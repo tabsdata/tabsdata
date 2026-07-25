@@ -217,47 +217,51 @@ def echo_function_run_status(server: TabsdataServer, fnrun: str) -> None:
     )
 
 
-def worker_patch(worker) -> str:
-    """The patch a worker ran (a function-version id), or '-' for head code.
+def patch_label(item) -> str:
+    """The patch a run/worker executed (a function-version id), or '-' for head
+    code. The patch id is surfaced onto the row as `function_version_patch_id`;
+    absent/None means unpatched (head)."""
+    return item.kwargs.get("function_version_patch_id") or "-"
 
-    The patch id lives on the physical function run, surfaced onto the worker
-    row as `function_version_patch_id`; absent/None means unpatched (head).
-    """
-    return worker.kwargs.get("function_version_patch_id") or "-"
+
+def _truncate(text: str, width: int = 20) -> str:
+    text = text or ""
+    return text if len(text) <= width else text[:width] + "..."
 
 
 def plans_table(executions) -> Table:
-    table = Table(title=f"Plans: {len(executions)}")
+    table = Table(title="Plans")
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Name")
     table.add_column("Project")
-    table.add_column("Collection")
-    table.add_column("Function")
-    table.add_column("Triggered on")
-    table.add_column("Trigger", no_wrap=True)
+    table.add_column("Trigger coll / fn", no_wrap=True)
+    table.add_column("Triggered by")
+    table.add_column("Start time", no_wrap=True)
+    table.add_column("End time", no_wrap=True)
     table.add_column("Status", no_wrap=True)
     for execution in executions:
         table.add_row(
             execution.id,
-            execution.name,
+            _truncate(execution.name),
             execution.project or "-",
-            collection_label(execution),
-            execution.function.name,
-            beautify_time(execution.triggered_on_str),
-            execution.trigger_type,
+            f"{collection_label(execution)} / {execution.function.name}",
+            execution.triggered_by,
+            beautify_time(execution.started_on_str),
+            beautify_time(execution.ended_on_str),
             execution.status,
         )
     return table
 
 
 def transactions_table(transactions) -> Table:
-    table = Table(title=f"Transactions: {len(transactions)}")
+    table = Table(title="Transactions")
     table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Plan ID")
+    table.add_column("Execution plan ID", no_wrap=True)
     table.add_column("Project")
     table.add_column("Collection")
-    table.add_column("Triggered on")
     table.add_column("Triggered by")
+    table.add_column("Start time", no_wrap=True)
+    table.add_column("End time", no_wrap=True)
     table.add_column("Status", no_wrap=True)
     for transaction in transactions:
         table.add_row(
@@ -265,36 +269,37 @@ def transactions_table(transactions) -> Table:
             transaction.execution.id,
             transaction.project or "-",
             collection_label(transaction),
-            beautify_time(transaction.triggered_on_str),
             transaction.triggered_by,
+            beautify_time(transaction.started_on_str),
+            beautify_time(transaction.ended_on_str),
             transaction.status,
         )
     return table
 
 
-def function_runs_table(function_runs, title: str = "Function Runs") -> Table:
+def function_runs_table(function_runs, title: str = "Function runs") -> Table:
     table = Table(title=title)
-    table.add_column("Function Run ID", style="cyan", no_wrap=True)
+    table.add_column("Function run ID", style="cyan", no_wrap=True)
+    table.add_column("Function")
+    table.add_column("Execution plan ID", no_wrap=True)
+    table.add_column("Transaction ID", no_wrap=True)
     table.add_column("Project")
     table.add_column("Collection")
-    table.add_column("Function")
-    table.add_column("Plan name")
-    table.add_column("Plan ID", no_wrap=True)
-    table.add_column("Transaction ID", no_wrap=True)
-    table.add_column("Started on", no_wrap=True)
-    table.add_column("Ended on", no_wrap=True)
+    table.add_column("Start time", no_wrap=True)
+    table.add_column("End time", no_wrap=True)
+    table.add_column("Patch")
     table.add_column("Status")
     for fn_run in function_runs:
         table.add_row(
             fn_run.id,
-            fn_run.project or "-",
-            collection_label(fn_run),
             fn_run.function.name,
-            fn_run.execution.name,
             fn_run.execution.id,
             fn_run.transaction.id,
+            fn_run.project or "-",
+            collection_label(fn_run),
             beautify_time(fn_run.started_on_str),
             beautify_time(fn_run.ended_on_str),
+            patch_label(fn_run),
             fn_run.status,
         )
     return table
@@ -305,29 +310,29 @@ def workers_table(workers, title: str = "Workers", indexed: bool = False) -> Tab
     if indexed:
         table.add_column("Index")
     table.add_column("Worker ID", style="cyan", no_wrap=True)
+    table.add_column("Function run ID", no_wrap=True)
+    table.add_column("Function")
+    table.add_column("Execution plan ID", no_wrap=True)
+    table.add_column("Transaction ID", no_wrap=True)
     table.add_column("Project")
     table.add_column("Collection")
-    table.add_column("Function")
-    table.add_column("Plan name")
-    table.add_column("Plan ID")
-    table.add_column("Transaction ID")
-    table.add_column("Started on", no_wrap=True)
-    table.add_column("Ended on", no_wrap=True)
+    table.add_column("Start time", no_wrap=True)
+    table.add_column("End time", no_wrap=True)
     table.add_column("Patch")
     table.add_column("Status")
     for position, worker in enumerate(workers, start=1):
         row = [str(position)] if indexed else []
         row.extend([
             worker.id,
+            worker.kwargs.get("logical_function_run_id") or "-",
+            worker.function.name,
+            worker.kwargs.get("execution_id") or "-",
+            worker.kwargs.get("transaction_id") or "-",
             worker.project or "-",
             collection_label(worker),
-            worker.function.name,
-            worker.execution.name,
-            worker.execution.id,
-            worker.transaction.id,
             beautify_time(worker.started_on_str),
             beautify_time(worker.ended_on_str),
-            worker_patch(worker),
+            patch_label(worker),
             worker.status,
         ])
         table.add_row(*row)

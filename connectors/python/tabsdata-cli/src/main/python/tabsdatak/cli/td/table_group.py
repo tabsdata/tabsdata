@@ -12,6 +12,7 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
+    beautify_time,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
@@ -19,12 +20,20 @@ from tabsdatak.cli.cli_utils import (
     output_option,
     proj_option,
     render,
-    show_hint,
     verify_login_or_prompt,
 )
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
+
+
+_TABLE_STATUS_LABELS = {"A": "Active", "F": "Frozen", "D": "Deleted"}
+
+
+def _size_mb(data_bytes) -> str:
+    if data_bytes is None:
+        return "-"
+    return f"{int(data_bytes) / (1024 * 1024):.2f}"
 
 
 @cli_command
@@ -232,13 +241,27 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
         )
 
         def _table():
-            cli_table = Table(title=f"Tables in collection '{coll}'")
+            from tabsdatak.sdk.tabsdata_server import _convert_timestamp_to_string
+
+            cli_table = Table(title="Tables")
             cli_table.add_column("Name", style="cyan", no_wrap=True)
             cli_table.add_column("Function")
+            cli_table.add_column("Status")
+            cli_table.add_column("Private")
+            cli_table.add_column("Created by")
+            cli_table.add_column("Created on")
             for table in list_of_tables:
+                data = table.kwargs
+                defined_on = data.get("defined_on")
                 cli_table.add_row(
                     table.name,
                     table.function.name,
+                    _TABLE_STATUS_LABELS.get(
+                        data.get("status"), data.get("status") or "-"
+                    ),
+                    "Yes" if data.get("private") else "No",
+                    data.get("defined_by") or "-",
+                    _convert_timestamp_to_string(defined_on) if defined_on else "-",
                 )
             click.echo()
             make_console().print(cli_table)
@@ -457,7 +480,7 @@ def schema(
         )
 
         def _table():
-            table = Table(title=f"Schema of table '{name}'")
+            table = Table(title="Schema")
             table.add_column("Column", style="cyan", no_wrap=True)
             table.add_column("Type")
             for column in table_schema:
@@ -485,18 +508,9 @@ def schema(
     "--name",
     help="The name of the table to which the data belongs.",
 )
-@click.option(
-    "--details",
-    is_flag=True,
-    help=(
-        "If provided, the command will show detailed information about each data "
-        "version, including the number of rows, number of columns (ignoring system "
-        "columns) and hash of the schema."
-    ),
-)
 @output_option
 @click.pass_context
-def versions(ctx: click.Context, coll: str, name: str, details: bool):
+def versions(ctx: click.Context, coll: str, name: str):
     """
     List all versions of the data of a table.
     """
@@ -515,49 +529,37 @@ def versions(ctx: click.Context, coll: str, name: str, details: bool):
         data_version_list = server.list_dataversions(coll, name, filter="status:eq:C")
 
         def _table():
-            table = Table(title=f"Data versions for table '{name}'")
-            table.add_column("ID", style="cyan", no_wrap=True)
-            table.add_column("Function ID")
-            table.add_column("Plan ID")
-            table.add_column("Created at")
+            table = Table(title="Data versions")
+            table.add_column("Version", style="cyan", no_wrap=True)
+            table.add_column("Function")
+            table.add_column("Function version", no_wrap=True)
+            table.add_column("Execution plan ID", no_wrap=True)
+            table.add_column("Transaction ID", no_wrap=True)
+            table.add_column("Created on", no_wrap=True)
+            table.add_column("Schema change")
+            table.add_column("Data changed")
+            table.add_column("Rows")
+            table.add_column("Size (MB)")
             table.add_column("Status")
-            if details:
-                table.add_column("Rows")
-                table.add_column("Columns")
-                table.add_column("Schema Hash")
             for data_version in data_version_list:
-                row_content = [
+                data = data_version.kwargs
+                row_count = data.get("row_count")
+                table.add_row(
                     data_version.id,
-                    data_version.function.id,
-                    data_version.execution.id,
-                    data_version.created_at_str,
+                    data.get("function") or "-",
+                    data.get("function_version_id") or "-",
+                    data.get("execution_id") or "-",
+                    data.get("transaction_id") or "-",
+                    beautify_time(data_version.created_at_str),
+                    "Yes" if data.get("schema_data_changed") else "No",
+                    "Yes" if data.get("data_changed") else "No",
+                    str(row_count) if row_count is not None else "-",
+                    _size_mb(data.get("data_bytes")),
                     data_version.status,
-                ]
-                if details:
-                    row_content.extend([
-                        (
-                            str(data_version.row_count)
-                            if data_version.row_count is not None
-                            else "-"
-                        ),
-                        (
-                            str(data_version.column_count)
-                            if data_version.column_count is not None
-                            else "-"
-                        ),
-                        data_version.schema_hash,
-                    ])
-                table.add_row(*row_content)
+                )
             click.echo()
             make_console().print(table)
             click.echo(f"Number of data versions: {len(data_version_list)}")
-            if not details:
-                show_hint(
-                    ctx,
-                    "Use the --details option to see more information about each data "
-                    "version, including the number of rows, the number of columns and "
-                    "the hash of the schema.",
-                )
 
         render(
             ctx,

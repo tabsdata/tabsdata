@@ -70,6 +70,10 @@ class _DTO:
 
     def __init__(self, data: dict[str, Any], **attrs: Any):
         self._data = data
+        # Real SDK DTOs keep the raw row on ``.kwargs``; table views read fields
+        # like patch/run ids off it. Mirror that (an explicit ``kwargs=`` attr
+        # override still wins, for rows that carry ids only on the raw payload).
+        self.kwargs = data
         for key, value in data.items():
             setattr(self, key, value)
         for key, value in attrs.items():
@@ -85,6 +89,9 @@ def _client() -> MagicMock:
     # ``server.connection.project`` on every invoke, so provide it explicitly.
     client = MagicMock(spec=TabsdataServer)
     client.connection = MagicMock()
+    # A concrete active project: form views (e.g. ``fn get``) render it, and a
+    # non-None value keeps the list commands' spanning check unchanged.
+    client.connection.project = "proj-a"
     return client
 
 
@@ -160,11 +167,15 @@ _FN_INFO = {
     "id": "FID_1",
     "name": "fn-a",
     "description": "publishes stuff",
+    "type": "P",
+    "status": "A",
+    "enabled": True,
     "defined_on_str": "2026-02-01",
     "defined_by": "admin",
     "dependencies": ["dep1", "dep2"],
     "triggers": ["trig1"],
     "tables": ["t1", "t2"],
+    "snippet": "@publisher()\ndef fn_a():\n    ...\n",
 }
 
 # ``plan get`` nests ``collection``/``function`` objects
@@ -181,8 +192,18 @@ _EXECUTION = {
     "status": "Done",
 }
 
-# ``table list`` nests a ``function`` object per table (``table.function.name``).
-_TABLES = [{"name": "tbl-a", "function": {"name": "fn-a"}}]
+# ``table list`` nests a ``function`` object per table (``table.function.name``);
+# status/private/created ride on the raw row (read via ``.kwargs``).
+_TABLES = [
+    {
+        "name": "tbl-a",
+        "function": {"name": "fn-a"},
+        "status": "A",
+        "private": False,
+        "defined_by": "admin",
+        "defined_on": 1704067200000,
+    }
+]
 
 # ``table schema`` returns a raw list of column dicts.
 _TABLE_SCHEMA = [{"name": "id", "type": "Int64"}, {"name": "label", "type": "String"}]
@@ -257,7 +278,10 @@ _EXECUTIONS = [
         "project": "proj-a",
         "collection": {"name": "coll-a"},
         "function": {"name": "fn-a"},
+        "triggered_by": "admin",
         "triggered_on_str": "2026-03-01",
+        "started_on_str": "2026-03-01",
+        "ended_on_str": "2026-03-02",
         "trigger_type": "manual",
         "status": "Done",
     }
@@ -310,9 +334,15 @@ _WORKERS = [
 _DATAVERSIONS = [
     {
         "id": "DV_1",
-        "function": {"id": "FID_1"},
-        "execution": {"id": "EID_1"},
+        "function": "fn-a",
+        "function_version_id": "FV_1",
+        "execution_id": "EID_1",
+        "transaction_id": "TID_1",
         "created_at_str": "2026-03-01",
+        "schema_data_changed": False,
+        "data_changed": True,
+        "row_count": 42,
+        "data_bytes": 1048576,
         "status": "C",
     }
 ]
@@ -373,6 +403,11 @@ def _set_group_list(c: MagicMock) -> None:
 
 def _set_group_info(c: MagicMock) -> None:
     c.get_group.return_value = _DTO(_GROUP_INFO)
+    # ``group get`` lists the collections whose ``group`` matches the group name.
+    c.list_collections.return_value = [
+        _DTO({"name": "coll-a", "group": "grp-a"}),
+        _DTO({"name": "coll-z", "group": "grp-b"}),
+    ]
 
 
 def _set_project_list(c: MagicMock) -> None:
@@ -447,9 +482,11 @@ def _set_worker_list(c: MagicMock) -> None:
             function=_DTO({"name": "fn-a"}),
             execution=_DTO({"name": "plan-a", "id": "EID_1"}),
             transaction=_DTO({"id": "TID_1"}),
-            # the Patch column reads the raw row via `.kwargs`
+            # the id/patch columns read the raw row via `.kwargs`
             kwargs={
                 "logical_function_run_id": "LFR_1",
+                "execution_id": "EID_1",
+                "transaction_id": "TID_1",
                 "function_version_patch_id": "FV_9",
             },
         )
@@ -521,13 +558,7 @@ def _set_fn_list_patches(c: MagicMock) -> None:
 
 
 def _set_table_versions(c: MagicMock) -> None:
-    c.list_dataversions.return_value = [
-        _DTO(
-            _DATAVERSIONS[0],
-            function=_DTO({"id": "FID_1"}),
-            execution=_DTO({"id": "EID_1"}),
-        )
-    ]
+    c.list_dataversions.return_value = [_DTO(_DATAVERSIONS[0])]
 
 
 def _set_perm_list_user(c: MagicMock) -> None:
@@ -555,23 +586,24 @@ CASES: tuple[RenderCase, ...] = (
         ["group", "list"],
         _set_group_list,
         _GROUPS,
-        ("grp-a", "GID_A", "first group", "2026-01-01", "admin"),
+        ("grp-a", "first group", "2026-01-01", "admin"),
     ),
     RenderCase(
         "group-get", ["group", "get", "-n", "grp-a"], _set_group_info, _GROUP_INFO,
-        # ``system`` is rendered as ``str(bool(grp.system))`` -> "False".
-        ("grp-a", "GID_A", "False", "first group", "2026-01-01", "admin"),
+        # Form view: name/description/created + the collections in the group
+        # ("coll-a" belongs to grp-a; "coll-z" is in another group).
+        ("grp-a", "first group", "2026-01-01", "admin", "coll-a"),
     ),
     RenderCase(
         "project-list",
         ["project", "list"],
         _set_project_list,
         _PROJECTS,
-        ("proj-a", "PID_A", "first project", "2026-01-02", "admin"),
+        ("proj-a", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
         "project-get", ["project", "get", "-n", "proj-a"], _set_project_info,
-        _PROJECTS[0], ("proj-a", "PID_A", "first project", "2026-01-02", "admin"),
+        _PROJECTS[0], ("proj-a", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
         "collection-list",
@@ -603,8 +635,9 @@ CASES: tuple[RenderCase, ...] = (
     ),
     RenderCase(
         "fn-get", ["fn", "get", "-n", "fn-a", "-c", "coll-a"], _set_fn_info, _FN_INFO,
-        ("fn-a", "FID_1", "publishes stuff", "2026-02-01", "admin",
-         "dep1", "dep2", "trig1", "t1", "t2"),
+        # Form view: no ID row; project/collection/status(->"Active") are shown.
+        ("fn-a", "proj-a", "coll-a", "publishes stuff", "2026-02-01", "admin",
+         "Active", "dep1", "dep2", "trig1", "t1", "t2"),
     ),
     RenderCase(
         # plan get builds its tables inline for the table format and hands a
@@ -660,7 +693,7 @@ CASES: tuple[RenderCase, ...] = (
         ["table", "list", "-c", "coll-a"],
         _set_table_list,
         _TABLES,
-        ("tbl-a", "fn-a"),
+        ("tbl-a", "fn-a", "Active", "2024-01-01T00:00:00Z", "admin"),
     ),
     RenderCase(
         "table-schema",
@@ -715,7 +748,7 @@ CASES: tuple[RenderCase, ...] = (
         ["plan", "list"],
         _set_plan_list,
         _EXECUTIONS,
-        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "manual", "Done"),
+        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "admin", "Done"),
     ),
     RenderCase(
         "trx-list",
@@ -734,7 +767,6 @@ CASES: tuple[RenderCase, ...] = (
             "proj-a",
             "coll-a",
             "fn-a",
-            "plan-a",
             "EID_1",
             "TID_1",
             "2026-03-01",
@@ -749,10 +781,10 @@ CASES: tuple[RenderCase, ...] = (
         _WORKERS,
         (
             "WK_1",
+            "LFR_1",
             "proj-a",
             "coll-a",
             "fn-a",
-            "plan-a",
             "EID_1",
             "TID_1",
             "Done",
@@ -764,7 +796,7 @@ CASES: tuple[RenderCase, ...] = (
         ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
         _set_table_versions,
         _DATAVERSIONS,
-        ("DV_1", "FID_1", "EID_1", "2026-03-01"),
+        ("DV_1", "fn-a", "FV_1", "EID_1", "TID_1", "2026-03-01", "42", "1.00"),
     ),
     RenderCase(
         # payload is built from attributes; a None project is null (json) / "-" (table).

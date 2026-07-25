@@ -89,21 +89,15 @@ def get(ctx: click.Context, name: str):
         prj = server.get_project(name)
 
         def _table():
-            table = Table(title=f"Project '{name}'")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("ID", no_wrap=True)
-            table.add_column("Description")
-            table.add_column("Created on")
-            table.add_column("Created by")
-            table.add_row(
-                prj.name,
-                prj.id,
-                prj.description,
-                prj.created_on_str,
-                prj.created_by,
-            )
+            table = Table(title="Project", show_header=False, show_lines=True)
+            table.add_column("Field", style="cyan", no_wrap=True)
+            table.add_column("Value")
+            table.add_row("Name:", prj.name)
+            table.add_row("Description:", prj.description or "")
+            table.add_row("Created by:", prj.created_by or "-")
+            table.add_row("Created on:", prj.created_on_str or "-")
             click.echo()
-            make_console().print(table)
+            make_console(emoji=False, markup=False).print(table)
             click.echo()
 
         render(ctx, data=lambda: prj._data, table=_table)
@@ -125,17 +119,15 @@ def list(ctx: click.Context):
         def _table():
             table = Table(title="Projects")
             table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("ID", no_wrap=True)
             table.add_column("Description")
-            table.add_column("Created on")
             table.add_column("Created by")
+            table.add_column("Created on")
             for prj in list_of_projects:
                 table.add_row(
                     prj.name,
-                    prj.id,
                     prj.description,
-                    prj.created_on_str,
                     prj.created_by,
+                    prj.created_on_str,
                 )
             click.echo()
             make_console().print(table)

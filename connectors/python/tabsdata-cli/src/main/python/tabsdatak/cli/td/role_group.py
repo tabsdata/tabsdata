@@ -403,7 +403,7 @@ def info(ctx: click.Context, name: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         role = server.get_role(name)
 
-        table = Table(title=f"Role '{name}'")
+        table = Table(title="Role")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("ID", no_wrap=True)
         table.add_column("Description")
@@ -478,7 +478,7 @@ def list_perm(ctx: click.Context, name: str):
         role = server.get_role(name)
         list_of_permissions = role.permissions
 
-        table = Table(title=f"Permissions of role '{name}'")
+        table = Table(title="Permissions")
         table.add_column("ID", style="cyan", no_wrap=True)
         table.add_column("Permission type")
         table.add_column("Entity name")
@@ -532,7 +532,7 @@ def list_user(ctx: click.Context, name: str):
         role = server.get_role(name)
         list_of_users = role.users
 
-        table = Table(title=f"Users of role '{name}'")
+        table = Table(title="Users")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("Full name")
         table.add_column("Email")

@@ -297,4 +297,6 @@ def test_connection_view_calls_sdk_and_renders(tmp_path):
     client.get_collection_connection.assert_called_once_with("c")
     out = json.loads(result.output)
     assert out["connection"]["type"] == "tabsdatak.conn.mysql:MySQLSrcConn"
-    assert out["secret_names"] == ["S1", "S2"]
+    # Neither secret names nor var names are ever surfaced.
+    assert "secret_names" not in out
+    assert "var_names" not in out

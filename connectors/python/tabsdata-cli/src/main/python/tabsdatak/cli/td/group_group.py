@@ -11,6 +11,7 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    beautify_list,
     hint_common_solutions,
     logical_prompt,
     make_console,
@@ -91,25 +92,24 @@ def get(ctx: click.Context, name: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         grp = server.get_group(name)
+        collection_names = sorted(
+            c.name
+            for c in server.list_collections()
+            if (c._data or {}).get("group") == name
+        )
 
         def _table():
-            table = Table(title=f"Group '{name}'")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("ID", no_wrap=True)
-            table.add_column("System", no_wrap=True)
-            table.add_column("Description")
-            table.add_column("Created on")
-            table.add_column("Created by")
-            table.add_row(
-                grp.name,
-                grp.id,
-                str(bool(grp.system)),
-                grp.description,
-                grp.created_on_str,
-                grp.created_by,
-            )
+            table = Table(title="Group", show_header=False, show_lines=True)
+            table.add_column("Field", style="cyan", no_wrap=True)
+            table.add_column("Value")
+            table.add_row("Name:", grp.name)
+            table.add_row("Description:", grp.description or "")
+            table.add_row("System:", "Yes" if grp.system else "No")
+            table.add_row("Created by:", grp.created_by or "-")
+            table.add_row("Created on:", grp.created_on_str or "-")
+            table.add_row("Collections:", beautify_list(collection_names))
             click.echo()
-            make_console().print(table)
+            make_console(emoji=False, markup=False).print(table)
             click.echo()
 
         render(ctx, data=lambda: grp._data, table=_table)
@@ -132,17 +132,15 @@ def list(ctx: click.Context):
         def _table():
             table = Table(title="Groups")
             table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("ID", no_wrap=True)
             table.add_column("Description")
-            table.add_column("Created on")
             table.add_column("Created by")
+            table.add_column("Created on")
             for grp in list_of_groups:
                 table.add_row(
                     grp.name,
-                    grp.id,
                     grp.description,
-                    grp.created_on_str,
                     grp.created_by,
+                    grp.created_on_str,
                 )
             click.echo()
             make_console().print(table)

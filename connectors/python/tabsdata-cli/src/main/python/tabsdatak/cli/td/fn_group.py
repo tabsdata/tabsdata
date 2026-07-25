@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import Execution, TabsdataServer, Transaction
 
 
+_FUNCTION_STATUS_LABELS = {"A": "Active", "F": "Frozen", "D": "Deleted"}
+
+
 @cli_command
 @click.group()
 def fn():
@@ -124,14 +127,12 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
             function_list = server.list_function_history(coll, name)
 
             def _table():
-                table = Table(
-                    title=f"History of function '{name}' in collection '{coll}'"
-                )
+                table = Table(title="History")
                 table.add_column("ID", style="cyan", no_wrap=True)
                 table.add_column("Name")
                 table.add_column("Description")
-                table.add_column("Defined on")
-                table.add_column("Defined by")
+                table.add_column("Created by")
+                table.add_column("Created on")
                 table.add_column("Dependencies")
                 table.add_column("Triggers (functions)")
                 table.add_column("Tables")
@@ -140,8 +141,8 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                         str(function.id),
                         function.name,
                         function.description,
-                        function.defined_on_str,
                         function.defined_by,
+                        function.defined_on_str,
                         beautify_list(function.dependencies),
                         beautify_list(function.triggers),
                         beautify_list([t.name for t in function.tables]),
@@ -157,28 +158,44 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                 table=_table,
             )
         else:
+            # noinspection PyProtectedMember
+            from tabsdatak.sdk.tabsdata_server import _function_type_to_mapping
+
             function = server.get_function(coll, name)
 
             def _table():
-                table = Table(title=f"Function '{name}' in collection '{coll}'")
-                table.add_column("ID", style="cyan", no_wrap=True)
-                table.add_column("Description")
-                table.add_column("Defined on")
-                table.add_column("Defined by")
-                table.add_column("Dependencies")
-                table.add_column("Triggers (functions)")
-                table.add_column("Tables")
-                table.add_row(
-                    str(function.id),
-                    function.description,
-                    function.defined_on_str,
-                    function.defined_by,
-                    beautify_list(function.dependencies),
-                    beautify_list(function.triggers),
-                    beautify_list([t.name for t in function.tables]),
+                data = function._data or {}
+                table = Table(
+                    title="Function",
+                    show_header=False,
+                    show_lines=True,
                 )
+                table.add_column("Field", style="cyan", no_wrap=True)
+                table.add_column("Value")
+                table.add_row("Name:", function.name)
+                table.add_row("Description:", function.description or "")
+                table.add_row("Project:", server.connection.project or "-")
+                table.add_row("Collection:", coll)
+                table.add_row("Created by:", function.defined_by or "-")
+                table.add_row("Created on:", function.defined_on_str or "-")
+                table.add_row(
+                    "Status:",
+                    _FUNCTION_STATUS_LABELS.get(
+                        data.get("status"), data.get("status") or "-"
+                    ),
+                )
+                table.add_row("Enabled:", "Yes" if function.enabled else "No")
+                table.add_row("Type:", _function_type_to_mapping(function.type))
+                table.add_row(
+                    "Tables:", beautify_list([t.name for t in function.tables])
+                )
+                table.add_row("Triggers:", beautify_list(function.triggers))
+                table.add_row("Dependencies:", beautify_list(function.dependencies))
+                table.add_row("Snippet:", data.get("snippet") or "")
                 click.echo()
-                make_console().print(table)
+                # emoji/markup off: the snippet is Python source with ':'/'[]'
+                # that rich would otherwise treat as an emoji shortcode / markup.
+                make_console(emoji=False, markup=False).print(table)
                 click.echo()
 
             render(ctx, data=lambda: function._data, table=_table)
@@ -260,19 +277,19 @@ def list_functions(ctx: click.Context, coll: str):
         list_of_functions = server.list_functions(coll)
 
         def _table():
-            table = Table(title=f"Functions in collection '{coll}'")
+            table = Table(title="Functions")
             table.add_column("Name", style="cyan", no_wrap=True)
             table.add_column("Type")
             table.add_column("Description")
-            table.add_column("Defined on")
-            table.add_column("Defined by")
+            table.add_column("Created by")
+            table.add_column("Created on")
             for function in list_of_functions:
                 table.add_row(
                     function.name,
                     _function_type_to_mapping(function.type),
                     function.description,
-                    function.defined_on_str,
                     function.defined_by,
+                    function.defined_on_str,
                 )
             click.echo()
             make_console().print(table)
@@ -620,8 +637,8 @@ def _monitor_execution_or_transaction(
     list_of_runs = supervised_entity.function_runs
 
     def build_table():
-        table = Table(title=f"Function Runs: {len(list_of_runs)}")
-        table.add_column("Function Run ID", style="cyan", no_wrap=True)
+        table = Table(title="Function runs")
+        table.add_column("Function run ID", style="cyan", no_wrap=True)
         table.add_column("Collection")
         table.add_column("Function")
         (
@@ -1035,7 +1052,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
         patches = server.list_function_patches(coll, name)
 
         def _table():
-            table = Table(title=f"Patches of function '{name}' in collection '{coll}'")
+            table = Table(title="Patches")
             table.add_column("Patch id (fvid)", style="cyan", no_wrap=True)
             table.add_column("Patches fvid")
             table.add_column("Description")

@@ -217,7 +217,7 @@ def _list_by_user(ctx: click.Context, server: TabsdataServer, user: str):
     permissions = server.list_permissions_by_user(user)
 
     def _table():
-        table = Table(title=f"Permissions of user '{user}'")
+        table = Table(title="Permissions")
         table.add_column("Permission", style="cyan", no_wrap=True)
         table.add_column("Project")
         for perm in permissions:
@@ -238,10 +238,10 @@ def _list_by_project(ctx: click.Context, server: TabsdataServer, project: str):
     access = server.list_permissions_by_project(project)
 
     def _table():
-        table = Table(title=f"Access on project '{project}'")
+        table = Table(title="Access")
         table.add_column("User", style="cyan", no_wrap=True)
         table.add_column("Permission")
-        table.add_column("Source")
+        table.add_column("On")
         for entry in access:
             table.add_row(entry.user, entry.permission, entry.source)
         click.echo()

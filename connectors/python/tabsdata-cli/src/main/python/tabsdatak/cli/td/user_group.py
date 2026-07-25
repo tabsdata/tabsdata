@@ -110,7 +110,7 @@ def get(ctx: click.Context, name: str):
         user = ctx.obj["tabsdataserver"].get_user(name)
 
         def _table():
-            table = Table(title=f"User '{name}'")
+            table = Table(title="User")
             table.add_column("Name", style="cyan", no_wrap=True)
             table.add_column("Full name")
             table.add_column("Email")

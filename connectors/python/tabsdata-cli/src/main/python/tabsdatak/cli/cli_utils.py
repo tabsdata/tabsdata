@@ -385,6 +385,25 @@ def output_format(ctx: click.Context) -> str:
     return (ctx.obj or {}).get("output_format", "table")
 
 
+def serialize(payload, fmt: str) -> str:
+    """Serialize a payload to a ``json`` or ``yaml`` string (the machine formats
+    of ``-o``). JSON is pretty-printed; both carry every field."""
+    if fmt == "json":
+        return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+    from ruamel.yaml import YAML
+
+    # Normalize through JSON (default=str) so any value is YAML-safe, then
+    # dump with ruamel (a guaranteed dependency via tabsdata-api; PyYAML is
+    # not a declared tabsdata-cli dependency). Key order is preserved.
+    normalized = json.loads(json.dumps(payload, default=str))
+    yaml = YAML()
+    yaml.default_flow_style = False
+    yaml.allow_unicode = True
+    buf = io.StringIO()
+    yaml.dump(normalized, buf)
+    return buf.getvalue()
+
+
 def render(ctx: click.Context, *, data, table) -> None:
     """Render a command's result in the active output format.
 
@@ -399,21 +418,9 @@ def render(ctx: click.Context, *, data, table) -> None:
         table()
         return
     payload = data() if callable(data) else data
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
-    else:  # yaml
-        from ruamel.yaml import YAML
-
-        # Normalize through JSON (default=str) so any value is YAML-safe, then
-        # dump with ruamel (a guaranteed dependency via tabsdata-api; PyYAML is
-        # not a declared tabsdata-cli dependency). Key order is preserved.
-        normalized = json.loads(json.dumps(payload, default=str))
-        yaml = YAML()
-        yaml.default_flow_style = False
-        yaml.allow_unicode = True
-        buf = io.StringIO()
-        yaml.dump(normalized, buf)
-        click.echo(buf.getvalue(), nl=False)
+    text = serialize(payload, fmt)
+    # YAML already ends with a newline; JSON does not.
+    click.echo(text, nl=(fmt == "json"))
 
 
 def load_pinned_objects(ctx: click.Context):

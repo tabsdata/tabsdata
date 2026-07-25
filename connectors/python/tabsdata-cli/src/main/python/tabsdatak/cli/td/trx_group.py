@@ -193,7 +193,7 @@ def get(ctx: click.Context, trx: str):
             )
             return
 
-        table = Table(title=f"Transaction '{trx}'")
+        table = Table(title="Transaction")
         table.add_column("Plan ID", no_wrap=True)
         table.add_column("Project")
         table.add_column("Collection")

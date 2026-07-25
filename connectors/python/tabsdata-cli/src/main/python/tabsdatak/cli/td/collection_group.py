@@ -22,6 +22,7 @@ from tabsdatak.cli.cli_utils import (
     proj_option,
     render,
     resolve_all_projects,
+    serialize,
     verify_login_or_prompt,
 )
 
@@ -133,6 +134,35 @@ def _group_for_conn(conn_cls) -> str:
     )
 
 
+_COLLECTION_TYPE_LABELS = {"F": "Data Factory", "S": "Source", "D": "Destination"}
+
+
+def _connection_system(doc: dict) -> str:
+    """The target-system name (e.g. 'PostgreSQL') of a connection document,
+    resolved from its ``type`` through the connector registry; falls back to the
+    raw type for an unregistered connector."""
+    # noinspection PyProtectedMember
+    from tabsdatak.cli import template
+
+    raw = str(doc.get("type", ""))
+    try:
+        conn_cls = template.resolve_class(doc.get("type"))
+    except Exception:  # noqa: BLE001 -- unknown / unregistered type
+        return raw
+    for r in template.list_connectors():
+        if r.conn_cls is conn_cls:
+            return r.system
+    return raw
+
+
+def _public_connection(conn_read: dict) -> dict:
+    """The connection view safe to display: just the dehydrated document, never
+    the secret or var names."""
+    return {
+        k: v for k, v in conn_read.items() if k not in ("secret_names", "var_names")
+    }
+
+
 def _load_connection_document(conn_file, group):
     """Read the connection YAML, validate it as a `Conn`, and dehydrate it.
 
@@ -235,21 +265,36 @@ def get(ctx: click.Context, name: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         collection = server.get_collection(name)
+        data = collection._data or {}
+        collection_type = data.get("collection_type")
+        conn_read = None
+        if collection_type in ("S", "D"):
+            conn_read = _public_connection(server.get_collection_connection(name))
 
         def _table():
-            table = Table(title=f"Collection '{name}'")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Description")
-            table.add_column("Created on")
-            table.add_column("Created by")
+            table = Table(title="Collection", show_header=False, show_lines=True)
+            table.add_column("Field", style="cyan", no_wrap=True)
+            table.add_column("Value")
+            table.add_row("Name:", collection.name)
+            table.add_row("Description:", collection.description or "")
+            table.add_row("Project:", data.get("project") or "-")
+            table.add_row("Group:", data.get("group") or "-")
             table.add_row(
-                collection.name,
-                collection.description,
-                collection.created_on_str,
-                collection.created_by,
+                "Collection type:",
+                _COLLECTION_TYPE_LABELS.get(collection_type, collection_type or "-"),
             )
+            table.add_row("Created by:", collection.created_by or "-")
+            table.add_row("Created on:", collection.created_on_str or "-")
+            if conn_read is not None:
+                doc = conn_read.get("connection") or {}
+                table.add_row("Connection type:", _connection_system(doc))
+                table.add_row(
+                    "Connection info:", serialize(conn_read, "yaml").rstrip("\n")
+                )
             click.echo()
-            make_console().print(table)
+            # emoji/markup off: connection info carries ':secret:' sentinels and
+            # '[]' that rich would otherwise treat as an emoji shortcode / markup.
+            make_console(emoji=False, markup=False).print(table)
             click.echo()
 
         render(ctx, data=lambda: collection._data, table=_table)
@@ -260,18 +305,26 @@ def get(ctx: click.Context, name: str):
 
 @collection.command()
 @proj_option
-@output_option
+@click.option(
+    "-o",
+    "--output",
+    "output",
+    type=click.Choice(("json", "yaml")),
+    default="json",
+    show_default=True,
+    help="Output format.",
+)
 @click.option(
     "--name",
     "-n",
     help="Name of the source/destination collection whose connection to display.",
 )
 @click.pass_context
-def connection(ctx: click.Context, name: str):
+def connection(ctx: click.Context, output: str, name: str):
     """Display the connection of a source/destination collection.
 
-    Shows the dehydrated connection document plus the names (never the values)
-    of its secrets and variables.
+    Emits the dehydrated connection document as JSON or YAML; secret and var
+    names are never shown.
     """
     verify_login_or_prompt(ctx)
     name = (
@@ -281,24 +334,8 @@ def connection(ctx: click.Context, name: str):
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        conn_read = server.get_collection_connection(name)
-
-        def _table():
-            doc = conn_read.get("connection") or {}
-            table = Table(title=f"Connection for collection '{name}'")
-            table.add_column("Type", style="cyan", no_wrap=True)
-            table.add_column("Secrets")
-            table.add_column("Vars")
-            table.add_row(
-                str(doc.get("type", "")),
-                ", ".join(conn_read.get("secret_names") or []),
-                ", ".join(conn_read.get("var_names") or []),
-            )
-            click.echo()
-            make_console().print(table)
-            click.echo()
-
-        render(ctx, data=conn_read, table=_table)
+        conn_read = _public_connection(server.get_collection_connection(name))
+        click.echo(serialize(conn_read, output), nl=(output == "json"))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display connection: {e}")
@@ -320,19 +357,18 @@ def list(ctx: click.Context, all_projects: bool):
         def _table():
             table = Table(title="Collections")
             table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Description")
             if spanning:
                 table.add_column("Project")
-            table.add_column("Description")
-            table.add_column("Created on")
             table.add_column("Created by")
+            table.add_column("Created on")
             for collection in list_of_collections:
-                row = [collection.name]
+                row = [collection.name, collection.description or ""]
                 if spanning:
                     row.append(collection.project or "-")
                 row.extend([
-                    collection.description,
-                    collection.created_on_str,
-                    collection.created_by,
+                    collection.created_by or "-",
+                    collection.created_on_str or "-",
                 ])
                 table.add_row(*row)
             click.echo()

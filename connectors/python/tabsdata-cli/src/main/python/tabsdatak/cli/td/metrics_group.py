@@ -299,7 +299,7 @@ def inflight(
             if not rows:
                 click.echo("(no inflight runs)")
                 return
-            table = Table(title=f"inflight ({len(rows)})")
+            table = Table(title="Inflight")
             table.add_column("Collection", style="cyan", no_wrap=True)
             table.add_column("Group", no_wrap=True)
             table.add_column("Status", no_wrap=True)

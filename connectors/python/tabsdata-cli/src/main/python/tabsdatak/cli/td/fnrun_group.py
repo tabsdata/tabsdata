@@ -158,7 +158,7 @@ def get(ctx: click.Context, fnrun: str):
             )
             return
 
-        table = Table(title=f"Function run '{fnrun}'")
+        table = Table(title="Function run")
         table.add_column("Project")
         table.add_column("Collection")
         table.add_column("Function")

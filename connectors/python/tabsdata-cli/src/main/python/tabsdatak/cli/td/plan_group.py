@@ -191,7 +191,7 @@ def get(ctx: click.Context, plan: str):
             )
             return
 
-        table = Table(title=f"Plan '{plan}'")
+        table = Table(title="Plan")
         table.add_column("Name")
         table.add_column("Project")
         table.add_column("Collection")
