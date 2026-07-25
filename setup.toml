@@ -29,14 +29,14 @@ name = "tabsdata"
 names = [
     "td_about",
     "td_apiserver",
-    "td_bootloader",
-    "td_crontrigger",
+  # "td_bootloader",
+  # "td_crontrigger",
     "td_dbmanager",
-    "td_supervisor",
-    "td_transporter1",
+  # "td_supervisor",
+  # "td_transporter1",
     "td_transporter2",
     "tdkserver",
-    "tdserver",
+  # "tdserver",
 ]
 
 [[binary_groups]]

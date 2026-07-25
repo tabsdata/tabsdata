@@ -18,14 +18,6 @@ rust-version = { workspace = true }
 version = { workspace = true }
 
 [[bin]]
-name = "tdserver"
-path = "src/tdserver.rs"
-
-[[bin]]
-name = "tdkserver"
-path = "src/tdkserver.rs"
-
-[[bin]]
 name = "td_about"
 path = "src/tdabout.rs"
 
@@ -33,31 +25,39 @@ path = "src/tdabout.rs"
 name = "td_apiserver"
 path = "src/apiserver.rs"
 
+# [[bin]]
+# name = "td_bootloader"
+# path = "src/bootloader.rs"
+
+# [[bin]]
+# name = "td_crontrigger"
+# path = "src/crontrigger.rs"
+
 [[bin]]
 name = "td_dbmanager"
 path = "src/dbmanager.rs"
 
-[[bin]]
-name = "td_bootloader"
-path = "src/bootloader.rs"
+# [[bin]]
+# name = "td_supervisor"
+# path = "src/supervisor.rs"
 
-[[bin]]
-name = "td_crontrigger"
-path = "src/crontrigger.rs"
-
-[[bin]]
-name = "td_supervisor"
-path = "src/supervisor.rs"
-
-[[bin]]
-name = "td_transporter1"
-path = "src/transporter1.rs"
+# [[bin]]
+# name = "td_transporter1"
+# path = "src/transporter1.rs"
 
 [[bin]]
 name = "td_transporter2"
 path = "src/transporter2.rs"
 
-# tdk dummy workers (lifecycle simulators for K Pop -- internal testing only)
+[[bin]]
+name = "tdkserver"
+path = "src/tdkserver.rs"
+
+# [[bin]]
+# name = "tdserver"
+# path = "src/tdserver.rs"
+
+# Dummy workers for tdkserver (lifecycle simulators for Kminus -- internal testing only)
 
 [[bin]]
 name = "td_ic"
