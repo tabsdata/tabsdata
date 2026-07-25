@@ -1090,7 +1090,12 @@ class Extractor:
             tf = self.type_field(attr.annotation)
             if tf:
                 result.update(tf)
-            if attr.value is not None and is_constant:
+            if attr.value is not None:
+                # Not just for ALL_CAPS constants: a lowercase class-attribute
+                # default (e.g. `port: PortSpec = "8123"`) needs its value
+                # recorded too, or downstream tooling has nothing to show as
+                # the parameter's default in a synthesized constructor
+                # signature.
                 result["value"] = str(attr.value)
         return result
 

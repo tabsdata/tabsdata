@@ -13,6 +13,7 @@
     "tabsdatak.dataquality",
     "tabsdatak.spi",
     "tabsdatak.error",
+    "tabsdatak.conn.common.types",
     "tabsdatak.conn.azureblob",
     "tabsdatak.conn.bigquery",
     "tabsdatak.conn.clickhouse",
