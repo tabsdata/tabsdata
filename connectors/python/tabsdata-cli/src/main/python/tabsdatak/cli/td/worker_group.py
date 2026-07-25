@@ -68,7 +68,7 @@ def worker():
         "with names starting with 'my_plan'."
     ),
 )
-@click.option("--run", type=str, help="ID of the function run to filter workers by.")
+@click.option("--fnrun", type=str, help="ID of the function run to filter workers by.")
 @click.option("--trx", type=str, help="ID of the transaction to filter workers by.")
 @output_option
 @click.pass_context
@@ -80,7 +80,7 @@ def list_workers(
     fn: str,
     plan: str,
     plan_name: str,
-    run: str,
+    fnrun: str,
     trx: str,
 ):
     """List workers across every project you can view."""
@@ -93,7 +93,7 @@ def list_workers(
             exe_name=plan_name,
             execution_id=plan,
             fn=fn,
-            run=run,
+            fnrun=fnrun,
             collection=coll,
             trx=trx,
             project=proj,
@@ -103,8 +103,8 @@ def list_workers(
                 echo_plan_status(server, plan)
             if trx:
                 echo_transaction_status(server, trx)
-            if run:
-                echo_function_run_status(server, run)
+            if fnrun:
+                echo_function_run_status(server, fnrun)
         list_of_workers = server.list_workers(filter=request_filter)
 
         if output_format(ctx) != "table":
@@ -123,7 +123,7 @@ def list_workers(
         show_hint(
             ctx,
             "Read logs with 'tdk worker logs --worker <WORKER-ID>', or "
-            "'tdk run logs --run <RUN-ID>' for a function run's workers.",
+            "'tdk fnrun logs --fnrun <RUN-ID>' for a function run's workers.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)

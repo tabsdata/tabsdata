@@ -221,8 +221,8 @@ CASES: tuple[MutCase, ...] = (
         "Transaction recovered successfully",
     ),
     MutCase(
-        "run-replay",
-        ["run", "replay", "--run", "LFR1"],
+        "fnrun-replay",
+        ["fnrun", "replay", "--fnrun", "LFR1"],
         "replay_logical_function_run",
         ("LFR1",),
         {},
@@ -365,9 +365,9 @@ _ID_KEYED_ARGVS = (
     ["trx", "recover"],
     ["trx", "monitor"],
     ["trx", "logs"],
-    ["run", "get"],
-    ["run", "logs"],
-    ["run", "recover"],
+    ["fnrun", "get"],
+    ["fnrun", "logs"],
+    ["fnrun", "recover"],
     ["worker", "logs"],
     ["worker", "recover"],
 )
@@ -394,7 +394,7 @@ def test_run_recover_resolves_owning_transaction(tmp_path):
     client = _client()
     client.get_function_run.return_value.transaction.id = "T9"
     result = _invoke(
-        ["run", "recover", "--run", "R1"], client=client, tmp_path=tmp_path
+        ["fnrun", "recover", "--fnrun", "R1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 0, result.output
     assert client.get_function_run.call_args == call("R1")

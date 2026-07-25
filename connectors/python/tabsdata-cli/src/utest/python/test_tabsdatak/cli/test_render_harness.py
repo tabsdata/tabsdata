@@ -645,8 +645,8 @@ CASES: tuple[RenderCase, ...] = (
         ("TID_1", "proj-a", "coll-a", "2026-03-01", "admin", "Done", "FR_1", "WK_1"),
     ),
     RenderCase(
-        "run-get",
-        ["run", "get", "--run", "FR_1"],
+        "fnrun-get",
+        ["fnrun", "get", "--fnrun", "FR_1"],
         _set_run_info,
         {"function_run": _FUNCTION_RUNS[0], "workers": _WORKERS},
         (
@@ -740,8 +740,8 @@ CASES: tuple[RenderCase, ...] = (
         ("TID_1", "EID_1", "proj-a", "coll-a", "2026-03-01", "admin", "Done"),
     ),
     RenderCase(
-        "run-list",
-        ["run", "list"],
+        "fnrun-list",
+        ["fnrun", "list"],
         _set_run_list,
         _FUNCTION_RUNS,
         (
@@ -989,7 +989,7 @@ def _picker_client(*workers: tuple[str, str]) -> MagicMock:
 def test_run_logs_single_worker_streams_directly(tmp_path):
     client = _picker_client((_WID_1, "Done"))
     result = _invoke(
-        ["run", "logs", "--run", "LFR_1"], client=client, tmp_path=tmp_path
+        ["fnrun", "logs", "--fnrun", "LFR_1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 0, result.output
     assert f"log-of-{_WID_1}" in result.output
@@ -1001,7 +1001,7 @@ def test_run_logs_single_worker_streams_directly(tmp_path):
 def test_run_logs_multiple_workers_prompts_by_index(tmp_path):
     client = _picker_client((_WID_1, "Failed"), (_WID_2, "Done"))
     result = _invoke(
-        ["run", "logs", "--run", "LFR_1"],
+        ["fnrun", "logs", "--fnrun", "LFR_1"],
         client=client,
         tmp_path=tmp_path,
         input="2\n",
@@ -1044,7 +1044,7 @@ def test_trx_logs_multiple_workers_no_prompt_lists_and_fails(tmp_path):
 def test_run_logs_with_no_workers_errors(tmp_path):
     client = _picker_client()
     result = _invoke(
-        ["run", "logs", "--run", "LFR_1"], client=client, tmp_path=tmp_path
+        ["fnrun", "logs", "--fnrun", "LFR_1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code != 0
     assert "no workers yet" in result.output
@@ -1057,7 +1057,7 @@ def test_list_status_echoes_stay_out_of_machine_output(tmp_path):
     _set_run_list(client)
     _set_worker_list(client)
     for argv in (
-        ["run", "list", "--plan", "EID_1", "-o", "json"],
+        ["fnrun", "list", "--plan", "EID_1", "-o", "json"],
         ["worker", "list", "--trx", "TID_1", "-o", "json"],
     ):
         result = _invoke(argv, client=client, tmp_path=tmp_path)

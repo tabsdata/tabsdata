@@ -684,7 +684,7 @@ def _monitor_execution_or_transaction(
         )
         show_hint(
             ctx,
-            "You can check their logs with 'tdk run logs --run <RUN-ID>' or with "
+            "You can check their logs with 'tdk fnrun logs --fnrun <RUN-ID>' or with "
             + complete_command,
         )
     else:
@@ -997,7 +997,7 @@ def patch(
         show_hint(
             ctx,
             "Replay a finished function run against the latest patch "
-            "with 'tdk run replay --run <RUN-ID>'.",
+            "with 'tdk fnrun replay --fnrun <RUN-ID>'.",
             final_empty_line=True,
         )
     except Exception as e:

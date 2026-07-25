@@ -41,11 +41,11 @@ if TYPE_CHECKING:
 
 @cli_command
 @click.group()
-def run():
+def fnrun():
     """Function run management commands"""
 
 
-@run.command(name="list")
+@fnrun.command(name="list")
 @click.option(
     "--proj", type=str, help="Name of the project to filter function runs by."
 )
@@ -132,11 +132,11 @@ def list_runs(
         raise click.ClickException(f"Failed to list function runs: {e}")
 
 
-@run.command()
-@click.option("--run", required=True, help="ID of the function run to display.")
+@fnrun.command()
+@click.option("--fnrun", required=True, help="ID of the function run to display.")
 @output_option
 @click.pass_context
-def get(ctx: click.Context, run: str):
+def get(ctx: click.Context, fnrun: str):
     """
     Display a function run: its details plus its workers.
     """
@@ -144,8 +144,8 @@ def get(ctx: click.Context, run: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
-        function_run = server.get_function_run(run)
-        workers = server.list_workers(filter=f"logical_function_run_id:eq:{run}")
+        function_run = server.get_function_run(fnrun)
+        workers = server.list_workers(filter=f"logical_function_run_id:eq:{fnrun}")
 
         if output_format(ctx) != "table":
             render(
@@ -158,7 +158,7 @@ def get(ctx: click.Context, run: str):
             )
             return
 
-        table = Table(title=f"Function run '{run}'")
+        table = Table(title=f"Function run '{fnrun}'")
         table.add_column("Project")
         table.add_column("Collection")
         table.add_column("Function")
@@ -191,8 +191,10 @@ def get(ctx: click.Context, run: str):
         raise click.ClickException(f"Failed to display function run: {e}")
 
 
-@run.command()
-@click.option("--run", required=True, help="ID of the function run whose logs to show.")
+@fnrun.command()
+@click.option(
+    "--fnrun", required=True, help="ID of the function run whose logs to show."
+)
 @click.option(
     "--file",
     help=(
@@ -202,7 +204,7 @@ def get(ctx: click.Context, run: str):
 )
 @output_option
 @click.pass_context
-def logs(ctx: click.Context, run: str, file: str):
+def logs(ctx: click.Context, fnrun: str, file: str):
     """
     Show logs of one of the function run's workers; when several ran (retries),
     pick one from the listing.
@@ -214,8 +216,8 @@ def logs(ctx: click.Context, run: str, file: str):
         target = pick_worker(
             ctx,
             server,
-            [f"logical_function_run_id:eq:{run}"],
-            f"Function run '{run}'",
+            [f"logical_function_run_id:eq:{fnrun}"],
+            f"Function run '{fnrun}'",
         )
         emit_worker_logs(ctx, server, target, file)
     except click.exceptions.Exit:
@@ -225,10 +227,10 @@ def logs(ctx: click.Context, run: str, file: str):
         raise click.ClickException(f"Failed to show logs: {e}")
 
 
-@run.command()
-@click.option("--run", help="ID of the function run to replay.")
+@fnrun.command()
+@click.option("--fnrun", help="ID of the function run to replay.")
 @click.pass_context
-def replay(ctx: click.Context, run: str):
+def replay(ctx: click.Context, fnrun: str):
     """Re-execute a finished function run.
 
     Mints a new concrete physical function run against the latest patch (or
@@ -236,12 +238,12 @@ def replay(ctx: click.Context, run: str):
     attempt's outputs until the new attempt finishes successfully.
     """
     verify_login_or_prompt(ctx)
-    run = run or logical_prompt(ctx, "ID of the function run to replay")
-    click.echo(f"Replaying function run '{run}'")
+    fnrun = fnrun or logical_prompt(ctx, "ID of the function run to replay")
+    click.echo(f"Replaying function run '{fnrun}'")
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        result = server.replay_logical_function_run(run)
+        result = server.replay_logical_function_run(fnrun)
         click.echo("Replay scheduled")
         click.echo(f"Run id:               {result.get('logical_function_run_id')}")
         click.echo(f"Previous FR (bound):  {result.get('previous_function_run_id')}")
@@ -252,10 +254,10 @@ def replay(ctx: click.Context, run: str):
         raise click.ClickException(f"Failed to replay function run: {e}")
 
 
-@run.command()
-@click.option("--run", required=True, help="ID of the function run to recover.")
+@fnrun.command()
+@click.option("--fnrun", required=True, help="ID of the function run to recover.")
 @click.pass_context
-def recover(ctx: click.Context, run: str):
+def recover(ctx: click.Context, fnrun: str):
     """
     Recover the transaction a function run belongs to: the transaction's
     failed or on-hold function runs are re-scheduled.
@@ -264,9 +266,9 @@ def recover(ctx: click.Context, run: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
-        function_run = server.get_function_run(run)
+        function_run = server.get_function_run(fnrun)
         trx = function_run.transaction.id
-        click.echo(f"Recovering transaction '{trx}' of function run '{run}'")
+        click.echo(f"Recovering transaction '{trx}' of function run '{fnrun}'")
         click.echo("-" * 10)
         server.recover_transaction(trx)
         click.echo("Transaction recovered successfully")

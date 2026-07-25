@@ -2,9 +2,9 @@
 
 Proposed command surface after the intuitiveness pass:
 
-- **Identifiers are named options** — every command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--run`/`--worker`/`--user` (execution & access); nothing is positional (except `hints {on|off}`).
+- **Identifiers are named options** — every command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--fnrun`/`--worker`/`--user` (execution & access); nothing is positional (except `hints {on|off}`).
 - **Full canonical names + short aliases**: `collection`/`col`, `function`/`fn`, `transaction`/`trx`.
-- **Execution split into entity subgroups** (`plan`, `transaction`, `run`, `worker`).
+- **Execution split into entity subgroups** (`plan`, `transaction`, `fnrun`, `worker`).
 - **Consistent flags**: `--enabled/--disabled`, `-y/--yes` for destructive ops, `-o/--output {table,json,yaml}`.
 - **Pinned-aware defaults**: `--proj` → pinned project, `--col` → pinned collection.
 - `role`, `cron` and `stage` groups removed.
@@ -34,7 +34,7 @@ Work
 Execution
   plan                   Execution plans (a triggered DAG run)
   transaction (trx)      Transactions within a plan
-  run                    Function runs within a transaction
+  fnrun                  Function runs within a transaction
   worker                 Worker processes and their logs
 
 Ops & access
@@ -184,22 +184,22 @@ trx monitor --trx TRX
 trx logs    --trx TRX   [--file FILE]   # pick a worker when several ran
 ```
 
-### `tdk run` *(function runs)*
+### `tdk fnrun` *(function runs)*
 
 ```
-run list              [--proj PROJECT] [--coll COLLECTION] [--status S ...] [--plan PLAN] [--plan-name PATTERN]
-                      [--fn FUNCTION] [--trx TRX] [-o]
-run get     --run RUN  [-o]      # run details + its workers (retries)
-run logs    --run RUN  [--file FILE]   # pick a worker when several ran
-run replay  --run RUN
-run recover --run RUN      # recovers the run's owning transaction
+fnrun list                  [--proj PROJECT] [--coll COLLECTION] [--status S ...] [--plan PLAN] [--plan-name PATTERN]
+                            [--fn FUNCTION] [--trx TRX] [-o]
+fnrun get     --fnrun RUN  [-o]      # run details + its workers (retries)
+fnrun logs    --fnrun RUN  [--file FILE]   # pick a worker when several ran
+fnrun replay  --fnrun RUN
+fnrun recover --fnrun RUN      # recovers the run's owning transaction
 ```
 
 ### `tdk worker`
 
 ```
 worker list                  [--proj PROJECT] [--coll COLLECTION] [--status S ...] [--plan PLAN] [--plan-name PATTERN]
-                             [--fn FUNCTION] [--run RUN] [--trx TRX] [-o]
+                             [--fn FUNCTION] [--fnrun RUN] [--trx TRX] [-o]
 worker logs    --worker WORKER  [--file FILE] [-o]
 worker recover --worker WORKER      # recovers the worker's owning transaction
 ```

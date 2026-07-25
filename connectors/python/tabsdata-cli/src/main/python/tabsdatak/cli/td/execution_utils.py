@@ -146,7 +146,7 @@ def obtain_list_worker_filters(
     exe_name: str = None,
     execution_id: str = None,
     fn: str = None,
-    run: str = None,
+    fnrun: str = None,
     collection: str = None,
     trx: str = None,
     worker_type: str = None,
@@ -166,8 +166,8 @@ def obtain_list_worker_filters(
         request_filter.append(f"execution_id:eq:{execution_id}")
     if fn:
         request_filter.append(f"function:eq:{fn}")
-    if run:
-        request_filter.append(f"logical_function_run_id:eq:{run}")
+    if fnrun:
+        request_filter.append(f"logical_function_run_id:eq:{fnrun}")
     if collection:
         request_filter.append(f"collection:eq:{collection}")
     if trx:
@@ -210,10 +210,10 @@ def echo_transaction_status(server: TabsdataServer, trx: str) -> None:
     )
 
 
-def echo_function_run_status(server: TabsdataServer, run: str) -> None:
-    function_run = server.get_function_run(run)
+def echo_function_run_status(server: TabsdataServer, fnrun: str) -> None:
+    function_run = server.get_function_run(fnrun)
     click.echo(
-        f"The current status of the function run '{run}' is '{function_run.status}'"
+        f"The current status of the function run '{fnrun}' is '{function_run.status}'"
     )
 
 
