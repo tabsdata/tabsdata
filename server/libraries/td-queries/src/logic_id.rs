@@ -24,7 +24,7 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
-    EP, ExecutionId, FV, FunctionVersionId, LDV, LFR, LogicalFunctionRunId,
+    DV, EP, ExecutionId, FR, FV, FunctionVersionId, LogicalFunctionRunId,
     LogicalTableDataVersionId, PDV, PFR, PhysicalFunctionRunId, PhysicalTableDataVersionId, TX,
     TransactionId, WKR, WorkerId,
 };
@@ -113,10 +113,10 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
             .await?;
     PhysicalTableDataVersionId::init(id)?;
 
-    let id = find_last_idl::<LogicalFunctionRunDB, LogicalFunctionRunId, LFR>(&mut conn).await?;
+    let id = find_last_idl::<LogicalFunctionRunDB, LogicalFunctionRunId, FR>(&mut conn).await?;
     LogicalFunctionRunId::init(id)?;
 
-    let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, LDV>(&mut conn)
+    let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, DV>(&mut conn)
         .await?;
     LogicalTableDataVersionId::init(id)?;
 

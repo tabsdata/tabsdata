@@ -196,7 +196,7 @@ def metrics():
 @click.option(
     "--status",
     default=None,
-    help="Comma-separated LFR statuses to include (e.g. `C,D,E`).",
+    help="Comma-separated function run statuses to include (e.g. `C,D,E`).",
 )
 @output_option
 @click.pass_context
@@ -266,7 +266,9 @@ def show(
 @click.option(
     "--status",
     default=None,
-    help="Comma-separated non-terminal LFR statuses to include (e.g. `S,R,H`).",
+    help=(
+        "Comma-separated non-terminal function run statuses to include (e.g. `S,R,H`)."
+    ),
 )
 @output_option
 @click.pass_context

@@ -129,7 +129,7 @@ impl SchemaSource for LoadDvSource {
         let mut seq = 1u64;
         for p in 0..partitions {
             for v in 0..versions {
-                let id = format!("LDV20260101.{seq:010}");
+                let id = format!("DV20260101.{seq:010}");
                 let defined_on = dv_defined_on(v);
                 let partition = format!("p{p}");
                 stmts.push(
@@ -296,7 +296,7 @@ fn keyed_row() -> Result<LoadDvKeyedDao, TdError> {
     )?;
     Ok(LoadDvKeyedDao::builder()
         .id(LogicalTableDataVersionId::try_from(
-            "LDV20260101.0000000001",
+            "DV20260101.0000000001",
         )?)
         .partition_id(p0())
         .status(DvStatus::Active)
@@ -327,7 +327,7 @@ pub(crate) fn dv_rows(start: usize, count: usize) -> Result<Vec<LoadDvDao>, TdEr
     (start..start + count)
         .map(|v| {
             let id =
-                LogicalTableDataVersionId::try_from(format!("LDV20260101.{:010}", v + 1).as_str())?;
+                LogicalTableDataVersionId::try_from(format!("DV20260101.{:010}", v + 1).as_str())?;
             let defined_on = AtTime::try_from(
                 dv_defined_on(v)
                     .parse::<chrono::DateTime<chrono::Utc>>()

@@ -4344,8 +4344,8 @@ class TabsdataServer:
         raise_for_status: bool = True,
     ) -> dict:
         """
-        Re-execute a finished LFR — mint a new concrete physical function
-        run against the latest patch (or head, if no patch exists). The
+        Re-execute a finished function run — mint a new concrete physical
+        attempt against the latest patch (or head, if no patch exists). The
         pointer stays bound to the previous FR until the new attempt
         finishes successfully.
 
@@ -4568,7 +4568,7 @@ class TabsdataServer:
         raise_for_status: bool = True,
     ) -> dict:
         """Point-in-time `/inflight` — returns the raw response
-        ``{rows}`` with non-terminal LFR counts per
+        ``{rows}`` with non-terminal function run counts per
         ``(collection, group, status)``.
         """
         params: dict = {}

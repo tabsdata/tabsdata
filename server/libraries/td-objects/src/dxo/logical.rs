@@ -66,7 +66,7 @@ pub trait LogicalPointerDao:
     /// The insert-once identity-row DAO this pointer-event row references.
     type IdentityDB: Dao;
 
-    /// Human-readable kind tag for error messages ("LFR" or "LTDV").
+    /// Human-readable kind tag for error messages ("function run" or "table data version").
     const KIND: &'static str;
 
     /// Iden for the logical-identity column (partition column).
@@ -370,7 +370,7 @@ mod definitions {
             logical_id_col = "logical_function_run_id",
             concrete_id_col = "physical_function_run_id",
             identity = LogicalFunctionRunDB,
-            kind = "LFR"
+            kind = "function run"
         )
     )]
     pub struct LogicalFunctionRunPointerDB {
@@ -582,7 +582,7 @@ mod definitions {
             logical_id_col = "logical_table_data_version_id",
             concrete_id_col = "physical_table_data_version_id",
             identity = LogicalTableDataVersionDB,
-            kind = "LTDV"
+            kind = "table data version"
         )
     )]
     pub struct LogicalTableDataVersionPointerDB {

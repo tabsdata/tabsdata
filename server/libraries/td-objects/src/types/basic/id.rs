@@ -103,7 +103,7 @@ impl GroupId {
     }
 }
 
-#[ta_objects::typed(idlogic(key = LFR))]
+#[ta_objects::typed(idlogic(key = FR))]
 pub struct LogicalFunctionRunId;
 
 #[ta_objects::typed(id)]
@@ -112,7 +112,7 @@ pub struct LogicalFunctionRunInputId;
 #[ta_objects::typed(id)]
 pub struct LogicalFunctionRunPointerId;
 
-#[ta_objects::typed(idlogic(key = LDV))]
+#[ta_objects::typed(idlogic(key = DV))]
 pub struct LogicalTableDataVersionId;
 
 #[ta_objects::typed(id)]
