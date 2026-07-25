@@ -121,19 +121,27 @@ def write_function_def(info: FunctionInfo, dest_dir: Path) -> Path:
 
 
 def capture_source_snippet(info: FunctionInfo) -> str:
-    """Return `inspect.getsource()` of the decorated callable.
+    """Return the source of the module defining the decorated callable.
 
     Exposed as a standalone helper so the caller can pass the snippet
-    to the server's register API as display metadata, mirroring the
-    legacy pattern in `tabsdata.api.tabsdata_server._create_archive`.
-    Not written into the bundle.
+    to the server's register API as display metadata. Not written into
+    the bundle.
 
-    If the source can't be located (e.g. compiled from a string,
-    defined in a REPL, or otherwise not file-backed) a one-line
-    placeholder is returned. Capture is best-effort: failure is
-    logged, not raised.
+    The whole module is captured — not just the function node — because
+    the function only runs together with its module scope (imports,
+    helpers, constants), and readers of the snippet (including repair
+    tooling) need that scope to produce code that executes. Falls back
+    to the function node alone, then to a one-line placeholder, when the
+    module source can't be located (compiled from a string, REPL, ...).
+    Capture is best-effort: failure is logged, not raised.
     """
     func = _unwrap_info(info.func)
+    try:
+        source_file = inspect.getsourcefile(func)
+        if source_file is not None:
+            return Path(source_file).read_text(encoding="utf-8")
+    except (OSError, TypeError) as exc:
+        log.warning("could not locate module source for %r: %s", func, exc)
     try:
         return inspect.getsource(func)
     except (OSError, TypeError) as exc:
