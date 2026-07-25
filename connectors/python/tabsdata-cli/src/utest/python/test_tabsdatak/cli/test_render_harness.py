@@ -305,10 +305,6 @@ _WORKERS = [
     }
 ]
 
-# ``plan graph``: the machine formats emit the whole response; the table view
-# prints the ``dot`` rendering.
-_GRAPH = {"dot": "digraph plan { a -> b }", "all_functions": ["fn-a"]}
-
 # ``table versions``: json/yaml emit ``[dv._data ...]``; the table reads nested
 # function/execution objects.
 _DATAVERSIONS = [
@@ -493,10 +489,6 @@ def _set_run_info(c: MagicMock) -> None:
     _set_worker_list(c)
 
 
-def _set_plan_graph(c: MagicMock) -> None:
-    c.get_execution_graph.return_value = _GRAPH
-
-
 def _set_table_list(c: MagicMock) -> None:
     c.list_tables.return_value = [_DTO(_TABLES[0], function=_DTO({"name": "fn-a"}))]
 
@@ -662,13 +654,6 @@ CASES: tuple[RenderCase, ...] = (
             "Done",
             "WK_1",
         ),
-    ),
-    RenderCase(
-        "plan-graph",
-        ["plan", "graph", "--plan", "EID_1"],
-        _set_plan_graph,
-        _GRAPH,
-        ("digraph plan",),
     ),
     RenderCase(
         "table-list",

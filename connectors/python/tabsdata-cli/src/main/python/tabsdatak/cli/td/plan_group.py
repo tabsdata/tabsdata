@@ -224,27 +224,6 @@ def get(ctx: click.Context, plan: str):
 
 
 @plan.command()
-@click.option("--plan", required=True, help="ID of the plan whose graph to display.")
-@output_option
-@click.pass_context
-def graph(ctx: click.Context, plan: str):
-    """
-    Display the full graph of a plan (its dot rendering).
-    """
-    verify_login_or_prompt(ctx)
-    try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        data = server.get_execution_graph(plan)
-        if output_format(ctx) != "table":
-            render(ctx, data=data, table=lambda: None)
-            return
-        click.echo(data.get("dot") or "")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to display plan graph: {e}")
-
-
-@plan.command()
 @click.option("--plan", required=True, help="ID of the plan to cancel.")
 @click.option(
     "--confirm",

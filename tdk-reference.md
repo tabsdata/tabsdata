@@ -165,7 +165,6 @@ every option is a filter, `--proj` included.
 plan list                 [--proj PROJECT] [--coll COLLECTION] [--fn FUNCTION] [--name PATTERN] [--status S ...]
                           [--last] [--at TS] [--monitor] [-o]
 plan get     --plan PLAN   [-o]      # plan details + its function runs and workers
-plan graph   --plan PLAN   [-o]      # full execution graph (dot)
 plan cancel  --plan PLAN   [--confirm cancel]
 plan recover --plan PLAN
 plan monitor --plan PLAN

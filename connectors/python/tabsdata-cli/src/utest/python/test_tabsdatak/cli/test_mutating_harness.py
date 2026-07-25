@@ -355,7 +355,6 @@ _ID_KEYED_METHODS = (
 
 _ID_KEYED_ARGVS = (
     ["plan", "get"],
-    ["plan", "graph"],
     ["plan", "cancel"],
     ["plan", "recover"],
     ["plan", "monitor"],
