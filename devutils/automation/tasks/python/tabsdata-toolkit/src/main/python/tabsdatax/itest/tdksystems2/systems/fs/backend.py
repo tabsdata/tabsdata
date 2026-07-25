@@ -40,10 +40,13 @@ _UNSAFE_ROOT_HEADS = frozenset({
 def validate_fs_root(root: str) -> None:
     if not root:
         raise TdxError("fs root path is empty")
-    if not root.startswith("/"):
-        raise TdxError(f"fs root path must be absolute (start with '/') (got: {root})")
-    parts = [p for p in root.split("/") if p]
-    if parts and parts[0] in _UNSAFE_ROOT_HEADS:
+    path = Path(root)
+    if not path.is_absolute():
+        raise TdxError(f"fs root path must be absolute (got: {root})")
+    # Path elements below the anchor (drive/root); the leading "/" or "C:\\" is
+    # excluded so the system-directory and depth checks compare real names.
+    parts = [p for p in path.parts[1:] if p]
+    if parts and parts[0].lower() in _UNSAFE_ROOT_HEADS:
         raise TdxError(f"fs root must not sit under a system directory (got: {root})")
     if len(parts) < 2:
         raise TdxError(f"fs root must have at least 2 path elements (got: {root})")
