@@ -29,10 +29,7 @@ from tabsdatak.conn.common.file import _output as _output_module
 from tabsdatak.conn.common.file import _plugin
 from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
-from tabsdatak.common._transporter.facade import (
-    TRANSPORTER_MODE_LEGACY,
-    make_handler,
-)
+from tabsdatak.common._transporter.facade import make_handler
 from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
@@ -192,7 +189,7 @@ def test_import_one_local_parquet_round_trip(tmp_path: Path):
         ],
     )
 
-    handler = make_handler(mode=TRANSPORTER_MODE_LEGACY)
+    handler = make_handler()
     source_path = src_dir / "users.parquet"
     report = _input_module.import_one(
         handler=handler,
@@ -222,7 +219,7 @@ def test_import_one_glob_pattern_in_basename(tmp_path: Path):
     _write_input_parquet(src_dir / "a.parquet", [{"id": 1}])
     _write_input_parquet(src_dir / "b.parquet", [{"id": 2}])
 
-    handler = make_handler(mode=TRANSPORTER_MODE_LEGACY)
+    handler = make_handler()
     glob = handler.local_uri(src_dir) + "*.parquet"
     report = _input_module.import_one(
         handler=handler,
@@ -256,7 +253,7 @@ def test_wildcard_copy_one_max_files_drains_one_at_a_time(tmp_path: Path):
         stamp = 1_700_000_000 + i
         _os.utime(src_dir / name, (stamp, stamp))
 
-    handler = make_handler(mode=TRANSPORTER_MODE_LEGACY)
+    handler = make_handler()
     source = handler.local_location(handler.local_uri(src_dir) + "*.parquet")
     # A baseline older than every file so all three are candidates.
     initial_lastmod = "2020-01-01T00:00:00.000000+00:00"
@@ -302,7 +299,7 @@ def test_copy_one_local_to_local(tmp_path: Path):
         [{"id": 100, "name": "carol"}],
     )
 
-    handler = make_handler(mode=TRANSPORTER_MODE_LEGACY)
+    handler = make_handler()
     src_loc = handler.local_path_location(src_dir / "in.parquet")
     target_path = out_dir / "out.parquet"
     tgt_loc = handler.local_path_location(target_path)
