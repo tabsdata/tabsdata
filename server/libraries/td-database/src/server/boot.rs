@@ -27,6 +27,8 @@ const POSTMASTER_PID_FILE: &str = "postmaster.pid";
 /// Timeout for the liveness probe against the postmaster's recorded port.
 const POSTMASTER_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
+const EMBEDDED_COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// Status line (8th line of `postmaster.pid`) written only once the postmaster
 /// accepts connections; `initdb`'s bootstrap backend writes none at all.
 const POSTMASTER_STATUS_READY: &str = "ready";
@@ -66,6 +68,7 @@ fn base_settings(cfg: &BootConfig) -> Settings {
         version: VersionReq::parse(EMBEDDED_POSTGRES_VERSION)
             .expect("EMBEDDED_POSTGRES_VERSION must be a valid version requirement"),
         temporary: !cfg.persistent,
+        timeout: Some(EMBEDDED_COMMAND_TIMEOUT),
         ..Settings::default()
     };
     if let Some(dir) = cfg.data_dir.clone() {
