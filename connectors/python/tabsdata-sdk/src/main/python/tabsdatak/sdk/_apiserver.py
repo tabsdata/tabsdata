@@ -44,7 +44,6 @@ MIN_CONNECTIONS = 2
 MAX_CONNECTIONS = 8
 REFRESH_BUFFER_IN_SECONDS = 300  # 5 minutes
 
-WILDCARD_PROJECT_MARKER = "*"
 
 DEFAULT_LIST_ENDPOINT_PARAMETERS = [
     "len",
@@ -152,12 +151,12 @@ class APIServerError(Exception):
 
 
 class NoProjectSelectedError(Exception):
-    """Raised when a tenant-scoped call has no active project.
+    """Raised when a project-scoped call has no active project.
 
-    Tenant resources (collections, functions, tables, executions, ...) live
+    Name-keyed resources (collections, functions, tables, groups, ...) live
     under ``/projects/{project}/...``. The active project rides on the
     connection, set from the pinned project or a command's ``--proj``
-    override; when neither is present there is no tenant to target.
+    override; when neither is present there is no project to target.
     """
 
     def __init__(self):
@@ -183,26 +182,6 @@ def process_url(url: str) -> str:
 
 
 class APIServer:
-    # Endpoint prefixes that are global (system-scoped) and never carry a
-    # project. Everything else is tenant-scoped: `_resolve_path` injects the
-    # active project as `/projects/{project}/...`. Defaulting to scoped is the
-    # safe bias for a multitenant client -- a forgotten exemption surfaces as
-    # an obvious 404, while a forgotten scope would leak across tenants.
-    #
-    # Source of truth is the server: in td-objects `rest_urls`, every tenant
-    # route is built under `SCOPED` (= `/projects/{project}`) and these globals
-    # are exactly the routes declared without it. Keep this in sync whenever the
-    # server adds a top-level (non-`SCOPED`) resource.
-    _GLOBAL_PREFIXES = (
-        "/auth",
-        "/permission-grants",
-        "/projects",
-        "/roles",
-        "/runtime-info",
-        "/status",
-        "/users",
-    )
-
     def __init__(self, url: str, credentials_file: str = None):
         url = process_url(url)
         self.url = url
@@ -212,30 +191,37 @@ class APIServer:
         self.expires_in = None
         self.expiration_time = None
         self.credentials_file = credentials_file
-        # Active project for tenant-scoped requests. Set once per CLI run from
-        # the pinned project or a command's `--proj` override; the connection then
-        # carries it into every tenant path, so callers never thread it.
+        # Active project for project-scoped requests. Set once per CLI run
+        # from the pinned project or a command's `--proj` override; `_scoped`
+        # builds scoped paths from it and `_project_narrow` narrows
+        # cross-project lists to it.
         self.project = None
 
-    def _resolve_path(self, path: str, allow_all_projects: bool = False) -> str:
-        """Inject the active project into tenant-scoped endpoints.
+    def _scoped(self, path: str) -> str:
+        """Build a project-scoped path under ``/projects/{project}``.
 
-        Tenant resources live under ``/projects/{project}/...``; the active
-        project rides on the connection, so individual callers never thread
-        it. Global endpoints (auth, users, roles, projects, status)
-        are left untouched. With no project selected a tenant call fails fast
-        rather than guessing a default -- unless ``allow_all_projects`` is set
-        (the cross-project list endpoints), where it targets the wildcard
-        marker: every project the requester can view.
+        Name-keyed resources (collections, functions, tables, groups,
+        metrics) are addressed within the active project, which rides on the
+        connection. Each endpoint method decides whether its path is scoped;
+        paths not built through this helper go out verbatim. With no project
+        selected a scoped call fails fast rather than guessing a default.
         """
-        if any(path == p or path.startswith(p + "/") for p in self._GLOBAL_PREFIXES):
-            return path
-        project = self.project
-        if not project:
-            if not allow_all_projects:
-                raise NoProjectSelectedError()
-            project = WILDCARD_PROJECT_MARKER
-        return f"/projects/{project}{path}"
+        if not self.project:
+            raise NoProjectSelectedError()
+        return f"/projects/{self.project}{path}"
+
+    def _project_narrow(
+        self, request_filter: List[str] | str = None
+    ) -> List[str] | str | None:
+        """Narrow a cross-project list to the active project, when one is set."""
+        if not self.project:
+            return request_filter
+        narrowed = f"project:eq:{self.project}"
+        if request_filter is None:
+            return [narrowed]
+        if isinstance(request_filter, str):
+            return [request_filter, narrowed]
+        return [*request_filter, narrowed]
 
     @property
     def certificate_file(self) -> str | None:
@@ -268,7 +254,7 @@ class APIServer:
             else {}
         )
 
-    def get(self, path, params=None, refresh_if_needed=True, allow_all_projects=False):
+    def get(self, path, params=None, refresh_if_needed=True):
         headers = {}
 
         if refresh_if_needed:
@@ -276,7 +262,7 @@ class APIServer:
 
         headers.update(self.authentication_header)
 
-        resolved = self.url + self._resolve_path(path, allow_all_projects)
+        resolved = self.url + path
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.get(
                 resolved,
@@ -314,7 +300,7 @@ class APIServer:
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.post(
-                self.url + self._resolve_path(path),
+                self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 json=json,
@@ -324,7 +310,7 @@ class APIServer:
             )
         else:
             return DEFAULT_HTTP_SESSION.post(
-                self.url + self._resolve_path(path),
+                self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 json=json,
@@ -344,7 +330,7 @@ class APIServer:
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.post(
-                self.url + self._resolve_path(path),
+                self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 data=data,
@@ -352,7 +338,7 @@ class APIServer:
             )
         else:
             return DEFAULT_HTTP_SESSION.post(
-                self.url + self._resolve_path(path),
+                self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 data=data,
@@ -369,7 +355,7 @@ class APIServer:
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.delete(
-                self.url + self._resolve_path(path),
+                self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 json=json,
@@ -377,7 +363,7 @@ class APIServer:
             )
         else:
             return DEFAULT_HTTP_SESSION.delete(
-                self.url + self._resolve_path(path),
+                self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 json=json,
@@ -506,7 +492,7 @@ class APIServer:
         variables: list | None = None,
         raise_for_status: bool = True,
     ):
-        endpoint = "/collections"
+        endpoint = self._scoped("/collections")
         data = {"name": name, "description": description}
         if group is not None:
             data["group"] = group
@@ -522,7 +508,7 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_delete(self, collection_name: str, raise_for_status: bool = True):
-        endpoint = f"/collections/{collection_name}"
+        endpoint = self._scoped(f"/collections/{collection_name}")
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -534,7 +520,7 @@ class APIServer:
         variables: list | None = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/connection"
+        endpoint = self._scoped(f"/collections/{collection_name}/connection")
         data = {
             "connection": connection,
             "secrets": secrets or [],
@@ -546,14 +532,14 @@ class APIServer:
     def collection_connection_get(
         self, collection_name: str, raise_for_status: bool = True
     ):
-        endpoint = f"/collections/{collection_name}/connection"
+        endpoint = self._scoped(f"/collections/{collection_name}/connection")
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_get_by_name(
         self, collection_name: str, raise_for_status: bool = True
     ):
-        endpoint = f"/collections/{collection_name}"
+        endpoint = self._scoped(f"/collections/{collection_name}")
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -570,9 +556,15 @@ class APIServer:
 
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
-            [request_len, request_filter, order_by, pagination_id, next_step],
+            [
+                request_len,
+                self._project_narrow(request_filter),
+                order_by,
+                pagination_id,
+                next_step,
+            ],
         )
-        response = self.get(endpoint, params, allow_all_projects=True)
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_update(
@@ -583,7 +575,7 @@ class APIServer:
         base_path: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}"
+        endpoint = self._scoped(f"/collections/{collection_name}")
         data = self.get_params_dict(
             ["name", "description", "base_path"],
             [new_collection_name, description, base_path],
@@ -603,7 +595,9 @@ class APIServer:
         raise_for_status: bool = True,
         at: int | None = None,
     ):
-        endpoint = f"/collections/{collection_name}/tables/{table_name}/data-versions"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/tables/{table_name}/data-versions"
+        )
 
         params = self.get_params_dict(
             [*DEFAULT_LIST_ENDPOINT_PARAMETERS, "at"],
@@ -630,9 +624,15 @@ class APIServer:
 
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
-            [request_len, request_filter, order_by, pagination_id, next_step],
+            [
+                request_len,
+                self._project_narrow(request_filter),
+                order_by,
+                pagination_id,
+                next_step,
+            ],
         )
-        response = self.get(endpoint, params, allow_all_projects=True)
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def execution_read(
@@ -655,7 +655,7 @@ class APIServer:
         execution_id: str,
         raise_for_status: bool = True,
     ):
-        endpoint = (
+        endpoint = self._scoped(
             f"/collections/{collection_name}/functions/"
             f"{function_name_or_version_id}/executions/{execution_id}"
         )
@@ -688,7 +688,7 @@ class APIServer:
         base_path: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions"
+        endpoint = self._scoped(f"/collections/{collection_name}/functions")
 
         names = [
             "name",
@@ -733,7 +733,9 @@ class APIServer:
     def function_delete(
         self, collection_name: str, function_name: str, raise_for_status: bool = True
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}"
+        )
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -744,7 +746,9 @@ class APIServer:
         execution_name=None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}/execute"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}/execute"
+        )
         data = self.get_params_dict(["name"], [execution_name])
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -752,7 +756,9 @@ class APIServer:
     def function_get(
         self, collection_name: str, function_name: str, raise_for_status: bool = True
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}"
+        )
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -766,7 +772,7 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions"
+        endpoint = self._scoped(f"/collections/{collection_name}/functions")
 
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
@@ -786,7 +792,9 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}/history"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}/history"
+        )
 
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
@@ -804,13 +812,19 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = "/function_runs"
+        endpoint = "/function-runs"
 
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
-            [request_len, request_filter, order_by, pagination_id, next_step],
+            [
+                request_len,
+                self._project_narrow(request_filter),
+                order_by,
+                pagination_id,
+                next_step,
+            ],
         )
-        response = self.get(endpoint, params, allow_all_projects=True)
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_update(
@@ -837,7 +851,9 @@ class APIServer:
         reset_stage: bool = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}"
+        )
 
         data = self.get_params_dict(
             [
@@ -891,7 +907,9 @@ class APIServer:
         enabled: bool,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}/enable"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}/enable"
+        )
 
         data = self.get_params_dict(["enabled"], [enabled])
         response = self.post(endpoint, json=data)
@@ -903,7 +921,9 @@ class APIServer:
         bundle: bytes,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/function-bundle-upload"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/function-bundle-upload"
+        )
         response = self.post_binary(endpoint, data=bundle)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -918,7 +938,9 @@ class APIServer:
         description: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}/patch"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}/patch"
+        )
         data = self.get_params_dict(
             ["patch_of", "bundle_id", "snippet", "runtime_values", "description"],
             [patch_of, bundle_id, snippet, runtime_values, description],
@@ -937,7 +959,9 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}/patches"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/functions/{function_name}/patches"
+        )
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
@@ -954,32 +978,28 @@ class APIServer:
 
     def logical_function_run_replay(
         self,
-        collection_name: str,
         logical_function_run_id: str,
         raise_for_status: bool = True,
     ):
-        endpoint = (
-            f"/collections/{collection_name}"
-            f"/logical-function-runs/{logical_function_run_id}/replay"
-        )
+        endpoint = f"/logical-function-runs/{logical_function_run_id}/replay"
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def group_create(
         self, name: str, description: str = None, raise_for_status: bool = True
     ):
-        endpoint = "/groups"
+        endpoint = self._scoped("/groups")
         data = self.get_params_dict(["name", "description"], [name, description])
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def group_delete(self, name: str, raise_for_status: bool = True):
-        endpoint = f"/groups/{name}"
+        endpoint = self._scoped(f"/groups/{name}")
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def group_get_by_name(self, name: str, raise_for_status: bool = True):
-        endpoint = f"/groups/{name}"
+        endpoint = self._scoped(f"/groups/{name}")
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -992,7 +1012,7 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = "/groups"
+        endpoint = self._scoped("/groups")
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
@@ -1007,7 +1027,7 @@ class APIServer:
         new_description: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/groups/{name}"
+        endpoint = self._scoped(f"/groups/{name}")
         data = self.get_params_dict(
             ["name", "description"], [new_name, new_description]
         )
@@ -1075,7 +1095,7 @@ class APIServer:
         ``{"dim": "collection", "unit": "day", "status": ["C", "F"]}``).
         Repeated params (collection, group, status) accept lists.
         """
-        response = self.get("/metrics", params=params or {})
+        response = self.get(self._scoped("/metrics"), params=params or {})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def inflight_get(
@@ -1086,7 +1106,7 @@ class APIServer:
         """Point-in-time `/inflight` — per-(collection, group, status)
         count of non-terminal runs.
         """
-        response = self.get("/inflight", params=params or {})
+        response = self.get(self._scoped("/inflight"), params=params or {})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def permission_grant(
@@ -1285,7 +1305,7 @@ class APIServer:
         table_name: str,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/tables/{table_name}"
+        endpoint = self._scoped(f"/collections/{collection_name}/tables/{table_name}")
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -1296,7 +1316,9 @@ class APIServer:
         at: int = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/tables/{table_name}/download"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/tables/{table_name}/download"
+        )
         params = self.get_params_dict(
             ["at"],
             [at],
@@ -1313,7 +1335,9 @@ class APIServer:
         len: int = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/tables/{table_name}/sample"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/tables/{table_name}/sample"
+        )
         params = self.get_params_dict(
             [
                 "at",
@@ -1332,7 +1356,9 @@ class APIServer:
         at: int = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/tables/{table_name}/schema"
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/tables/{table_name}/schema"
+        )
         params = self.get_params_dict(
             ["at"],
             [at],
@@ -1351,7 +1377,7 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/tables"
+        endpoint = self._scoped(f"/collections/{collection_name}/tables")
         names = ["at"] + DEFAULT_LIST_ENDPOINT_PARAMETERS
         values = [at, request_len, request_filter, order_by, pagination_id, next_step]
         params = self.get_params_dict(names, values)
@@ -1376,9 +1402,15 @@ class APIServer:
 
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
-            [request_len, request_filter, order_by, pagination_id, next_step],
+            [
+                request_len,
+                self._project_narrow(request_filter),
+                order_by,
+                pagination_id,
+                next_step,
+            ],
         )
-        response = self.get(endpoint, params, allow_all_projects=True)
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_recover(self, transaction_id: str, raise_for_status: bool = True):
@@ -1468,9 +1500,15 @@ class APIServer:
 
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
-            [request_len, request_filter, order_by, pagination_id, next_step],
+            [
+                request_len,
+                self._project_narrow(request_filter),
+                order_by,
+                pagination_id,
+                next_step,
+            ],
         )
-        response = self.get(endpoint, params, allow_all_projects=True)
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     @staticmethod

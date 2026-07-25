@@ -342,17 +342,15 @@ def resolve_all_projects(ctx: click.Context, all_projects: bool) -> bool:
     """Apply ``--all-projects`` for this command and report whether the listing
     spans projects.
 
-    ``--all-projects`` points the connection at the wildcard, overriding any
+    ``--all-projects`` clears the connection's project, overriding any
     pinned or ``--proj`` project. Even without the flag a listing still spans
     projects when no project is selected at all (the implicit fallback)."""
-    from tabsdatak.sdk._apiserver import WILDCARD_PROJECT_MARKER
-
     server = ctx.obj.get("tabsdataserver")
     if server is None:
         return False
     if all_projects:
-        server.connection.project = WILDCARD_PROJECT_MARKER
-    return server.connection.project in (None, WILDCARD_PROJECT_MARKER)
+        server.connection.project = None
+    return server.connection.project is None
 
 
 # ---------------------------------------------------------------------------

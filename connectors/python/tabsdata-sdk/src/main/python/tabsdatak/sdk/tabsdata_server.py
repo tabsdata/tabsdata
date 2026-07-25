@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -3910,6 +3911,17 @@ class TabsdataServer:
         execution = Execution(self.connection, execution_id)
         return execution.cancel()
 
+    @contextmanager
+    def _spanning(self):
+        """Suspend the active project for one call: by-id lookups resolve a
+        globally unique id and must not be narrowed to the active project."""
+        project = self.connection.project
+        self.connection.project = None
+        try:
+            yield
+        finally:
+            self.connection.project = project
+
     def get_execution(self, execution_id: str) -> Execution:
         """
         Get an execution in the server.
@@ -3924,7 +3936,8 @@ class TabsdataServer:
             APIServerError: If the execution could not be obtained.
         """
         try:
-            return self.list_executions(filter=f"id:eq:{execution_id}")[0]
+            with self._spanning():
+                return self.list_executions(filter=f"id:eq:{execution_id}")[0]
         except IndexError:
             raise ValueError(f"Execution with ID {execution_id} not found.")
 
@@ -4111,7 +4124,8 @@ class TabsdataServer:
 
     def get_function_run(self, function_run_id: str) -> FunctionRun:
         try:
-            return self.list_function_runs(filter=f"id:eq:{function_run_id}")[0]
+            with self._spanning():
+                return self.list_function_runs(filter=f"id:eq:{function_run_id}")[0]
         except IndexError:
             raise ValueError(f"Function Run with ID {function_run_id} not found.")
 
@@ -4313,7 +4327,6 @@ class TabsdataServer:
 
     def replay_logical_function_run(
         self,
-        collection_name: str,
         logical_function_run_id: str,
         raise_for_status: bool = True,
     ) -> dict:
@@ -4328,7 +4341,6 @@ class TabsdataServer:
                     new_function_run_id, function_version_id }
         """
         response = self.connection.logical_function_run_replay(
-            collection_name=collection_name,
             logical_function_run_id=logical_function_run_id,
             raise_for_status=raise_for_status,
         )
@@ -5089,7 +5101,8 @@ class TabsdataServer:
             APIServerError: If the transaction could not be obtained.
         """
         try:
-            return self.list_transactions(filter=f"id:eq:{transaction_id}")[0]
+            with self._spanning():
+                return self.list_transactions(filter=f"id:eq:{transaction_id}")[0]
         except IndexError:
             raise ValueError(f"Transaction with ID {transaction_id} not found.")
 

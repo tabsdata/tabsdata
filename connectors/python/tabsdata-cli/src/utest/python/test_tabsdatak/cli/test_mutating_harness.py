@@ -178,8 +178,8 @@ CASES: tuple[MutCase, ...] = (
         "recover_transaction", ("T1",), {}, "Transaction recovered successfully",
     ),
     MutCase(
-        "exe-replay", ["exe", "replay", "-c", "coll1", "--lfr", "LFR1"],
-        "replay_logical_function_run", ("coll1", "LFR1"), {}, "Replay scheduled",
+        "exe-replay", ["exe", "replay", "--lfr", "LFR1"],
+        "replay_logical_function_run", ("LFR1",), {}, "Replay scheduled",
     ),
     MutCase(
         "table-download",

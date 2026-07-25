@@ -1165,16 +1165,11 @@ def recover(ctx: click.Context, plan: str, trx: str):
 @exe.command()
 @proj_option
 @click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the logical function run belongs.",
-)
-@click.option(
     "--lfr",
     help="ID of the logical function run (LFR) to replay.",
 )
 @click.pass_context
-def replay(ctx: click.Context, coll: str, lfr: str):
+def replay(ctx: click.Context, lfr: str):
     """Re-execute a finished logical function run.
 
     Mints a new concrete physical function run against the latest patch (or
@@ -1182,17 +1177,12 @@ def replay(ctx: click.Context, coll: str, lfr: str):
     attempt's outputs until the new attempt finishes successfully.
     """
     verify_login_or_prompt(ctx)
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the LFR belongs")
-    )
     lfr = lfr or logical_prompt(ctx, "ID of the logical function run to replay")
-    click.echo(f"Replaying logical function run '{lfr}' in collection '{coll}'")
+    click.echo(f"Replaying logical function run '{lfr}'")
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        result = server.replay_logical_function_run(coll, lfr)
+        result = server.replay_logical_function_run(lfr)
         click.echo("Replay scheduled")
         click.echo(f"LFR id:               {result.get('logical_function_run_id')}")
         click.echo(f"Previous FR (bound):  {result.get('previous_function_run_id')}")

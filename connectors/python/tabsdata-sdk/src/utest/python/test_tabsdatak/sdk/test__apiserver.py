@@ -19,7 +19,6 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak.sdk import _apiserver as a
 
-
 # ---------------------------------------------------------------------------
 # process_url
 # ---------------------------------------------------------------------------
@@ -170,9 +169,9 @@ def test_apiserver_refresh_invoked_when_within_buffer(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Project (tenant) scoping: `_resolve_path` injects the active project into
-# tenant endpoints; globals pass through; a tenant call with no project fails
-# fast rather than guessing a default.
+# Project scoping: `_scoped` builds `/projects/{project}/...` paths from the
+# active project; scoping is a per-endpoint decision, so paths not built
+# through it go out verbatim. `_project_narrow` narrows cross-project lists.
 # ---------------------------------------------------------------------------
 
 
@@ -180,61 +179,30 @@ def test_apiserver_starts_with_no_project():
     assert a.APIServer("host").project is None
 
 
-@pytest.mark.parametrize(
-    "path",
-    ["/auth", "/projects", "/projects/acme", "/roles", "/status", "/users"],
-)
-def test_global_paths_pass_through_without_project(path):
-    s = a.APIServer("host")
-    assert s.project is None
-    assert s._resolve_path(path) == path
-
-
-def test_tenant_path_requires_a_project():
+def test_scoped_requires_a_project():
     s = a.APIServer("host")
     with pytest.raises(a.NoProjectSelectedError):
-        s._resolve_path("/collections")
+        s._scoped("/collections")
 
 
-def test_tenant_path_is_prefixed_when_project_set():
+def test_scoped_prefixes_the_active_project():
     s = a.APIServer("host")
     s.project = "acme"
-    assert s._resolve_path("/collections") == "/projects/acme/collections"
+    assert s._scoped("/collections") == "/projects/acme/collections"
     assert (
-        s._resolve_path("/collections/c1/functions")
+        s._scoped("/collections/c1/functions")
         == "/projects/acme/collections/c1/functions"
     )
-    # globals stay global even with a project set
-    assert s._resolve_path("/projects") == "/projects"
 
 
-def test_all_projects_targets_wildcard_when_no_project():
+def test_project_narrow_appends_filter_when_project_set():
     s = a.APIServer("host")
-    assert s.project is None
-    assert (
-        s._resolve_path("/transactions", allow_all_projects=True)
-        == f"/projects/{a.WILDCARD_PROJECT_MARKER}/transactions"
-    )
-
-
-def test_all_projects_still_uses_the_selected_project():
-    s = a.APIServer("host")
+    assert s._project_narrow(None) is None
+    assert s._project_narrow("status:eq:D") == "status:eq:D"
     s.project = "acme"
-    assert (
-        s._resolve_path("/transactions", allow_all_projects=True)
-        == "/projects/acme/transactions"
-    )
-
-
-def test_all_projects_leaves_global_paths_untouched():
-    s = a.APIServer("host")
-    assert s._resolve_path("/projects", allow_all_projects=True) == "/projects"
-
-
-def test_tenant_path_without_all_projects_still_requires_a_project():
-    s = a.APIServer("host")
-    with pytest.raises(a.NoProjectSelectedError):
-        s._resolve_path("/transactions", allow_all_projects=False)
+    assert s._project_narrow(None) == ["project:eq:acme"]
+    assert s._project_narrow("status:eq:D") == ["status:eq:D", "project:eq:acme"]
+    assert s._project_narrow(["status:eq:D"]) == ["status:eq:D", "project:eq:acme"]
 
 
 # ---------------------------------------------------------------------------
@@ -265,9 +233,7 @@ def test_get_params_dict_omits_base_path_when_none():
 def test_get_params_dict_keeps_false_reset_flags():
     # ``False`` is a meaningful reset value and must survive the filter
     # (only ``None`` is dropped).
-    out = a.APIServer.get_params_dict(
-        ["reset_state", "reset_stage"], [False, True]
-    )
+    out = a.APIServer.get_params_dict(["reset_state", "reset_stage"], [False, True])
     assert out == {"reset_state": False, "reset_stage": True}
 
 
@@ -304,6 +270,9 @@ class _DummyResponse:
 
 def _server_with_captured_post(monkeypatch):
     server = a.APIServer("host")
+    # collection/function endpoints are project-scoped; an active project must
+    # ride on the connection for their paths to build.
+    server.project = "proj"
     capture = _CapturePost()
     monkeypatch.setattr(server, "post", capture)
     return server, capture
