@@ -12,6 +12,7 @@ mod notify;
 mod recover;
 mod shared;
 mod stage_trigger;
+mod stop;
 
 pub use at_time::dispatch_at_time;
 pub use cron_trigger::{
@@ -21,7 +22,7 @@ pub use cron_trigger::{
 pub use function_runner::{
     create_locked_function_runner_workers_start_request, enrich_minted_dispatch,
     fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch, lfr_ids_from_minted_dispatch,
-    materialize_replay_dispatch, pfr_ids_from_minted_dispatch,
+    materialize_replay_dispatch, pfr_ids_from_dispatched_workers,
 };
 pub use notify::notify_scheduler;
 pub use recover::{
@@ -31,3 +32,4 @@ pub use stage_trigger::{
     create_locked_stage_trigger_workers_start_request,
     create_locked_stage_trigger_workers_stop_request,
 };
+pub use stop::stop_worker_update;

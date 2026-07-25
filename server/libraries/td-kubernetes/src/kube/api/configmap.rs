@@ -8,8 +8,9 @@ use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams};
+use tracing::debug;
 
-use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT};
+use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND};
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
 use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
@@ -183,17 +184,23 @@ pub async fn upsert_configmap(
 
 pub async fn delete_configmap(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    api.delete(name, &DeleteParams::default())
-        .await
-        .map(|_| ())
-        .map_err(|error| {
-            KubeConfigMapError::DeleteFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
+    match api.delete(name, &DeleteParams::default()).await {
+        Ok(_) => Ok(()),
+        Err(kube::Error::Api(api_error)) if api_error.code == HTTP_STATUS_NOT_FOUND => {
+            debug!(
+                configmap = name,
+                namespace = %context.namespace(),
+                "configmap.delete: already deleted"
+            );
+            Ok(())
+        }
+        Err(error) => Err(KubeConfigMapError::DeleteFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
+    }
 }
 
 pub async fn get_configmap(

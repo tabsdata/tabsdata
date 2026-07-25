@@ -15,7 +15,7 @@ use crate::scheduler::layers::request::{
     create_locked_stage_trigger_workers_stop_request, dispatch_at_time, enrich_minted_dispatch,
     fail_stale_abandoned_attempts, fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch,
     fetch_stale_dispatched_runs, lfr_ids_from_minted_dispatch, materialize_replay_dispatch,
-    pfr_ids_from_minted_dispatch, stuck_lfrs_from_stale,
+    pfr_ids_from_dispatched_workers, stop_worker_update, stuck_lfrs_from_stale,
 };
 use ta_services::factory::service_factory;
 use td_bridge::BridgeProviderHandle;
@@ -127,7 +127,7 @@ pub fn request_function_runners() {
         // Flip PFR.status Requested → Dispatched so the replay-side
         // readiness query (`Pfr::to_dispatch`) excludes these
         // PFRs from the next tick.
-        from_fn(pfr_ids_from_minted_dispatch),
+        from_fn(pfr_ids_from_dispatched_workers),
         from_fn(UpdatePhysicalFunctionRunDB::dispatched),
         from_fn(
             By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
@@ -161,7 +161,7 @@ pub fn request_replay_function_runners() {
         from_fn(insert_vec::<WorkerDB>),
         // Flip PFR.status Requested → Dispatched. No LFR.status flip
         // (sticky terminal stays put).
-        from_fn(pfr_ids_from_minted_dispatch),
+        from_fn(pfr_ids_from_dispatched_workers),
         from_fn(UpdatePhysicalFunctionRunDB::dispatched),
         from_fn(
             By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
@@ -208,7 +208,7 @@ pub fn stop_cron_trigger_runners() {
         from_fn(create_locked_cron_trigger_workers_stop_request),
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-        from_fn(UpdateWorkerDB::stop_requested),
+        from_fn(stop_worker_update),
         from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
         from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
@@ -252,7 +252,7 @@ pub fn stop_stage_trigger_runners() {
         from_fn(create_locked_stage_trigger_workers_stop_request),
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-        from_fn(UpdateWorkerDB::stop_requested),
+        from_fn(stop_worker_update),
         from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
         from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
@@ -265,14 +265,17 @@ mod tests {
     use crate::execution::services::execute::ExecuteFunctionService;
     use crate::scheduler::services::SchedulerContext;
     use http::Method;
+    use std::collections::HashSet;
     use std::str::FromStr;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
     use td_bridge::messaging::{
-        CronRequest, FunctionRequest, OrchestratorMessagePayload, StageTriggerRequest,
+        CronRequest, FunctionRequest, OrchestratorMessage, OrchestratorMessagePayload,
+        OrchestratorMessageQueue, QueueError, StageTriggerRequest,
     };
     use td_bridge::test::TestBridgeProvider;
     use td_bridge::{BridgeProviderHandle, Orchestrator};
@@ -335,7 +338,7 @@ mod tests {
                         LogicalFunctionRunDB,
                     >,
                 ),
-                type_of_val(&pfr_ids_from_minted_dispatch),
+                type_of_val(&pfr_ids_from_dispatched_workers),
                 type_of_val(&UpdatePhysicalFunctionRunDB::dispatched),
                 type_of_val(
                     &By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
@@ -349,7 +352,7 @@ mod tests {
                 type_of_val(&enrich_minted_dispatch),
                 type_of_val(&create_locked_function_runner_workers_start_request),
                 type_of_val(&insert_vec::<WorkerDB>),
-                type_of_val(&pfr_ids_from_minted_dispatch),
+                type_of_val(&pfr_ids_from_dispatched_workers),
                 type_of_val(&UpdatePhysicalFunctionRunDB::dispatched),
                 type_of_val(
                     &By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
@@ -368,7 +371,7 @@ mod tests {
                 type_of_val(&create_locked_cron_trigger_workers_stop_request),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-                type_of_val(&UpdateWorkerDB::stop_requested),
+                type_of_val(&stop_worker_update),
                 type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
                 type_of_val(
@@ -401,7 +404,7 @@ mod tests {
                 type_of_val(&create_locked_stage_trigger_workers_stop_request),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-                type_of_val(&UpdateWorkerDB::stop_requested),
+                type_of_val(&stop_worker_update),
                 type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
                 type_of_val(
@@ -1176,13 +1179,84 @@ mod tests {
     /// A `SchedulerContext` wired to the kubernetes orchestrator with an
     /// in-memory queue (the file queue only accepts flat request messages).
     fn kubernetes_scheduler_context(db: &TdPool) -> SchedulerContext {
+        kubernetes_scheduler_context_with_queue(db, InMemoryOrchestratorMessageQueue::default())
+    }
+
+    fn kubernetes_scheduler_context_with_queue(
+        db: &TdPool,
+        queue: impl OrchestratorMessageQueue + 'static,
+    ) -> SchedulerContext {
         let mut context = SchedulerContext::with_defaults(db.clone());
         context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
             TestBridgeProvider::default()
                 .with_orchestrator(Orchestrator::Kubernetes)
-                .with_message_queue(InMemoryOrchestratorMessageQueue::default()),
+                .with_message_queue(queue),
         )));
         context
+    }
+
+    /// An in-memory queue that fails `put` for selected message ids or for
+    /// the first N puts — drives the per-item isolation paths in the tick.
+    struct FailPutQueue {
+        inner: InMemoryOrchestratorMessageQueue,
+        fail_ids: HashSet<String>,
+        fail_first: AtomicUsize,
+    }
+
+    impl FailPutQueue {
+        fn failing_ids(ids: impl IntoIterator<Item = String>) -> Self {
+            Self {
+                inner: InMemoryOrchestratorMessageQueue::default(),
+                fail_ids: ids.into_iter().collect(),
+                fail_first: AtomicUsize::new(0),
+            }
+        }
+
+        fn failing_first(n: usize) -> Self {
+            Self {
+                inner: InMemoryOrchestratorMessageQueue::default(),
+                fail_ids: HashSet::new(),
+                fail_first: AtomicUsize::new(n),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl OrchestratorMessageQueue for FailPutQueue {
+        async fn put(
+            &self,
+            id: String,
+            payload: OrchestratorMessagePayload<serde_yaml::Value>,
+        ) -> Result<OrchestratorMessage<serde_yaml::Value>, QueueError> {
+            let fail_burst = self
+                .fail_first
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+                .is_ok();
+            if fail_burst || self.fail_ids.contains(&id) {
+                return Err(QueueError::BackendError {
+                    cause: format!("injected put failure for '{id}'"),
+                });
+            }
+            self.inner.put(id, payload).await
+        }
+
+        async fn commit(
+            &self,
+            message: &OrchestratorMessage<serde_yaml::Value>,
+        ) -> Result<(), QueueError> {
+            self.inner.commit(message).await
+        }
+
+        async fn rollback(
+            &self,
+            message: &OrchestratorMessage<serde_yaml::Value>,
+        ) -> Result<(), QueueError> {
+            self.inner.rollback(message).await
+        }
+
+        async fn locked_messages(&self) -> Vec<OrchestratorMessage<serde_yaml::Value>> {
+            self.inner.locked_messages().await
+        }
     }
 
     /// Assert a callback is a tokenized HTTP POST.
@@ -1192,23 +1266,15 @@ mod tests {
     }
 
     /// Seed a collection + function and a worker of `worker_type` in
-    /// `worker_status`, then run the request tick against the kubernetes
-    /// orchestrator with an in-memory queue. Returns the single enqueued
-    /// message plus the seeded worker.
-    async fn schedule_trigger_kubernetes(
+    /// `worker_status`/`message_status`.
+    async fn seed_trigger_worker(
         db: &TdPool,
         project_id: ProjectId,
         collection_name: &str,
         worker_type: WorkerType,
         worker_status: WorkerStatus,
-    ) -> Result<
-        (
-            OrchestratorMessagePayload<serde_yaml::Value>,
-            String,
-            WorkerDB,
-        ),
-        TdError,
-    > {
+        message_status: WorkerMessageStatus,
+    ) -> Result<WorkerDB, TdError> {
         let collection = db
             .scoped(project_id)
             .seed()
@@ -1234,17 +1300,45 @@ mod tests {
             .seed()
             .function(&collection, &create)
             .await?;
-        let worker = db
-            .scoped(project_id)
+        db.scoped(project_id)
             .seed()
             .worker(
                 &collection,
                 &function,
                 &worker_type,
                 &worker_status,
-                &WorkerMessageStatus::Locked,
+                &message_status,
             )
-            .await?;
+            .await
+    }
+
+    /// Seed a collection + function and a worker of `worker_type` in
+    /// `worker_status`, then run the request tick against the kubernetes
+    /// orchestrator with an in-memory queue. Returns the single enqueued
+    /// message plus the seeded worker.
+    async fn schedule_trigger_kubernetes(
+        db: &TdPool,
+        project_id: ProjectId,
+        collection_name: &str,
+        worker_type: WorkerType,
+        worker_status: WorkerStatus,
+    ) -> Result<
+        (
+            OrchestratorMessagePayload<serde_yaml::Value>,
+            String,
+            WorkerDB,
+        ),
+        TdError,
+    > {
+        let worker = seed_trigger_worker(
+            db,
+            project_id,
+            collection_name,
+            worker_type,
+            worker_status,
+            WorkerMessageStatus::Locked,
+        )
+        .await?;
 
         let context = kubernetes_scheduler_context(db);
         RequestService::build(&context)
@@ -1256,6 +1350,165 @@ mod tests {
         assert_eq!(created.len(), 1);
         let message = created.remove(0);
         Ok((message.payload, message.id, worker))
+    }
+
+    /// One poisoned worker must not abort the tick: the failing stop is
+    /// skipped (stays `StopScheduled`, re-pickable next tick) while the
+    /// healthy one completes — and the kubernetes stop is synchronous, so
+    /// its row lands directly in `Stopped`.
+    #[td_test::test(db)]
+    async fn test_stop_stage_trigger_isolation_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let poisoned = seed_trigger_worker(
+            &db,
+            p.id,
+            "c_stop_iso_1",
+            WorkerType::StageTrigger,
+            WorkerStatus::StopScheduled,
+            WorkerMessageStatus::Unlocked,
+        )
+        .await?;
+        let healthy = seed_trigger_worker(
+            &db,
+            p.id,
+            "c_stop_iso_2",
+            WorkerType::StageTrigger,
+            WorkerStatus::StopScheduled,
+            WorkerMessageStatus::Unlocked,
+        )
+        .await?;
+
+        let queue = FailPutQueue::failing_ids([poisoned.id.to_string()]);
+        let context = kubernetes_scheduler_context_with_queue(&db, queue);
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+
+        let skipped: WorkerDB = db.live().fetch_one::<WorkerDB>(&poisoned.id).await?;
+        assert_eq!(skipped.status, WorkerStatus::StopScheduled);
+        assert_eq!(skipped.message_status, WorkerMessageStatus::Unlocked);
+
+        let stopped: WorkerDB = db.live().fetch_one::<WorkerDB>(&healthy.id).await?;
+        assert_eq!(stopped.status, WorkerStatus::Stopped);
+        assert!(stopped.ended_on.is_some());
+        assert_eq!(stopped.message_status, WorkerMessageStatus::Locked);
+
+        let created = context.bridge.message_queue().locked_messages().await;
+        assert_eq!(created.len(), 1);
+        assert_eq!(created[0].id, healthy.id.to_string());
+        Ok(())
+    }
+
+    /// The supervisor stop is asynchronous: the row waits in `StopRequested`
+    /// for the exiting worker's callback (unlike the kubernetes synchronous
+    /// stop, which lands in `Stopped`).
+    #[td_test::test(db)]
+    async fn test_stop_stage_trigger_supervisor_awaits_callback(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let worker = seed_trigger_worker(
+            &db,
+            p.id,
+            "c_stop_sup",
+            WorkerType::StageTrigger,
+            WorkerStatus::StopScheduled,
+            WorkerMessageStatus::Unlocked,
+        )
+        .await?;
+
+        let context = SchedulerContext::with_defaults(db.clone());
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+
+        let updated: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker.id).await?;
+        assert_eq!(updated.status, WorkerStatus::StopRequested);
+        assert!(updated.ended_on.is_none());
+        Ok(())
+    }
+
+    /// A failing function-run dispatch is skipped without aborting the tick;
+    /// its PFR stays `Requested` with no WorkerDB and is re-dispatched
+    /// through the replay-side readiness — which runs right after the
+    /// initial pipeline, so the retry already lands in the same tick (under
+    /// a fresh worker id).
+    #[td_test::test(db)]
+    async fn test_function_dispatch_isolation_and_retry_kubernetes(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(
+                &CollectionName::try_from("c_dispatch_iso")?,
+                &UserId::admin(),
+            )
+            .await?;
+        for (name, table) in [("function_1", "table_1"), ("function_2", "table_2")] {
+            let create = FunctionRegister::builder()
+                .try_name(name)?
+                .try_description("d")?
+                .bundle_id(BundleId::default())
+                .try_snippet("s")?
+                .decorator(Decorator::Publisher)
+                .dependencies(vec![])
+                .triggers(None)
+                .tables(vec![TableNameDto::try_from(table)?])
+                .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+                .reuse_frozen_tables(false)
+                .build()?;
+            db.scoped(p.id)
+                .seed()
+                .function(&collection, &create)
+                .await?;
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str(name)?)
+                        .build()?,
+                    ExecutionRequest::builder().name(None).build()?,
+                )
+                .in_project(p.id);
+            ExecuteFunctionService::with_defaults(db.clone())
+                .service()
+                .raw_oneshot(request)
+                .await?;
+        }
+
+        // The first put fails; the tick still succeeds, the other run
+        // dispatches, and the failed run is retried by the replay-side
+        // pipeline within the same tick.
+        let context = kubernetes_scheduler_context_with_queue(&db, FailPutQueue::failing_first(1));
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+        let created = context.bridge.message_queue().locked_messages().await;
+        assert_eq!(created.len(), 2);
+        for message in created.iter() {
+            let worker_id = WorkerId::try_from(message.id.as_str())?;
+            let worker: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker_id).await?;
+            assert_eq!(worker.status, WorkerStatus::Requested);
+        }
+
+        // Nothing left for the next tick: both runs are Dispatched.
+        let context = kubernetes_scheduler_context(&db);
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+        assert!(
+            context
+                .bridge
+                .message_queue()
+                .locked_messages()
+                .await
+                .is_empty()
+        );
+        Ok(())
     }
 
     /// Kubernetes stage-trigger start: lean `StageTriggerRequest::Start`

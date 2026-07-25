@@ -28,7 +28,7 @@ use td_objects::types::basic::{
 use td_queries::{ChunkedQueries, LfrEntry, PfrEntry};
 use td_storage::Storage;
 use td_tower::extractors::{MutRef, Ref};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 /// LFR-rooted readiness fetch for the no-pre-mint dispatch path.
 #[instrument(
@@ -188,13 +188,18 @@ pub async fn lfr_ids_from_minted_dispatch(
     Ok(minted.iter().map(|m| m.lfr.id.clone()).collect())
 }
 
-/// Extract the PFR ids from the minted dispatch set so the
-/// `Requested → Dispatched` status flip can update_chunked across them.
-/// Used by both initial and replay pipelines after WorkerDB insert.
-pub async fn pfr_ids_from_minted_dispatch(
-    minted: Ref<Vec<MintedDispatch>>,
+/// Extract the PFR ids from the successfully dispatched workers so the
+/// `Requested → Dispatched` status flip only covers runs whose start message
+/// was enqueued; a skipped run's PFR stays `Requested` (with no WorkerDB) and
+/// is re-picked by the replay-side readiness next tick. Used by both initial
+/// and replay pipelines after WorkerDB insert.
+pub async fn pfr_ids_from_dispatched_workers(
+    workers: Ref<Vec<WorkerDB>>,
 ) -> Result<Vec<PhysicalFunctionRunId>, TdError> {
-    Ok(minted.iter().map(|m| m.fr.id.clone()).collect())
+    Ok(workers
+        .iter()
+        .filter_map(|w| w.physical_function_run_id.clone())
+        .collect())
 }
 
 // The argument list IS the dependency-injection contract for `from_fn`:
@@ -228,97 +233,116 @@ pub async fn create_locked_function_runner_workers_start_request(
         Orchestrator::Kubernetes => None,
     };
 
+    // One run's failure must not abort the tick: skip it (its PFR stays
+    // `Requested` with no WorkerDB, re-picked by the replay-side readiness
+    // next tick) and keep the rest.
     let mut results = Vec::new();
     for f in physical_function_runs.iter() {
-        let worker_id = WorkerId::new();
+        let result = async {
+            let worker_id = WorkerId::new();
 
-        let server_address = server_addresses.first();
-        let fr_id = f.id.to_string();
-        let w_id = worker_id.to_string();
-        let bindings = [
-            ("function_run_id", fr_id.as_str()),
-            ("worker_id", w_id.as_str()),
-        ];
-        // Responder: where the worker POSTs its status back (both paths).
-        let responder =
-            internal_post_callback(&jwt, server_address, UPDATE_FUNCTION_RUN_WORKER, &bindings)?;
+            let server_address = server_addresses.first();
+            let fr_id = f.id.to_string();
+            let w_id = worker_id.to_string();
+            let bindings = [
+                ("function_run_id", fr_id.as_str()),
+                ("worker_id", w_id.as_str()),
+            ];
+            // Responder: where the worker POSTs its status back (both paths).
+            let responder = internal_post_callback(
+                &jwt,
+                server_address,
+                UPDATE_FUNCTION_RUN_WORKER,
+                &bindings,
+            )?;
 
-        // The message kind differs by orchestrator: supervisor ships a flat
-        // request carrying the fully-resolved Function context; kubernetes
-        // ships a per-action FunctionRequest carrying the decorator + resolver,
-        // resolved later via the endpoint.
-        let payload = match prefetch.as_ref() {
-            Some(prefetch) => {
-                let function_input_v2 = build_function_v2(&mut conn, &storage, f, prefetch).await?;
-                let function_input = WorkerInput::Function(Box::new(function_input_v2));
-                let context = serde_yaml::to_value(&function_input).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Failed to serialize function input: {e}"
+            // The message kind differs by orchestrator: supervisor ships a flat
+            // request carrying the fully-resolved Function context; kubernetes
+            // ships a per-action FunctionRequest carrying the decorator + resolver,
+            // resolved later via the endpoint.
+            let payload = match prefetch.as_ref() {
+                Some(prefetch) => {
+                    let function_input_v2 =
+                        build_function_v2(&mut conn, &storage, f, prefetch).await?;
+                    let function_input = WorkerInput::Function(Box::new(function_input_v2));
+                    let context = serde_yaml::to_value(&function_input).map_err(|e| {
+                        api_error!(
+                            ApiError::InternalError,
+                            "Failed to serialize function input: {e}"
+                        )
+                    })?;
+                    OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
+                        RequestMessagePayload::<serde_yaml::Value> {
+                            class: WorkerClass::Ephemeral,
+                            worker: WorkerName::Function.as_ref().to_string(),
+                            worker_id: worker_id.to_string(),
+                            action: MessageAction::Start,
+                            arguments: Vec::new(),
+                            callback: Some(responder),
+                            context: Some(context),
+                        },
                     )
-                })?;
-                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
-                    RequestMessagePayload::<serde_yaml::Value> {
-                        class: WorkerClass::Ephemeral,
-                        worker: WorkerName::Function.as_ref().to_string(),
-                        worker_id: worker_id.to_string(),
-                        action: MessageAction::Start,
-                        arguments: Vec::new(),
-                        callback: Some(responder),
-                        context: Some(context),
-                    },
-                )
-            }
-            None => {
-                let resolver = internal_get_callback(
-                    &jwt,
-                    server_address,
-                    RESOLVE_WORKER,
-                    &[("worker_id", w_id.as_str())],
-                )?;
-                OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
-                    FunctionRequest::Start(FunctionStartRequest {
-                        worker: WorkerName::Function,
-                        worker_id: worker_id.clone(),
-                        decorator: f.decorator.to_message(),
-                        resolver,
-                        responder,
-                        project_id: f.project_id,
-                        collection_id: f.collection_id,
-                        collection: f.collection.clone(),
-                        connection_id: f.connection_id,
-                        function_id: f.function_id,
-                        function: f.name.clone(),
-                    }),
-                )
-            }
-        };
+                }
+                None => {
+                    let resolver = internal_get_callback(
+                        &jwt,
+                        server_address,
+                        RESOLVE_WORKER,
+                        &[("worker_id", w_id.as_str())],
+                    )?;
+                    OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+                        FunctionRequest::Start(FunctionStartRequest {
+                            worker: WorkerName::Function,
+                            worker_id: worker_id.clone(),
+                            decorator: f.decorator.to_message(),
+                            resolver,
+                            responder,
+                            project_id: f.project_id,
+                            collection_id: f.collection_id,
+                            collection: f.collection.clone(),
+                            connection_id: f.connection_id,
+                            function_id: f.function_id,
+                            function: f.name.clone(),
+                        }),
+                    )
+                }
+            };
 
-        // Create worker message. The worker inherits the function-run's
-        // project so its callbacks land in the right RLS scope.
-        let message = WorkerDB {
-            id: worker_id,
-            project_id: f.project_id,
-            collection_id: f.collection_id,
-            execution_id: Some(f.execution_id.clone()),
-            transaction_id: Some(f.transaction_id.clone()),
-            physical_function_run_id: Some(f.id.clone()),
-            function_version_id: f.function_version_id.clone(),
-            message_status: WorkerMessageStatus::Locked,
-            started_on: None,
-            ended_on: None,
-            status: WorkerStatus::Requested,
-            worker_type: WorkerType::FunctionRunner,
-            worker_enabled: Enabled::TRUE,
-            worker_config: None,
-        };
+            // Create worker message. The worker inherits the function-run's
+            // project so its callbacks land in the right RLS scope.
+            let message = WorkerDB {
+                id: worker_id,
+                project_id: f.project_id,
+                collection_id: f.collection_id,
+                execution_id: Some(f.execution_id.clone()),
+                transaction_id: Some(f.transaction_id.clone()),
+                physical_function_run_id: Some(f.id.clone()),
+                function_version_id: f.function_version_id.clone(),
+                message_status: WorkerMessageStatus::Locked,
+                started_on: None,
+                ended_on: None,
+                status: WorkerStatus::Requested,
+                worker_type: WorkerType::FunctionRunner,
+                worker_enabled: Enabled::TRUE,
+                worker_config: None,
+            };
 
-        // Add it to the queue
-        bridge
-            .message_queue()
-            .put(message.id.to_string(), payload)
-            .await?;
-        results.push(message);
+            // Add it to the queue
+            bridge
+                .message_queue()
+                .put(message.id.to_string(), payload)
+                .await?;
+            Ok::<WorkerDB, TdError>(message)
+        }
+        .await;
+        match result {
+            Ok(message) => results.push(message),
+            Err(e) => warn!(
+                pfr_id = %f.id,
+                reason = ?e,
+                "request: skipping function-run dispatch; will retry next tick"
+            ),
+        }
     }
 
     if !results.is_empty() {

@@ -131,6 +131,7 @@ pub const KUBE_NAME_SEPARATOR: &str = "-";
 pub const KUBE_METADATA_FIELD_NAME: &str = "name";
 pub const KUBE_METADATA_FIELD_UID: &str = "uid";
 
+pub const HTTP_STATUS_NOT_FOUND: u16 = 404;
 pub const HTTP_STATUS_CONFLICT: u16 = 409;
 
 pub const POD_YAML_FIELD_KIND: &str = "kind";

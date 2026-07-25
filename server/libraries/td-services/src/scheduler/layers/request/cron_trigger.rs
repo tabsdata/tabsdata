@@ -3,6 +3,7 @@
 //
 
 use super::shared::{internal_get_callback, internal_post_callback, internal_request};
+use futures::future::join_all;
 use http::Method;
 use std::collections::HashMap;
 use td_bridge::messaging::{
@@ -20,7 +21,7 @@ use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, RESOLVE_WORKER, 
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{AtTime, WorkerConfig};
 use td_tower::extractors::Ref;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 #[instrument(
     name = "scheduler.create_cron_trigger_workers_start",
@@ -33,7 +34,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
     server_addresses: Ref<InternalServerAddresses>,
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
-) -> Result<(), TdError> {
+) -> Result<Vec<WorkerDBWithNames>, TdError> {
     // Supervisor resolves the full cron-trigger message eagerly here; the
     // kubernetes path defers resolution to the gateway/pod and ships a lean
     // request built entirely from the worker row. Both shapes are assembled
@@ -155,8 +156,21 @@ pub async fn create_locked_cron_trigger_workers_start_request(
             }
         })
         .collect();
-    futures::future::try_join_all(futures).await?;
-    Ok(())
+    // One worker's failure must not abort the tick: skip it (it stays
+    // `Scheduled`, re-picked next tick) and keep the rest.
+    let results = join_all(futures).await;
+    let mut kept = Vec::with_capacity(cron_trigger_workers.len());
+    for (worker, result) in cron_trigger_workers.iter().zip(results) {
+        match result {
+            Ok(()) => kept.push(worker.clone()),
+            Err(e) => warn!(
+                worker_id = %worker.id,
+                reason = ?e,
+                "request: skipping cron-trigger start; will retry next tick"
+            ),
+        }
+    }
+    Ok(kept)
 }
 
 #[instrument(
@@ -170,7 +184,7 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
     server_addresses: Ref<InternalServerAddresses>,
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
-) -> Result<(), TdError> {
+) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let kubernetes = matches!(bridge.orchestrator(), Orchestrator::Kubernetes);
 
     let futures: Vec<_> = cron_trigger_workers
@@ -227,6 +241,19 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
             }
         })
         .collect();
-    futures::future::try_join_all(futures).await?;
-    Ok(())
+    // One worker's failure must not abort the tick: skip it (it stays
+    // `StopScheduled`, re-picked next tick) and keep the rest.
+    let results = join_all(futures).await;
+    let mut kept = Vec::with_capacity(cron_trigger_workers.len());
+    for (worker, result) in cron_trigger_workers.iter().zip(results) {
+        match result {
+            Ok(()) => kept.push(worker.clone()),
+            Err(e) => warn!(
+                worker_id = %worker.id,
+                reason = ?e,
+                "request: skipping cron-trigger stop; will retry next tick"
+            ),
+        }
+    }
+    Ok(kept)
 }

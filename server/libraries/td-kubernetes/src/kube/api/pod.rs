@@ -9,8 +9,11 @@ use k8s_openapi::api::core::v1::{ConfigMap, Pod, Secret};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, LogParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
+use tracing::debug;
 
-use crate::base::constants::{DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT};
+use crate::base::constants::{
+    DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT, HTTP_STATUS_NOT_FOUND,
+};
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
@@ -53,17 +56,23 @@ pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), Kuberne
         propagation_policy: Some(PropagationPolicy::Foreground),
         ..DeleteParams::default()
     };
-    api.delete(name, &delete_params)
-        .await
-        .map(|_| ())
-        .map_err(|error| {
-            KubePodError::DeleteFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
+    match api.delete(name, &delete_params).await {
+        Ok(_) => Ok(()),
+        Err(kube::Error::Api(api_error)) if api_error.code == HTTP_STATUS_NOT_FOUND => {
+            debug!(
+                pod = name,
+                namespace = %context.namespace(),
+                "pod.delete: already deleted"
+            );
+            Ok(())
+        }
+        Err(error) => Err(KubePodError::DeleteFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
+    }
 }
 
 pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {

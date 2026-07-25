@@ -282,6 +282,14 @@ mod definitions {
                 status: WorkerStatus::StopRequested,
             })
         }
+
+        pub async fn stopped(at: &AtTime) -> Result<Self, TdError> {
+            Ok(Self {
+                started_on: None,
+                ended_on: Some(*at),
+                status: WorkerStatus::Stopped,
+            })
+        }
     }
 
     #[ta_objects::Dao]

@@ -7,7 +7,9 @@ use k8s_openapi::api::core::v1::{ConfigMap, Secret};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
+use tracing::debug;
 
+use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
@@ -49,17 +51,23 @@ pub async fn delete_job(context: &KubeContext, name: &str) -> Result<(), Kuberne
         propagation_policy: Some(PropagationPolicy::Foreground),
         ..DeleteParams::default()
     };
-    api.delete(name, &delete_params)
-        .await
-        .map(|_| ())
-        .map_err(|error| {
-            KubeJobError::DeleteFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
+    match api.delete(name, &delete_params).await {
+        Ok(_) => Ok(()),
+        Err(kube::Error::Api(api_error)) if api_error.code == HTTP_STATUS_NOT_FOUND => {
+            debug!(
+                job = name,
+                namespace = %context.namespace(),
+                "job.delete: already deleted"
+            );
+            Ok(())
+        }
+        Err(error) => Err(KubeJobError::DeleteFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
+    }
 }
 
 pub async fn delete_jobs(context: &KubeContext) -> Result<(), KubernetesError> {
