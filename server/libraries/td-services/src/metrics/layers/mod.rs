@@ -206,26 +206,43 @@ fn synthesize_nodes_from_edges(edges: &[EdgeRow]) -> Result<Vec<NodeRow>, TdErro
     Ok(acc.into_values().collect())
 }
 
-/// Fill `NodeRow::logical_tables_out` from the `(node, table_id)` listing. It's
-/// a distinct-table count, so it can't ride the summing SQL/fold path: instead
-/// the listing rows are folded to the same bucket grain the nodes already carry
-/// (identity for Hour/Day/Week/Month; Month→Quarter/Year otherwise) and the
-/// distinct `table_id`s counted per node — collapsing a table produced across
-/// many runs, or many months of a period, to one. Runs after `fold_to_coarse`
-/// and before the synthetic nodes are appended; only real `Dim` nodes are keyed
-/// (synthetic nodes carry no table identity and keep zero).
+/// Count distinct `table_id`s per key: fold the listing `items` into
+/// `HashSet`s keyed by identity, then write each target's distinct count.
+/// A distinct-table count can't ride the summing SQL/fold path, so the raw
+/// listing (fine grain) is folded to the grain each target already carries;
+/// `target_key` returns `None` to skip a target (e.g. synthetic nodes).
+fn fill_distinct_table_counts<Item, Target, Key>(
+    items: Vec<Item>,
+    targets: &mut [Target],
+    item_key_table: impl Fn(Item) -> (Key, TableId),
+    target_key: impl Fn(&Target) -> Option<Key>,
+    mut set_count: impl FnMut(&mut Target, usize) -> Result<(), TdError>,
+) -> Result<(), TdError>
+where
+    Key: Eq + std::hash::Hash,
+{
+    let mut distinct: HashMap<Key, HashSet<TableId>> = HashMap::new();
+    for item in items {
+        let (key, table) = item_key_table(item);
+        distinct.entry(key).or_default().insert(table);
+    }
+    for target in targets.iter_mut() {
+        if let Some(key) = target_key(target) {
+            let count = distinct.get(&key).map_or(0, |s| s.len());
+            set_count(target, count)?;
+        }
+    }
+    Ok(())
+}
+
+/// Distinct output tables per node (only real `Dim` nodes; synthetic nodes
+/// keep zero). Runs after `fold_to_coarse`, so node buckets are already at
+/// grain while the listing rows still need folding.
 fn fill_logical_tables_out(
     nodes: &mut [NodeRow],
     out_tables: Vec<NodeOutputTableRow>,
     unit: WindowUnit,
 ) -> Result<(), TdError> {
-    type Key = (
-        i64,
-        Option<CollectionId>,
-        Option<GroupId>,
-        Option<ProjectId>,
-        LogicalFunctionRunStatus,
-    );
     let coarse = matches!(unit, WindowUnit::Quarter | WindowUnit::Year);
     let bucket_ms = |b: EpochMs| -> i64 {
         if coarse {
@@ -234,58 +251,46 @@ fn fill_logical_tables_out(
             *b
         }
     };
-
-    let mut distinct: HashMap<Key, HashSet<TableId>> = HashMap::new();
-    for t in out_tables {
-        distinct
-            .entry((
-                bucket_ms(t.bucket),
-                t.collection_id,
-                t.group_id,
-                t.project_id,
-                t.status,
-            ))
-            .or_default()
-            .insert(t.table_id);
-    }
-
-    for n in nodes.iter_mut().filter(|n| n.kind == NodeKind::Dim) {
-        let key = (
-            *n.bucket,
-            n.collection_id,
-            n.group_id,
-            n.project_id,
-            n.status,
-        );
-        let count = distinct.get(&key).map_or(0, |s| s.len());
-        n.logical_tables_out = TableVersionCount::try_from(count as i64)?;
-    }
-    Ok(())
+    fill_distinct_table_counts(
+        out_tables,
+        nodes,
+        |t| {
+            (
+                (
+                    bucket_ms(t.bucket),
+                    t.collection_id,
+                    t.group_id,
+                    t.project_id,
+                    t.status,
+                ),
+                t.table_id,
+            )
+        },
+        |n| {
+            (n.kind == NodeKind::Dim).then(|| {
+                (
+                    *n.bucket,
+                    n.collection_id,
+                    n.group_id,
+                    n.project_id,
+                    n.status,
+                )
+            })
+        },
+        |n, count| {
+            n.logical_tables_out = TableVersionCount::try_from(count as i64)?;
+            Ok(())
+        },
+    )
 }
 
-/// Fill `EdgeRow::logical_tables` from the `(edge, table_id)` listing — the
-/// edge-side counterpart of [`fill_logical_tables_out`]. Same rationale: a
-/// distinct-table count can't ride the summing SQL/fold path, so the listing
-/// rows are folded to the grain the edges already carry and the distinct
-/// `table_id`s counted per edge, collapsing the versions a table accrues on an
-/// edge across many runs (or many months of a period) to one. Keyed on the same
-/// identity as [`EdgeRow`]'s fold key; applies to every edge kind, since
-/// synthetic-endpoint edges carry table identity too. Runs after
-/// `fold_to_coarse` and before gap-fill.
+/// Distinct tables per edge — the edge-side counterpart of
+/// [`fill_logical_tables_out`]; applies to every edge kind.
 fn fill_logical_tables(
     edges: &mut [EdgeRow],
     edge_tables: Vec<EdgeTableRow>,
     unit: WindowUnit,
 ) -> Result<(), TdError> {
-    type Key = (
-        i64,
-        NodeKind,
-        Option<String>,
-        NodeKind,
-        Option<String>,
-        Option<ProjectId>,
-        LogicalFunctionRunStatus,
-    );
     let coarse = matches!(unit, WindowUnit::Quarter | WindowUnit::Year);
     let bucket_ms = |b: EpochMs| -> i64 {
         if coarse {
@@ -294,36 +299,39 @@ fn fill_logical_tables(
             *b
         }
     };
-
-    let mut distinct: HashMap<Key, HashSet<TableId>> = HashMap::new();
-    for t in edge_tables {
-        distinct
-            .entry((
-                bucket_ms(t.bucket),
-                t.source_kind,
-                t.source,
-                t.target_kind,
-                t.target,
-                t.project_id,
-                t.status,
+    fill_distinct_table_counts(
+        edge_tables,
+        edges,
+        |t| {
+            (
+                (
+                    bucket_ms(t.bucket),
+                    t.source_kind,
+                    t.source,
+                    t.target_kind,
+                    t.target,
+                    t.project_id,
+                    t.status,
+                ),
+                t.table_id,
+            )
+        },
+        |e| {
+            Some((
+                *e.bucket,
+                e.source_kind,
+                e.source.clone(),
+                e.target_kind,
+                e.target.clone(),
+                e.project_id,
+                e.status,
             ))
-            .or_default()
-            .insert(t.table_id);
-    }
-
-    for e in edges.iter_mut() {
-        let key = (
-            *e.bucket,
-            e.source_kind,
-            e.source.clone(),
-            e.target_kind,
-            e.target.clone(),
-            e.project_id,
-            e.status,
-        );
-        e.logical_tables = distinct.get(&key).map_or(0, |s| s.len()) as i64;
-    }
-    Ok(())
+        },
+        |e, count| {
+            e.logical_tables = count as i64;
+            Ok(())
+        },
+    )
 }
 
 /// Status axis for gap-fill: the request filter intersected with
