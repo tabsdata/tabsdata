@@ -17,9 +17,7 @@ from tabsdatak.conn.localfile import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.localfile._explorer import (
-    LocalFileExplorer
-)
+from tabsdatak.conn.localfile._explorer import LocalFileExplorer
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 from tabsdatak.spi import (
     DestContext,

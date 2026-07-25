@@ -45,14 +45,14 @@ class DruidConnectionExplorer(SqlAlchemyConnectionExplorer):
 
     def system_schemas(self) -> frozenset[str]:
         return frozenset({"INFORMATION_SCHEMA", "sys", "lookup"})
-    
+
     def map_entity_fields(self, conn: DruidDestConn, schema: str | None) -> dict:
         """Map the iterated schema name to entity database/schema fields."""
         return {
             "database": "",
             "schema": schema or "",
         }
-    
+
     def engine_kwargs(self, conn: DruidDestConn) -> dict:
         return conn.conn_cfg or {}
 
