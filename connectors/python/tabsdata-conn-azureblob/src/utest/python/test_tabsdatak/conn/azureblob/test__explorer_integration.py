@@ -40,35 +40,41 @@ pytestmark = pytest.mark.azureblob
 _TABLES = ("country", "city", "country_language")
 _FORMATS = ("csv", "ndjson", "parquet")
 
-# The first five city rows (in id order). The auto `id` column is not
-# staged to files, so it is absent here. ndjson / parquet
-# preserve native types; csv comes back with every value as a string.
+# The first five city rows (in id order). The staged files include the `id`
+# column (native int for ndjson / parquet; string for csv, like every other
+# value). ndjson / parquet preserve native types; csv comes back with every
+# value as a string.
 _WLD_CITY_HEAD = [
     {
+        "id": 1,
         "name": "Kabul",
         "country_code": "AFG",
         "district": "Kabol",
         "population": 1780000,
     },
     {
+        "id": 2,
         "name": "Qandahar",
         "country_code": "AFG",
         "district": "Qandahar",
         "population": 237500,
     },
     {
+        "id": 3,
         "name": "Herat",
         "country_code": "AFG",
         "district": "Herat",
         "population": 186800,
     },
     {
+        "id": 4,
         "name": "Mazar-e-Sharif",
         "country_code": "AFG",
         "district": "Balkh",
         "population": 127800,
     },
     {
+        "id": 5,
         "name": "Amsterdam",
         "country_code": "NLD",
         "district": "Noord-Holland",
