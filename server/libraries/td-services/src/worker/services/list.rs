@@ -20,14 +20,13 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<Worker>,
     connection = ConnectionProvider,
-    scope = "WildcardProject",
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(Visible::projects),
-        from_fn(Visible::enforce),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Worker>, _>),
         from_fn(By::<()>::list::<VisibleProjectsFilter, Worker>),
@@ -38,16 +37,14 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
-    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
-    use td_error::{TdError, assert_service_error};
+    use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectName,
-        TransactionKey, UserId, WildcardProject, WorkerMessageStatus, WorkerStatus, WorkerType,
+        TransactionKey, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
     use td_tower::ctx_service::RawOneshot;
@@ -55,17 +52,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_workers(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::WildcardProject;
         use td_tower::metadata::type_of_val;
 
         WorkerListService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<()>, WildcardProject>, ListResponse<Worker>>(&[
+            .assert_service::<ListRequest<()>, ListResponse<Worker>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 type_of_val(&Visible::projects),
-                type_of_val(&Visible::enforce),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Worker>, _>),
                 type_of_val(&By::<()>::list::<VisibleProjectsFilter, Worker>),
@@ -173,8 +167,7 @@ mod tests {
 
         let service = WorkerListService::with_defaults(db.clone()).service();
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list((), ListParams::default())
-            .in_project(p.id);
+            .list((), ListParams::default());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, workers.len());
@@ -212,8 +205,7 @@ mod tests {
         let wildcard = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .list((), ListParams::default())
-                    .in_project(WildcardProject::Wildcard),
+                    .list((), ListParams::default()),
             )
             .await?;
 
@@ -238,32 +230,12 @@ mod tests {
         let response = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), user.id)
-                    .list((), ListParams::default())
-                    .in_project(WildcardProject::Wildcard),
+                    .list((), ListParams::default()),
             )
             .await?;
 
         assert!(response.data.iter().any(|w| w.id == base_worker));
         assert!(!response.data.iter().any(|w| w.id == alpha_worker));
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_list_worker_named_project_forbidden(db: TdPool) -> Result<(), TdError> {
-        let base = db.seed().test_project().await?;
-        seed_run(&db, base.id).await?;
-        let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let user = seed_project_viewer(&db, alpha.id).await?;
-
-        // A named project the requester cannot view is denied, not emptied.
-        let service = WorkerListService::with_defaults(db.clone()).service();
-        let request = RequestContext::with(AccessTokenId::default(), user.id)
-            .list((), ListParams::default())
-            .in_project(base.id);
-        assert_service_error(service, request, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-        })
-        .await;
         Ok(())
     }
 }

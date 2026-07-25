@@ -103,9 +103,6 @@ impl GroupId {
     }
 }
 
-#[ta_objects::typed(id)]
-pub struct InterCollectionPermissionId;
-
 #[ta_objects::typed(idlogic(key = LFR))]
 pub struct LogicalFunctionRunId;
 

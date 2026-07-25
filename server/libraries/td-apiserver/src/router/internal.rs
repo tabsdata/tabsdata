@@ -6,7 +6,6 @@ use td_apiforge::router_ext;
 
 #[router_ext(InternalRouter)]
 mod routes {
-    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -16,7 +15,6 @@ mod routes {
     use ta_apiserver::status::ok_status::{CreateStatus, GetStatus, NoContent, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_database::pool::scoped::InProject;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::{ExecutionRequestInternal, ExecutionResponse};
     use td_objects::dxo::file::DownloadResponse;
@@ -44,11 +42,10 @@ mod routes {
     pub async fn function_run_callback(
         State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(param): Path<PhysicalFunctionRunWorkerIdParam>,
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-        let request = context.update(param, request).in_project(project_id);
+        let request = context.update(param, request);
         let response = state.callback.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -58,11 +55,10 @@ mod routes {
     pub async fn worker_callback(
         State(state): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(param): Path<WorkerIdParam>,
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-        let request = context.update(param, request).in_project(project_id);
+        let request = context.update(param, request);
         let response = state.callback.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -72,10 +68,9 @@ mod routes {
     pub async fn worker_message(
         State(state): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(param): Path<WorkerIdParam>,
     ) -> Result<GetStatus<WorkerInput>, ErrorStatus> {
-        let request = context.read(param).in_project(project_id);
+        let request = context.read(param);
         let response = state.resolve_message.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -85,13 +80,10 @@ mod routes {
     pub async fn function_version_execute(
         State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(function_param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionRequestInternal>,
     ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
-        let request = context
-            .create(function_param, request)
-            .in_project(project_id);
+        let request = context.create(function_param, request);
         let response = state.execute_version.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -101,7 +93,6 @@ mod routes {
     pub async fn function_version_execution_status(
         State(state): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionParam>,
     ) -> Result<GetStatus<PhysicalFunctionRun>, ErrorStatus> {
@@ -109,7 +100,7 @@ mod routes {
             function_version_id: param.function_version_id,
             execution: request.execution,
         };
-        let request = context.read(request).in_project(project_id);
+        let request = context.read(request);
         let response = state
             .read_version_execution
             .service()
@@ -128,7 +119,6 @@ mod routes {
     pub async fn download_state(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(function_param): Path<FunctionVersionIdParam>,
         Query(at_param): Query<AtTimeParam>,
     ) -> Result<DownloadResponse, ErrorStatus> {
@@ -136,7 +126,7 @@ mod routes {
             function_version_id: function_param.function_version_id,
             at: at_param.at,
         };
-        let request = context.read(param).in_project(project_id);
+        let request = context.read(param);
         let response = state.download_state.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::parquet(response))
     }

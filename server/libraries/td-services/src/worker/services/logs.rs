@@ -5,13 +5,13 @@
 use crate::worker::layers::logs::{worker_logs, worker_logs_tail};
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
 use td_bridge::BridgeProviderHandle;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{LogsCastNumber, ProjectId, WorkerIdName};
+use td_objects::types::basic::{LogsCastNumber, ProjectId, WorkerId};
 use td_objects::types::stream::BoxedSyncStream;
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
@@ -23,7 +23,7 @@ use td_tower::layers;
     request = ReadRequest<WorkerLogsParams>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
     context = BridgeProviderHandle,
 )]
@@ -32,9 +32,10 @@ fn service() {
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
         // find worker (resolves the owning project for the scope)
-        from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
-        from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
+        from_fn(With::<WorkerLogsParams>::extract::<WorkerId>),
+        from_fn(By::<WorkerId>::fetch_one::<WorkerDB>),
         from_fn(With::<WorkerDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         // check requester has access to the project
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
@@ -50,7 +51,7 @@ fn service() {
     request = ReadRequest<WorkerLogsParams>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
     context = BridgeProviderHandle,
 )]
@@ -58,9 +59,10 @@ fn logs_tail_service() {
     layers!(
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
-        from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
-        from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
+        from_fn(With::<WorkerLogsParams>::extract::<WorkerId>),
+        from_fn(By::<WorkerId>::fetch_one::<WorkerDB>),
         from_fn(With::<WorkerDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
@@ -75,14 +77,12 @@ mod tests {
     use crate::worker::layers::tests::create_log_files;
     use bytes::Bytes;
     use futures_util::TryStreamExt;
-    use std::str::FromStr;
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_bridge::test::TestBridgeProvider;
     use td_bridge::worker::workspace::WorkspaceWorkerHandler;
     use td_common::env::WORKSPACE_URI_ENV;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -97,60 +97,54 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_worker_logs(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         WorkerLogService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<WorkerLogsParams>, ProjectId>, BoxedSyncStream>(
-                &[
-                    type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
-                    type_of_val(
-                        &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
-                    ),
-                    // find worker (resolves the owning project for the scope)
-                    type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
-                    type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
-                    type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
-                    // check requester has access to the project
-                    type_of_val(&Scope::<Project>::set),
-                    type_of_val(&Rbac::<Project, DevelopProject>::check),
-                    // Resolve worker message path.
-                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
-                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
-                    type_of_val(&worker_logs),
-                ],
-            );
+            .assert_service::<ReadRequest<WorkerLogsParams>, BoxedSyncStream>(&[
+                type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
+                type_of_val(
+                    &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
+                ),
+                // find worker (resolves the owning project for the scope)
+                type_of_val(&With::<WorkerLogsParams>::extract::<WorkerId>),
+                type_of_val(&By::<WorkerId>::fetch_one::<WorkerDB>),
+                type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
+                // check requester has access to the project
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
+                // Resolve worker message path.
+                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
+                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
+                type_of_val(&worker_logs),
+            ]);
     }
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_worker_logs_tail(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         WorkerLogTailService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<WorkerLogsParams>, ProjectId>, BoxedSyncStream>(
-                &[
-                    type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
-                    type_of_val(
-                        &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
-                    ),
-                    type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
-                    type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
-                    type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
-                    type_of_val(&Scope::<Project>::set),
-                    type_of_val(&Rbac::<Project, DevelopProject>::check),
-                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
-                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
-                    type_of_val(&worker_logs_tail),
-                ],
-            );
+            .assert_service::<ReadRequest<WorkerLogsParams>, BoxedSyncStream>(&[
+                type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
+                type_of_val(
+                    &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
+                ),
+                type_of_val(&With::<WorkerLogsParams>::extract::<WorkerId>),
+                type_of_val(&By::<WorkerId>::fetch_one::<WorkerDB>),
+                type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
+                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
+                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
+                type_of_val(&worker_logs_tail),
+            ]);
     }
 
     #[td_test::test(db)]
@@ -245,12 +239,11 @@ mod tests {
                     let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                         .read(
                             WorkerLogsParams::builder()
-                                .worker(WorkerIdName::from_str(&workers[0].id.to_string())?)
+                                .worker(workers[0].id.clone())
                                 .extension(vec![LogsExtension::All])
                                 .retry(vec![])
                                 .build()?,
-                        )
-                        .in_project(p.id);
+                        );
 
                     let response = service.raw_oneshot(request).await?;
                     Ok::<_, TdError>(response)

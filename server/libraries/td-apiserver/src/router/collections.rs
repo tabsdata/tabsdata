@@ -4,47 +4,64 @@
 
 use td_apiforge::router_ext;
 
+#[router_ext(CollectionListRouter)]
+mod list_routes {
+    use axum::Extension;
+    use axum::extract::State;
+    use axum_extra::extract::Query;
+    use std::sync::Arc;
+    use ta_apiserver::status::error_status::ErrorStatus;
+    use ta_apiserver::status::ok_status::ListStatus;
+    use ta_services::service::TdService;
+    use td_apiforge::apiserver_path;
+    use td_objects::dxo::collection::CollectionRead;
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::rest_urls::LIST_COLLECTIONS;
+    use td_services::collection::service::CollectionServices;
+    use tower::ServiceExt;
+
+    const COLLECTIONS_TAG: &str = "Collections";
+
+    // Spans every project the caller can view; narrow with the `project`
+    // list filter.
+    #[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
+    #[doc = "Lists collections"]
+    pub async fn list_collections(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Query(query_params): Query<ListParams>,
+    ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
+        let request = context.list((), query_params);
+        let response = collection_state.list.service().oneshot(request).await?;
+        Ok(ListStatus::OK(response))
+    }
+}
+
 #[router_ext(CollectionsRouter)]
 mod routes {
-    use crate::extractors::{Project, WildcardProject};
+    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, State};
-    use axum_extra::extract::Query;
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
     use ta_apiserver::status::ok_status::{
-        CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
+        CreateStatus, DeleteStatus, GetStatus, NoContent, UpdateStatus,
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_database::pool::scoped::InProject;
     use td_objects::dxo::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
     use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
-    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::{
         CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION,
-        GET_COLLECTION_CONNECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
-        UPSERT_COLLECTION_CONNECTION,
+        GET_COLLECTION_CONNECTION, UPDATE_COLLECTION, UPSERT_COLLECTION_CONNECTION,
     };
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
 
     const COLLECTIONS_TAG: &str = "Collections";
-
-    // `*` spans every project the caller can view; a concrete project lists just that one.
-    #[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
-    #[doc = "Lists collections"]
-    pub async fn list_collections(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        WildcardProject(selector): WildcardProject,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(selector);
-        let response = collection_state.list.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
 
     #[apiserver_path(method = get, path = GET_COLLECTION, tag = COLLECTIONS_TAG)]
     #[doc = "Get a collection"]
@@ -144,7 +161,7 @@ mod routes {
 #[cfg(test)]
 mod tests {
     use crate::layers::project_resolver::project_resolver_layer;
-    use crate::router::collections::CollectionsRouter;
+    use crate::router::collections::{CollectionListRouter, CollectionsRouter};
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use axum::middleware::from_fn_with_state;
@@ -181,6 +198,13 @@ mod tests {
             .layer(Extension(context))
     }
 
+    /// Mounts the flat (non-project) list router with only the
+    /// `RequestContext` extension — no resolver runs for top-level routes.
+    fn to_list_route<R: Into<Router> + Clone>(router: &R) -> Router {
+        let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
+        router.clone().into().layer(Extension(context))
+    }
+
     /// Substitute the `{project}` segment with the per-test seeded `test` project.
     fn url(template: &str) -> String {
         template.replace("{project}", "test")
@@ -199,7 +223,11 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_COLLECTIONS.replace("{project}", "does-not-exist"))
+                    .uri(
+                        GET_COLLECTION
+                            .replace("{project}", "does-not-exist")
+                            .replace("{collection}", "whatever"),
+                    )
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -245,7 +273,7 @@ mod tests {
             }
         }
         assert!(
-            ops >= 7,
+            ops >= 6,
             "expected the collections operations, counted {ops}"
         );
 
@@ -264,17 +292,18 @@ mod tests {
     #[td_test::test(db)]
     async fn test_collections_lifecycle(db: TdPool) {
         db.seed().test_project().await.unwrap();
-        let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
-            &Context::with_defaults(db.clone()),
+        let services = Arc::new(CollectionServices::build(&Context::with_defaults(
+            db.clone(),
         )));
+        let router = CollectionsRouter::router(services.clone());
+        let list_router = CollectionListRouter::router(services);
 
         // List empty collections
-        let response = to_route(&router, db.clone())
-            .await
+        let response = to_list_route(&list_router)
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(url(LIST_COLLECTIONS))
+                    .uri(LIST_COLLECTIONS)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -315,12 +344,11 @@ mod tests {
         assert_eq!(body["data"]["description"], "mock collection");
 
         // List again and assert we have 2 collections
-        let response = to_route(&router, db.clone())
-            .await
+        let response = to_list_route(&list_router)
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(url(LIST_COLLECTIONS))
+                    .uri(LIST_COLLECTIONS)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -393,12 +421,11 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // List again and assert we are back to 1 collection
-        let response = to_route(&router, db.clone())
-            .await
+        let response = to_list_route(&list_router)
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(url(LIST_COLLECTIONS))
+                    .uri(LIST_COLLECTIONS)
                     .body(Body::empty())
                     .unwrap(),
             )

@@ -11,10 +11,11 @@ use crate::execution::layers::read::{
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject, enter_project_scope};
 use td_execution::TransactionBy;
 use td_objects::StateFilter;
 use td_objects::States;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
@@ -23,7 +24,7 @@ use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, ExecutionId, ExecutionIdName, FunctionId, FunctionVersionId, TriggeredOn,
+    AtTime, CollectionId, ExecutionId, FunctionId, FunctionVersionId, ProjectId, TriggeredOn,
 };
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
@@ -56,7 +57,7 @@ where
     request = ReadRequest<ExecutionParam>,
     response = ExecutionResponse,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "Global",
     context = TransactionBy,
     context = AuthzContext,
 )]
@@ -65,17 +66,22 @@ where
     FunctionDB: States<FUNCTION_STATE>,
 {
     layers!(
-        // Authorize: the requester must be able to view the project in scope.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
         // Extract from request.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
         // TODO: when ExecutionParam carries an AtParam, thread it as the
         // pointer-read AtTime so logical bindings render at request time.
         // Find Plan and its TriggeredOn (and convert to AtTime).
-        from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
-        from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
+        from_fn(With::<ExecutionParam>::extract::<ExecutionId>),
+        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDB>),
+        // Resolve the owning project via the collection; authorize the
+        // requester to view it.
+        from_fn(With::<ExecutionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         from_fn(With::<ExecutionDB>::extract::<TriggeredOn>),
         from_fn(With::<TriggeredOn>::try_convert_to::<AtTime, _>),
         // Find function that triggered the plan.
@@ -90,7 +96,6 @@ where
         // Build execution plan
         from_fn(build_execution_plan),
         // Get transactions
-        from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         from_fn(By::<ExecutionId>::fetch_all::<TransactionDB>),
         from_fn(build_existing_transaction_map),
         // Create execution plan
@@ -108,10 +113,8 @@ where
 mod tests {
     use super::*;
     use crate::execution::services::execute::tests::test_execute;
-    use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -123,23 +126,26 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_read_execution(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<ExecutionParam>, ProjectId>, ExecutionResponse>(&[
-                // Authorize: the requester must be able to view the project in scope.
+            .assert_service::<ReadRequest<ExecutionParam>, ExecutionResponse>(&[
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
                 // Find Plan and its TriggeredOn (and convert to AtTime).
-                type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
-                type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
+                type_of_val(&With::<ExecutionParam>::extract::<ExecutionId>),
+                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDB>),
+                // Resolve the owning project via the collection; authorize the
+                // requester to view it.
+                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 type_of_val(&With::<ExecutionDB>::extract::<TriggeredOn>),
                 type_of_val(&With::<TriggeredOn>::try_convert_to::<AtTime, _>),
                 // Find function that triggered the plan.
@@ -170,7 +176,6 @@ mod tests {
                 // Build execution plan
                 type_of_val(&build_execution_plan),
                 // Get transactions
-                type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
                 type_of_val(&By::<ExecutionId>::fetch_all::<TransactionDB>),
                 type_of_val(&build_existing_transaction_map),
                 // Create execution plan
@@ -190,13 +195,11 @@ mod tests {
 
         let service =
             ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(
-                ExecutionParam::builder()
-                    .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
-                    .build()?,
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            ExecutionParam::builder()
+                .execution(execution.id.clone())
+                .build()?,
+        );
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(execution.id, response.id);

@@ -672,12 +672,10 @@ mod tests {
 
         // Call replay — mints FR_new + Requested(FR_new) pointer event.
         let replay_param = LogicalFunctionRunParam::builder()
-            .collection(CollectionIdName::from_str("c_replay")?)
             .logical_function_run(lfr_id.clone())
             .build()?;
         let replay_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(replay_param, ())
-            .in_project(p.id);
+            .create(replay_param, ());
         let replay_response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
             .raw_oneshot(replay_request)
@@ -854,8 +852,8 @@ mod tests {
         assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
 
         // The resolver carries a valid internal token bound to this exact
-        // request: GET, the /message scope, and the worker-scoped ids
-        // (worker_id + project; function_run_id is fetched from the worker row).
+        // request: GET, the /message scope, and the worker id (the
+        // function_run_id is fetched from the worker row).
         let bearer = resolver
             .headers
             .get("authorization")
@@ -868,7 +866,6 @@ mod tests {
             claims.bindings.get("worker_id").unwrap(),
             &worker_id.to_string()
         );
-        assert!(claims.bindings.contains_key("project"));
 
         Ok(())
     }

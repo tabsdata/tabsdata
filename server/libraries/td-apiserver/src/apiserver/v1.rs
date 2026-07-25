@@ -40,9 +40,9 @@ use crate::layers::project_resolver::project_resolver_layer;
 use crate::layers::security_mode::mode_authz_router;
 use crate::layers::tracing::TraceService;
 use crate::router::auth::{SecureAuthRouter, UnsecureAuthRouter};
-use crate::router::collections::CollectionsRouter;
+use crate::router::collections::{CollectionListRouter, CollectionsRouter};
 use crate::router::executions::ExecutionsRouter;
-use crate::router::function_runs::FunctionRunsRouter;
+use crate::router::function_runs::{FunctionRunListRouter, FunctionRunsRouter};
 use crate::router::functions::FunctionsRouter;
 use crate::router::groups::GroupsRouter;
 use crate::router::logical_versions::LogicalVersionsRouter;
@@ -55,7 +55,7 @@ use crate::router::roles::RolesRouter;
 use crate::router::server_status::ServerStatusRouter;
 use crate::router::simple_permissions::SimplePermissionsRouter;
 use crate::router::tables::TablesRouter;
-use crate::router::transactions::TransactionsRouter;
+use crate::router::transactions::{SynchrotronRouter, TransactionsRouter};
 use crate::router::user_roles::UserRolesRouter;
 use crate::router::users::UsersRouter;
 use crate::router::workers::WorkersRouter;
@@ -90,9 +90,12 @@ impl ApiServerV1 {
                         .merge(ping_router()),
                 )
                 // secure endpoints — split into:
-                //   - global subtree: system-scoped routes that do not nest
-                //     under a project (auth, users, roles, projects CRUDL
-                //     itself, server status, role permissions).
+                //   - global subtree: routes with no `{project}` segment —
+                //     system-scoped routes (auth, users, roles, projects CRUDL
+                //     itself, server status, role permissions) and the
+                //     id-keyed routes (executions, transactions, workers,
+                //     function runs, replay) whose services resolve the
+                //     owning project from the row itself.
                 //   - tenant subtree: routes under `/projects/{project}/...`
                 //     (collections, functions, tables, groups, ...)
                 //     where the project_resolver_layer turns the URL segment
@@ -135,6 +138,12 @@ impl ApiServerV1 {
                         // only `Permissions (Simple)` (Roles / Permissions /
                         // User Roles are hidden), and `rbac` mode the reverse.
                         .merge(mode_authz_router(mode, rbac_management, simple_facade))
+                        .merge(CollectionListRouter::router(context.services.clone()))
+                        .merge(ExecutionsRouter::router(context.services.clone()))
+                        .merge(FunctionRunListRouter::router(context.services.clone()))
+                        .merge(LogicalVersionsRouter::router(context.services.clone()))
+                        .merge(TransactionsRouter::router(context.services.clone()))
+                        .merge(WorkersRouter::router(context.services.clone()))
                         .merge(AuthenticatedExtendedRouter::router(
                             context.extended_services.clone(),
                         ));
@@ -142,14 +151,11 @@ impl ApiServerV1 {
                     let tenant = utoipa_axum::router::OpenApiRouter::default()
                         .merge(GroupsRouter::router(context.services.clone()))
                         .merge(CollectionsRouter::router(context.services.clone()))
-                        .merge(ExecutionsRouter::router(context.services.clone()))
                         .merge(FunctionsRouter::router(context.services.clone()))
                         .merge(FunctionRunsRouter::router(context.services.clone()))
                         .merge(MetricsRouter::router(context.services.clone()))
-                        .merge(LogicalVersionsRouter::router(context.services.clone()))
+                        .merge(SynchrotronRouter::router(context.services.clone()))
                         .merge(TablesRouter::router(context.services.clone()))
-                        .merge(TransactionsRouter::router(context.services.clone()))
-                        .merge(WorkersRouter::router(context.services.clone()))
                         // resolver runs after auth, before any service stack;
                         // 404s unknown projects before any RLS-scoped table
                         // is touched.

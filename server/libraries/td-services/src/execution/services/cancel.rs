@@ -6,14 +6,15 @@ use crate::execution::layers::update_status::update_function_run_status;
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
 use td_execution::SchedulerNotify;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{ExecutionId, ExecutionIdName};
+use td_objects::types::basic::{CollectionId, ExecutionId, ProjectId};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -24,7 +25,7 @@ use td_tower::layers;
     request = UpdateRequest<ExecutionParam, ()>,
     response = (),
     connection = TransactionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -33,14 +34,16 @@ fn service() {
         // Extract from request.
         from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
         from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
-        // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
-        from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
-        // Find function run.
-        from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
-        // check requester can develop the current project (manage or develop)
+        from_fn(With::<ExecutionParam>::extract::<ExecutionId>),
+        // Find execution and resolve its owning project via the collection.
+        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDB>),
+        from_fn(With::<ExecutionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
+        // check requester can develop the project (manage or develop)
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
-        from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
         // Set cancel status (on the LFR — FR has no status).
         from_fn(UpdateLogicalFunctionRunDB::cancel),
@@ -60,7 +63,6 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -75,27 +77,27 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_cancel_execution(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         ExecutionCancelService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<UpdateRequest<ExecutionParam, ()>, ProjectId>, ()>(&[
+            .assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
                 // Extract from request.
                 type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
                 type_of_val(
                     &With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>,
                 ),
-                // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
-                type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
-                // Find function run.
-                type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
-                // check requester can develop the current project (manage or develop)
+                type_of_val(&With::<ExecutionParam>::extract::<ExecutionId>),
+                // Find execution and resolve its owning project via the collection.
+                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDB>),
+                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
+                // check requester can develop the project (manage or develop)
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
-                type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
                 type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
                 // Set cancel status (on the LFR).
                 type_of_val(&UpdateLogicalFunctionRunDB::cancel),
@@ -121,11 +123,10 @@ mod tests {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(
                         ExecutionParam::builder()
-                            .execution(ExecutionIdName::from_str(&execution)?)
+                            .execution(ExecutionId::from_str(&execution)?)
                             .build()?,
                         (),
-                    )
-                    .in_project(project_id);
+                    );
 
                 ExecutionCancelService::with_defaults(db.clone())
                     .service()

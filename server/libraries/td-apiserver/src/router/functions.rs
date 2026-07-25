@@ -23,6 +23,7 @@ mod routes {
     use td_database::pool::scoped::InProject;
     use td_objects::dxo::bundle::Bundle;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
     use td_objects::dxo::file::DownloadResponse;
     use td_objects::dxo::function::{
         Function, FunctionEnable, FunctionPatch, FunctionPatchRecord, FunctionRegister,
@@ -32,15 +33,32 @@ mod routes {
     use td_objects::rest_urls::params::FunctionAtIdName;
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, FUNCTION_BUNDLE_DOWNLOAD, FUNCTION_CREATE, FUNCTION_DELETE,
-        FUNCTION_ENABLE, FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL,
-        FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
-        FunctionVersionIdParam,
+        FUNCTION_ENABLE, FUNCTION_EXECUTE, FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST,
+        FUNCTION_LIST_BY_COLL, FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD,
+        FunctionParam, FunctionVersionIdParam,
     };
+    use td_services::execution::services::ExecutionServices;
     use td_services::function::services::FunctionServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 
     const FUNCTIONS_TAG: &str = "Functions";
+
+    #[apiserver_path(method = post, path = FUNCTION_EXECUTE, tag = FUNCTIONS_TAG)]
+    #[doc = "Executes a function"]
+    pub async fn execute(
+        State(executions): State<Arc<ExecutionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Project(project_id): Project,
+        Path(function_param): Path<FunctionParam>,
+        Json(request): Json<ExecutionRequest>,
+    ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
+        let request = context
+            .create(function_param, request)
+            .in_project(project_id);
+        let response = executions.execute.service().oneshot(request).await?;
+        Ok(CreateStatus::CREATED(response))
+    }
 
     #[apiserver_path(method = delete, path = FUNCTION_DELETE, tag = FUNCTIONS_TAG)]
     pub async fn delete(

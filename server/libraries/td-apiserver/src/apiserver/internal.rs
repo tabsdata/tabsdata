@@ -6,7 +6,6 @@ use crate::apiserver::ApiServerCtx;
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::layers::cors::CorsService;
 use crate::layers::internal_token::internal_token_layer;
-use crate::layers::project_resolver::project_resolver_layer;
 use crate::layers::tracing::TraceService;
 use crate::router::internal::InternalRouter;
 use async_trait::async_trait;
@@ -43,32 +42,18 @@ impl InternalServer {
         }
 
         let inner = {
-            // Internal router. Layer order (outermost first): internal-token
-            // gate → project_resolver_layer → handler. The token gate validates
-            // the per-request internal-endpoint token and injects the internal
-            // `RequestContext` (system user, internal provenance). The resolver then
-            // resolves the URL's `{project}` segment and inserts it as a
-            // `ProjectId` request extension, which handlers pair with their
-            // request via `.in_project(..)`, so worker callbacks update
-            // project-scoped tables under proper RLS isolation rather than via
-            // cross-project bypass.
+            // Internal router. Routes are keyed by globally-unique ids; the
+            // services resolve the owning project from the row itself, so no
+            // project resolution happens here.
             let router = utoipa_axum::router::OpenApiRouter::default().merge(
                 utoipa_axum::router::OpenApiRouter::default()
                     .merge(InternalRouter::router(context.services.clone()))
-                    // Resolve `{project}` onto the RequestContext the token gate
-                    // injected. `route_layer` so routing runs first (needs the
-                    // matched path params); inner of the gate so it only runs
-                    // for authorized requests.
-                    .route_layer(from_fn_with_state(
-                        context.context.clone(),
-                        project_resolver_layer,
-                    ))
                     // Internal authorization gate: validate the per-request
                     // internal-endpoint token (replaces the loopback-IP gate)
-                    // and inject the internal RequestContext. Outermost so it runs
-                    // before the resolver, which reads the context it injects.
-                    // `route_layer` so routing runs first and the gate can read
-                    // the matched route + path params it validates against.
+                    // and inject the internal RequestContext (system user,
+                    // internal provenance). `route_layer` so routing runs first
+                    // and the gate can read the matched route + path params it
+                    // validates against.
                     .route_layer(from_fn_with_state(
                         context.context.clone(),
                         internal_token_layer,

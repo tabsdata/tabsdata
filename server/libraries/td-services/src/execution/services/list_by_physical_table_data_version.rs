@@ -5,13 +5,15 @@
 use crate::execution::layers::list::list_executions_by_tdv;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject, enter_project_scope};
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::execution::Execution;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::PhysicalTableDataVersionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::PhysicalTableDataVersionId;
+use td_objects::types::basic::{PhysicalTableDataVersionId, ProjectId};
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -21,15 +23,12 @@ use td_tower::layers;
     request = ListRequest<PhysicalTableDataVersionParam>,
     response = ListResponse<Execution>,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {
     layers!(
-        // Authorize: the requester must be able to view the project in scope.
         from_fn(With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<RequestContext>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
         // Extract PhysicalTableDataVersionId from request.
         from_fn(
             With::<ListRequest<PhysicalTableDataVersionParam>>::extract_name::<
@@ -37,6 +36,13 @@ fn service() {
             >
         ),
         from_fn(With::<PhysicalTableDataVersionParam>::extract::<PhysicalTableDataVersionId>),
+        // Resolve the anchor's owning project; authorize the requester to
+        // view it.
+        from_fn(By::<PhysicalTableDataVersionId>::fetch_one::<PhysicalTableDataVersionDB>),
+        from_fn(With::<PhysicalTableDataVersionDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Wrap into Option to match the nullable column.
         from_fn(With::<PhysicalTableDataVersionId>::some),
         // List executions
@@ -51,7 +57,6 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::and;
@@ -69,18 +74,13 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_executions_by_table_data_version(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         ExecutionListByPhysicalTableDataVersionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<PhysicalTableDataVersionParam>, ProjectId>, ListResponse<Execution>>(&[
-                // Authorize: the requester must be able to view the project in scope.
+            .assert_service::<ListRequest<PhysicalTableDataVersionParam>, ListResponse<Execution>>(&[
                 type_of_val(&With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<RequestContext>),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Extract PhysicalTableDataVersionId from request.
                 type_of_val(
                     &With::<ListRequest<PhysicalTableDataVersionParam>>::extract_name::<
@@ -88,6 +88,13 @@ mod tests {
                     >,
                 ),
                 type_of_val(&With::<PhysicalTableDataVersionParam>::extract::<PhysicalTableDataVersionId>),
+                // Resolve the anchor's owning project; authorize the requester to
+                // view it.
+                type_of_val(&By::<PhysicalTableDataVersionId>::fetch_one::<PhysicalTableDataVersionDB>),
+                type_of_val(&With::<PhysicalTableDataVersionDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Wrap into Option to match the nullable column.
                 type_of_val(&With::<PhysicalTableDataVersionId>::some),
                 // List executions with pagination (single JOIN query).
@@ -230,14 +237,12 @@ mod tests {
         // Call the service.
         let service =
             ExecutionListByPhysicalTableDataVersionService::with_defaults(db.clone()).service();
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list(
-                PhysicalTableDataVersionParam::builder()
-                    .table_data_version(tdv.id.clone())
-                    .build()?,
-                ListParams::default(),
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
+            PhysicalTableDataVersionParam::builder()
+                .table_data_version(tdv.id.clone())
+                .build()?,
+            ListParams::default(),
+        );
         let response = service.raw_oneshot(request).await?;
 
         // Only execution_2 should appear (it has the function requirement referencing the TDV).
@@ -318,14 +323,12 @@ mod tests {
         // No function requirements reference this TDV.
         let service =
             ExecutionListByPhysicalTableDataVersionService::with_defaults(db.clone()).service();
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list(
-                PhysicalTableDataVersionParam::builder()
-                    .table_data_version(tdv.id.clone())
-                    .build()?,
-                ListParams::default(),
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
+            PhysicalTableDataVersionParam::builder()
+                .table_data_version(tdv.id.clone())
+                .build()?,
+            ListParams::default(),
+        );
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 0);

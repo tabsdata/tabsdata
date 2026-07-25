@@ -4,22 +4,19 @@
 
 use td_apiforge::router_ext;
 
-#[router_ext(FunctionRunsRouter)]
-mod routes {
-    use crate::extractors::{Project, WildcardProject};
+#[router_ext(FunctionRunListRouter)]
+mod list_routes {
     use axum::Extension;
-    use axum::extract::{Path, State};
+    use axum::extract::State;
     use axum_extra::extract::Query;
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::ok_status::{GetStatus, ListStatus};
+    use ta_apiserver::status::ok_status::ListStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_database::pool::scoped::InProject;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::logical::FunctionRun;
-    use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
-    use td_objects::rest_urls::{FUNCTION_RUN_GET, FUNCTION_RUN_LIST, PhysicalFunctionRunParam};
+    use td_objects::rest_urls::FUNCTION_RUN_LIST;
     use td_services::function_run::services::FunctionRunServices;
     use tower::ServiceExt;
 
@@ -33,10 +30,9 @@ mod routes {
     pub async fn list(
         State(physical_function_runs): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
-        WildcardProject(selector): WildcardProject,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<FunctionRun>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(selector);
+        let request = context.list((), query_params);
         let response = physical_function_runs
             .list
             .service()
@@ -44,6 +40,26 @@ mod routes {
             .await?;
         Ok(ListStatus::OK(response))
     }
+}
+
+#[router_ext(FunctionRunsRouter)]
+mod routes {
+    use crate::extractors::Project;
+    use axum::Extension;
+    use axum::extract::{Path, State};
+    use std::sync::Arc;
+    use ta_apiserver::status::error_status::ErrorStatus;
+    use ta_apiserver::status::ok_status::GetStatus;
+    use ta_services::service::TdService;
+    use td_apiforge::apiserver_path;
+    use td_database::pool::scoped::InProject;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
+    use td_objects::rest_urls::{FUNCTION_RUN_GET, PhysicalFunctionRunParam};
+    use td_services::function_run::services::FunctionRunServices;
+    use tower::ServiceExt;
+
+    const FUNCTION_RUNS_TAG: &str = "Function Runs";
 
     #[apiserver_path(method = get, path = FUNCTION_RUN_GET, tag = FUNCTION_RUNS_TAG)]
     #[doc = "Read function run"]

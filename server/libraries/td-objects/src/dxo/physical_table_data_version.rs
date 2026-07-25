@@ -31,6 +31,7 @@ mod definitions {
         /// LFR/PFR at mint; required at construction — there is no default
         /// project fallback, which would mask a builder forgetting to thread
         /// the project through the (bypass-scoped) dispatch insert.
+        #[dxo(extractor)]
         pub project_id: ProjectId,
         pub collection_id: CollectionId,
         pub table_id: TableId,

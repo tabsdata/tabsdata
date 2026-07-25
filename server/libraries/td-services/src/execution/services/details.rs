@@ -4,7 +4,7 @@
 
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject, enter_project_scope};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::execution::{
     Execution, ExecutionBuilder, ExecutionDBWithStatus, ExecutionDetails, ExecutionDetailsBuilder,
@@ -13,7 +13,7 @@ use td_objects::dxo::function::{Function, FunctionBuilder, FunctionDBWithNames};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{ExecutionId, ExecutionIdName, FunctionVersionId};
+use td_objects::types::basic::{ExecutionId, FunctionVersionId, ProjectId};
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -24,21 +24,21 @@ use td_tower::layers;
     request = ReadRequest<ExecutionParam>,
     response = ExecutionDetails,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {
     layers!(
-        // Authorize: the requester must be able to view the project in scope.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
         // Extract from request.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
-        // Find Plan and its ID.
-        from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
-        from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDBWithStatus>),
-        from_fn(With::<ExecutionDBWithStatus>::extract::<ExecutionId>),
+        // Find Plan; authorize the requester to view its project.
+        from_fn(With::<ExecutionParam>::extract::<ExecutionId>),
+        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDBWithStatus>),
+        from_fn(With::<ExecutionDBWithStatus>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Initialize builder.
         from_fn(builder::<ExecutionDetails>),
         from_fn(With::<ExecutionDBWithStatus>::try_convert_to::<ExecutionBuilder, _>),
@@ -64,10 +64,8 @@ mod tests {
     use super::*;
     use crate::execution::services::execute::tests::test_execute;
     use std::collections::HashSet;
-    use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -78,24 +76,22 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_execution_details(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         ExecutionDetailsService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<ExecutionParam>, ProjectId>, ExecutionDetails>(&[
-                // Authorize: the requester must be able to view the project in scope.
+            .assert_service::<ReadRequest<ExecutionParam>, ExecutionDetails>(&[
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
-                // Find Plan and its ID.
-                type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
-                type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDBWithStatus>),
-                type_of_val(&With::<ExecutionDBWithStatus>::extract::<ExecutionId>),
+                // Find Plan; authorize the requester to view its project.
+                type_of_val(&With::<ExecutionParam>::extract::<ExecutionId>),
+                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDBWithStatus>),
+                type_of_val(&With::<ExecutionDBWithStatus>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Initialize builder
                 type_of_val(&builder::<ExecutionDetails>),
                 type_of_val(&With::<ExecutionDBWithStatus>::try_convert_to::<ExecutionBuilder, _>),
@@ -122,13 +118,11 @@ mod tests {
         let execution = test_execute(db.clone(), p.id, false, false, false).await?;
 
         let service = ExecutionDetailsService::with_defaults(db.clone()).service();
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(
-                ExecutionParam::builder()
-                    .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
-                    .build()?,
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            ExecutionParam::builder()
+                .execution(execution.id.clone())
+                .build()?,
+        );
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.execution.id, execution.id);

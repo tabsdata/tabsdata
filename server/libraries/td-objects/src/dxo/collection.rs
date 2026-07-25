@@ -95,6 +95,8 @@ mod definitions {
     #[dao(sql_table = "collections_resolved")]
     #[inherits(ActiveCollectionDB)]
     pub struct CollectionDB {
+        #[dxo(extractor)]
+        pub project_id: ProjectId,
         pub deleted: CollectionWhenDeleted,
     }
 

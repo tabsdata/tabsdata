@@ -11,7 +11,6 @@ mod string;
 mod tagged;
 mod timestamp;
 mod typed_enum;
-mod wildcard_project;
 
 // Re-export the types so they are all accessible under basic::*
 pub use bool::*;
@@ -23,4 +22,3 @@ pub use string::*;
 pub use tagged::*;
 pub use timestamp::*;
 pub use typed_enum::*;
-pub use wildcard_project::*;

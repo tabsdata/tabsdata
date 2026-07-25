@@ -20,14 +20,13 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<CollectionRead>,
     connection = ConnectionProvider,
-    scope = "WildcardProject",
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(Visible::projects),
-        from_fn(Visible::enforce),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>),
         from_fn(By::<()>::list::<VisibleProjectsFilter, CollectionRead>),
@@ -40,14 +39,12 @@ mod tests {
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_authz::AuthzContext;
-    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
-    use td_error::{TdError, assert_service_error};
+    use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, Description, ProjectName, RoleName, UserEnabled, UserId,
-        UserName, WildcardProject,
+        UserName,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer};
     use td_tower::ctx_service::RawOneshot;
@@ -55,25 +52,20 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_collections(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::WildcardProject;
         use td_tower::metadata::type_of_val;
 
         ListCollectionsService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<()>, WildcardProject>, ListResponse<CollectionRead>>(
-                &[
-                    type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                    type_of_val(&Visible::projects),
-                    type_of_val(&Visible::enforce),
-                    type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                    type_of_val(
-                        &With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>,
-                    ),
-                    type_of_val(&By::<()>::list::<VisibleProjectsFilter, CollectionRead>),
-                ],
-            );
+            .assert_service::<ListRequest<()>, ListResponse<CollectionRead>>(&[
+                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                type_of_val(&Visible::projects),
+                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
+                type_of_val(
+                    &With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>,
+                ),
+                type_of_val(&By::<()>::list::<VisibleProjectsFilter, CollectionRead>),
+            ]);
     }
 
     #[td_test::test(db)]
@@ -88,8 +80,7 @@ mod tests {
             .unwrap();
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list((), ListParams::default())
-            .in_project(p.id);
+            .list((), ListParams::default());
 
         let service = ListCollectionsService::new(db, Arc::new(AuthzContext::default())).service();
         let response = service.raw_oneshot(request).await;
@@ -124,12 +115,10 @@ mod tests {
             .collection(&name, &UserId::admin())
             .await?;
 
-        // Within the project, every collection is visible to users with
-        // view_project (the admin user holds sys_admin, which grants
-        // manage_project on all projects).
+        // Every collection of a viewable project is listed (the admin user
+        // holds sys_admin, which grants manage_project on all projects).
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list((), ListParams::default())
-            .in_project(p.id);
+            .list((), ListParams::default());
 
         let service = ListCollectionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -138,21 +127,18 @@ mod tests {
         assert_eq!(list.len, 1);
         assert_eq!(list.data[0].name, name);
 
-        // A user whose role carries no view_project on the project is forbidden.
-        let request = RequestContext::with(AccessTokenId::default(), user.id)
-            .list((), ListParams::default())
-            .in_project(p.id);
+        // A user whose roles grant view_project on no project sees nothing.
+        let request =
+            RequestContext::with(AccessTokenId::default(), user.id).list((), ListParams::default());
 
         let service = ListCollectionsService::with_defaults(db.clone()).service();
-        assert_service_error(service, request, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-        })
-        .await;
+        let response = service.raw_oneshot(request).await?;
+        assert_eq!(response.len, 0);
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_list_collections_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
+    async fn test_list_collections_spans_projects(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
         db.scoped(base.id)
             .seed()
@@ -168,8 +154,7 @@ mod tests {
         let response = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .list((), ListParams::default())
-                    .in_project(WildcardProject::Wildcard),
+                    .list((), ListParams::default()),
             )
             .await?;
 
@@ -180,7 +165,7 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_list_collections_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
+    async fn test_list_collections_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
         db.scoped(base.id)
             .seed()
@@ -198,8 +183,7 @@ mod tests {
         let response = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), user.id)
-                    .list((), ListParams::default())
-                    .in_project(WildcardProject::Wildcard),
+                    .list((), ListParams::default()),
             )
             .await?;
 

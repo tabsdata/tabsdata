@@ -6,14 +6,18 @@ use crate::execution::layers::execute;
 use crate::execution::layers::execution_version::assert_function_version;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
+use td_authz::rbac::enter_project_scope;
 use td_execution::SchedulerNotify;
 use td_execution::TransactionBy;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionRequestInternal, ExecutionResponse};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::FunctionVersionIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, FunctionId, FunctionVersionId, TriggerType};
+use td_objects::types::basic::{
+    AtTime, CollectionId, FunctionId, FunctionVersionId, ProjectId, TriggerType,
+};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -24,7 +28,7 @@ use td_tower::layers;
     request = CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>,
     response = ExecutionResponse,
     connection = TransactionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
     context = TransactionBy,
     context = SchedulerNotify,
@@ -49,8 +53,13 @@ fn service() {
         ),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
-        // Select trigger function.
+        // Select trigger function; pivot into its project's scope via the
+        // collection.
         from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
+        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
+        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         // Ensure the trigger function is the current active version (never allow older versions to execute)
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(
@@ -110,8 +119,8 @@ mod tests {
         use crate::graph::layers::build::GraphBuilder;
         use crate::scheduler::layers::request::notify_scheduler;
         use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-        use td_database::pool::scoped::Scoped;
         use td_objects::And;
+        use td_objects::dxo::collection::CollectionDB;
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::execution::{
             ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionRequestInternal,
@@ -134,7 +143,7 @@ mod tests {
         ExecuteFunctionVersionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>, ProjectId>, ExecutionResponse>(&[
+            .assert_service::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>, ExecutionResponse>(&[
                 // Extract from request.
                 type_of_val(&
                     With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract::<
@@ -153,8 +162,13 @@ mod tests {
                 ),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(&With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
-                // Select trigger function.
+                // Select trigger function; pivot into its project's scope via the
+                // collection.
                 type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
+                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
                 // Ensure the trigger function is the current active version (never allow older versions to execute)
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 type_of_val(&
@@ -459,18 +473,16 @@ mod tests {
         }
 
         // Trigger function
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(
-                FunctionVersionIdParam {
-                    function_version_id: function.id.clone(),
-                },
-                ExecutionRequestInternal::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .skip_if_running(skip_if_running)
-                    .trigger_type(TriggerType::CronTrigger)
-                    .build()?,
-            )
-            .in_project(project_id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+            FunctionVersionIdParam {
+                function_version_id: function.id.clone(),
+            },
+            ExecutionRequestInternal::builder()
+                .name(Some(ExecutionName::try_from("test_execution")?))
+                .skip_if_running(skip_if_running)
+                .trigger_type(TriggerType::CronTrigger)
+                .build()?,
+        );
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -528,17 +540,15 @@ mod tests {
         let updated = service.raw_oneshot(request).await?;
 
         // Now, using function.id will fail
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(
-                FunctionVersionIdParam {
-                    function_version_id: function.id.clone(),
-                },
-                ExecutionRequestInternal::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .trigger_type(TriggerType::CronTrigger)
-                    .build()?,
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+            FunctionVersionIdParam {
+                function_version_id: function.id.clone(),
+            },
+            ExecutionRequestInternal::builder()
+                .name(Some(ExecutionName::try_from("test_execution")?))
+                .trigger_type(TriggerType::CronTrigger)
+                .build()?,
+        );
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -580,22 +590,19 @@ mod tests {
 
     async fn trigger_with_external_uid(
         db: &TdPool,
-        project_id: ProjectId,
         function_version_id: &FunctionVersionId,
         external_uid: Option<ExternalUid>,
     ) -> Result<ExecutionResponse, TdError> {
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(
-                FunctionVersionIdParam {
-                    function_version_id: function_version_id.clone(),
-                },
-                ExecutionRequestInternal::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .external_uid(external_uid)
-                    .trigger_type(TriggerType::CronTrigger)
-                    .build()?,
-            )
-            .in_project(project_id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+            FunctionVersionIdParam {
+                function_version_id: function_version_id.clone(),
+            },
+            ExecutionRequestInternal::builder()
+                .name(Some(ExecutionName::try_from("test_execution")?))
+                .external_uid(external_uid)
+                .trigger_type(TriggerType::CronTrigger)
+                .build()?,
+        );
         ExecuteFunctionVersionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -608,10 +615,10 @@ mod tests {
         let function = seed_dedup_function(&db, p.id).await?;
         let uid = ExternalUid::try_from("uid-123")?;
 
-        trigger_with_external_uid(&db, p.id, &function.id, Some(uid.clone())).await?;
+        trigger_with_external_uid(&db, &function.id, Some(uid.clone())).await?;
 
         // Same external_uid on a still-live execution -> 409 Conflict, no new row.
-        let err = trigger_with_external_uid(&db, p.id, &function.id, Some(uid))
+        let err = trigger_with_external_uid(&db, &function.id, Some(uid))
             .await
             .unwrap_err();
         assert_eq!(err.api_error(), ApiError::Any(409));
@@ -629,8 +636,8 @@ mod tests {
         let p = db.seed().test_project().await?;
         let function = seed_dedup_function(&db, p.id).await?;
 
-        trigger_with_external_uid(&db, p.id, &function.id, None).await?;
-        trigger_with_external_uid(&db, p.id, &function.id, None).await?;
+        trigger_with_external_uid(&db, &function.id, None).await?;
+        trigger_with_external_uid(&db, &function.id, None).await?;
 
         let executions: Vec<ExecutionDB> = db
             .live()
@@ -659,8 +666,8 @@ mod tests {
 
         // Fire two identical triggers concurrently on the shared pool.
         let (a, b) = tokio::join!(
-            trigger_with_external_uid(&db, p.id, &function.id, Some(uid.clone())),
-            trigger_with_external_uid(&db, p.id, &function.id, Some(uid.clone())),
+            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
+            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
         );
 
         let executed = [&a, &b].into_iter().filter(|r| r.is_ok()).count();

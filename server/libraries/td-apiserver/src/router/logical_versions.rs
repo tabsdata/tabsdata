@@ -6,7 +6,6 @@ use td_apiforge::router_ext;
 
 #[router_ext(LogicalVersionsRouter)]
 mod routes {
-    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, State};
     use std::sync::Arc;
@@ -14,7 +13,6 @@ mod routes {
     use ta_apiserver::status::ok_status::CreateStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_database::pool::scoped::InProject;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::logical::LogicalFunctionRunReplayResponse;
     use td_objects::rest_urls::{LOGICAL_FUNCTION_RUN_REPLAY, LogicalFunctionRunParam};
@@ -28,10 +26,9 @@ mod routes {
     pub async fn replay(
         State(state): State<Arc<LogicalServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(param): Path<LogicalFunctionRunParam>,
     ) -> Result<CreateStatus<LogicalFunctionRunReplayResponse>, ErrorStatus> {
-        let request = context.create(param, ()).in_project(project_id);
+        let request = context.create(param, ());
         let response = state.replay().service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }

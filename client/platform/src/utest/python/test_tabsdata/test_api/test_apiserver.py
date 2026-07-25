@@ -1017,9 +1017,7 @@ class TestHttpSessionNotClosedAfterRequest:
         mock_response.status_code = 200
 
         # Global path: lifecycle test, not tenant routing.
-        with patch.object(
-            DEFAULT_HTTP_SESSION, "post", return_value=mock_response
-        ):
+        with patch.object(DEFAULT_HTTP_SESSION, "post", return_value=mock_response):
             server.post("/status", json={"key": "value"})
 
         adapters_after = _count_adapters(DEFAULT_HTTP_SESSION)
@@ -1038,9 +1036,7 @@ class TestHttpSessionNotClosedAfterRequest:
         mock_response.status_code = 200
 
         # Global path: lifecycle test, not tenant routing.
-        with patch.object(
-            DEFAULT_HTTP_SESSION, "delete", return_value=mock_response
-        ):
+        with patch.object(DEFAULT_HTTP_SESSION, "delete", return_value=mock_response):
             server.delete("/status")
 
         adapters_after = _count_adapters(DEFAULT_HTTP_SESSION)
@@ -1056,8 +1052,10 @@ class TestHttpSessionNotClosedAfterRequest:
         mock_response.status_code = 200
 
         # Global path: lifecycle test, not tenant routing.
-        with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response), \
-             patch.object(DEFAULT_HTTP_SESSION, "post", return_value=mock_response):
+        with (
+            patch.object(GET_HTTP_SESSION, "get", return_value=mock_response),
+            patch.object(DEFAULT_HTTP_SESSION, "post", return_value=mock_response),
+        ):
             for _ in range(5):
                 server.get("/status")
                 server.post("/status", json={})
@@ -1306,11 +1304,12 @@ class TestRegisterFunctionTempDirCleanup:
             nonlocal temp_dir_path
             temp_dir_path = self_td.name
 
-        with patch.object(
-            tempfile.TemporaryDirectory, "__init__", capture_init
-        ), patch(
-            "tabsdata.api.tabsdata_server._create_archive",
-            side_effect=RuntimeError("archive failed"),
+        with (
+            patch.object(tempfile.TemporaryDirectory, "__init__", capture_init),
+            patch(
+                "tabsdata.api.tabsdata_server._create_archive",
+                side_effect=RuntimeError("archive failed"),
+            ),
         ):
             with pytest.raises(RuntimeError, match="archive failed"):
                 coll.register_function(
@@ -1325,89 +1324,63 @@ class TestRegisterFunctionTempDirCleanup:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests for project (tenant) scoping
+# Unit tests for project scoping
 # ---------------------------------------------------------------------------
 
 
-class TestResolvePathScoping:
-    """`_resolve_path` injects the active project into tenant endpoints.
+class TestScopedPathBuilding:
+    """`_scoped` builds ``/projects/{project}/...`` paths from the connection.
 
-    Tenant resources live under ``/projects/{project}/...``; global endpoints
-    (auth, users, roles, projects, status, runtime-info) never carry a
-    project. With no project selected a tenant call must fail fast rather than
-    guessing a default.
+    Scoping is a per-endpoint decision: name-keyed resources build their path
+    through ``_scoped``; everything else (globals and id-keyed resources) goes
+    out verbatim. With no project selected a scoped call must fail fast rather
+    than guessing a default.
     """
 
-    GLOBAL_SAMPLES = [
-        "/auth/login",
-        "/users",
-        "/users/bob",
-        "/roles/r/permissions",
-        "/projects",
-        "/projects/acme",
-        "/status",
-        "/runtime-info",
-    ]
-    TENANT_SAMPLES = [
-        "/collections",
-        "/collections/c1/functions",
-        "/executions",
-        "/groups",
-        "/metrics",
-        "/inflight",
-        "/function_runs",
-        "/transactions/t1/cancel",
-        "/workers",
-    ]
-
-    def test_globals_pass_through_without_project(self):
+    def test_scoped_requires_a_project(self):
         server = APIServer("http://localhost:0")
         assert server.project is None
-        for path in self.GLOBAL_SAMPLES:
-            assert server._resolve_path(path) == path
+        with pytest.raises(NoProjectSelectedError):
+            server._scoped("/collections")
 
-    def test_tenant_paths_require_a_project(self):
-        server = APIServer("http://localhost:0")
-        for path in self.TENANT_SAMPLES:
-            with pytest.raises(NoProjectSelectedError):
-                server._resolve_path(path)
-
-    def test_tenant_paths_get_prefixed_when_project_set(self):
+    def test_scoped_prefixes_the_active_project(self):
         server = APIServer("http://localhost:0")
         server.project = "acme"
-        assert server._resolve_path("/collections") == "/projects/acme/collections"
+        assert server._scoped("/collections") == "/projects/acme/collections"
         assert (
-            server._resolve_path("/collections/c1/functions")
+            server._scoped("/collections/c1/functions")
             == "/projects/acme/collections/c1/functions"
         )
-        assert server._resolve_path("/metrics") == "/projects/acme/metrics"
+        assert server._scoped("/metrics") == "/projects/acme/metrics"
 
-    def test_globals_never_double_scoped(self):
+    def test_project_narrow_appends_filter_when_project_set(self):
         server = APIServer("http://localhost:0")
+        assert server._project_narrow(None) is None
+        assert server._project_narrow("status:eq:D") == "status:eq:D"
         server.project = "acme"
-        for path in self.GLOBAL_SAMPLES:
-            assert server._resolve_path(path) == path
-
-    def test_prefix_boundary_is_segment_aware(self):
-        # `/users-export` merely starts with the `/users` characters; it is a
-        # different top-level segment and must be scoped, not exempted.
-        server = APIServer("http://localhost:0")
-        server.project = "acme"
-        assert server._resolve_path("/users-export") == "/projects/acme/users-export"
+        assert server._project_narrow(None) == ["project:eq:acme"]
+        assert server._project_narrow("status:eq:D") == [
+            "status:eq:D",
+            "project:eq:acme",
+        ]
+        assert server._project_narrow(["status:eq:D"]) == [
+            "status:eq:D",
+            "project:eq:acme",
+        ]
 
 
 class TestProjectScopingOnTheWire:
-    """The active project rides on the connection into the request URL."""
+    """The active project rides on the connection into scoped request URLs."""
 
     @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
-    def test_tenant_request_url_carries_project(self):
+    def test_scoped_request_url_carries_project(self):
         server = APIServer("http://localhost:0")
         server.project = "acme"
         mock_response = MagicMock(status_code=200)
         with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response) as m:
-            server.collection_list(raise_for_status=False)
+            server.group_list(raise_for_status=False)
         url = m.call_args.args[0]
-        assert url == f"{server.url}/projects/acme/collections"
+        assert url == f"{server.url}/projects/acme/groups"
 
     @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
     def test_global_request_url_has_no_project(self):
@@ -1420,36 +1393,66 @@ class TestProjectScopingOnTheWire:
         assert url == f"{server.url}/roles"
 
     @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
-    def test_tenant_request_without_project_fails_fast(self):
+    def test_id_keyed_request_url_has_no_project(self):
+        server = APIServer("http://localhost:0")
+        server.project = "acme"
+        mock_response = MagicMock(status_code=200)
+        with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response) as m:
+            server.execution_read("e1", raise_for_status=False)
+        url = m.call_args.args[0]
+        assert url == f"{server.url}/executions/e1"
+
+    @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
+    def test_list_narrows_to_active_project(self):
+        server = APIServer("http://localhost:0")
+        server.project = "acme"
+        mock_response = MagicMock(status_code=200)
+        with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response) as m:
+            server.workers_list(raise_for_status=False)
+        assert m.call_args.args[1] == {"filter": ["project:eq:acme"]}
+
+    @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
+    def test_scoped_request_without_project_fails_fast(self):
         server = APIServer("http://localhost:0")
         # No project set and no network call should happen.
         with patch.object(GET_HTTP_SESSION, "get") as m:
             with pytest.raises(NoProjectSelectedError):
-                server.collection_list(raise_for_status=False)
+                server.group_list(raise_for_status=False)
         m.assert_not_called()
 
 
-class TestEndpointPrefixClassification:
+class TestEndpointScopeClassification:
     """Every endpoint the client builds must be consciously classified.
 
-    `_resolve_path` defaults unknown prefixes to tenant (scoped), so a new,
-    unclassified endpoint would be silently scoped and 404 at runtime. This
-    pins the reviewed set: a new top-level prefix fails here until it is added
-    to ``APIServer._GLOBAL_PREFIXES`` (system-scoped) or to
-    ``EXPECTED_TENANT_PREFIXES`` below (project-scoped), each confirmed against
-    the server's ``SCOPED`` routes in td-objects ``rest_urls``.
+    Scoping is a per-endpoint decision: a project-scoped path is built through
+    ``_scoped`` and anything else goes out verbatim. This pins the reviewed
+    split: a new top-level prefix fails here until it is added to the matching
+    set below, confirmed against the server's ``SCOPED`` routes in td-objects
+    ``rest_urls``.
     """
 
-    # Tenant top-level prefixes the client currently uses.
-    EXPECTED_TENANT_PREFIXES = {
+    # `/collections` appears in both sets: the cross-project list is flat,
+    # while the name-keyed CRUD stays under `/projects/{project}`.
+    SCOPED_PREFIXES = {
         "/collections",
-        "/executions",
         "/groups",
-        "/transactions",
-        "/workers",
-        "/function_runs",
         "/metrics",
         "/inflight",
+    }
+    GLOBAL_PREFIXES = {
+        "/auth",
+        "/collections",
+        "/executions",
+        "/function-runs",
+        "/logical-function-runs",
+        "/permission-grants",
+        "/projects",
+        "/roles",
+        "/runtime-info",
+        "/status",
+        "/transactions",
+        "/users",
+        "/workers",
     }
 
     @staticmethod
@@ -1464,13 +1467,31 @@ class TestEndpointPrefixClassification:
         return None
 
     @classmethod
-    def _endpoint_prefixes(cls):
-        """Top-level prefixes of every endpoint built inside `APIServer`.
+    def _classified_literal(cls, node):
+        """`(leading_literal, scoped)` for a path expression, else `None`.
 
-        Scrapes the source rather than calling each method: collects the
-        leading literal of `endpoint = ...` assignments and of
-        `self.{get,post,delete,post_binary}("/...", ...)` calls, then reduces
-        each to its first path segment.
+        A path built as ``self._scoped(...)`` is scoped; a bare literal or
+        f-string goes out verbatim.
+        """
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "_scoped"
+            and node.args
+        ):
+            lit = cls._leading_literal(node.args[0])
+            return (lit, True) if lit else None
+        lit = cls._leading_literal(node)
+        return (lit, False) if lit else None
+
+    @classmethod
+    def _endpoint_prefixes(cls):
+        """`(prefix, scoped)` pairs for every endpoint built in `APIServer`.
+
+        Scrapes the source rather than calling each method: collects
+        `endpoint = ...` assignments and the first argument of
+        `self.{get,post,delete,post_binary}(...)` calls, then reduces each
+        path to its first segment.
         """
         import tabsdata.api.apiserver as apiserver_module
 
@@ -1481,53 +1502,52 @@ class TestEndpointPrefixClassification:
             for n in tree.body
             if isinstance(n, ast.ClassDef) and n.name == "APIServer"
         )
-        literals = []
+        classified = []
         for fn in api_cls.body:
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
+            if fn.name in {"get", "post", "post_binary", "delete", "_scoped"}:
+                continue
             for sub in ast.walk(fn):
                 if isinstance(sub, ast.Assign) and any(
-                    isinstance(t, ast.Name) and t.id == "endpoint"
-                    for t in sub.targets
+                    isinstance(t, ast.Name) and t.id == "endpoint" for t in sub.targets
                 ):
-                    lit = cls._leading_literal(sub.value)
-                    if lit:
-                        literals.append(lit)
+                    entry = cls._classified_literal(sub.value)
+                    if entry:
+                        classified.append(entry)
                 elif (
                     isinstance(sub, ast.Call)
                     and isinstance(sub.func, ast.Attribute)
                     and sub.func.attr in {"get", "post", "delete", "post_binary"}
                     and sub.args
                 ):
-                    lit = cls._leading_literal(sub.args[0])
-                    if lit:
-                        literals.append(lit)
+                    entry = cls._classified_literal(sub.args[0])
+                    if entry:
+                        classified.append(entry)
         prefixes = set()
-        for lit in literals:
+        for lit, scoped in classified:
             if lit.startswith("/"):
                 seg = lit.lstrip("/").split("/", 1)[0]
                 if seg:
-                    prefixes.add("/" + seg)
+                    prefixes.add(("/" + seg, scoped))
         return prefixes
 
-    def test_no_overlap_between_global_and_tenant(self):
-        overlap = set(APIServer._GLOBAL_PREFIXES) & self.EXPECTED_TENANT_PREFIXES
-        assert not overlap, f"prefixes classified as both global and tenant: {overlap}"
-
     def test_every_endpoint_prefix_is_classified(self):
-        known = set(APIServer._GLOBAL_PREFIXES) | self.EXPECTED_TENANT_PREFIXES
+        known = {(p, True) for p in self.SCOPED_PREFIXES} | {
+            (p, False) for p in self.GLOBAL_PREFIXES
+        }
         unclassified = self._endpoint_prefixes() - known
         assert not unclassified, (
-            f"Unclassified endpoint prefixes: {sorted(unclassified)}. Add each to "
-            f"APIServer._GLOBAL_PREFIXES (system-scoped) or to "
-            f"EXPECTED_TENANT_PREFIXES (project-scoped) after confirming against "
-            f"the server's rest_urls SCOPED routes."
+            f"Unclassified or misclassified endpoint prefixes: "
+            f"{sorted(unclassified)}. Scoped paths must be built via "
+            f"`self._scoped(...)` and listed in SCOPED_PREFIXES; verbatim paths "
+            f"must be listed in GLOBAL_PREFIXES, each confirmed against the "
+            f"server's rest_urls SCOPED routes."
         )
 
-    def test_reviewed_tenant_prefixes_are_actually_used(self):
-        # Keep the reviewed list from rotting: every listed tenant prefix must
-        # still be built somewhere in the client.
-        stale = self.EXPECTED_TENANT_PREFIXES - self._endpoint_prefixes()
-        assert not stale, (
-            f"tenant prefixes no longer used by the client: {sorted(stale)}"
-        )
+    def test_reviewed_prefixes_are_actually_used(self):
+        # Keep the reviewed lists from rotting: every listed prefix must still
+        # be built somewhere in the client.
+        used = {p for p, _ in self._endpoint_prefixes()}
+        stale = (self.SCOPED_PREFIXES | self.GLOBAL_PREFIXES) - used
+        assert not stale, f"prefixes no longer used by the client: {sorted(stale)}"

@@ -29,7 +29,7 @@ pub struct Scoped<R, P> {
 /// Wrap any value with the project it targets, producing a [`Scoped`]. Blanket
 /// over every type, so `request.in_project(project)` is always available. The
 /// target accepts anything `Into<P>`, so a `ProjectId` wraps into a richer
-/// scope selector (e.g. `WildcardProject`) without an explicit conversion.
+/// scope selector without an explicit conversion.
 pub trait InProject: Sized {
     fn in_project<P>(self, project: impl Into<P>) -> Scoped<Self, P> {
         Scoped {

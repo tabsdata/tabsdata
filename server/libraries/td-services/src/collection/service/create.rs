@@ -589,12 +589,15 @@ mod tests {
                 .unwrap();
         }
 
-        // Listing within each project sees only that project's collection — the
-        // app applies no collection filter; RLS does the isolation.
-        for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
-            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default())
-                .in_project(*project);
+        // The flat list narrowed to each project sees only that project's
+        // collection.
+        for (project, name) in [("test", "ca"), ("project_b", "cb")] {
+            let params = ListParams::builder()
+                .filter(vec![format!("project:eq:{project}")])
+                .build()
+                .unwrap();
+            let request =
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).list((), params);
             let list = ListCollectionsService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(request)

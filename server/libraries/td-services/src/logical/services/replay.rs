@@ -10,13 +10,13 @@ use crate::logical::layers::replay::{
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunReplayResponse};
 use td_objects::rest_urls::LogicalFunctionRunParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, LogicalFunctionRunId};
+use td_objects::types::basic::{AtTime, LogicalFunctionRunId, ProjectId};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -27,7 +27,7 @@ use td_tower::layers;
     request = CreateRequest<LogicalFunctionRunParam, ()>,
     response = LogicalFunctionRunReplayResponse,
     connection = TransactionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -44,6 +44,8 @@ fn service() {
         from_fn(With::<LogicalFunctionRunParam>::extract::<LogicalFunctionRunId>),
         // Load the LFR identity row and authz on its project.
         from_fn(By::<LogicalFunctionRunId>::fetch_one::<LogicalFunctionRunDB>),
+        from_fn(With::<LogicalFunctionRunDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
         // Validate replay preconditions: LFR.status terminal + pointer Bound +
@@ -69,11 +71,8 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
-    use td_database::pool::scoped::Scoped;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::and;
@@ -86,10 +85,10 @@ mod tests {
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
-        FunctionRuntimeValues, FunctionStatus, FunctionVersionId, LogicalFunctionRunStatus,
-        LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, Snippet,
-        TableNameDto, TransactionKey, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues,
+        FunctionStatus, FunctionVersionId, LogicalFunctionRunStatus, LogicalPointerReason,
+        LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, Snippet, TableNameDto,
+        TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
@@ -103,7 +102,7 @@ mod tests {
         ReplayLogicalFunctionRunService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<CreateRequest<LogicalFunctionRunParam, ()>, ProjectId>, LogicalFunctionRunReplayResponse,>(&[
+            .assert_service::<CreateRequest<LogicalFunctionRunParam, ()>, LogicalFunctionRunReplayResponse>(&[
                 // Pull the request envelope apart.
                 type_of_val(&With::<CreateRequest<LogicalFunctionRunParam, ()>>::extract::<RequestContext>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
@@ -115,6 +114,8 @@ mod tests {
                 type_of_val(&With::<LogicalFunctionRunParam>::extract::<LogicalFunctionRunId>),
                 // Load the LFR identity row and authz on its project.
                 type_of_val(&By::<LogicalFunctionRunId>::fetch_one::<LogicalFunctionRunDB>),
+                type_of_val(&With::<LogicalFunctionRunDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
                 // Validate replay preconditions: LFR.status terminal + pointer Bound +
@@ -134,19 +135,12 @@ mod tests {
     }
 
     /// Build a CreateRequest hitting the replay endpoint for an LFR.
-    fn replay_request(
-        project_id: ProjectId,
-        collection: &CollectionName,
-        lfr_id: &LogicalFunctionRunId,
-    ) -> Scoped<CreateRequest<LogicalFunctionRunParam, ()>, ProjectId> {
+    fn replay_request(lfr_id: &LogicalFunctionRunId) -> CreateRequest<LogicalFunctionRunParam, ()> {
         let param = LogicalFunctionRunParam::builder()
-            .collection(CollectionIdName::from_str(&collection.to_string()).unwrap())
             .logical_function_run(lfr_id.clone())
             .build()
             .unwrap();
-        RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(param, ())
-            .in_project(project_id)
+        RequestContext::with(AccessTokenId::default(), UserId::admin()).create(param, ())
     }
 
     /// Seed a function with one output table, run plan-build proxy (seed
@@ -251,11 +245,8 @@ mod tests {
         let (lfr, fr_old, _head) =
             seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
 
-        let coll_name = CollectionName::try_from("c0")?;
         let service = ReplayLogicalFunctionRunService::with_defaults(db.clone()).service();
-        let response = service
-            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
-            .await?;
+        let response = service.raw_oneshot(replay_request(&lfr.id)).await?;
 
         assert_eq!(response.logical_function_run_id, lfr.id);
         assert_eq!(response.previous_function_run_id, fr_old.id);
@@ -305,10 +296,9 @@ mod tests {
         let (lfr, fr_old, _head) =
             seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Done).await;
 
-        let coll_name = CollectionName::try_from("c0")?;
         let response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
+            .raw_oneshot(replay_request(&lfr.id))
             .await?;
 
         assert_ne!(response.new_function_run_id, fr_old.id);
@@ -324,10 +314,9 @@ mod tests {
         let (lfr, _fr, _head) =
             seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Running).await;
 
-        let coll_name = CollectionName::try_from("c0")?;
         let result = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
+            .raw_oneshot(replay_request(&lfr.id))
             .await;
 
         assert!(result.is_err(), "expected refusal, got {result:?}");
@@ -388,10 +377,9 @@ mod tests {
         let patch_id = seed_patch(&db, p.id, &head).await;
 
         // Replay: the minted FR_new must run the patch, not the head.
-        let coll_name = CollectionName::try_from("c0")?;
         let response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(p.id, &coll_name, &lfr_id))
+            .raw_oneshot(replay_request(&lfr_id))
             .await?;
 
         // The response advertises the effective (patch) fvid.
@@ -484,10 +472,9 @@ mod tests {
             .insert::<LogicalFunctionRunPointerDB>(&pending)
             .await?;
 
-        let coll_name = CollectionName::try_from("c0")?;
         let result = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
+            .raw_oneshot(replay_request(&lfr.id))
             .await;
         assert!(result.is_err(), "expected NotBound, got {result:?}");
         Ok(())

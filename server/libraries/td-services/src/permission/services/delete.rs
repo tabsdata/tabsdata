@@ -11,7 +11,7 @@ use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames};
 use td_objects::rest_urls::RolePermissionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{PermissionId, PermissionIdName, RoleIdName};
+use td_objects::types::basic::{PermissionId, RoleIdName};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -29,8 +29,8 @@ fn service() {
     layers!(
         from_fn(With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
         from_fn(With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>),
-        from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
-        from_fn(By::<PermissionIdName>::fetch_one::<PermissionDBWithNames>),
+        from_fn(With::<RolePermissionParam>::extract::<PermissionId>),
+        from_fn(By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
         // Check the role in the request matches the role in permission
         from_fn(With::<RolePermissionParam>::extract::<RoleIdName>),
         from_fn(assert_role_in_permission),
@@ -84,8 +84,8 @@ mod tests {
             type_of_val(
                 &With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>,
             ),
-            type_of_val(&With::<RolePermissionParam>::extract::<PermissionIdName>),
-            type_of_val(&By::<PermissionIdName>::fetch_one::<PermissionDBWithNames>),
+            type_of_val(&With::<RolePermissionParam>::extract::<PermissionId>),
+            type_of_val(&By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
             type_of_val(&With::<RolePermissionParam>::extract::<RoleIdName>),
             type_of_val(&assert_role_in_permission),
             type_of_val(&authorize_permission_target::<PermissionDBWithNames>),
@@ -113,7 +113,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("king")?)
-                .permission(PermissionIdName::from_str(&seeded.id.to_string())?)
+                .permission(seeded.id)
                 .build()?,
         );
 
@@ -292,9 +292,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("r0")?)
-                .permission(PermissionIdName::from_str(
-                    &project_dev_perm.id.to_string(),
-                )?)
+                .permission(project_dev_perm.id)
                 .build()?,
         );
 
@@ -338,9 +336,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("r_incorrect")?)
-                .permission(PermissionIdName::from_str(
-                    &project_dev_perm.id.to_string(),
-                )?)
+                .permission(project_dev_perm.id)
                 .build()?,
         );
 
@@ -397,7 +393,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), user.id).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("r1")?)
-                .permission(PermissionIdName::from_str(&perm1.id.to_string())?)
+                .permission(perm1.id)
                 .build()?,
         );
 
@@ -449,9 +445,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), user.id).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("r0")?)
-                .permission(PermissionIdName::from_str(
-                    &all_project_dev_perm.id.to_string(),
-                )?)
+                .permission(all_project_dev_perm.id)
                 .build()?,
         );
 
@@ -484,7 +478,7 @@ mod tests {
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
                     RolePermissionParam::builder()
                         .role(RoleIdName::Id(permission.role_id))
-                        .permission(PermissionIdName::Id(permission.id))
+                        .permission(permission.id)
                         .build()?,
                 );
 

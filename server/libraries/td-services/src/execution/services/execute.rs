@@ -93,10 +93,9 @@ pub(crate) mod tests {
     use td_objects::rest_urls::ExecutionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
-        ExecutionIdName, ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues,
-        GroupId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
-        ProjectName, TableName, TableNameDto, TransactionKey, TransactionStatus, TriggeredOn,
-        UserId, VersionPos,
+        ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues, GroupId, InputIdx,
+        LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId, ProjectName, TableName,
+        TableNameDto, TransactionKey, TransactionStatus, TriggeredOn, UserId, VersionPos,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
@@ -606,14 +605,12 @@ pub(crate) mod tests {
         let read_service =
             ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
         let read_request = || {
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    ExecutionParam::builder()
-                        .execution(ExecutionIdName::from_str(&response.id.to_string()).unwrap())
-                        .build()
-                        .unwrap(),
-                )
-                .in_project(p)
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+                ExecutionParam::builder()
+                    .execution(response.id.clone())
+                    .build()
+                    .unwrap(),
+            )
         };
         let read_response = read_service.clone().raw_oneshot(read_request()).await?;
         assert_eq!(idxs(dep_edge(&read_response, 0)), vec![0, 1, 2]);

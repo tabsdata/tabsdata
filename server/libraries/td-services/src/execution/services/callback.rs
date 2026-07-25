@@ -10,6 +10,7 @@ use crate::logical::layers::index_lfrs_by_exec_fn;
 use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashSet;
 use ta_services::factory::service_factory;
+use td_authz::rbac::enter_project_scope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
@@ -26,7 +27,7 @@ use td_objects::dxo::worker::{
 use td_objects::rest_urls::internal::PhysicalFunctionRunWorkerIdParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, ExecutionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus, WorkerId,
+    AtTime, ExecutionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, WorkerId,
 };
 use td_queries::{By, ChunkedQueries};
 use td_tower::default_services::TransactionProvider;
@@ -97,7 +98,7 @@ async fn update_function_run_audit(
     request = UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
-    scope = "Project",
+    scope = "Global",
     context = SchedulerNotify,
 )]
 fn service() {
@@ -123,8 +124,10 @@ fn service() {
         from_fn(With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
         // Extract worker_id.
         from_fn(With::<PhysicalFunctionRunWorkerIdParam>::extract::<WorkerId>),
-        // Find worker (we will always have 1).
-        from_fn(By::<WorkerId>::assert_exists::<WorkerDB>),
+        // Find worker; pivot into its project's scope.
+        from_fn(By::<WorkerId>::fetch_one::<WorkerDB>),
+        from_fn(With::<WorkerDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         // Update worker status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
         from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
@@ -167,7 +170,6 @@ mod tests {
     use td_common::status::ExitStatus;
     use td_common::worker::{MessageAction, ResponseMessagePayload};
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -188,14 +190,12 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_execution_callback(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         ExecutionCallbackService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>, ProjectId>, ()>(&[
+            .assert_service::<UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>, ()>(&[
                 // Extract from request.
                 type_of_val(&
                     With::<UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>>::extract::<
@@ -217,8 +217,10 @@ mod tests {
                 type_of_val(&With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
                 // Extract worker_id. We assume it's correct as the callback is constructed by the server.
                 type_of_val(&With::<PhysicalFunctionRunWorkerIdParam>::extract::<WorkerId>),
-                // Find worker (we will always have 1).
-                type_of_val(&By::<WorkerId>::assert_exists::<WorkerDB>),
+                // Find worker; pivot into its project's scope.
+                type_of_val(&By::<WorkerId>::fetch_one::<WorkerDB>),
+                type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
                 // Update worker status.
                 type_of_val(&With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
                 type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
@@ -282,8 +284,7 @@ mod tests {
                             worker_id: worker.into(),
                         },
                         response,
-                    )
-                    .in_project(project_id);
+                    );
 
                 let service = ExecutionCallbackService::with_defaults(db.clone()).service();
                 service.raw_oneshot(request).await

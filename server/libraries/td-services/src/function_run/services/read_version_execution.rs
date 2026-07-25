@@ -4,6 +4,8 @@
 
 use crate::function_run::layers::resolve_bound_function_run;
 use ta_services::factory::service_factory;
+use td_authz::rbac::enter_project_scope;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::physical_function_run::{
@@ -11,7 +13,7 @@ use td_objects::dxo::physical_function_run::{
 };
 use td_objects::rest_urls::internal::FunctionVersionExecution;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{ExecutionId, ExecutionIdName, FunctionVersionId};
+use td_objects::types::basic::{CollectionId, ExecutionId, FunctionVersionId, ProjectId};
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -23,7 +25,7 @@ use td_tower::layers;
     request = ReadRequest<FunctionVersionExecution>,
     response = PhysicalFunctionRun,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "Global",
 )]
 fn service() {
     layers!(
@@ -31,10 +33,13 @@ fn service() {
             With::<ReadRequest<FunctionVersionExecution>>::extract_name::<FunctionVersionExecution>
         ),
         from_fn(With::<FunctionVersionExecution>::extract::<FunctionVersionId>),
-        from_fn(With::<FunctionVersionExecution>::extract::<ExecutionIdName>),
-        // find execution ID
-        from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
-        from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
+        from_fn(With::<FunctionVersionExecution>::extract::<ExecutionId>),
+        // Find execution and pivot into its project's scope via the collection.
+        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDB>),
+        from_fn(With::<ExecutionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         // find function run via LFR pointer: replays mint multiple FRs
         // under one LFR identity; the canonical one is whatever the
         // pointer currently binds to.
@@ -50,10 +55,8 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -68,24 +71,25 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_read_version_execution(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         FunctionVersionExecutionReadService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<FunctionVersionExecution>, ProjectId>, PhysicalFunctionRun>(&[
+            .assert_service::<ReadRequest<FunctionVersionExecution>, PhysicalFunctionRun>(&[
                 type_of_val(
                     &With::<ReadRequest<FunctionVersionExecution>>::extract_name::<
                         FunctionVersionExecution,
                     >,
                 ),
                 type_of_val(&With::<FunctionVersionExecution>::extract::<FunctionVersionId>),
-                type_of_val(&With::<FunctionVersionExecution>::extract::<ExecutionIdName>),
-                // find execution ID
-                type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
-                type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
+                type_of_val(&With::<FunctionVersionExecution>::extract::<ExecutionId>),
+                // Find execution and pivot into its project's scope via the collection.
+                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDB>),
+                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
                 // find function run via LFR pointer: replays mint multiple FRs
                 // under one LFR identity; the canonical one is whatever the
                 // pointer currently binds to.
@@ -151,14 +155,12 @@ mod tests {
             .await?;
 
         // Test
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(
-                FunctionVersionExecution::builder()
-                    .function_version_id(function_version.id)
-                    .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
-                    .build()?,
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            FunctionVersionExecution::builder()
+                .function_version_id(function_version.id)
+                .execution(execution.id.clone())
+                .build()?,
+        );
 
         let service = FunctionVersionExecutionReadService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

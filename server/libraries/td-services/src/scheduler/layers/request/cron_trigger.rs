@@ -13,13 +13,12 @@ use td_common::id;
 use td_common::jwt::JwtConfig;
 use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::TaggedExt;
 use td_objects::dxo::worker::{CronTriggerConfig, WorkerDBWithNames};
 use td_objects::dxo::yaml::cron_trigger::CronTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, cron_trigger};
 use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, RESOLVE_WORKER, UPDATE_WORKER};
 use td_objects::types::addresses::InternalServerAddresses;
-use td_objects::types::basic::{AtTime, ProjectIdName, WorkerConfig};
+use td_objects::types::basic::{AtTime, WorkerConfig};
 use td_tower::extractors::Ref;
 use tracing::instrument;
 
@@ -49,13 +48,12 @@ pub async fn create_locked_cron_trigger_workers_start_request(
             let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
-                let proj = cron_trigger_worker.project_id.tagged::<ProjectIdName>();
                 let server_address = server_addresses.first();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,
                     UPDATE_WORKER,
-                    &[("project", proj.as_str()), ("worker_id", &worker_id)],
+                    &[("worker_id", &worker_id)],
                 )?;
 
                 let function_version_id = cron_trigger_worker.function_version_id.to_string();
@@ -66,10 +64,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                     server_address,
                     Method::POST,
                     FUNCTION_VERSION_EXECUTE,
-                    &[
-                        ("project", proj.as_str()),
-                        ("function_version_id", &function_version_id),
-                    ],
+                    &[("function_version_id", &function_version_id)],
                     HashMap::from([("content-type".to_string(), "application/json".to_string())]),
                     true,
                 )?;
@@ -81,7 +76,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                         &jwt,
                         server_address,
                         RESOLVE_WORKER,
-                        &[("project", proj.as_str()), ("worker_id", &worker_id)],
+                        &[("worker_id", &worker_id)],
                     )?;
                     // The CronJob's schedule must be known when the gateway
                     // creates it, so the mask travels in the start request
@@ -186,13 +181,12 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
             let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
-                let proj = cron_trigger_worker.project_id.tagged::<ProjectIdName>();
                 let server_address = server_addresses.first();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,
                     UPDATE_WORKER,
-                    &[("project", proj.as_str()), ("worker_id", &worker_id)],
+                    &[("worker_id", &worker_id)],
                 )?;
 
                 // Kubernetes ships a lean Stop keyed by the worker id (so the

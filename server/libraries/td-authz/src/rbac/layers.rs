@@ -43,8 +43,8 @@
 //!   unit tests need no database, pool or tower context.
 
 use crate::rbac::model::{
-    EffectiveGrants, EntityKind, FromGrants, Grants, IdentityClaim, On, Project, ProjectPermission,
-    Requires, System, SystemEntity, SystemPermission, User,
+    EffectiveGrants, EntityKind, FromGrants, Grants, IdentityClaim, On, Project, ProjectId,
+    ProjectPermission, Requires, System, SystemEntity, SystemPermission, User,
 };
 use crate::rbac::source::{RbacSource, identity_grants};
 use std::any::type_name;
@@ -52,8 +52,8 @@ use std::marker::PhantomData;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::{Provenance, RequestContext};
-use td_objects::types::basic::WildcardProject;
 use td_objects::types::visible_projects::VisibleProjects;
+use td_tower::error::ConnectionError;
 use td_tower::extractors::{MutRef, Ref};
 
 /// Errors raised by the enforcement layer.
@@ -88,6 +88,22 @@ impl Scope<System> {
     pub async fn system() -> Result<Scope<System>, TdError> {
         Ok(Scope(On::Entity(SystemEntity)))
     }
+}
+
+/// Layer fn: scope the connection to the resolved project (`SET LOCAL
+/// app.project_id`, clearing any bypass). A `scope = Global` service pivots
+/// through this once it has resolved the owning project of the id it was
+/// called with — downstream layers then run exactly as under `scope =
+/// Project`, with RLS enforcing the project and inserts inheriting it.
+pub async fn enter_project_scope(
+    project: Ref<ProjectId>,
+    mut slot: MutRef<DomainConnection<Apiserver>>,
+) -> Result<(), TdError> {
+    let conn = slot.ready_mut().ok_or(ConnectionError::ConnectionLost)?;
+    conn.set_project_scope(&project.to_string())
+        .await
+        .map_err(ConnectionError::CannotSetProjectScope)?;
+    Ok(())
 }
 
 /// A requirement an operation may demand, evaluated against the effective
@@ -278,8 +294,7 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
 /// counterpart of [`Enforce`]. A cross-project (global) read gates on no
 /// single project — instead it narrows its result set to the projects the
 /// requester may view. This layer puts that set in the service context for a
-/// downstream layer to filter against. Wildcard-capable reads additionally
-/// gate a named project against the same set ([`Self::enforce`]).
+/// downstream layer to filter against.
 pub struct VisibleProjectsResolver<S: RbacSource> {
     _p: PhantomData<S>,
 }
@@ -294,30 +309,6 @@ impl<S: RbacSource> VisibleProjectsResolver<S> {
     ) -> Result<VisibleProjects, TdError> {
         let user_grants = source.user_grants(&mut slot, &request.user_id).await?;
         Ok(VisibleProjects::from_grants(&user_grants))
-    }
-
-    /// Layer fn: gate a wildcard-capable scope against the resolved
-    /// [`VisibleProjects`] — a named project outside the requester's visible
-    /// set is Forbidden. The wildcard names no project: its result set is the
-    /// visible set itself, narrowed by the downstream filter over the same
-    /// value.
-    pub async fn enforce(
-        request: Ref<RequestContext>,
-        scope: Ref<WildcardProject>,
-        visible: Ref<VisibleProjects>,
-    ) -> Result<(), TdError> {
-        if request.provenance == Provenance::InternalToken {
-            return Ok(());
-        }
-        if let WildcardProject::Project(id) = *scope
-            && !visible.contains(&id)
-        {
-            Err(RbacError::Forbidden(
-                type_name::<ViewProject>().to_string(),
-                format!("{}:{}", Project::NAME, On::<Project>::Entity(id)),
-            ))?
-        }
-        Ok(())
     }
 }
 
@@ -503,64 +494,6 @@ mod tests {
         // the system scope takes nothing from the context
         let scope = Scope::<System>::system().await.unwrap();
         assert_eq!(scope.0, On::Entity(SystemEntity));
-    }
-
-    #[tokio::test]
-    async fn test_visible_enforce_layer() {
-        use std::sync::Arc;
-
-        let p = ProjectId::default();
-        let user_id = UserId::default();
-
-        let gate = |scope: WildcardProject, visible: VisibleProjects, ctx: RequestContext| {
-            VisibleProjectsResolver::<FixedRbacSource>::enforce(
-                Ref::from_arc(Arc::new(ctx)),
-                Ref::from_arc(Arc::new(scope)),
-                Ref::from_arc(Arc::new(visible)),
-            )
-        };
-
-        let only_p = VisibleProjects::Only([p].into());
-        let empty = VisibleProjects::Only(Default::default());
-
-        // a named project inside the visible set passes; outside is Forbidden
-        gate(WildcardProject::Project(p), only_p, request(user_id))
-            .await
-            .unwrap();
-        gate(
-            WildcardProject::Project(p),
-            VisibleProjects::All,
-            request(user_id),
-        )
-        .await
-        .unwrap();
-        let err = gate(WildcardProject::Project(p), empty.clone(), request(user_id))
-            .await
-            .unwrap_err();
-        let RbacError::Forbidden(_, scope_str) = err.domain_err();
-        assert_eq!(scope_str, &format!("project:{p}"));
-
-        // the wildcard names no project — it passes even with nothing visible
-        gate(WildcardProject::Wildcard, empty.clone(), request(user_id))
-            .await
-            .unwrap();
-
-        // internal-token callers bypass the gate; a session merely carrying
-        // the system user does not
-        gate(
-            WildcardProject::Project(p),
-            empty.clone(),
-            RequestContext::internal(),
-        )
-        .await
-        .unwrap();
-        gate(
-            WildcardProject::Project(p),
-            empty,
-            request(UserId::system()),
-        )
-        .await
-        .unwrap_err();
     }
 
     #[td_test::test(db)]

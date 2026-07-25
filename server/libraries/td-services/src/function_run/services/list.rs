@@ -29,14 +29,13 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<FunctionRun>,
     connection = ConnectionProvider,
-    scope = "WildcardProject",
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(Visible::projects),
-        from_fn(Visible::enforce),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
         from_fn(By::<()>::list::<VisibleProjectsFilter, FunctionRun>),
@@ -47,35 +46,27 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
-    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
-    use td_error::{TdError, assert_service_error};
-    use td_objects::types::basic::{AccessTokenId, ProjectName, UserId, WildcardProject};
+    use td_error::TdError;
+    use td_objects::types::basic::{AccessTokenId, ProjectName, UserId};
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_function_run(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
         use td_tower::metadata::type_of_val;
 
         FunctionRunListService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<()>, WildcardProject>, ListResponse<FunctionRun>>(
-                &[
-                    type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                    type_of_val(&Visible::projects),
-                    type_of_val(&Visible::enforce),
-                    type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                    type_of_val(
-                        &With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>,
-                    ),
-                    type_of_val(&By::<()>::list::<VisibleProjectsFilter, FunctionRun>),
-                ],
-            );
+            .assert_service::<ListRequest<()>, ListResponse<FunctionRun>>(&[
+                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                type_of_val(&Visible::projects),
+                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
+                type_of_val(&By::<()>::list::<VisibleProjectsFilter, FunctionRun>),
+            ]);
     }
 
     #[td_test::test(db)]
@@ -89,8 +80,7 @@ mod tests {
         let wildcard = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .list((), ListParams::default())
-                    .in_project(WildcardProject::Wildcard),
+                    .list((), ListParams::default()),
             )
             .await?;
 
@@ -120,8 +110,7 @@ mod tests {
         let response = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), user.id)
-                    .list((), ListParams::default())
-                    .in_project(WildcardProject::Wildcard),
+                    .list((), ListParams::default()),
             )
             .await?;
 
@@ -132,25 +121,6 @@ mod tests {
             .collect();
         assert!(projects.contains(&base.name.clone()));
         assert!(!projects.contains(&ProjectName::try_from("alpha")?));
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_list_function_run_named_project_forbidden(db: TdPool) -> Result<(), TdError> {
-        let base = db.seed().test_project().await?;
-        seed_run(&db, base.id).await?;
-        let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let user = seed_project_viewer(&db, alpha.id).await?;
-
-        // A named project the requester cannot view is denied, not emptied.
-        let service = FunctionRunListService::with_defaults(db.clone()).service();
-        let request = RequestContext::with(AccessTokenId::default(), user.id)
-            .list((), ListParams::default())
-            .in_project(base.id);
-        assert_service_error(service, request, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-        })
-        .await;
         Ok(())
     }
 }

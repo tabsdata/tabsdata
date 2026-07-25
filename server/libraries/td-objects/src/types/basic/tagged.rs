@@ -3,9 +3,8 @@
 //
 
 use crate::types::basic::{
-    CollectionId, CollectionName, ExecutionId, FunctionId, FunctionName, GroupId, GroupName,
-    InterCollectionPermissionId, PermissionId, ProjectId, ProjectName, RoleId, RoleName, TableId,
-    TableName, TransactionId, UserId, UserName, WorkerId,
+    CollectionId, CollectionName, FunctionId, FunctionName, GroupId, GroupName, ProjectId,
+    ProjectName, RoleId, RoleName, TableId, TableName, UserId, UserName,
 };
 
 #[ta_objects::typed_tag]
@@ -22,15 +21,6 @@ pub enum ProjectIdName {
     Id(ProjectId),
     #[tag("")]
     Name(ProjectName),
-}
-
-// ExecutionName is not UNIQUE nor NOT NULL. We cannot use it as a primary key to lookup.
-#[ta_objects::typed_tag]
-pub enum ExecutionIdName {
-    #[tag("~")]
-    Id(ExecutionId),
-    #[tag("")]
-    Name(ExecutionId),
 }
 
 #[ta_objects::typed_tag]
@@ -50,22 +40,6 @@ pub enum GroupIdName {
 }
 
 #[ta_objects::typed_tag]
-pub enum InterCollectionPermissionIdName {
-    #[tag("~")]
-    Id(InterCollectionPermissionId),
-    #[tag("")]
-    Name(InterCollectionPermissionId),
-}
-
-#[ta_objects::typed_tag]
-pub enum PermissionIdName {
-    #[tag("~")]
-    Id(PermissionId),
-    #[tag("")]
-    Name(PermissionId),
-}
-
-#[ta_objects::typed_tag]
 pub enum RoleIdName {
     #[tag("~")]
     Id(RoleId),
@@ -82,25 +56,9 @@ pub enum TableIdName {
 }
 
 #[ta_objects::typed_tag]
-pub enum TransactionIdName {
-    #[tag("~")]
-    Id(TransactionId),
-    #[tag("")]
-    Name(TransactionId),
-}
-
-#[ta_objects::typed_tag]
 pub enum UserIdName {
     #[tag("~")]
     Id(UserId),
     #[tag("")]
     Name(UserName),
-}
-
-#[ta_objects::typed_tag]
-pub enum WorkerIdName {
-    #[tag("~")]
-    Id(WorkerId),
-    #[tag("")]
-    Name(WorkerId),
 }

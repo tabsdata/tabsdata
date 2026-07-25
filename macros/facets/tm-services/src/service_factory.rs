@@ -13,20 +13,15 @@ use syn::{
     FnArg, GenericParam, Ident, ItemFn, ReturnType, Token, Type, parse_macro_input, parse_quote,
 };
 
-/// Project scope of a service, declared as `scope = "Project"`, `scope =
-/// "WildcardProject"`, or `scope = "Global"`. Required for any service with a
-/// `connection`. `Project` services take their target project as part of the
-/// input (a `Scoped<Request>`) and run every query under `SET LOCAL
-/// app.project_id`; `WildcardProject` services take a `WildcardProject` and
-/// either scope to a named project (RLS as usual) or, for the wildcard, bypass
-/// RLS and let the service filter across projects — the selector is
-/// republished on the handler so the service gates named projects against the
-/// requester's visible set (`Visible::enforce`); `Global` services span all
-/// projects (`SET LOCAL app.bypass_rls = on`). A `grep 'scope = "Global"'` is
-/// the audit list of cross-project escape hatches.
+/// Project scope of a service, declared as `scope = "Project"` or `scope =
+/// "Global"`. Required for any service with a `connection`. `Project`
+/// services take their target project as part of the input (a
+/// `Scoped<Request>`) and run every query under `SET LOCAL app.project_id`;
+/// `Global` services span all projects (`SET LOCAL app.bypass_rls = on`). A
+/// `grep 'scope = "Global"'` is the audit list of cross-project escape
+/// hatches.
 enum Scope {
     Project,
-    WildcardProject,
     Global,
 }
 
@@ -75,12 +70,11 @@ impl Parse for ProviderArgs {
                     let value: syn::LitStr = input.parse()?;
                     scope = Some(match value.value().as_str() {
                         "Project" => Scope::Project,
-                        "WildcardProject" => Scope::WildcardProject,
                         "Global" => Scope::Global,
                         _ => {
                             return Err(syn::Error::new(
                                 value.span(),
-                                "`scope` must be \"Project\", \"WildcardProject\", or \"Global\"",
+                                "`scope` must be \"Project\" or \"Global\"",
                             ));
                         }
                     });
@@ -100,7 +94,7 @@ impl Parse for ProviderArgs {
         if connection.is_some() && scope.is_none() {
             return Err(syn::Error::new(
                 input.span(),
-                "a service with a `connection` must declare `scope = Project`, `scope = WildcardProject`, or `scope = Global`",
+                "a service with a `connection` must declare `scope = Project` or `scope = Global`",
             ));
         }
         if connection.is_none() && scope.is_some() {
@@ -255,12 +249,6 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! { ::td_database::pool::scoped::Scoped<#req_ty, ::td_objects::types::basic::ProjectId> },
             vec![quote! {
                 ::td_tower::project_scope::ProjectScopeProvider::<#req_ty, ::td_objects::types::basic::ProjectId, #scope_domain>::new()
-            }],
-        ),
-        Some(Scope::WildcardProject) => (
-            quote! { ::td_database::pool::scoped::Scoped<#req_ty, ::td_objects::types::basic::WildcardProject> },
-            vec![quote! {
-                ::td_tower::project_scope::WildcardProjectScopeProvider::<#req_ty, ::td_objects::types::basic::WildcardProject, #scope_domain>::new()
             }],
         ),
         Some(Scope::Global) => (

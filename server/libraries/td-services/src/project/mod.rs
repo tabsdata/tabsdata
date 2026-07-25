@@ -13,8 +13,6 @@ pub enum ProjectError {
     UpdateRequestHasNothingToUpdate = 0,
     #[error("This instance does not support creating projects.")]
     SingleProjectBackend = 1,
-    #[error("The `*` wildcard project marker is not valid on this endpoint")]
-    WildcardProjectNotAllowed = 2,
 
     // 1000-1999: NotFound — surfaces as 404.
     #[error("Project `{0}` not found")]

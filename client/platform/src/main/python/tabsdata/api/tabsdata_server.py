@@ -4260,7 +4260,6 @@ class TabsdataServer:
 
     def replay_logical_function_run(
         self,
-        collection_name: str,
         logical_function_run_id: str,
         raise_for_status: bool = True,
     ) -> dict:
@@ -4275,7 +4274,6 @@ class TabsdataServer:
                     new_function_run_id, function_version_id }
         """
         response = self.connection.logical_function_run_replay(
-            collection_name=collection_name,
             logical_function_run_id=logical_function_run_id,
             raise_for_status=raise_for_status,
         )

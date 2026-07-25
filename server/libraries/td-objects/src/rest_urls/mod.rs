@@ -5,10 +5,10 @@
 pub mod params;
 
 use crate::types::basic::{
-    AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionVersionId,
-    GroupIdName, LogicalFunctionRunId, LogsCastNumber, PermissionIdName, PhysicalFunctionRunId,
+    AllowDisabled, AtTime, CollectionIdName, ExecutionId, FunctionIdName, FunctionVersionId,
+    GroupIdName, LogicalFunctionRunId, LogsCastNumber, PermissionId, PhysicalFunctionRunId,
     PhysicalTableDataVersionId, ProjectIdName, RoleIdName, SampleLen, SampleOffset, Sql,
-    TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerId, WorkerIdName,
+    TableIdName, TransactionId, UncommittedStatus, UserIdName, WorkerId,
 };
 use td_common::logging::LOG_EXTENSION;
 use td_common::worker::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
@@ -33,12 +33,10 @@ pub mod internal {
     use super::*;
 
     // Loopback-only callbacks served by the `InternalServer` (not the public
-    // apiserver). The `{project}` segment lets the InternalServer's resolver
-    // populate `RequestContext.project_id` so worker callbacks update
-    // project-scoped tables under proper RLS isolation — instead of bypassing
-    // it as infrastructure. The scheduler stamps each row's `project_id` into
-    // the outbound callback URL it builds.
-    pub const INTERNAL_PREFIX: &str = url!("/internal", SCOPED);
+    // apiserver). Routes are keyed by globally-unique ids and authenticated by
+    // per-request internal tokens; the services resolve the owning project from
+    // the row itself.
+    pub const INTERNAL_PREFIX: &str = url!("/internal");
 
     pub const FUNCTION_VERSIONS: &str = url!("/function-versions");
     pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version_id}");
@@ -48,7 +46,7 @@ pub mod internal {
         #[dxo(extractor)]
         pub function_version_id: FunctionVersionId,
         #[dxo(extractor)]
-        pub execution: ExecutionIdName,
+        pub execution: ExecutionId,
     }
 
     #[ta_objects::Dlo]
@@ -195,7 +193,7 @@ pub struct RolePermissionParam {
     #[dxo(extractor)]
     role: RoleIdName,
     #[dxo(extractor)]
-    permission: PermissionIdName,
+    permission: PermissionId,
 }
 
 pub const LIST_PERMISSIONS: &str = url!(PERMISSIONS);
@@ -277,7 +275,9 @@ pub struct CollectionParam {
     collection: CollectionIdName,
 }
 
-pub const LIST_COLLECTIONS: &str = url!(COLLECTIONS);
+// Top-level: spans every project the requester can view, narrowed by the
+// `project` list filter. Collection CRUD stays name-keyed under the project.
+pub const LIST_COLLECTIONS: &str = url!("/collections");
 pub const GET_COLLECTION: &str = url!(COLLECTION);
 pub const CREATE_COLLECTION: &str = url!(COLLECTIONS);
 pub const UPDATE_COLLECTION: &str = url!(COLLECTION);
@@ -318,15 +318,14 @@ pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 pub const FUNCTION_PATCH: &str = url!(FUNCTION, "/patch");
 pub const FUNCTION_PATCHES: &str = url!(FUNCTION, "/patches");
 
-// Logical function runs (LFR) — operator-driven endpoints.
-pub const LOGICAL_FUNCTION_RUNS: &str = url!(COLLECTION, "/logical-function-runs");
+// Logical function runs (LFR) — operator-driven endpoints. Top-level,
+// globally-unique ids (see Executions).
+pub const LOGICAL_FUNCTION_RUNS: &str = url!("/logical-function-runs");
 pub const LOGICAL_FUNCTION_RUN: &str = url!(LOGICAL_FUNCTION_RUNS, "/{logical_function_run}");
 pub const LOGICAL_FUNCTION_RUN_REPLAY: &str = url!(LOGICAL_FUNCTION_RUN, "/replay");
 
 #[ta_objects::UrlParam]
 pub struct LogicalFunctionRunParam {
-    #[dxo(extractor)]
-    collection: CollectionIdName,
     #[dxo(extractor)]
     logical_function_run: LogicalFunctionRunId,
 }
@@ -409,14 +408,17 @@ pub const RUNTIME_INFO: &str = url!("/runtime-info");
 // file `<resources_folder>/conns/foo.svg`.
 pub const RESOURCES: &str = url!("/resources/{*path}");
 
-// Executions (tenant-scoped)
-pub const EXECUTIONS: &str = url!(SCOPED, "/executions");
+// Executions — top-level (no `{project}` segment): execution ids are globally
+// unique, so the services resolve the owning project from the row and gate
+// authorization on it. Lists span the caller's visible projects, narrowed by
+// `?project=`.
+pub const EXECUTIONS: &str = url!("/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 
 #[ta_objects::UrlParam]
 pub struct ExecutionParam {
     #[dxo(extractor)]
-    pub execution: ExecutionIdName,
+    pub execution: ExecutionId,
 }
 
 #[ta_objects::UrlParam]
@@ -441,14 +443,10 @@ pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 pub const EXECUTION_DETAILS: &str = url!(EXECUTION, "/details");
 pub const EXECUTION_LIST: &str = url!(EXECUTIONS);
-pub const EXECUTION_LIST_BY_FUNCTION_VERSION: &str = url!(
-    SCOPED,
-    "/function-versions/{function_version_id}/executions"
-);
-pub const EXECUTION_LIST_BY_TABLE_DATA_VERSION: &str = url!(
-    SCOPED,
-    "/table-data-versions/{table_data_version}/executions"
-);
+pub const EXECUTION_LIST_BY_FUNCTION_VERSION: &str =
+    url!("/function-versions/{function_version_id}/executions");
+pub const EXECUTION_LIST_BY_TABLE_DATA_VERSION: &str =
+    url!("/table-data-versions/{table_data_version}/executions");
 
 #[ta_objects::QueryParam]
 pub struct AllowDisabledParam {
@@ -458,14 +456,14 @@ pub struct AllowDisabledParam {
 
 pub const EXECUTION_READ: &str = url!(EXECUTION);
 
-// Transactions (tenant-scoped)
-pub const TRANSACTIONS: &str = url!(SCOPED, "/transactions");
+// Transactions — top-level, globally-unique ids (see Executions).
+pub const TRANSACTIONS: &str = url!("/transactions");
 pub const TRANSACTION: &str = url!(TRANSACTIONS, "/{transaction}");
 
 #[ta_objects::UrlParam]
 pub struct TransactionParam {
     #[dxo(extractor)]
-    transaction: TransactionIdName,
+    transaction: TransactionId,
 }
 
 pub const TRANSACTION_CANCEL: &str = url!(TRANSACTION, "/cancel");
@@ -475,14 +473,14 @@ pub const TRANSACTIONS_LIST: &str = url!(TRANSACTIONS);
 // Synchrotron (tenant-scoped)
 pub const SYNCHROTRON_READ: &str = url!(SCOPED, "/synchrotron");
 
-// Worker messages (tenant-scoped)
-pub const WORKERS: &str = url!(SCOPED, "/workers");
+// Worker messages — top-level, globally-unique ids (see Executions).
+pub const WORKERS: &str = url!("/workers");
 pub const WORKER: &str = url!(WORKERS, "/{worker}");
 
 #[ta_objects::UrlParam]
 pub struct WorkerParam {
     #[dxo(extractor)]
-    worker: WorkerIdName,
+    worker: WorkerId,
 }
 
 pub const WORKERS_LIST: &str = url!(WORKERS);
@@ -562,7 +560,7 @@ fn extension_default() -> Vec<LogsExtension> {
 #[ta_objects::Dlo]
 pub struct WorkerLogsParams {
     #[dxo(extractor)]
-    worker: WorkerIdName,
+    worker: WorkerId,
     #[dxo(extractor)]
     extension: Vec<LogsExtension>,
     #[dxo(extractor)]
@@ -590,11 +588,11 @@ pub struct PhysicalFunctionRunParam {
     #[dxo(extractor)]
     function: FunctionIdName,
     #[dxo(extractor)]
-    execution: ExecutionIdName,
+    execution: ExecutionId,
 }
 
 pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);
-pub const FUNCTION_RUN_LIST: &str = url!(SCOPED, "/function_runs");
+pub const FUNCTION_RUN_LIST: &str = url!("/function-runs");
 
 // Table lineage graph
 pub const TABLE_FLOW_GRAPH: &str = url!(TABLE, "/flow");

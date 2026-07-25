@@ -72,7 +72,7 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     // The `{project}` segment of `/projects/{project}/...` routes is resolved
-    // in middleware and read via the `Project` / `WildcardProject` extractors,
+    // in middleware and read via the `Project` extractor,
     // never a `Path<_>` — so utoipa can't see it. Emit it explicitly (first,
     // matching URL order) whenever the handler takes one of those extractors.
     // The raw `Extension<ProjectId>` form is rejected: it would silently skip
@@ -80,7 +80,7 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     if let Some(offender) = project_id_extension_arg(&input) {
         return syn::Error::new_spanned(
             offender,
-            "Extension<ProjectId> is not allowed in apiserver handlers; take the `Project` or `WildcardProject` extractor so the project path parameter is documented",
+            "Extension<ProjectId> is not allowed in apiserver handlers; take the `Project` extractor so the project path parameter is documented",
         )
         .to_compile_error()
         .into();
@@ -189,7 +189,7 @@ fn has_type(input: &ItemFn, method_type: &str) -> bool {
         false
     })
 }
-/// True if the handler takes the `Project` or `WildcardProject` extractor — the
+/// True if the handler takes the `Project` extractor — the
 /// forms that carry the resolved `/projects/{project}/...` segment. utoipa
 /// can't otherwise see it, since it's resolved in middleware, not a `Path<_>`.
 fn has_project_extractor(input: &ItemFn) -> bool {
@@ -198,14 +198,14 @@ fn has_project_extractor(input: &ItemFn) -> bool {
             && let Type::Path(type_path) = &*pat_type.ty
             && let Some(seg) = type_path.path.segments.last()
         {
-            return seg.ident == "Project" || seg.ident == "WildcardProject";
+            return seg.ident == "Project";
         }
         false
     })
 }
 
 /// The banned `Extension<ProjectId>` argument, if the handler takes one — the
-/// raw form that predates the `Project` / `WildcardProject` extractors and
+/// raw form that predates the `Project` extractor and
 /// would skip the documented `{project}` parameter.
 fn project_id_extension_arg(input: &ItemFn) -> Option<&FnArg> {
     input.sig.inputs.iter().find(|arg| {

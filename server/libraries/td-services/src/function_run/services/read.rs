@@ -17,7 +17,7 @@ use td_objects::dxo::physical_function_run::{
 use td_objects::rest_urls::PhysicalFunctionRunParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    CollectionIdName, ExecutionId, ExecutionIdName, FunctionIdName, FunctionVersionId, ProjectId,
+    CollectionIdName, ExecutionId, FunctionIdName, FunctionVersionId, ProjectId,
 };
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
@@ -55,9 +55,8 @@ fn service() {
         ),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // find execution ID
-        from_fn(With::<PhysicalFunctionRunParam>::extract::<ExecutionIdName>),
-        from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
-        from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
+        from_fn(With::<PhysicalFunctionRunParam>::extract::<ExecutionId>),
+        from_fn(By::<ExecutionId>::assert_exists::<ExecutionDB>),
         // find function run via LFR pointer: replays mint multiple FRs
         // under one LFR identity; the canonical one is whatever the
         // pointer currently binds to.
@@ -124,9 +123,8 @@ mod tests {
                 ),
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                 // find execution ID
-                type_of_val(&With::<PhysicalFunctionRunParam>::extract::<ExecutionIdName>),
-                type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
-                type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
+                type_of_val(&With::<PhysicalFunctionRunParam>::extract::<ExecutionId>),
+                type_of_val(&By::<ExecutionId>::assert_exists::<ExecutionDB>),
                 // find function run (walks the LFR pointer log to the latest
                 // bound PFR for (execution_id, function_version_id))
                 type_of_val(&resolve_bound_function_run),
@@ -199,7 +197,7 @@ mod tests {
                         "{}",
                         function_version.name
                     ))?)
-                    .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
+                    .execution(execution.id.clone())
                     .build()?,
             )
             .in_project(p.id);

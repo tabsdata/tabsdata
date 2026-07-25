@@ -6,6 +6,7 @@ use crate::scheduler::message_builder::{
     build_cron_input, build_function_v2, build_streamer_input, prefetch_dispatch,
 };
 use ta_services::factory::service_factory;
+use td_authz::rbac::enter_project_scope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
@@ -13,8 +14,8 @@ use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWit
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::rest_urls::internal::WorkerIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, WorkerId, WorkerType};
-use td_queries::{LfrEntry, LiveEntry};
+use td_objects::types::basic::{AtTime, ProjectId, WorkerId, WorkerType};
+use td_queries::{By, LfrEntry, LiveEntry};
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::extractors::{MutRef, Ref};
@@ -27,16 +28,17 @@ use tracing::instrument;
     request = ReadRequest<WorkerIdParam>,
     response = WorkerInput,
     connection = TransactionProvider,
-    // Internal worker-callback handler; the apiserver's project_resolver sets
-    // the request's project from the URL, so it runs project-scoped like its
-    // siblings (worker callback/list/logs).
-    scope = "Project",
+    scope = "Global",
     context = Storage,
 )]
 fn service() {
     layers!(
         from_fn(With::<ReadRequest<WorkerIdParam>>::extract_name::<WorkerIdParam>),
         from_fn(With::<WorkerIdParam>::extract::<WorkerId>),
+        // Find worker; pivot into its project's scope.
+        from_fn(By::<WorkerId>::fetch_one::<WorkerDB>),
+        from_fn(With::<WorkerDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         from_fn(With::<ReadRequest<WorkerIdParam>>::extract::<RequestContext>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(resolve_worker_message),
@@ -122,7 +124,6 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
@@ -189,9 +190,7 @@ mod tests {
         let param = WorkerIdParam {
             worker_id: worker.id.clone(),
         };
-        let read = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(param)
-            .in_project(p.id);
+        let read = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(param);
         let response = ResolveWorkerMessageService::with_defaults(db.clone())
             .service()
             .raw_oneshot(read)

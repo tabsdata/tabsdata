@@ -4,13 +4,14 @@
 
 use crate::execution::layers::update_status::update_worker_status;
 use ta_services::factory::service_factory;
+use td_authz::rbac::enter_project_scope;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::worker::{
     CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution, WorkerDB,
 };
 use td_objects::rest_urls::internal::WorkerIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::WorkerId;
+use td_objects::types::basic::{ProjectId, WorkerId};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -21,7 +22,7 @@ use td_tower::layers;
     request = UpdateRequest<WorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
-    scope = "Project",
+    scope = "Global",
 )]
 fn service() {
     layers!(
@@ -36,8 +37,10 @@ fn service() {
         from_fn(With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
         // Extract worker_id.
         from_fn(With::<WorkerIdParam>::extract::<WorkerId>),
-        // Find worker (we will always have 1).
-        from_fn(By::<WorkerId>::assert_exists::<WorkerDB>),
+        // Find worker; pivot into its project's scope.
+        from_fn(By::<WorkerId>::fetch_one::<WorkerDB>),
+        from_fn(With::<WorkerDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         // Update worker status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
         from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
@@ -53,7 +56,6 @@ mod tests {
     use td_common::status::ExitStatus;
     use td_common::worker::{MessageAction, ResponseMessagePayload};
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -70,42 +72,38 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_worker_callback(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         WorkerCallbackService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<UpdateRequest<WorkerIdParam, CallbackRequest>, ProjectId>, ()>(
-                &[
-                    // Extract from request.
-                    type_of_val(
-                        &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_name::<
-                            WorkerIdParam,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_data::<
-                            CallbackRequest,
-                        >,
-                    ),
-                    // Convert callback request to status update request.
-                    type_of_val(
-                        &With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>,
-                    ),
-                    // Extract worker_id.
-                    type_of_val(&With::<WorkerIdParam>::extract::<WorkerId>),
-                    // Find worker (we will always have 1).
-                    type_of_val(&By::<WorkerId>::assert_exists::<WorkerDB>),
-                    // Update worker status.
-                    type_of_val(
-                        &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
-                    ),
-                    type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
-                    type_of_val(&update_worker_status),
-                ],
-            );
+            .assert_service::<UpdateRequest<WorkerIdParam, CallbackRequest>, ()>(&[
+                // Extract from request.
+                type_of_val(
+                    &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_name::<
+                        WorkerIdParam,
+                    >,
+                ),
+                type_of_val(
+                    &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_data::<
+                        CallbackRequest,
+                    >,
+                ),
+                // Convert callback request to status update request.
+                type_of_val(&With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
+                // Extract worker_id.
+                type_of_val(&With::<WorkerIdParam>::extract::<WorkerId>),
+                // Find worker; pivot into its project's scope.
+                type_of_val(&By::<WorkerId>::fetch_one::<WorkerDB>),
+                type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
+                // Update worker status.
+                type_of_val(
+                    &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
+                ),
+                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
+                type_of_val(&update_worker_status),
+            ]);
     }
 
     #[td_test::test(db)]
@@ -156,14 +154,12 @@ mod tests {
             context: None,
         };
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .update(
-                WorkerIdParam {
-                    worker_id: worker.id.clone(),
-                },
-                response,
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+            WorkerIdParam {
+                worker_id: worker.id.clone(),
+            },
+            response,
+        );
 
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -186,14 +182,12 @@ mod tests {
             context: None,
         };
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .update(
-                WorkerIdParam {
-                    worker_id: worker.id.clone(),
-                },
-                response,
-            )
-            .in_project(p.id);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+            WorkerIdParam {
+                worker_id: worker.id.clone(),
+            },
+            response,
+        );
 
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;

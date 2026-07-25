@@ -140,6 +140,7 @@ mod definitions {
         #[dxo(extractor)]
         pub id: ExecutionId,
 
+        #[dxo(extractor)]
         pub project_id: ProjectId,
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
