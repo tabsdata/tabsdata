@@ -2,6 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+import json
 import os
 import sys
 import textwrap
@@ -118,13 +119,124 @@ def enforce_not_in_ai_agent(env: Mapping[str, str] | None = None) -> None:
     raise SystemExit(1)
 
 
+def _full_help_options(command) -> list:
+    options = []
+    for param in getattr(command, "params", []):
+        if isinstance(param, click.Option):
+            options.append({
+                "opts": list(param.opts) + list(param.secondary_opts),
+                "help": param.help or "",
+                "is_flag": bool(param.is_flag),
+                "required": bool(param.required),
+                "default": (
+                    param.default
+                    if (param.default is not None and not param.is_flag)
+                    else None
+                ),
+                "type": getattr(param.type, "name", None),
+            })
+    return options
+
+
+def _full_help_node(name: str, command, path: str) -> dict:
+    node = {
+        "name": name,
+        "path": path,
+        "help": (command.help or command.short_help or "").strip(),
+        "options": _full_help_options(command),
+        "arguments": [
+            {"name": param.name, "required": bool(param.required)}
+            for param in getattr(command, "params", [])
+            if isinstance(param, click.Argument)
+        ],
+    }
+    if isinstance(command, click.Group):
+        node["commands"] = [
+            _full_help_node(sub, command.commands[sub], f"{path} {sub}")
+            for sub in sorted(command.commands)
+        ]
+    return node
+
+
+def _full_help_text(node: dict, lines: list | None = None) -> str:
+    lines = [] if lines is None else lines
+    lines.append(node["path"])
+    if node["help"]:
+        for line in node["help"].splitlines():
+            lines.append(f"    {line}".rstrip())
+    if node["arguments"]:
+        lines.append("    Arguments:")
+        for arg in node["arguments"]:
+            tag = "required" if arg["required"] else "optional"
+            lines.append(f"      {arg['name']} ({tag})")
+    if node["options"]:
+        lines.append("    Options:")
+        for opt in node["options"]:
+            flags = ", ".join(opt["opts"])
+            tag = "required" if opt["required"] else "optional"
+            suffix = f"  {opt['help']}" if opt["help"] else ""
+            lines.append(f"      {flags} ({tag}){suffix}".rstrip())
+    lines.append("")
+    for sub in node.get("commands", []):
+        _full_help_text(sub, lines)
+    return "\n".join(lines)
+
+
+def build_full_help(root, output: str = "text", prog_name: str = "tdk") -> str:
+    """Render the help for ``root`` and every command/subcommand under it.
+
+    Each option and argument is tagged ``(required)`` or ``(optional)`` in the
+    text form, and carries a ``required`` boolean in the json form.
+
+    ``output`` is ``"text"`` (a flat, indented listing) or ``"json"`` (a nested
+    tree of ``{name, path, help, options, arguments, commands}`` objects)."""
+    tree = _full_help_node(prog_name, root, prog_name)
+    if output == "json":
+        # ``default=str`` coerces any non-JSON option default (e.g. a Choice or
+        # Path sentinel) to its string form rather than failing the dump.
+        return json.dumps(tree, indent=2, default=str)
+    return _full_help_text(tree)
+
+
+def _incoming_argv(args, kwargs) -> list:
+    if kwargs.get("args") is not None:
+        return list(kwargs["args"])
+    if args and args[0] is not None:
+        return list(args[0])
+    return list(sys.argv[1:])
+
+
+def _full_output_format(argv: list) -> str:
+    fmt = "text"
+    for flag in ("--output", "-o"):
+        if flag in argv:
+            index = argv.index(flag)
+            if index + 1 < len(argv):
+                fmt = argv[index + 1]
+    if fmt not in ("text", "json"):
+        click.echo(f"Invalid --output '{fmt}'; expected 'text' or 'json'.", err=True)
+        raise SystemExit(2)
+    return fmt
+
+
 class _AiAgentGuardedGroup(click.RichGroup):
     """Top-level group that refuses to run inside a supported AI agent. The check
     runs in ``main`` -- before any argument parsing -- so even ``--help`` and
-    ``--version`` are gated, not just subcommands."""
+    ``--version`` are gated, not just subcommands.
+
+    ``main`` also intercepts ``--help --full`` (before Click's own ``--help``
+    handling) to print the recursive full help for every command and
+    subcommand. ``--full`` is only honored together with ``--help``, and
+    ``--output`` only together with ``--full``:
+    ``tdk --help [--full [--output FORMAT]]``."""
 
     def main(self, *args, **kwargs):
         enforce_not_in_ai_agent()
+        argv = _incoming_argv(args, kwargs)
+        wants_help = "--help" in argv or "-h" in argv
+        if wants_help and "--full" in argv:
+            click.echo(build_full_help(self, _full_output_format(argv)))
+            raise SystemExit(0)
         return super().main(*args, **kwargs)
 
 
@@ -136,6 +248,16 @@ class _AiAgentGuardedGroup(click.RichGroup):
     help=(
         "Disable all prompts. If a prompt is required for proper execution, "
         "the command will fail."
+    ),
+)
+@click.option(
+    "--full",
+    is_flag=True,
+    expose_value=False,
+    help=(
+        "With --help, print the full help for every command and subcommand, "
+        "then exit. Optionally add '--output text|json' (default: text): "
+        "'tdk --help [--full [--output FORMAT]]'."
     ),
 )
 @click.pass_context

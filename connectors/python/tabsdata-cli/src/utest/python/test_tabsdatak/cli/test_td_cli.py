@@ -87,25 +87,25 @@ def test_subcommand_help_loads_without_error(subcommand):
 
 
 # ---------------------------------------------------------------------------
-# `tdk fn register` v2 surface (--path / --dir-to-bundle / --local-pkg /
-# --requirements / --update)
+# `tdk fn register` surface (--path / --dir-to-bundle / --storage-path /
+# --update). --requirements and --local-pkg are temporarily disabled, and
+# --base-path was renamed to --storage-path.
 # ---------------------------------------------------------------------------
 
 
-def test_fn_register_help_advertises_v2_flags():
+def test_fn_register_help_advertises_flags():
     runner = CliRunner()
     result = runner.invoke(cli, ["fn", "register", "--help"])
     assert result.exit_code == 0
     out = result.output
     assert "--path" in out
     assert "--dir-to-bundle" in out
-    assert "--local-pkg" in out
-    # ``--requirements`` is restored in v2: it now points to a
-    # user-supplied requirements.yaml that the bundle embeds
-    # verbatim. ``--update`` is also restored as an idempotent
-    # register-or-update flag.
-    assert "--requirements" in out
     assert "--update" in out
+    assert "--storage-path" in out
+    # Renamed / temporarily disabled options must not surface.
+    assert "--base-path" not in out
+    assert "--requirements" not in out
+    assert "--local-pkg" not in out
 
 
 def test_fn_update_help_describes_v2_command():
@@ -128,6 +128,73 @@ def test_fn_bundle_help_advertises_options_and_tgz():
 
 
 # ---------------------------------------------------------------------------
+# `tdk --help --full --output text|json`: recursive help over every command.
+# ---------------------------------------------------------------------------
+
+
+def test_full_help_text_lists_nested_commands():
+    result = CliRunner().invoke(cli, ["--help", "--full", "--output", "text"])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    # Every group and a representative renamed subcommand is present.
+    assert "tdk collection get" in out
+    assert "tdk fn patches" in out
+    assert "tdk fn bundle" in out
+
+
+def test_full_help_defaults_to_text():
+    result = CliRunner().invoke(cli, ["--help", "--full"])
+    assert result.exit_code == 0, result.output
+    assert "tdk collection get" in result.output
+
+
+def test_full_help_requires_help_flag():
+    # --full only applies together with --help; on its own it is not the
+    # full-help path (Click falls through to a usage error).
+    result = CliRunner().invoke(cli, ["--full"])
+    assert result.exit_code != 0
+    assert "tdk collection get" not in result.output
+
+
+def test_full_help_json_is_a_command_tree():
+    result = CliRunner().invoke(cli, ["--help", "--full", "--output", "json"])
+    assert result.exit_code == 0, result.output
+    tree = json.loads(result.output)
+    assert tree["name"] == "tdk"
+    top = {c["name"] for c in tree["commands"]}
+    assert {"collection", "fn", "group", "project", "user"} <= top
+    fn = next(c for c in tree["commands"] if c["name"] == "fn")
+    fn_subs = {c["name"] for c in fn["commands"]}
+    assert "get" in fn_subs and "info" not in fn_subs
+    assert "patches" in fn_subs and "list-patches" not in fn_subs
+
+
+def test_full_help_rejects_unknown_output():
+    result = CliRunner().invoke(cli, ["--help", "--full", "--output", "yaml"])
+    assert result.exit_code == 2
+
+
+def test_full_help_marks_options_required_or_optional():
+    # Text form tags every option; the tree carries the same as a boolean.
+    text = CliRunner().invoke(cli, ["--help", "--full"]).output
+    assert "(optional)" in text
+    assert "(required)" in text
+
+    tree = json.loads(
+        CliRunner().invoke(cli, ["--help", "--full", "--output", "json"]).output
+    )
+
+    def _options(node):
+        yield from node.get("options", [])
+        for sub in node.get("commands", []):
+            yield from _options(sub)
+
+    required_values = {opt["required"] for opt in _options(tree)}
+    # Both mandatory and optional options exist across the command tree.
+    assert required_values == {True, False}
+
+
+# ---------------------------------------------------------------------------
 # projects / multitenancy surface
 # ---------------------------------------------------------------------------
 
@@ -145,7 +212,7 @@ def test_project_group_has_crud_only():
     assert sorted(project.commands) == [
         "create",
         "delete",
-        "info",
+        "get",
         "list",
         "update",
     ]

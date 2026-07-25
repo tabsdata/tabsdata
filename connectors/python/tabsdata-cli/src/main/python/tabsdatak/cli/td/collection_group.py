@@ -47,7 +47,8 @@ def collection():
     ),
 )
 @click.option(
-    "--base-path",
+    "--storage-path",
+    "base_path",
     help=(
         "Logical storage prefix for the collection's artifacts. Defaults to '/'. "
         "The physical backend is selected by the server's configured mounts."
@@ -223,7 +224,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @output_option
 @click.option("--name", "-n", help="Name of the collection to display.")
 @click.pass_context
-def info(ctx: click.Context, name: str):
+def get(ctx: click.Context, name: str):
     """Display a collection by name"""
     verify_login_or_prompt(ctx)
     name = (
@@ -355,7 +356,8 @@ def list(ctx: click.Context, all_projects: bool):
 @click.option("--new-name", help="New name for the collection.")
 @click.option("--description", help="New description for the collection.")
 @click.option(
-    "--base-path",
+    "--storage-path",
+    "base_path",
     help=(
         "New logical storage prefix for the collection's artifacts. Existing data "
         "versions keep their stamped path; only new artifacts use the new prefix."

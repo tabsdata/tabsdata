@@ -4,7 +4,7 @@
 
 """Mocked-client renderer harness for the ``tdk`` read commands.
 
-Every ``tdk`` read command (``list`` / ``info``) shares one output contract:
+Every ``tdk`` read command (``list`` / ``get``) shares one output contract:
 ``-o/--output {table,json,yaml}`` dispatched through
 :func:`tabsdatak.cli.cli_utils.render`. This harness runs each such command
 with a **mocked** ``TabsdataServer`` injected into ``ctx.obj`` and asserts, per
@@ -63,7 +63,7 @@ class _DTO:
     silently disagree about the same record.
 
     ``attrs`` overrides let a table view read a *richer* attribute than the flat
-    ``_data`` value -- e.g. ``fn info`` renders ``[t.name for t in fn.tables]``,
+    ``_data`` value -- e.g. ``fn get`` renders ``[t.name for t in fn.tables]``,
     so ``_data["tables"]`` stays a plain list of names for JSON/YAML while the
     ``tables`` attribute is overridden with objects exposing ``.name``.
     """
@@ -142,7 +142,7 @@ _COLLECTIONS = [
 _AUTH_INFO = {"name": "alice", "email": "alice@x.io", "roles": ["sys_admin", "user"]}
 
 # Functions carry a richer payload; ``fn list`` renders a flat table, while
-# ``fn info`` renders nested ``tables``/``dependencies``/``triggers``. ``type``
+# ``fn get`` renders nested ``tables``/``dependencies``/``triggers``. ``type``
 # is the raw wire value ("P"); the machine formats keep it verbatim while the
 # table maps it to "Publisher" -- a case where content legitimately differs by
 # format, which is exactly why each format is validated on its own terms.
@@ -220,7 +220,7 @@ _INFLIGHT = {
     ],
 }
 
-# ``fn list-patches`` returns raw patch dicts. ``defined_on`` is epoch millis:
+# ``fn patches`` returns raw patch dicts. ``defined_on`` is epoch millis:
 # json/yaml keep it verbatim while the table renders it as a UTC ISO string
 # (1704067200000 ms -> 2024-01-01T00:00:00Z).
 _PATCHES = [
@@ -353,7 +353,7 @@ def _set_fn_list(c: MagicMock) -> None:
 
 
 def _set_fn_info(c: MagicMock) -> None:
-    # ``fn info`` reads ``[t.name for t in fn.tables]`` -- override the flat
+    # ``fn get`` reads ``[t.name for t in fn.tables]`` -- override the flat
     # ``tables`` attribute with objects while ``_data`` keeps plain names.
     c.get_function.return_value = _DTO(
         _FN_INFO, tables=[_DTO({"name": t}) for t in _FN_INFO["tables"]]
@@ -390,7 +390,7 @@ def _set_metrics_inflight(c: MagicMock) -> None:
 
 
 def _set_fn_info_history(c: MagicMock) -> None:
-    # ``fn info --show-history`` lists versions; same DTO shape as ``fn info``.
+    # ``fn get --show-history`` lists versions; same DTO shape as ``fn get``.
     c.list_function_history.return_value = [
         _DTO(_FN_INFO, tables=[_DTO({"name": t}) for t in _FN_INFO["tables"]])
     ]
@@ -457,7 +457,7 @@ CASES: tuple[RenderCase, ...] = (
          "bob", "Bob B", "bob@x.io", "False"),
     ),
     RenderCase(
-        "user-info", ["user", "info", "-n", "alice"], _set_user_info, _USERS[0],
+        "user-get", ["user", "get", "-n", "alice"], _set_user_info, _USERS[0],
         ("alice", "Alice A", "alice@x.io", "True"),
     ),
     RenderCase(
@@ -465,7 +465,7 @@ CASES: tuple[RenderCase, ...] = (
         ("grp-a", "GID_A", "first group", "2026-01-01", "admin"),
     ),
     RenderCase(
-        "group-info", ["group", "info", "-n", "grp-a"], _set_group_info, _GROUP_INFO,
+        "group-get", ["group", "get", "-n", "grp-a"], _set_group_info, _GROUP_INFO,
         # ``system`` is rendered as ``str(bool(grp.system))`` -> "False".
         ("grp-a", "GID_A", "False", "first group", "2026-01-01", "admin"),
     ),
@@ -474,7 +474,7 @@ CASES: tuple[RenderCase, ...] = (
         ("proj-a", "PID_A", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
-        "project-info", ["project", "info", "-n", "proj-a"], _set_project_info,
+        "project-get", ["project", "get", "-n", "proj-a"], _set_project_info,
         _PROJECTS[0], ("proj-a", "PID_A", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
@@ -482,7 +482,7 @@ CASES: tuple[RenderCase, ...] = (
         ("coll-a", "first collection", "2026-01-03", "admin"),
     ),
     RenderCase(
-        "collection-info", ["collection", "info", "-n", "coll-a"], _set_collection_info,
+        "collection-get", ["collection", "get", "-n", "coll-a"], _set_collection_info,
         _COLLECTIONS[0], ("coll-a", "first collection", "2026-01-03", "admin"),
     ),
     RenderCase(
@@ -497,7 +497,7 @@ CASES: tuple[RenderCase, ...] = (
         ("fn-a", "Publisher", "publishes stuff", "2026-02-01", "admin"),
     ),
     RenderCase(
-        "fn-info", ["fn", "info", "-n", "fn-a", "-c", "coll-a"], _set_fn_info, _FN_INFO,
+        "fn-get", ["fn", "get", "-n", "fn-a", "-c", "coll-a"], _set_fn_info, _FN_INFO,
         ("fn-a", "FID_1", "publishes stuff", "2026-02-01", "admin",
          "dep1", "dep2", "trig1", "t1", "t2"),
     ),
@@ -533,15 +533,15 @@ CASES: tuple[RenderCase, ...] = (
     ),
     RenderCase(
         # --show-history returns a list of versions via list_function_history.
-        "fn-info-history",
-        ["fn", "info", "-n", "fn-a", "-c", "coll-a", "--show-history"],
+        "fn-get-history",
+        ["fn", "get", "-n", "fn-a", "-c", "coll-a", "--show-history"],
         _set_fn_info_history, [_FN_INFO],
         ("fn-a", "FID_1", "publishes stuff", "dep1", "trig1", "t1", "t2"),
     ),
     RenderCase(
         # epoch defined_on (1704067200000) is kept raw in json/yaml but rendered
         # as the UTC ISO string in the table.
-        "fn-list-patches", ["fn", "list-patches", "-n", "fn-a", "-c", "coll-a"],
+        "fn-patches", ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
         _set_fn_list_patches, _PATCHES,
         ("PV_2", "PV_1", "second patch", "2024-01-01T00:00:00Z", "published"),
     ),
@@ -656,7 +656,7 @@ def test_invalid_output_format_is_rejected(tmp_path):
     client = _client()
     _set_user_info(client)
     result = _invoke(
-        ["user", "info", "-n", "alice", "-o", "xml"], client=client, tmp_path=tmp_path
+        ["user", "get", "-n", "alice", "-o", "xml"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code != 0
     assert "xml" in result.output  # click names the offending value

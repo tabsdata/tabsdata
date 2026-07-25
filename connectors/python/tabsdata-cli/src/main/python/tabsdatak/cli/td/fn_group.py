@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from time import sleep
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import rich_click as click
 from rich.live import Live
@@ -109,7 +109,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     help="Show the history of the function, newest first.",
 )
 @click.pass_context
-def info(ctx: click.Context, name: str, coll: str, show_history: bool):
+def get(ctx: click.Context, name: str, coll: str, show_history: bool):
     """Display a function"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be displayed")
@@ -195,7 +195,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
     "fn_version",
     help=(
         "Function version id (fvid) whose bundle will be downloaded. Use "
-        "'tdk fn info --show-history' to find available fvids."
+        "'tdk fn get --show-history' to find available fvids."
     ),
 )
 @click.option(
@@ -233,10 +233,8 @@ def bundle(ctx: click.Context, fn_version: str, file: str):
         raise click.ClickException(f"Failed to download function bundle: {e}")
 
 
-# Registered as "list" but the Python function is NOT named ``list``: a module
-# named ``list`` would shadow the ``list`` builtin, and ``register`` / ``update``
-# / ``patch`` below call ``list(local_pkg)`` -- with the builtin shadowed that
-# invoked this Click command instead, breaking ``--local-pkg`` at runtime.
+# Registered as "list" but the Python function is NOT named ``list`` to avoid
+# shadowing the ``list`` builtin at module scope.
 @fn.command("list")
 @proj_option
 @output_option
@@ -318,31 +316,7 @@ def list_functions(ctx: click.Context, coll: str):
         "function file is will be used."
     ),
 )
-@click.option(
-    "--requirements",
-    help=(
-        "Path to a user-supplied requirements.yaml. When set, this "
-        "file is embedded in the bundle verbatim, overriding the env "
-        "snapshot the bundle producer would otherwise synthesise "
-        "from the active Python interpreter. Use this when the build "
-        "env differs from the runtime env (e.g. cross-platform "
-        "deployment)."
-    ),
-)
-@click.option(
-    "--local-pkg",
-    type=str,
-    multiple=True,
-    help=(
-        "Path to a local package directory to include in the bundle. Local "
-        "packages are pip-installed into the function's runtime environment, "
-        "separately from the '--dir-to-bundle' source tree. Import them "
-        "absolutely (`import mypkg`); use relative imports (`from .mod import "
-        "x`) for modules inside the bundled source tree. If a local package "
-        "shares a name with a module in that tree, the installed package wins "
-        "at runtime and shadows the source module."
-    ),
-)
+# --requirements and --local-pkg are temporarily disabled.
 @click.option(
     "--reuse-tables",
     is_flag=True,
@@ -374,7 +348,8 @@ def list_functions(ctx: click.Context, coll: str):
     ),
 )
 @click.option(
-    "--base-path",
+    "--storage-path",
+    "base_path",
     help=(
         "Optional storage-prefix override for this function's output table data. "
         "When omitted, the collection's base_path is used."
@@ -387,8 +362,6 @@ def register(
     description: str,
     path: str,
     dir_to_bundle: str,
-    requirements: str,
-    local_pkg: Tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
     base_path: str = None,
@@ -410,7 +383,6 @@ def register(
 
     verify_login_or_prompt(ctx)
     description = description or ""
-    local_pkg_list = list(local_pkg) if local_pkg else None
     click.echo("Registering a function")
     click.echo("-" * 10)
     coll = (
@@ -449,10 +421,10 @@ def register(
                     info,
                     project_root,
                     description=description,
-                    local_packages=local_pkg_list,
+                    local_packages=None,
                     reuse_tables=reuse_tables,
                     enabled=enabled,
-                    requirements=requirements,
+                    requirements=None,
                     base_path=base_path,
                 )
                 click.echo("Function updated successfully")
@@ -467,10 +439,10 @@ def register(
             info,
             project_root,
             description=description,
-            local_packages=local_pkg_list,
+            local_packages=None,
             reuse_tables=reuse_tables,
             enabled=enabled,
-            requirements=requirements,
+            requirements=None,
             base_path=base_path,
         )
         click.echo("Function registered successfully")
@@ -748,28 +720,7 @@ def _monitor_execution_or_transaction(
         "function file is will be used."
     ),
 )
-@click.option(
-    "--requirements",
-    help=(
-        "Path to a user-supplied requirements.yaml. When set, this "
-        "file is embedded in the bundle verbatim, overriding the env "
-        "snapshot the bundle producer would otherwise synthesise "
-        "from the active Python interpreter."
-    ),
-)
-@click.option(
-    "--local-pkg",
-    multiple=True,
-    help=(
-        "Path to a local package directory to include in the bundle. Local "
-        "packages are pip-installed into the function's runtime environment, "
-        "separately from the '--dir-to-bundle' source tree. Import them "
-        "absolutely (`import mypkg`); use relative imports (`from .mod import "
-        "x`) for modules inside the bundled source tree. If a local package "
-        "shares a name with a module in that tree, the installed package wins "
-        "at runtime and shadows the source module."
-    ),
-)
+# --requirements and --local-pkg are temporarily disabled.
 @click.option(
     "--reuse-tables",
     is_flag=True,
@@ -792,7 +743,8 @@ def _monitor_execution_or_transaction(
     help="Enable or disable the feature",
 )
 @click.option(
-    "--base-path",
+    "--storage-path",
+    "base_path",
     help=(
         "Optional storage-prefix override for this function's output table data. "
         "When omitted, the previous version's value is carried forward."
@@ -822,8 +774,6 @@ def update(
     description: str,
     path: str,
     dir_to_bundle: str,
-    requirements: str,
-    local_pkg: Tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
     base_path: str = None,
@@ -837,7 +787,6 @@ def update(
     v2 bundle producer (``tabsdatak.common._archive.bundle.build_bundle``).
     """
     verify_login_or_prompt(ctx)
-    local_pkg_list = list(local_pkg) if local_pkg else None
     name = name or logical_prompt(ctx, "Name of the function to be updated")
     coll = (
         coll
@@ -861,10 +810,10 @@ def update(
             info,
             project_root,
             description=description,
-            local_packages=local_pkg_list,
+            local_packages=None,
             reuse_tables=reuse_tables,
             enabled=enabled,
-            requirements=requirements,
+            requirements=None,
             base_path=base_path,
             reset_state=reset_state,
             reset_stage=reset_stage,
@@ -969,9 +918,10 @@ def disable(
     help="Name of the collection to which the function belongs.",
 )
 @click.option(
-    "--patch-of",
+    "--fn-version",
+    "fn_version",
     help=(
-        "Function-version id (fvid) this patch overrides. Use 'tdk fn info "
+        "Function-version id (fvid) this patch overrides. Use 'tdk fn get "
         "--show-history' to find available fvids."
     ),
 )
@@ -992,40 +942,16 @@ def disable(
         "function file is will be used."
     ),
 )
-@click.option(
-    "--requirements",
-    help=(
-        "Path to a user-supplied requirements.yaml. When set, this "
-        "file is embedded in the bundle verbatim, overriding the env "
-        "snapshot the bundle producer would otherwise synthesise "
-        "from the active Python interpreter."
-    ),
-)
-@click.option(
-    "--local-pkg",
-    type=str,
-    multiple=True,
-    help=(
-        "Path to a local package directory to include in the bundle. Local "
-        "packages are pip-installed into the function's runtime environment, "
-        "separately from the '--dir-to-bundle' source tree. Import them "
-        "absolutely (`import mypkg`); use relative imports (`from .mod import "
-        "x`) for modules inside the bundled source tree. If a local package "
-        "shares a name with a module in that tree, the installed package wins "
-        "at runtime and shadows the source module."
-    ),
-)
+# --requirements and --local-pkg are temporarily disabled.
 @click.pass_context
 def patch(
     ctx: click.Context,
     name: str,
     coll: str,
-    patch_of: str,
+    fn_version: str,
     path: str,
     description: str,
     dir_to_bundle: str,
-    requirements: str,
-    local_pkg: Tuple[str, ...],
 ):
     """Register a code-only patch of a function version.
 
@@ -1040,7 +966,7 @@ def patch(
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     name = name or logical_prompt(ctx, "Name of the function to patch")
-    patch_of = patch_of or logical_prompt(
+    fn_version = fn_version or logical_prompt(
         ctx, "Function-version id (fvid) this patch overrides"
     )
     path = path or logical_prompt(
@@ -1048,9 +974,8 @@ def patch(
         "Path to the function file. Must be of the form "
         "'/path/to/file.py::function_name'",
     )
-    local_pkg_list = list(local_pkg) if local_pkg else None
     click.echo(
-        f"Patching function '{name}' in collection '{coll}' (patch_of={patch_of})"
+        f"Patching function '{name}' in collection '{coll}' (fn_version={fn_version})"
     )
     click.echo("-" * 10)
     try:
@@ -1061,10 +986,10 @@ def patch(
             name,
             info,
             project_root,
-            patch_of=patch_of,
+            patch_of=fn_version,
             description=description,
-            local_packages=local_pkg_list,
-            requirements=requirements,
+            local_packages=None,
+            requirements=None,
         )
         click.echo("Patch registered successfully")
         click.echo(f"Patch id (fvid): {record.get('id')}")
@@ -1080,7 +1005,7 @@ def patch(
         raise click.ClickException(f"Failed to patch function: {e}")
 
 
-@fn.command("list-patches")
+@fn.command("patches")
 @proj_option
 @output_option
 @click.option(

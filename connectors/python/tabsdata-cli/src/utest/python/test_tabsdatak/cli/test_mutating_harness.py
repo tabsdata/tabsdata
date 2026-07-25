@@ -123,7 +123,7 @@ CASES: tuple[MutCase, ...] = (
     MutCase(
         "collection-update",
         ["collection", "update", "-n", "c1", "--new-name", "c2",
-         "--description", "d", "--base-path", "bp"],
+         "--description", "d", "--storage-path", "bp"],
         "update_collection", ("c1",),
         {"new_name": "c2", "new_description": "d", "new_base_path": "bp"},
         "Collection updated successfully",
@@ -340,17 +340,18 @@ def test_fn_register_maps_flags_to_register_function(tmp_path):
         [
             "fn", "register", "-c", "coll1", "--path", "/x.py::f",
             "--description", "desc", "--reuse-tables",
-            "--requirements", "req.yaml", "--base-path", "bp",
-            "--local-pkg", "pkgA",
+            "--storage-path", "bp",
         ],
         client=client,
         tmp_path=tmp_path,
     )
     assert result.exit_code == 0, result.output
+    # --requirements and --local-pkg are temporarily disabled: the command
+    # always forwards them as None.
     assert client.register_function.call_args == call(
         "coll1", _INFO, _ROOT,
-        description="desc", local_packages=["pkgA"], reuse_tables=True,
-        enabled=True, requirements="req.yaml", base_path="bp",
+        description="desc", local_packages=None, reuse_tables=True,
+        enabled=True, requirements=None, base_path="bp",
     )
     assert "registered successfully" in result.output
 
@@ -378,7 +379,7 @@ def test_fn_patch_maps_flags_to_patch_function(tmp_path):
     client = _client()
     result = _invoke_fn(
         [
-            "fn", "patch", "-n", "f1", "-c", "coll1", "--patch-of", "fv1",
+            "fn", "patch", "-n", "f1", "-c", "coll1", "--fn-version", "fv1",
             "--path", "/x.py::f", "--description", "d",
         ],
         client=client,

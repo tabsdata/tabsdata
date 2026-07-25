@@ -102,7 +102,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @output_option
 @click.option("--name", "-n", help="Name of the user to display.")
 @click.pass_context
-def info(ctx: click.Context, name: str):
+def get(ctx: click.Context, name: str):
     """Display a user by name"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the user to display")

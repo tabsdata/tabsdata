@@ -53,6 +53,9 @@ Global options
   -h, --help             Show help
       --version          Show version
       --no-prompt        Never prompt; fail if input is required
+      --full             With --help: print the full help for every command and
+                         subcommand. Pair with --output text|json (default: text),
+                         e.g. `tdk --help --full --output json`.
 
 Note: tdk refuses to run inside AI agents — use the Tabsdata MCP server instead.
 Set TDK_IN_AGENT=1 to override (see Environment).
@@ -82,7 +85,7 @@ Required identifiers (`--name`, `--plan`, ...) are shown without brackets; `[...
 project create --name NAME [--description D] [--groups g1,g2,...]
 project update --name NAME [--new-name N] [--description D]
 project delete --name NAME [-y]
-project info   --name NAME
+project get    --name NAME
 project list
 ```
 
@@ -90,12 +93,12 @@ project list
 
 ```
 collection create --name NAME [--proj PROJECT] [--description D] [--group G]
-                              [--base-path PATH] [--conn-file FILE]
+                              [--storage-path PATH] [--conn-file FILE]
 collection update --name NAME [--proj PROJECT] [--new-name N] [--description D]
-                              [--group G] [--base-path PATH|-] [--conn-file FILE]
-                              # '-' = inherit project base-path; --conn-file updates the connection
+                              [--group G] [--storage-path PATH|-] [--conn-file FILE]
+                              # '-' = inherit project storage path; --conn-file updates the connection
 collection delete --name NAME [--proj PROJECT] [-y]
-collection info   --name NAME [--proj PROJECT] [-o]
+collection get    --name NAME [--proj PROJECT] [-o]
 collection list               [--proj PROJECT] [-o]
 ```
 
@@ -105,7 +108,7 @@ collection list               [--proj PROJECT] [-o]
 group create --name NAME [--proj PROJECT] [--description D]
 group update --name NAME [--proj PROJECT] [--new-name N] [--description D]
 group delete --name NAME [--proj PROJECT] [-y]
-group info   --name NAME [--proj PROJECT] [-o]
+group get    --name NAME [--proj PROJECT] [-o]
 group list               [--proj PROJECT] [-o]
 ```
 
@@ -113,23 +116,24 @@ group list               [--proj PROJECT] [-o]
 
 ```
 function register --path PATH [--proj PROJECT] [--col COLLECTION] [--description D] [--dir-to-bundle DIR]
-                              [--requirements FILE] [--local-pkg PKG ...]
-                              [--reuse-tables] [--enabled|--disabled] [--update] [--base-path PATH]
+                              [--reuse-tables] [--enabled|--disabled] [--update] [--storage-path PATH]
                               #   name is taken from the decorated function in the bundle
+                              #   (--requirements / --local-pkg are temporarily disabled)
 function update   --name NAME [--proj PROJECT] [--col COLLECTION] [--description D] [--path PATH]
-                              [--dir-to-bundle DIR] [--requirements FILE] [--local-pkg PKG ...] [--reuse-tables]
-                              [--enabled|--disabled] [--base-path PATH] [--reset-state] [--reset-stage]
+                              [--dir-to-bundle DIR] [--reuse-tables]
+                              [--enabled|--disabled] [--storage-path PATH] [--reset-state] [--reset-stage]
 function delete   --name NAME [--proj PROJECT] [--col COLLECTION] [-y]
-function info     --name NAME [--proj PROJECT] [--col COLLECTION] [--version V] [--history] [-o]
+function get      --name NAME [--proj PROJECT] [--col COLLECTION] [--version V] [--history] [-o]
                               #   --version: details of a specific version (default: current)
-function bundle   --name NAME [--proj PROJECT] [--col COLLECTION] [--version V] --file FILE
-                              #   downloads a function version's bundle (default: current version)
+function bundle   --fn-version FVID [--proj PROJECT] --file FILE
+                              #   downloads a function version's bundle (a .tgz archive)
 function list                 [--proj PROJECT] [--col COLLECTION] [--cron] [--stream] [-o]
 function trigger  --name NAME [--proj PROJECT] [--col COLLECTION] [--plan-name N] [--detach]
 function enable   --name NAME [--proj PROJECT] [--col COLLECTION]
 function disable  --name NAME [--proj PROJECT] [--col COLLECTION]
-function patch    --name NAME [--proj PROJECT] [--col COLLECTION] --patch-of REF [--path PATH] [--description D]
-                              [--dir-to-bundle DIR] [--requirements FILE] [--local-pkg PKG ...]
+function patch    --name NAME [--proj PROJECT] [--col COLLECTION] --fn-version REF [--path PATH] [--description D]
+                              [--dir-to-bundle DIR]
+                              #   (--requirements / --local-pkg are temporarily disabled)
 function patches  --name NAME [--proj PROJECT] [--col COLLECTION] [-o]      # was: list-patches
 ```
 
