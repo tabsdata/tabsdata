@@ -3867,25 +3867,6 @@ class TabsdataServer:
         collection = Collection(self.connection, name)
         return collection.get_connection(raise_for_status=raise_for_status)
 
-    def refresh_collection_connection(
-        self, name: str, raise_for_status: bool = True
-    ) -> None:
-        """Force a re-examination of a source/destination collection's
-        connection ahead of its staleness window.
-
-        Args:
-            name (str): The name of the collection.
-            raise_for_status (bool, optional): Whether to raise an exception if the
-                request was not successful. Defaults to True.
-
-        Raises:
-            APIServerError: If the request was not successful.
-        """
-        self.connection.collection_connection_refresh(
-            name, raise_for_status=raise_for_status
-        )
-        return None
-
     def list_dataversions(
         self,
         collection_name: str,
