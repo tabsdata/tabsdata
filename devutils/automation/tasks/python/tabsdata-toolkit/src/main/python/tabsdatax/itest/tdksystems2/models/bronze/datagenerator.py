@@ -309,27 +309,27 @@ class _Bronze(Model):
         now, span = _NOW, _SPAN
         return [
             Table(
-                "full_snapshot",
+                "brz_full_snapshot",
                 [SIM_COUNTER, *_data_cols("is_active")],
                 _gen_full_snapshot(batches, batch_size, now, span),
             ),
             Table(
-                "insup_soft_delete",
+                "brz_insup_soft_delete",
                 [SIM_COUNTER, *_data_cols("deleted")],
                 _gen_insup_soft_delete(batches, batch_size, now, span),
             ),
             Table(
-                "insup_no_delete",
+                "brz_insup_no_delete",
                 [SIM_COUNTER, *_data_cols("is_active")],
                 _gen_insup_no_delete(batches, batch_size, now, span),
             ),
             Table(
-                "cdc_stream",
+                "brz_cdc_stream",
                 _cdc_cols(),
                 _gen_cdc_stream(batches, batch_size, now, span),
             ),
             Table(
-                "append_events",
+                "brz_append_events",
                 [SIM_COUNTER, *_data_cols("is_active")],
                 _gen_append_events(batches, batch_size, now, span),
             ),

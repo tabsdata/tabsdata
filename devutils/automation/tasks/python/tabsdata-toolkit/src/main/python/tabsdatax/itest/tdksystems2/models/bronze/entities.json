@@ -1,22 +1,22 @@
 [
   {
-    "name": "full_snapshot",
+    "name": "brz_full_snapshot",
     "sizeable": true
   },
   {
-    "name": "insup_soft_delete",
+    "name": "brz_insup_soft_delete",
     "sizeable": true
   },
   {
-    "name": "insup_no_delete",
+    "name": "brz_insup_no_delete",
     "sizeable": true
   },
   {
-    "name": "cdc_stream",
+    "name": "brz_cdc_stream",
     "sizeable": true
   },
   {
-    "name": "append_events",
+    "name": "brz_append_events",
     "sizeable": true
   }
 ]

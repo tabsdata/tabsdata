@@ -13,7 +13,7 @@
 -- SMALLINT(0,1) for cross-engine portability.
 -- =============================================================
 
-CREATE TABLE full_snapshot (
+CREATE TABLE brz_full_snapshot (
     sim_counter     BIGINT          NOT NULL PRIMARY KEY,
     tenant_id       VARCHAR(20)     NOT NULL,
     entity_id       BIGINT          NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE full_snapshot (
     is_active       SMALLINT        NOT NULL CHECK (is_active IN (0,1))
 );
 
-CREATE TABLE insup_soft_delete (
+CREATE TABLE brz_insup_soft_delete (
     sim_counter     BIGINT          NOT NULL PRIMARY KEY,
     tenant_id       VARCHAR(20)     NOT NULL,
     entity_id       BIGINT          NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE insup_soft_delete (
     deleted         SMALLINT        NOT NULL CHECK (deleted IN (0,1))
 );
 
-CREATE TABLE insup_no_delete (
+CREATE TABLE brz_insup_no_delete (
     sim_counter     BIGINT          NOT NULL PRIMARY KEY,
     tenant_id       VARCHAR(20)     NOT NULL,
     entity_id       BIGINT          NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE insup_no_delete (
 -- ("@td.cdc.data.col.old.<COL>" / "@td.cdc.data.col.new.<COL>"). Per
 -- spec: Insert → old NULL, new = inserted; Update → old = before, new
 -- = after; Delete → old NULL, new = deleted row.
-CREATE TABLE cdc_stream (
+CREATE TABLE brz_cdc_stream (
     sim_counter                          BIGINT      NOT NULL PRIMARY KEY,
     "@td.cdc.meta.op"                    CHAR(1)     NOT NULL CHECK ("@td.cdc.meta.op" IN ('i','u','d')),
     "@td.cdc.meta.tx"                    VARCHAR(36) NOT NULL,
@@ -87,7 +87,7 @@ CREATE TABLE cdc_stream (
     "@td.cdc.data.col.new.is_active"     SMALLINT    CHECK ("@td.cdc.data.col.new.is_active" IS NULL OR "@td.cdc.data.col.new.is_active" IN (0,1))
 );
 
-CREATE TABLE append_events (
+CREATE TABLE brz_append_events (
     sim_counter     BIGINT          NOT NULL PRIMARY KEY,
     tenant_id       VARCHAR(20)     NOT NULL,
     entity_id       BIGINT          NOT NULL,

@@ -5,7 +5,7 @@
 -- columns kept, no CREATE INDEX.
 -- =============================================================
 
-CREATE TABLE full_snapshot (
+CREATE TABLE brz_full_snapshot (
     sim_counter     BIGINT          NOT NULL,
     tenant_id       STRING          NOT NULL,
     entity_id       BIGINT          NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE full_snapshot (
     is_active       BOOLEAN         NOT NULL
 );
 
-CREATE TABLE insup_soft_delete (
+CREATE TABLE brz_insup_soft_delete (
     sim_counter     BIGINT          NOT NULL,
     tenant_id       STRING          NOT NULL,
     entity_id       BIGINT          NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE insup_soft_delete (
     deleted         BOOLEAN         NOT NULL
 );
 
-CREATE TABLE insup_no_delete (
+CREATE TABLE brz_insup_no_delete (
     sim_counter     BIGINT          NOT NULL,
     tenant_id       STRING          NOT NULL,
     entity_id       BIGINT          NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE insup_no_delete (
     is_active       BOOLEAN         NOT NULL
 );
 
-CREATE TABLE cdc_stream (
+CREATE TABLE brz_cdc_stream (
     sim_counter                          BIGINT      NOT NULL,
     `@td.cdc.meta.op`                    STRING      NOT NULL,
     `@td.cdc.meta.tx`                    STRING      NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE cdc_stream (
     `@td.cdc.data.col.new.is_active`     BOOLEAN
 );
 
-CREATE TABLE append_events (
+CREATE TABLE brz_append_events (
     sim_counter     BIGINT          NOT NULL,
     tenant_id       STRING          NOT NULL,
     entity_id       BIGINT          NOT NULL,
