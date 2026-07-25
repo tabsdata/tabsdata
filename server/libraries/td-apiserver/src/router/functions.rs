@@ -9,9 +9,7 @@ mod routes {
     use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, Request, State};
-    use axum_extra::TypedHeader;
     use axum_extra::extract::Query;
-    use headers::IfNoneMatch;
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
@@ -24,7 +22,6 @@ mod routes {
     use td_objects::dxo::bundle::Bundle;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
-    use td_objects::dxo::file::DownloadResponse;
     use td_objects::dxo::function::{
         Function, FunctionEnable, FunctionPatch, FunctionPatchRecord, FunctionRegister,
         FunctionUpdate, FunctionWithTables,
@@ -32,14 +29,12 @@ mod routes {
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::params::FunctionAtIdName;
     use td_objects::rest_urls::{
-        AtTimeParam, CollectionParam, FUNCTION_BUNDLE_DOWNLOAD, FUNCTION_CREATE, FUNCTION_DELETE,
-        FUNCTION_ENABLE, FUNCTION_EXECUTE, FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST,
-        FUNCTION_LIST_BY_COLL, FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD,
-        FunctionParam, FunctionVersionIdParam,
+        AtTimeParam, CollectionParam, FUNCTION_CREATE, FUNCTION_DELETE, FUNCTION_ENABLE,
+        FUNCTION_EXECUTE, FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL,
+        FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
     };
     use td_services::execution::services::ExecutionServices;
     use td_services::function::services::FunctionServices;
-    use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 
     const FUNCTIONS_TAG: &str = "Functions";
@@ -231,6 +226,25 @@ mod routes {
         let response = state.upload.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
+}
+
+#[router_ext(FunctionBundleRouter)]
+mod bundle_route {
+    use axum::Extension;
+    use axum::extract::{Path, State};
+    use axum_extra::TypedHeader;
+    use headers::IfNoneMatch;
+    use std::sync::Arc;
+    use ta_apiserver::status::error_status::ErrorStatus;
+    use ta_services::service::TdService;
+    use td_apiforge::apiserver_path;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::file::DownloadResponse;
+    use td_objects::rest_urls::{FUNCTION_BUNDLE_DOWNLOAD, FunctionVersionIdParam};
+    use td_services::function::services::FunctionServices;
+    use td_tower::ctx_service::RawOneshot;
+
+    const FUNCTIONS_TAG: &str = "Functions";
 
     #[apiserver_path(
         method = get,
@@ -244,11 +258,10 @@ mod routes {
     pub async fn download_bundle(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
         Path(function_version_param): Path<FunctionVersionIdParam>,
         if_none_match: Option<TypedHeader<IfNoneMatch>>,
     ) -> Result<DownloadResponse, ErrorStatus> {
-        let request = context.read(function_version_param).in_project(project_id);
+        let request = context.read(function_version_param);
         let d = state.download_bundle.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::octet_stream(d.stream)
             .attachment(format_args!(

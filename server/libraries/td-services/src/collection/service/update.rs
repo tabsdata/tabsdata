@@ -629,8 +629,7 @@ mod tests {
         let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read(FunctionVersionIdParam {
                 function_version_id: function_after.id.clone(),
-            })
-            .in_project(p.id);
+            });
         let response = DownloadBundleService::build(&context)
             .service()
             .raw_oneshot(download_request)

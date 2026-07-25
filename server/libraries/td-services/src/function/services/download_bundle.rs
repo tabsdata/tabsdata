@@ -6,11 +6,14 @@ pub use crate::function::layers::download_bundle::BundleDownload;
 use crate::function::layers::download_bundle::{build_bundle_download, resolve_function_version};
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::FunctionVersionIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::FunctionVersionId;
+use td_objects::types::basic::{CollectionId, FunctionVersionId, ProjectId};
+use td_queries::By;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -21,7 +24,7 @@ use td_tower::layers;
     request = ReadRequest<FunctionVersionIdParam>,
     response = BundleDownload,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "Global",
     context = AuthzContext,
     context = Storage,
 )]
@@ -32,7 +35,13 @@ fn service() {
             With::<ReadRequest<FunctionVersionIdParam>>::extract_name::<FunctionVersionIdParam>
         ),
         from_fn(With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
+        // The version id is globally unique; resolve it, then pivot into its
+        // project's scope via the collection before the authz check.
         from_fn(resolve_function_version),
+        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
+        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<ProjectId>),
+        from_fn(enter_project_scope),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(build_bundle_download),
@@ -71,14 +80,15 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_download_bundle(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
         use td_tower::metadata::type_of_val;
 
         DownloadBundleService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<FunctionVersionIdParam>, ProjectId>, BundleDownload>(&[
-                type_of_val(&With::<ReadRequest<FunctionVersionIdParam>>::extract::<RequestContext>),
+            .assert_service::<ReadRequest<FunctionVersionIdParam>, BundleDownload>(&[
+                type_of_val(
+                    &With::<ReadRequest<FunctionVersionIdParam>>::extract::<RequestContext>,
+                ),
                 type_of_val(
                     &With::<ReadRequest<FunctionVersionIdParam>>::extract_name::<
                         FunctionVersionIdParam,
@@ -86,6 +96,10 @@ mod tests {
                 ),
                 type_of_val(&With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
                 type_of_val(&resolve_function_version),
+                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
+                type_of_val(&enter_project_scope),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&build_bundle_download),
@@ -154,8 +168,7 @@ mod tests {
             let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(FunctionVersionIdParam {
                     function_version_id: expected_fn.id.clone(),
-                })
-                .in_project(p.id);
+                });
             let response = service.clone().raw_oneshot(download_request).await?;
 
             assert_eq!(response.function_version_id, expected_fn.id);
@@ -179,11 +192,11 @@ mod tests {
             .build()?;
         db.scoped(p.id).live().insert(&deleted).await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(FunctionVersionIdParam {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            FunctionVersionIdParam {
                 function_version_id: deleted.id.clone(),
-            })
-            .in_project(p.id);
+            },
+        );
         let err = service
             .clone()
             .raw_oneshot(request)
@@ -193,11 +206,11 @@ mod tests {
         assert_eq!(err.api_error(), ApiError::NotFound);
 
         // An unknown version id is likewise not found.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(FunctionVersionIdParam {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            FunctionVersionIdParam {
                 function_version_id: FunctionVersionId::new(),
-            })
-            .in_project(p.id);
+            },
+        );
         let err = service
             .clone()
             .raw_oneshot(request)
@@ -264,8 +277,7 @@ mod tests {
         let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read(FunctionVersionIdParam {
                 function_version_id: function.id.clone(),
-            })
-            .in_project(p.id);
+            });
         let response = service.raw_oneshot(download_request).await?;
         assert_eq!(response.bundle_id, bundle_id);
 

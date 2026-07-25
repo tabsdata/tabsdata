@@ -436,8 +436,7 @@ pub struct FunctionVersionIdParam {
 // Bundle download is keyed by function version id (tenant-scoped), not by
 // collection/function name: a bundle is the immutable artifact of a specific
 // version. A version whose function has been deleted is not exposed.
-pub const FUNCTION_BUNDLE_DOWNLOAD: &str =
-    url!(SCOPED, "/function-versions/{function_version_id}/bundle");
+pub const FUNCTION_BUNDLE_DOWNLOAD: &str = url!("/function-versions/{function_version_id}/bundle");
 
 pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");

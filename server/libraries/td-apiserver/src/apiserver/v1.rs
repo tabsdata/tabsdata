@@ -43,7 +43,7 @@ use crate::router::auth::{SecureAuthRouter, UnsecureAuthRouter};
 use crate::router::collections::{CollectionListRouter, CollectionsRouter};
 use crate::router::executions::ExecutionsRouter;
 use crate::router::function_runs::{FunctionRunListRouter, FunctionRunsRouter};
-use crate::router::functions::FunctionsRouter;
+use crate::router::functions::{FunctionBundleRouter, FunctionsRouter};
 use crate::router::groups::GroupsRouter;
 use crate::router::logical_versions::LogicalVersionsRouter;
 use crate::router::metrics::{GlobalMetricsRouter, MetricsRouter};
@@ -144,6 +144,7 @@ impl ApiServerV1 {
                         .merge(LogicalVersionsRouter::router(context.services.clone()))
                         .merge(TransactionsRouter::router(context.services.clone()))
                         .merge(WorkersRouter::router(context.services.clone()))
+                        .merge(FunctionBundleRouter::router(context.services.clone()))
                         .merge(AuthenticatedExtendedRouter::router(
                             context.extended_services.clone(),
                         ));
