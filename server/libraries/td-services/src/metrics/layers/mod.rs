@@ -223,6 +223,7 @@ fn fill_logical_tables_out(
         i64,
         Option<CollectionId>,
         Option<GroupId>,
+        Option<ProjectId>,
         LogicalFunctionRunStatus,
     );
     let coarse = matches!(unit, WindowUnit::Quarter | WindowUnit::Year);
@@ -237,13 +238,25 @@ fn fill_logical_tables_out(
     let mut distinct: HashMap<Key, HashSet<TableId>> = HashMap::new();
     for t in out_tables {
         distinct
-            .entry((bucket_ms(t.bucket), t.collection_id, t.group_id, t.status))
+            .entry((
+                bucket_ms(t.bucket),
+                t.collection_id,
+                t.group_id,
+                t.project_id,
+                t.status,
+            ))
             .or_default()
             .insert(t.table_id);
     }
 
     for n in nodes.iter_mut().filter(|n| n.kind == NodeKind::Dim) {
-        let key = (*n.bucket, n.collection_id, n.group_id, n.status);
+        let key = (
+            *n.bucket,
+            n.collection_id,
+            n.group_id,
+            n.project_id,
+            n.status,
+        );
         let count = distinct.get(&key).map_or(0, |s| s.len());
         n.logical_tables_out = TableVersionCount::try_from(count as i64)?;
     }
@@ -270,6 +283,7 @@ fn fill_logical_tables(
         Option<String>,
         NodeKind,
         Option<String>,
+        Option<ProjectId>,
         LogicalFunctionRunStatus,
     );
     let coarse = matches!(unit, WindowUnit::Quarter | WindowUnit::Year);
@@ -290,6 +304,7 @@ fn fill_logical_tables(
                 t.source,
                 t.target_kind,
                 t.target,
+                t.project_id,
                 t.status,
             ))
             .or_default()
@@ -303,6 +318,7 @@ fn fill_logical_tables(
             e.source.clone(),
             e.target_kind,
             e.target.clone(),
+            e.project_id,
             e.status,
         );
         e.logical_tables = distinct.get(&key).map_or(0, |s| s.len()) as i64;
@@ -357,11 +373,15 @@ fn fold_to_coarse<R: FoldRow>(rows: Vec<R>, unit: WindowUnit) -> Result<Vec<R>, 
 }
 
 impl FoldRow for NodeRow {
+    // project_id is part of the key: group ids (and the well-known system
+    // group in particular) repeat across projects, so folding without it
+    // would merge distinct projects' nodes on global reads.
     type Key = (
         i64,
         NodeKind,
         Option<CollectionId>,
         Option<GroupId>,
+        Option<ProjectId>,
         LogicalFunctionRunStatus,
     );
 
@@ -377,6 +397,7 @@ impl FoldRow for NodeRow {
             self.kind,
             self.collection_id,
             self.group_id,
+            self.project_id,
             self.status,
         )
     }
@@ -399,12 +420,15 @@ impl FoldRow for NodeRow {
 }
 
 impl FoldRow for EdgeRow {
+    // project_id disambiguates group-dim endpoints whose ids repeat across
+    // projects; see the NodeRow key note.
     type Key = (
         i64,
         NodeKind,
         Option<String>,
         NodeKind,
         Option<String>,
+        Option<ProjectId>,
         LogicalFunctionRunStatus,
     );
 
@@ -421,6 +445,7 @@ impl FoldRow for EdgeRow {
             self.source.clone(),
             self.target_kind,
             self.target.clone(),
+            self.project_id,
             self.status,
         )
     }
@@ -888,6 +913,40 @@ mod tests {
         ];
         let out = fold_to_coarse(rows, WindowUnit::Quarter).unwrap();
         assert_eq!(out.len(), 2);
+    }
+
+    /// Group ids repeat across projects (the system groups share well-known
+    /// ids), so a global read folding to Quarter/Year must keep same-id rows
+    /// from different projects apart.
+    #[test]
+    fn fold_to_coarse_quarter_keeps_projects_separate() {
+        let other_project = ProjectId::try_from("00000000000000000000000704").unwrap();
+        let mut other = node(JAN_2026, LogicalFunctionRunStatus::Done, 2);
+        other.project_id = Some(other_project);
+        let rows = vec![node(JAN_2026, LogicalFunctionRunStatus::Done, 1), other];
+        let mut out = fold_to_coarse(rows, WindowUnit::Quarter).unwrap();
+        assert_eq!(
+            out.len(),
+            2,
+            "same group id across projects merged: {out:?}"
+        );
+        out.sort_by_key(|r| r.fn_runs);
+        assert_eq!(out[0].fn_runs, 1);
+        assert_eq!(out[1].fn_runs, 2);
+    }
+
+    #[test]
+    fn fold_to_coarse_edges_quarter_keeps_projects_separate() {
+        let other_project = ProjectId::try_from("00000000000000000000000704").unwrap();
+        let mut other = edge(JAN_2026, LogicalFunctionRunStatus::Done, 2);
+        other.project_id = Some(other_project);
+        let rows = vec![edge(JAN_2026, LogicalFunctionRunStatus::Done, 1), other];
+        let out = fold_to_coarse(rows, WindowUnit::Quarter).unwrap();
+        assert_eq!(
+            out.len(),
+            2,
+            "same endpoints across projects merged: {out:?}"
+        );
     }
 
     #[test]

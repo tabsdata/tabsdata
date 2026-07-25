@@ -22,7 +22,7 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB, LogicalPointerDao,
     LogicalTableDataVersionPointerDB,
 };
-use td_objects::dxo::metrics::{Dim, InflightRequest, MetricsRequest};
+use td_objects::dxo::metrics::{Dim, InflightRequest, MetricsRequest, NodeKind};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
 use td_objects::dxo::table::{Table, TableDB};
@@ -567,6 +567,16 @@ async fn time_metrics_queries(db: &TdPool) -> Result<Vec<(&'static str, f64)>, T
         "metrics::metrics_edges",
         conn.metrics().metrics_edges(&req).await?
     );
+    let _ = timed!(
+        out,
+        "metrics::metrics_node_output_tables",
+        conn.metrics().metrics_node_output_tables(&req).await?
+    );
+    let _ = timed!(
+        out,
+        "metrics::metrics_edge_tables",
+        conn.metrics().metrics_edge_tables(&req).await?
+    );
     Ok(out)
 }
 
@@ -584,10 +594,10 @@ fn metrics_queries_hold_window_first_fenced_contract() {
             let mut req = metrics_request();
             req.unit = unit;
             req.dim = dim;
-            let (node, edge) = td_queries::metrics_plan_sql(&req);
+            let statements = td_queries::metrics_plan_sql(&req);
             let tag = format!("{unit:?}/{dim:?}");
 
-            for (which, sql) in [("node", &node), ("edge", &edge)] {
+            for (which, sql) in &statements {
                 assert!(
                     sql.contains(r#"FROM "physical_function_runs""#)
                         && sql.contains(r#""physical_function_runs"."ended_on" >="#)
@@ -603,8 +613,10 @@ fn metrics_queries_hold_window_first_fenced_contract() {
                      OFFSET-0 fences — a probe escaped its fence and will \
                      cartesian at wide windows:\n{sql}"
                 );
+                // Run-resolution probe: both dims reshape to a lean base-LFR
+                // probe (names attached after aggregation).
                 assert!(
-                    sql.contains(r#"FROM "function_runs__with_names" AS "p""#),
+                    sql.contains(r#"FROM "logical_function_runs" AS "p""#),
                     "{which} {tag}: run-resolution probe not fenced:\n{sql}"
                 );
                 assert!(
@@ -612,23 +624,29 @@ fn metrics_queries_hold_window_first_fenced_contract() {
                     "{which} {tag}: magnitude (TDV) probe not fenced:\n{sql}"
                 );
             }
-            assert!(
-                edge.contains(r#"FROM "logical_function_run_inputs" AS "p""#),
-                "edge {tag}: consumed-input (LFRI) join not fenced — wide \
-                 windows will cartesian:\n{edge}"
-            );
+            for which in ["edges", "edge_tables"] {
+                let sql = &statements.iter().find(|(n, _)| *n == which).unwrap().1;
+                assert!(
+                    sql.contains(r#"FROM "logical_function_run_inputs" AS "p""#),
+                    "{which} {tag}: consumed-input (LFRI) join not fenced — \
+                     wide windows will cartesian:\n{sql}"
+                );
+            }
         }
     }
 }
 
-/// Deterministic plan guard (cheap, unconditional). Under the Global RLS-bypass
-/// path the metrics plans must reach the LFR view via `logical_function_runs_pkey`;
-/// keying the view by `physical_function_run_id` instead re-expands it per window
-/// row (the O(window × history) blowup). Multi-project seed is load-bearing —
-/// single-project folds against MCVs and hides the regression.
+/// Deterministic plan + execution guard (cheap, unconditional), both dims.
+/// Under the Global RLS-bypass path the metrics plans must reach the LFR view
+/// via `logical_function_runs_pkey`; keying the view by
+/// `physical_function_run_id` instead re-expands it per window row (the
+/// O(window × history) blowup). Multi-project seed is load-bearing — for the
+/// plan guard (single-project folds against MCVs and hides the regression)
+/// and for the name assertions (group ids are only unique per project, so the
+/// group-dim name joins must key on `(project, id)`).
 #[cfg(postgres)]
 #[td_test::test(db)]
-async fn metrics_plans_reach_lfr_by_pk_under_bypass(db: TdPool) -> Result<(), TdError> {
+async fn metrics_plans_and_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
     dataset::metrics_dataset(
         &db,
         MetricsKnobs {
@@ -642,16 +660,59 @@ async fn metrics_plans_reach_lfr_by_pk_under_bypass(db: TdPool) -> Result<(), Td
         .await
         .expect("analyze after metrics seed");
 
-    let (node_sql, edge_sql) = td_queries::metrics_plan_sql(&metrics_request());
     let mut conn = db.acquire_for_read().await.unwrap();
-    for (name, sql) in [("nodes", &node_sql), ("edges", &edge_sql)] {
-        let plan = conn.explain(sql).await.expect("explain").join("\n");
-        assert!(
-            plan.contains("logical_function_runs_pkey"),
-            "{name} plan does not reach the LFR view by primary key — the window \
-             probe regressed to per-row view re-expansion (the RLS \
-             O(window×history) blowup):\n{plan}"
-        );
+    for dim in [Dim::Collection, Dim::Group] {
+        let mut req = metrics_request();
+        req.dim = dim;
+        for (name, sql) in &td_queries::metrics_plan_sql(&req) {
+            let plan = conn.explain(sql).await.expect("explain").join("\n");
+            assert!(
+                plan.contains("logical_function_runs_pkey"),
+                "{dim:?} {name} plan does not reach the LFR view by primary key — \
+                 the window probe regressed to per-row view re-expansion (the RLS \
+                 O(window×history) blowup):\n{plan}"
+            );
+        }
+
+        let nodes = conn.metrics().metrics_nodes(&req).await?;
+        assert!(!nodes.is_empty(), "{dim:?}: no node rows on seeded data");
+        for n in &nodes {
+            match dim {
+                Dim::Collection => assert!(
+                    n.collection_id.is_some() && n.collection_name.is_some(),
+                    "{dim:?} node lost its collection identity: {n:?}"
+                ),
+                Dim::Group => assert!(
+                    n.collection_id.is_none() && n.collection_name.is_none(),
+                    "{dim:?} node must fold collections to NULL: {n:?}"
+                ),
+            }
+            assert!(
+                n.group_id.is_some() && n.group_name.is_some(),
+                "{dim:?} node group name did not resolve: {n:?}"
+            );
+            assert!(
+                n.project_id.is_some() && n.project_name.is_some(),
+                "{dim:?} node project name did not resolve: {n:?}"
+            );
+        }
+
+        let edges = conn.metrics().metrics_edges(&req).await?;
+        assert!(!edges.is_empty(), "{dim:?}: no edge rows on seeded data");
+        for e in &edges {
+            if matches!(e.source_kind, NodeKind::Dim) {
+                assert!(
+                    e.source.is_some() && e.source_name.is_some(),
+                    "{dim:?} edge source name did not resolve: {e:?}"
+                );
+            }
+            if matches!(e.target_kind, NodeKind::Dim) {
+                assert!(
+                    e.target.is_some() && e.target_name.is_some(),
+                    "{dim:?} edge target name did not resolve: {e:?}"
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -739,9 +800,8 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
     // Mechanism (deterministic): the attempt is resolved to its run by pk, not
     // by re-expanding the LFR-anchored view per window row. The reverse index on
     // the pointer hop is logged, not asserted — discretionary at these sizes.
-    let (node_sql, edge_sql) = td_queries::metrics_plan_sql(&metrics_request());
     let mut conn = db.acquire_for_read().await.unwrap();
-    for (name, sql) in [("nodes", &node_sql), ("edges", &edge_sql)] {
+    for (name, sql) in &td_queries::metrics_plan_sql(&metrics_request()) {
         let plan = conn.explain(sql).await.expect("explain").join("\n");
         eprintln!("[query-load] window plan {name}:\n{plan}\n");
         assert!(
