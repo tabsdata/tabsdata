@@ -369,7 +369,7 @@ def entity_specs(name: str) -> list[EntityInfo]:
     markers, from ``entities.json`` (a list of ``{"name", "sizeable"}`` objects;
     a bare string is treated as sizeable for backward compatibility)."""
     path = model_dir(name) / "entities.json"
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise TdxError(f"{path}: entities.json must be a list")
     out: list[EntityInfo] = []

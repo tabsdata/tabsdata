@@ -447,7 +447,7 @@ class SqlContainerBackend(PortPoolMixin):
         files = sorted(d.glob("*.ddl"))
         if not files:
             raise TdxError(f"model '{model}' has no {self.label} DDL (looked in {d})")
-        return "\n\n".join(f.read_text() for f in files)
+        return "\n\n".join(f.read_text(encoding="utf-8") for f in files)
 
     def install_schema(
         self, meta: dict[str, str], model: str, *, force: bool = False

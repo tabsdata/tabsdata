@@ -598,7 +598,7 @@ class _Finance(Model):
 
     def build_initial(self, rng: random.Random, n: int) -> list[Table]:
         random.seed(SEED)
-        with _ACCOUNTS_CSV.open(newline="") as fh:
+        with _ACCOUNTS_CSV.open(newline="", encoding="utf-8") as fh:
             accounts = list(csv.DictReader(fh))
         return _build_tables(accounts)
 

@@ -60,7 +60,7 @@ class _World(Model):
     entities: list[Entity] = []  # reference-only: no deltas
 
     def build_initial(self, rng: random.Random, n: int) -> list[Table]:
-        data = json.loads(_DATA.read_text())
+        data = json.loads(_DATA.read_text(encoding="utf-8"))
         countries = data["countries"]
         cities_sorted = sorted(data["cities"], key=lambda c: c["ID"])
         kept = cities_sorted[: max(0, n)]

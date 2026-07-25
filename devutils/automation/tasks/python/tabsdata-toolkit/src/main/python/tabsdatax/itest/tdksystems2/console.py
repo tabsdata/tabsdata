@@ -89,7 +89,7 @@ class _Console:
         sys.stderr.flush()
         term_fd = os.dup(1)
         err_fd = os.dup(2)
-        term = os.fdopen(term_fd, "w", buffering=1, closefd=False)
+        term = os.fdopen(term_fd, "w", buffering=1, closefd=False, encoding="utf-8")
         term_tty = os.isatty(term_fd)
 
         log_fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -97,8 +97,8 @@ class _Console:
         os.dup2(log_fd, 2)
         os.close(log_fd)
         saved_out, saved_err = sys.stdout, sys.stderr
-        sys.stdout = os.fdopen(1, "w", buffering=1, closefd=False)
-        sys.stderr = os.fdopen(2, "w", buffering=1, closefd=False)
+        sys.stdout = os.fdopen(1, "w", buffering=1, closefd=False, encoding="utf-8")
+        sys.stderr = os.fdopen(2, "w", buffering=1, closefd=False, encoding="utf-8")
 
         self.active = True
         self.log_path = path

@@ -136,7 +136,7 @@ class _Sakila(Model):
 
     def build_initial(self, rng: random.Random, n: int) -> list[Table]:
         random.seed(_BASE_SEED)
-        data = json.loads(_DATA.read_text())
+        data = json.loads(_DATA.read_text(encoding="utf-8"))
 
         languages = data["language"]
         actors = data["actor"]
