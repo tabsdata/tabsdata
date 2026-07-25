@@ -1358,15 +1358,16 @@ class TestScopedPathBuilding:
         assert server._project_narrow(None) is None
         assert server._project_narrow("status:eq:D") == "status:eq:D"
         server.project = "acme"
-        assert server._project_narrow(None) == ["project:eq:acme"]
-        assert server._project_narrow("status:eq:D") == [
-            "status:eq:D",
-            "project:eq:acme",
-        ]
-        assert server._project_narrow(["status:eq:D"]) == [
-            "status:eq:D",
-            "project:eq:acme",
-        ]
+        with patch.object(server, "_active_project_name", return_value="acme"):
+            assert server._project_narrow(None) == ["project:eq:acme"]
+            assert server._project_narrow("status:eq:D") == [
+                "status:eq:D",
+                "project:eq:acme",
+            ]
+            assert server._project_narrow(["status:eq:D"]) == [
+                "status:eq:D",
+                "project:eq:acme",
+            ]
 
 
 class TestProjectScopingOnTheWire:

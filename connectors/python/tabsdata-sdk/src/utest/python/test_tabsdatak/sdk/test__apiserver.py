@@ -195,11 +195,12 @@ def test_scoped_prefixes_the_active_project():
     )
 
 
-def test_project_narrow_appends_filter_when_project_set():
+def test_project_narrow_appends_filter_when_project_set(monkeypatch):
     s = a.APIServer("host")
     assert s._project_narrow(None) is None
     assert s._project_narrow("status:eq:D") == "status:eq:D"
     s.project = "acme"
+    monkeypatch.setattr(s, "_active_project_name", lambda: "acme")
     assert s._project_narrow(None) == ["project:eq:acme"]
     assert s._project_narrow("status:eq:D") == ["status:eq:D", "project:eq:acme"]
     assert s._project_narrow(["status:eq:D"]) == ["status:eq:D", "project:eq:acme"]
