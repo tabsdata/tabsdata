@@ -11,7 +11,7 @@ from pathlib import Path
 from tenacity import retry, retry_if_exception, stop_after_delay, wait_fixed
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import UserPassword, _convert, full_path
+from tabsdatak.conn.common.types import UserPassword, _convert, cloud_full_path
 from tabsdatak.conn.starrocks import (
     AzBlobLocation,
     CloudLocation,
@@ -173,7 +173,7 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
     The URI format is the one StarRocks' ``FILES()`` table function
     consumes for the corresponding cloud backend.
     """
-    rel = full_path(staging._base_path(), key)
+    rel = cloud_full_path(staging._base_path(), key)
     if isinstance(staging, S3Location):
         bucket = staging._bucket()
         return f"s3://{bucket}/{rel}"
@@ -202,7 +202,7 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
 def transporter_target(staging: CloudLocation, key: str, handler):
     """Build the transporter location *destination* for a parquet upload
     to *staging* under the relative *key*."""
-    rel = full_path(staging._base_path(), key)
+    rel = cloud_full_path(staging._base_path(), key)
     if isinstance(staging, S3Location):
         bucket = staging._bucket()
         return handler.s3_location(

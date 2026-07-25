@@ -20,7 +20,7 @@ from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery.error import BigqueryErrorCode
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import full_path
+from tabsdatak.conn.common.types import cloud_full_path
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -129,7 +129,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
             file_name = (f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet").replace(
                 "-", "_"
             )
-            relative = full_path(conn.staging._base_path(), file_name)
+            relative = cloud_full_path(conn.staging._base_path(), file_name)
             staging_uris.append(f"gs://{staging_bucket}/{relative}")
 
         total = len(write_cfg.target_tables)

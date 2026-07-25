@@ -64,7 +64,7 @@ from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
     CfgSpec,
-    FullPathSpec,
+    CloudRelativePathSpec,
     S3BucketSpec,
     _convert,
 )
@@ -121,7 +121,7 @@ class S3SrcConn(Conn):
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: CredentialsSpec
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _bucket(self) -> str:
@@ -148,7 +148,7 @@ class S3DestConn(Conn):
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: CredentialsSpec
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _bucket(self) -> str:

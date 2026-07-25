@@ -50,7 +50,7 @@ class GCSConnectionExplorer(Explorer):
 
     def metadata(self, conn: GCSConn) -> list[FileStorageEntity]:
         bucket = conn._bucket()
-        # base_path is a FullPathSpec (leading "/"); the GCS list prefix
+        # base_path is a CloudRelativePathSpec (leading "/"); the GCS list prefix
         # wants no leading "/" and a trailing "/", so normalize it
         # (root "/" -> "" -> list the whole bucket).
         prefix = normalize_dir_path(

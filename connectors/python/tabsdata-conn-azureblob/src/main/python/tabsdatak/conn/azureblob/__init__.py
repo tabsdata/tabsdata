@@ -65,7 +65,7 @@ from tabsdatak.conn.common.types import (
     AzContainerSpec,
     AzureAccountKey,
     CfgSpec,
-    FullPathSpec,
+    CloudRelativePathSpec,
     _convert,
 )
 from tabsdatak.spi import Conn
@@ -125,7 +125,7 @@ class AzureBlobSrcConn(Conn):
 
     container: AzContainerSpec
     credentials: CredentialsSpec
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _container(self) -> str:
@@ -148,7 +148,7 @@ class AzureBlobDestConn(Conn):
 
     container: AzContainerSpec
     credentials: CredentialsSpec
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _container(self) -> str:

@@ -18,7 +18,7 @@ from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file._output import copy_one as _transporter_copy_one
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert, full_path
+from tabsdatak.conn.common.types import _convert, cloud_full_path
 from tabsdatak.conn.druid import (
     AzBlobLocation,
     CloudLocation,
@@ -194,7 +194,7 @@ def upload_staged_files(
     keys: list[str] = []
     for idx, src_path in enumerate(parquet_files):
         name = f"part-{idx:05d}-{Path(src_path).name}"
-        key = full_path(staging._base_path(), f"{subdir}/{name}")
+        key = cloud_full_path(staging._base_path(), f"{subdir}/{name}")
         target = _transporter_target(staging, key, handler)
         source = handler.local_path_location(Path(src_path))
         pairs.append((source, target))

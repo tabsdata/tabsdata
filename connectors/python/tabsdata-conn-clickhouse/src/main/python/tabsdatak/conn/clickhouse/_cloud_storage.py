@@ -14,7 +14,7 @@ from tabsdatak.conn.clickhouse._storage_config import (
     GCSConfig,
     S3Config,
 )
-from tabsdatak.conn.common.types import full_path, normalize_dir_path
+from tabsdatak.conn.common.types import cloud_full_path, normalize_dir_path
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def _make_key(base_path: str, upload_id: str, filename: str) -> str:
     """Build the object key ``<base_path>/<upload_id>/<filename>`` with no
     leading slash -- S3 / GCS / Azure object keys are never slash-rooted
     (an empty ``base_path`` collapses to ``"<upload_id>/<filename>"``)."""
-    return full_path(base_path, f"{upload_id}/{filename}")
+    return cloud_full_path(base_path, f"{upload_id}/{filename}")
 
 
 # ClickHouse's list APIs (S3 ``list_objects_v2`` ``Prefix``, Azure

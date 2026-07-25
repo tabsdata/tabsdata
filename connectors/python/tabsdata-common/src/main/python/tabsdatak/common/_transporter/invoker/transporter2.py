@@ -12,7 +12,8 @@ from abc import ABC
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Union, get_args, get_origin, get_type_hints
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import yaml
 
@@ -152,7 +153,10 @@ def _file_uri_to_path(uri: str) -> str:
     URIs (``s3://`` etc.) are returned unchanged."""
     if not isinstance(uri, str) or not uri.startswith("file://"):
         return uri
-    return unquote(urlparse(uri).path)
+    # `url2pathname` is OS-aware: on Windows `/C:/a/b` -> `C:\a\b`, on POSIX
+    # `/a/b` stays. Raw `urlparse().path` would keep a leading slash before
+    # a drive letter, yielding a non-absolute value.
+    return url2pathname(urlparse(uri).path)
 
 
 # --- Server-side env var names --------------------------------------

@@ -60,7 +60,7 @@ from tabsdatak.conn.common.file.typing_ import (
     SrcFormatCfgSpec,
     SrcPathsSpec,
 )
-from tabsdatak.conn.common.types import CfgSpec, FullPathSpec, _convert
+from tabsdatak.conn.common.types import CfgSpec, LocalAbsolutePathSpec, _convert
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 from tabsdatak.spi import Conn
 
@@ -93,14 +93,14 @@ class LocalFileSrcConn(Conn):
     the plugin at run time. Has no credentials.
 
     Args:
-        base_path: Absolute local-filesystem path; starts with `/`, has
-            no trailing `/` (other than the bare root `/`) and no empty
-            segments (`//`). Defaults to `/`. Accepts a plain string or
-            a `Secret`.
+        base_path: Absolute local-filesystem path — POSIX (`/a/b`) or
+            Windows drive-absolute (`C:/a/b` or `C:\\a\\b`). No trailing
+            separator (other than a bare root) and no empty segments.
+            Defaults to `/`. Accepts a plain string or a `Secret`.
         conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
-    base_path: FullPathSpec = "/"
+    base_path: LocalAbsolutePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _base_path(self) -> str:
@@ -118,7 +118,7 @@ class LocalFileDestConn(Conn):
     place of one another. See `LocalFileSrcConn` for the field meanings.
     """
 
-    base_path: FullPathSpec = "/"
+    base_path: LocalAbsolutePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _base_path(self) -> str:

@@ -50,8 +50,8 @@ from tabsdatak.conn.common import _validation as _common_validation
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     CfgSpec,
+    CloudRelativePathSpec,
     EntityWhitelistSpec,
-    FullPathSpec,
     GCPJson,
     GCSBucketSpec,
     StrOrSecretConstraints,
@@ -134,7 +134,7 @@ class GCSLocation(CloudLocation):
     __kind__ = "bigQueryGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     cfg: CfgSpec | None = None
 
     def _bucket(self) -> str:

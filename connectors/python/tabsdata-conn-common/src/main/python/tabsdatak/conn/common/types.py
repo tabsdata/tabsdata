@@ -16,6 +16,7 @@ time.
 
 from __future__ import annotations
 
+import os
 import re
 from abc import ABC
 from datetime import datetime
@@ -246,27 +247,23 @@ class StrOrSecretConstraints:
 # is left unchecked.
 
 
-# --- FullPath -------------------------------------------------------
+# --- CloudRelativePath ----------------------------------------------
 
-# `base_path` is always spelled as a full, absolute-looking path: it
-# starts with `/`, never ends with one (other than the bare root `/`
-# itself), and has no empty segments (no `//`). This gives one
-# consistent shape across every connector -- local filesystem and cloud
-# object store alike. For the local-file connector the leading `/` is
-# the real absolute path. For the cloud connectors it is a UX
-# convention: the value denotes a "folder" (object-key prefix) from the
-# container / bucket root, and the leading `/` is trimmed when composing
-# the actual object key (`full_path` / `normalize_dir_path` do the
-# trimming). Backslash and NUL are forbidden. pydantic_core's regex
-# engine has no lookaround, so the rule is spelled out structurally: a
-# leading `/` followed by zero or more `/`-separated segments, each a run
-# of one or more chars that are not `/`, `\` or NUL; the bare `/` root is
-# allowed. Defaults to `/`.
-_FULL_PATH_RE_STR = r"^/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?$"
-FullPathSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_FULL_PATH_RE_STR)
+# The cloud connectors' `base_path` denotes a "folder" (object-key
+# prefix) from the container / bucket root. It is spelled absolute-looking
+# for a consistent UX -- starts with `/`, never ends with one (other than
+# the bare root `/`), no empty segments (no `//`) -- but the leading `/`
+# is trimmed when composing the actual object key (`cloud_full_path` /
+# `normalize_dir_path` do the trimming). Backslash and NUL are forbidden.
+# pydantic_core's regex engine has no lookaround, so the rule is spelled
+# out structurally: a leading `/` followed by zero or more `/`-separated
+# segments, each a run of one or more chars that are not `/`, `\` or NUL;
+# the bare `/` root is allowed. Defaults to `/`.
+_CLOUD_RELATIVE_PATH_RE_STR = r"^/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?$"
+CloudRelativePathSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_CLOUD_RELATIVE_PATH_RE_STR)
 ]
-"""A full path (object-key prefix) from the container/bucket root.
+"""A cloud object-key prefix, relative to the container/bucket root.
 
 Starts with `/`, has no trailing `/` (except the bare root `/`) and no
 empty segments (no `//`); backslash and NUL are forbidden. Accepts a
@@ -274,14 +271,53 @@ plain string or a `Secret`.
 """
 
 
-def full_path(base_path: FullPathSpec, path: str) -> str:
-    """Join `base_path` with `path`, stripping leading and
-    trailing `/` from each side and from the result. `base_path`
-    may be a `str` or a `Secret` whose `.value()`
-    resolves to the path string.
+# --- LocalAbsolutePath ----------------------------------------------
+
+# The local-filesystem connectors' `base_path` is a real absolute path on
+# the host, so it accepts two shapes: a POSIX absolute path (`/a/b`) or a
+# Windows drive-absolute path (`C:/a/b` or `C:\a\b`, either separator).
+# UNC paths (`\\host\share`) and relative paths are rejected. No empty
+# segments and no NUL in either shape. The Windows branch mirrors the
+# POSIX one: a drive letter, a separator, then zero or more `/`- or `\`-
+# separated non-empty segments.
+_LOCAL_ABSOLUTE_PATH_RE_STR = (
+    r"^(?:/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?"
+    r"|[A-Za-z]:[/\\](?:[^/\\\x00]+(?:[/\\][^/\\\x00]+)*)?)$"
+)
+LocalAbsolutePathSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_LOCAL_ABSOLUTE_PATH_RE_STR)
+]
+"""An absolute local-filesystem path: POSIX (`/a/b`) or Windows
+drive-absolute (`C:/a/b` or `C:\\a\\b`). UNC and relative paths are
+rejected; no empty segments or NUL. Accepts a plain string or a `Secret`.
+"""
+
+
+def cloud_full_path(base_path: CloudRelativePathSpec, path: str) -> str:
+    """Join a cloud `base_path` (object-key prefix) with `path`, stripping
+    leading and trailing `/` from each side and from the result.
+    `base_path` may be a `str` or a `Secret` whose `.value()` resolves to
+    the path string.
     """
     resolved = _convert(base_path, str)
     return (resolved.strip("/") + "/" + path.strip("/")).strip("/")
+
+
+def local_full_path(base_path: LocalAbsolutePathSpec, path: str) -> str:
+    """Join a local-filesystem `base_path` with the relative `path`,
+    returning a native path for the running OS.
+
+    `base_path` is absolute (POSIX or Windows drive-absolute). `path` is
+    relative to it and may use `/` or `\\` separators; both are accepted
+    and the segments are re-joined with the OS-native separator so the
+    result is usable directly for filesystem access. `base_path` may be a
+    `str` or a `Secret`.
+    """
+    resolved = _convert(base_path, str)
+    segments = [seg for seg in re.split(r"[/\\]", path) if seg]
+    if not segments:
+        return resolved
+    return os.path.join(resolved, *segments)
 
 
 def normalize_dir_path(path: str, lead_separator: bool, back_separator: bool) -> str:

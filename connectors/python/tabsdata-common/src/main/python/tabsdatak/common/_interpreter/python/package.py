@@ -115,7 +115,13 @@ class Package:
     @staticmethod
     def path_from_url(url: str) -> Path:
         stripped = url[len(FILE_PROTOCOL) :]
-        if os.name == WINDOWS_OS_NAME and stripped.startswith(WINDOWS_URL_PREFIX):
+        if (
+            os.name == WINDOWS_OS_NAME
+            and stripped.startswith(WINDOWS_URL_PREFIX)
+            and len(stripped) >= 3
+            and stripped[1].isalpha()
+            and stripped[2] == ":"
+        ):
             stripped = stripped[len(WINDOWS_URL_PREFIX) :]
         if stripped.startswith(BACK_SLASH):
             stripped = stripped[len(BACK_SLASH) :]

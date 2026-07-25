@@ -48,7 +48,7 @@ class FileCommonErrorCode(ErrorCode):
     )  # _validate_src_path
     FILE_COMMON_3 = ErrorDef(
         ConnInitException,
-        "Source path '{path}' cannot contain '\\\\'",
+        "Source path '{path}' cannot contain '.' or '..' segments",
     )  # _validate_src_path
     FILE_COMMON_4 = ErrorDef(
         ConnInitException,
@@ -68,7 +68,7 @@ class FileCommonErrorCode(ErrorCode):
     )  # _validate_dest_path
     FILE_COMMON_8 = ErrorDef(
         ConnInitException,
-        "Destination path '{path}' cannot contain '\\\\'",
+        "Destination path '{path}' cannot contain '.' or '..' segments",
     )  # _validate_dest_path
     FILE_COMMON_9 = ErrorDef(
         ConnInitException,

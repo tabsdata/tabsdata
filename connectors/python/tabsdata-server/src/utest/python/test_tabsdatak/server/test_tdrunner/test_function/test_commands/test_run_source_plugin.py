@@ -322,12 +322,17 @@ def test_normalise_uri_scheme_is_case_insensitive():
 
 
 def test_normalise_bare_absolute_path():
-    assert _normalise_table_file("/tmp/x.parquet") == "/tmp/x.parquet"
+    # An already-absolute path is returned posix-canonical and unchanged
+    # (on POSIX; on Windows `Path.absolute()` anchors it to the cwd drive,
+    # so compare against the same resolution the function performs).
+    assert _normalise_table_file("/tmp/x.parquet") == Path("/tmp/x.parquet").absolute().as_posix()
 
 
 def test_normalise_bare_relative_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    assert _normalise_table_file("x.parquet") == str(tmp_path / "x.parquet")
+    # Manifest paths are posix-canonical, so the resolved absolute path
+    # comes back with forward slashes on every OS.
+    assert _normalise_table_file("x.parquet") == (tmp_path / "x.parquet").as_posix()
 
 
 # --- unit: _SrcContext ----------------------------------------------------

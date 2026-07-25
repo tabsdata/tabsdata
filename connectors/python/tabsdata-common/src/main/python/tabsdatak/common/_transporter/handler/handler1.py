@@ -10,7 +10,8 @@ import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Sequence, Union
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -330,7 +331,10 @@ def file_uri_to_path(uri: str) -> Path:
     parsed = urlparse(uri)
     if parsed.scheme != "file":
         raise ValueError(f"expected file:// URL, got {uri!r}.")
-    return Path(unquote(parsed.path))
+    # `url2pathname` is OS-aware: on Windows it turns `/C:/a/b` into the
+    # native `C:\a\b`, on POSIX it leaves `/a/b`. Using `urlparse().path`
+    # directly would keep the leading slash before a drive letter.
+    return Path(url2pathname(parsed.path))
 
 
 def transcode_to_local(

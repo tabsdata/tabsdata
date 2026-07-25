@@ -231,8 +231,11 @@ def _normalise_table_file(p) -> str:
     """
     s = str(p)
     if s[:5].lower().startswith("file:"):
-        return url2pathname(urlparse(s).path)
-    return str(Path(s).absolute())
+        # Manifest paths are posix-canonical (portable, stable across OS).
+        # `url2pathname` gives the native path; `as_posix` re-canonicalizes
+        # a Windows `C:\a\b` to `C:/a/b` and leaves posix paths unchanged.
+        return Path(url2pathname(urlparse(s).path)).as_posix()
+    return Path(s).absolute().as_posix()
 
 
 def _write_inputs_manifest(

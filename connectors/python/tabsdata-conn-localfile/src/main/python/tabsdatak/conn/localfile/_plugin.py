@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file import _plugin as _file_plugin
-from tabsdatak.conn.common.types import full_path
+from tabsdatak.conn.common.types import local_full_path
 from tabsdatak.conn.localfile import (
     LocalFileDest,
     LocalFileDestConn,
@@ -46,13 +47,16 @@ _AnyLocalFileConn = LocalFileSrcConn | LocalFileDestConn
 def build_location(
     conn: _AnyLocalFileConn, entry: str, handler: TransporterHandler
 ) -> Any:
-    # ``base_path`` is an absolute local path (leading "/"). ``full_path``
-    # composes cloud-style, from a slash-stripped prefix, so it drops the
-    # leading "/"; re-anchor the joined result at the filesystem root.
-    resolved = "/" + full_path(conn._base_path(), entry)
+    # ``base_path`` is an absolute local path (POSIX or Windows drive-
+    # absolute); ``entry`` is relative and may use either separator.
+    # ``local_full_path`` joins them into a native path for this OS.
+    resolved = local_full_path(conn._base_path(), entry)
     if "*" in resolved:
-        head, sep, basename = resolved.rpartition("/")
-        head_uri = handler.local_uri(head + sep)
+        # ``as_uri`` would percent-encode the glob ``*``; split the native
+        # path at its last separator so only the glob-free head becomes a
+        # URI and the wildcard basename is appended verbatim.
+        head, _, basename = resolved.rpartition(os.sep)
+        head_uri = handler.local_uri(head + os.sep)
         return handler.local_location(head_uri + basename)
     return handler.local_location(handler.local_uri(resolved))
 

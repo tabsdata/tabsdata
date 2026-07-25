@@ -10,7 +10,7 @@ from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert, full_path
+from tabsdatak.conn.common.types import _convert, cloud_full_path
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 from tabsdatak.conn.s3.error import S3ErrorCode
@@ -44,7 +44,7 @@ def build_location(
     conn: _AnyS3Conn, path_entry: str, handler: TransporterHandler
 ) -> Any:
     if not path_entry.startswith("s3://"):
-        path_entry = full_path(conn._base_path(), path_entry)
+        path_entry = cloud_full_path(conn._base_path(), path_entry)
     return handler.s3_location(
         uri=_s3_uri(conn._bucket(), path_entry),
         access_key_env=handler.aws_access_key_id_env,

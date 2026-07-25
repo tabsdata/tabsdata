@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -58,7 +59,12 @@ def test_build_location_treats_absolute_path_as_relative_to_base_path():
 def test_build_location_root_base_path_uses_root():
     conn = LocalFileSrcConn(base_path="/")
     loc = plugin.build_location(conn, "users.csv", HANDLER)
-    assert loc.url == "file:///users.csv"
+    # `/` + `users.csv` is joined natively then rendered as a file URI; on
+    # POSIX that anchors at the root (`file:///users.csv`), on Windows at
+    # the cwd drive. Compare against the same native resolution the URI
+    # builder performs.
+    expected = Path(os.path.join("/", "users.csv")).resolve().as_uri()
+    assert loc.url == expected
 
 
 # ---------------------------------------------------------------------------

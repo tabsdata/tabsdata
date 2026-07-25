@@ -49,7 +49,7 @@ class AzureBlobConnectionExplorer(Explorer):
 
     def metadata(self, conn: AzureBlobConn) -> list[FileStorageEntity]:
         container = conn._container()
-        # base_path is a FullPathSpec (leading "/"); the blob
+        # base_path is a CloudRelativePathSpec (leading "/"); the blob
         # name_starts_with wants no leading "/" and a trailing "/", so
         # normalize it (root "/" -> "" -> list the whole container).
         prefix = normalize_dir_path(

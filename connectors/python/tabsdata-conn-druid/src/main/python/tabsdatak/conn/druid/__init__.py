@@ -57,7 +57,7 @@ from tabsdatak.conn.common.types import (
     AzContainerSpec,
     AzureAccountKey,
     CfgSpec,
-    FullPathSpec,
+    CloudRelativePathSpec,
     GCPJson,
     GCSBucketSpec,
     S3BucketSpec,
@@ -162,7 +162,7 @@ class S3Location(CloudLocation):
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: AwsAccessSecretKey
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     cfg: CfgSpec | None = None
 
     def _bucket(self) -> str:
@@ -198,7 +198,7 @@ class AzBlobLocation(CloudLocation):
     __kind__ = "druidAzBlobLocation"
     container: AzContainerSpec
     credentials: AzureAccountKey
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     cfg: CfgSpec | None = None
 
     def _container(self) -> str:
@@ -231,7 +231,7 @@ class GCSLocation(CloudLocation):
     __kind__ = "druidGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     cfg: CfgSpec | None = None
 
     def _bucket(self) -> str:

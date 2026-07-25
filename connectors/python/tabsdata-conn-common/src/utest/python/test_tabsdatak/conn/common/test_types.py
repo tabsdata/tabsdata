@@ -16,12 +16,12 @@ from pydantic import TypeAdapter
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AzureAccountKey,
+    CloudRelativePathSpec,
     Credentials,
-    FullPathSpec,
     GCPJson,
     UserPassword,
 )
-from tabsdatak.conn.common.types import full_path, normalize_dir_path
+from tabsdatak.conn.common.types import cloud_full_path, normalize_dir_path
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -153,28 +153,28 @@ def test_azure_account_key_missing_field_raises_conn_4():
     ],
 )
 def testfull_path_normalizes_str_base_path(base_path, path, expected):
-    assert full_path(base_path, path) == expected
+    assert cloud_full_path(base_path, path) == expected
 
 
 
 
 def testfull_path_resolves_secret_base_path():
-    assert full_path(Secret("/data/secret/"), "/foo.csv") == "data/secret/foo.csv"
+    assert cloud_full_path(Secret("/data/secret/"), "/foo.csv") == "data/secret/foo.csv"
 
 
 def testfull_path_result_never_starts_or_ends_with_slash():
     for bp in ["", "/", "/a/", "a/", "/a", "a", "/a/b/", "a/b"]:
         for p in ["", "/", "x", "/x", "x/", "/x/", "/x/y/"]:
-            out = full_path(bp, p)
+            out = cloud_full_path(bp, p)
             assert not out.startswith("/"), (bp, p, out)
             assert not out.endswith("/"), (bp, p, out)
 
 
 # ---------------------------------------------------------------------------
-# FullPathSpec validation
+# CloudRelativePathSpec validation
 # ---------------------------------------------------------------------------
 
-_full_path = TypeAdapter(FullPathSpec)
+_full_path = TypeAdapter(CloudRelativePathSpec)
 
 
 def _accepts_json(value) -> bool:

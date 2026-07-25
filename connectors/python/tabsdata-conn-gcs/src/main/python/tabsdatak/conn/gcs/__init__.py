@@ -63,7 +63,7 @@ from tabsdatak.conn.common.file.typing_ import (
 )
 from tabsdatak.conn.common.types import (
     CfgSpec,
-    FullPathSpec,
+    CloudRelativePathSpec,
     GCPJson,
     GCSBucketSpec,
     StrOrSecretConstraints,
@@ -138,7 +138,7 @@ class GCSSrcConn(Conn):
     bucket: GCSBucketSpec
     credentials: CredentialsSpec
     project: ProjectSpec | None = None
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _bucket(self) -> str:
@@ -165,7 +165,7 @@ class GCSDestConn(Conn):
     bucket: GCSBucketSpec
     credentials: CredentialsSpec
     project: ProjectSpec | None = None
-    base_path: FullPathSpec = "/"
+    base_path: CloudRelativePathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
     def _bucket(self) -> str:

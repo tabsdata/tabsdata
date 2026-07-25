@@ -48,7 +48,7 @@ class S3ConnectionExplorer(Explorer):
 
     def metadata(self, conn: S3Conn) -> list[FileStorageEntity]:
         bucket = conn._bucket()
-        # base_path is a FullPathSpec (leading "/"); the S3 list_objects_v2
+        # base_path is a CloudRelativePathSpec (leading "/"); the S3 list_objects_v2
         # Prefix wants no leading "/" and a trailing "/", so normalize it
         # (root "/" -> "" -> list the whole bucket).
         prefix = normalize_dir_path(
