@@ -23,6 +23,20 @@ pub(crate) async fn seed(db: &TdPool) -> Result<(ChainHandle, SizeProfile, usize
     Ok((handle, profile, seeded))
 }
 
+/// Database-wide ANALYZE with retries: the pg_class sweep can race a
+/// concurrent test's DDL ("relation with OID ... does not exist"); the race
+/// is transient, so a retry always clears it.
+pub(crate) async fn analyze(db: &TdPool, what: &str) {
+    let mut last = None;
+    for _ in 0..3 {
+        match db.execute_batch(&["ANALYZE".to_string()]).await {
+            Ok(()) => return,
+            Err(e) => last = Some(e),
+        }
+    }
+    panic!("analyze {what}: {last:?}");
+}
+
 /// `t` is captured immediately before the query, so seeding is excluded.
 pub(crate) fn record(
     case: &'static str,

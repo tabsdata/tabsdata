@@ -224,7 +224,7 @@ mod definitions {
             let floors = BucketFloors::from_utc(dt);
             Ok(Self {
                 started_on: None,
-                ended_on: Some(ended_on.clone()),
+                ended_on: Some(*ended_on),
                 status: PhysicalFunctionRunStatus::Failed,
                 ended_on_hour_ms: Some(EpochMs::try_from(floors.hour_ms)?),
                 ended_on_day_ms: Some(EpochMs::try_from(floors.day_ms)?),

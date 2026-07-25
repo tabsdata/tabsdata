@@ -15,7 +15,7 @@ use crate::daos::pointers::{LogicalPointers, ProducerLfr};
 use crate::primitives::chunked::MAX_QUERY_CONDITIONS;
 use sea_query::{
     Alias, Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
-    SelectStatement, SimpleExpr, SubQueryStatement, WithClause,
+    SelectStatement, SimpleExpr, WithClause,
 };
 use std::collections::HashMap;
 use ta_objects::SeaValue;
@@ -603,6 +603,28 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime) -> sea_query::SelectState
         .take()
 }
 
+/// The three chain statements (readiness / blocked / commit), for plan
+/// inspection in the load suite.
+#[cfg(all(postgres, feature = "td-test"))]
+pub fn chain_plan_sql(at: &AtTime, execution_id: &ExecutionId) -> [(&'static str, String); 3] {
+    use sea_query::PostgresQueryBuilder;
+    [
+        (
+            "lfrs_to_execute",
+            fetch_lfrs_to_execute_query(at).to_string(PostgresQueryBuilder),
+        ),
+        (
+            "blocked_ids",
+            blocked_ids_query(execution_id, at).to_string(PostgresQueryBuilder),
+        ),
+        (
+            "ids_to_commit",
+            fetch_ids_to_commit_query(std::slice::from_ref(execution_id))
+                .to_string(PostgresQueryBuilder),
+        ),
+    ]
+}
+
 /// FR-side projection used at dispatch enrichment. `function_version_id`
 /// always holds the head fvid (FK to `functions`) and joins FunctionDB
 /// directly; `function_version_patch_id` is the optional patch
@@ -959,11 +981,19 @@ pub(crate) struct ChainParams<'a> {
 /// NULL-safe self-loop exclusion in the WHERE. Caller adds projection,
 /// outer scope, and any additional filters on `LTDV.status` or
 /// `Lp.status`.
+///
+/// The latest-pointer hop is a fenced lateral (`OFFSET 0`), never a
+/// `JOIN ON id = (subquery)`: RLS policy quals blind the planner to
+/// ~1-row estimates, and with a subquery equality it demotes the probe
+/// into a join filter over an inputs × pointers cross-materialization —
+/// O(rows²) SubPlan executions per scheduler tick. The fence pins it to
+/// one index probe per LTDV row regardless of estimates.
 pub(crate) fn build_chain(params: ChainParams<'_>) -> SelectStatement {
     let ChainParams { at_bound } = params;
 
-    let mut latest_id_subq_select = Query::select()
+    let mut latest_pointer = Query::select()
         .column(LogicalTableDataVersionPointerDBIden::Id)
+        .column(LogicalTableDataVersionPointerDBIden::Status)
         .from(LogicalTableDataVersionPointerDBIden::Table)
         .and_where(
             Expr::col((
@@ -977,7 +1007,7 @@ pub(crate) fn build_chain(params: ChainParams<'_>) -> SelectStatement {
         )
         .to_owned();
     if let Some(at) = at_bound {
-        latest_id_subq_select.and_where(
+        latest_pointer.and_where(
             Expr::col((
                 LogicalTableDataVersionPointerDBIden::Table,
                 LogicalTableDataVersionPointerDBIden::SetOn,
@@ -985,14 +1015,11 @@ pub(crate) fn build_chain(params: ChainParams<'_>) -> SelectStatement {
             .lte(at.as_sea_value()),
         );
     }
-    latest_id_subq_select
+    latest_pointer
         .order_by(LogicalTableDataVersionPointerDBIden::SetOn, Order::Desc)
         .order_by(LogicalTableDataVersionPointerDBIden::Id, Order::Desc)
-        .limit(1);
-    let latest_id_subq = Expr::SubQuery(
-        None,
-        Box::new(SubQueryStatement::SelectStatement(latest_id_subq_select)),
-    );
+        .limit(1)
+        .offset(0);
 
     let mut stmt = Query::select()
         .from(LogicalFunctionRunInputDBIden::Table)
@@ -1010,12 +1037,7 @@ pub(crate) fn build_chain(params: ChainParams<'_>) -> SelectStatement {
             LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
         )),
     )
-    .join_as(
-        JoinType::InnerJoin,
-        LogicalTableDataVersionPointerDBIden::Table,
-        Lp,
-        Expr::col((Lp, LogicalTableDataVersionPointerDBIden::Id)).eq(latest_id_subq),
-    )
+    .join_lateral(JoinType::InnerJoin, latest_pointer, Lp, Expr::val(true))
     .join_as(
         JoinType::LeftJoin,
         LogicalFunctionRunDBIden::Table,
@@ -1088,8 +1110,14 @@ mod tests {
             "CTE2 must join the pointer event log: {sql}"
         );
         assert!(
-            sql.contains(r#"ORDER BY "set_on" DESC, "id" DESC LIMIT 1"#),
-            "CTE2 latest-pointer subquery orders by (set_on DESC, id DESC) with LIMIT 1: {sql}"
+            sql.contains(r#"ORDER BY "set_on" DESC, "id" DESC LIMIT 1 OFFSET 0"#),
+            "CTE2 latest-pointer probe is a fenced lateral (ORDER BY set_on \
+             DESC, id DESC LIMIT 1 OFFSET 0): {sql}"
+        );
+        assert!(
+            sql.contains("LATERAL"),
+            "CTE2 latest-pointer probe must be a lateral join, not a \
+             join-filter subquery: {sql}"
         );
         assert!(
             sql.contains(r#""producer_logical_function_run_id""#),

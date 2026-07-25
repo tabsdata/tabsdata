@@ -18,6 +18,8 @@ mod tower;
 // module via the `query_handle!` macro.
 pub use daos::dependency::{Dependencies, DependenciesEntry};
 pub use daos::execution::{Executions, ExecutionsEntry};
+#[cfg(all(postgres, feature = "td-test"))]
+pub use daos::function_runs::chain_plan_sql;
 pub use daos::function_runs::{Lfr, LfrEntry, Pfr, PfrEntry};
 #[cfg(all(postgres, feature = "td-test"))]
 pub use daos::metrics::metrics_plan_sql;

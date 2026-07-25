@@ -45,7 +45,7 @@ use crate::bulk::bulk_insert;
 use crate::cases::LOAD_CASES;
 use crate::dataset::{self, ChainHandle, WINDOW_END_MS, WINDOW_START_MS};
 use crate::dataversion_cases;
-use crate::harness::{timed, timed_once};
+use crate::harness::{analyze, seed, timed, timed_once};
 use crate::profile::{ChainKnobs, MetricsKnobs};
 
 type Ptr = LogicalTableDataVersionPointerDB;
@@ -656,9 +656,7 @@ async fn metrics_plans_and_rows_under_bypass(db: TdPool) -> Result<(), TdError> 
         },
     )
     .await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after metrics seed");
+    analyze(&db, "after metrics seed").await;
 
     let mut conn = db.acquire_for_read().await.unwrap();
     for dim in [Dim::Collection, Dim::Group] {
@@ -713,6 +711,37 @@ async fn metrics_plans_and_rows_under_bypass(db: TdPool) -> Result<(), TdError> 
                 );
             }
         }
+    }
+    Ok(())
+}
+
+/// Deterministic plan guard (cheap, unconditional) for the scheduler chain
+/// statements (readiness / blocked / commit). Their latest-pointer hop must
+/// stay a fenced lateral driven through the pointer partition index: expressed
+/// as `JOIN ON id = (subquery)`, the RLS ~1-row estimates demote the probe
+/// into a join filter over an inputs × pointers cross-materialization — a
+/// SubPlan re-executed O(rows²) per scheduler tick, which pins the
+/// dispatcher's pool connection for minutes and starves the apiserver.
+#[cfg(postgres)]
+#[td_test::test(db)]
+async fn chain_plans_use_fenced_pointer_probe(db: TdPool) -> Result<(), TdError> {
+    let (h, _, _) = seed(&db).await?;
+    analyze(&db, "after chain seed").await;
+
+    let mut conn = db.acquire_for_read().await.unwrap();
+    for (name, sql) in &td_queries::chain_plan_sql(&h.at, &h.execs[0]) {
+        let plan = conn.explain(sql).await.expect("explain").join("\n");
+        assert!(
+            plan.contains("logical_table_data_version_pointers___logical_table_data_versio"),
+            "{name}: latest-pointer probe is not driven by the pointer \
+             partition index:\n{plan}"
+        );
+        assert!(
+            !plan.contains("SubPlan"),
+            "{name}: plan re-grew a correlated SubPlan — the latest-pointer \
+             hop regressed from the fenced lateral to a join-filter subquery \
+             (O(rows²) per scheduler tick):\n{plan}"
+        );
     }
     Ok(())
 }
