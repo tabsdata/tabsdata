@@ -1687,7 +1687,7 @@ class FunctionRun:
         self.started_on = kwargs.get("started_on")
         self.started_on_str = None
         self._data = None
-        self.kwargs = kwargs
+        self.kwargs = {"id": id, **kwargs}
 
     @property
     def _data(self) -> dict:
@@ -2959,7 +2959,7 @@ class Transaction:
         self.ended_on_str = None
         self.started_on = kwargs.get("started_on")
         self.started_on_str = None
-        self.kwargs = kwargs
+        self.kwargs = {"id": id, **kwargs}
         self._data = None
 
     @property
@@ -3354,7 +3354,7 @@ class Worker:
         self.ended_on_str = None
         self.function_version_id = kwargs.get("function_version_id")
         self._data = None
-        self.kwargs = kwargs
+        self.kwargs = {"id": id, **kwargs}
 
     @property
     def _data(self) -> dict:
@@ -3940,6 +3940,19 @@ class TabsdataServer:
                 return self.list_executions(filter=f"id:eq:{execution_id}")[0]
         except IndexError:
             raise ValueError(f"Execution with ID {execution_id} not found.")
+
+    def get_execution_graph(self, execution_id: str) -> dict:
+        """
+        Get the plan graph of an execution.
+
+        Args:
+            execution_id (str): The ID of the execution.
+
+        Returns:
+            dict: The plan graph, including its `dot` rendering.
+        """
+        response = self.connection.execution_read(execution_id)
+        return response.json().get("data") or {}
 
     def list_executions(
         self,
@@ -5351,6 +5364,22 @@ class TabsdataServer:
         if isinstance(worker, str):
             worker = Worker(self.connection, worker)
         return worker.log
+
+    def get_worker(self, worker_id: str) -> Worker:
+        """
+        Get a worker in the server.
+
+        Args:
+            worker_id (str): The ID of the worker.
+
+        Returns:
+            Worker: The worker.
+        """
+        try:
+            with self._spanning():
+                return self.list_workers(filter=f"id:eq:{worker_id}")[0]
+        except IndexError:
+            raise ValueError(f"Worker with ID {worker_id} not found.")
 
     def list_workers(
         self,
