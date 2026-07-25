@@ -105,6 +105,7 @@ mod tests {
             triggered_on: TriggeredOn::now(),
             triggered_by_id: UserId::admin(),
             trigger: Trigger::Manual,
+            dispatched_on: None,
             started_on: None,
             ended_on: None,
             status: PhysicalFunctionRunStatus::Requested,

@@ -138,6 +138,11 @@ async fn time_chain_queries(
     let _ = timed!(out, "pfr::to_dispatch", (db).pfr().to_dispatch().await?);
     let _ = timed!(
         out,
+        "pfr::dispatched_before",
+        (db).pfr().dispatched_before(&at).await?
+    );
+    let _ = timed!(
+        out,
         "pfr::in_flight_for",
         (db).pfr()
             .in_flight_for(&h.execs[0], &h.consumer_function_id)

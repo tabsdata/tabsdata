@@ -14,6 +14,7 @@ use td_error::TdError;
 use td_objects::dxo::crudl::ListParams;
 use td_objects::dxo::execution::Execution;
 use td_objects::list::params::ListQueryParams;
+use td_objects::types::basic::AtTime;
 use td_queries::{DependenciesEntry, ExecutionsEntry, LfrEntry, PfrEntry};
 
 use crate::harness::{record, seed};
@@ -152,6 +153,23 @@ async fn load_pfr_to_dispatch(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let rows = (&db).pfr().to_dispatch().await?;
     record("pfr::to_dispatch", &db, profile, t, rows.len(), seeded);
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_pfr_dispatched_before(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, _) = seed(&db).await?;
+    let seeded = h.fr_ids.len();
+    let t = Instant::now();
+    let rows = (&db).pfr().dispatched_before(&AtTime::now()).await?;
+    record(
+        "pfr::dispatched_before",
+        &db,
+        profile,
+        t,
+        rows.len(),
+        seeded,
+    );
     Ok(())
 }
 

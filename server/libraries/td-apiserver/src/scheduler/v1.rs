@@ -16,16 +16,12 @@ use tokio::sync::watch;
 use tower::{BoxError, ServiceBuilder, ServiceExt};
 use tracing::{debug, error, trace};
 
-/// Failover polling interval for the scheduler loops. Under normal operation
-/// the scheduler is woken immediately by `SchedulerNotify` whenever a
-/// function-run status changes (callback, cancel, recover, execute). This
-/// interval only exists as a safety net to pick up pending work after a server
-/// restart or if a notification is missed.
-const CHECK_FREQUENCY: Duration = Duration::from_secs(60);
-
 pub struct FunctionRequesterV1 {
     request_service: ServiceProvider<(), (), BoxError>,
     notify: SchedulerNotify,
+    // Failover safety net — `SchedulerNotify` wakes the loop on status
+    // changes; the timer also bounds the stuck-run sweep cadence.
+    check_frequency: Duration,
 }
 
 impl FunctionRequesterV1 {
@@ -40,6 +36,7 @@ impl FunctionRequesterV1 {
         FunctionRequesterV1 {
             request_service,
             notify: (*context.context.scheduler_notify).clone(),
+            check_frequency: context.context.scheduler_config.check_frequency.0,
         }
     }
 
@@ -63,7 +60,7 @@ impl ServerRunnable for FunctionRequesterV1 {
                     break;
                 }
                 _ = self.notify.notified_scheduler() => debug!("Request scheduler: tick (notify)"),
-                _ = tokio::time::sleep(CHECK_FREQUENCY) => debug!("Request scheduler: tick (timer)"),
+                _ = tokio::time::sleep(self.check_frequency) => debug!("Request scheduler: tick (timer)"),
             }
             match self.request().await {
                 Ok(_) => trace!("Execution plan scheduler executed successfully"),
@@ -77,6 +74,7 @@ impl ServerRunnable for FunctionRequesterV1 {
 pub struct FunctionDispatcherV1 {
     commit_service: ServiceProvider<(), (), BoxError>,
     notify: SchedulerNotify,
+    check_frequency: Duration,
 }
 
 impl FunctionDispatcherV1 {
@@ -91,6 +89,7 @@ impl FunctionDispatcherV1 {
         FunctionDispatcherV1 {
             commit_service,
             notify: (*context.context.scheduler_notify).clone(),
+            check_frequency: context.context.scheduler_config.check_frequency.0,
         }
     }
 
@@ -114,7 +113,7 @@ impl ServerRunnable for FunctionDispatcherV1 {
                     break;
                 }
                 _ = self.notify.notified_dispatcher() => debug!("Dispatch scheduler: tick (notify)"),
-                _ = tokio::time::sleep(CHECK_FREQUENCY) => debug!("Dispatch scheduler: tick (timer)"),
+                _ = tokio::time::sleep(self.check_frequency) => debug!("Dispatch scheduler: tick (timer)"),
             }
             match self.commit().await {
                 Ok(_) => trace!("Execution plan commit scheduler executed successfully"),

@@ -9,7 +9,7 @@ use td_bridge::BridgeProviderHandle;
 use td_common::jwt::JwtConfig;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
-use td_execution::SchedulerNotify;
+use td_execution::{SchedulerConfig, SchedulerNotify};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_services::scheduler::services::SchedulerContext;
 use td_storage::Storage;
@@ -29,6 +29,7 @@ impl SchedulerCtx {
         internal_addresses: Arc<InternalServerAddresses>,
         scheduler_notify: Arc<SchedulerNotify>,
         jwt_config: Arc<JwtConfig>,
+        scheduler_config: Arc<SchedulerConfig>,
     ) -> Self {
         let context = SchedulerContext {
             db,
@@ -37,6 +38,7 @@ impl SchedulerCtx {
             internal_addresses,
             scheduler_notify,
             jwt_config,
+            scheduler_config,
         };
 
         Self { context }

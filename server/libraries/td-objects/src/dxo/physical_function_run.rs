@@ -16,6 +16,7 @@ mod definitions {
     use chrono::{DateTime, Utc};
     use td_common::bucket::BucketFloors;
     use td_error::TdError;
+    use td_tower::extractors::Ref;
 
     #[ta_objects::Dao]
     #[dao(
@@ -48,6 +49,9 @@ mod definitions {
         #[dxo(builder(include))]
         pub triggered_by_id: UserId,
         pub trigger: Trigger,
+        // Stamped at dispatch; basis for the stuck-run sweep.
+        #[builder(default)]
+        pub dispatched_on: Option<AtTime>,
         #[builder(default)]
         pub started_on: Option<AtTime>,
         #[builder(default)]
@@ -171,6 +175,9 @@ mod definitions {
     #[dao(update, sql_table = "physical_function_runs")]
     #[dxo(builder(try_from = UpdateWorkerExecution))]
     pub struct UpdatePhysicalFunctionRunDB {
+        #[dxo(builder(skip))]
+        #[builder(default)]
+        pub dispatched_on: Option<AtTime>,
         #[dao(immutable)]
         #[builder(default)]
         pub started_on: Option<AtTime>,
@@ -197,11 +204,12 @@ mod definitions {
 
     impl UpdatePhysicalFunctionRunDB {
         /// Status transition for the request-layer's dispatch step:
-        /// `Requested → Dispatched`. The same tx creates the WorkerDB
-        /// row; the pair (PFR.status=Dispatched, WorkerDB exists)
-        /// makes the PFR ineligible for the readiness query.
-        pub async fn dispatched() -> Result<Self, td_error::TdError> {
+        /// `Requested → Dispatched`, stamped at `dispatched_on`. The same
+        /// tx creates the WorkerDB row; the pair (PFR.status=Dispatched,
+        /// WorkerDB exists) makes the PFR ineligible for the readiness query.
+        pub async fn dispatched(at: Ref<AtTime>) -> Result<Self, td_error::TdError> {
             Ok(Self {
+                dispatched_on: Some(*at),
                 started_on: None,
                 ended_on: None,
                 status: PhysicalFunctionRunStatus::Dispatched,
@@ -223,6 +231,7 @@ mod definitions {
             let dt: DateTime<Utc> = ***ended_on;
             let floors = BucketFloors::from_utc(dt);
             Ok(Self {
+                dispatched_on: None,
                 started_on: None,
                 ended_on: Some(*ended_on),
                 status: PhysicalFunctionRunStatus::Failed,
@@ -241,12 +250,17 @@ mod definitions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::basic::PhysicalFunctionRunStatus;
+    use crate::types::basic::{AtTime, PhysicalFunctionRunStatus};
+    use td_tower::extractors::Ref;
 
     #[tokio::test]
-    async fn test_dispatched_helper_sets_only_status() {
-        let update = UpdatePhysicalFunctionRunDB::dispatched().await.unwrap();
+    async fn test_dispatched_helper_sets_status_and_dispatched_on() {
+        let at = AtTime::now();
+        let update = UpdatePhysicalFunctionRunDB::dispatched(Ref::new(at))
+            .await
+            .unwrap();
         assert_eq!(update.status, PhysicalFunctionRunStatus::Dispatched);
+        assert_eq!(update.dispatched_on, Some(at));
         assert!(update.started_on.is_none());
         assert!(update.ended_on.is_none());
     }

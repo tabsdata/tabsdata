@@ -326,6 +326,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "pfr::dispatched_before",
+        covers: &["Pfr::dispatched_before"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "pfr::in_flight_for",
         covers: &["Pfr::in_flight_for"],
         family: Family::Chain,

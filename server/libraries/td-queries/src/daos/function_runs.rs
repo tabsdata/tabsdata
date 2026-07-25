@@ -41,7 +41,8 @@ use td_objects::dxo::user::UserDBIden;
 use td_objects::dxo::worker::WorkerDBIden;
 use td_objects::types::basic::{
     AtTime, BasePath, ExecutionId, FunctionId, FunctionVersionId, LogicalFunctionRunId,
-    LogicalFunctionRunStatus, LogicalPointerStatus, PhysicalFunctionRunId, TriggeredOn,
+    LogicalFunctionRunStatus, LogicalPointerStatus, PhysicalFunctionRunId,
+    PhysicalFunctionRunStatus, TriggeredOn,
 };
 
 query_handle! {
@@ -259,6 +260,20 @@ where
     /// that's the only producer today.
     pub async fn to_dispatch(self) -> Result<Vec<PhysicalFunctionRunDB>, SqlError> {
         let result: Vec<PhysicalFunctionRunDB> = fetch_pfrs_to_dispatch_query()
+            .build_query_as()
+            .fetch_all(self.executor)
+            .await
+            .map_err(SqlError::on_read::<PhysicalFunctionRunDB>)?;
+        Ok(result)
+    }
+
+    /// `Dispatched` PFRs with `dispatched_on` strictly before `cutoff` —
+    /// dispatched but no callback ever arrived.
+    pub async fn dispatched_before(
+        self,
+        cutoff: &AtTime,
+    ) -> Result<Vec<PhysicalFunctionRunDB>, SqlError> {
+        let result: Vec<PhysicalFunctionRunDB> = fetch_dispatched_pfrs_query(cutoff)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -916,6 +931,21 @@ fn fetch_pfrs_to_dispatch_query() -> sea_query::SelectStatement {
     stmt.take()
 }
 
+fn fetch_dispatched_pfrs_query(cutoff: &AtTime) -> sea_query::SelectStatement {
+    let mut stmt = Query::select();
+    for col in <PhysicalFunctionRunDB as ta_objects::Dao>::columns() {
+        stmt.column(col);
+    }
+    stmt.from(PhysicalFunctionRunDBIden::Table)
+        .and_where(
+            Expr::col(PhysicalFunctionRunDBIden::Status)
+                .eq(PhysicalFunctionRunStatus::Dispatched.as_sea_value()),
+        )
+        .and_where(Expr::col(PhysicalFunctionRunDBIden::DispatchedOn).lt(cutoff.as_sea_value()))
+        .order_by(PhysicalFunctionRunDBIden::DispatchedOn, Order::Asc);
+    stmt.take()
+}
+
 /// Most-recent in-flight PFR under `(execution_id, function_id)`. Used
 /// at replay-endpoint time; returns the newest by `triggered_on` so the
 /// error message names the attempt that's actually blocking.
@@ -1070,7 +1100,7 @@ pub(crate) fn build_chain(params: ChainParams<'_>) -> SelectStatement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::SqliteQueryBuilder;
+    use sea_query::{PostgresQueryBuilder, SqliteQueryBuilder};
 
     #[test]
     fn test_fetch_to_commit_query_sql() {
@@ -1258,6 +1288,27 @@ mod tests {
         assert!(
             sql.contains(r#""status" = 'RR'"#),
             "filters on Requested: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_dispatched_before_query_sql() {
+        let sql = fetch_dispatched_pfrs_query(&AtTime::now()).to_string(PostgresQueryBuilder);
+        assert!(
+            sql.contains(r#"FROM "physical_function_runs""#),
+            "scans physical_function_runs: {sql}"
+        );
+        assert!(
+            sql.contains(r#""status" = 'DP'"#),
+            "filters on Dispatched: {sql}"
+        );
+        assert!(
+            sql.contains(r#""dispatched_on" <"#),
+            "bounds by the staleness cutoff: {sql}"
+        );
+        assert!(
+            sql.contains(r#"ORDER BY "dispatched_on" ASC"#),
+            "orders by dispatch order: {sql}"
         );
     }
 

@@ -12,7 +12,7 @@ use std::time::Duration;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
-use td_execution::SchedulerNotify;
+use td_execution::{SchedulerConfig, SchedulerNotify};
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -169,6 +169,10 @@ pub fn run() {
                 internal_addresses.clone(),
                 scheduler_notify,
                 Arc::new(config.jwt.clone()),
+                Arc::new(SchedulerConfig {
+                    check_frequency: config.check_frequency,
+                    stuck_requested_timeout: config.stuck_requested_timeout,
+                }),
             );
             let function_request_server = FunctionRequester::new(&scheduler_context).await;
             let function_dispatch_server = FunctionDispatcher::new(&scheduler_context).await;

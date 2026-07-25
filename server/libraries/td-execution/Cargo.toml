@@ -67,6 +67,7 @@ td-test = { workspace = true }
 derive_builder = { workspace = true }
 itertools = { workspace = true }
 petgraph = { workspace = true }
+serde = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

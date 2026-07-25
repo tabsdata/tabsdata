@@ -9778,6 +9778,7 @@ dependencies = [
  "itertools 0.14.0",
  "openssl",
  "petgraph",
+ "serde",
  "strum 0.28.0",
  "td-database",
  "td-error",

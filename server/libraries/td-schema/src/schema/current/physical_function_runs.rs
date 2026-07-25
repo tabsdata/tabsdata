@@ -35,6 +35,8 @@ pub enum PhysicalFunctionRuns {
     TriggeredOn,
     TriggeredById,
     Trigger,
+    // Stamped at dispatch; NULL until then. Basis for the stuck-run sweep.
+    DispatchedOn,
     StartedOn,
     EndedOn,
     FunctionId,
@@ -77,6 +79,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(PhysicalFunctionRuns::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::TriggeredById).text().not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::Trigger).text().not_null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::DispatchedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::StartedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::EndedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::FunctionId).text().not_null().default(""))

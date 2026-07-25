@@ -9,6 +9,7 @@ mod at_time;
 mod cron_trigger;
 mod function_runner;
 mod notify;
+mod recover;
 mod shared;
 mod stage_trigger;
 
@@ -23,6 +24,9 @@ pub use function_runner::{
     materialize_replay_dispatch, pfr_ids_from_minted_dispatch,
 };
 pub use notify::notify_scheduler;
+pub use recover::{
+    fail_stale_abandoned_attempts, fetch_stale_dispatched_runs, stuck_lfrs_from_stale,
+};
 pub use stage_trigger::{
     create_locked_stage_trigger_workers_start_request,
     create_locked_stage_trigger_workers_stop_request,

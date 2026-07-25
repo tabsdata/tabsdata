@@ -18,6 +18,8 @@ jwt:
   secret: tabsdata-pytest-fixed-jwt-signing-key
   access_token_expiration: 3600
 request_timeout: 60
+check_frequency: 60
+stuck_requested_timeout: 120
 orchestrator: supervisor
 # The server td_dbmanager boots on this URL's port; ${embedded} = the
 # generated credentials persisted next to the data dir.

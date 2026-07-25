@@ -15,7 +15,7 @@ use td_bridge::Orchestrator;
 use td_common::jwt::JwtConfig;
 use td_database::config::DatabaseComponents;
 use td_error::{TdError, td_error};
-use td_execution::TransactionBy;
+use td_execution::{SchedulerCheckFrequency, StuckRequestedTimeout, TransactionBy};
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
 };
@@ -32,6 +32,10 @@ pub struct Config {
     pub password: PasswordHashingConfig,
     pub jwt: JwtConfig,
     pub request_timeout: i64, // in seconds
+    #[serde(default)]
+    pub check_frequency: SchedulerCheckFrequency,
+    #[serde(default)]
+    pub stuck_requested_timeout: StuckRequestedTimeout,
     pub ssl_folder: PathBuf,
     #[serde(default)]
     pub database: DatabaseComponents,
@@ -131,6 +135,8 @@ impl Default for Config {
             password: PasswordHashingConfig::default(),
             jwt: JwtConfig::default(),
             request_timeout: 60,
+            check_frequency: SchedulerCheckFrequency::default(),
+            stuck_requested_timeout: StuckRequestedTimeout::default(),
             ssl_folder: PathBuf::default(),
             database: DatabaseComponents::default(),
             storage: Some(StorageConfig::default()),
@@ -207,6 +213,13 @@ pub struct Params {
     #[clap(long)]
     /// Request timeout in seconds
     request_timeout: Option<i64>,
+    #[clap(long)]
+    /// Failover polling interval in seconds for the scheduler loops
+    check_frequency: Option<i64>,
+    #[clap(long)]
+    /// Seconds a dispatched function run may go without a worker callback
+    /// before the scheduler auto-recovers it; `<= 0` disables the sweep
+    stuck_requested_timeout: Option<i64>,
     #[clap(long, value_parser = parse_transaction_by)]
     /// Transaction by
     transaction_by: Option<TransactionBy>,
@@ -267,6 +280,14 @@ impl Params {
                 JwtConfig::new(secret, expiration)
             },
             request_timeout: self.request_timeout.unwrap_or(config.request_timeout),
+            check_frequency: self
+                .check_frequency
+                .map(SchedulerCheckFrequency::from_secs)
+                .unwrap_or(config.check_frequency),
+            stuck_requested_timeout: self
+                .stuck_requested_timeout
+                .map(StuckRequestedTimeout::from_secs)
+                .unwrap_or(config.stuck_requested_timeout),
             ssl_folder: self
                 .ssl_folder
                 .clone()
@@ -473,6 +494,8 @@ storage:
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(7200),
             request_timeout: Some(120),
+            check_frequency: None,
+            stuck_requested_timeout: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,
@@ -531,6 +554,8 @@ storage:
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(1800),
             request_timeout: None,
+            check_frequency: None,
+            stuck_requested_timeout: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,

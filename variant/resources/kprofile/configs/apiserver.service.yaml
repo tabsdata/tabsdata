@@ -16,4 +16,6 @@ jwt:
   secret: ${{secretAuto:jwt_signing_key}}
   access_token_expiration: 3600
 request_timeout: 60
+check_frequency: 60
+stuck_requested_timeout: 120
 orchestrator: kubernetes

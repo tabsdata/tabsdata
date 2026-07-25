@@ -10,7 +10,7 @@ use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_bridge::BridgeProviderHandle;
 use td_common::jwt::JwtConfig;
 use td_database::pool::TdPool;
-use td_execution::SchedulerNotify;
+use td_execution::{SchedulerConfig, SchedulerNotify};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_storage::Storage;
 
@@ -33,6 +33,7 @@ pub struct SchedulerContext {
     /// Signing key for the worker tokens embedded in callback/resolver
     /// HttpRequests; validated by the internal router on the way back.
     pub jwt_config: Arc<JwtConfig>,
+    pub scheduler_config: Arc<SchedulerConfig>,
 }
 
 #[cfg(feature = "test-utils")]
@@ -45,6 +46,7 @@ impl SchedulerContext {
             internal_addresses: Arc::new(InternalServerAddresses::default()),
             scheduler_notify: Arc::new(SchedulerNotify::new()),
             jwt_config: Arc::new(JwtConfig::default()),
+            scheduler_config: Arc::new(SchedulerConfig::default()),
         }
     }
 }
