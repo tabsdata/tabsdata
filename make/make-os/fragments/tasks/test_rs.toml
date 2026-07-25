@@ -274,8 +274,16 @@ script = [
         code = exit 0
     end
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling"
-    exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --tests
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads 1 report_scaling"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads 1 report_scaling
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling
+    end
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}
