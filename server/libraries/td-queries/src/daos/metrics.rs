@@ -44,6 +44,15 @@
 //! query time, NOT from the PFR's worker-aggregated metric columns —
 //! those keep the full totals (private included) so a future flag can
 //! expose them.
+//!
+//! ## Soft-deleted collection/project exclusion invariant
+//!
+//! A run or table version owned by a soft-deleted collection — or by a
+//! collection under a soft-deleted project — is filtered out everywhere it
+//! surfaces (nodes, edges, IN magnitudes), like private/system tables.
+//! `apply_active_entity_filter` gates it on the `collections_active` /
+//! `projects_active` views; the two are checked separately because
+//! `collections_active` gates only the collection's own deletion.
 
 use crate::QueryExecutor;
 use chrono::{DateTime, Utc};
@@ -54,7 +63,7 @@ use sea_query::{
 use ta_objects::errors::SqlError;
 use ta_objects::{CurrentDao, SeaValue};
 use td_database::sea_query::builder::SeaQueryExt;
-use td_objects::dxo::collection::{CollectionCreateDBIden, CollectionDBIden};
+use td_objects::dxo::collection::{ActiveCollectionDBIden, CollectionDBIden};
 use td_objects::dxo::group::GroupDBIden;
 use td_objects::dxo::logical::{
     FunctionRunDBWithNames, FunctionRunDBWithNamesIden, LogicalFunctionRunDB,
@@ -274,6 +283,17 @@ fn from_windowed_runs(stmt: &mut SelectStatement, req: &MetricsRequest) {
             FunctionRunDBWithNamesIden::Table,
             Expr::val(true),
         );
+    apply_active_entity_filter(
+        stmt,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::CollectionId,
+        ),
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::ProjectId,
+        ),
+    );
     apply_ended_status_filter(stmt);
 }
 
@@ -643,6 +663,7 @@ fn per_lfr_input_aggregates_lateral() -> SelectStatement {
         .is_not_null(),
     );
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
+    filter_source_tdv_active(&mut stmt);
     stmt
 }
 
@@ -908,6 +929,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
     join_consumed_lfri(&mut stmt);
     join_source_tdv(&mut stmt);
     lfri_qualified(&mut stmt);
+    filter_source_tdv_active(&mut stmt);
     apply_edge_user_status_filters(&mut stmt, req);
     apply_dim_filter_either_endpoint(
         &mut stmt,
@@ -1003,6 +1025,7 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
     join_consumed_lfri(&mut stmt);
     join_source_tdv(&mut stmt);
     lfri_qualified(&mut stmt);
+    filter_source_tdv_active(&mut stmt);
     stmt.and_where(
         Expr::exists({
             let mut sub = Query::select();
@@ -1225,19 +1248,8 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::CollectionId,
     ))
-    // Resolve the name against the base `collections` table, not the
-    // `collections_active` view `ActiveCollectionDB` maps to: a collection
-    // soft-deleted while one of its runs is still in flight is hidden from
-    // the view, so the LEFT JOIN would miss and decode NULL into the
-    // non-nullable name. `name_when_deleted` holds the pre-deletion name.
     .expr_as(
-        Func::coalesce([
-            Expr::col((
-                CollectionCreateDBIden::Table,
-                CollectionCreateDBIden::NameWhenDeleted,
-            )),
-            Expr::col((CollectionCreateDBIden::Table, CollectionCreateDBIden::Name)),
-        ]),
+        Expr::col((ActiveCollectionDBIden::Table, ActiveCollectionDBIden::Name)),
         Col::CollectionName,
     )
     .column((
@@ -1262,14 +1274,16 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
     ))
     .expr_as(Func::count(Expr::val(1)), Col::Count)
     .from(LogicalFunctionRunDBIden::Table)
+    // INNER JOIN drops in-flight runs of a soft-deleted collection; ids are
+    // globally unique, so no project qualifier is needed.
     .join(
-        JoinType::LeftJoin,
-        CollectionCreateDBIden::Table,
+        JoinType::InnerJoin,
+        ActiveCollectionDBIden::Table,
         Expr::col((
             LogicalFunctionRunDBIden::Table,
             LogicalFunctionRunDBIden::CollectionId,
         ))
-        .equals((CollectionCreateDBIden::Table, CollectionCreateDBIden::Id)),
+        .equals((ActiveCollectionDBIden::Table, ActiveCollectionDBIden::Id)),
     )
     .join(
         JoinType::LeftJoin,
@@ -1293,8 +1307,10 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
             .equals((GroupDBIden::Table, Col::ProjectId)),
         ),
     )
+    // INNER JOIN drops in-flight runs of a soft-deleted project (the Global
+    // cross-project path; the scoped path already resolves to a live project).
     .join(
-        JoinType::LeftJoin,
+        JoinType::InnerJoin,
         ActiveProjectDBIden::Table,
         Expr::col((
             LogicalFunctionRunDBIden::Table,
@@ -1317,11 +1333,7 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::CollectionId,
     ))
-    .group_by_col((
-        CollectionCreateDBIden::Table,
-        CollectionCreateDBIden::NameWhenDeleted,
-    ))
-    .group_by_col((CollectionCreateDBIden::Table, CollectionCreateDBIden::Name))
+    .group_by_col((ActiveCollectionDBIden::Table, ActiveCollectionDBIden::Name))
     .group_by_col((
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::GroupId,
@@ -1445,6 +1457,51 @@ where
     );
 }
 
+/// Require `collection_id` / `project_id` to still resolve in the
+/// `collections_active` / `projects_active` views — dropping anything owned by
+/// a soft-deleted collection or project. Ids are globally unique, so each probe
+/// keys on id alone.
+fn apply_active_entity_filter<C, P>(stmt: &mut SelectStatement, collection_id: C, project_id: P)
+where
+    C: sea_query::IntoColumnRef,
+    P: sea_query::IntoColumnRef,
+{
+    stmt.and_where(Expr::exists({
+        let mut sub = Query::select();
+        sub.expr(Expr::val(1))
+            .from(ActiveCollectionDBIden::Table)
+            .and_where(
+                Expr::col((ActiveCollectionDBIden::Table, ActiveCollectionDBIden::Id))
+                    .equals(collection_id),
+            );
+        sub
+    }))
+    .and_where(Expr::exists({
+        let mut sub = Query::select();
+        sub.expr(Expr::val(1))
+            .from(ActiveProjectDBIden::Table)
+            .and_where(
+                Expr::col((ActiveProjectDBIden::Table, ActiveProjectDBIden::Id)).equals(project_id),
+            );
+        sub
+    }));
+}
+
+/// [`apply_active_entity_filter`] on a consumed source LTDV alias.
+fn filter_source_tdv_active(stmt: &mut SelectStatement) {
+    apply_active_entity_filter(
+        stmt,
+        (
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::CollectionId,
+        ),
+        (
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::ProjectId,
+        ),
+    );
+}
+
 fn apply_dim_filter<Id, C>(stmt: &mut SelectStatement, filter: &DimensionFilter<Id>, col: C)
 where
     Id: SeaValue,
@@ -1511,7 +1568,7 @@ mod tests {
     use td_common::datetime::Timestamp;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDeleteDB};
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::logical::{
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalPointerDao,
@@ -1522,6 +1579,7 @@ mod tests {
         PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB,
     };
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
+    use td_objects::dxo::project::{ActiveProjectDB, ProjectDeleteDB};
     use td_objects::dxo::query_filters::DimensionFilter;
     use td_objects::dxo::query_filters::{TimeWindow, WindowUnit};
     use td_objects::dxo::table::TableDB;
@@ -1531,7 +1589,7 @@ mod tests {
         PhysicalFunctionRunStatus, RowCount, TableFunctionParamPos, TableNameDto,
         TableVersionCount, TransactionKey, VersionPos,
     };
-    use td_objects::types::basic::{CollectionName, ProjectId, UserId};
+    use td_objects::types::basic::{CollectionName, ProjectId, ProjectName, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     const WINDOW_DAY_START: i64 = 1_700_000_000_000; // arbitrary day in Nov 2023
@@ -1693,6 +1751,34 @@ mod tests {
             .await
     }
 
+    async fn soft_delete_collection(db: &TdPool, coll: &ActiveCollectionDB) -> Result<(), TdError> {
+        let del = CollectionDeleteDB::builder()
+            .name(CollectionName::try_from(format!("deleted_{}", coll.id))?)
+            .modified_on(AtTime::try_from(Timestamp::try_from(IN_WINDOW)?)?)
+            .modified_by_id(UserId::try_from(ENCODED_ID_SYSTEM)?)
+            .name_when_deleted(coll.name.clone())
+            .build()?;
+        db.scoped(coll.project_id)
+            .live()
+            .update::<_, ActiveCollectionDB>(&del, &coll.id)
+            .await?;
+        Ok(())
+    }
+
+    async fn soft_delete_project(db: &TdPool, project: &ActiveProjectDB) -> Result<(), TdError> {
+        let del = ProjectDeleteDB::builder()
+            .name(ProjectName::try_from(format!("deleted_{}", project.id))?)
+            .modified_on(AtTime::try_from(Timestamp::try_from(IN_WINDOW)?)?)
+            .modified_by_id(UserId::try_from(ENCODED_ID_SYSTEM)?)
+            .name_when_deleted(project.name.clone())
+            .build()?;
+        db.scoped(project.id)
+            .live()
+            .update::<_, ActiveProjectDB>(&del, &project.id)
+            .await?;
+        Ok(())
+    }
+
     /// Seed a publisher (no inputs) with a terminated PFR, stamped
     /// metrics, and a bound PTDV carrying row_count + data_bytes. The
     /// LTDV's view-resolved magnitudes will reflect the PTDV.
@@ -1804,6 +1890,46 @@ mod tests {
         };
         let rows = db.metrics().inflight(&req).await?;
         assert!(rows.is_empty(), "no runs yet, got {rows:?}");
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_inflight_excludes_soft_deleted_collection(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let coll = seed_collection(&db, p.id, "inflight_del").await?;
+        let func = make_publisher_function(&db, &coll, "inflight_del_fn").await?;
+        let exec = db.scoped(p.id).seed().execution(&func).await?;
+        let trx = db
+            .scoped(p.id)
+            .seed()
+            .transaction(&exec, &TransactionKey::try_from("ANY")?)
+            .await?;
+        db.scoped(p.id)
+            .seed()
+            .physical_function_run(
+                &coll,
+                &func,
+                &exec,
+                &trx,
+                &LogicalFunctionRunStatus::Running,
+            )
+            .await?;
+
+        let req = InflightRequest {
+            collections: DimensionFilter::default(),
+            groups: DimensionFilter::default(),
+            statuses: vec![],
+        };
+        assert!(
+            !db.metrics().inflight(&req).await?.is_empty(),
+            "a live collection's in-flight run must show"
+        );
+
+        soft_delete_collection(&db, &coll).await?;
+        assert!(
+            db.metrics().inflight(&req).await?.is_empty(),
+            "a soft-deleted collection's in-flight run must be excluded"
+        );
         Ok(())
     }
 
@@ -2345,6 +2471,99 @@ mod tests {
                     || e.source != Some(cons_coll.id.to_string())),
             "private output must not appear as unused, got {edges:?}"
         );
+        Ok(())
+    }
+
+    // ----- soft-deleted collection/project exclusion --------------------
+
+    #[td_test::test(db)]
+    async fn test_soft_deleted_collection_excluded_from_nodes_and_edges(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, p.id, "del_coll", "del_fn").await?;
+        let req = empty_request(Dim::Collection);
+        assert_eq!(db.metrics().metrics_nodes(&req).await?.len(), 1);
+        assert!(!db.metrics().metrics_edges(&req).await?.is_empty());
+
+        soft_delete_collection(&db, &coll).await?;
+        assert!(
+            db.metrics().metrics_nodes(&req).await?.is_empty(),
+            "a soft-deleted collection must not appear as a node"
+        );
+        assert!(
+            db.metrics().metrics_edges(&req).await?.is_empty(),
+            "a soft-deleted collection's edges must vanish"
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_soft_deleted_project_excluded_from_nodes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (_coll, _lfr, _ltdv) =
+            seed_publisher_with_ltdv(&db, p.id, "del_proj_coll", "del_proj_fn").await?;
+        let req = empty_request(Dim::Collection);
+        assert_eq!(db.metrics().metrics_nodes(&req).await?.len(), 1);
+
+        soft_delete_project(&db, &p).await?;
+        assert!(
+            db.metrics().metrics_nodes(&req).await?.is_empty(),
+            "runs under a soft-deleted project must be excluded even when the collection is live"
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_soft_deleted_source_collection_excluded_from_real_edge(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (producer_coll, _, producer_ltdv) =
+            seed_publisher_with_ltdv(&db, p.id, "edge_del_prod", "edge_del_prod_fn").await?;
+        let consumer_coll = seed_collection(&db, p.id, "edge_del_cons").await?;
+        let consumer_fn = make_publisher_function(&db, &consumer_coll, "edge_del_cons_fn").await?;
+        let (consumer_lfr, consumer_pfr) = seed_done_run(&db, &consumer_coll, &consumer_fn).await?;
+        stamp_buckets_on_pfr(&db, &consumer_pfr).await?;
+        let input = LogicalFunctionRunInputDB::builder()
+            .collection_id(consumer_coll.id)
+            .execution_id(&consumer_lfr.execution_id)
+            .transaction_id(&consumer_lfr.transaction_id)
+            .logical_function_run_id(consumer_lfr.id.clone())
+            .requirement_logical_table_data_version_id(Some(producer_ltdv.id))
+            .requirement_input_idx(Some(InputIdx::try_from(0)?))
+            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
+            .requirement_version_pos(VersionPos::try_from(0)?)
+            .build()?;
+        db.scoped(p.id).live().insert(&input).await?;
+
+        let req = empty_request(Dim::Collection);
+        let producer_id = producer_coll.id.to_string();
+        assert!(
+            db.metrics()
+                .metrics_edges(&req)
+                .await?
+                .iter()
+                .any(|e| e.source.as_deref() == Some(producer_id.as_str())),
+            "the live producer must be a real-edge source before deletion"
+        );
+
+        soft_delete_collection(&db, &producer_coll).await?;
+        let edges = db.metrics().metrics_edges(&req).await?;
+        assert!(
+            edges
+                .iter()
+                .all(|e| e.source.as_deref() != Some(producer_id.as_str())
+                    && e.target.as_deref() != Some(producer_id.as_str())),
+            "no edge may reference the soft-deleted producer, got {edges:?}"
+        );
+        let cons_node = db
+            .metrics()
+            .metrics_nodes(&req)
+            .await?
+            .into_iter()
+            .any(|n| n.collection_id.as_ref() == Some(&consumer_coll.id));
+        assert!(cons_node, "the live consumer must still be a node");
         Ok(())
     }
 }
