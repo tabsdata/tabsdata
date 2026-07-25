@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tabsdata-conn-common-file"
 description = "Shared types and validators for tabsdatak's file-shaped connectors (localfile, s3, gcs, azureblob)."
-authors = [{name = "Tabs Data Inc."}]
+authors = [{name = "Tabsdata Inc."}]
 keywords = [
     "tabsdata",
     "tabsdatak",

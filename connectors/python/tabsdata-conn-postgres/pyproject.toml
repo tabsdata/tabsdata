@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tabsdata-conn-postgres"
 description = "PostgreSQL connector."
-authors = [{name = "Tabs Data Inc."}]
+authors = [{name = "Tabsdata Inc."}]
 keywords = [
     "tabsdata",
     "tabsdatak",

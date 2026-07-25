@@ -3,7 +3,7 @@
 #
 
 [book]
-authors = ["Tabs Data Inc."]
+authors = ["Tabsdata Inc."]
 language = "en"
 src = "src"
 title = "Tabsdata Examples Guide"

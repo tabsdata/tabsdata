@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tabsdata-server"
 description = "Tabsdata Server COmponents."
-authors = [{name = "Tabs Data Inc."}]
+authors = [{name = "Tabsdata Inc."}]
 keywords = [
     "tabsdata",
     "data",

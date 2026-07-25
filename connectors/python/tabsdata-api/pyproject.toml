@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tabsdata-api"
 description = "Tabsdata API — core interfaces and types."
-authors = [{name = "Tabs Data Inc."}]
+authors = [{name = "Tabsdata Inc."}]
 keywords = [
     "tabsdata",
     "tabsdatak",

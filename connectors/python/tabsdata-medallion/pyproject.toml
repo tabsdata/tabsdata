@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tabsdata-medallion"
 description = "Tabsdata support for building Medallion-architecture data pipelines."
-authors = [{name = "Tabs Data Inc."}]
+authors = [{name = "Tabsdata Inc."}]
 keywords = [
     "tabsdata",
     "tabsdatak",
