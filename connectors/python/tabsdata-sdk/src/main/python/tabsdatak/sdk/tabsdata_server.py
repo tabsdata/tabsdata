@@ -4062,6 +4062,36 @@ class TabsdataServer:
         collection = self.get_collection(collection_name)
         return collection.get_function(function_name)
 
+    def download_function_bundle(
+        self,
+        function_version_id: str,
+        destination_file: str,
+        raise_for_status: bool = True,
+    ) -> None:
+        """
+        Download the bundle of a function version as a tgz archive.
+
+        The bundle is addressed by its function version id; only Active or
+        Frozen versions are downloadable (a version whose function has been
+        deleted is not found).
+
+        Args:
+            function_version_id (str): The function version id (fvid) whose
+                bundle will be downloaded.
+            destination_file (str): The path where the tgz bundle is written.
+            raise_for_status (bool, optional): Whether to raise an exception if
+                the request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the bundle could not be downloaded.
+        """
+        response = self.connection.function_bundle_download(
+            function_version_id,
+            raise_for_status=raise_for_status,
+        )
+        with open(destination_file, "wb") as file:
+            file.write(response.content)
+
     def list_function_history(self, collection_name, function_name) -> List[Function]:
         """
         List the version history of a function.

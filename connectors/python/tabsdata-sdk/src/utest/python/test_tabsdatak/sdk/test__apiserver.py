@@ -379,6 +379,27 @@ def test_function_update_omits_reset_flags_when_none(monkeypatch):
     assert "base_path" not in body
 
 
+class _CaptureGet:
+    """A ``get`` replacement that records its path and returns a dummy 200
+    response so ``raise_for_status`` is a no-op."""
+
+    def __init__(self):
+        self.seen: dict = {}
+
+    def __call__(self, path, params=None, **kw):
+        self.seen["path"] = path
+        self.seen["params"] = params
+        return _DummyResponse()
+
+
+def test_function_bundle_download_targets_function_version_endpoint(monkeypatch):
+    server = a.APIServer("host")
+    capture = _CaptureGet()
+    monkeypatch.setattr(server, "get", capture)
+    server.function_bundle_download("fv-123")
+    assert capture.seen["path"] == "/function-versions/fv-123/bundle"
+
+
 def test_obtain_connection_returns_apiserver_without_login():
     conn = a.obtain_connection("host")
     assert isinstance(conn, a.APIServer)

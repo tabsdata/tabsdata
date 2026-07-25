@@ -945,6 +945,13 @@ class APIServer:
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def function_bundle_download(
+        self, function_version_id: str, raise_for_status: bool = True
+    ):
+        endpoint = f"/function-versions/{function_version_id}/bundle"
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def logical_function_run_replay(
         self,
         collection_name: str,

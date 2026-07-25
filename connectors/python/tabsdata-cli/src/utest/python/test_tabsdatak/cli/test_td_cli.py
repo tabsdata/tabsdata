@@ -115,6 +115,18 @@ def test_fn_update_help_describes_v2_command():
     assert result.exit_code == 0
 
 
+def test_fn_bundle_help_advertises_options_and_tgz():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["fn", "bundle", "--help"])
+    assert result.exit_code == 0
+    out = result.output
+    assert "--proj" in out
+    assert "--fn-version" in out
+    assert "--file" in out
+    # The help must make clear the downloaded file is a tgz archive.
+    assert "tgz" in out
+
+
 # ---------------------------------------------------------------------------
 # projects / multitenancy surface
 # ---------------------------------------------------------------------------

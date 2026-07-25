@@ -188,6 +188,51 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
         raise click.ClickException(f"Failed to display function: {e}")
 
 
+@fn.command()
+@proj_option
+@click.option(
+    "--fn-version",
+    "fn_version",
+    help=(
+        "Function version id (fvid) whose bundle will be downloaded. Use "
+        "'tdk fn info --show-history' to find available fvids."
+    ),
+)
+@click.option(
+    "--file",
+    "-f",
+    "file",
+    help=(
+        "Path to write the downloaded bundle to. The bundle is a "
+        "gzip-compressed tar archive (.tgz)."
+    ),
+)
+@click.pass_context
+def bundle(ctx: click.Context, fn_version: str, file: str):
+    """Download the bundle of a function version as a tgz archive.
+
+    The bundle is addressed by its function version id (fvid); only Active or
+    Frozen versions can be downloaded (a version whose function has been
+    deleted is not found).
+    """
+    verify_login_or_prompt(ctx)
+    fn_version = fn_version or logical_prompt(
+        ctx, "Function version id (fvid) whose bundle will be downloaded"
+    )
+    file = file or logical_prompt(
+        ctx, "Path to write the downloaded bundle to (a .tgz archive)"
+    )
+    click.echo(f"Downloading bundle of function version '{fn_version}' to '{file}'")
+    click.echo("-" * 10)
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.download_function_bundle(fn_version, file)
+        click.echo("Bundle downloaded successfully")
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to download function bundle: {e}")
+
+
 # Registered as "list" but the Python function is NOT named ``list``: a module
 # named ``list`` would shadow the ``list`` builtin, and ``register`` / ``update``
 # / ``patch`` below call ``list(local_pkg)`` -- with the builtin shadowed that

@@ -557,6 +557,31 @@ def test_build_and_upload_bundle_invokes_bundle_and_upload(
 # ---------------------------------------------------------------------------
 
 
+def test_download_function_bundle_writes_response_content(tmp_path):
+    """``download_function_bundle`` fetches by fvid and writes the raw bytes
+    to the destination file."""
+    seen: dict = {}
+
+    class _FakeResponse:
+        content = b"TGZ-BYTES"
+
+    class _FakeConnection:
+        def function_bundle_download(self, function_version_id, raise_for_status=True):
+            seen["fvid"] = function_version_id
+            seen["raise_for_status"] = raise_for_status
+            return _FakeResponse()
+
+    server = ts.TabsdataServer.__new__(ts.TabsdataServer)
+    server.connection = _FakeConnection()
+
+    dest = tmp_path / "bundle.tgz"
+    server.download_function_bundle("fv-123", str(dest))
+
+    assert seen["fvid"] == "fv-123"
+    assert seen["raise_for_status"] is True
+    assert dest.read_bytes() == b"TGZ-BYTES"
+
+
 def test_collection_stores_explicit_base_path_in_both_slots():
     coll = ts.Collection(connection=None, name="c", base_path="/data/c")
     assert coll._base_path == "/data/c"
