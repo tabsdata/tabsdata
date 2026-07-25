@@ -36,7 +36,7 @@ pub enum ListError {
     #[error("Undefined is filter: {0}")]
     UndefinedIsFilter(String) = 9,
     #[error("Error parsing value: {0}")]
-    InvalidFieldValue(#[source] TdError) = 5000,
+    InvalidFieldValue(#[source] TdError) = 10,
 }
 
 /// Parse a typed column value string for this order's field.
