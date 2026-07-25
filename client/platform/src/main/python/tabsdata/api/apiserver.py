@@ -187,6 +187,17 @@ class APIServer:
         # scoped paths from it and `_project_narrow` narrows cross-project
         # lists to it.
         self.project = None
+        self._active_project_name_for = None
+        self._resolved_active_project_name = None
+
+    def _active_project_name(self) -> str:
+        # `--project`/pin may be an id; the list filter matches the project
+        # name, so resolve id-or-name to the name (cached per active value).
+        if self._active_project_name_for != self.project:
+            data = self.project_get_by_name(self.project).json()["data"]
+            self._resolved_active_project_name = data["name"]
+            self._active_project_name_for = self.project
+        return self._resolved_active_project_name
 
     def _scoped(self, path: str) -> str:
         """Build a project-scoped path under ``/projects/{project}``.
@@ -207,7 +218,7 @@ class APIServer:
         """Narrow a cross-project list to the active project, when one is set."""
         if not self.project:
             return request_filter
-        narrowed = f"project:eq:{self.project}"
+        narrowed = f"project:eq:{self._active_project_name()}"
         if request_filter is None:
             return [narrowed]
         if isinstance(request_filter, str):
