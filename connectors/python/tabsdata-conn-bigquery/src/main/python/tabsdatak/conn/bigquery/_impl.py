@@ -175,6 +175,14 @@ def build_load_job_config(
 
     ``CREATE_IF_NEEDED`` is set unconditionally so the first write to a
     new table creates it.
+
+    ``decimal_target_types`` widens the candidate list for a parquet
+    decimal column. BigQuery otherwise picks ``NUMERIC``, whose scale
+    caps at 9, and a source decimal with a larger scale fails the load
+    outright ("out of valid NUMERIC range: Value will lose precision
+    after scaling down to NUMERIC type"). Listing ``BIGNUMERIC`` after
+    ``NUMERIC`` keeps ``NUMERIC`` for everything that fits and falls
+    through to ``BIGNUMERIC`` only when it does not.
     """
     from google.cloud import bigquery
 
@@ -195,4 +203,5 @@ def build_load_job_config(
         write_disposition=write_disposition,
         schema_update_options=schema_update_options,
         create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
+        decimal_target_types=["NUMERIC", "BIGNUMERIC"],
     )
