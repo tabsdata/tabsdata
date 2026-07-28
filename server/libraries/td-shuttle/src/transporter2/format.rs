@@ -204,6 +204,65 @@ fn decode_text(name: &str, data: Bytes, batch_size: usize) -> Result<(SchemaRef,
 
 /// Encode a `(schema, batches)` stream as `format`, returning the bytes. The
 /// caller compresses + writes them. [`Format::Text`] is read-only ⇒ error.
+/// The fixed offset every tz-aware timestamp is labelled with on the way into a
+/// text format.
+const UTC_OFFSET: &str = "+00:00";
+
+/// The `+00:00`-labelled counterpart of a timezone-carrying timestamp type, or
+/// [`None`] when the type needs no relabelling.
+fn utc_offset_type(data_type: &DataType) -> Option<DataType> {
+    match data_type {
+        DataType::Timestamp(unit, Some(tz)) if tz.as_ref() != UTC_OFFSET => {
+            Some(DataType::Timestamp(*unit, Some(UTC_OFFSET.into())))
+        }
+        _ => None,
+    }
+}
+
+/// `batch` with every timezone-carrying timestamp column relabelled to the fixed
+/// `+00:00` offset, so csv / ndjson render one canonical ISO-8601 UTC form.
+///
+/// The text writers format the timezone, and arrow understands only fixed
+/// offsets unless the `chrono-tz` feature is on — so a named zone fails the
+/// write outright, `UTC` included. Arrow already stores a tz-aware timestamp as
+/// a UTC epoch count with the zone as display metadata, so this preserves the
+/// instant exactly; it is the label that changes, not the values.
+///
+/// Only top-level columns are relabelled: a timestamp nested inside a list or
+/// struct still reaches the writer with its own zone.
+fn to_utc_offset(batch: RecordBatch) -> Result<RecordBatch> {
+    let schema = batch.schema();
+    if !schema
+        .fields()
+        .iter()
+        .any(|f| utc_offset_type(f.data_type()).is_some())
+    {
+        return Ok(batch);
+    }
+    let fields: Vec<Arc<Field>> = schema
+        .fields()
+        .iter()
+        .map(|f| match utc_offset_type(f.data_type()) {
+            Some(data_type) => Arc::new(f.as_ref().clone().with_data_type(data_type)),
+            None => f.clone(),
+        })
+        .collect();
+    let target = Arc::new(Schema::new_with_metadata(fields, schema.metadata().clone()));
+    let columns = batch
+        .columns()
+        .iter()
+        .zip(target.fields())
+        .map(|(column, field)| {
+            if column.data_type() == field.data_type() {
+                Ok(column.clone())
+            } else {
+                arrow::compute::cast(column, field.data_type())
+            }
+        })
+        .collect::<std::result::Result<Vec<ArrayRef>, _>>()?;
+    Ok(RecordBatch::try_new(target, columns)?)
+}
+
 pub fn encode(
     format: Format,
     schema: SchemaRef,
@@ -225,14 +284,14 @@ pub fn encode(
                 .with_delimiter(opts.csv_delimiter)
                 .build(&mut buf);
             for b in batches {
-                w.write(&b?)?;
+                w.write(&to_utc_offset(b?)?)?;
             }
         }
         Format::Ndjson => {
             let mut w = arrow::json::writer::WriterBuilder::new()
                 .build::<_, arrow::json::writer::LineDelimited>(&mut buf);
             for b in batches {
-                w.write(&b?)?;
+                w.write(&to_utc_offset(b?)?)?;
             }
             w.finish()?;
         }
@@ -349,14 +408,14 @@ pub fn encode_file(
                 .with_delimiter(opts.csv_delimiter)
                 .build(out);
             for b in batches {
-                w.write(&b?)?;
+                w.write(&to_utc_offset(b?)?)?;
             }
         }
         Format::Ndjson => {
             let mut w = arrow::json::writer::WriterBuilder::new()
                 .build::<_, arrow::json::writer::LineDelimited>(out);
             for b in batches {
-                w.write(&b?)?;
+                w.write(&to_utc_offset(b?)?)?;
             }
             w.finish()?;
         }
@@ -445,7 +504,8 @@ pub fn convert_bytes_counted(
 #[cfg(test)]
 mod test {
     use super::*;
-    use arrow::array::{Int64Array, StringArray};
+    use arrow::array::{Int64Array, StringArray, TimestampMicrosecondArray};
+    use arrow::datatypes::TimeUnit;
 
     fn sample() -> (SchemaRef, RecordBatch) {
         let schema = Arc::new(Schema::new(vec![
@@ -778,5 +838,118 @@ mod test {
             err,
             TransporterError::UnsupportedTarget(Format::Text)
         ));
+    }
+
+    fn stamped(tz: Option<&str>) -> (SchemaRef, RecordBatch) {
+        let data_type = DataType::Timestamp(TimeUnit::Microsecond, tz.map(Into::into));
+        let schema = Arc::new(Schema::new(vec![Field::new("ts", data_type.clone(), true)]));
+        // 2026-07-14T09:30:15Z
+        let values = TimestampMicrosecondArray::from(vec![Some(1_784_021_415_000_000)])
+            .with_data_type(data_type);
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(values) as ArrayRef]).unwrap();
+        (schema, batch)
+    }
+
+    #[test]
+    fn named_zone_is_relabelled_to_a_fixed_offset() {
+        let (_schema, batch) = stamped(Some("UTC"));
+        let relabelled = to_utc_offset(batch.clone()).unwrap();
+        assert_eq!(
+            relabelled.schema().field(0).data_type(),
+            &DataType::Timestamp(TimeUnit::Microsecond, Some(UTC_OFFSET.into()))
+        );
+        // The label changes, the instant does not.
+        let before = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<TimestampMicrosecondArray>()
+            .unwrap()
+            .value(0);
+        let after = relabelled
+            .column(0)
+            .as_any()
+            .downcast_ref::<TimestampMicrosecondArray>()
+            .unwrap()
+            .value(0);
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn a_naive_timestamp_is_left_alone() {
+        let (_schema, batch) = stamped(None);
+        let same = to_utc_offset(batch.clone()).unwrap();
+        assert_eq!(same.schema(), batch.schema());
+    }
+
+    #[test]
+    fn an_offset_zone_is_left_alone() {
+        let (_schema, batch) = stamped(Some(UTC_OFFSET));
+        let same = to_utc_offset(batch.clone()).unwrap();
+        assert_eq!(same.schema(), batch.schema());
+    }
+
+    #[test]
+    fn a_named_zone_writes_iso_utc_to_the_text_formats() {
+        for dst in [Format::Csv, Format::Ndjson] {
+            let (schema, batch) = stamped(Some("UTC"));
+            let out = String::from_utf8(enc(dst, schema, batch)).unwrap();
+            assert!(
+                out.contains("2026-07-14T09:30:15"),
+                "{dst:?} rendered {out:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_non_utc_named_zone_is_written_as_the_same_instant_in_utc() {
+        let data_type = DataType::Timestamp(TimeUnit::Microsecond, Some("America/New_York".into()));
+        let schema = Arc::new(Schema::new(vec![Field::new("ts", data_type.clone(), true)]));
+        let values = TimestampMicrosecondArray::from(vec![Some(1_784_021_415_000_000)])
+            .with_data_type(data_type);
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(values) as ArrayRef]).unwrap();
+        let out = String::from_utf8(enc(Format::Csv, schema, batch)).unwrap();
+        assert!(out.contains("2026-07-14T09:30:15"), "rendered {out:?}");
+    }
+
+    #[test]
+    fn a_named_zone_writes_iso_utc_through_the_file_path() {
+        // The staging convert leg the binary runs goes through `encode_file`, not
+        // the buffered `encode`.
+        let dir = std::env::temp_dir().join(format!("transporter-tz-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (dst, name) in [(Format::Csv, "out.csv"), (Format::Ndjson, "out.json")] {
+            let (schema, batch) = stamped(Some("UTC"));
+            let path = dir.join(name);
+            encode_file(
+                dst,
+                schema,
+                std::iter::once(Ok(batch)),
+                &path,
+                &EncodeOptions::default(),
+            )
+            .unwrap();
+            let out = std::fs::read_to_string(&path).unwrap();
+            assert!(out.contains("2026-07-14T09:30:15"), "{dst:?} wrote {out:?}");
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn parquet_keeps_the_original_zone() {
+        let (schema, batch) = stamped(Some("UTC"));
+        let bytes = enc(Format::Parquet, schema, batch);
+        let (read, _iter) = decode(
+            Format::Parquet,
+            "x.parquet",
+            Bytes::from(bytes),
+            &DecodeOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            read.field(0).data_type(),
+            &DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()))
+        );
     }
 }

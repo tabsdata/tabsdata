@@ -237,6 +237,13 @@ class S3Dest(Dest):
         dest_cfg: Optional connector config; supports the key
             `tabsdata.file.chunkSize`.
 
+    Note:
+        A timestamp carrying a timezone is written to `CSV` and `JSON` as
+        ISO-8601 in UTC -- `2026-07-14T09:30:15Z` -- whatever zone the
+        column declared: the instant is preserved and only the label is
+        normalised. A timestamp without a timezone is written as-is, with
+        no offset. `PARQUET` and `AVRO` keep the column's own zone.
+
     Examples:
         Subscribe rows to S3, choosing the output file format:
 
