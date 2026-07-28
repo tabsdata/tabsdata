@@ -5,10 +5,8 @@
 """Integration tests for :class:`ManifestStageSrcPlugin` against the
 real ``td_transporter2`` binary, exercised over the local-file backend.
 
-Skipped unless the ``td_transporter2`` binary is installed in the
-active Python environment's scripts folder::
-
-    pytest .../test_tabsdatak/connector/_stream -k integration
+Skipped unless the binary is installed in the active Python environment's
+scripts folder.
 
 ``ManifestStageConn`` is the read-side scaffolding; its concrete kwargs
 constructor is still being shaped, so these tests drive ``read_in`` with

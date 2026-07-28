@@ -2,16 +2,12 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Integration tests that invoke the real ``td_transporter2`` binary.
+"""Transporter integration tests that invoke the real ``td_transporter2``.
 
-These tests are skipped unless the ``td_transporter2`` binary is
-installed in the active Python environment's scripts folder::
-
-    pytest packages/tabsdata-conn-common-file/src/utest/python -k integration
-
-Everything else in the conn-common-file test suite mocks the
-subprocess, so this file is the only end-to-end coverage of the
-binary handshake (request YAML round-trip + report parsing).
+Skipped unless the binary is installed in the active Python environment's
+scripts folder. Everything else in the conn-common-file suite mocks the
+subprocess, so this file is the only end-to-end coverage of the binary
+handshake (request YAML round-trip + report parsing).
 """
 
 from __future__ import annotations
@@ -21,23 +17,25 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _input as _input_module
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _output as _output_module
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _plugin
 from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 from tabsdatak.common._transporter.facade import make_handler
 from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
+
+# noinspection PyProtectedMember
+# noinspection PyProtectedMember
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import (
+    _input as _input_module,
+    _output as _output_module,
+    _plugin,
+)
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
     SrcFileFormat,
 )
 from tabsdatak.spi import DestContext, SrcPluginCtx
-
 
 # ---------------------------------------------------------------------------
 # Gate: skip the whole module if the binary isn't available
@@ -64,7 +62,6 @@ pytestmark = pytest.mark.skipif(
 
 
 class _SrcCtx(SrcPluginCtx):
-
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
@@ -108,9 +105,9 @@ class _SrcCtx(SrcPluginCtx):
 
     def add_metadata(self, attr, val):
         pass
+
 
 class _DestCtx(DestContext):
-
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
@@ -154,6 +151,7 @@ class _DestCtx(DestContext):
 
     def add_metadata(self, attr, val):
         pass
+
 
 # ---------------------------------------------------------------------------
 # _input.import_one
