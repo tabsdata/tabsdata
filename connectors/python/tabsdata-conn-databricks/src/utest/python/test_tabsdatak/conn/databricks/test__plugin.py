@@ -10,7 +10,7 @@ fault-inject into the impl to verify the plugin maps every
 expected exception class to the right DATABRICKS_* error code.
 
 End-to-end coverage against a real Databricks workspace lives in
-``test__plugin_integration.py``.
+``src/itest/python/testi_tabsdatak/conn/databricks``.
 """
 
 from __future__ import annotations
@@ -222,6 +222,40 @@ def test_src_plugin_wraps_query_failure_as_databricks_6(
     with pytest.raises(DatabricksRuntimeException) as ei:
         plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_6
+
+
+@pytest.mark.parametrize(
+    "message, expected",
+    [
+        pytest.param(
+            "[UNBOUND_SQL_PARAMETER] Found the unbound parameter: cursor. "
+            "Please, fix `args`. SQLSTATE: 42P02",
+            "'cursor'",
+            id="name-reported",
+        ),
+        pytest.param(
+            "[UNBOUND_SQL_PARAMETER] Found an unbound parameter. SQLSTATE: 42P02",
+            "a parameter it does not name",
+            id="name-missing",
+        ),
+    ],
+)
+def test_src_plugin_wraps_unbound_bind_as_databricks_12(
+    monkeypatch,
+    work_dir,
+    message: str,
+    expected: str,
+):
+    monkeypatch.setattr(
+        impl,
+        "read_all_queries",
+        MagicMock(side_effect=RuntimeError(message)),
+    )
+    with pytest.raises(DatabricksRuntimeException) as ei:
+        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_12
+    assert expected in str(ei.value)
+    assert "initial_values" in str(ei.value)
 
 
 def test_src_plugin_returns_one_parquet_per_query(

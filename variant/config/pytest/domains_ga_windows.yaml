@@ -12,10 +12,10 @@
   sys: bigquery
 - name: databricks
   sys: databricks
-- name: databricks_world_xs
+- name: databricks_employees_xs
   sys: databricks
-  model: world
-  size: 200
+  model: employees
+  size: 1
 - name: fs
   sys: fs
 - name: fs_employees_xs

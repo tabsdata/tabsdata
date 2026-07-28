@@ -731,13 +731,46 @@ def read_all_queries(cfg: DatabricksReadCfg, work_dir: Path) -> list[Path]:
     return out
 
 
+def reject_unsupported_columns(
+    target_tables: list[str],
+    parquet_files: list[Path],
+) -> None:
+    """Fail before uploading anything if a column has a type Databricks cannot
+    store.
+
+    COPY INTO rejects the parquet TIME type outright
+    ("[PARQUET_TYPE_ILLEGAL] Illegal Parquet type: INT64 (TIME(...))"), and it
+    does so per file after the upload and the CREATE have already run. Reading
+    the parquet footer up front costs nothing and turns that into one error that
+    names the table and the offending columns.
+    """
+    import pyarrow.parquet as pq
+
+    from tabsdatak.conn.databricks.error import DatabricksErrorCode
+
+    for table, path in zip(target_tables, parquet_files):
+        schema = pq.read_schema(str(path))
+        offenders = [f.name for f in schema if pa_is_time(f.type)]
+        if offenders:
+            raise DatabricksErrorCode.DATABRICKS_13.exception(
+                table=table,
+                columns=", ".join(repr(name) for name in offenders),
+            )
+
+
+def pa_is_time(arrow_type: Any) -> bool:
+    import pyarrow as pa
+
+    return pa.types.is_time(arrow_type)
+
+
 def write_all_tables(
     cfg: DatabricksWriteCfg,
     parquet_files: list[Path],
 ) -> None:
     """Upload each parquet file to the volume and run the matching
     CREATE / COPY INTO sequence. Failures are surfaced to the caller
-    which wraps them into the appropriate CLICKHOUSE_* code."""
+    which wraps them into the appropriate DATABRICKS_* code."""
     if len(cfg.target_tables) != len(parquet_files):
         # Should already have been caught by the plugin; defensive.
         from tabsdatak.conn.databricks.error import DatabricksErrorCode
@@ -746,6 +779,8 @@ def write_all_tables(
             tables=len(cfg.target_tables),
             slots=len(parquet_files),
         )
+
+    reject_unsupported_columns(list(cfg.target_tables), parquet_files)
 
     logger.debug("databricks: establishing workspace client")
     ws_client = _build_workspace_client(cfg.conn)

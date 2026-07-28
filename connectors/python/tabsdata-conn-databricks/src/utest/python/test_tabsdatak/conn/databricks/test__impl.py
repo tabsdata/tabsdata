@@ -6,7 +6,7 @@
 that don't need the SDK / SQL connector libraries at module level.
 
 End-to-end coverage against a real Databricks workspace lives in
-``test__plugin_integration.py``.
+``src/itest/python/testi_tabsdatak/conn/databricks``.
 """
 
 from __future__ import annotations
@@ -414,3 +414,79 @@ class TestExecuteQueryEmptyResult:
         with pytest.raises(DatabricksRuntimeException) as ei:
             self._run(tmp_path, None)
         assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
+
+
+# ---------------------------------------------------------------------------
+# write_all_tables -- up-front column rejection
+# ---------------------------------------------------------------------------
+
+
+def _parquet(path, **columns):
+    """A real one-row parquet at `path`; `write_all_tables` reads its schema."""
+    import pyarrow.parquet as pq
+
+    pq.write_table(pa.table(columns or {"c": pa.array([1], pa.int64())}), str(path))
+    return path
+
+
+def test_write_all_tables_rejects_a_time_column_before_connecting(tmp_path):
+    """A time column has to be refused up front, not by COPY INTO after the
+    upload and the CREATE already ran."""
+    import datetime
+
+    parquet = _parquet(
+        tmp_path / "t.parquet",
+        ok=pa.array([1], pa.int64()),
+        clock=pa.array([datetime.time(9, 30, 15)], pa.time64("ns")),
+    )
+    cfg = _impl.DatabricksWriteCfg(
+        conn=_dest_conn(),
+        target_tables=["main.analytics.events"],
+        if_table_exists="append",
+        schema_evolution="strict",
+    )
+    # No workspace/SQL fixture: the check must fire before any connect.
+    with pytest.raises(DatabricksRuntimeException) as ei:
+        _impl.write_all_tables(cfg, [parquet])
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_13
+    assert "'clock'" in str(ei.value)
+    assert "'ok'" not in str(ei.value)
+    assert "main.analytics.events" in str(ei.value)
+
+
+@pytest.mark.parametrize("unit", ["s", "ms", "us", "ns"])
+def test_write_all_tables_rejects_every_time_width(tmp_path, unit):
+    import datetime
+
+    arrow = pa.time32(unit) if unit in ("s", "ms") else pa.time64(unit)
+    parquet = _parquet(
+        tmp_path / f"t_{unit}.parquet",
+        clock=pa.array([datetime.time(1, 2, 3)], arrow),
+    )
+    cfg = _impl.DatabricksWriteCfg(
+        conn=_dest_conn(),
+        target_tables=["main.analytics.events"],
+        if_table_exists="append",
+        schema_evolution="strict",
+    )
+    with pytest.raises(DatabricksRuntimeException):
+        _impl.write_all_tables(cfg, [parquet])
+
+
+def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
+    import datetime
+
+    clean = _parquet(tmp_path / "clean.parquet")
+    dirty = _parquet(
+        tmp_path / "dirty.parquet",
+        clock=pa.array([datetime.time(1, 2, 3)], pa.time64("us")),
+    )
+    cfg = _impl.DatabricksWriteCfg(
+        conn=_dest_conn(),
+        target_tables=["main.analytics.first", "main.analytics.second"],
+        if_table_exists="append",
+        schema_evolution="strict",
+    )
+    with pytest.raises(DatabricksRuntimeException) as ei:
+        _impl.write_all_tables(cfg, [clean, dirty])
+    assert "main.analytics.second" in str(ei.value)

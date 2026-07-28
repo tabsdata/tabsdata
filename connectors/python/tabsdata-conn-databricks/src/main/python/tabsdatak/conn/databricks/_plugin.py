@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -155,6 +156,28 @@ def _is_connection_error(exc: BaseException) -> bool:
     }
 
 
+_UNBOUND_PARAMETER = re.compile(
+    r"unbound parameter[:\s]+`?([A-Za-z_]\w*)`?", re.IGNORECASE
+)
+
+
+def _unbound_bind(exc: BaseException) -> str | None:
+    """What the query binds that ``initial_values`` did not provide, or ``None``
+    when the failure is something else.
+
+    Only the names in ``initial_values`` are sent as statement parameters, so a
+    ``:name`` the seed omits reaches the warehouse unbound and the warehouse --
+    not this adapter -- rejects the statement. The name therefore has to be read
+    back out of its message; when the marker is there but the name is not, the
+    diagnosis still holds, so report it without one.
+    """
+    text = str(exc)
+    if "UNBOUND_SQL_PARAMETER" not in text:
+        return None
+    found = _UNBOUND_PARAMETER.search(text)
+    return f"'{found.group(1)}'" if found else "a parameter it does not name"
+
+
 class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
     def read_in(
         self,
@@ -188,6 +211,12 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
                 raise DatabricksErrorCode.DATABRICKS_5.exception(
                     cause=e,
                     host=host,
+                )
+            unbound = _unbound_bind(e)
+            if unbound is not None:
+                raise DatabricksErrorCode.DATABRICKS_12.exception(
+                    cause=e,
+                    parameter=unbound,
                 )
             # Query/download failure; we don't know which slot
             # without cooperation from the adapter, so emit -1.

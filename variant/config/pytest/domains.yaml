@@ -20,10 +20,10 @@
   size: 200
 - name: databricks
   sys: databricks
-- name: databricks_world_xs
+- name: databricks_employees_xs
   sys: databricks
-  model: world
-  size: 200
+  model: employees
+  size: 1
 - name: db2
   sys: db2
 - name: db2_employees_xs

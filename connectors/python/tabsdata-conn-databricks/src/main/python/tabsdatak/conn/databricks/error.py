@@ -84,3 +84,14 @@ class DatabricksErrorCode(ErrorCode):
         "Databricks query returned no rows and no result schema was available"
         " to materialize an empty result (query_index={query_index})",
     )  # execute_query: empty result with no manifest schema
+    DATABRICKS_12 = ErrorDef(
+        DatabricksRuntimeException,
+        "Databricks rejected the query: it binds {parameter}, which"
+        " initial_values does not provide",
+    )  # _DatabricksSrcPlugin.read_in: UNBOUND_SQL_PARAMETER from the warehouse
+    DATABRICKS_13 = ErrorDef(
+        DatabricksRuntimeException,
+        "Databricks has no time-of-day type, so table {table!r} cannot take"
+        " the column(s) {columns}. Cast them before writing -- for example to"
+        " a timestamp or a string",
+    )  # write_all_tables: parquet TIME column, rejected before uploading
