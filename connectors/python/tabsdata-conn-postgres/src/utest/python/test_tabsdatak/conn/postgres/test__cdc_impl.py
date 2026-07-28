@@ -5,8 +5,8 @@
 """``_cdc_impl.py`` -- pure-function coverage for the Postgres CDC
 dialect, wal2json ingester and offset. Catalog / engine calls
 (``server_timezone``, ``get_catalog_columns``, slot create /
-``start_replication``, ``poll_changes``) need a real Postgres
-fixture and live in ``test__cdc_plugin_integration.py``."""
+``start_replication``, ``poll_changes``) need a real Postgres CDC
+domain and live in the integration tests (``test_plugin_cdc.py``)."""
 
 from __future__ import annotations
 
