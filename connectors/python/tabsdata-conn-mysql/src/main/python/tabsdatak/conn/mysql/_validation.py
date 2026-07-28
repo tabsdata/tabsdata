@@ -11,7 +11,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # Pattern gating ``UriSpec`` via ``StrOrSecretConstraints`` -- enforced on
 # a plain-string URI and on a ``Secret``'s hydrated URI value alike.
-MSYQL_URI_PATTERN = r"(?i)^(?:(?:mysql|mariadb)(?:\+[a-z0-9]+)?://.*)$"
+MYSQL_URI_PATTERN = r"(?i)^(?:(?:mysql|mariadb)(?:\+[a-z0-9]+)?://.*)$"
 # --- Table FQN ------------------------------------------------------
 
 # MySQL / MariaDB tables can be referenced as ``table`` or

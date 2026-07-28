@@ -42,7 +42,6 @@ from test_tabsdata.common.constants import (
     DOCKER_UTEST_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from test_tabsdata.common.system import get_free_port as _free_port
 
 # noinspection PyUnusedImports
 from test_tabsdata.conftest import (
@@ -88,13 +87,6 @@ TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"
 # laptop without docker.
 SKIP_ON_DOCKER_FAIL = "SKIP_ON_DOCKER_FAIL"
 
-# External-DB var prefixes. ``{prefix}__{backend}_ENVS`` truthy
-# switches the fixture from docker mode to external mode.
-_MYSQL_PREFIX = "MYSQL0"
-_MYSQL_BACKEND = "MYSQL"
-_MARIADB_PREFIX = "MARIADB0"
-_MARIADB_BACKEND = "MARIADB"
-
 
 def _truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in TRUE_VALUES
@@ -112,26 +104,11 @@ def _fail_or_skip(reason: str) -> "None":
 
 # --- Constants ------------------------------------------------------
 
-_MYSQL_IMAGE = "mysql:9.2.0"
-_MARIADB_IMAGE = "mariadb:11.4.4"
-
-_MYSQL_CONTAINER = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
-    f"{DOCKER_UTEST_CONTAINER_INFIX}"
-    f"{DOCKER_REGULAR_CONTAINER_INFIX}"
-    "mysql"
-)
 _MYSQL_CDC_CONTAINER = (
     f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
     f"{DOCKER_UTEST_CONTAINER_INFIX}"
     f"{DOCKER_REGULAR_CONTAINER_INFIX}"
     "mysql-cdc"
-)
-_MARIADB_CONTAINER = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
-    f"{DOCKER_UTEST_CONTAINER_INFIX}"
-    f"{DOCKER_REGULAR_CONTAINER_INFIX}"
-    "mariadb"
 )
 
 _DB_NAME = "testing"
@@ -194,7 +171,6 @@ def _ensure_container(
     name: str,
     image: str,
     environment: list[str],
-    forwarded_port: int | None = None,
     command: list[str] | None = None,
 ) -> int:
     from docker.errors import APIError, ImageNotFound, NotFound
@@ -228,7 +204,7 @@ def _ensure_container(
     run_kwargs: dict = dict(
         name=name,
         environment=environment,
-        ports={"3306/tcp": forwarded_port},
+        ports={"3306/tcp": None},
         detach=True,
     )
     if command is not None:
@@ -293,40 +269,6 @@ def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> Non
         f"database at {host}:{port}/{db} did not accept connections "
         f"after {_READY_MAX_RETRIES} attempts (last error: {last_error})"
     )
-
-
-def _seed_schema(cfg: DBConfig) -> None:
-    from sqlalchemy import create_engine, text
-
-    engine = create_engine(cfg.uri_with_credentials)
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS orders"))
-            conn.execute(text("DROP TABLE IF EXISTS users"))
-            conn.execute(text(
-                "CREATE TABLE users ("
-                "  id INT PRIMARY KEY,"
-                "  name VARCHAR(64) NOT NULL,"
-                "  age INT NOT NULL"
-                ") ENGINE=InnoDB"
-            ))
-            conn.execute(text(
-                "INSERT INTO users (id, name, age) VALUES "
-                "(1, 'alice', 30), (2, 'bob', 25), (3, 'carol', 40)"
-            ))
-            conn.execute(text(
-                "CREATE TABLE orders ("
-                "  id INT PRIMARY KEY,"
-                "  user_id INT NOT NULL,"
-                "  qty INT NOT NULL"
-                ") ENGINE=InnoDB"
-            ))
-            conn.execute(text(
-                "INSERT INTO orders (id, user_id, qty) VALUES "
-                "(10, 1, 2), (11, 2, 5)"
-            ))
-    finally:
-        engine.dispose()
 
 
 def _remove_container(name: str) -> None:
@@ -404,134 +346,6 @@ def _should_reseed_external(prefix: str, backend: str) -> bool:
     return _truthy(f"{prefix}__{backend}_RESEED")
 
 
-# --- Public fixtures ------------------------------------------------
-
-
-def _build_config(
-    *,
-    name: str,
-    image: str,
-    environment: list[str],
-) -> DBConfig:
-    host_port = _ensure_container(
-        name=name,
-        image=image,
-        environment=environment,
-    )
-    cfg = DBConfig(
-        host="127.0.0.1",
-        port=host_port,
-        user=_DB_USER,
-        password=_DB_PASSWORD,
-        database=_DB_NAME,
-    )
-    _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
-    _seed_schema(cfg)
-    return cfg
-
-
-@pytest.fixture(scope="session")
-def mysql_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
-    external = _external_config(
-        prefix=_MYSQL_PREFIX, backend=_MYSQL_BACKEND, fixture="mysql_config",
-    )
-    if external is not None:
-        if _should_reseed_external(_MYSQL_PREFIX, _MYSQL_BACKEND):
-            _seed_schema(external)
-        yield external
-        return
-
-    if worker_id == "master":
-        cfg = _build_config(
-            name=_MYSQL_CONTAINER,
-            image=_MYSQL_IMAGE,
-            environment=[
-                f"MYSQL_ROOT_PASSWORD={_ROOT_PASSWORD}",
-                f"MYSQL_DATABASE={_DB_NAME}",
-                f"MYSQL_USER={_DB_USER}",
-                f"MYSQL_PASSWORD={_DB_PASSWORD}",
-            ],
-        )
-    else:
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-        lock_path = root_tmp_dir / "docker_mysql_config_creation.lock"
-        with FileLock(str(lock_path)):
-            cfg = _build_config(
-                name=_MYSQL_CONTAINER,
-                image=_MYSQL_IMAGE,
-                environment=[
-                    f"MYSQL_ROOT_PASSWORD={_ROOT_PASSWORD}",
-                    f"MYSQL_DATABASE={_DB_NAME}",
-                    f"MYSQL_USER={_DB_USER}",
-                    f"MYSQL_PASSWORD={_DB_PASSWORD}",
-                ],
-            )
-    try:
-        yield cfg
-    finally:
-        if worker_id == "master":
-            _remove_container(_MYSQL_CONTAINER)
-
-
-@pytest.fixture(scope="session")
-def mariadb_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
-    external = _external_config(
-        prefix=_MARIADB_PREFIX, backend=_MARIADB_BACKEND,
-        fixture="mariadb_config",
-    )
-    if external is not None:
-        if _should_reseed_external(_MARIADB_PREFIX, _MARIADB_BACKEND):
-            _seed_schema(external)
-        yield external
-        return
-
-    if worker_id == "master":
-        cfg = _build_config(
-            name=_MARIADB_CONTAINER,
-            image=_MARIADB_IMAGE,
-            environment=[
-                f"MARIADB_ROOT_PASSWORD={_ROOT_PASSWORD}",
-                f"MARIADB_DATABASE={_DB_NAME}",
-                f"MARIADB_USER={_DB_USER}",
-                f"MARIADB_PASSWORD={_DB_PASSWORD}",
-            ],
-        )
-    else:
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-        lock_path = root_tmp_dir / "docker_mariadb_config_creation.lock"
-        with FileLock(str(lock_path)):
-            cfg = _build_config(
-                name=_MARIADB_CONTAINER,
-                image=_MARIADB_IMAGE,
-                environment=[
-                    f"MARIADB_ROOT_PASSWORD={_ROOT_PASSWORD}",
-                    f"MARIADB_DATABASE={_DB_NAME}",
-                    f"MARIADB_USER={_DB_USER}",
-                    f"MARIADB_PASSWORD={_DB_PASSWORD}",
-                ],
-            )
-    try:
-        yield cfg
-    finally:
-        if worker_id == "master":
-            _remove_container(_MARIADB_CONTAINER)
-
-
-# Per-test re-seed so write tests don't leak rows into subsequent
-# reader tests. The session-scoped ``mysql_config`` keeps the
-# container itself alive.
-@pytest.fixture
-def fresh_mysql(mysql_config, tmp_path_factory, worker_id) -> DBConfig:
-    if worker_id == "master":
-        _seed_schema(mysql_config)
-    else:
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-        lock_path = root_tmp_dir / "docker_mysql_config_seed.lock"
-        with FileLock(str(lock_path)):
-            _seed_schema(mysql_config)
-    return mysql_config
-
-
 # --- CDC fixtures ---------------------------------------------------
 #
 # Binlog-enabled MySQL container for CDC integration tests.
@@ -583,8 +397,8 @@ def _grant_replication(cfg: "DBConfig") -> None:
 
 
 def _seed_cdc_schema(cfg: "DBConfig") -> None:
-    """Same shape as ``_seed_schema`` but only the ``users`` table --
-    CDC tests work one tracked table for simplicity."""
+    """The single ``users`` table the CDC tests track -- they work one
+    tracked table for simplicity."""
     from sqlalchemy import create_engine, text
 
     engine = create_engine(cfg.uri_with_credentials)
@@ -631,9 +445,8 @@ def _build_cdc_config() -> "DBConfig":
 def mysql_cdc_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     """Session-scoped binlog-enabled MySQL container for CDC
     integration tests."""
-    # External-DB var path mirrors ``mysql_config``: opt out of
-    # docker by setting ``MYSQLCDC0__MYSQLCDC_ENVS=true`` and
-    # providing URI / USER / PASSWORD / DATABASE.
+    # Opt out of docker by setting ``MYSQLCDC0__MYSQLCDC_ENVS=true``
+    # and providing URI / USER / PASSWORD / DATABASE.
     external = _external_config(
         prefix="MYSQLCDC0", backend="MYSQLCDC", fixture="mysql_cdc_config",
     )

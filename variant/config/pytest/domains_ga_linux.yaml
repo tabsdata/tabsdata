@@ -61,6 +61,10 @@
   size: 1
 - name: mysql
   sys: mysql
+- name: mysql_employees_xs
+  sys: mysql
+  model: employees
+  size: 1
 - name: mysql_world_xs
   sys: mysql
   model: world

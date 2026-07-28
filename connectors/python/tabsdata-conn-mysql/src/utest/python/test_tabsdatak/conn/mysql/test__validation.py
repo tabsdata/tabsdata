@@ -30,7 +30,7 @@ pytestmark = pytest.mark.mysql
     ],
 )
 def test_mysql_uri_pattern_accepts_valid(value):
-    assert re.fullmatch(_validation.MSYQL_URI_PATTERN, value) is not None
+    assert re.fullmatch(_validation.MYSQL_URI_PATTERN, value) is not None
 
 
 @pytest.mark.parametrize(
@@ -44,7 +44,7 @@ def test_mysql_uri_pattern_accepts_valid(value):
     ],
 )
 def test_mysql_uri_pattern_rejects_invalid(value):
-    assert re.fullmatch(_validation.MSYQL_URI_PATTERN, value) is None
+    assert re.fullmatch(_validation.MYSQL_URI_PATTERN, value) is None
 
 
 # ---------------------------------------------------------------------------

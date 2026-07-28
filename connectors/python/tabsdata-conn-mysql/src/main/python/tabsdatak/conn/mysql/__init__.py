@@ -191,7 +191,7 @@ CredentialsSpec: TypeAlias = UserPassword
 password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.MSYQL_URI_PATTERN)
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.MYSQL_URI_PATTERN)
 ]
 """A SQLAlchemy-style MySQL URI, e.g.
 `mysql+mysqlconnector://host:port/db`. The scheme must be `mysql` or

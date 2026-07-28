@@ -42,30 +42,8 @@ from tabsdatak.conn.mysql.error import (
 pytestmark = pytest.mark.mysql
 
 
-def _src_conn() -> MySQLSrcConn:
-    return MySQLSrcConn(
-        uri="mysql://mysql.example.com:3306/analytics",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"mysql.timeout": 30},
-    )
-
-
-def _dest_conn() -> MySQLDestConn:
-    return MySQLDestConn(
-        uri="mysql://mysql.example.com:3306/analytics",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"mysql.timeout": 30},
-    )
-
-
 # ---------------------------------------------------------------------------
-# MySQLSrcConn / MySQLDestConn
+# MySQLConn
 # ---------------------------------------------------------------------------
 
 

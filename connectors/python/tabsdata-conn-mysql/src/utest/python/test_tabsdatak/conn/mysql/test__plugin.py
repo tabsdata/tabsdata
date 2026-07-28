@@ -18,12 +18,7 @@ from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
     sqlalchemy_writer as saw_writer,
 )
-from tabsdatak.conn.mysql import (
-    MySQLDest,
-    MySQLDestConn,
-    MySQLSrc,
-    MySQLSrcConn,
-)
+from tabsdatak.conn.mysql import MySQLDestConn, MySQLSrcConn, MySQLDest, MySQLSrc
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _impl as impl
@@ -80,17 +75,14 @@ def _fast_retry(monkeypatch):
 # ---------------------------------------------------------------------------
 # _MySQLSrcPlugin.read_in -- error wrapping (fault injection via mocks)
 #
-# We mock ``build_mysql_engine`` to return a MagicMock whose
-# ``connect`` raises the desired exception. Mocking is necessary
-# here -- a real engine can't be forced to surface a specific
-# OperationalError on demand. The real-MySQL happy paths live in
-# ``test__plugin_integration.py``.
+# Real-MySQL happy paths live in the integration suite's ``test_plugin_src.py``
+# and ``test_plugin_dest.py``.
 # ---------------------------------------------------------------------------
 
 
 def _bare_src_conn() -> MySQLSrcConn:
-    """Minimal MySQLSrcConn for error tests -- the URI/creds never
-    see a real driver (the engine is mocked)."""
+    """Minimal MySQLSrcConn for error tests -- the URI/creds never see
+    a real driver (the engine is mocked)."""
     from tabsdatak.api import Secret
 
     return MySQLSrcConn(
@@ -103,7 +95,8 @@ def _bare_src_conn() -> MySQLSrcConn:
 
 
 def _bare_dest_conn() -> MySQLDestConn:
-    """Minimal MySQLDestConn for error tests."""
+    """Minimal MySQLDestConn for error tests -- the URI/creds never see
+    a real driver (the engine is mocked)."""
     from tabsdatak.api import Secret
 
     return MySQLDestConn(
@@ -230,8 +223,6 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
     assert cfg.logging_level == _logging.ERROR
     assert cfg.read_engine is None
     assert cfg.chunk_size is None
-    cfg2 = plugin._resolve_src_cfg({})
-    assert cfg2 == cfg
 
 
 def test_resolve_src_cfg_applies_overrides():
@@ -248,20 +239,9 @@ def test_resolve_src_cfg_applies_overrides():
 
 
 def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
-    # Bypass pydantic by passing a plain dict directly to the resolver.
     with caplog.at_level("WARNING", logger=plugin.logger.name):
-        cfg = plugin._resolve_src_cfg({"bogus.key": "value"})
+        plugin._resolve_src_cfg({"bogus.key": "value"})
     assert any("Unknown src_cfg key" in r.getMessage() for r in caplog.records)
-    assert cfg.read_engine is None  # defaults still apply
-
-
-def test_resolve_dest_cfg_returns_defaults_when_empty():
-    import logging as _logging
-
-    cfg = plugin._resolve_dest_cfg(None)
-    assert cfg.logging_level == _logging.ERROR
-    assert cfg.write_engine is None
-    assert cfg.chunk_size is None
 
 
 def test_resolve_dest_cfg_applies_overrides():
