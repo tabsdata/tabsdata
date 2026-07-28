@@ -109,7 +109,3 @@
   sys: snowflake
 - name: starrocks
   sys: starrocks
-- name: starrocks_world_xs
-  sys: starrocks
-  model: world
-  size: 200
