@@ -242,10 +242,46 @@ def _copy_into(
 # --- Write entry point ----------------------------------------------
 
 
+def reject_unsupported_columns(
+    target_tables: list[str],
+    files: list[Path],
+) -> None:
+    """Fail before loading anything if a column has a type the bulk load cannot
+    carry.
+
+    COPY INTO matches columns by name, which routes every parquet value through
+    a variant, and a variant cannot be cast to BINARY ("Failed to cast variant
+    value ... to BINARY"). Snowflake reports that per file once the stage and the
+    table already exist, so reading the parquet footer up front turns it into one
+    error naming the table and the offending columns.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
+
+    for table, path in zip(target_tables, files):
+        schema = pq.read_schema(str(path))
+        offenders = [
+            f.name
+            for f in schema
+            if pa.types.is_binary(f.type)
+            or pa.types.is_large_binary(f.type)
+            or pa.types.is_fixed_size_binary(f.type)
+        ]
+        if offenders:
+            raise SnowflakeErrorCode.SNOWFLAKE_8.exception(
+                table=table,
+                columns=", ".join(repr(name) for name in offenders),
+            )
+
+
 def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
     """Bulk-load each parquet file in ``files`` into its corresponding
     table in ``cfg.target_tables``. Opens a single Snowflake connection
     per call and re-uses it across every (file, table) pair."""
+    reject_unsupported_columns(list(cfg.target_tables), files)
+
     logger.debug(
         "snowflake: establishing connection to account %r",
         cfg.conn._account(),

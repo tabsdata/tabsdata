@@ -42,7 +42,3 @@
   sys: salesforce
 - name: snowflake
   sys: snowflake
-- name: snowflake_world_xs
-  sys: snowflake
-  model: world
-  size: 200

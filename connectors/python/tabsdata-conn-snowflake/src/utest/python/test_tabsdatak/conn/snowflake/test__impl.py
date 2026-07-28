@@ -19,6 +19,20 @@ from tabsdatak.conn.snowflake import _impl as impl
 pytestmark = pytest.mark.snowflake
 
 
+
+def _parquet(path: Path, **columns) -> Path:
+    """A real one-row parquet at `path`.
+
+    `write_all_tables` reads each file's schema before it loads anything, so a
+    placeholder byte string is not enough -- it has to be a parseable parquet.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    pq.write_table(pa.table(columns or {"c": pa.array([1], pa.int64())}), str(path))
+    return path
+
+
 def _credentials() -> UserPassword:
     return UserPassword(
         user=Secret("etl"),
@@ -259,8 +273,7 @@ def fake_sf_connection(monkeypatch):
 def test_write_all_tables_drives_use_warehouse_first(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(),
         target_tables=["ANALYTICS.PUBLIC.T"],
@@ -273,8 +286,7 @@ def test_write_all_tables_drives_use_warehouse_first(
 def test_write_all_tables_forces_database_and_schema_before_stage(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(),  # database=ANALYTICS, schema=PUBLIC
         target_tables=["ANALYTICS.PUBLIC.T"],
@@ -295,8 +307,7 @@ def test_write_all_tables_forces_database_and_schema_before_stage(
 def test_write_all_tables_skips_namespace_when_database_unset(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(database=None, schema=None, warehouse=None),
         target_tables=["T"],
@@ -319,8 +330,7 @@ def test_write_all_tables_raises_when_namespace_not_adopted(monkeypatch, tmp_pat
     fake = _FakeConnection()
     fake.cursor = lambda: _BoomOnUseCursor(fake.log)  # type: ignore[method-assign]
     monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(), target_tables=["ANALYTICS.PUBLIC.T"], if_table_exists="append"
     )
@@ -331,8 +341,7 @@ def test_write_all_tables_raises_when_namespace_not_adopted(monkeypatch, tmp_pat
 def test_write_all_tables_creates_stage_puts_then_copies(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(),
         target_tables=["ANALYTICS.PUBLIC.T"],
@@ -353,8 +362,7 @@ def test_write_all_tables_creates_stage_puts_then_copies(
 def test_write_all_tables_uses_temporary_stage_when_conn_stage_unset(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     conn = SnowflakeDestConn(
         account="ACME-MAIN",
         credentials=_credentials(),
@@ -378,8 +386,7 @@ def test_write_all_tables_uses_temporary_stage_when_conn_stage_unset(
 def test_write_all_tables_truncates_before_copy_on_replace(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(),
         target_tables=["ANALYTICS.PUBLIC.T"],
@@ -403,8 +410,7 @@ def test_write_all_tables_truncates_before_copy_on_replace(
 def test_write_all_tables_does_not_truncate_on_append(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(),
         target_tables=["ANALYTICS.PUBLIC.T"],
@@ -417,10 +423,8 @@ def test_write_all_tables_does_not_truncate_on_append(
 def test_write_all_tables_iterates_one_per_table(
     fake_sf_connection, tmp_path
 ):
-    p1 = tmp_path / "a.parquet"
-    p1.write_bytes(b"\x00")
-    p2 = tmp_path / "b.parquet"
-    p2.write_bytes(b"\x00")
+    p1 = _parquet(tmp_path / "a.parquet")
+    p2 = _parquet(tmp_path / "b.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(),
         target_tables=["DB.S.T1", "DB.S.T2"],
@@ -436,8 +440,7 @@ def test_write_all_tables_iterates_one_per_table(
 def test_write_all_tables_closes_connection_on_exit(
     fake_sf_connection, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
     cfg = impl.SnowflakeWriteCfg(
         conn=_conn(),
         target_tables=["ANALYTICS.PUBLIC.T"],
@@ -450,8 +453,7 @@ def test_write_all_tables_closes_connection_on_exit(
 def test_write_all_tables_closes_connection_on_failure(
     monkeypatch, tmp_path
 ):
-    parquet = tmp_path / "in.parquet"
-    parquet.write_bytes(b"\x00")
+    parquet = _parquet(tmp_path / "in.parquet")
 
     fake = _FakeConnection()
 
@@ -472,3 +474,71 @@ def test_write_all_tables_closes_connection_on_failure(
     with pytest.raises(RuntimeError, match="boom"):
         impl.write_all_tables(cfg, [parquet])
     assert fake.closed is True
+
+
+def test_write_all_tables_rejects_a_binary_column_before_connecting(tmp_path):
+    """A binary column has to be refused up front, not by COPY INTO after the
+    stage and the table already exist."""
+    import pyarrow as pa
+
+    from tabsdatak.conn.snowflake.error import (
+        SnowflakeErrorCode,
+        SnowflakeRuntimeException,
+    )
+
+    parquet = _parquet(
+        tmp_path / "bin.parquet",
+        ok=pa.array([1], pa.int64()),
+        payload=pa.array([b"\x00\x01"], pa.binary()),
+    )
+    cfg = impl.SnowflakeWriteCfg(
+        conn=_conn(),
+        target_tables=["ANALYTICS.PUBLIC.T"],
+        if_table_exists="append",
+    )
+    # No fake_sf_connection fixture: the check must fire before any connect.
+    with pytest.raises(SnowflakeRuntimeException) as ei:
+        impl.write_all_tables(cfg, [parquet])
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_8
+    assert "'payload'" in str(ei.value)
+    assert "'ok'" not in str(ei.value)
+    assert "ANALYTICS.PUBLIC.T" in str(ei.value)
+
+
+def test_write_all_tables_rejects_large_and_fixed_binary(tmp_path):
+    import pyarrow as pa
+
+    from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
+
+    for name, array in (
+        ("large", pa.array([b"x"], pa.large_binary())),
+        ("fixed", pa.array([b"xy"], pa.binary(2))),
+    ):
+        parquet = _parquet(tmp_path / f"{name}.parquet", **{name: array})
+        cfg = impl.SnowflakeWriteCfg(
+            conn=_conn(),
+            target_tables=["ANALYTICS.PUBLIC.T"],
+            if_table_exists="append",
+        )
+        with pytest.raises(SnowflakeRuntimeException):
+            impl.write_all_tables(cfg, [parquet])
+
+
+def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
+    """With several slots the error has to point at the right table."""
+    import pyarrow as pa
+
+    from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
+
+    clean = _parquet(tmp_path / "clean.parquet")
+    dirty = _parquet(
+        tmp_path / "dirty.parquet", payload=pa.array([b"x"], pa.binary())
+    )
+    cfg = impl.SnowflakeWriteCfg(
+        conn=_conn(),
+        target_tables=["ANALYTICS.PUBLIC.FIRST", "ANALYTICS.PUBLIC.SECOND"],
+        if_table_exists="append",
+    )
+    with pytest.raises(SnowflakeRuntimeException) as ei:
+        impl.write_all_tables(cfg, [clean, dirty])
+    assert "ANALYTICS.PUBLIC.SECOND" in str(ei.value)

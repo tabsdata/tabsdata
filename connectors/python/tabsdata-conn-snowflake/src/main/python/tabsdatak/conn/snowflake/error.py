@@ -65,3 +65,9 @@ class SnowflakeErrorCode(ErrorCode):
         SnowflakeRuntimeException,
         "Snowflake session could not adopt database={database!r} schema={schema!r}",
     )  # write_all_tables: USE DATABASE / USE SCHEMA failed
+    SNOWFLAKE_8 = ErrorDef(
+        SnowflakeRuntimeException,
+        "The Snowflake bulk load cannot carry binary values, so table"
+        " {table!r} cannot take the column(s) {columns}. Encode them before"
+        " writing -- for example base64 into a string",
+    )  # write_all_tables: parquet binary column, rejected before loading
