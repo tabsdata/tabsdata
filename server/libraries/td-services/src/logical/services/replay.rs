@@ -87,8 +87,8 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues,
         FunctionStatus, FunctionVersionId, LogicalFunctionRunStatus, LogicalPointerReason,
-        LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, Snippet, TableNameDto,
-        TransactionKey, UserId,
+        LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, RawSnippet, Snippet,
+        TableNameDto, TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
@@ -220,7 +220,7 @@ mod tests {
             .parent_function_version_id(head.id.clone())
             .function_id(head.function_id)
             .collection_id(head.collection_id)
-            .snippet(Snippet::try_from("patched").unwrap())
+            .snippet(Snippet::try_from(RawSnippet::try_from("patched").unwrap()).unwrap())
             .bundle_id(BundleId::default())
             .runtime_values(FunctionRuntimeValues::try_from("rv-patch").unwrap())
             .description(Description::try_from("patch").unwrap())

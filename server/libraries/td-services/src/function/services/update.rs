@@ -165,8 +165,8 @@ mod tests {
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, Decorator, Depth, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, ResetStage, TableId, TableName, TableStatus, UserId, WorkerMessageStatus,
-        WorkerStatus, WorkerType,
+        FunctionStatus, ResetStage, SNIPPET_MAX_LEN, TableId, TableName, TableStatus, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::recursion::RecursionOptions;
     use td_objects::{Buildable, and};
@@ -359,6 +359,67 @@ mod tests {
             &response,
         )
         .await
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_snippet_larger_than_storage_is_trimmed(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("foo")?
+            .try_description("foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("foo snippet")?
+            .decorator(Decorator::Transformer)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        db.scoped(p.id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+
+        let mut module = String::from("import tabsdata as td\n\n\n@td.transformer()\ndef f(df):\n");
+        for line in 0..2000 {
+            module.push_str(&format!("    value_{line} = df.select('col_{line}')\n"));
+        }
+        module.push_str("    return value_0\n");
+        assert!(module.len() > SNIPPET_MAX_LEN);
+
+        let update = FunctionUpdate::builder()
+            .bundle_id(BundleId::default())
+            .snippet(Some(module.as_str().try_into()?))
+            .build()?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("foo")?)
+                    .build()?,
+                update,
+            )
+            .in_project(p.id);
+
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
+        let response = service.raw_oneshot(request).await?;
+
+        let snippet = &*response.snippet;
+        assert!(snippet.len() <= SNIPPET_MAX_LEN);
+        assert!(snippet.starts_with("import tabsdata as td\n"));
+        assert!(snippet.ends_with("    return value_0\n"));
+        assert!(snippet.contains(" bytes elided ..."));
+        Ok(())
     }
 
     #[td_test::test(db)]

@@ -167,8 +167,8 @@ mod tests {
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleStatus, ConnectionKind, Decorator, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, WorkerMessageStatus,
-        WorkerStatus, WorkerType,
+        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, SNIPPET_MAX_LEN, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -393,6 +393,104 @@ mod tests {
         let response = response?;
 
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_snippet_larger_than_the_legacy_limit(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let module = format!(
+            "import tabsdata as td\n{}def f():\n    return 1\n",
+            "# padding\n".repeat(2000)
+        );
+        let create = FunctionRegister::builder()
+            .try_name("function_foo")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet(module.as_str())?
+            .decorator(Decorator::Transformer)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                    .build()?,
+                create.clone(),
+            )
+            .in_project(p.id);
+
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
+        let response = service.raw_oneshot(request).await?;
+
+        assert_eq!(*response.snippet, module);
+
+        let stored: FunctionDB = db.live().fetch_one(&response.id).await?;
+        assert_eq!(*stored.snippet, module);
+
+        assert_register(&db, &UserId::admin(), &collection, &create, &response).await
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_snippet_larger_than_storage_is_trimmed(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cofnig")?;
+        db.scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let mut module = String::from("import tabsdata as td\n\n\n@td.transformer()\ndef f(df):\n");
+        for line in 0..2000 {
+            module.push_str(&format!("    value_{line} = df.select('col_{line}')\n"));
+        }
+        module.push_str("    return value_0\n");
+        assert!(module.len() > SNIPPET_MAX_LEN);
+
+        let create = FunctionRegister::builder()
+            .try_name("function_foo")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet(module.as_str())?
+            .decorator(Decorator::Transformer)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                    .build()?,
+                create,
+            )
+            .in_project(p.id);
+
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
+        let response = service.raw_oneshot(request).await?;
+
+        let snippet = &*response.snippet;
+        assert!(snippet.len() <= SNIPPET_MAX_LEN);
+        assert!(snippet.starts_with("import tabsdata as td\n"));
+        assert!(snippet.ends_with("    return value_0\n"));
+        assert!(snippet.contains(" bytes elided ..."));
+        Ok(())
     }
 
     #[td_test::test(db)]

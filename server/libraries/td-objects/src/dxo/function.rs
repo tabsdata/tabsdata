@@ -8,9 +8,9 @@ mod definitions {
     use crate::types::basic::{
         AtTime, BasePath, BundleId, CollectionId, CollectionName, ConnectionKind, Connector,
         Decorator, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, FunctionVersionId, GroupId, ResetStage, ResetState, ReuseFrozen, Snippet,
-        StageId, StorageVersion, TableName, TableNameDto, TableType, UserId, UserName,
-        WorkerConfig, WorkerId, WorkerTypeDto,
+        FunctionStatus, FunctionVersionId, GroupId, RawSnippet, ResetStage, ResetState,
+        ReuseFrozen, Snippet, StageId, StorageVersion, TableName, TableNameDto, TableType, UserId,
+        UserName, WorkerConfig, WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -24,7 +24,7 @@ mod definitions {
         pub name: FunctionName,
         pub description: Description,
         pub bundle_id: BundleId,
-        pub snippet: Snippet,
+        pub snippet: RawSnippet,
         pub decorator: Decorator,
         #[builder(default)]
         pub connector: Option<Connector>,
@@ -66,7 +66,7 @@ mod definitions {
         pub name: Option<FunctionName>,
         pub description: Option<Description>,
         pub bundle_id: Option<BundleId>,
-        pub snippet: Option<Snippet>,
+        pub snippet: Option<RawSnippet>,
         pub decorator: Option<Decorator>,
         pub connector: Option<Option<Connector>>,
         pub connection: Option<Option<ConnectionKind>>,
@@ -114,7 +114,7 @@ mod definitions {
         #[dxo(extractor)]
         pub patch_of: FunctionVersionId,
         pub bundle_id: BundleId,
-        pub snippet: Snippet,
+        pub snippet: RawSnippet,
         #[serde(default)]
         #[builder(default)]
         pub runtime_values: Option<FunctionRuntimeValues>,

@@ -7,7 +7,9 @@ use td_error::{TdError, td_error};
 use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{FunctionDB, FunctionPatch, FunctionPatchDB};
-use td_objects::types::basic::{CollectionId, FunctionIdName, FunctionStatus, FunctionVersionId};
+use td_objects::types::basic::{
+    CollectionId, FunctionIdName, FunctionStatus, FunctionVersionId, Snippet,
+};
 use td_tower::extractors::Ref;
 
 #[td_error]
@@ -62,7 +64,7 @@ pub async fn build_patch_function(
         .parent_function_version_id(parent.id.clone())
         .function_id(parent.function_id)
         .collection_id(parent.collection_id)
-        .snippet(body.snippet.clone())
+        .snippet(Snippet::try_from(&body.snippet)?)
         .bundle_id(body.bundle_id)
         .runtime_values(
             body.runtime_values

@@ -109,7 +109,7 @@ pub(crate) mod tests {
         assert_eq!(response.status, FunctionStatus::Active);
         assert_eq!(response.decorator, create.decorator);
         assert_eq!(response.bundle_id, create.bundle_id);
-        assert_eq!(response.snippet, create.snippet);
+        assert_eq!(*response.snippet, *create.snippet);
         assert_eq!(response.defined_by_id, *user_id);
         assert_eq!(response.collection, collection.name);
         assert_eq!(response.enabled, Enabled::TRUE);
@@ -249,6 +249,12 @@ pub(crate) mod tests {
             .await?;
         assert_eq!(functions.len(), 1);
         assert_eq!(&functions[0], created_function);
+
+        // Assert the snippet was updated or carried forward
+        match &update.snippet {
+            Some(snippet) => assert_eq!(*response.snippet, **snippet),
+            None => assert_eq!(response.snippet, created_function.snippet),
+        }
 
         // Assert tables
         for table_dto in create.tables.as_deref().unwrap_or(&[]) {

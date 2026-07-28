@@ -11,9 +11,9 @@ use crate::graph::{TdGraph, TdGraphBuilder};
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId,
     DependencyPos, DependencyStatus, DependencyVersionId, Description, Enabled, FunctionId,
-    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Snippet,
-    StageId, StorageVersion, TableId, TableName, TableStatus, TableType, TableVersionId, TriggerId,
-    TriggerStatus, TriggerVersionId, UserId, UserName,
+    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, RawSnippet,
+    Snippet, StageId, StorageVersion, TableId, TableName, TableStatus, TableType, TableVersionId,
+    TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
@@ -219,7 +219,7 @@ pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
         .stage_base_path(BasePath::default())
         .storage_version(StorageVersion::default())
         .bundle_id(BundleId::default())
-        .snippet(Snippet::try_from("test").unwrap())
+        .snippet(Snippet::try_from(RawSnippet::try_from("test").unwrap()).unwrap())
         .defined_on(AtTime::now())
         .defined_by_id(UserId::default())
         .status(FunctionStatus::Active)

@@ -23,6 +23,7 @@ from tabsdatak.common._archive.bundle import (
     build_bundle,
     capture_source_snippet,
     collect_local_packages,
+    read_function_source,
     validate_python_version,
     write_function_def,
     write_requirements,
@@ -226,6 +227,68 @@ def _make_project(tmp_path: Path) -> Path:
     (pkg / "__pycache__" / "junk.pyc").write_bytes(b"\x00")
     (root / "README.md").write_text("hi\n")
     return root
+
+
+def _write_bundle(path: Path, members: dict[str, str]) -> None:
+    """Write a `.tar.zst` holding exactly `members` (name -> text)."""
+    staging = path.parent / f"{path.stem}_staging"
+    for name, text in members.items():
+        member = staging / name
+        member.parent.mkdir(parents=True, exist_ok=True)
+        member.write_text(text, encoding="utf-8")
+    compressor = zstandard.ZstdCompressor()
+    with open(path, "wb") as raw:
+        with compressor.stream_writer(raw, closefd=False) as stream:
+            with tarfile.open(fileobj=stream, mode="w|") as tar:
+                tar.add(staging, arcname=".")
+
+
+def _manifest(func: str) -> dict:
+    """The `function_def.json` envelope `info.to_json()` produces."""
+    return {
+        "kind": "transformerDef",
+        "apiVersion": "1.0",
+        "type": "tabsdatak._info:TransformerInfo",
+        "spec": {"func": func},
+    }
+
+
+_MODULE_SOURCE = (
+    "import tabsdata as td\n\n\n"
+    "@td.publisher(source=td.LocalFileSource(paths=['a.csv']), tables=['t'])\n"
+    "def my_fn():\n    return None\n"
+)
+
+
+def test_read_function_source_returns_the_defining_module(tmp_path):
+    out = tmp_path / "bundle.tar.zst"
+    _write_bundle(
+        out,
+        {
+            BUNDLE_MANIFEST_FILENAME: json.dumps(_manifest("my_pkg.module:my_fn")),
+            f"{BUNDLE_USER_CODE_DIRNAME}/my_pkg/module.py": _MODULE_SOURCE,
+            f"{BUNDLE_USER_CODE_DIRNAME}/my_pkg/other.py": "# unrelated\n",
+        },
+    )
+
+    assert read_function_source(out) == ("my_fn", _MODULE_SOURCE)
+
+
+def test_read_function_source_without_manifest_returns_none(tmp_path):
+    out = tmp_path / "bundle.tar.zst"
+    _write_bundle(out, {f"{BUNDLE_USER_CODE_DIRNAME}/my_pkg/module.py": _MODULE_SOURCE})
+
+    assert read_function_source(out) is None
+
+
+def test_read_function_source_with_module_missing_returns_none(tmp_path):
+    out = tmp_path / "bundle.tar.zst"
+    _write_bundle(
+        out,
+        {BUNDLE_MANIFEST_FILENAME: json.dumps(_manifest("my_pkg.module:my_fn"))},
+    )
+
+    assert read_function_source(out) is None
 
 
 def _tar_members(path: Path) -> set[str]:

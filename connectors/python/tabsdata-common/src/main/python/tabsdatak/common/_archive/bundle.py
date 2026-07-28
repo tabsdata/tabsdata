@@ -36,6 +36,7 @@ pattern in `tabsdata.api.tabsdata_server._create_archive`).
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import shutil
 import tarfile
@@ -121,32 +122,65 @@ def write_function_def(info: FunctionInfo, dest_dir: Path) -> Path:
 
 
 def capture_source_snippet(info: FunctionInfo) -> str:
-    """Return the source of the module defining the decorated callable.
+    """Return `inspect.getsource()` of the decorated callable.
 
     Exposed as a standalone helper so the caller can pass the snippet
-    to the server's register API as display metadata. Not written into
-    the bundle.
+    to the server's register API as display metadata, mirroring the
+    legacy pattern in `tabsdata.api.tabsdata_server._create_archive`.
+    Not written into the bundle.
 
-    The whole module is captured — not just the function node — because
-    the function only runs together with its module scope (imports,
-    helpers, constants), and readers of the snippet (including repair
-    tooling) need that scope to produce code that executes. Falls back
-    to the function node alone, then to a one-line placeholder, when the
-    module source can't be located (compiled from a string, REPL, ...).
-    Capture is best-effort: failure is logged, not raised.
+    If the source can't be located (e.g. compiled from a string,
+    defined in a REPL, or otherwise not file-backed) a one-line
+    placeholder is returned. Capture is best-effort: failure is
+    logged, not raised.
     """
     func = _unwrap_info(info.func)
-    try:
-        source_file = inspect.getsourcefile(func)
-        if source_file is not None:
-            return Path(source_file).read_text(encoding="utf-8")
-    except (OSError, TypeError) as exc:
-        log.warning("could not locate module source for %r: %s", func, exc)
     try:
         return inspect.getsource(func)
     except (OSError, TypeError) as exc:
         log.warning("could not capture source for %r: %s", func, exc)
         return f"# source unavailable: {exc}\n"
+
+
+def read_function_source(archive: Path) -> tuple[str, str] | None:
+    """Return `(qualname, source)` of the module defining the bundled
+    function, read back out of a `.tar.zst` bundle.
+
+    The manifest is a `JsonSerde` envelope whose `spec.func` is
+    `"<module>:<qualname>"`; the module resolves against `user_code/`,
+    the same way the runner resolves it at execution time. This is the source that actually runs — unlike
+    the registered snippet, which is display metadata and may have been
+    trimmed. Returns `None` when the bundle carries no manifest, no
+    `func`, or no matching module.
+    """
+    manifest: str | None = None
+    modules: dict[str, str] = {}
+    with open(archive, "rb") as raw:
+        with zstandard.ZstdDecompressor().stream_reader(raw) as stream:
+            with tarfile.open(fileobj=stream, mode="r|") as tar:
+                for member in tar:
+                    if not member.isfile():
+                        continue
+                    name = member.name.removeprefix("./")
+                    if name == BUNDLE_MANIFEST_FILENAME:
+                        manifest = _member_text(tar, member)
+                    elif name.startswith(
+                        f"{BUNDLE_USER_CODE_DIRNAME}/"
+                    ) and name.endswith(".py"):
+                        modules[name] = _member_text(tar, member)
+    if manifest is None:
+        return None
+    spec = json.loads(manifest).get("spec") or {}
+    module, _, qualname = (spec.get("func") or "").partition(":")
+    if not module:
+        return None
+    source = modules.get(f"{BUNDLE_USER_CODE_DIRNAME}/{module.replace('.', '/')}.py")
+    return None if source is None else (qualname, source)
+
+
+def _member_text(tar: tarfile.TarFile, member: tarfile.TarInfo) -> str:
+    content = tar.extractfile(member)
+    return "" if content is None else content.read().decode("utf-8", errors="replace")
 
 
 # --- requirements snapshot + python version ------------------------------

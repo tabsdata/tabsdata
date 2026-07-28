@@ -8,7 +8,7 @@ use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::function::{FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, FunctionName, FunctionStatus, FunctionVersionId, StageId,
+    CollectionId, CollectionName, FunctionName, FunctionStatus, FunctionVersionId, Snippet, StageId,
 };
 use td_queries::CurrentEntry;
 use td_tower::extractors::{MutRef, Ref};
@@ -65,7 +65,7 @@ pub async fn update_function_db_builder(
         builder.bundle_id(bundle_id);
     }
     if let Some(snippet) = &update.snippet {
-        builder.snippet(snippet);
+        builder.snippet(Snippet::try_from(snippet)?);
     }
     if let Some(decorator) = &update.decorator {
         builder.decorator(decorator);

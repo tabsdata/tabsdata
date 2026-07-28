@@ -214,10 +214,6 @@ pub struct SchemaFieldType;
 #[derive(Eq, PartialEq, Hash)]
 pub struct SchemaHash;
 
-#[ta_objects::typed(string(min_len = 0, max_len = 4096))]
-#[derive(Eq, PartialEq)]
-pub struct Snippet;
-
 #[ta_objects::typed(string)]
 pub struct Sql;
 

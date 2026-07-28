@@ -164,7 +164,7 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionPatchDB, FunctionRegister};
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
-        ProjectId, Snippet, TableNameDto, UserId,
+        ProjectId, RawSnippet, Snippet, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
 
@@ -210,7 +210,7 @@ mod tests {
             .parent_function_version_id(head.id.clone())
             .function_id(head.function_id)
             .collection_id(head.collection_id)
-            .snippet(Snippet::try_from(snippet)?)
+            .snippet(Snippet::try_from(RawSnippet::try_from(snippet)?)?)
             .bundle_id(BundleId::default())
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .description(Description::try_from("d")?)
