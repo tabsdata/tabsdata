@@ -6,7 +6,7 @@
 
 These stub the ``clickhouse_connect`` client so the explorer's catalog
 logic (and the fqn it derives) can be verified without a live ClickHouse
-server -- unlike ``test__explorer_integration.py``, which needs one.
+server -- unlike the itest ``test_explorer.py``, which needs one.
 """
 
 from __future__ import annotations

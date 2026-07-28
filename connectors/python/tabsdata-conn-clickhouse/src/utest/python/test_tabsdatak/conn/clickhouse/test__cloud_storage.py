@@ -8,7 +8,7 @@ strings each ``ClickHouseCloudStorage`` emits.
 
 The driver-touching call paths (``upload`` / ``delete``) talk to
 ``boto3`` / ``google-cloud-storage`` / ``azure-storage-blob`` and
-are exercised end-to-end in ``test__plugin_integration.py``; here
+are exercised end-to-end in the itest ``test_plugin_dest.py``; here
 we cover the deterministic surface that doesn't need a network.
 """
 

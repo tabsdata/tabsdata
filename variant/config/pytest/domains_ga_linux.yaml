@@ -14,10 +14,6 @@
   sys: bigquery
 - name: clickhouse
   sys: clickhouse
-- name: clickhouse_world_xs
-  sys: clickhouse
-  model: world
-  size: 200
 - name: databricks
   sys: databricks
 - name: databricks_employees_xs

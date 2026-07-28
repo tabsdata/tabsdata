@@ -60,6 +60,7 @@ _ARROW_TO_CLICKHOUSE: dict = {
     pa.large_string(): "String",
     pa.large_utf8(): "String",
     pa.binary(): "String",
+    pa.large_binary(): "String",
     pa.date32(): "Date32",
 }
 
@@ -92,6 +93,19 @@ def _arrow_type_to_clickhouse(arrow_type: pa.DataType) -> str:
         if arrow_type.tz:
             return f"DateTime64({precision}, '{arrow_type.tz}')"
         return f"DateTime64({precision})"
+
+    # ClickHouse 24.8 has no time-of-day type (Time64 arrived in 25.6), so a
+    # time rides a DateTime64 on the sentinel date 1970-01-01 -- the convention
+    # the SQL connectors and MongoDB use for the same gap.
+    if pa.types.is_time(arrow_type):
+        return f"DateTime64({_TIMESTAMP_PRECISION.get(arrow_type.unit, 6)})"
+
+    # No interval type either. ClickHouse reads the staged parquet itself, so the
+    # integer keeps the source column's own unit -- a `duration[us]` lands as a
+    # count of microseconds, not of nanoseconds. The unit is therefore not
+    # recoverable from the Int64 column alone.
+    if pa.types.is_duration(arrow_type):
+        return "Int64"
 
     if pa.types.is_list(arrow_type) or pa.types.is_large_list(arrow_type):
         inner = _arrow_type_to_clickhouse(arrow_type.value_type)

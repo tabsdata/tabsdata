@@ -324,6 +324,15 @@ class ClickHouseDest(Dest):
         dest_cfg: Optional connector config; the only supported key is
             `clickhouse.logging_level`.
 
+    Note:
+        ClickHouse 24.8 has no time-of-day and no interval type, so a `Time`
+        column becomes a `DateTime64` on the sentinel date **1970-01-01**
+        (`09:30:15` reads back as `1970-01-01T09:30:15`) and a `Duration`
+        becomes an `Int64`. ClickHouse reads the staged parquet itself, so
+        that integer keeps the source column's own unit -- a microsecond
+        duration lands as a count of microseconds -- and the unit cannot be
+        recovered from the column alone. `Binary` lands in a `String`.
+
     Examples:
         Write a table with the `replace` disposition -- the first run
         creates it, later runs drop and recreate it (row count stays):
