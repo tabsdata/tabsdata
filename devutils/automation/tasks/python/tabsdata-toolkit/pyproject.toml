@@ -201,6 +201,8 @@ namespaces = true
     "models/*/*.json",
     "models/*/*.csv",
     "systems/*/domain/models/*/*.ddl",
+    "systems/*/domain/models/*/*.yml",
+    "systems/*/domain/models/*/*.md",
 ]
 
 [tool.tabsdata]

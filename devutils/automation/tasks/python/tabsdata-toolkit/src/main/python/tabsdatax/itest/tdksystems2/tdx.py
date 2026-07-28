@@ -63,8 +63,9 @@ The common verbs (``types`` / ``list`` / ``info``) are handled here; everything
 else is *delegated* to the matching command module discovered on disk —
 ``systems/<slug>/<verb>.py`` for system verbs, ``systems/<slug>/domain/<verb>.py``
 for domain verbs. The available commands and their help come straight from those
-files. A model is available for a system when its DDL is present under
-``systems/<slug>/domain/models/<model>/``.
+files. A model is available for a system when its assets are present under
+``systems/<slug>/domain/models/<model>/`` — DDL for a SQL system, a snowfakery
+recipe and load mapping for the salesforce org.
 
 Descriptors are addressed by *name* (a file in the store dir) and stored
 encrypted. The long-running verbs accept ``--latch FILE`` to be waitable in the

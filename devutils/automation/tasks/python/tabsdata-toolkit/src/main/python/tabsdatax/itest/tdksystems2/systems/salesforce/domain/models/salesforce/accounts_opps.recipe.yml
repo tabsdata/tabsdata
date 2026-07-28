@@ -1,0 +1,194 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# accounts_opps.recipe.yml
+# Accounts with a realistic Opportunity pipeline for forecasting.
+
+- object: Account
+  count: 75
+  fields:
+    Name:
+      fake: company
+    Industry:
+      random_choice:
+        - choice:
+            probability: 25%
+            pick: Technology
+        - choice:
+            probability: 15%
+            pick: Healthcare
+        - choice:
+            probability: 15%
+            pick: Finance
+        - choice:
+            probability: 10%
+            pick: Manufacturing
+        - choice:
+            probability: 10%
+            pick: Retail
+        - choice:
+            probability: 10%
+            pick: Education
+        - choice:
+            probability: 15%
+            pick: Consulting
+    Type:
+      random_choice:
+        - Customer - Direct
+        - Customer - Channel
+        - Prospect
+        - Partner
+    AnnualRevenue:
+      random_number:
+        min: 1000000
+        max: 500000000
+    NumberOfEmployees:
+      random_number:
+        min: 10
+        max: 5000
+    BillingStreet:
+      fake: street_address
+    BillingCity:
+      fake: city
+    BillingState:
+      random_choice:
+        - Alabama
+        - Alaska
+        - Arizona
+        - Arkansas
+        - California
+        - Colorado
+        - Connecticut
+        - Delaware
+        - Florida
+        - Georgia
+        - Hawaii
+        - Idaho
+        - Illinois
+        - Indiana
+        - Iowa
+        - Kansas
+        - Kentucky
+        - Louisiana
+        - Maine
+        - Maryland
+        - Massachusetts
+        - Michigan
+        - Minnesota
+        - Mississippi
+        - Missouri
+        - Montana
+        - Nebraska
+        - Nevada
+        - New Hampshire
+        - New Jersey
+        - New Mexico
+        - New York
+        - North Carolina
+        - North Dakota
+        - Ohio
+        - Oklahoma
+        - Oregon
+        - Pennsylvania
+        - Rhode Island
+        - South Carolina
+        - South Dakota
+        - Tennessee
+        - Texas
+        - Utah
+        - Vermont
+        - Virginia
+        - Washington
+        - West Virginia
+        - Wisconsin
+        - Wyoming
+    BillingPostalCode:
+      fake: postcode
+    BillingCountry: United States
+    Phone:
+      fake: phone_number
+    Website:
+      fake: url
+    Description:
+      fake: catch_phrase
+
+  friends:
+    - object: Opportunity
+      count:
+        random_number:
+          min: 1
+          max: 4
+      fields:
+        AccountId:
+          reference: Account
+        Name:
+          fake: catch_phrase
+        StageName:
+          random_choice:
+            - choice:
+                probability: 20%
+                pick: Prospecting
+            - choice:
+                probability: 15%
+                pick: Qualification
+            - choice:
+                probability: 15%
+                pick: Needs Analysis
+            - choice:
+                probability: 10%
+                pick: Value Proposition
+            - choice:
+                probability: 10%
+                pick: Proposal/Price Quote
+            - choice:
+                probability: 10%
+                pick: Negotiation/Review
+            - choice:
+                probability: 15%
+                pick: Closed Won
+            - choice:
+                probability: 5%
+                pick: Closed Lost
+        CloseDate:
+          date_between:
+            start_date: -90d
+            end_date: +180d
+        Amount:
+          random_choice:
+            - random_number:
+                min: 5000
+                max: 25000
+            - random_number:
+                min: 25000
+                max: 100000
+            - random_number:
+                min: 100000
+                max: 500000
+        Probability:
+          random_number:
+            min: 10
+            max: 95
+        LeadSource:
+          random_choice:
+            - Web
+            - Partner Referral
+            - Purchased List
+            - Phone Inquiry
+            - Other
+        Type:
+          random_choice:
+            - New Business
+            - Existing Business - Upgrade
+            - Existing Business - Renewal
+        ForecastCategoryName:
+          random_choice:
+            - Pipeline
+            - Best Case
+            - Commit
+            - Closed
+            - Omitted
+        NextStep:
+          fake: sentence
+        Description:
+          fake: paragraph

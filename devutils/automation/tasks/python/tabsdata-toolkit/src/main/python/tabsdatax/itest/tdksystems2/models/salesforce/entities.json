@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Account",
+    "sizeable": false
+  },
+  {
+    "name": "Opportunity",
+    "sizeable": false
+  }
+]

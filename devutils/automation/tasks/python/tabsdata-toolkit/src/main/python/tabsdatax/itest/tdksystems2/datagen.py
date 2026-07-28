@@ -10,7 +10,9 @@ A *model* (``models/<name>/``) ships:
   * ``datagenerator.py`` — a ``datagenerator() -> Model`` factory. The ``Model``
     knows how to build a deterministic **initial** dataset of a given size, and
     declares one ``Entity`` per table that supports **deltas** (which ops, how
-    many rows per set, how to build/target/mutate a row).
+    many rows per set, how to build/target/mutate a row). A model whose data its
+    own system loads instead (salesforce, from a snowfakery recipe) ships none,
+    so it resolves by name but never appears in :func:`list_models`.
 
 This module owns the base size / multiplier, the deterministic delta *planner*
 (entity-selection / ops / sets / seed, model-agnostic) and the SQL rendering.
@@ -348,8 +350,11 @@ def list_models() -> list[str]:
 
 
 def model_dir(name: str) -> Path:
+    """The model's directory, identified by its ``entities.json``. A model whose
+    data a system loads by itself (salesforce) ships no ``datagenerator.py``, so
+    it resolves here and is absent from :func:`list_models`."""
     d = _models_root() / name
-    if not (d / "datagenerator.py").is_file():
+    if not (d / "entities.json").is_file():
         raise TdxError(f"unknown model: {name} (known: {', '.join(list_models())})")
     return d
 
@@ -395,7 +400,11 @@ def sizeable_entities(name: str) -> list[str]:
 
 def load_model(name: str) -> Model:
     """Import ``models/<name>/datagenerator.py`` and return its ``Model``."""
-    model_dir(name)  # validates existence
+    if not (model_dir(name) / "datagenerator.py").is_file():
+        raise TdxError(
+            f"model '{name}' has no datagenerator.py — its data is loaded by the "
+            f"system that owns it, not by the shared pipeline"
+        )
     module = import_module(f"{__package__}.models.{name}.datagenerator")
     if not hasattr(module, "datagenerator"):
         raise TdxError(f"model '{name}': datagenerator.py has no datagenerator() entry")
