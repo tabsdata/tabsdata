@@ -15,7 +15,7 @@ from sqlalchemy import (
     table as sa_table,
     text as sa_text,
 )
-from sqlalchemy.exc import NoSuchTableError, ResourceClosedError
+from sqlalchemy.exc import DBAPIError, NoSuchTableError, ResourceClosedError
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
@@ -136,6 +136,16 @@ class SqlAlchemyConnectionExplorer(Explorer):
         """
         return {}
 
+    def is_missing_table_error(self, error: DBAPIError) -> bool:
+        """Whether `error` says the table being reflected does not exist.
+
+        SQLAlchemy raises :class:`NoSuchTableError` only for the driver
+        errors its dialect recognises; a dialect that reports a dropped
+        table some other way (StarRocks answers with its own analyzer
+        error) overrides this so :meth:`metadata` can still skip it.
+        """
+        return False
+
     def connectivity_probe(self) -> str:
         """SQL used by :meth:`check_connect` to verify a live connection.
 
@@ -192,6 +202,10 @@ class SqlAlchemyConnectionExplorer(Explorer):
                     # The table was listed but has since been dropped
                     # (concurrent DDL on a shared / live database); skip it
                     # rather than failing the whole scan.
+                    continue
+                except DBAPIError as error:
+                    if not self.is_missing_table_error(error):
+                        raise
                     continue
 
                 entities.append(
