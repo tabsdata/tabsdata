@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -40,8 +41,9 @@ POLL_INTERVAL_SECONDS = 2
 POLL_TIMEOUT_SECONDS = 300
 
 # Creates a collection in a given group ("sources" / "destinations") with the
-# given connection, and returns the created ``Collection``.
-CollectionFactory = Callable[[str, Conn], Collection]
+# given connection -- named explicitly, or generated when the name does not
+# matter -- and returns the created ``Collection``.
+CollectionFactory = Callable[..., Collection]
 
 
 def write_module(project_root: Path, module_name: str, body: str) -> ModuleType:
@@ -88,6 +90,18 @@ def run_function(
     )
 
 
+def table_frame(collection: Collection, table: str) -> pl.DataFrame:
+    """Everything ``collection``'s `table` holds at HEAD. ``Table.sample`` is what
+    its name says (an ``offset`` / ``len`` window), so a test asserting on a
+    published table downloads it instead."""
+    handle = collection.get_table(table)
+    assert handle is not None, f"table {table!r} not found in {collection.name!r}"
+    with tempfile.TemporaryDirectory() as tmp:
+        parquet = Path(tmp) / f"{table}.parquet"
+        handle.download(str(parquet))
+        return pl.read_parquet(parquet)
+
+
 def assert_frames_match(got: pl.DataFrame, expected: pl.DataFrame) -> None:
     """Order- and dtype-agnostic content equality on ``expected``'s columns
     (transporter format inference may differ from polars' own read)."""
@@ -118,13 +132,16 @@ def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
     state: dict[str, str | None] = {"project": None}
     created: list[str] = []
 
-    def make(group: str, conn: Conn) -> Collection:
+    def make(group: str, conn: Conn, name: str | None = None) -> Collection:
         if state["project"] is None:
             project = f"e2e_{uuid.uuid4().hex[:8]}_proj"
             server.create_project(project, description="e2e test project")
             server.connection.project = project
             state["project"] = project
-        name = f"e2e_{group}_{uuid.uuid4().hex[:8]}"
+        # A checked-in function referencing a table by "<collection>/<table>" needs
+        # the collection named at authoring time; the project around it is still
+        # per-test, so a fixed name collides with nothing.
+        name = name or f"e2e_{group}_{uuid.uuid4().hex[:8]}"
         document, secrets = _connection_document(conn)
         collection = Collection(
             connection=server.connection,

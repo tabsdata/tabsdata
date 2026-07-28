@@ -6,15 +6,18 @@
 (db2 / mssqlserver / mysql / oracle / postgres).
 
 Each :data:`DATATYPE_CASES` entry is one TableFrame/polars column type. The
-shared :func:`write_datatype_table` builds a one-column parquet of that type,
-drives the connector's ``DestPlugin.write_out`` in ``replace`` mode (so the
+shared :func:`write_named_datatype_table` builds a one-column parquet of that
+type, drives the connector's ``DestPlugin.write_out`` in ``replace`` mode (so the
 create-on-write path picks the target column type), reads the table back, and
 returns the round-tripped frame.
 
-Each connector's itest parametrizes over ``DATATYPE_CASES`` and calls
-``write_datatype_table`` against its live tdx-provisioned domain. Types that
-need special handling on a given engine surface here as a failing (or xfail'd)
-case -- e.g. Arrow decimal landing in a CLOB on DB2.
+Each connector's itest parametrizes over ``DATATYPE_CASES`` and calls it against
+its live tdx-provisioned domain, naming the target table after the case. Types
+that need special handling on a given engine surface here as a failing (or
+xfail'd) case -- e.g. Arrow decimal landing in a CLOB on DB2.
+
+:func:`write_datatype_table` is the pre-migration variant that invents a random
+table name; it goes away once every connector passes a name of its own.
 """
 
 from __future__ import annotations
@@ -82,21 +85,24 @@ def build_parquet(path: Path, case: DataTypeCase) -> Path:
     return path
 
 
-def write_datatype_table(
+def write_named_datatype_table(
     case: DataTypeCase,
     *,
+    table: str,
     dest_plugin: Any,
     make_dest: Callable[[list[str]], Any],
     dest_conn: Any,
     sql: SqlStore,
     work_dir: Path,
 ) -> pl.DataFrame:
-    """Create + load a scratch table of ``case.dtype`` through the connector's
-    write plugin (``replace`` mode), returning the round-tripped frame. Drops the
-    scratch table on the way out. Raises whatever the connector raises -- a type
-    the engine can't create/bind fails right here.
+    """Create + load `table` with ``case.dtype`` through the connector's write
+    plugin (``replace`` mode), returning the round-tripped frame. Drops the table
+    on the way out. Raises whatever the connector raises -- a type the engine
+    can't create/bind fails right here.
+
+    The caller names the table, one per case, so a run leaves nothing
+    unpredictable behind in the domain.
     """
-    table = scratch_table()
     parquet = build_parquet(work_dir / f"{case.id}.parquet", case)
     try:
         dest_plugin.write_out(
@@ -108,3 +114,28 @@ def write_datatype_table(
         return sql.read_table(table)
     finally:
         sql.drop_table(table)
+
+
+def write_datatype_table(
+    case: DataTypeCase,
+    *,
+    dest_plugin: Any,
+    make_dest: Callable[[list[str]], Any],
+    dest_conn: Any,
+    sql: SqlStore,
+    work_dir: Path,
+) -> pl.DataFrame:
+    """:func:`write_named_datatype_table` against a randomly-named scratch table.
+
+    The variant the connectors not yet migrated to fixed table names still use;
+    it goes away with the last of them.
+    """
+    return write_named_datatype_table(
+        case,
+        table=scratch_table(),
+        dest_plugin=dest_plugin,
+        make_dest=make_dest,
+        dest_conn=dest_conn,
+        sql=sql,
+        work_dir=work_dir,
+    )

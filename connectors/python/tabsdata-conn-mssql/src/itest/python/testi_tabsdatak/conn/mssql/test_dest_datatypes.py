@@ -2,11 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""SQL Server data-type coverage: drive ``MSSQLDestPlugin.write_out``
-(create-on-write, replace) for every TableFrame column type against a
-tdx-provisioned ``mssqlserver`` domain, via the shared matrix in
-:mod:`testi_tabsdatak.conn.common.sql.datatype_matrix`.
-"""
+"""MSSQL Server data-type coverage on write."""
 
 from __future__ import annotations
 
@@ -17,22 +13,18 @@ from tabsdatax.itest.fixture.backends.mssqlserver import (
     MssqlserverDomain,
     mssqlserver_domain,
 )
-from tabsdatax.itest.fixture.functions.sql import sql_credentials
 from testi_tabsdatak.conn.common.sql.datatype_matrix import (
     DATATYPE_CASES,
     DataTypeCase,
-    write_datatype_table,
+    write_named_datatype_table,
 )
+from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
+from testi_tabsdatak.conn.mssql.backend import dest_conn, store
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.mssql import MSSQLDest, MSSQLDestConn, _plugin as plugin
+from tabsdatak.conn.mssql import MSSQLDest, _plugin as plugin
 
 pytestmark = pytest.mark.mssql
-
-
-def _dest_conn(domain: MssqlserverDomain) -> MSSQLDestConn:
-    return MSSQLDestConn(uri=domain.uri, credentials=sql_credentials(domain))
-
 
 # Types the SQL Server write path can't create/load today (surfaced by the matrix).
 _XFAIL: dict[str, str] = {
@@ -47,22 +39,26 @@ def _params():
             if case.id in _XFAIL
             else []
         )
-        yield pytest.param(case, id=case.id, marks=marks)
+        # One fixed table per case, so a run leaves nothing unpredictable behind.
+        table = f"td_dt_{case.id}"
+        yield pytest.param(case, table, id=case.id, marks=marks)
 
 
-@pytest.mark.parametrize("case", list(_params()))
+@pytest.mark.parametrize("case, table", list(_params()))
 @mssqlserver_domain("mssqlserver")
 def test_datatype_create_and_load(
-    case: DataTypeCase, domain_mssqlserver: MssqlserverDomain, sql, tmp_path: Path
+    domain_mssqlserver: MssqlserverDomain,
+    case: DataTypeCase,
+    table: str,
+    tmp_path: Path,
 ):
-    work = tmp_path / "work"
-    work.mkdir()
-    frame = write_datatype_table(
+    frame = write_named_datatype_table(
         case,
+        table=table,
         dest_plugin=plugin.MSSQLDestPlugin(),
         make_dest=lambda tables: MSSQLDest(tables=tables, if_table_exists="replace"),
-        dest_conn=_dest_conn(domain_mssqlserver),
-        sql=sql(domain_mssqlserver),
-        work_dir=work,
+        dest_conn=dest_conn(domain_mssqlserver),
+        sql=store(domain_mssqlserver),
+        work_dir=work_dir(tmp_path),
     )
     assert frame.height == len(case.values)

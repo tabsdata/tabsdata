@@ -29,7 +29,7 @@ from tabsdatak.conn.mssql.error import (
     MSSQLRuntimeException,
     MssqlErrorCode,
 )
-from tabsdatak.conn.mssql._explorer import MSSQLServerConnectionExplorer
+from tabsdatak.conn.mssql._explorer import MSSQLServerExplorer
 
 # noinspection PyProtectedMember
 from test_tabsdatak.conn.common.sql._testing import CtxStub
@@ -75,7 +75,8 @@ def _fast_retry(monkeypatch):
 # ---------------------------------------------------------------------------
 # _MSSQLSrcPlugin.read_in -- error wrapping (fault injection via mocks)
 #
-# Real-MSSQL happy paths live in ``test__plugin_integration.py``.
+# Real-MSSQL happy paths live in the integration suite's ``test_plugin_src.py``
+# and ``test_plugin_dest.py``.
 # ---------------------------------------------------------------------------
 
 
@@ -188,7 +189,7 @@ def test_mssql_src_def_wires_plugin_and_explorer():
     assert plugin.MSSQL_SRC.conn is MSSQLSrcConn
     assert plugin.MSSQL_SRC.src is MSSQLSrc
     assert plugin.MSSQL_SRC.plugin is plugin.MSSQLSrcPlugin
-    assert plugin.MSSQL_SRC.explorer is MSSQLServerConnectionExplorer
+    assert plugin.MSSQL_SRC.explorer is MSSQLServerExplorer
     assert plugin.MSSQL_SRC.type_ == "mssql-sql-in"
 
 
@@ -196,7 +197,7 @@ def test_mssql_dest_def_wires_plugin_and_explorer():
     assert plugin.MSSQL_DEST.conn is MSSQLDestConn
     assert plugin.MSSQL_DEST.dest is MSSQLDest
     assert plugin.MSSQL_DEST.plugin is plugin.MSSQLDestPlugin
-    assert plugin.MSSQL_DEST.explorer is MSSQLServerConnectionExplorer
+    assert plugin.MSSQL_DEST.explorer is MSSQLServerExplorer
     assert plugin.MSSQL_DEST.type_ == "mssql-sql-out"
 
 

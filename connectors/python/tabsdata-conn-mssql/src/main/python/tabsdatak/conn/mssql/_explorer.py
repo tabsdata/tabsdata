@@ -23,13 +23,8 @@ def _is_odbc_connection_string(uri: str) -> bool:
     return "://" not in uri
 
 
-class MSSQLServerConnectionExplorer(SqlAlchemyConnectionExplorer):
-    """SQL Server metadata via pyodbc.
-
-    Drives the shared :class:`SqlAlchemyConnectionExplorer`
-    introspection surface (``check_connect`` / ``metadata`` / ``data``)
-    against an :class:`MSSQLSrcConn` or :class:`MSSQLDestConn`.
-    """
+class MSSQLServerExplorer(SqlAlchemyConnectionExplorer):
+    """SQL Server metadata via pyodbc."""
 
     def system_schemas(self) -> frozenset[str]:
         return frozenset({

@@ -83,4 +83,4 @@ precision > 31). A fuller Arrow→SQLAlchemy type map would make this configurab
 
 The reusable coverage matrix lives in
 `testi_tabsdatak/conn/common/sql/datatype_matrix.py`; each connector's
-`test__plugin_datatypes.py` runs it against that engine.
+`test_dest_datatypes.py` runs it against that engine, one fixed table per case.

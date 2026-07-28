@@ -18,7 +18,7 @@ from tabsdatak.conn.mssql import (
     SrcCfgKey,
     SrcCfgSpec,
 )
-from tabsdatak.conn.mssql._explorer import MSSQLServerConnectionExplorer
+from tabsdatak.conn.mssql._explorer import MSSQLServerExplorer
 from tabsdatak.conn.mssql.error import MssqlErrorCode
 from tabsdatak.spi import (
     DestContext,
@@ -242,7 +242,7 @@ MSSQL_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=MSSQLSrcPlugin,
-    explorer=MSSQLServerConnectionExplorer,
+    explorer=MSSQLServerExplorer,
     icon="conn/mssql/resources/mssql-server.svg",
 )
 
@@ -254,6 +254,6 @@ MSSQL_DEST = DestDef(
     dest=MSSQLDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=MSSQLDestPlugin,
-    explorer=MSSQLServerConnectionExplorer,
+    explorer=MSSQLServerExplorer,
     icon="conn/mssql/resources/mssql-server.svg",
 )

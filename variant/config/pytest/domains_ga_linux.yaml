@@ -37,6 +37,10 @@
   model: world
 - name: fs
   sys: fs
+- name: fs_employees_xs
+  sys: fs
+  model: employees
+  size: 1
 - name: fs_world_xs
   sys: fs
   model: world
@@ -51,10 +55,10 @@
   sys: mongodb
 - name: mssqlserver
   sys: mssqlserver
-- name: mssqlserver_world_xs
+- name: mssqlserver_employees_xs
   sys: mssqlserver
-  model: world
-  size: 200
+  model: employees
+  size: 1
 - name: mysql
   sys: mysql
 - name: mysql_world_xs
