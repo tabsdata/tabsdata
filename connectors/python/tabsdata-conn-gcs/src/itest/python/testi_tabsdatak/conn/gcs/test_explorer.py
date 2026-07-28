@@ -2,17 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""End-to-end ``GCSConnectionExplorer`` tests against a real GCS bucket.
-
-The ``gcs_world_xs`` domain (provisioned by tdx) holds the world dataset laid
-out as ``<base_path>/<format>/<table>.<format>`` -- three tables
-(``country`` / ``city`` / ``country_language``) in three formats
-(``csv`` / ``ndjson`` / ``parquet``). The explorer talks to GCS directly via
-``google-cloud-storage``: ``check_connect`` proves auth + bucket existence,
-``metadata`` lists the objects under ``base_path`` (with size + last-modified),
-and ``data`` previews the first rows of a blob (csv via streamed lines, ndjson
-via newline-delimited JSON, parquet via pyarrow range requests).
-"""
+"""GCS explorer integration tests against a provisioned bucket prefix"""
 
 from __future__ import annotations
 
@@ -20,30 +10,26 @@ import re
 import uuid
 
 import pytest
+from tabsdatax.itest.fixture.backends.gcs import (
+    GcsDomain,
+    gcs_domain,
+)
+from testi_tabsdatak.conn.gcs.backend import credentials, src_conn
 
-from tabsdatak.api import Secret
 from tabsdatak.conn.common.file._explorer import FileStorageEntity
-from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSSrcConn
 from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 
-from tabsdatax.itest.fixture.backends.gcs import (
-    GcsDomain,
-    GcsSystem,
-    gcs_domain,
-    gcs_system,
-)
-
 pytestmark = pytest.mark.gcs
 
-_TABLES = ("country", "city", "country_language")
-_FORMATS = ("csv", "ndjson", "parquet")
+TABLES = ("country", "city", "country_language")
+FORMATS = ("csv", "ndjson", "parquet")
 
-# The first five city rows (in id order). The staged files include the `id`
+# The first five city rows (in id order). The staged objects include the `id`
 # column (native int for ndjson / parquet; string for csv, like every other
 # value). ndjson / parquet preserve native types; csv comes back with every
 # value as a string.
-_WLD_CITY_HEAD = [
+CITY_HEAD = [
     {
         "id": 1,
         "name": "Kabul",
@@ -81,19 +67,6 @@ _WLD_CITY_HEAD = [
     },
 ]
 
-
-def _creds(cfg: GcsDomain) -> GCPJson:
-    return GCPJson(json=Secret(cfg.service_account_key))
-
-
-def _conn_from(cfg: GcsDomain) -> GCSSrcConn:
-    return GCSSrcConn(
-        bucket=cfg.bucket,
-        credentials=_creds(cfg),
-        base_path="/" + str(cfg.base_path).strip("/"),
-    )
-
-
 _TS_RE = re.compile(r"_\d{8}T\d{6}_\d+(?=\.[^.]+$)")
 
 
@@ -123,23 +96,19 @@ def _entity_by_file(
 # ---------------------------------------------------------------------------
 
 
-@gcs_system("gcs")
 @gcs_domain("gcs_world_xs")
-def test_check_connect_succeeds(system_gcs: GcsSystem, domain_gcs_world_xs: GcsDomain):
+def test_check_connect_succeeds(domain_gcs_world_xs: GcsDomain):
     # Contract: returns None on success and must not raise.
-    assert (
-        GCSConnectionExplorer().check_connect(_conn_from(domain_gcs_world_xs)) is None
-    )
+    domain = domain_gcs_world_xs
+    conn = src_conn(domain, domain.base_path)
+    assert GCSConnectionExplorer().check_connect(conn) is None
 
 
-@gcs_system("gcs")
 @gcs_domain("gcs_world_xs")
-def test_check_connect_nonexistent_bucket_raises(
-    system_gcs: GcsSystem, domain_gcs_world_xs: GcsDomain
-):
+def test_check_connect_nonexistent_bucket_raises(domain_gcs_world_xs: GcsDomain):
     bad = GCSSrcConn(
         bucket=f"td-does-not-exist-{uuid.uuid4().hex}",
-        credentials=_creds(domain_gcs_world_xs),
+        credentials=credentials(domain_gcs_world_xs),
     )
     with pytest.raises(Exception):
         GCSConnectionExplorer().check_connect(bad)
@@ -150,16 +119,14 @@ def test_check_connect_nonexistent_bucket_raises(
 # ---------------------------------------------------------------------------
 
 
-@gcs_system("gcs")
 @gcs_domain("gcs_world_xs")
-def test_metadata_lists_domain_objects(
-    system_gcs: GcsSystem, domain_gcs_world_xs: GcsDomain
-):
-    entities = GCSConnectionExplorer().metadata(_conn_from(domain_gcs_world_xs))
+def test_metadata_lists_domain_objects(domain_gcs_world_xs: GcsDomain):
+    domain = domain_gcs_world_xs
+    entities = GCSConnectionExplorer().metadata(src_conn(domain, domain.base_path))
 
     assert entities and all(isinstance(e, FileStorageEntity) for e in entities)
     assert all(e.scheme == "gs" for e in entities)
-    assert all(e.bucket == domain_gcs_world_xs.bucket for e in entities)
+    assert all(e.bucket == domain.bucket for e in entities)
 
     # Every object reports its size (bytes) and last-modified timestamp.
     assert all(isinstance(e.size, int) and e.size > 0 for e in entities)
@@ -167,31 +134,29 @@ def test_metadata_lists_domain_objects(
 
     # Exactly the world dataset: three tables in three formats.
     assert {_logical(e.file.pattern) for e in entities} == {
-        f"{table}.{fmt}" for table in _TABLES for fmt in _FORMATS
+        f"{table}.{fmt}" for table in TABLES for fmt in FORMATS
     }
 
 
-@gcs_system("gcs")
 @gcs_domain("gcs_world_xs")
-def test_metadata_sniffs_format(system_gcs: GcsSystem, domain_gcs_world_xs: GcsDomain):
-    entities = GCSConnectionExplorer().metadata(_conn_from(domain_gcs_world_xs))
+def test_metadata_sniffs_format(domain_gcs_world_xs: GcsDomain):
+    domain = domain_gcs_world_xs
+    entities = GCSConnectionExplorer().metadata(src_conn(domain, domain.base_path))
     by_name = {_logical(e.file.pattern): e for e in entities}
-    for fmt in _FORMATS:
+    for fmt in FORMATS:
         assert by_name[f"city.{fmt}"].file.format == fmt
 
 
 # ---------------------------------------------------------------------------
-# data -- first-rows preview per format
+# data
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("fmt", _FORMATS)
-@gcs_system("gcs")
+@pytest.mark.parametrize("fmt", FORMATS)
 @gcs_domain("gcs_world_xs")
-def test_data_returns_first_rows(
-    system_gcs: GcsSystem, domain_gcs_world_xs: GcsDomain, fmt: str
-):
-    conn = _conn_from(domain_gcs_world_xs)
+def test_data_returns_first_rows(domain_gcs_world_xs: GcsDomain, fmt: str):
+    domain = domain_gcs_world_xs
+    conn = src_conn(domain, domain.base_path)
     explorer = GCSConnectionExplorer()
     entity = _entity_by_file(explorer.metadata(conn), f"city.{fmt}")
 
@@ -200,7 +165,7 @@ def test_data_returns_first_rows(
     assert isinstance(rows, list)
     # csv comes back as strings; ndjson / parquet keep native types.
     if fmt == "csv":
-        expected = [{k: str(v) for k, v in r.items()} for r in _WLD_CITY_HEAD]
+        expected = [{k: str(v) for k, v in r.items()} for r in CITY_HEAD]
     else:
-        expected = _WLD_CITY_HEAD
+        expected = CITY_HEAD
     assert rows == expected
