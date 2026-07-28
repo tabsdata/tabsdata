@@ -165,7 +165,6 @@ class Redpanda(SqlContainerBackend):
             "KAFKA_BROKERS": brokers,
             "SCHEMA_REGISTRY_URL": sys_meta.get("SCHEMA_REGISTRY_URL", ""),
             "GROUP_ID": naming.build_identity(),
-            "URI": f"kafka://{brokers}/{entity_name}",
         }
 
     def provision_domain(
@@ -215,7 +214,11 @@ class Redpanda(SqlContainerBackend):
         return datagen.list_models()
 
     def data_plane_uri(self, meta: dict[str, str]) -> str:
-        return meta["URI"]  # kafka://<brokers>/<domain-topic-prefix>
+        # A kafka domain is brokers + a topic prefix, not an addressable
+        # endpoint, so the descriptor stores no URI: this composes the handle the
+        # generic data-plane commands pass around, and `_brokers_prefix` takes it
+        # apart again.
+        return f"kafka://{meta.get('KAFKA_BROKERS', '')}/{meta.get('DB', '')}"
 
     @staticmethod
     def _brokers_prefix(uri: str) -> tuple[str, str]:
