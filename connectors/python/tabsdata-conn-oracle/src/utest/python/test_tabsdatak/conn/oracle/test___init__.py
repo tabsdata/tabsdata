@@ -36,28 +36,6 @@ from tabsdatak.conn.oracle.error import (
 pytestmark = pytest.mark.oracle
 
 
-def _src_conn() -> OracleSrcConn:
-    return OracleSrcConn(
-        uri="oracle://oracle.example.com:1521/orcl",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"oracle.timeout": 30},
-    )
-
-
-def _dest_conn() -> OracleDestConn:
-    return OracleDestConn(
-        uri="oracle://oracle.example.com:1521/orcl",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"oracle.timeout": 30},
-    )
-
-
 # ---------------------------------------------------------------------------
 # OracleConn
 # ---------------------------------------------------------------------------

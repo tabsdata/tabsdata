@@ -73,6 +73,10 @@
   sys: openai
 - name: oracle
   sys: oracle
+- name: oracle_employees_xs
+  sys: oracle
+  model: employees
+  size: 1
 - name: oracle_world_xs
   sys: oracle
   model: world

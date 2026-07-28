@@ -75,7 +75,8 @@ def _fast_retry(monkeypatch):
 # ---------------------------------------------------------------------------
 # _OracleSrcPlugin.read_in -- error wrapping (fault injection via mocks)
 #
-# Real-Oracle happy paths live in ``test__plugin_integration.py``.
+# Real-Oracle happy paths live in the integration suite's ``test_plugin_src.py``
+# and ``test_plugin_dest.py``.
 # ---------------------------------------------------------------------------
 
 
