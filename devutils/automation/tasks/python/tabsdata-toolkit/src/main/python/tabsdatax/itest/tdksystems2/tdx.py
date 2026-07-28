@@ -4,7 +4,7 @@
 
 """tdx-system / tdx-domain — modular manager for external systems and domains.
 
-    tdx-system types                       # list system types + images
+    tdx-system types                       # list system types + envs + images
     tdx-system list [--sys-dir DIR]        # systems in the store
     tdx-system manifest [--out FILE]       # YAML manifest of the store
     tdx-system info --sys NAME|list|ALL | --manifest FILE [--format ...] [--prefix P]
@@ -18,6 +18,7 @@
     tdx-system restart --sys NAME|list|ALL | --manifest FILE
     tdx-system fetch-bin [--type TYPE|t1,t2|ALL]
     tdx-system secrets --set 1p:<vault> [--out json|export|unset]  # fetch creds
+    tdx-system clear-venvs                 # delete the managed venvs
 
     tdx-domain list [--domain-dir DIR]     # domains in the store
     tdx-domain manifest [--out FILE]       # YAML manifest of the store
@@ -54,6 +55,10 @@ replays a YAML manifest in parallel — one system ``create`` each, or one
 ``create`` -> ``create-model`` -> ``create-data`` chain per domain — and
 ``--sync`` reconciles the store to it.
 
+Every command re-execs into one of the managed uv venvs before it runs (see
+``_venv``): a system declares the env its outside (``sys_env``) and its inside
+(``dom_env``) need, ``types`` shows both, and ``clear-venvs`` deletes them all.
+
 The common verbs (``types`` / ``list`` / ``info``) are handled here; everything
 else is *delegated* to the matching command module discovered on disk —
 ``systems/<slug>/<verb>.py`` for system verbs, ``systems/<slug>/domain/<verb>.py``
@@ -78,6 +83,7 @@ from pathlib import Path
 from types import ModuleType
 
 from tabsdatax.itest.tdksystems2 import (
+    _venv,
     batch,
     cli,
     console,
@@ -341,7 +347,7 @@ def _list_store(store_dir: Path, role: str) -> None:
 
 def _cmn_types(tool: str, rest: list[str]) -> int:
     ArgumentParser(prog=f"{tool} {constants.V_TYPES}").parse_args(rest)
-    rows = [("TYPE", "LABEL", "WEIGHT", "IMAGE(S)")]
+    rows = [("TYPE", "LABEL", "WEIGHT", "SYS-ENV", "DOM-ENV", "IMAGE(S)")]
     for slug in systems.all_slugs():
         sysobj = systems.get(slug)
         imgs = ", ".join(i for i, _ in sysobj.docker_images()) or "-"
@@ -349,15 +355,23 @@ def _cmn_types(tool: str, rest: list[str]) -> int:
             slug,
             str(getattr(sysobj, "label", slug)),
             str(getattr(sysobj, "weight", 1)),
+            _venv.venv_name(sysobj.sys_env),
+            _venv.venv_name(sysobj.dom_env),
             imgs,
         ))
-    widths = [max(len(r[i]) for r in rows) for i in range(3)]  # last col unpadded
-    for type_, label, weight, imgs in rows:
+    widths = [max(len(r[i]) for r in rows) for i in range(5)]  # last col unpadded
+    for type_, label, weight, sys_env, dom_env, imgs in rows:
         console.out(
             f"  {type_:<{widths[0]}}  {label:<{widths[1]}}  "
-            f"{weight:<{widths[2]}}  {imgs}"
+            f"{weight:<{widths[2]}}  {sys_env:<{widths[3]}}  "
+            f"{dom_env:<{widths[4]}}  {imgs}"
         )
     return 0
+
+
+def _cmn_clear_venvs(tool: str, rest: list[str]) -> int:
+    ArgumentParser(prog=f"{tool} {constants.V_CLEAR_VENVS}").parse_args(rest)
+    return _venv.clear_venvs()
 
 
 def _cmn_sys_list(tool: str, rest: list[str]) -> int:
@@ -516,6 +530,7 @@ _COMMON = {
         constants.V_INFO: _cmn_sys_info,
         constants.V_MANIFEST: _cmn_sys_manifest,
         constants.V_SECRETS: _cmn_secrets,
+        constants.V_CLEAR_VENVS: _cmn_clear_venvs,
     },
     constants.DOM_TOOL: {
         constants.V_LIST: _cmn_dom_list,
@@ -774,11 +789,12 @@ def _print_top_help(tool: str) -> None:
     console.out("")
     console.out("commands:")
     summaries = {
-        constants.V_TYPES: "list system types and their docker images",
+        constants.V_TYPES: "list system types, their venvs and docker images",
         constants.V_LIST: "list the descriptors in the store",
         constants.V_INFO: "print a descriptor",
         constants.V_MANIFEST: "dump a YAML manifest of the store (--out FILE)",
         constants.V_SECRETS: "fetch a provider's secrets as env vars (--set 1p:VAULT)",
+        constants.V_CLEAR_VENVS: "delete the managed venvs (rebuilt on next use)",
     }
     summaries.update(delegated)
     for v in verbs:

@@ -39,6 +39,7 @@ dependencies = [
     "archspec==0.2.5",
     "black==26.5.1",
     "colorama==0.4.6",
+    "cryptography==47.0.0",
     "distlib==0.4.0",
     "filelock==3.25.2",
     "griffe==2.1.0",
@@ -59,36 +60,6 @@ dependencies = [
     "textual-plotext==1.0.1",
     "tqdm==4.67.3",
     "tzlocal==5.3.1",
-]
-
-[project.optional-dependencies]
-main = [
-    "azure-storage-blob",
-    "boto3",
-    "clickhouse-sqlalchemy",
-    "confluent-kafka[avro,json,protobuf]",
-    "cryptography",
-    "fastavro",
-    "google-cloud-bigquery",
-    "google-cloud-storage",
-    "ibm_db; platform_machine != 'aarch64'",
-    "ibm_db_sa; platform_machine != 'aarch64'",
-    "mysql-connector-python",
-    "oracledb",
-    "pandas",
-    "protobuf",
-    "psycopg2-binary",
-    "pyarrow",
-    "pymongo",
-    "pyodbc",
-    "snowflake-connector-python",
-    "sqlalchemy",
-    "sqlparse",
-]
-salesforce = [
-    "cryptography",
-    "cumulusci-plus",
-    "snowfakery",
 ]
 
 [project.entry-points.pytest11]
@@ -226,6 +197,7 @@ namespaces = true
 ]
 "tabsdatax.itest.tdksystems.systems.druid" = ["*.yaml"]
 "tabsdatax.itest.tdksystems2" = [
+    "env-defs/*.requirements",
     "models/*/*.json",
     "models/*/*.csv",
     "systems/*/domain/models/*/*.ddl",

@@ -1,0 +1,12 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# Salesforce data plane. Kept apart from tdx-sys-a because cumulusci-plus pins
+# sqlalchemy<2, which conflicts with clickhouse-sqlalchemy's sqlalchemy>=2.
+# simple-salesforce is a direct import of the loader, so it is pinned here
+# rather than left to arrive transitively through cumulusci-plus.
+
+cumulusci-plus
+simple-salesforce
+snowfakery

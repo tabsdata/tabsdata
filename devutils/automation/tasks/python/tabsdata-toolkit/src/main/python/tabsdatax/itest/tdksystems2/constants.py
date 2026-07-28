@@ -39,6 +39,7 @@ V_CREATE_DATA = "create-data"
 V_MODIFY_DATA = "modify-data"
 V_MANIFEST = "manifest"
 V_SECRETS = "secrets"
+V_CLEAR_VENVS = "clear-venvs"
 
 # --- option flags ----------------------------------------------------------
 OPT_TYPE = "--type"

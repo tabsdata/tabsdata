@@ -1,0 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# Driver-free: the toolkit's own dependencies and nothing else. Verbs that only
+# read the store or drive docker from the outside run here, so provisioning a
+# container never pulls a database driver in.

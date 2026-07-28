@@ -27,7 +27,7 @@ import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems2 import datagen, emit, options
+from tabsdatax.itest.tdksystems2 import _venv, datagen, emit, options
 from tabsdatax.itest.tdksystems2.datagen import OpKind
 from tabsdatax.itest.tdksystems2.errors import TdxError
 
@@ -65,6 +65,10 @@ class FileBackend:
     supports_models: bool = True
     supports_data: bool = True
     supports_changes: bool = True  # insert-only (enforced in apply_changes)
+
+    # Staging data files needs the frame writer; a local root does not.
+    sys_env: str = _venv.ENV_C
+    dom_env: str = _venv.ENV_A
 
     slug: str = ""
     label: str = ""
@@ -266,6 +270,8 @@ class CloudFileBackend(FileBackend):
     and their ``uri_scheme`` (``s3`` / ``gs`` / ``az``).
     """
 
+    # Creating the bucket already goes through the store's SDK.
+    sys_env = _venv.ENV_A
     env_prefix: str = ""  # S3 / GCS / AZ
     uri_scheme: str = ""  # URI scheme for the location URI; defaults to the slug
 

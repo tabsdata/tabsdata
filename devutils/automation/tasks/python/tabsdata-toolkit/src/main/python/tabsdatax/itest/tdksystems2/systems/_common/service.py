@@ -14,7 +14,7 @@ checks the credentials are present. Verbs are gated off by the capability flags
 
 from __future__ import annotations
 
-from tabsdatax.itest.tdksystems2 import options
+from tabsdatax.itest.tdksystems2 import _venv, options
 from tabsdatax.itest.tdksystems2.errors import TdxError
 
 
@@ -24,6 +24,10 @@ class ServiceBackend:
     supports_models: bool = False
     supports_data: bool = False
     supports_changes: bool = False
+
+    # Credentials in, an HTTPS probe out — no driver either side.
+    sys_env: str = _venv.ENV_C
+    dom_env: str = _venv.ENV_C
 
     slug: str = ""
     label: str = ""

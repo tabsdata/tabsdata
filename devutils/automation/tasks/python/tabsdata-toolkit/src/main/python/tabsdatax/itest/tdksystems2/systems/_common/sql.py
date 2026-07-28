@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems2 import datagen, emit, options
+from tabsdatax.itest.tdksystems2 import _venv, datagen, emit, options
 from tabsdatax.itest.tdksystems2.errors import TdxError
 from tabsdatax.itest.tdksystems2.shell import (
     container_exists,
@@ -64,6 +64,13 @@ class SqlContainerBackend(PortPoolMixin):
     supports_models: bool = True
     supports_data: bool = True
     supports_changes: bool = True
+
+    # ---- managed venvs (see _venv) ----
+    # Starting and probing a container is docker-only (readiness runs as an
+    # in-container CLI), so the lifecycle needs no driver; everything that
+    # speaks SQL to it does.
+    sys_env: str = _venv.ENV_C
+    dom_env: str = _venv.ENV_A
 
     # ---- identity / shape (subclass sets these) ----
     slug: str = ""
@@ -524,6 +531,9 @@ class RemoteSqlBackend(SqlContainerBackend):
     """
 
     is_container = False
+    # Nothing to start, so create probes reachability over SQL — the driver is
+    # needed from the outside too.
+    sys_env = _venv.ENV_A
     env_prefix: str = ""
     namespace_meta: str = (
         "DATABASE"  # meta key naming the DB/catalog the schema sits in

@@ -20,10 +20,15 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 
+from tabsdatax.itest.tdksystems2 import _venv
 from tabsdatax.itest.tdksystems2.systems._common.service import ServiceBackend
 
 
 class Salesforce(ServiceBackend):
+    # The org's data plane is snowfakery + cumulusci, which cannot share an env
+    # with the SQL drivers (sqlalchemy<2 vs >=2).
+    dom_env = _venv.ENV_B
+
     slug = "salesforce"
     label = "Salesforce"
     kind = "salesforce"

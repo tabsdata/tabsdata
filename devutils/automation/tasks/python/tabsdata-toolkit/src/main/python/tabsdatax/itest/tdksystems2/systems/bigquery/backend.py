@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 from functools import cached_property
 
-from tabsdatax.itest.tdksystems2 import options
+from tabsdatax.itest.tdksystems2 import _venv, options
 from tabsdatax.itest.tdksystems2.errors import TdxError
 
 
@@ -28,6 +28,10 @@ class BigQuery:
     supports_models: bool = False
     supports_data: bool = False
     supports_changes: bool = False
+
+    # Both planes go through google-cloud-bigquery / -storage.
+    sys_env = _venv.ENV_A
+    dom_env = _venv.ENV_A
 
     slug = "bigquery"
     label = "BigQuery"

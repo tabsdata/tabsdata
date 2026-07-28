@@ -16,6 +16,7 @@ compose file + image list and the ``plan_endpoints`` / ``compose_env`` /
 
 from __future__ import annotations
 
+from tabsdatax.itest.tdksystems2 import _venv
 from tabsdatax.itest.tdksystems2.errors import TdxError
 from tabsdatax.itest.tdksystems2.shell import (
     compose_container_ids,
@@ -33,6 +34,10 @@ class ContainersBackend(PortPoolMixin):
     supports_models: bool = False
     supports_data: bool = False
     supports_changes: bool = False
+
+    # A compose stack driven by docker, administered over HTTP.
+    sys_env: str = _venv.ENV_C
+    dom_env: str = _venv.ENV_C
 
     slug: str = ""
     label: str = ""

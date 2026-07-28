@@ -1,0 +1,28 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# Driver set: everything needed to talk to a provisioned system's insides —
+# SQL engines, object stores, kafka, and the data-plane frame writer.
+
+azure-storage-blob
+boto3
+clickhouse-sqlalchemy
+confluent-kafka[avro,json,protobuf]
+fastavro
+google-cloud-bigquery
+google-cloud-storage
+ibm_db; platform_machine != 'aarch64'
+ibm_db_sa; platform_machine != 'aarch64'
+mysql-connector-python
+oracledb
+pandas
+polars
+protobuf
+psycopg2-binary
+pyarrow
+pymongo
+pyodbc
+snowflake-connector-python
+sqlalchemy
+sqlparse

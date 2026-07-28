@@ -26,6 +26,13 @@ class Backend(Protocol):
     max_entity_name_length: int
     weight: int  # 1..3 scheduling weight; batch runs the heaviest targets first
 
+    # Managed venvs (see ``_venv``): the env a verb re-execs into. ``sys_env``
+    # covers the verbs that only touch the system from the outside (create /
+    # destroy / status / restart / fetch-bin); ``dom_env`` the ones that reach
+    # inside it — every domain verb, plus ``purge``.
+    sys_env: str
+    dom_env: str
+
     # capability flags — the dispatcher gates verb availability on these.
     is_container: bool
     supports_purge: bool
