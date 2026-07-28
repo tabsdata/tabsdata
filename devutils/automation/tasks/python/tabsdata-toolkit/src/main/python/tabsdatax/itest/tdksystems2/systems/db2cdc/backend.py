@@ -32,6 +32,9 @@ from tabsdatax.itest.tdksystems2.systems.db2.backend import _XP_DB, Db2
 
 _ASN = "ASN"
 _ARCHIVE_DIR = "archive"
+
+# asnccmd reports a stopped capture program with this code, on a zero exit.
+_ASNCAP_DOWN = "ASN0506E"
 _BACKUP_DIR = "backup"
 _STAGING_PREFIX = "TD_T__"
 _OLD_VALUES_PREFIX = "_"
@@ -112,7 +115,7 @@ class Db2Cdc(Db2):
         print(">>> CDC: configuring Db2 SQL Replication (archive log + asncap) …")
         self._setup_archive(container)
         self._setup_asn_control_tables(container)
-        self._setup_asncap(container)
+        self._ensure_asncap(container)
         print(">>> CDC: asncap capture program is running")
 
     def _archive_configured(self, container: str) -> bool:
@@ -197,23 +200,167 @@ class Db2Cdc(Db2):
             what="asncap to populate the restart table",
         )
 
+    def _ensure_asncap(self, container: str) -> None:
+        """Start ``asncap`` unless it is already answering.
+
+        ``asncap`` is a process inside the container, not a database object, so
+        it does not survive a container restart the way the archive setting and
+        the ``ASN.IBMSNAP_*`` tables do -- and it is known to exit on its own
+        (the connector's own CDC tests carry a watchdog for exactly that). Both
+        ``post_provision`` and ``restart_system`` go through here so bringing it
+        back is always safe to attempt.
+        """
+        if self._asncap_responsive(container):
+            print(">>> CDC: asncap already running")
+            return
+        self._setup_asncap(container)
+
+    def restart_system(self, meta: dict[str, str]) -> str:
+        """Restart the container, then put the capture program back.
+
+        The base implementation only restarts the container. That is enough for
+        a plain Db2, but here it silently leaves the system without a capture
+        program: nothing writes to the CD tables any more, and a CDC reader sees
+        a registered source that never produces a change. The archive setting and
+        the control tables are durable, so only ``asncap`` needs re-establishing
+        -- but both setup steps are guarded, so re-running them costs nothing.
+        """
+        result = super().restart_system(meta)
+        container = meta.get("CONTAINER") or meta.get("SYS_CONTAINER", "")
+        if not container:
+            return result
+        self._wait_ready(container, meta.get("PASSWORD", ""), self.ready_timeout)
+        print(">>> CDC: re-establishing Db2 SQL Replication after restart …")
+        self._setup_archive(container)
+        self._setup_asn_control_tables(container)
+        self._ensure_asncap(container)
+        print(">>> CDC: asncap capture program is running")
+        return result
+
     def _asncap_responsive(self, container: str) -> bool:
+        """Whether the capture program is actually up.
+
+        ``asnccmd status`` exits 0 whether or not Capture is running: when it is
+        down it still succeeds and reports ``ASN0506E ... "Capture" was not
+        running``. Treating a clean exit as "up" therefore always says yes, so
+        the answer has to come from the output.
+        """
         try:
-            self._exec_inst(
+            out = self._exec_inst(
                 container,
                 f"asnccmd capture_schema={_ASN} capture_server={_XP_DB} status",
             )
-            return True
         except TdxError:
             return False
+        return _ASNCAP_DOWN not in out
 
-    # ---- per-table registration (after_install_schema, per model) ------
+    # ---- per-table registration (public: used by after_install_schema and
+    # ---- by tests that need a source table of their own) ----------------
 
-    def after_install_schema(self, meta: dict[str, str], model: str) -> None:
+    def cd_table(self, table: str) -> str:
+        """The qualified CD table ASN capture writes `table`'s changes into."""
+        return f"{_ASN}.{_STAGING_PREFIX}{table.upper()}"
+
+    def register_table(
+        self, meta: dict[str, str], table: str, *, ddl: str | None = None
+    ) -> str:
+        """Register `table` in the domain's schema for ASN capture, creating it
+        from `ddl` first when one is given, and return its CD table.
+
+        This is the same sequence ``after_install_schema`` runs for the model's
+        tables -- ``data capture changes``, ``asnclp create registration``, the
+        reserved ``IBMSNAP_LOGMARKER`` column, CAPSTART, wait for Active. A test
+        that needs a source table of its own goes through here rather than
+        reimplementing it, so registration stays defined in one place.
+        """
+        container, schema = self._container_and_schema(meta)
+        self._ensure_asncap(container)
+        if ddl:
+            self._clp(container, ddl)
+        self._register_table(container, schema, table.upper())
+        return self.cd_table(table)
+
+    def deregister_table(
+        self, meta: dict[str, str], table: str, *, drop: bool = False
+    ) -> None:
+        """Undo :meth:`register_table`: stop capturing `table`, remove its
+        registration and CD table, and drop the source table when `drop`.
+
+        CAPSTOP comes first and is waited on. asncap holds the registration in
+        memory: drop the CD table from under a still-capturing registration and
+        its next insert fails with SQLCODE -42704, which takes the whole capture
+        program down -- so the table has to be released before it is removed.
+
+        Best-effort otherwise -- a test cleaning up must not fail because some
+        part of the registration was never made.
+        """
+        container, schema = self._container_and_schema(meta)
+        table = table.upper()
+        staging = f"{_STAGING_PREFIX}{table}"
+        self._send_capstop(container, schema, table)
+        self._clp(
+            container,
+            f"delete from {_ASN}.ibmsnap_register where source_owner = "
+            f"'{schema}' and source_table = '{table}'",
+            ignore_failure=True,
+        )
+        self._clp(
+            container,
+            f"delete from {_ASN}.ibmsnap_pruncntl where source_owner = "
+            f"'{schema}' and source_table = '{table}'",
+            ignore_failure=True,
+        )
+        self._clp(container, f"drop trigger {_ASN}.LM_{staging}", ignore_failure=True)
+        self._clp(container, f"drop table {_ASN}.{staging}", ignore_failure=True)
+        self._clp(
+            container,
+            f"alter table {schema}.{table} data capture none",
+            ignore_failure=True,
+        )
+        if drop:
+            self._clp(container, f"drop table {schema}.{table}", ignore_failure=True)
+
+    def _send_capstop(self, container: str, schema: str, table: str) -> None:
+        """Tell asncap to stop capturing ``schema.table`` and wait for it to
+        acknowledge, so the CD table can be removed safely."""
+        source = f"{schema}.{table}"
+        self._clp(
+            container,
+            f"insert into {_ASN}.ibmsnap_signal (signal_type, signal_subtype, "
+            f"signal_input_in, signal_state) values "
+            f"('CMD', 'CAPSTOP', '{source}', 'P')",
+            ignore_failure=True,
+        )
+        try:
+            self._poll(
+                lambda: self._capstop_consumed(container, source),
+                what=f"CAPSTOP of {source} to be consumed",
+            )
+        except TdxError:
+            # A capture program that is already down cannot consume it; the
+            # registration is going away regardless.
+            pass
+
+    def _capstop_consumed(self, container: str, source: str) -> bool:
+        state = self._clp_scalar(
+            container,
+            f"select signal_state from {_ASN}.ibmsnap_signal where "
+            f"signal_type = 'CMD' and signal_subtype = 'CAPSTOP' and "
+            f"signal_input_in = '{source}' order by signal_time desc "
+            f"fetch first 1 row only",
+        )
+        return state.upper() == "C" or state == ""
+
+    def _container_and_schema(self, meta: dict[str, str]) -> tuple[str, str]:
         container = meta.get("SYS_CONTAINER", "")
         if not container:
             raise TdxError("db2cdc domain has no SYS_CONTAINER back-reference")
-        schema = self._schema(meta.get("DB", ""))
+        return container, self._schema(meta.get("DB", ""))
+
+    # ---- model registration ---------------------------------------------
+
+    def after_install_schema(self, meta: dict[str, str], model: str) -> None:
+        container, schema = self._container_and_schema(meta)
         tables = self._list_schema_tables(container, schema)
         if not tables:
             print(">>> CDC: no tables to register")
