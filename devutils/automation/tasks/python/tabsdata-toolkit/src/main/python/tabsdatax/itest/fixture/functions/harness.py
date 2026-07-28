@@ -8,7 +8,7 @@ running tabsdata instance, trigger them, and read results back.
 Loaded as a pytest plugin (entry point ``tdf-functions``), so the ``server`` and
 ``collection_factory`` fixtures are available to any connector's itest without a
 per-package conftest. The plain helpers (``run_function``, ``wait_for_completion``,
-``assert_frames_match``, ``write_module``) are importable from here.
+``assert_frames_match``) are importable from here.
 
 A test declares ``@tabsdata_instance(consumer=...)`` (for ``server``) and, via
 ``collection_factory``, creates source/destination collections carrying any
@@ -17,14 +17,11 @@ connector's ``Conn``; file-specific helpers live in :mod:`.files`.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 import tempfile
 import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from time import sleep
-from types import ModuleType
 
 import polars as pl
 import pytest
@@ -44,21 +41,6 @@ POLL_TIMEOUT_SECONDS = 300
 # given connection -- named explicitly, or generated when the name does not
 # matter -- and returns the created ``Collection``.
 CollectionFactory = Callable[..., Collection]
-
-
-def write_module(project_root: Path, module_name: str, body: str) -> ModuleType:
-    """Write ``body`` to ``project_root/<module_name>.py`` and import it. Function
-    definitions must live in real modules under a ``project_root`` (they are
-    bundled and re-imported by the runner), and the source/destination paths are
-    fixed at decoration time -- so test modules are generated per test."""
-    (project_root / f"{module_name}.py").write_text(body)
-    spec = importlib.util.spec_from_file_location(
-        module_name, project_root / f"{module_name}.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def wait_for_completion(execution) -> str:

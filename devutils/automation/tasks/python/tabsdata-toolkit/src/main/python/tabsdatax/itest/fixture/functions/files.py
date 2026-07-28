@@ -3,15 +3,14 @@
 #
 
 """End-to-end helpers shared by the file-based connectors (localfile, s3, gcs,
-azureblob): discover a provisioned file/object, fabricate plugin contexts,
-resolve the provisioned entity, and generate publisher / subscriber modules
-parameterized by the connector's ``Src`` / ``Dest``.
+azureblob): discover a provisioned file/object and fabricate the plugin contexts
+a test drives a ``SrcPlugin`` / ``DestPlugin`` with.
 
-Connector-agnostic: the caller passes the import line and the constructor
-expression for its own source/destination, and (for object stores) an
-:class:`ObjectStore` adapter over its own cloud client -- so nothing here
-depends on a specific connector. Generic (non-file) harness lives in
-:mod:`.harness`.
+Connector-agnostic: for object stores the caller passes an :class:`ObjectStore`
+adapter over its own cloud client, so nothing here depends on a specific
+connector. Generic (non-file) harness lives in :mod:`.harness`; the functions a
+test registers are checked in per connector under its own ``functions/``
+project.
 """
 
 from __future__ import annotations
@@ -20,10 +19,7 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
-from tabsdatak.sdk.tabsdata_server import FunctionInfo
 from tabsdatak.spi import DestContext, SrcPluginCtx
-
-from tabsdatax.itest.fixture.functions.harness import write_module
 
 
 class _PluginCtx:
@@ -111,18 +107,6 @@ def download_or_skip(store: ObjectStore, key: str, dest: Path) -> Path:
     return dest
 
 
-def entity_stem(domain) -> str:
-    """A deterministic provisioned entity name from a cloud ``domain``. The
-    descriptor lists entities as full object paths (``<prefix>/<fmt>/<entity>.<ext>``),
-    one per staged format, so the bare name is the file stem; skip if none."""
-    if not domain.entities:
-        pytest.skip(
-            f"domain {domain.name!r} has no entities (model={domain.model!r}); "
-            f"seed the domain before running this test",
-        )
-    return sorted({Path(key).stem for key in domain.entities})[0]
-
-
 def first_provisioned_file(base_dir: Path, pattern: str = "*.csv") -> Path:
     """The first file matching ``pattern`` in ``base_dir`` (resolved absolute), or
     skip. Absolute matters: the connection base_path is handed to the function
@@ -136,53 +120,3 @@ def first_provisioned_file(base_dir: Path, pattern: str = "*.csv") -> Path:
             f"before running this test",
         )
     return matches[0]
-
-
-def write_publisher_module(
-    project_root: Path,
-    *,
-    source_import: str,
-    source_expr: str,
-    output_table: str,
-) -> FunctionInfo:
-    """A publisher reading ``source_expr`` into ``output_table``. ``source_import``
-    is the import line for the connector's ``Src`` (e.g.
-    ``"from tabsdatak.conn.localfile import LocalFileSrc"``); ``source_expr`` is
-    its constructor call. File ``Src``s are array-mode (a path may glob to many
-    files), so the input is a list of frames; publish the single matched file."""
-    module = write_module(
-        project_root,
-        "e2e_publisher",
-        "from tabsdatak.api import publisher, TableFrameSpec, TableFramesSpec\n"
-        f"{source_import}\n"
-        "\n"
-        f"@publisher(source={source_expr}, output_tables=[{output_table!r}])\n"
-        "def e2e_pub(inputs: TableFramesSpec) -> TableFrameSpec:\n"
-        "    frames = [f for f in (inputs or []) if f is not None]\n"
-        "    return frames[0] if frames else None\n",
-    )
-    return module.e2e_pub
-
-
-def write_subscriber_module(
-    project_root: Path,
-    *,
-    dest_import: str,
-    dest_expr: str,
-    input_table: str,
-) -> FunctionInfo:
-    """A subscriber shipping ``input_table`` (a ``"collection/table"`` reference)
-    to ``dest_expr``. ``dest_import`` is the import line for the connector's
-    ``Dest``; ``dest_expr`` is its constructor call. A subscriber gets one frame
-    per input table and returns the frames to write."""
-    module = write_module(
-        project_root,
-        "e2e_subscriber",
-        "from tabsdatak.api import subscriber, TableFrameSpec\n"
-        f"{dest_import}\n"
-        "\n"
-        f"@subscriber(destination={dest_expr}, input_tables=[{input_table!r}])\n"
-        "def e2e_sub(t: TableFrameSpec) -> TableFrameSpec:\n"
-        "    return t\n",
-    )
-    return module.e2e_sub

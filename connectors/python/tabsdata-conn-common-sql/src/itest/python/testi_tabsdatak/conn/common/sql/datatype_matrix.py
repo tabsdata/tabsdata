@@ -15,9 +15,6 @@ Each connector's itest parametrizes over ``DATATYPE_CASES`` and calls it against
 its live tdx-provisioned domain, naming the target table after the case. Types
 that need special handling on a given engine surface here as a failing (or
 xfail'd) case -- e.g. Arrow decimal landing in a CLOB on DB2.
-
-:func:`write_datatype_table` is the pre-migration variant that invents a random
-table name; it goes away once every connector passes a name of its own.
 """
 
 from __future__ import annotations
@@ -30,7 +27,7 @@ from typing import Any, Callable
 
 import polars as pl
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
-from tabsdatax.itest.fixture.functions.sql import SqlStore, scratch_table
+from tabsdatax.itest.fixture.functions.sql import SqlStore
 
 
 @dataclass(frozen=True)
@@ -114,28 +111,3 @@ def write_named_datatype_table(
         return sql.read_table(table)
     finally:
         sql.drop_table(table)
-
-
-def write_datatype_table(
-    case: DataTypeCase,
-    *,
-    dest_plugin: Any,
-    make_dest: Callable[[list[str]], Any],
-    dest_conn: Any,
-    sql: SqlStore,
-    work_dir: Path,
-) -> pl.DataFrame:
-    """:func:`write_named_datatype_table` against a randomly-named scratch table.
-
-    The variant the connectors not yet migrated to fixed table names still use;
-    it goes away with the last of them.
-    """
-    return write_named_datatype_table(
-        case,
-        table=scratch_table(),
-        dest_plugin=dest_plugin,
-        make_dest=make_dest,
-        dest_conn=dest_conn,
-        sql=sql,
-        work_dir=work_dir,
-    )
