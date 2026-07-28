@@ -14,17 +14,38 @@ class Entry:
     files: list[str]
 
 
+VERSION = "V1"
+
+
 class LastModInfo:
     def __init__(self, lastmod_info: str):
-        lastmod_dict = json.loads(base64.b64decode(lastmod_info + "=="))  # Adding
-        # padding just in case there was none. There is no need to verify the length
-        # of the string to do this, as b64decode takes care of shaving any excess
-        # of padding that exists.
+        try:
+            lastmod_dict = json.loads(base64.b64decode(lastmod_info + "=="))  # Adding
+            # padding just in case there was none. There is no need to verify the length
+            # of the string to do this, as b64decode takes care of shaving any excess
+            # of padding that exists.
+        except ValueError as e:
+            raise ValueError(f"Could not decode the last modified info: {e}") from e
+        # An envelope this class cannot read used to answer "no entries", which the
+        # caller reads as "no previous run" and resolves to the registration time --
+        # a silent re-import of everything. The transporter2 cursor is shaped
+        # {"initial", "entries"} rather than {"V1": ...} and would land exactly
+        # there, so an unknown envelope has to fail instead of going quiet.
+        if not isinstance(lastmod_dict, dict):
+            raise ValueError(
+                "Unreadable last modified info: expected a JSON object, found "
+                f"{type(lastmod_dict).__name__}"
+            )
+        if VERSION not in lastmod_dict:
+            raise ValueError(
+                f"Unreadable last modified info: expected a {VERSION!r} envelope, "
+                f"found the keys {sorted(lastmod_dict)}"
+            )
         self.data = lastmod_dict
 
     @property
     def info(self) -> dict:
-        return self.data.get("V1", {})
+        return self.data.get(VERSION, {})
 
     @property
     def initial_last_modified(self) -> str | None:

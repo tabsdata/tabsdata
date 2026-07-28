@@ -93,12 +93,26 @@ class TestLastModInfoParsing:
         assert info.initial_last_modified is None
         assert info.entries == []
 
-    def test_missing_v1_key(self):
+    def test_missing_v1_key_raises(self):
+        """An envelope this class cannot read must fail loudly.
+
+        Reading it as "no entries" makes the caller fall back to the
+        registration time, which silently re-imports everything.
+        """
         raw = {"V2": {"something": "else"}}
-        info = LastModInfo(_encode_lastmod(raw))
-        assert info.info == {}
-        assert info.initial_last_modified is None
-        assert info.entries == []
+        with pytest.raises(ValueError, match="expected a 'V1' envelope"):
+            LastModInfo(_encode_lastmod(raw))
+
+    def test_transporter2_cursor_raises(self):
+        """The transporter2 cursor is shaped {"initial", "entries"} -- the very
+        blob that would otherwise be mistaken for an exhausted V1 one."""
+        raw = {"initial": "2026-01-01T00:00:00Z", "entries": {}}
+        with pytest.raises(ValueError, match="expected a 'V1' envelope"):
+            LastModInfo(_encode_lastmod(raw))
+
+    def test_undecodable_input_raises(self):
+        with pytest.raises(ValueError, match="Could not decode"):
+            LastModInfo("this is not base64 json")
 
     def test_repr(self):
         raw = {"V1": {}}
