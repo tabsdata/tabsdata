@@ -41,6 +41,12 @@ CONTAINER = [
 ]
 IDS = [c[0] for c in CONTAINER]
 
+# The domain attribute that must reference the created entity. Most container
+# backends are SQL and carry a sqlalchemy_uri; the two that are not carry no SQL
+# URI at all (mongodb ships a mongodb:// uri of its own, and a redpanda domain
+# *is* a topic).
+ENTITY_REF = {"mongodb": "uri", "redpanda": "topic"}
+
 
 @pytest.mark.parametrize("slug,kind,staging,Sys,Dom", CONTAINER, ids=IDS)
 def test_container_system(provision, slug, kind, staging, Sys, Dom):
@@ -62,11 +68,14 @@ def test_container_domain(provision, slug, kind, staging, Sys, Dom):
     assert obj.system_kind == kind and obj.host == "localhost"
     # The entity (db) is the prefixed external name (default DOMAIN_PREFIX),
     # compared case-insensitively since some backends upper-case identifiers
-    # (db2); the descriptor's logical name stays "d". The sqlalchemy_uri is a
-    # real connection URI that references that entity.
+    # (db2); the descriptor's logical name stays "d". The domain's connection
+    # handle references that same entity.
     ext = naming.external_name("d")
     assert obj.db.lower() == ext.lower()
-    assert ext.lower() in obj.sqlalchemy_uri.lower()
+    ref = ENTITY_REF.get(slug, "sqlalchemy_uri")
+    assert ext.lower() in getattr(obj, ref).lower()
+    if ref != "sqlalchemy_uri":
+        assert obj.sqlalchemy_uri is None  # a non-SQL backend carries no SQL URI
     assert obj.model is None and obj.data is None
 
 
