@@ -18,6 +18,10 @@
   size: 200
 - name: fs
   sys: fs
+- name: fs_employees_xs
+  sys: fs
+  model: employees
+  size: 1
 - name: fs_world_xs
   sys: fs
   model: world
