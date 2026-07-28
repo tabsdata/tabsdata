@@ -10,7 +10,7 @@ from collections.abc import Iterator
 
 import pytest
 from pymongo.errors import OperationFailure
-from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain, mongodb_domain
+from tabsdatax.itest.fixture.backends.mongodb import MongoDBDomain, mongodb_domain
 from testi_tabsdatak.conn.mongodb.backend import dest_conn, store
 
 from tabsdatak.api import Secret
@@ -30,7 +30,7 @@ CITY_DOCUMENTS = [
 
 
 @pytest.fixture
-def seeded(domain_mongodb: MongodbDomain) -> Iterator[str]:
+def seeded(domain_mongodb: MongoDBDomain) -> Iterator[str]:
     """The mongodb domain carries no model, so the explorer is introspected against
     a collection the test writes itself; yields its name."""
     db = store(domain_mongodb)
@@ -56,13 +56,13 @@ def _entity_by_collection(
 
 
 @mongodb_domain("mongodb")
-def test_check_connect_succeeds(domain_mongodb: MongodbDomain):
+def test_check_connect_succeeds(domain_mongodb: MongoDBDomain):
     conn = dest_conn(domain_mongodb)
     assert MongoDBConnectionExplorer().check_connect(conn) is None
 
 
 @mongodb_domain("mongodb")
-def test_check_connect_bad_credentials_raises(domain_mongodb: MongodbDomain):
+def test_check_connect_bad_credentials_raises(domain_mongodb: MongoDBDomain):
     bad = MongoDBDestConn(
         uri=domain_mongodb.uri,
         credentials=UserPassword(
@@ -80,7 +80,7 @@ def test_check_connect_bad_credentials_raises(domain_mongodb: MongodbDomain):
 
 
 @mongodb_domain("mongodb")
-def test_metadata_lists_created_collection(domain_mongodb: MongodbDomain, seeded: str):
+def test_metadata_lists_created_collection(domain_mongodb: MongoDBDomain, seeded: str):
     conn = dest_conn(domain_mongodb)
     entities = MongoDBConnectionExplorer().metadata(conn)
 
@@ -92,7 +92,7 @@ def test_metadata_lists_created_collection(domain_mongodb: MongodbDomain, seeded
 
 
 @mongodb_domain("mongodb")
-def test_metadata_reflects_indexes(domain_mongodb: MongodbDomain, seeded: str):
+def test_metadata_reflects_indexes(domain_mongodb: MongoDBDomain, seeded: str):
     conn = dest_conn(domain_mongodb)
     cities = _entity_by_collection(MongoDBConnectionExplorer().metadata(conn), seeded)
 
@@ -106,7 +106,7 @@ def test_metadata_reflects_indexes(domain_mongodb: MongodbDomain, seeded: str):
 
 
 @mongodb_domain("mongodb")
-def test_data_returns_documents(domain_mongodb: MongodbDomain, seeded: str):
+def test_data_returns_documents(domain_mongodb: MongoDBDomain, seeded: str):
     conn = dest_conn(domain_mongodb)
     explorer = MongoDBConnectionExplorer()
     cities = _entity_by_collection(explorer.metadata(conn), seeded)
@@ -121,7 +121,7 @@ def test_data_returns_documents(domain_mongodb: MongodbDomain, seeded: str):
 
 
 @mongodb_domain("mongodb")
-def test_data_respects_limit(domain_mongodb: MongodbDomain, seeded: str):
+def test_data_respects_limit(domain_mongodb: MongoDBDomain, seeded: str):
     conn = dest_conn(domain_mongodb)
     explorer = MongoDBConnectionExplorer()
     cities = _entity_by_collection(explorer.metadata(conn), seeded)

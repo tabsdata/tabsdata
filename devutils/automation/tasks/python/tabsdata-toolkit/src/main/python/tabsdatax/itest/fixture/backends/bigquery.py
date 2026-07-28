@@ -15,7 +15,7 @@ from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class BigquerySystem(System):
+class BigQuerySystem(System):
     system_type: ClassVar[str] = "bigquery"
     name: str
     system_kind: str
@@ -26,7 +26,7 @@ class BigquerySystem(System):
 
 
 @dataclass(frozen=True)
-class BigqueryDomain(Domain):
+class BigQueryDomain(Domain):
     system_type: ClassVar[str] = "bigquery"
     name: str
     system_kind: str
@@ -39,8 +39,8 @@ class BigqueryDomain(Domain):
 
 
 def bigquery_system(name: str):
-    return require(name, BigquerySystem)
+    return require(name, BigQuerySystem)
 
 
 def bigquery_domain(name: str):
-    return require(name, BigqueryDomain)
+    return require(name, BigQueryDomain)

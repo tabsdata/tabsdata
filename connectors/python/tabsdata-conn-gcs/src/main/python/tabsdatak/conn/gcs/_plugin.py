@@ -13,7 +13,7 @@ from tabsdatak.conn.common.file import _plugin
 from tabsdatak.conn.common.types import GCPJson, _convert, cloud_full_path
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
 from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
-from tabsdatak.conn.gcs.error import GcsErrorCode
+from tabsdatak.conn.gcs.error import GCSErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -73,11 +73,11 @@ def run_env(conn: _AnyGCSConn, handler: TransporterHandler) -> dict[str, str]:
 
 
 ERRORS = _plugin.FilePluginErrors(
-    binary_not_found=GcsErrorCode.GCS_6,
-    read_failed=GcsErrorCode.GCS_7,
-    write_failed=GcsErrorCode.GCS_8,
-    report_invalid=GcsErrorCode.GCS_9,
-    cred_resolution=GcsErrorCode.GCS_10,
+    binary_not_found=GCSErrorCode.GCS_6,
+    read_failed=GCSErrorCode.GCS_7,
+    write_failed=GCSErrorCode.GCS_8,
+    report_invalid=GCSErrorCode.GCS_9,
+    cred_resolution=GCSErrorCode.GCS_10,
 )
 
 

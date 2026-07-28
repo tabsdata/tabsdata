@@ -49,7 +49,7 @@ from tabsdatak.conn.common.types import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.mongodb import _validation
-from tabsdatak.conn.mongodb.error import MongodbErrorCode
+from tabsdatak.conn.mongodb.error import MongoDBErrorCode
 from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
@@ -77,7 +77,7 @@ DestCfgSpec: TypeAlias = Annotated[
 # --- Connection ------------------------------------------------------
 
 
-@_api.dataclass(MongodbErrorCode.MONGODB_1, kw_only=True)
+@_api.dataclass(MongoDBErrorCode.MONGODB_1, kw_only=True)
 class MongoDBDestConn(Conn):
     """MongoDB connection used by `MongoDBDest`.
 
@@ -108,7 +108,7 @@ class MongoDBDestConn(Conn):
 # --- Destination -----------------------------------------------------
 
 
-@_api.dataclass(MongodbErrorCode.MONGODB_2, kw_only=True)
+@_api.dataclass(MongoDBErrorCode.MONGODB_2, kw_only=True)
 class MongoDBDest(Dest):
     """MongoDB destination for `@subscriber` -- one slot per
     collection.
@@ -209,6 +209,6 @@ class MongoDBDest(Dest):
         Called by the framework; raises `MongoDBValidateException`.
         """
         if self.docs_per_trx <= 0:
-            raise MongodbErrorCode.MONGODB_17.exception(
+            raise MongoDBErrorCode.MONGODB_17.exception(
                 docs_per_trx=self.docs_per_trx,
             )

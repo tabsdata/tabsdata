@@ -11,7 +11,7 @@ from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
 from tabsdatak.conn.mongodb.error import (
     MongoDBValidateException,
-    MongodbErrorCode,
+    MongoDBErrorCode,
 )
 from tabsdatak.error import TabsdataException
 
@@ -128,7 +128,7 @@ def test_mongodb_dest_rejects_non_positive_docs_per_trx():
             collections_with_ids=[("users", None)],
             docs_per_trx=0,
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_17
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_17
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ def test_mongodb_dest_rejects_unknown_dest_cfg_key():
             collections_with_ids=[("users", None)],
             dest_cfg={"bogus.key": 1},
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_2
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_2
 
 
 def test_mongodb_dest_accepts_known_dest_cfg_keys():
@@ -163,4 +163,4 @@ def test_mongodb_conn_rejects_missing_uri():
                 password=Secret("p"),
             ),
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_1
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_1

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 
 import polars as pl
-from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain
+from tabsdatax.itest.fixture.backends.bigquery import BigQueryDomain
 from tabsdatax.itest.fixture.functions.sql import SqlStore
 
 from tabsdatak.api import Secret
@@ -25,7 +25,7 @@ def table_fqn(table: str) -> str:
     return f"{open_}{table}{close}"
 
 
-def dest_conn(domain: BigqueryDomain) -> BigQueryDestConn:
+def dest_conn(domain: BigQueryDomain) -> BigQueryDestConn:
     """The connection, staging through the GCS bucket the bigquery domain itself
     carries -- the load job reads the parquet from there, so the same
     service-account key authenticates both the upload and the load."""
@@ -42,7 +42,7 @@ def dest_conn(domain: BigqueryDomain) -> BigQueryDestConn:
     )
 
 
-def store(domain: BigqueryDomain) -> BigQueryStore:
+def store(domain: BigQueryDomain) -> BigQueryStore:
     """A store to seed / read back / drop what a test wrote, over the domain's own
     credentials."""
     return BigQueryStore(domain)
@@ -52,7 +52,7 @@ class BigQueryStore(SqlStore):
     """A google-cloud-bigquery-backed :class:`SqlStore`. The connector only ever
     writes, so every verification goes through this rather than through it."""
 
-    def __init__(self, domain: BigqueryDomain) -> None:
+    def __init__(self, domain: BigQueryDomain) -> None:
         from google.cloud import bigquery
 
         self._project = domain.project

@@ -246,7 +246,7 @@ class AzBlobLocation(CloudLocation):
 #         and need no cluster-side setup.
 #     """
 #
-#     __kind__ = "druidGcsLocation"
+#     __kind__ = "druidGCSLocation"
 #     bucket: GCSBucketSpec
 #     credentials: GCPJson
 #     base_path: CloudRelativePathSpec = "/"

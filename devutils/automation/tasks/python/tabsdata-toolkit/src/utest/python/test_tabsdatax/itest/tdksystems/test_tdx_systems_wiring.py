@@ -16,7 +16,7 @@ from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.shell import ArgumentParser
 from tabsdatax.itest.tdksystems.systems.base import Health, System
 from tabsdatax.itest.tdksystems.systems.druid.system import DruidSystem
-from tabsdatax.itest.tdksystems.systems.gcs.system import GcsSystem
+from tabsdatax.itest.tdksystems.systems.gcs.system import GCSSystem
 from tabsdatax.itest.tdksystems.systems.mysql.system import MysqlSystem
 from tabsdatax.itest.tdksystems.systems.s3.system import S3System
 from tabsdatax.itest.tdksystems.systems.snowflake.system import SnowflakeSystem
@@ -50,7 +50,7 @@ def fake_s3(monkeypatch):
 
 @pytest.fixture
 def fake_gcs(monkeypatch):
-    monkeypatch.setattr(GcsSystem, "_backend", lambda self, values: _FakeS3())
+    monkeypatch.setattr(GCSSystem, "_backend", lambda self, values: _FakeS3())
 
 
 @pytest.fixture

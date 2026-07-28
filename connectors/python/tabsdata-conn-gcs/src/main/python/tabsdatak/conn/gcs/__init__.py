@@ -69,7 +69,7 @@ from tabsdatak.conn.common.types import (
     StrOrSecretConstraints,
     _convert,
 )
-from tabsdatak.conn.gcs.error import GcsErrorCode
+from tabsdatak.conn.gcs.error import GCSErrorCode
 from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
@@ -112,7 +112,7 @@ DestCfgSpec: TypeAlias = Annotated[
 # --- Connection ------------------------------------------------------
 
 
-@_api.dataclass(GcsErrorCode.GCS_1, kw_only=True)
+@_api.dataclass(GCSErrorCode.GCS_1, kw_only=True)
 class GCSSrcConn(Conn):
     """GCS connection used by `GCSSrc`.
 
@@ -151,7 +151,7 @@ class GCSSrcConn(Conn):
         return _convert(self.base_path, str)
 
 
-@_api.dataclass(GcsErrorCode.GCS_1, kw_only=True)
+@_api.dataclass(GCSErrorCode.GCS_1, kw_only=True)
 class GCSDestConn(Conn):
     """GCS connection used by `GCSDest`.
 
@@ -181,7 +181,7 @@ class GCSDestConn(Conn):
 # --- Source ----------------------------------------------------------
 
 
-@_api.dataclass(GcsErrorCode.GCS_2, kw_only=True)
+@_api.dataclass(GCSErrorCode.GCS_2, kw_only=True)
 class GCSSrc(Src):
     """GCS source for `@publisher` -- one output slot per path.
 
@@ -247,19 +247,19 @@ class GCSSrc(Src):
     def validate(self) -> None:
         """Cross-field validation of `format_cfg` (source side).
 
-        Called by the framework; raises `GcsValidateException` on
+        Called by the framework; raises `GCSValidateException` on
         failure.
         """
         try:
             _validation.validate_format_cfg(self.format_cfg, side="src")
         except Exception as e:
-            raise GcsErrorCode.GCS_3.exception(cause=e, side="src")
+            raise GCSErrorCode.GCS_3.exception(cause=e, side="src")
 
 
 # --- Destination -----------------------------------------------------
 
 
-@_api.dataclass(GcsErrorCode.GCS_4, kw_only=True)
+@_api.dataclass(GCSErrorCode.GCS_4, kw_only=True)
 class GCSDest(Dest):
     """GCS destination for `@subscriber` -- one target file per path.
 
@@ -297,10 +297,10 @@ class GCSDest(Dest):
     def validate(self) -> None:
         """Cross-field validation of `format_cfg` (dest side).
 
-        Called by the framework; raises `GcsValidateException` on
+        Called by the framework; raises `GCSValidateException` on
         failure.
         """
         try:
             _validation.validate_format_cfg(self.format_cfg, side="dest")
         except Exception as e:
-            raise GcsErrorCode.GCS_5.exception(cause=e, side="dest")
+            raise GCSErrorCode.GCS_5.exception(cause=e, side="dest")

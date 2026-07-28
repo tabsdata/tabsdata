@@ -21,7 +21,7 @@ from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
 from tabsdatak.conn.mongodb._explorer._explorer import MongoDBConnectionExplorer
 from tabsdatak.conn.mongodb.error import (
-    MongodbErrorCode,
+    MongoDBErrorCode,
     MongoDBRuntimeException,
 )
 
@@ -381,7 +381,7 @@ def test_write_out_raises_mongodb_18_on_count_mismatch(monkeypatch, work_dir):
         plugin._MongoDBDestPlugin().write_out(
             _Ctx(work_dir), _bare_conn(), dest, [parquet],
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_18
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_18
 
 
 def test_write_out_raises_mongodb_19_on_connect_failure(monkeypatch, work_dir):
@@ -397,7 +397,7 @@ def test_write_out_raises_mongodb_19_on_connect_failure(monkeypatch, work_dir):
         plugin._MongoDBDestPlugin().write_out(
             _Ctx(work_dir), _bare_conn(), dest, [parquet],
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_19
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_19
 
 
 def test_write_out_raises_mongodb_22_on_bare_collection_name(
@@ -415,7 +415,7 @@ def test_write_out_raises_mongodb_22_on_bare_collection_name(
         plugin._MongoDBDestPlugin().write_out(
             _Ctx(work_dir), _bare_conn(), dest, [parquet],
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_22
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_22
 
 
 def test_write_out_bare_collection_uses_uri_default_db(monkeypatch, work_dir):
@@ -445,7 +445,7 @@ def test_write_out_raises_mongodb_21_when_id_field_missing(
         plugin._MongoDBDestPlugin().write_out(
             _Ctx(work_dir), _bare_conn(), dest, [parquet],
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_21
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_21
 
 
 def test_write_out_raises_mongodb_20_on_pymongo_write_failure(
@@ -466,7 +466,7 @@ def test_write_out_raises_mongodb_20_on_pymongo_write_failure(
         plugin._MongoDBDestPlugin().write_out(
             _Ctx(work_dir), _bare_conn(), dest, [parquet],
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_20
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_20
 
 
 def test_write_out_swallows_dup_keys_when_configured(monkeypatch, work_dir):
@@ -505,7 +505,7 @@ def test_write_out_propagates_non_dup_key_bulk_errors(monkeypatch, work_dir):
         plugin._MongoDBDestPlugin().write_out(
             _Ctx(work_dir), _bare_conn(), dest, [parquet],
         )
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_20
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_20
 
 
 def test_write_out_aborts_transaction_on_failure(monkeypatch, work_dir):
@@ -585,13 +585,13 @@ def test_split_collection_qualified_overrides_default_db():
 def test_split_collection_rejects_bare_name_without_default_db():
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._split_collection("users", None)
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_22
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_22
 
 
 def test_split_collection_rejects_empty_db():
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._split_collection(".users", "app")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_22
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_22
 
 
 def test_default_database_name_from_uri():

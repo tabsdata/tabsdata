@@ -26,7 +26,7 @@ from tabsdatax.itest.tdksystems2.systems._common.files import (
 )
 
 
-class Gcs(CloudFileBackend):
+class GCS(CloudFileBackend):
     slug = "gcs"
     label = "GCS"
     env_prefix = "GCS"

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.gcs import GcsSystem, gcs_system
+from tabsdatax.itest.fixture.backends.gcs import GCSSystem, gcs_system
 from tabsdatax.itest.fixture.functions.files import ObjectStore, PluginSrcCtx
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.gcs.backend import run_prefix, src_conn, store
@@ -54,7 +54,7 @@ def _stage(
     objects.upload(local, f"{prefix}/{name}")
 
 
-def _read_back(system: GcsSystem, prefix: str, src: GCSSrc, tmp_path: Path):
+def _read_back(system: GCSSystem, prefix: str, src: GCSSrc, tmp_path: Path):
     work = tmp_path / f"work-src-{uuid.uuid4().hex}"
     work.mkdir()
     return plugin.GCSSrcPlugin().read_in(
@@ -64,7 +64,7 @@ def _read_back(system: GcsSystem, prefix: str, src: GCSSrc, tmp_path: Path):
 
 @gcs_system("gcs")
 def test_src_wildcard_in_basename_matches_multiple_objects(
-    system_gcs: GcsSystem, tmp_path: Path
+    system_gcs: GCSSystem, tmp_path: Path
 ):
     objects = store(system_gcs)
     prefix = run_prefix(system_gcs.sys_path, "td-integ")
@@ -82,7 +82,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
 
 @gcs_system("gcs")
 def test_src_wildcard_with_no_matches_returns_empty_slot(
-    system_gcs: GcsSystem, tmp_path: Path
+    system_gcs: GCSSystem, tmp_path: Path
 ):
     prefix = run_prefix(system_gcs.sys_path, "td-integ")
     _stage(store(system_gcs), prefix, "only.csv", tmp_path, rows=[{"name": "x"}])
@@ -94,7 +94,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
 
 @gcs_system("gcs")
 def test_src_initial_last_modified_filters_out_older_objects(
-    system_gcs: GcsSystem, tmp_path: Path
+    system_gcs: GCSSystem, tmp_path: Path
 ):
     # Object timestamps are server-side, so the two uploads are deliberately
     # spaced and the cut-off taken between them.
@@ -127,7 +127,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
     ],
 )
 def test_src_reads_each_format(
-    system_gcs: GcsSystem,
+    system_gcs: GCSSystem,
     tmp_path: Path,
     name: str,
     writer: Writer,
@@ -153,7 +153,7 @@ def _names(slot) -> list[str]:
     return sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in slot)
 
 
-def _read_with(ctx, system: GcsSystem, prefix: str, src: GCSSrc):
+def _read_with(ctx, system: GCSSystem, prefix: str, src: GCSSrc):
     return plugin.GCSSrcPlugin().read_in(ctx, src_conn(system, prefix), src)
 
 
@@ -164,7 +164,7 @@ def _work(tmp_path: Path, name: str) -> Path:
 
 
 @gcs_system("gcs")
-def test_src_one_slot_per_path_in_path_order(system_gcs: GcsSystem, tmp_path: Path):
+def test_src_one_slot_per_path_in_path_order(system_gcs: GCSSystem, tmp_path: Path):
     objects = store(system_gcs)
     prefix = run_prefix(system_gcs.sys_path, "td-integ")
     for name in ("in/a1.parquet", "in/a2.parquet", "out/b1.parquet", "single.parquet"):
@@ -182,7 +182,7 @@ def test_src_one_slot_per_path_in_path_order(system_gcs: GcsSystem, tmp_path: Pa
 
 @gcs_system("gcs")
 def test_src_overlapping_globs_import_the_same_object_in_every_slot(
-    system_gcs: GcsSystem, tmp_path: Path
+    system_gcs: GCSSystem, tmp_path: Path
 ):
     objects = store(system_gcs)
     prefix = run_prefix(system_gcs.sys_path, "td-integ")
@@ -204,7 +204,7 @@ def test_src_overlapping_globs_import_the_same_object_in_every_slot(
 
 @gcs_system("gcs")
 def test_src_second_run_resumes_from_the_stored_cursor(
-    system_gcs: GcsSystem, tmp_path: Path
+    system_gcs: GCSSystem, tmp_path: Path
 ):
     objects = store(system_gcs)
     prefix = run_prefix(system_gcs.sys_path, "td-integ")
@@ -227,7 +227,7 @@ def test_src_second_run_resumes_from_the_stored_cursor(
 
 @gcs_system("gcs")
 def test_src_without_initial_last_modified_keeps_no_cursor(
-    system_gcs: GcsSystem, tmp_path: Path
+    system_gcs: GCSSystem, tmp_path: Path
 ):
     # A Src with no baseline is not incremental at all: nothing is stored on the
     # context, so every run re-imports whatever the glob matches.
@@ -247,7 +247,7 @@ def test_src_without_initial_last_modified_keeps_no_cursor(
 
 @gcs_system("gcs")
 def test_src_reordering_paths_reimports_because_slots_are_positional(
-    system_gcs: GcsSystem, tmp_path: Path
+    system_gcs: GCSSystem, tmp_path: Path
 ):
     objects = store(system_gcs)
     prefix = run_prefix(system_gcs.sys_path, "td-integ")

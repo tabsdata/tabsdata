@@ -16,7 +16,7 @@ from tabsdatax.itest.fixture.backends.clickhouse import (
     clickhouse_domain,
 )
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
-from tabsdatax.itest.fixture.backends.gcs import GcsDomain, gcs_domain
+from tabsdatax.itest.fixture.backends.gcs import GCSDomain, gcs_domain
 from tabsdatax.itest.fixture.backends.s3 import S3Domain, s3_domain
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from testi_tabsdatak.conn.clickhouse.backend import (
@@ -62,7 +62,7 @@ def test_dest_plugin_write_out_appends_rows(
     domain_clickhouse: ClickhouseDomain,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
-    domain_gcs: GcsDomain,
+    domain_gcs: GCSDomain,
     tmp_path: Path,
 ):
     db = store(domain_clickhouse)
@@ -104,7 +104,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
     domain_clickhouse: ClickhouseDomain,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
-    domain_gcs: GcsDomain,
+    domain_gcs: GCSDomain,
     tmp_path: Path,
 ):
     # Replacing with a different entity: the second write must leave only its own

@@ -20,7 +20,7 @@ from tabsdatax.itest.tdksystems2.systems._common.sql import Admin, SqlContainerB
 _SYSTEM_DBS = frozenset({"admin", "local", "config"})
 
 
-class Mongodb(SqlContainerBackend):
+class MongoDB(SqlContainerBackend):
     slug = "mongodb"
     label = "MongoDB"
     kind = "mongodb"

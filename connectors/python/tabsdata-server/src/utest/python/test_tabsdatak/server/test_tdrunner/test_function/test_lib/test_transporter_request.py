@@ -14,8 +14,8 @@ from tabsdatak.common._transporter.handler.handler1 import (
     AzureEndpoint,
     CopyPair,
     EnvRef,
-    GcsConfigs,
-    GcsEndpoint,
+    GCSConfigs,
+    GCSEndpoint,
     LiteralRef,
     LocalFileEndpoint,
     S3Configs,
@@ -246,7 +246,7 @@ def test_gcs_endpoint(tmp_path):
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
-    assert isinstance(src, GcsEndpoint)
+    assert isinstance(src, GCSEndpoint)
     assert src.configs.service_account_key == EnvRef(name="GCP_SERVICE_ACCOUNT_KEY")
 
 
@@ -469,9 +469,9 @@ def test_yaml_emits_azure_and_gcs_tags():
                 target=LocalFileEndpoint(url="file:///t"),
             ),
             CopyPair(
-                source=GcsEndpoint(
+                source=GCSEndpoint(
                     url="gs://b/x",
-                    configs=GcsConfigs(
+                    configs=GCSConfigs(
                         service_account_key=EnvRef(name="GCP_SERVICE_ACCOUNT_KEY"),
                     ),
                 ),

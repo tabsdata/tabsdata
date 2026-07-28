@@ -49,8 +49,8 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureEndpoint,
     Endpoint,
     EnvRef,
-    GcsConfigs,
-    GcsEndpoint,
+    GCSConfigs,
+    GCSEndpoint,
     LocalFileEndpoint,
     S3Configs,
     S3Endpoint,
@@ -101,7 +101,7 @@ def location_from_endpoint(endpoint: Endpoint, rel: str, handler: TransporterHan
             account_name_env=_env_name(endpoint.configs.account_name),
             account_key_env=_env_name(endpoint.configs.account_key),
         )
-    if isinstance(endpoint, GcsEndpoint):
+    if isinstance(endpoint, GCSEndpoint):
         return handler.gcs_location(
             uri=url,
             service_account_key_env=_env_name(endpoint.configs.service_account_key),
@@ -141,10 +141,10 @@ def _mount_endpoint(endpoint: Endpoint, mount: str) -> Endpoint:
                 account_key=ref("azure_storage_account_key"),
             ),
         )
-    if isinstance(endpoint, GcsEndpoint):
-        return GcsEndpoint(
+    if isinstance(endpoint, GCSEndpoint):
+        return GCSEndpoint(
             url=endpoint.url,
-            configs=GcsConfigs(service_account_key=ref("google_service_account_key")),
+            configs=GCSConfigs(service_account_key=ref("google_service_account_key")),
         )
     return endpoint  # LocalFileEndpoint: no credentials to re-key.
 

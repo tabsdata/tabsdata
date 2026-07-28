@@ -7,10 +7,10 @@ from typing import Optional, Union
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Entity
-from tabsdatak.conn.mongodb.error import MongodbErrorCode
+from tabsdatak.conn.mongodb.error import MongoDBErrorCode
 
 
-@_api.dataclass(MongodbErrorCode.MONGODB_23)
+@_api.dataclass(MongoDBErrorCode.MONGODB_23)
 class MongoIndex:
     """An index defined on a MongoDB collection.
 
@@ -41,7 +41,7 @@ class MongoIndex:
         )
 
 
-@_api.dataclass(MongodbErrorCode.MONGODB_24)
+@_api.dataclass(MongoDBErrorCode.MONGODB_24)
 class MongoValidator:
     """A validator attached to a MongoDB collection.
 
@@ -70,7 +70,7 @@ class MongoValidator:
         )
 
 
-@_api.dataclass(MongodbErrorCode.MONGODB_25)
+@_api.dataclass(MongoDBErrorCode.MONGODB_25)
 class MongoDBEntity(Entity):
     """A MongoDB collection, view, or timeseries collection."""
 
@@ -128,7 +128,7 @@ class MongoDBEntity(Entity):
         )
 
 
-@_api.dataclass(MongodbErrorCode.MONGODB_26)
+@_api.dataclass(MongoDBErrorCode.MONGODB_26)
 class MongoDBConnMetaModel(BaseConnMetaModel):
     """MongoDB: database → collection, with indexes and optional validators."""
 

@@ -10,7 +10,7 @@ from tabsdatak.conn.common.error import ConnException, ConnInitException
 from tabsdatak.conn.mongodb.error import (
     MongoDBRuntimeException,
     MongoDBValidateException,
-    MongodbErrorCode,
+    MongoDBErrorCode,
 )
 
 from tabsdatak.error import TabsdataException
@@ -38,5 +38,5 @@ def test_every_code_uses_known_exception():
         MongoDBValidateException,
         MongoDBRuntimeException,
     )
-    for code in MongodbErrorCode:
+    for code in MongoDBErrorCode:
         assert issubclass(code.value.exception, allowed)

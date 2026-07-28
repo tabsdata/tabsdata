@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from .._cloud import CloudBase
 from ..base import Option
-from .backend import GcsBackend
+from .backend import GCSBackend
 
 
-class GcsSystem(CloudBase):
+class GCSSystem(CloudBase):
     slug = "gcs"
     label = "GCS"
     options = (
@@ -22,5 +22,5 @@ class GcsSystem(CloudBase):
         Option("HMAC_SECRET_KEY", "hmac-secret-key", secret=True),
     )
 
-    def _backend(self, values: dict[str, str]) -> GcsBackend:
-        return GcsBackend(values)
+    def _backend(self, values: dict[str, str]) -> GCSBackend:
+        return GCSBackend(values)

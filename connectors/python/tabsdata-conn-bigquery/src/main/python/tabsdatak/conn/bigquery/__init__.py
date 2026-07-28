@@ -42,7 +42,7 @@ from tabsdatak.api import Dest, StrOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
-from tabsdatak.conn.bigquery.error import BigqueryErrorCode
+from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -112,7 +112,7 @@ class CloudLocation(_api.DescriptorBase, ABC):
     __kind__ = "bigQueryCloudLocation"
 
 
-@_api.dataclass(BigqueryErrorCode.BIGQUERY_8, kw_only=True)
+@_api.dataclass(BigQueryErrorCode.BIGQUERY_8, kw_only=True)
 class GCSLocation(CloudLocation):
     """GCS staging area for `BigQueryDest`.
 
@@ -131,7 +131,7 @@ class GCSLocation(CloudLocation):
         cfg: Optional connector-config dict for the GCS client.
     """
 
-    __kind__ = "bigQueryGcsLocation"
+    __kind__ = "bigQueryGCSLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
     base_path: CloudRelativePathSpec = "/"
@@ -147,7 +147,7 @@ class GCSLocation(CloudLocation):
 # --- Connection ------------------------------------------------------
 
 
-@_api.dataclass(BigqueryErrorCode.BIGQUERY_1, kw_only=True)
+@_api.dataclass(BigQueryErrorCode.BIGQUERY_1, kw_only=True)
 class BigQueryDestConn(Conn):
     """BigQuery connection.
 
@@ -193,13 +193,13 @@ class BigQueryDestConn(Conn):
         """
         if self.dataset is not None and self.project is None:
             # noinspection PyProtectedMember
-            raise BigqueryErrorCode.BIGQUERY_2.exception(dataset=self.dataset)
+            raise BigQueryErrorCode.BIGQUERY_2.exception(dataset=self.dataset)
 
 
 # --- Destination -----------------------------------------------------
 
 
-@_api.dataclass(BigqueryErrorCode.BIGQUERY_3, kw_only=True)
+@_api.dataclass(BigQueryErrorCode.BIGQUERY_3, kw_only=True)
 class BigQueryDest(Dest):
     """BigQuery destination for `@subscriber` -- one output slot per table.
 

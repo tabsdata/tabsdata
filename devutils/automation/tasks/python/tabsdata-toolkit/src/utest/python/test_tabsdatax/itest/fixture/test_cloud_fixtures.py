@@ -13,7 +13,7 @@ import pytest
 
 from tabsdatax.itest.fixture import backend as common
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain, AzureblobSystem
-from tabsdatax.itest.fixture.backends.gcs import GcsDomain, GcsSystem
+from tabsdatax.itest.fixture.backends.gcs import GCSDomain, GCSSystem
 from tabsdatax.itest.fixture.backends.s3 import (
     S3Domain,
     S3System,
@@ -24,7 +24,7 @@ from tabsdatax.itest.fixture.backends.s3 import (
 # slug, SystemCls, DomainCls
 CLOUD = [
     ("s3", S3System, S3Domain),
-    ("gcs", GcsSystem, GcsDomain),
+    ("gcs", GCSSystem, GCSDomain),
     ("azureblob", AzureblobSystem, AzureblobDomain),
 ]
 IDS = [c[0] for c in CLOUD]

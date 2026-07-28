@@ -10,7 +10,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain, mongodb_domain
+from tabsdatax.itest.fixture.backends.mongodb import MongoDBDomain, mongodb_domain
 from testi_tabsdatak.conn.common.sql.datatype_matrix import (
     DATATYPE_CASES,
     DataTypeCase,
@@ -56,7 +56,7 @@ def _params():
 @pytest.mark.parametrize("case, collection", list(_params()))
 @mongodb_domain("mongodb")
 def test_datatype_create_and_load(
-    domain_mongodb: MongodbDomain,
+    domain_mongodb: MongoDBDomain,
     case: DataTypeCase,
     collection: str,
     tmp_path: Path,

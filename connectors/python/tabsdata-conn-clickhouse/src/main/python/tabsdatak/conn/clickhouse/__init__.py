@@ -236,7 +236,7 @@ class GCSLocation(CloudLocation):
         cfg: Optional connector-config dict for the GCS client.
     """
 
-    __kind__ = "clickHouseGcsLocation"
+    __kind__ = "clickHouseGCSLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
     hmac_credentials: GCPHmac

@@ -10,7 +10,7 @@ from tabsdatak.conn.common.error import ConnException, ConnInitException
 from tabsdatak.conn.bigquery.error import (
     BigQueryRuntimeException,
     BigQueryValidateException,
-    BigqueryErrorCode,
+    BigQueryErrorCode,
 )
 
 from tabsdatak.error import TabsdataException
@@ -38,5 +38,5 @@ def test_every_code_uses_known_exception():
         BigQueryValidateException,
         BigQueryRuntimeException,
     )
-    for code in BigqueryErrorCode:
+    for code in BigQueryErrorCode:
         assert issubclass(code.value.exception, allowed)

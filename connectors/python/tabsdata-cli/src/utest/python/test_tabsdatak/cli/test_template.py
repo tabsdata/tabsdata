@@ -124,7 +124,7 @@ def test_polymorphic_staging_lists_all_subclasses_commented():
     for kind in (
         "clickHouseS3Location",
         "clickHouseAzBlobLocation",
-        "clickHouseGcsLocation",
+        "clickHouseGCSLocation",
     ):
         assert f"#   kind: {kind}" in text
     # The blocks render in place (right after the preceding `credentials` field,

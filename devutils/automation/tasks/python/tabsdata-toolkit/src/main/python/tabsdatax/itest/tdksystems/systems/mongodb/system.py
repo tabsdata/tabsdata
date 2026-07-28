@@ -15,7 +15,7 @@ from ...shell import docker_run
 from .._container import AdminConn, ContainerBase, DomainContext, DomainResult
 
 
-class MongodbSystem(ContainerBase):
+class MongoDBSystem(ContainerBase):
     slug = "mongodb"
     label = "MongoDB"
     domain_desc = "a database (with a dedicated user that owns it)"

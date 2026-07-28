@@ -26,7 +26,7 @@ def bq(monkeypatch):
     `datasets` (created BQ datasets) and `cleared` (cleared GCS prefixes)."""
     state: dict = {"datasets": set(), "cleared": []}
 
-    class _FakeGcs:
+    class _FakeGCS:
         def __init__(self, values): pass
         def status(self): pass
         def exists(self, prefix): return False
@@ -40,7 +40,7 @@ def bq(monkeypatch):
         def create_dataset(self, name, *, force=False): state["datasets"].add(name)
         def delete_dataset(self, name): state["datasets"].discard(name)
 
-    monkeypatch.setattr(BigQuerySystem, "_gcs", lambda self, v: _FakeGcs(v))
+    monkeypatch.setattr(BigQuerySystem, "_gcs", lambda self, v: _FakeGCS(v))
     monkeypatch.setattr(BigQuerySystem, "_bq", lambda self, v: _FakeBq(v))
     return state
 

@@ -4,7 +4,7 @@
 
 """BigQuery dataset ops (google-cloud-bigquery). Only what the System contract
 needs: ping / dataset_exists / create_dataset / delete_dataset. Built from a
-plain `{OPTION: value}` dict of resolved connection values, like GcsBackend, so
+plain `{OPTION: value}` dict of resolved connection values, like GCSBackend, so
 create-time and run-time callers construct it the same way. The client library
 is imported lazily so it is only required when BigQuery is actually used."""
 

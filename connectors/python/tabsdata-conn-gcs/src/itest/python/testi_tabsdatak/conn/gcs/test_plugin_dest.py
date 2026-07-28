@@ -12,7 +12,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.gcs import GcsSystem, gcs_system
+from tabsdatax.itest.fixture.backends.gcs import GCSSystem, gcs_system
 from tabsdatax.itest.fixture.functions.files import (
     PluginDestCtx,
     PluginSrcCtx,
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.gcs
 ROWS = [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]
 
 
-def _write_out(system: GcsSystem, prefix: str, dest: GCSDest, tmp_path: Path) -> None:
+def _write_out(system: GCSSystem, prefix: str, dest: GCSDest, tmp_path: Path) -> None:
     """Write ``ROWS`` as the parquet the plugin is handed, then let it land the
     object ``dest`` names."""
     local = tmp_path / f"in-{uuid.uuid4().hex}.parquet"
@@ -43,7 +43,7 @@ def _write_out(system: GcsSystem, prefix: str, dest: GCSDest, tmp_path: Path) ->
 
 
 @gcs_system("gcs")
-def test_dest_then_src_round_trip(system_gcs: GcsSystem, tmp_path: Path):
+def test_dest_then_src_round_trip(system_gcs: GCSSystem, tmp_path: Path):
     prefix = run_prefix(system_gcs.sys_path, "td-integ")
     _write_out(system_gcs, prefix, GCSDest(paths=["users.parquet"]), tmp_path)
 
@@ -72,7 +72,7 @@ def test_dest_then_src_round_trip(system_gcs: GcsSystem, tmp_path: Path):
     ],
 )
 def test_dest_writes_each_format(
-    system_gcs: GcsSystem,
+    system_gcs: GCSSystem,
     tmp_path: Path,
     name: str,
     fmt: DestFileFormat,

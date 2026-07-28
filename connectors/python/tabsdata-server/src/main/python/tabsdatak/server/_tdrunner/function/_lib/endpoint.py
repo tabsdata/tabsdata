@@ -91,18 +91,18 @@ class AzureEndpoint(BaseModel):
     configs: AzureConfigs = Field(default_factory=AzureConfigs)
 
 
-class GcsConfigs(BaseModel):
+class GCSConfigs(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     service_account_key: CredRef | None = None
     extra_configs: dict[str, str] = Field(default_factory=dict)
 
 
-class GcsEndpoint(BaseModel):
+class GCSEndpoint(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     url: str
-    configs: GcsConfigs = Field(default_factory=GcsConfigs)
+    configs: GCSConfigs = Field(default_factory=GCSConfigs)
 
 
 class LocalFileEndpoint(BaseModel):
@@ -111,7 +111,7 @@ class LocalFileEndpoint(BaseModel):
     url: str
 
 
-Endpoint = Union[S3Endpoint, AzureEndpoint, GcsEndpoint, LocalFileEndpoint]
+Endpoint = Union[S3Endpoint, AzureEndpoint, GCSEndpoint, LocalFileEndpoint]
 
 
 # ---- URI → Endpoint resolution -------------------------------------------
@@ -150,9 +150,9 @@ def _build_azure(location: Location) -> Endpoint:
 
 def _build_gcs(location: Location) -> Endpoint:
     prefix = location.env_prefix
-    return GcsEndpoint(
+    return GCSEndpoint(
         url=location.uri,
-        configs=GcsConfigs(
+        configs=GCSConfigs(
             service_account_key=_env(prefix, "GCP_SERVICE_ACCOUNT_KEY"),
         ),
     )

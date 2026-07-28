@@ -7,7 +7,7 @@ import pytest
 
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.mongodb import _validation
-from tabsdatak.conn.mongodb.error import MongodbErrorCode
+from tabsdatak.conn.mongodb.error import MongoDBErrorCode
 
 
 pytestmark = pytest.mark.mongodb
@@ -21,19 +21,19 @@ def test_validate_database_name_accepts_valid(value):
 def test_validate_database_name_rejects_empty():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_database_name("")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_3
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_3
 
 
 def test_validate_database_name_rejects_too_long():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_database_name("a" * 64)
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_7
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_7
 
 
 def test_validate_database_name_rejects_null_byte():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_database_name("bad\x00name")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_8
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_8
 
 
 @pytest.mark.parametrize(
@@ -42,7 +42,7 @@ def test_validate_database_name_rejects_null_byte():
 def test_validate_database_name_rejects_forbidden_char(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_database_name(value)
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_9
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_9
 
 
 @pytest.mark.parametrize("value", ["users", "users.events", pytest.param("a" * 235, id="a35")])
@@ -53,31 +53,31 @@ def test_validate_collection_name_accepts_valid(value):
 def test_validate_collection_name_rejects_empty():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_collection_name("")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_4
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_4
 
 
 def test_validate_collection_name_rejects_too_long():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_collection_name("a" * 236)
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_10
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_10
 
 
 def test_validate_collection_name_rejects_null_byte():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_collection_name("bad\x00name")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_11
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_11
 
 
 def test_validate_collection_name_rejects_dollar():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_collection_name("bad$name")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_12
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_12
 
 
 def test_validate_collection_name_rejects_system_prefix():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_collection_name("system.users")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_13
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_13
 
 
 @pytest.mark.parametrize("value", ["name", "user_id", "field-with-dashes"])
@@ -88,25 +88,25 @@ def test_validate_field_name_accepts_valid(value):
 def test_validate_field_name_rejects_empty():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_field_name("")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_5
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_5
 
 
 def test_validate_field_name_rejects_null_byte():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_field_name("a\x00b")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_14
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_14
 
 
 def test_validate_field_name_rejects_dot():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_field_name("a.b")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_15
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_15
 
 
 def test_validate_field_name_rejects_dollar_prefix():
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_field_name("$op")
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_16
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_16
 
 
 @pytest.mark.parametrize(
@@ -126,4 +126,4 @@ def test_validate_uri_accepts_valid(value):
 def test_validate_uri_rejects_invalid(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_uri(value)
-    assert ei.value.api_error is MongodbErrorCode.MONGODB_6
+    assert ei.value.api_error is MongoDBErrorCode.MONGODB_6

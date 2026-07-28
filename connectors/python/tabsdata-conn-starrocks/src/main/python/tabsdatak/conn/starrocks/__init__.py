@@ -125,7 +125,7 @@ class CloudLocation(_api.DescriptorBase, ABC):
     `GCSLocation`; set one as `StarRocksDestConn.staging`.
     """
 
-    __kind__ = "startRocksCloudLocation"
+    __kind__ = "starRocksCloudLocation"
 
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_8, kw_only=True)
@@ -148,7 +148,7 @@ class S3Location(CloudLocation):
         cfg: Optional connector-config dict for the S3 client.
     """
 
-    __kind__ = "startRocksS3Location"
+    __kind__ = "starRocksS3Location"
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: AwsAccessSecretKey
@@ -184,7 +184,7 @@ class AzBlobLocation(CloudLocation):
         cfg: Optional connector-config dict for the Azure Blob client.
     """
 
-    __kind__ = "startRocksAzBlobLocation"
+    __kind__ = "starRocksAzBlobLocation"
     container: AzContainerSpec
     credentials: AzureAccountKey
     base_path: CloudRelativePathSpec = "/"
@@ -222,7 +222,7 @@ class GCSLocation(CloudLocation):
         cfg: Optional connector-config dict for the GCS client.
     """
 
-    __kind__ = "startRocksGcsLocation"
+    __kind__ = "starRocksGCSLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
     hmac_credentials: GCPHmac

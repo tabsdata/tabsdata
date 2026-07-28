@@ -11,8 +11,8 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
     AzureEndpoint,
     EnvRef,
-    GcsConfigs,
-    GcsEndpoint,
+    GCSConfigs,
+    GCSEndpoint,
     LocalFileEndpoint,
     S3Configs,
     S3Endpoint,
@@ -72,14 +72,14 @@ def test_gs_uri_resolves_to_gcs_endpoint_with_gcp_creds():
     ep = endpoint_from_location(
         Location(uri="gs://bucket/file.parquet", env_prefix=None)
     )
-    assert isinstance(ep, GcsEndpoint)
+    assert isinstance(ep, GCSEndpoint)
     assert ep.url == "gs://bucket/file.parquet"
     assert ep.configs.service_account_key == EnvRef(name="GCP_SERVICE_ACCOUNT_KEY")
 
 
 def test_gs_with_env_prefix():
     ep = endpoint_from_location(Location(uri="gs://bucket/x", env_prefix="PROD"))
-    assert isinstance(ep, GcsEndpoint)
+    assert isinstance(ep, GCSEndpoint)
     assert ep.configs.service_account_key == EnvRef(
         name="PROD_GCP_SERVICE_ACCOUNT_KEY"
     )
@@ -126,8 +126,8 @@ def test_azure_endpoint_default_configs_is_empty():
 
 
 def test_gcs_endpoint_default_configs_is_empty():
-    ep = GcsEndpoint(url="gs://b/x")
-    assert ep.configs == GcsConfigs()
+    ep = GCSEndpoint(url="gs://b/x")
+    assert ep.configs == GCSConfigs()
     assert ep.configs.service_account_key is None
 
 

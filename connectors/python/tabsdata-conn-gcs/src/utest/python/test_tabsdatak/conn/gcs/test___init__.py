@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.gcs.error import GcsValidateException
+from tabsdatak.conn.gcs.error import GCSValidateException
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
@@ -16,7 +16,7 @@ from tabsdatak.conn.common.file.typing_ import (
     SrcFileFormat,
 )
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
-from tabsdatak.conn.gcs.error import GcsErrorCode
+from tabsdatak.conn.gcs.error import GCSErrorCode
 
 
 pytestmark = pytest.mark.gcs
@@ -61,21 +61,21 @@ def test_gcs_dest_full_round_trip():
 
 
 def test_gcs_validate_rejects_cross_side_format_cfg_keys():
-    with pytest.raises(GcsValidateException) as ei:
+    with pytest.raises(GCSValidateException) as ei:
         GCSSrc(
             paths=["data.csv"],
             format=SrcFileFormat.CSV,
             format_cfg={SrcFileFormat.CSV: {"include_header": True}},
         )
-    assert ei.value.api_error is GcsErrorCode.GCS_3
+    assert ei.value.api_error is GCSErrorCode.GCS_3
 
-    with pytest.raises(GcsValidateException) as ei:
+    with pytest.raises(GCSValidateException) as ei:
         GCSDest(
             paths=["out.csv"],
             format=DestFileFormat.CSV,
             format_cfg={DestFileFormat.CSV: {"has_header": True}},
         )
-    assert ei.value.api_error is GcsErrorCode.GCS_5
+    assert ei.value.api_error is GCSErrorCode.GCS_5
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ def test_gcs_conn_rejects_missing_bucket(conn_cls):
 
     with pytest.raises(ConnInitException) as ei:
         conn_cls(credentials=GCPJson(json=Secret()))  # type: ignore[call-arg]
-    assert ei.value.api_error is GcsErrorCode.GCS_1
+    assert ei.value.api_error is GCSErrorCode.GCS_1
 
 
 def test_gcs_conn_rejects_missing_credentials(conn_cls):
@@ -140,7 +140,7 @@ def test_gcs_conn_rejects_missing_credentials(conn_cls):
 
     with pytest.raises(ConnInitException) as ei:
         conn_cls(bucket="my-bucket")  # type: ignore[call-arg]
-    assert ei.value.api_error is GcsErrorCode.GCS_1
+    assert ei.value.api_error is GCSErrorCode.GCS_1
 
 
 def test_gcs_src_rejects_missing_paths():
@@ -150,7 +150,7 @@ def test_gcs_src_rejects_missing_paths():
         GCSSrc(  # type: ignore[call-arg]
             format=SrcFileFormat.CSV,
         )
-    assert ei.value.api_error is GcsErrorCode.GCS_2
+    assert ei.value.api_error is GCSErrorCode.GCS_2
 
 
 def test_gcs_dest_rejects_missing_paths():
@@ -160,4 +160,4 @@ def test_gcs_dest_rejects_missing_paths():
         GCSDest(  # type: ignore[call-arg]
             format=DestFileFormat.CSV,
         )
-    assert ei.value.api_error is GcsErrorCode.GCS_4
+    assert ei.value.api_error is GCSErrorCode.GCS_4

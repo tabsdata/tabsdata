@@ -7,13 +7,13 @@
 from __future__ import annotations
 
 import polars as pl
-from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain
+from tabsdatax.itest.fixture.backends.mongodb import MongoDBDomain
 from tabsdatax.itest.fixture.functions.sql import sql_credentials
 
 from tabsdatak.conn.mongodb import MongoDBDestConn
 
 
-def dest_conn(domain: MongodbDomain) -> MongoDBDestConn:
+def dest_conn(domain: MongoDBDomain) -> MongoDBDestConn:
     return MongoDBDestConn(uri=domain.uri, credentials=sql_credentials(domain))
 
 
@@ -22,7 +22,7 @@ class MongoStore:
     destination-only, so this is the independent oracle every test verifies
     against -- the connector never reads back."""
 
-    def __init__(self, domain: MongodbDomain) -> None:
+    def __init__(self, domain: MongoDBDomain) -> None:
         import pymongo
 
         # The domain's `uri` carries no credentials (they ride separately on the
@@ -48,5 +48,5 @@ class MongoStore:
         self._db[collection].drop()
 
 
-def store(domain: MongodbDomain) -> MongoStore:
+def store(domain: MongoDBDomain) -> MongoStore:
     return MongoStore(domain)

@@ -17,7 +17,7 @@ from tabsdatak.conn.bigquery import (
     DestCfgSpec,
 )
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
-from tabsdatak.conn.bigquery.error import BigqueryErrorCode
+from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import cloud_full_path
@@ -96,7 +96,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         # the DestDef ensures this matches in normal flows; we still
         # double-check at the plugin boundary.
         if len(write_cfg.target_tables) != len(tables):
-            raise BigqueryErrorCode.BIGQUERY_4.exception(
+            raise BigQueryErrorCode.BIGQUERY_4.exception(
                 tables=len(write_cfg.target_tables),
                 slots=len(tables),
             )
@@ -111,7 +111,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 conn.conn_cfg,
             )
         except Exception as e:
-            raise BigqueryErrorCode.BIGQUERY_5.exception(
+            raise BigQueryErrorCode.BIGQUERY_5.exception(
                 cause=e,
                 project=project_str,
             )
@@ -141,7 +141,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 try:
                     _upload_to_gcs(gcs_client, Path(parquet_path), uri)
                 except Exception as e:
-                    raise BigqueryErrorCode.BIGQUERY_6.exception(
+                    raise BigQueryErrorCode.BIGQUERY_6.exception(
                         cause=e,
                         uri=uri,
                     )
@@ -172,7 +172,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                         ),
                     )
                 except Exception as e:
-                    raise BigqueryErrorCode.BIGQUERY_7.exception(
+                    raise BigQueryErrorCode.BIGQUERY_7.exception(
                         cause=e,
                         table=table_fqn,
                     )

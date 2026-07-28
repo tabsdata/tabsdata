@@ -20,7 +20,7 @@ from tabsdatak.conn.mongodb import (
     MongoDBDestConn,
 )
 from tabsdatak.conn.mongodb._explorer._explorer import MongoDBConnectionExplorer
-from tabsdatak.conn.mongodb.error import MongodbErrorCode
+from tabsdatak.conn.mongodb.error import MongoDBErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -127,9 +127,9 @@ def _build_client(conn: MongoDBDestConn) -> Any:
         # surface mid-write.
         client.admin.command("ping")
     except PyMongoError as e:
-        raise MongodbErrorCode.MONGODB_19.exception(cause=e)
+        raise MongoDBErrorCode.MONGODB_19.exception(cause=e)
     except Exception as e:
-        raise MongodbErrorCode.MONGODB_19.exception(cause=e)
+        raise MongoDBErrorCode.MONGODB_19.exception(cause=e)
     return client
 
 
@@ -147,7 +147,7 @@ def _split_collection(value: str, default_db: str | None) -> tuple[str, str]:
         parts = [None, value]
     db, coll = complete_levels(parts, [default_db, None])
     if not db or not coll:
-        raise MongodbErrorCode.MONGODB_22.exception(value=value)
+        raise MongoDBErrorCode.MONGODB_22.exception(value=value)
     return db, coll
 
 
@@ -294,7 +294,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
         # ``len(tables) == cardinality(dest)`` via the binding, but
         # the SPI is generic so we don't trust that here.
         if len(dest.collections_with_ids) != len(tables):
-            raise MongodbErrorCode.MONGODB_18.exception(
+            raise MongoDBErrorCode.MONGODB_18.exception(
                 collections=len(dest.collections_with_ids),
                 slots=len(tables),
             )
@@ -410,7 +410,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
             return pymongo.InsertOne(doc)
 
         if id_field not in doc:
-            raise MongodbErrorCode.MONGODB_21.exception(
+            raise MongoDBErrorCode.MONGODB_21.exception(
                 id_field=id_field,
                 collection=collection_fqn,
             )
@@ -466,14 +466,14 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
                     collection_fqn,
                 )
                 return
-            raise MongodbErrorCode.MONGODB_20.exception(
+            raise MongoDBErrorCode.MONGODB_20.exception(
                 cause=e,
                 collection=collection_fqn,
             )
         except PyMongoError as e:
             if dest.use_trxs and session is not None:
                 session.abort_transaction()
-            raise MongodbErrorCode.MONGODB_20.exception(
+            raise MongoDBErrorCode.MONGODB_20.exception(
                 cause=e,
                 collection=collection_fqn,
             )

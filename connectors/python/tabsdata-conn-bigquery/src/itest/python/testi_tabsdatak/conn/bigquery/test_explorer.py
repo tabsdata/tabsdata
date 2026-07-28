@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import pytest
-from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain, bigquery_domain
+from tabsdatax.itest.fixture.backends.bigquery import BigQueryDomain, bigquery_domain
 from testi_tabsdatak.conn.bigquery.backend import dest_conn, store
 
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
@@ -36,7 +36,7 @@ def _entity_by_table(entities: list[SQLEntity], table: str) -> SQLEntity:
 
 
 @bigquery_domain("bigquery")
-def test_check_connect_succeeds(domain_bigquery: BigqueryDomain):
+def test_check_connect_succeeds(domain_bigquery: BigQueryDomain):
     conn = dest_conn(domain_bigquery)
     assert BigQueryConnectionExplorer().check_connect(conn) is None
 
@@ -47,7 +47,7 @@ def test_check_connect_succeeds(domain_bigquery: BigqueryDomain):
 
 
 @bigquery_domain("bigquery")
-def test_metadata_lists_seeded_table(domain_bigquery: BigqueryDomain):
+def test_metadata_lists_seeded_table(domain_bigquery: BigQueryDomain):
     db = store(domain_bigquery)
     table = "td_explorer_metadata"
     db.create_int_table(table, SEEDED_ROWS)
@@ -73,7 +73,7 @@ def test_metadata_lists_seeded_table(domain_bigquery: BigqueryDomain):
 
 
 @bigquery_domain("bigquery")
-def test_metadata_reflects_columns(domain_bigquery: BigqueryDomain):
+def test_metadata_reflects_columns(domain_bigquery: BigQueryDomain):
     db = store(domain_bigquery)
     table = "td_explorer_columns"
     db.create_int_table(table, SEEDED_ROWS)
@@ -104,7 +104,7 @@ def test_metadata_reflects_columns(domain_bigquery: BigqueryDomain):
 
 
 @bigquery_domain("bigquery")
-def test_data_returns_all_rows(domain_bigquery: BigqueryDomain):
+def test_data_returns_all_rows(domain_bigquery: BigQueryDomain):
     db = store(domain_bigquery)
     table = "td_explorer_data"
     db.create_int_table(table, SEEDED_ROWS)
@@ -123,7 +123,7 @@ def test_data_returns_all_rows(domain_bigquery: BigqueryDomain):
 
 
 @bigquery_domain("bigquery")
-def test_data_respects_limit(domain_bigquery: BigqueryDomain):
+def test_data_respects_limit(domain_bigquery: BigQueryDomain):
     db = store(domain_bigquery)
     table = "td_explorer_limit"
     db.create_int_table(table, SEEDED_ROWS)

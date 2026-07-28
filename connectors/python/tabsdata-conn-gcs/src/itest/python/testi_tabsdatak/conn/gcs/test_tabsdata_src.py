@@ -10,7 +10,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.gcs import GcsDomain, gcs_domain
+from tabsdatax.itest.fixture.backends.gcs import GCSDomain, gcs_domain
 from tabsdatax.itest.fixture.functions.harness import (
     CollectionFactory,
     assert_frames_match,
@@ -32,7 +32,7 @@ FUNCTIONS = Path(__file__).parent / "functions"
 publisher = function_module(FUNCTIONS, "publisher")
 
 
-def _entity_key(domain: GcsDomain, fmt: str) -> str:
+def _entity_key(domain: GCSDomain, fmt: str) -> str:
     """The provisioned object a publisher's glob matches. The descriptor lists
     entities as ``<format>/<entity>_<stamp>.<format>``, relative to base_path."""
     prefix = f"{fmt}/{publisher.ENTITY}_"
@@ -41,7 +41,7 @@ def _entity_key(domain: GcsDomain, fmt: str) -> str:
     return f"{str(domain.base_path).strip('/')}/{matches[0]}"
 
 
-def _reference(domain: GcsDomain, source_format: str, tmp_path: Path) -> pl.DataFrame:
+def _reference(domain: GCSDomain, source_format: str, tmp_path: Path) -> pl.DataFrame:
     """What the published table must hold. The staged model is identical across
     formats, so the csv copy is the reference for every one of them -- except that
     the transporter reads a quoted empty csv cell as null, where polars' own read
@@ -68,7 +68,7 @@ def test_publisher_reads_format_from_gcs_domain(
     source_format: str,
     function: FunctionInfo,
     instance_tdtest: Instance,
-    domain_gcs_world_xs: GcsDomain,
+    domain_gcs_world_xs: GCSDomain,
     collection_factory: CollectionFactory,
     tmp_path: Path,
 ) -> None:

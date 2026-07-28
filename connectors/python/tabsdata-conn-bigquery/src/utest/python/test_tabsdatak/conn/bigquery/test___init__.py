@@ -23,7 +23,7 @@ from tabsdatak.conn.bigquery import (
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.bigquery.error import (
     BigQueryValidateException,
-    BigqueryErrorCode,
+    BigQueryErrorCode,
 )
 from tabsdatak.conn.bigquery import GCSLocation
 from tabsdatak.conn.common.types import CfgSpec, GCPJson
@@ -65,7 +65,7 @@ def test_bigquery_conn_validate_rejects_dataset_without_project():
             credentials=GCPJson(json=Secret()),
             dataset="analytics",
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_2
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_2
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ def test_bigquery_dest_rejects_unknown_dest_cfg_key():
             tables=["`myproject.mydataset.users`"],
             dest_cfg={"bogus.key": 1},
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_3
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_3
 
 
 def test_bigquery_dest_accepts_known_dest_cfg_keys():
@@ -123,4 +123,4 @@ def test_bigquery_conn_rejects_missing_staging():
             project="my-project",
             dataset="analytics",
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_1
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_1

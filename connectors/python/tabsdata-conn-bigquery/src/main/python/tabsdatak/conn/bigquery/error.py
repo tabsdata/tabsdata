@@ -28,13 +28,13 @@ class BigQueryRuntimeException(ConnException):
     """
 
 
-class BigqueryErrorCode(ErrorCode):
+class BigQueryErrorCode(ErrorCode):
     """Error codes for the BigQuery connector.
 
     :categories: error
 
     One variant per validation / runtime site. Raise via
-    `BigqueryErrorCode.BIGQUERY_N.exception`.
+    `BigQueryErrorCode.BIGQUERY_N.exception`.
     """
 
     BIGQUERY_1 = ErrorDef(

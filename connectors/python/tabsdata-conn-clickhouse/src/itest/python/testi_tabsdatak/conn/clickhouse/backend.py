@@ -11,7 +11,7 @@ import uuid
 import polars as pl
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain
 from tabsdatax.itest.fixture.backends.clickhouse import ClickhouseDomain
-from tabsdatax.itest.fixture.backends.gcs import GcsDomain
+from tabsdatax.itest.fixture.backends.gcs import GCSDomain
 from tabsdatax.itest.fixture.backends.s3 import S3Domain
 from tabsdatax.itest.fixture.functions.sql import SqlStore, sql_credentials
 
@@ -33,7 +33,7 @@ from tabsdatak.conn.common.types import (
 # ClickHouse quotes identifiers with backticks.
 DELIMITERS = ("`", "`")
 
-StagingDomain = S3Domain | AzureblobDomain | GcsDomain
+StagingDomain = S3Domain | AzureblobDomain | GCSDomain
 
 # ClickHouse never inserts row by row: it lands parquet in a cloud bucket and
 # ingests it from there, so a write test runs once per staging provider. GCS is
@@ -45,7 +45,7 @@ def staging_domain(
     provider: str,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
-    domain_gcs: GcsDomain,
+    domain_gcs: GCSDomain,
 ) -> StagingDomain:
     """The object-store domain a :data:`STAGING_PROVIDERS` id names."""
     return {"s3": domain_s3, "azblob": domain_azureblob, "gcs": domain_gcs}[provider]
@@ -175,7 +175,7 @@ def _staging(domain: StagingDomain) -> CloudLocation:
             ),
             base_path=base_path,
         )
-    if isinstance(domain, GcsDomain):
+    if isinstance(domain, GCSDomain):
         return GCSLocation(
             bucket=domain.bucket,
             credentials=GCPJson(json=Secret(domain.service_account_key)),

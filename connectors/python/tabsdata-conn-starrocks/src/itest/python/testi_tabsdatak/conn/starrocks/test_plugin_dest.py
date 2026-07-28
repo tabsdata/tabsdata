@@ -12,7 +12,7 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain, azureblob_domain
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
-from tabsdatax.itest.fixture.backends.gcs import GcsDomain, gcs_domain
+from tabsdatax.itest.fixture.backends.gcs import GCSDomain, gcs_domain
 from tabsdatax.itest.fixture.backends.s3 import S3Domain, s3_domain
 from tabsdatax.itest.fixture.backends.starrocks import StarrocksDomain, starrocks_domain
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
@@ -61,7 +61,7 @@ def test_dest_plugin_write_out_appends_rows(
     domain_starrocks: StarrocksDomain,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
-    domain_gcs: GcsDomain,
+    domain_gcs: GCSDomain,
     tmp_path: Path,
 ):
     db = store(domain_starrocks)
@@ -104,7 +104,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
     domain_starrocks: StarrocksDomain,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
-    domain_gcs: GcsDomain,
+    domain_gcs: GCSDomain,
     tmp_path: Path,
 ):
     # `replace` truncates the existing table rather than recreating it -- the

@@ -2,6 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-from .system import MongodbSystem
+from .system import MongoDBSystem
 
-__all__ = ["MongodbSystem"]
+__all__ = ["MongoDBSystem"]

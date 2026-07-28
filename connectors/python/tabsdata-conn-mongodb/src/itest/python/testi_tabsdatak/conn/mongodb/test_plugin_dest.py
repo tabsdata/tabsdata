@@ -11,7 +11,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
-from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain, mongodb_domain
+from tabsdatax.itest.fixture.backends.mongodb import MongoDBDomain, mongodb_domain
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from testi_tabsdatak.conn.common.sql.employees_model import DEPARTMENTS
 from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_dir
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.mongodb
 
 
 def _write_out(
-    domain: MongodbDomain,
+    domain: MongoDBDomain,
     work: Path,
     collection: str,
     parquet: Path,
@@ -49,7 +49,7 @@ def _write_out(
 @mongodb_domain("mongodb")
 def test_dest_plugin_write_out_appends_documents(
     domain_fs_employees_xs: FsDomain,
-    domain_mongodb: MongodbDomain,
+    domain_mongodb: MongoDBDomain,
     tmp_path: Path,
 ):
     db = store(domain_mongodb)
@@ -79,7 +79,7 @@ def test_dest_plugin_write_out_appends_documents(
 @mongodb_domain("mongodb")
 def test_dest_plugin_write_out_replace_clears_existing(
     domain_fs_employees_xs: FsDomain,
-    domain_mongodb: MongodbDomain,
+    domain_mongodb: MongoDBDomain,
     tmp_path: Path,
 ):
     # The pre-existing documents are seeded with a field the entity does not have,
@@ -108,7 +108,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
 @mongodb_domain("mongodb")
 def test_dest_plugin_write_out_upserts_on_id_field(
     domain_fs_employees_xs: FsDomain,
-    domain_mongodb: MongodbDomain,
+    domain_mongodb: MongoDBDomain,
     tmp_path: Path,
 ):
     # With an `id_field` the plugin copies that field into `_id` and upserts, so
@@ -140,7 +140,7 @@ def test_dest_plugin_write_out_upserts_on_id_field(
 @mongodb_domain("mongodb")
 def test_dest_plugin_write_out_qualified_collection_targets_database(
     domain_fs_employees_xs: FsDomain,
-    domain_mongodb: MongodbDomain,
+    domain_mongodb: MongoDBDomain,
     tmp_path: Path,
 ):
     # A bare collection resolves against the database named in the connection URI
@@ -168,7 +168,7 @@ def test_dest_plugin_write_out_qualified_collection_targets_database(
 @mongodb_domain("mongodb")
 def test_dest_plugin_write_out_chunks_by_docs_per_trx(
     domain_fs_employees_xs: FsDomain,
-    domain_mongodb: MongodbDomain,
+    domain_mongodb: MongoDBDomain,
     tmp_path: Path,
 ):
     db = store(domain_mongodb)

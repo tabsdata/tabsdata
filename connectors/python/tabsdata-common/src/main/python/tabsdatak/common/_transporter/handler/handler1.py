@@ -88,18 +88,18 @@ class AzureEndpoint(BaseModel):
     configs: AzureConfigs = Field(default_factory=AzureConfigs)
 
 
-class GcsConfigs(BaseModel):
+class GCSConfigs(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     service_account_key: CredRef | None = None
     extra_configs: dict[str, str] = Field(default_factory=dict)
 
 
-class GcsEndpoint(BaseModel):
+class GCSEndpoint(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     url: str
-    configs: GcsConfigs = Field(default_factory=GcsConfigs)
+    configs: GCSConfigs = Field(default_factory=GCSConfigs)
 
 
 class LocalFileEndpoint(BaseModel):
@@ -108,7 +108,7 @@ class LocalFileEndpoint(BaseModel):
     url: str
 
 
-Endpoint = Union[S3Endpoint, AzureEndpoint, GcsEndpoint, LocalFileEndpoint]
+Endpoint = Union[S3Endpoint, AzureEndpoint, GCSEndpoint, LocalFileEndpoint]
 
 
 class UnsupportedSchemeError(ValueError):
@@ -155,9 +155,9 @@ def build_azure(uri: str, prefix: str | None) -> Endpoint:
 
 
 def build_gcs(uri: str, prefix: str | None) -> Endpoint:
-    return GcsEndpoint(
+    return GCSEndpoint(
         url=uri,
-        configs=GcsConfigs(
+        configs=GCSConfigs(
             service_account_key=env_ref(prefix, "GCP_SERVICE_ACCOUNT_KEY"),
         ),
     )
@@ -201,7 +201,7 @@ def make_dumper() -> type[yaml.SafeDumper]:
     TransporterDumper.add_representer(LiteralRef, literal_repr)
     TransporterDumper.add_representer(S3Endpoint, s3_repr)
     TransporterDumper.add_representer(AzureEndpoint, azure_repr)
-    TransporterDumper.add_representer(GcsEndpoint, gcs_repr)
+    TransporterDumper.add_representer(GCSEndpoint, gcs_repr)
     TransporterDumper.add_representer(LocalFileEndpoint, local_repr)
     TransporterDumper.add_representer(TransporterCopyRequest, copy_repr)
     return TransporterDumper
@@ -246,7 +246,7 @@ def azure_repr(
     )
 
 
-def gcs_repr(dumper: yaml.SafeDumper, endpoint: GcsEndpoint) -> yaml.nodes.MappingNode:
+def gcs_repr(dumper: yaml.SafeDumper, endpoint: GCSEndpoint) -> yaml.nodes.MappingNode:
     return dumper.represent_mapping(
         "!GCS",
         {

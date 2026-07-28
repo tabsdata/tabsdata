@@ -22,7 +22,7 @@ from tabsdatax.itest.tdksystems2 import options
 from tabsdatax.itest.tdksystems2.errors import TdxError
 
 
-class Bigquery:
+class BigQuery:
     is_container: bool = False
     supports_purge: bool = True
     supports_models: bool = False

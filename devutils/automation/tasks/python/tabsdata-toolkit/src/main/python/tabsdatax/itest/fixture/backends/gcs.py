@@ -15,7 +15,7 @@ from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class GcsSystem(System):
+class GCSSystem(System):
     system_type: ClassVar[str] = "gcs"
     name: str
     system_kind: str
@@ -28,7 +28,7 @@ class GcsSystem(System):
 
 
 @dataclass(frozen=True)
-class GcsDomain(Domain):
+class GCSDomain(Domain):
     system_type: ClassVar[str] = "gcs"
     name: str
     system_kind: str
@@ -48,8 +48,8 @@ class GcsDomain(Domain):
 
 
 def gcs_system(name: str):
-    return require(name, GcsSystem)
+    return require(name, GCSSystem)
 
 
 def gcs_domain(name: str):
-    return require(name, GcsDomain)
+    return require(name, GCSDomain)

@@ -28,13 +28,13 @@ class MongoDBRuntimeException(ConnException):
     """
 
 
-class MongodbErrorCode(ErrorCode):
+class MongoDBErrorCode(ErrorCode):
     """Error codes for the MongoDB connector.
 
     :categories: error
 
     One variant per validation / runtime site. Raise via
-    `MongodbErrorCode.MONGODB_N.exception`.
+    `MongoDBErrorCode.MONGODB_N.exception`.
     """
 
     MONGODB_1 = ErrorDef(

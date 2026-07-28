@@ -6,7 +6,7 @@
 
 Hybrid, so it subclasses `System` directly rather than a category mixin:
   * system: a GCP PROJECT + service-account CREDENTIALS + a GCS BUCKET and
-    SYS_PATH staging prefix (the GCS side reuses `GcsBackend`);
+    SYS_PATH staging prefix (the GCS side reuses `GCSBackend`);
   * domain: named like every other system — the domain NAME is both the
     BigQuery DATASET and the GCS staging prefix segment (BASE_PATH =
     SYS_PATH/<name>); destroying the domain drops the dataset and clears the
@@ -27,7 +27,7 @@ from ..base import (
     System,
     SystemContext,
 )
-from ..gcs.backend import GcsBackend
+from ..gcs.backend import GCSBackend
 from . import client
 
 
@@ -52,8 +52,8 @@ class BigQuerySystem(System):
 
     # ---- fakeable seams (mirror gcs._backend / snowflake._cursor) ----
 
-    def _gcs(self, values: dict[str, str]) -> GcsBackend:
-        return GcsBackend(values)
+    def _gcs(self, values: dict[str, str]) -> GCSBackend:
+        return GCSBackend(values)
 
     def _bq(self, values: dict[str, str]) -> "client.BigQueryClient":
         return client.BigQueryClient(values)

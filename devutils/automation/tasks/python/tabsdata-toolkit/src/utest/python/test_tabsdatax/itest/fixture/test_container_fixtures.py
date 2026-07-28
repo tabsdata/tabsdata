@@ -14,7 +14,7 @@ from tabsdatax.itest.fixture import backend as common
 from tabsdatax.itest.tdksystems2 import naming
 from tabsdatax.itest.fixture.backends.clickhouse import ClickhouseDomain, ClickhouseSystem
 from tabsdatax.itest.fixture.backends.db2 import Db2Domain, Db2System
-from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain, MongodbSystem
+from tabsdatax.itest.fixture.backends.mongodb import MongoDBDomain, MongoDBSystem
 from tabsdatax.itest.fixture.backends.mssqlserver import MssqlserverDomain, MssqlserverSystem
 from tabsdatax.itest.fixture.backends.mysql import (
     MysqlDomain,
@@ -34,7 +34,7 @@ CONTAINER = [
     ("mssqlserver", "sql", False, MssqlserverSystem, MssqlserverDomain),
     ("oracle", "sql", False, OracleSystem, OracleDomain),
     ("db2", "sql", False, Db2System, Db2Domain),
-    ("mongodb", "mongodb", False, MongodbSystem, MongodbDomain),
+    ("mongodb", "mongodb", False, MongoDBSystem, MongoDBDomain),
     ("redpanda", "kafka", False, RedpandaSystem, RedpandaDomain),
     ("clickhouse", "sql", False, ClickhouseSystem, ClickhouseDomain),
     ("starrocks", "sql", False, StarrocksSystem, StarrocksDomain),

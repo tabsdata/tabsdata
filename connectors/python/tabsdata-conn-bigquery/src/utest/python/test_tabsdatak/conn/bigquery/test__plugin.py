@@ -21,7 +21,7 @@ from tabsdatak.conn.bigquery import _impl as impl
 from tabsdatak.conn.bigquery import _plugin as plugin
 from tabsdatak.conn.bigquery.error import (
     BigQueryRuntimeException,
-    BigqueryErrorCode,
+    BigQueryErrorCode,
 )
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery import GCSLocation
@@ -261,7 +261,7 @@ def test_dest_plugin_raises_bigquery_4_on_tables_slots_mismatch(work_dir):
         plugin._BigQueryDestPlugin().write_out(
             _dest_ctx(work_dir), _bare_conn(), dest, [src]
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_4
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_4
 
 
 def test_dest_plugin_raises_bigquery_4_when_empty_tables(work_dir):
@@ -271,7 +271,7 @@ def test_dest_plugin_raises_bigquery_4_when_empty_tables(work_dir):
         plugin._BigQueryDestPlugin().write_out(
             _dest_ctx(work_dir), _bare_conn(), dest, [src]
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_4
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_4
 
 
 def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
@@ -295,7 +295,7 @@ def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
         plugin._BigQueryDestPlugin().write_out(
             _dest_ctx(work_dir), _bare_conn(), dest, [src]
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_5
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_5
 
 
 def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
@@ -325,7 +325,7 @@ def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
         plugin._BigQueryDestPlugin().write_out(
             _dest_ctx(work_dir), _bare_conn(), dest, [src]
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_6
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_6
     # Best-effort cleanup still attempts to delete the staging URI even
     # when the upload (which created the partial / nothing) failed.
     blob.delete.assert_called()
@@ -361,7 +361,7 @@ def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
         plugin._BigQueryDestPlugin().write_out(
             _dest_ctx(work_dir), _bare_conn(), dest, [src]
         )
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_7
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_7
     # Upload succeeded, so cleanup runs unconditionally.
     blob.delete.assert_called()
 
@@ -495,7 +495,7 @@ def test_bigquery_dest_cardinality_zero_for_empty_tables():
 def test_bigquery_dest_requires_tables():
     with pytest.raises(ConnInitException) as ei:
         BigQueryDest()
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_3
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_3
 
 
 # ---------------------------------------------------------------------------

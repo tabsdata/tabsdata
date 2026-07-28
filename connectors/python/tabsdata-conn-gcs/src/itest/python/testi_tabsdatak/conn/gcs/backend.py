@@ -10,7 +10,7 @@ import json
 import uuid
 from pathlib import Path
 
-from tabsdatax.itest.fixture.backends.gcs import GcsDomain, GcsSystem
+from tabsdatax.itest.fixture.backends.gcs import GCSDomain, GCSSystem
 from tabsdatax.itest.fixture.functions.files import ObjectStore
 
 from tabsdatak.api import Secret
@@ -24,14 +24,14 @@ from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn
 TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
 
 # Either backend flavour -- both carry bucket / service_account_key.
-GcsBackend = GcsSystem | GcsDomain
+GCSBackend = GCSSystem | GCSDomain
 
 
-def credentials(backend: GcsBackend) -> GCPJson:
+def credentials(backend: GCSBackend) -> GCPJson:
     return GCPJson(json=Secret(backend.service_account_key))
 
 
-def src_conn(backend: GcsBackend, base_path: str) -> GCSSrcConn:
+def src_conn(backend: GCSBackend, base_path: str) -> GCSSrcConn:
     return GCSSrcConn(
         bucket=backend.bucket,
         credentials=credentials(backend),
@@ -39,7 +39,7 @@ def src_conn(backend: GcsBackend, base_path: str) -> GCSSrcConn:
     )
 
 
-def dest_conn(backend: GcsBackend, base_path: str) -> GCSDestConn:
+def dest_conn(backend: GCSBackend, base_path: str) -> GCSDestConn:
     return GCSDestConn(
         bucket=backend.bucket,
         credentials=credentials(backend),
@@ -55,18 +55,18 @@ def run_prefix(root: str | Path, area: str) -> str:
     return f"{parent}/{suffix}" if parent else suffix
 
 
-def store(backend: GcsBackend) -> ObjectStore:
+def store(backend: GCSBackend) -> ObjectStore:
     """A store to stage / read back what a test wrote, over the backend's own
     credentials."""
-    return GcsObjectStore(backend)
+    return GCSObjectStore(backend)
 
 
-class GcsObjectStore(ObjectStore):
+class GCSObjectStore(ObjectStore):
     """google-cloud-storage-backed :class:`ObjectStore`: stage source objects and
     download emitted objects to verify the bytes the transporter wrote (the src
     plugin would re-transcode to parquet, hiding the on-object format)."""
 
-    def __init__(self, backend: GcsBackend) -> None:
+    def __init__(self, backend: GCSBackend) -> None:
         from google.cloud import storage
 
         self._bucket = storage.Client.from_service_account_info(

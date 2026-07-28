@@ -24,14 +24,14 @@ _SLUGS = {
     "db2": ("db2.system", "Db2System"),
     "db2cdc": ("db2cdc.system", "Db2CdcSystem"),
     "clickhouse": ("clickhouse.system", "ClickhouseSystem"),
-    "mongodb": ("mongodb.system", "MongodbSystem"),
+    "mongodb": ("mongodb.system", "MongoDBSystem"),
     "starrocks": ("starrocks.system", "StarrocksSystem"),
     "redpanda": ("redpanda.system", "RedpandaSystem"),
     # containers (compose stack)
     "druid": ("druid.system", "DruidSystem"),
     # cloud / fs
     "s3": ("s3.system", "S3System"),
-    "gcs": ("gcs.system", "GcsSystem"),
+    "gcs": ("gcs.system", "GCSSystem"),
     "azureblob": ("azureblob.system", "AzureblobSystem"),
     "fs": ("fs.system", "FsSystem"),
     # saas

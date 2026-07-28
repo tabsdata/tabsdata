@@ -14,7 +14,7 @@ from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class MongodbSystem(System):
+class MongoDBSystem(System):
     system_type: ClassVar[str] = "mongodb"
     name: str
     system_kind: str
@@ -27,7 +27,7 @@ class MongodbSystem(System):
 
 
 @dataclass(frozen=True)
-class MongodbDomain(Domain):
+class MongoDBDomain(Domain):
     system_type: ClassVar[str] = "mongodb"
     name: str
     system_kind: str
@@ -47,8 +47,8 @@ class MongodbDomain(Domain):
 
 
 def mongodb_system(name: str):
-    return require(name, MongodbSystem)
+    return require(name, MongoDBSystem)
 
 
 def mongodb_domain(name: str):
-    return require(name, MongodbDomain)
+    return require(name, MongoDBDomain)

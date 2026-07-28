@@ -18,8 +18,8 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
     AzureEndpoint,
     EnvRef,
-    GcsConfigs,
-    GcsEndpoint,
+    GCSConfigs,
+    GCSEndpoint,
     LocalFileEndpoint,
     S3Configs,
     S3Endpoint,
@@ -77,8 +77,8 @@ def test_azure_gcs_local_endpoints_build_their_locations():
     assert az.url == "az://c/x/m"
 
     gcs = location_from_endpoint(
-        GcsEndpoint(
-            url="gs://b/x", configs=GcsConfigs(service_account_key=EnvRef(name="J"))
+        GCSEndpoint(
+            url="gs://b/x", configs=GCSConfigs(service_account_key=EnvRef(name="J"))
         ),
         "m",
         HANDLER,

@@ -2,6 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-from .system import GcsSystem
+from .system import GCSSystem
 
-__all__ = ["GcsSystem"]
+__all__ = ["GCSSystem"]

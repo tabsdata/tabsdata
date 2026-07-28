@@ -451,7 +451,7 @@ to extend later but consumers (1.10, 3.x) want a stable shape.
   format is *its* contract — it expects `!CopyV1`, `!S3`, `!Azure`,
   `!GCS`, `!LocalFile`, `!Env`, `!Literal`. Mirrored exactly via
   PyYAML `add_representer`.
-* **Endpoint dataclasses:** `S3Endpoint`, `AzureEndpoint`, `GcsEndpoint`,
+* **Endpoint dataclasses:** `S3Endpoint`, `AzureEndpoint`, `GCSEndpoint`,
   `LocalFileEndpoint` — frozen, fields match the legacy
   `TransporterS3` / etc. shape (`url` + `configs.{access_key, secret_key,
   region, extra_configs}` etc).

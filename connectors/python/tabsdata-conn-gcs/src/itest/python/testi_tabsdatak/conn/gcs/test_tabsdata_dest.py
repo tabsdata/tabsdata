@@ -11,7 +11,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.gcs import GcsDomain, gcs_domain
+from tabsdatax.itest.fixture.backends.gcs import GCSDomain, gcs_domain
 from tabsdatax.itest.fixture.functions.files import download_object
 from tabsdatax.itest.fixture.functions.harness import (
     CollectionFactory,
@@ -54,7 +54,7 @@ def test_subscriber_writes_format_to_gcs_domain(
     reader: Callable[[Path], pl.DataFrame],
     function: FunctionInfo,
     instance_tdtest: Instance,
-    domain_gcs: GcsDomain,
+    domain_gcs: GCSDomain,
     collection_factory: CollectionFactory,
     tmp_path: Path,
 ) -> None:

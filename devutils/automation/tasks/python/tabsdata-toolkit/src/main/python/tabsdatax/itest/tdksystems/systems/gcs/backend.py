@@ -21,7 +21,7 @@ def _is_inline_json(value: str) -> bool:
     return value.lstrip().startswith("{")
 
 
-class GcsBackend:
+class GCSBackend:
     """Built from a plain `{OPTION: value}` dict of resolved connection values
     — no argparse / descriptor coupling, so create-time and run-time callers
     construct it the same way."""

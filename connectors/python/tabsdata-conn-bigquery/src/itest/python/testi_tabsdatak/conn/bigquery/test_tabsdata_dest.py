@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain, bigquery_domain
+from tabsdatax.itest.fixture.backends.bigquery import BigQueryDomain, bigquery_domain
 from tabsdatax.itest.fixture.functions.harness import (
     CollectionFactory,
     assert_frames_match,
@@ -35,7 +35,7 @@ subscriber = function_module(FUNCTIONS, "subscriber")
 @bigquery_domain("bigquery")
 def test_subscriber_writes_table_to_bigquery_domain(
     instance_tdtest: Instance,
-    domain_bigquery: BigqueryDomain,
+    domain_bigquery: BigQueryDomain,
     collection_factory: CollectionFactory,
 ) -> None:
     # The subscriber reads a tabsdata table, so the input table is filled by the

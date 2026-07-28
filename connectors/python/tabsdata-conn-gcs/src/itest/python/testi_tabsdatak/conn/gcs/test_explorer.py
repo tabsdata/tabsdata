@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 from tabsdatax.itest.fixture.backends.gcs import (
-    GcsDomain,
+    GCSDomain,
     gcs_domain,
 )
 from testi_tabsdatak.conn.gcs.backend import credentials, src_conn
@@ -97,7 +97,7 @@ def _entity_by_file(
 
 
 @gcs_domain("gcs_world_xs")
-def test_check_connect_succeeds(domain_gcs_world_xs: GcsDomain):
+def test_check_connect_succeeds(domain_gcs_world_xs: GCSDomain):
     # Contract: returns None on success and must not raise.
     domain = domain_gcs_world_xs
     conn = src_conn(domain, domain.base_path)
@@ -105,7 +105,7 @@ def test_check_connect_succeeds(domain_gcs_world_xs: GcsDomain):
 
 
 @gcs_domain("gcs_world_xs")
-def test_check_connect_nonexistent_bucket_raises(domain_gcs_world_xs: GcsDomain):
+def test_check_connect_nonexistent_bucket_raises(domain_gcs_world_xs: GCSDomain):
     bad = GCSSrcConn(
         bucket=f"td-does-not-exist-{uuid.uuid4().hex}",
         credentials=credentials(domain_gcs_world_xs),
@@ -120,7 +120,7 @@ def test_check_connect_nonexistent_bucket_raises(domain_gcs_world_xs: GcsDomain)
 
 
 @gcs_domain("gcs_world_xs")
-def test_metadata_lists_domain_objects(domain_gcs_world_xs: GcsDomain):
+def test_metadata_lists_domain_objects(domain_gcs_world_xs: GCSDomain):
     domain = domain_gcs_world_xs
     entities = GCSConnectionExplorer().metadata(src_conn(domain, domain.base_path))
 
@@ -139,7 +139,7 @@ def test_metadata_lists_domain_objects(domain_gcs_world_xs: GcsDomain):
 
 
 @gcs_domain("gcs_world_xs")
-def test_metadata_sniffs_format(domain_gcs_world_xs: GcsDomain):
+def test_metadata_sniffs_format(domain_gcs_world_xs: GCSDomain):
     domain = domain_gcs_world_xs
     entities = GCSConnectionExplorer().metadata(src_conn(domain, domain.base_path))
     by_name = {_logical(e.file.pattern): e for e in entities}
@@ -154,7 +154,7 @@ def test_metadata_sniffs_format(domain_gcs_world_xs: GcsDomain):
 
 @pytest.mark.parametrize("fmt", FORMATS)
 @gcs_domain("gcs_world_xs")
-def test_data_returns_first_rows(domain_gcs_world_xs: GcsDomain, fmt: str):
+def test_data_returns_first_rows(domain_gcs_world_xs: GCSDomain, fmt: str):
     domain = domain_gcs_world_xs
     conn = src_conn(domain, domain.base_path)
     explorer = GCSConnectionExplorer()

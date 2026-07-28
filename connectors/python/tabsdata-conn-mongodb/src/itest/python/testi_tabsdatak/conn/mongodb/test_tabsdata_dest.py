@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain, mongodb_domain
+from tabsdatax.itest.fixture.backends.mongodb import MongoDBDomain, mongodb_domain
 from tabsdatax.itest.fixture.functions.harness import (
     CollectionFactory,
     assert_frames_match,
@@ -35,7 +35,7 @@ subscriber = function_module(FUNCTIONS, "subscriber")
 @mongodb_domain("mongodb")
 def test_subscriber_writes_collection_to_mongodb_domain(
     instance_tdtest: Instance,
-    domain_mongodb: MongodbDomain,
+    domain_mongodb: MongoDBDomain,
     collection_factory: CollectionFactory,
 ) -> None:
     # MongoDB is destination-only, so the input table is filled by the dev data

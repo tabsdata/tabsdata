@@ -10,7 +10,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain, bigquery_domain
+from tabsdatax.itest.fixture.backends.bigquery import BigQueryDomain, bigquery_domain
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from testi_tabsdatak.conn.bigquery.backend import dest_conn, store, table_fqn
@@ -42,7 +42,7 @@ def _spelling_params():
 @bigquery_domain("bigquery")
 def test_dest_plugin_write_out_appends_rows(
     domain_fs_employees_xs: FsDomain,
-    domain_bigquery: BigqueryDomain,
+    domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
     db = store(domain_bigquery)
@@ -75,7 +75,7 @@ def test_dest_plugin_write_out_appends_rows(
 @bigquery_domain("bigquery")
 def test_dest_plugin_write_out_replace_clears_existing(
     domain_fs_employees_xs: FsDomain,
-    domain_bigquery: BigqueryDomain,
+    domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
     # Replacing with a different entity: the load job truncates the table and
@@ -115,7 +115,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
 @bigquery_domain("bigquery")
 def test_dest_plugin_write_out_resolves_table_name_spelling(
     domain_fs_employees_xs: FsDomain,
-    domain_bigquery: BigqueryDomain,
+    domain_bigquery: BigQueryDomain,
     template: str,
     table: str,
     tmp_path: Path,
@@ -155,7 +155,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 @bigquery_domain("bigquery")
 def test_dest_plugin_write_out_loads_one_table_per_slot(
     domain_fs_employees_xs: FsDomain,
-    domain_bigquery: BigqueryDomain,
+    domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
     db = store(domain_bigquery)

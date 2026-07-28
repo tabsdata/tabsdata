@@ -6,6 +6,6 @@
 # data plane). Only the backend + create command are system-specific; every other
 # verb runs the shared command in _common/commands.
 
-from tabsdatax.itest.tdksystems2.systems.bigquery.backend import Bigquery
+from tabsdatax.itest.tdksystems2.systems.bigquery.backend import BigQuery
 
-__all__ = ["Bigquery"]
+__all__ = ["BigQuery"]

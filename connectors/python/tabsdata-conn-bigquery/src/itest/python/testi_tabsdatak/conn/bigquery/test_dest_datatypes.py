@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain, bigquery_domain
+from tabsdatax.itest.fixture.backends.bigquery import BigQueryDomain, bigquery_domain
 from testi_tabsdatak.conn.bigquery.backend import dest_conn, store, table_fqn
 from testi_tabsdatak.conn.common.sql.datatype_matrix import (
     DATATYPE_CASES,
@@ -42,7 +42,7 @@ def _params():
 @pytest.mark.parametrize("case, table", list(_params()))
 @bigquery_domain("bigquery")
 def test_datatype_create_and_load(
-    domain_bigquery: BigqueryDomain,
+    domain_bigquery: BigQueryDomain,
     case: DataTypeCase,
     table: str,
     tmp_path: Path,

@@ -14,7 +14,7 @@ import pytest
 
 from tabsdatax.itest.fixture import backend as common
 from tabsdatax.itest.tdksystems2 import naming
-from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain, BigquerySystem
+from tabsdatax.itest.fixture.backends.bigquery import BigQueryDomain, BigQuerySystem
 from tabsdatax.itest.fixture.backends.databricks import DatabricksDomain, DatabricksSystem
 from tabsdatax.itest.fixture.backends.salesforce import SalesforceDomain, SalesforceSystem
 from tabsdatax.itest.fixture.backends.snowflake import (
@@ -52,10 +52,10 @@ def test_salesforce(provision):
 
 def test_bigquery(provision):
     provision.system("bigquery", "s")
-    sysobj = common.load("s", BigquerySystem)
+    sysobj = common.load("s", BigQuerySystem)
     assert sysobj.project == "proj" and isinstance(sysobj.sys_path, Path)
     provision.domain("bigquery", "s", "d")
-    dom = common.load("d", BigqueryDomain)
+    dom = common.load("d", BigQueryDomain)
     assert dom.dataset == naming.external_name("d")  # prefixed name
     assert isinstance(dom.base_path, Path)
 
