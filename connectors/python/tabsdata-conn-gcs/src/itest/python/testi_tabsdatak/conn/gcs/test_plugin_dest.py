@@ -16,7 +16,7 @@ from tabsdatax.itest.fixture.backends.gcs import GcsSystem, gcs_system
 from tabsdatax.itest.fixture.functions.files import (
     PluginDestCtx,
     PluginSrcCtx,
-    download_or_skip,
+    download_object,
 )
 from testi_tabsdatak.conn.gcs.backend import dest_conn, run_prefix, src_conn, store
 
@@ -83,7 +83,7 @@ def test_dest_writes_each_format(
 
     # Download the raw object to verify the transporter wrote the requested
     # format (reading via the src plugin would re-transcode to parquet).
-    fetched = download_or_skip(
+    fetched = download_object(
         store(system_gcs), f"{prefix}/{name}", tmp_path / f"fetched-{name}"
     )
     df = reader(fetched).select("id", "name").sort("id")

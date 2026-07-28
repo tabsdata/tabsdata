@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabssize Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 - name: anthropic
@@ -66,6 +66,10 @@
   sys: mysql
   model: world
   size: 200
+- name: mysqlcdc_employees_xs
+  sys: mysqlcdc
+  model: employees
+  size: 1
 - name: openai
   sys: openai
 - name: oracle
@@ -88,6 +92,10 @@
   sys: postgres
   model: world
   size: 200
+- name: postgrescdc_employees_xs
+  sys: postgrescdc
+  model: employees
+  size: 1
 - name: redpanda
   sys: redpanda
 - name: redpanda_world_xs

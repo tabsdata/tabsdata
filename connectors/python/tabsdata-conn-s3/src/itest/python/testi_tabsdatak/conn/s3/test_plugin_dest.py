@@ -16,7 +16,7 @@ from tabsdatax.itest.fixture.backends.s3 import S3System, s3_system
 from tabsdatax.itest.fixture.functions.files import (
     PluginDestCtx,
     PluginSrcCtx,
-    download_or_skip,
+    download_object,
 )
 from testi_tabsdatak.conn.s3.backend import dest_conn, run_prefix, src_conn, store
 
@@ -81,7 +81,7 @@ def test_dest_writes_each_format(
 
     # Download the raw object to verify the transporter wrote the requested
     # format (reading via the src plugin would re-transcode to parquet).
-    fetched = download_or_skip(
+    fetched = download_object(
         store(system_s3), f"{prefix}/{name}", tmp_path / f"fetched-{name}"
     )
     df = reader(fetched).select("id", "name").sort("id")

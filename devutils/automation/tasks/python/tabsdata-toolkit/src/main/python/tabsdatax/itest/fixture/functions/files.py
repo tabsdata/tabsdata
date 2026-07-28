@@ -94,29 +94,30 @@ class ObjectStore(Protocol):
     def upload(self, local: Path, key: str) -> None: ...
 
 
-def download_or_skip(store: ObjectStore, key: str, dest: Path) -> Path:
-    """Download ``key`` to ``dest``, or skip if the object is absent -- the
-    object-store analogue of :func:`first_provisioned_file`, so an unseeded or
-    stale-descriptor domain yields a clean skip instead of a raw 404."""
+def download_object(store: ObjectStore, key: str, dest: Path) -> Path:
+    """Download ``key`` to ``dest``, failing if the object is absent. Callers are
+    destination tests reading back what the connector just wrote, so a missing
+    object is the connector's failure to report -- not a reason to skip."""
     if not store.exists(key):
-        pytest.skip(
-            f"object {key!r} not provisioned; (re)seed the domain before running "
-            f"this test",
-        )
+        pytest.fail(f"object {key!r} was not written", pytrace=False)
     store.download(key, dest)
     return dest
 
 
 def first_provisioned_file(base_dir: Path, pattern: str = "*.csv") -> Path:
-    """The first file matching ``pattern`` in ``base_dir`` (resolved absolute), or
-    skip. Absolute matters: the connection base_path is handed to the function
-    pod, which resolves it against its own cwd -- a relative path would match no
-    file there and the function would see empty input."""
+    """The first file matching ``pattern`` in ``base_dir`` (resolved absolute).
+    Absolute matters: the connection base_path is handed to the function pod,
+    which resolves it against its own cwd -- a relative path would match no file
+    there and the function would see empty input.
+
+    A domain that resolved but holds no such file is a provisioning failure, so
+    this fails rather than skipping: the harness already fails outright on a
+    missing domain, and a silent skip here would hide the same problem."""
     resolved = base_dir.resolve()
     matches = sorted(resolved.glob(pattern))
     if not matches:
-        pytest.skip(
-            f"no {pattern!r} file provisioned at {resolved}; seed the domain "
-            f"before running this test",
+        pytest.fail(
+            f"no {pattern!r} file provisioned at {resolved}; (re)seed the domain",
+            pytrace=False,
         )
     return matches[0]

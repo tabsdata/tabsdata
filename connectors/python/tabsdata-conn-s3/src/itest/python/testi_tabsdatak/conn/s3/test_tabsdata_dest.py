@@ -12,7 +12,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.s3 import S3Domain, s3_domain
-from tabsdatax.itest.fixture.functions.files import download_or_skip
+from tabsdatax.itest.fixture.functions.files import download_object
 from tabsdatax.itest.fixture.functions.harness import (
     CollectionFactory,
     assert_frames_match,
@@ -72,5 +72,5 @@ def test_subscriber_writes_format_to_s3_domain(
     run_function(destination, function, FUNCTIONS)
 
     name = f"{subscriber.SUBSCRIBED_STEM}.{dest_format}"
-    fetched = download_or_skip(store(domain_s3), f"{prefix}/{name}", tmp_path / name)
+    fetched = download_object(store(domain_s3), f"{prefix}/{name}", tmp_path / name)
     assert_frames_match(reader(fetched), publisher.GENERATED_FRAME)

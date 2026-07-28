@@ -40,13 +40,16 @@ def slot_frame(out: list[list], index: int = 0) -> pl.DataFrame:
 
 
 def entity_rows(domain, entity: str) -> int:
-    """The row count the descriptor records for `entity`, or skip when the domain
-    was not seeded with it. SQL domains list entities as bare table names."""
+    """The row count the descriptor records for `entity`. SQL domains list entities
+    as bare table names. A domain missing the entity failed provisioning, so this
+    fails rather than skipping -- the model's tables are part of the contract a
+    resolved domain fulfils."""
     rows = (domain.entities or {}).get(entity)
     if rows is None:
-        pytest.skip(
+        pytest.fail(
             f"domain {domain.name!r} (model={domain.model!r}) has no {entity!r}; "
-            f"provision the domain with data before running this test",
+            f"(re)provision the domain with data",
+            pytrace=False,
         )
     return rows
 
