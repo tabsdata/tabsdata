@@ -42,7 +42,6 @@ from test_tabsdata.common.constants import (
     DOCKER_UTEST_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from test_tabsdata.common.system import get_free_port as _free_port
 
 # noinspection PyUnusedImports
 from test_tabsdata.conftest import (
@@ -82,9 +81,6 @@ TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
 TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"
 SKIP_ON_DOCKER_FAIL = "SKIP_ON_DOCKER_FAIL"
 
-_POSTGRES_PREFIX = "POSTGRES0"
-_POSTGRES_BACKEND = "POSTGRES"
-
 
 def _truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in TRUE_VALUES
@@ -102,13 +98,6 @@ def _fail_or_skip(reason: str) -> "None":
 
 # --- Constants ------------------------------------------------------
 
-_POSTGRES_IMAGE = "postgres:17.2"
-_POSTGRES_CONTAINER = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
-    f"{DOCKER_UTEST_CONTAINER_INFIX}"
-    f"{DOCKER_REGULAR_CONTAINER_INFIX}"
-    "postgres"
-)
 _POSTGRES_CDC_CONTAINER = (
     f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
     f"{DOCKER_UTEST_CONTAINER_INFIX}"
@@ -276,40 +265,6 @@ def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> Non
     )
 
 
-def _seed_schema(cfg: DBConfig) -> None:
-    from sqlalchemy import create_engine, text
-
-    engine = create_engine(cfg.uri_with_credentials)
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS orders"))
-            conn.execute(text("DROP TABLE IF EXISTS users"))
-            conn.execute(text(
-                "CREATE TABLE users ("
-                "  id INTEGER PRIMARY KEY,"
-                "  name VARCHAR(64) NOT NULL,"
-                "  age INTEGER NOT NULL"
-                ")"
-            ))
-            conn.execute(text(
-                "INSERT INTO users (id, name, age) VALUES "
-                "(1, 'alice', 30), (2, 'bob', 25), (3, 'carol', 40)"
-            ))
-            conn.execute(text(
-                "CREATE TABLE orders ("
-                "  id INTEGER PRIMARY KEY,"
-                "  user_id INTEGER NOT NULL,"
-                "  qty INTEGER NOT NULL"
-                ")"
-            ))
-            conn.execute(text(
-                "INSERT INTO orders (id, user_id, qty) VALUES "
-                "(10, 1, 2), (11, 2, 5)"
-            ))
-    finally:
-        engine.dispose()
-
-
 def _remove_container(name: str) -> None:
     if _dont_kill():
         logger.info(
@@ -383,90 +338,6 @@ def _external_config(
 
 def _should_reseed_external(prefix: str, backend: str) -> bool:
     return _truthy(f"{prefix}__{backend}_RESEED")
-
-
-# --- Public fixtures ------------------------------------------------
-
-
-def _build_config(
-    *,
-    name: str,
-    image: str,
-    environment: list[str],
-) -> DBConfig:
-    host_port = _ensure_container(
-        name=name,
-        image=image,
-        environment=environment,
-    )
-    cfg = DBConfig(
-        host="127.0.0.1",
-        port=host_port,
-        user=_DB_USER,
-        password=_DB_PASSWORD,
-        database=_DB_NAME,
-    )
-    _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
-    _seed_schema(cfg)
-    return cfg
-
-
-@pytest.fixture(scope="session")
-def postgres_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
-    external = _external_config(
-        prefix=_POSTGRES_PREFIX,
-        backend=_POSTGRES_BACKEND,
-        fixture="postgres_config",
-    )
-    if external is not None:
-        if _should_reseed_external(_POSTGRES_PREFIX, _POSTGRES_BACKEND):
-            _seed_schema(external)
-        yield external
-        return
-
-    if worker_id == "master":
-        cfg = _build_config(
-            name=_POSTGRES_CONTAINER,
-            image=_POSTGRES_IMAGE,
-            environment=[
-                f"POSTGRES_DB={_DB_NAME}",
-                f"POSTGRES_USER={_DB_USER}",
-                f"POSTGRES_PASSWORD={_DB_PASSWORD}",
-            ],
-        )
-    else:
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-        lock_path = root_tmp_dir / "docker_postgres_config_creation.lock"
-        with FileLock(str(lock_path)):
-            cfg = _build_config(
-                name=_POSTGRES_CONTAINER,
-                image=_POSTGRES_IMAGE,
-                environment=[
-                    f"POSTGRES_DB={_DB_NAME}",
-                    f"POSTGRES_USER={_DB_USER}",
-                    f"POSTGRES_PASSWORD={_DB_PASSWORD}",
-                ],
-            )
-    try:
-        yield cfg
-    finally:
-        if worker_id == "master":
-            _remove_container(_POSTGRES_CONTAINER)
-
-
-# Per-test re-seed so write tests don't leak rows into subsequent
-# reader tests. The session-scoped ``postgres_config`` keeps the
-# container itself alive.
-@pytest.fixture
-def fresh_postgres(postgres_config, tmp_path_factory, worker_id) -> DBConfig:
-    if worker_id == "master":
-        _seed_schema(postgres_config)
-    else:
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-        lock_path = root_tmp_dir / "docker_postgres_config_seed.lock"
-        with FileLock(str(lock_path)):
-            _seed_schema(postgres_config)
-    return postgres_config
 
 
 # --- CDC fixtures ---------------------------------------------------

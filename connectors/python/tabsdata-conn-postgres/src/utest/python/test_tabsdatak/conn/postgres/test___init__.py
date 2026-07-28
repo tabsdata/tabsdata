@@ -39,37 +39,15 @@ from tabsdatak.conn.postgres.error import (
 pytestmark = pytest.mark.postgres
 
 
-def _src_conn() -> PostgresSrcConn:
-    return PostgresSrcConn(
-        uri="postgresql://pg.example.com:5432/analytics",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"postgres.timeout": 30},
-    )
-
-
-def _dest_conn() -> PostgresDestConn:
-    return PostgresDestConn(
-        uri="postgresql://pg.example.com:5432/analytics",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"postgres.timeout": 30},
-    )
-
-
 # ---------------------------------------------------------------------------
-# PostgresSrcConn / PostgresDestConn
+# PostgresConn
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])
 def test_postgres_conn_round_trip(cls):
     c = cls(
-        uri="postgresql://pg.example.com:5432/analytics",
+        uri="postgresql://postgres.example.com:5432/analytics",
         credentials=UserPassword(
             user=Secret("etl"),
             password=Secret("hunter2"),
@@ -80,7 +58,7 @@ def test_postgres_conn_round_trip(cls):
     # Serializing always dehydrates, so secret values do not survive the
     # round-trip -- the credentials come back dehydrated.
     assert loaded.credentials == UserPassword(user=Secret(), password=Secret())
-    assert loaded.uri == "postgresql://pg.example.com:5432/analytics"
+    assert loaded.uri == "postgresql://postgres.example.com:5432/analytics"
     assert loaded.conn_cfg == {"postgres.timeout": 30}
 
 

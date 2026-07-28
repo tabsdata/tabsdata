@@ -15,7 +15,7 @@ from tabsdatak.conn.common.sql._engine import constants as const
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
-from tabsdatak.conn.postgres import PostgresSrcConn, PostgresDestConn
+from tabsdatak.conn.postgres import PostgresDestConn, PostgresSrcConn
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres import _impl as impl
 
@@ -26,8 +26,8 @@ pytestmark = pytest.mark.postgres
 # ---------------------------------------------------------------------------
 # build_postgres_engine -- driver injection, scheme aliasing, credential set
 #
-# We intercept ``create_engine`` and verify the URL the impl built --
-# avoids real DBAPI traffic during unit tests.
+# The postgres DBAPI may not be installed in the test env, so we intercept
+# ``create_engine`` and verify the URL that the impl built.
 # ---------------------------------------------------------------------------
 
 
@@ -51,7 +51,7 @@ def _credentials() -> UserPassword:
 
 def _src_conn() -> PostgresSrcConn:
     return PostgresSrcConn(
-        uri="postgresql://pg.example.com:5432/analytics",
+        uri="postgresql://postgres.example.com:5432/analytics",
         credentials=_credentials(),
         conn_cfg={"connect_timeout": 5},
     )
@@ -59,7 +59,7 @@ def _src_conn() -> PostgresSrcConn:
 
 def _dest_conn() -> PostgresDestConn:
     return PostgresDestConn(
-        uri="postgresql://pg.example.com:5432/analytics",
+        uri="postgresql://postgres.example.com:5432/analytics",
         credentials=_credentials(),
         conn_cfg={"connect_timeout": 5},
     )

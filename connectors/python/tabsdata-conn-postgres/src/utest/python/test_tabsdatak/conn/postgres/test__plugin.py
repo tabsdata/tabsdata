@@ -80,7 +80,8 @@ def _fast_retry(monkeypatch):
 # ---------------------------------------------------------------------------
 # _PostgresSrcPlugin.read_in -- error wrapping (fault injection via mocks)
 #
-# Real-Postgres happy paths live in ``test__plugin_integration.py``.
+# Real-Postgres happy paths live in the integration suite's ``test_plugin_src.py``
+# and ``test_plugin_dest.py``.
 # ---------------------------------------------------------------------------
 
 

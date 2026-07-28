@@ -75,6 +75,10 @@
   size: 200
 - name: postgres
   sys: postgres
+- name: postgres_employees_xs
+  sys: postgres
+  model: employees
+  size: 1
 - name: postgres_world_xs
   sys: postgres
   model: world
