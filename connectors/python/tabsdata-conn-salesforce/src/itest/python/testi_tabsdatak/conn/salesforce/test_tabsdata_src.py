@@ -19,7 +19,7 @@ from tabsdatax.itest.fixture.functions.harness import (
     table_frame,
 )
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
-from testi_tabsdatak.conn.common.sql.function_project import function_module
+from testi_tabsdatak.conn.common.function_project import function_module
 from testi_tabsdatak.conn.salesforce.backend import sobject_rows, src_conn
 
 pytestmark = pytest.mark.salesforce

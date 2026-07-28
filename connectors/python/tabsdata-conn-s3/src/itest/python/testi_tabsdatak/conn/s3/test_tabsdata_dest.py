@@ -19,7 +19,7 @@ from tabsdatax.itest.fixture.functions.harness import (
     run_function,
 )
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
-from testi_tabsdatak.conn.common.sql.function_project import function_module
+from testi_tabsdatak.conn.common.function_project import function_module
 from testi_tabsdatak.conn.s3.backend import dest_conn, run_prefix, store
 
 from tabsdatak.conn.dev import DataGenSrcConn

@@ -21,7 +21,7 @@ from tabsdatax.itest.fixture.functions.harness import (
     wait_for_completion,
 )
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
-from testi_tabsdatak.conn.common.sql.function_project import function_module
+from testi_tabsdatak.conn.common.function_project import function_module
 from testi_tabsdatak.conn.localfile.backend import scratch, src_conn, stage_parquet
 
 from tabsdatak.sdk.status_utils.execution import EXECUTION_SUCCESSFUL_FINAL_STATUSES

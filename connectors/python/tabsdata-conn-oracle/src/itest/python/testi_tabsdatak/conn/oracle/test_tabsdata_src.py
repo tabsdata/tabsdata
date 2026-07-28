@@ -18,12 +18,12 @@ from tabsdatax.itest.fixture.functions.harness import (
     wait_for_completion,
 )
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
+from testi_tabsdatak.conn.common.function_project import function_module
 from testi_tabsdatak.conn.common.sql.employees_model import (
     DEPARTMENTS,
     EMPLOYEES,
     emp_nos,
 )
-from testi_tabsdatak.conn.common.sql.function_project import function_module
 from testi_tabsdatak.conn.common.sql.plugin_io import entity_rows
 from testi_tabsdatak.conn.oracle.backend import src_conn, store
 

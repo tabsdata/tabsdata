@@ -21,7 +21,7 @@ from tabsdatax.itest.fixture.functions.harness import (
 )
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
 from testi_tabsdatak.conn.clickhouse.backend import dest_conn, store
-from testi_tabsdatak.conn.common.sql.function_project import function_module
+from testi_tabsdatak.conn.common.function_project import function_module
 
 from tabsdatak.conn.dev import DataGenSrcConn
 
