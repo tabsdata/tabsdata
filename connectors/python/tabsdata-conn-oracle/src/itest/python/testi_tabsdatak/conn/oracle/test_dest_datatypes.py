@@ -24,11 +24,7 @@ from tabsdatak.conn.oracle import OracleDest, _plugin as plugin
 pytestmark = pytest.mark.oracle
 
 # Types the Oracle write path can't create/load today (surfaced by the matrix).
-_XFAIL: dict[str, str] = {
-    "float32": "ORACLE_9: float columns fail on the Oracle write path",
-    "float64": "ORACLE_9: float columns fail on the Oracle write path",
-    "time": "ORACLE_9: Oracle has no TIME type, so the create fails",
-}
+_XFAIL: dict[str, str] = {}
 
 
 def _params():

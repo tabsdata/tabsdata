@@ -5,6 +5,7 @@
 import contextlib
 import logging
 from abc import ABC, abstractmethod
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Literal, cast
 
@@ -213,6 +214,65 @@ def _decimal_dtype_overrides(connection: Connection, arrow_schema) -> dict:
     return overrides
 
 
+# The date a time-of-day column carries on a target with no time type. Arbitrary
+# but fixed, and documented in TYPE_MAPPING.md: a reader drops it to recover the
+# original time.
+_SENTINEL_DATE = date(1970, 1, 1)
+
+
+def _sentinel_datetime(column: str):
+    """`column`'s time-of-day as a datetime on `_SENTINEL_DATE`. polars refuses to
+    cast Time to Datetime directly, so the date is combined in."""
+    import polars as pl
+
+    return pl.lit(_SENTINEL_DATE).dt.combine(pl.col(column))
+
+
+def _dialect_type_fixes(
+    connection: Connection, arrow_schema
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The SQLAlchemy type to force per column, plus any value transform that type
+    needs, for the columns pandas' inference maps wrongly on this dialect.
+
+    pandas picks a type from the (polars -> pandas) column alone, so it cannot know
+    what the target accepts:
+
+    * mssql -- a tz-aware timestamp becomes a generic ``TIMESTAMP``, which T-SQL
+      reads as ``ROWVERSION``: an auto-generated row counter that rejects every
+      insert. ``DATETIMEOFFSET`` is the tz-aware column SQL Server actually has.
+    * oracle -- pandas' ``Float`` carries decimal precision, which the Oracle
+      dialect refuses to compile ("FLOAT types use binary precision"), so float
+      columns never reach the database. ``BINARY_FLOAT`` / ``BINARY_DOUBLE`` are
+      Oracle's native IEEE types.
+    * oracle -- there is no time-of-day type, and oracledb rejects a Python
+      ``time`` whatever the target column is (DPY-3002), so the column is stored
+      as a ``TIMESTAMP`` on `_SENTINEL_DATE`.
+
+    A transform is keyed off the type being forced rather than off the dialect, so
+    a user-supplied override resolving to the same type reuses it.
+    """
+    import pyarrow as pa
+    from sqlalchemy.dialects import mssql, oracle
+
+    dialect = connection.dialect.name
+    dtype: dict[str, Any] = {}
+    transforms: dict[str, Any] = {}
+    for field in arrow_schema:
+        name, arrow = field.name, field.type
+        if dialect == "mssql" and pa.types.is_timestamp(arrow) and arrow.tz:
+            dtype[name] = mssql.DATETIMEOFFSET()
+        elif dialect == "oracle" and pa.types.is_float32(arrow):
+            dtype[name] = oracle.BINARY_FLOAT()
+        elif dialect == "oracle" and pa.types.is_float64(arrow):
+            dtype[name] = oracle.BINARY_DOUBLE()
+        elif dialect == "oracle" and (
+            pa.types.is_time32(arrow) or pa.types.is_time64(arrow)
+        ):
+            dtype[name] = oracle.TIMESTAMP()
+            transforms[name] = _sentinel_datetime(name)
+    return dtype, transforms
+
+
 def _drop_table_if_exists(connection: Connection, table: str) -> None:
     from sqlalchemy import MetaData, Table
 
@@ -264,8 +324,11 @@ def _polars_write(
     pf = pq.ParquetFile(parquet_file)
     table = _qualify_for_write(connection, table)
     options = _write_database_options(connection)
-    # Force decimal columns to a (clamped) DECIMAL on create, across dialects.
+    # Force decimal columns to a (clamped) DECIMAL on create, across dialects, and
+    # fix the types this dialect cannot take from pandas' inference.
     _dtype = _decimal_dtype_overrides(connection, pf.schema_arrow)
+    _fixes, _transforms = _dialect_type_fixes(connection, pf.schema_arrow)
+    _dtype.update(_fixes)
     if _dtype:
         options.setdefault("engine_options", {})["dtype"] = _dtype
     # Create-on-write for 'replace': drop the target up front, then always
@@ -280,6 +343,8 @@ def _polars_write(
     wrote_any = False
     for batch in pf.iter_batches(batch_size=chunk_size):
         df = cast(DataFrame, pl.from_arrow(batch))
+        if _transforms:
+            df = df.with_columns(**_transforms)
         df.write_database(
             table_name=table,
             connection=connection,
@@ -294,6 +359,8 @@ def _polars_write(
         # caller's if_table_exists semantics by writing an empty
         # frame matching the file's schema.
         df = cast(DataFrame, pl.from_arrow(pf.read()))
+        if _transforms:
+            df = df.with_columns(**_transforms)
         df.write_database(
             table_name=table,
             connection=connection,

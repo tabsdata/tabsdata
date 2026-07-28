@@ -290,6 +290,16 @@ class OracleDest(Dest):
         dest_cfg: Optional config mapping over the allowed keys only
             (`oracle.logging_level`, `tabsdata.sql.sql.writeEngine`,
             `tabsdata.sql.chunkSize`).
+
+    Note:
+        Column types are picked only when the target table is created (with
+        `"replace"`, or `"append"` to a missing table); writing into an existing
+        table uses that table's columns. Oracle needs three substitutions:
+        `Float32` / `Float64` become `BINARY_FLOAT` / `BINARY_DOUBLE`, and `Time`
+        is stored as a `TIMESTAMP` on 1970-01-01, since Oracle has no
+        time-of-day type -- it reads back carrying that date. A tz-aware
+        `Datetime` loses its offset (stored naive). See `TYPE_MAPPING.md` in
+        `tabsdata-conn-common-sql` for the full matrix.
     """
 
     tables: OracleTableNamesSpec

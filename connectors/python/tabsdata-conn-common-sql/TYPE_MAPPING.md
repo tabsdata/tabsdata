@@ -13,7 +13,9 @@ use this mapping (the existing column governs).
 
 The write goes `polars → pandas.to_sql → CREATE TABLE`. For most types pandas
 infers the SQLAlchemy type from the (polars→pandas) column and the dialect
-renders it. Two deliberate interventions:
+renders it. pandas sees only the column, never the target, so where its choice is
+wrong for a dialect we override it (`dtype=` on `to_sql`) and, where the driver
+also refuses the Python value, transform the value too:
 
 - **Decimal** — pandas has no decimal dtype (an Arrow `decimal128` arrives as a
   Python-`Decimal` `object` column and mis-maps, e.g. to `CLOB` on DB2). We force
@@ -21,6 +23,21 @@ renders it. Two deliberate interventions:
   maximum** (see below). Implemented in `_decimal_dtype_overrides`.
 - **Duration / interval** — polars writes it as an integer (nanoseconds); it
   lands as a 64-bit integer column. Accepted as-is.
+- **tz-aware `Datetime` on SQL Server** — pandas picks a generic `TIMESTAMP`,
+  which T-SQL reads as `ROWVERSION`: an auto-generated row counter that rejects
+  every insert. Forced to `DATETIMEOFFSET`, the tz-aware column SQL Server has —
+  so SQL Server is the one target that preserves the offset.
+- **`Float32` / `Float64` on Oracle** — pandas' `Float` carries decimal
+  precision, which the Oracle dialect refuses to compile at all ("FLOAT types use
+  binary precision"), so float columns never reached the database. Forced to
+  Oracle's native IEEE types, `BINARY_FLOAT` and `BINARY_DOUBLE`.
+- **`Time` on Oracle** — Oracle has no time-of-day type, and `oracledb` rejects a
+  Python `time` value whatever the target column is (DPY-3002). Stored as a
+  `TIMESTAMP` on the sentinel date **1970-01-01**, so `09:30:15` reads back as
+  `1970-01-01 09:30:15`; a reader recovers the original time by dropping the date.
+
+The last three live in `_dialect_type_fixes`, which returns both the type to force
+and any value transform that type needs.
 
 ## Verified mapping (live, 2026-07-14)
 

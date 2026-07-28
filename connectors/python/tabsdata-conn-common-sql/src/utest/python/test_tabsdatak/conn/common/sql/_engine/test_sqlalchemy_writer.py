@@ -355,6 +355,65 @@ class _RowcountForbidden:
         raise AssertionError("rowcount must not be read for ibm_db")
 
 
+def _arrow_schema():
+    import pyarrow as pa
+
+    return pa.schema(
+        [
+            pa.field("ts_tz", pa.timestamp("us", tz="UTC")),
+            pa.field("ts_naive", pa.timestamp("us")),
+            pa.field("f4", pa.float32()),
+            pa.field("f8", pa.float64()),
+            pa.field("t", pa.time64("ns")),
+            pa.field("s", pa.string()),
+        ]
+    )
+
+
+def test_dialect_type_fixes_maps_tz_timestamp_to_datetimeoffset_on_mssql():
+    # A generic TIMESTAMP is ROWVERSION in T-SQL, which rejects inserts.
+    from sqlalchemy.dialects import mssql
+
+    conn = MagicMock()
+    conn.dialect.name = "mssql"
+    dtype, transforms = saw._dialect_type_fixes(conn, _arrow_schema())
+    assert isinstance(dtype["ts_tz"], mssql.DATETIMEOFFSET)
+    assert set(dtype) == {"ts_tz"}
+    assert transforms == {}
+
+
+def test_dialect_type_fixes_maps_floats_and_time_on_oracle():
+    # Oracle rejects pandas' decimal-precision Float outright, and has no time
+    # type -- the time column rides on a sentinel date instead.
+    from sqlalchemy.dialects import oracle
+
+    conn = MagicMock()
+    conn.dialect.name = "oracle"
+    dtype, transforms = saw._dialect_type_fixes(conn, _arrow_schema())
+    assert isinstance(dtype["f4"], oracle.BINARY_FLOAT)
+    assert isinstance(dtype["f8"], oracle.BINARY_DOUBLE)
+    assert isinstance(dtype["t"], oracle.TIMESTAMP)
+    assert set(dtype) == {"f4", "f8", "t"}
+    # Only the time column needs its values reshaped.
+    assert set(transforms) == {"t"}
+
+
+def test_dialect_type_fixes_is_empty_for_the_other_dialects():
+    for other in ("postgresql", "mysql", "ibm_db_sa", "sqlite"):
+        conn = MagicMock()
+        conn.dialect.name = other
+        assert saw._dialect_type_fixes(conn, _arrow_schema()) == ({}, {})
+
+
+def test_sentinel_datetime_puts_the_time_on_the_sentinel_date():
+    import datetime as dt
+
+    df = pl.DataFrame({"t": [dt.time(9, 30, 15), None]}, schema={"t": pl.Time})
+    got = df.with_columns(t=saw._sentinel_datetime("t"))["t"].to_list()
+    assert got == [dt.datetime(1970, 1, 1, 9, 30, 15), None]
+    assert saw._SENTINEL_DATE == dt.date(1970, 1, 1)
+
+
 def test_qualify_for_write_qualifies_unqualified_name_on_ibm_db_sa():
     # ibm_db_sa's default_schema_name is the authorization ID, not the CURRENT
     # SCHEMA statements run under, so has_table would probe the wrong schema and

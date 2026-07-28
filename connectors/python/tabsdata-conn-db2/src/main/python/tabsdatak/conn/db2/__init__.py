@@ -313,6 +313,15 @@ class Db2Dest(Dest):
         dest_cfg: Optional config mapping over the allowed keys only
             (`db2.logging_level`, `tabsdata.sql.sql.writeEngine`,
             `tabsdata.sql.chunkSize`).
+
+    Note:
+        Column types are picked only when the target table is created (with
+        `"replace"`, or `"append"` to a missing table); writing into an existing
+        table uses that table's columns. DB2 caps `DECIMAL` at precision 31, so a
+        wider source decimal is clamped (e.g. `Decimal(38, 10)` ->
+        `DECIMAL(31, 10)`) and a value needing the lost digits overflows at
+        insert. A tz-aware `Datetime` loses its offset (stored naive). See
+        `TYPE_MAPPING.md` in `tabsdata-conn-common-sql` for the full matrix.
     """
 
     tables: Db2TableNamesSpec

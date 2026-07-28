@@ -27,9 +27,7 @@ from tabsdatak.conn.mssql import MSSQLDest, _plugin as plugin
 pytestmark = pytest.mark.mssql
 
 # Types the SQL Server write path can't create/load today (surfaced by the matrix).
-_XFAIL: dict[str, str] = {
-    "datetime_tz": "MSSQL_9: tz-aware datetime not supported (needs DATETIMEOFFSET)",
-}
+_XFAIL: dict[str, str] = {}
 
 
 def _params():

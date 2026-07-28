@@ -272,6 +272,14 @@ class MSSQLDest(Dest):
         dest_cfg: Optional connector config; supported keys are
             `mssql.logging_level`, `tabsdata.sql.sql.writeEngine`
             and `tabsdata.sql.chunkSize`.
+
+    Note:
+        Column types are picked only when the target table is created (with
+        `"replace"`, or `"append"` to a missing table); writing into an existing
+        table uses that table's columns. A tz-aware `Datetime` becomes a
+        `DATETIMEOFFSET`, so SQL Server is the one target that keeps the offset
+        rather than storing the value naive. See `TYPE_MAPPING.md` in
+        `tabsdata-conn-common-sql` for the full matrix.
     """
 
     tables: MSSQLTableNamesSpec
