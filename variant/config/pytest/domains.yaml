@@ -26,6 +26,10 @@
   size: 200
 - name: db2
   sys: db2
+- name: db2_employees_xs
+  sys: db2
+  model: employees
+  size: 1
 - name: db2_world_xs
   sys: db2
   model: world

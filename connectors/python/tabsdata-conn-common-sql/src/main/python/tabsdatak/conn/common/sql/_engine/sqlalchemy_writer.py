@@ -225,6 +225,31 @@ def _drop_table_if_exists(connection: Connection, table: str) -> None:
     Table(name, MetaData(), schema=schema).drop(bind=connection, checkfirst=True)
 
 
+# Dialects whose `default_schema_name` is not the schema an unqualified CREATE
+# lands in, and the query that answers it for the live session. ibm_db_sa derives
+# its default from the authorization ID (the connect user), while statements run
+# under CURRENT SCHEMA -- which the connection URL sets via `?currentSchema=`.
+# Existence is resolved through has_table both by the DROP below and by pandas'
+# create-on-write, so with an unqualified name they probe the connect user's
+# schema, miss a table that is really there, and the CREATE that follows fails
+# with SQL0601N.
+_SESSION_SCHEMA_QUERY: dict[str, str] = {"ibm_db_sa": "VALUES CURRENT SCHEMA"}
+
+
+def _qualify_for_write(connection: Connection, table: str) -> str:
+    """`table` qualified with the schema this session writes into, for dialects
+    whose own default schema disagrees with it. Already-qualified names and every
+    other dialect are returned untouched."""
+    query = _SESSION_SCHEMA_QUERY.get(connection.dialect.name)
+    if query is None or "." in table:
+        return table
+    from sqlalchemy import text
+
+    # DB2 returns the special register space-padded.
+    schema = (connection.execute(text(query)).scalar() or "").strip()
+    return f"{schema}.{table}" if schema else table
+
+
 def _polars_write(
     *,
     connection: Connection,
@@ -237,6 +262,7 @@ def _polars_write(
     import pyarrow.parquet as pq
 
     pf = pq.ParquetFile(parquet_file)
+    table = _qualify_for_write(connection, table)
     options = _write_database_options(connection)
     # Force decimal columns to a (clamped) DECIMAL on create, across dialects.
     _dtype = _decimal_dtype_overrides(connection, pf.schema_arrow)

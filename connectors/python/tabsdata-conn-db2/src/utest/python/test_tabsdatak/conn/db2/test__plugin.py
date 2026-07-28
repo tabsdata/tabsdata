@@ -18,7 +18,7 @@ from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
     sqlalchemy_writer as saw_writer,
 )
-from tabsdatak.conn.db2 import Db2SrcConn, Db2DestConn, Db2Dest, Db2Src
+from tabsdatak.conn.db2 import Db2DestConn, Db2SrcConn, Db2Dest, Db2Src
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _impl as impl
@@ -29,6 +29,7 @@ from tabsdatak.conn.db2.error import (
     Db2RuntimeException,
     Db2ErrorCode,
 )
+from tabsdatak.conn.db2._explorer import Db2ConnectionExplorer
 
 # noinspection PyProtectedMember
 from test_tabsdatak.conn.common.sql._testing import CtxStub
@@ -74,7 +75,8 @@ def _fast_retry(monkeypatch):
 # ---------------------------------------------------------------------------
 # _Db2SrcPlugin.read_in -- error wrapping (fault injection via mocks)
 #
-# Real-Db2 happy paths live in ``test__plugin_integration.py``.
+# Real-Db2 happy paths live in the integration suite's ``test_plugin_src.py``
+# and ``test_plugin_dest.py``.
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +189,7 @@ def test_db2_src_def_wires_plugin_and_explorer():
     assert plugin.DB2_SRC.conn is Db2SrcConn
     assert plugin.DB2_SRC.src is Db2Src
     assert plugin.DB2_SRC.plugin is plugin.Db2SrcPlugin
-    assert plugin.DB2_SRC.explorer is plugin.Db2ConnectionExplorer
+    assert plugin.DB2_SRC.explorer is Db2ConnectionExplorer
     assert plugin.DB2_SRC.type_ == "db2-sql-in"
 
 
@@ -195,7 +197,7 @@ def test_db2_dest_def_wires_plugin_and_explorer():
     assert plugin.DB2_DEST.conn is Db2DestConn
     assert plugin.DB2_DEST.dest is Db2Dest
     assert plugin.DB2_DEST.plugin is plugin.Db2DestPlugin
-    assert plugin.DB2_DEST.explorer is plugin.Db2ConnectionExplorer
+    assert plugin.DB2_DEST.explorer is Db2ConnectionExplorer
     assert plugin.DB2_DEST.type_ == "db2-sql-out"
 
 

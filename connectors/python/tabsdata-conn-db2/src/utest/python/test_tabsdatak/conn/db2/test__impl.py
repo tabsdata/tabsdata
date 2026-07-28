@@ -15,7 +15,7 @@ from tabsdatak.conn.common.sql._engine import constants as const
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
-from tabsdatak.conn.db2 import Db2SrcConn, Db2DestConn
+from tabsdatak.conn.db2 import Db2DestConn, Db2SrcConn
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _impl as impl
 

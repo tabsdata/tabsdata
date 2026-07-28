@@ -322,84 +322,6 @@ def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> Non
     )
 
 
-_TRANSIENT_COMMS_MARKERS = ("CLI0108E", "SQLCODE=-99999", "SQL1224N")
-
-
-def _is_transient_comms_error(exc: BaseException) -> bool:
-    message = str(exc)
-    return any(marker in message for marker in _TRANSIENT_COMMS_MARKERS)
-
-
-def run_query_with_retry(query_fn, *, timeout_s: float = 60.0, poll_s: float = 0.5):
-    from sqlalchemy.exc import DBAPIError, OperationalError
-
-    deadline = time.monotonic() + timeout_s
-    last_error: Exception | None = None
-    while True:
-        try:
-            return query_fn()
-        except (OperationalError, DBAPIError) as exc:
-            if not _is_transient_comms_error(exc):
-                raise
-            last_error = exc
-            if time.monotonic() >= deadline:
-                raise
-            time.sleep(poll_s)
-
-
-def _seed_schema(cfg: DBConfig) -> None:
-    from sqlalchemy import create_engine, text
-
-    _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
-
-    # Db2 has no ``DROP TABLE IF EXISTS``; the compound statement
-    # below installs a SQLSTATE '42704' (undefined name) handler so
-    # the drop is a no-op when the table is absent.
-    drop_if_exists = (
-        "BEGIN "
-        "DECLARE CONTINUE HANDLER FOR SQLSTATE '42704' BEGIN END; "
-        "EXECUTE IMMEDIATE 'DROP TABLE {tbl}'; "
-        "END"
-    )
-
-    engine = create_engine(cfg.uri_with_credentials)
-
-    def _seed():
-        with engine.begin() as conn:
-            conn.execute(text(drop_if_exists.format(tbl="orders")))
-            conn.execute(text(drop_if_exists.format(tbl="users")))
-            conn.execute(text(
-                "CREATE TABLE users ("
-                "  id INTEGER NOT NULL PRIMARY KEY,"
-                "  name VARCHAR(64) NOT NULL,"
-                "  age INTEGER NOT NULL"
-                ")"
-            ))
-            for sql in (
-                "INSERT INTO users (id, name, age) VALUES (1, 'alice', 30)",
-                "INSERT INTO users (id, name, age) VALUES (2, 'bob', 25)",
-                "INSERT INTO users (id, name, age) VALUES (3, 'carol', 40)",
-            ):
-                conn.execute(text(sql))
-            conn.execute(text(
-                "CREATE TABLE orders ("
-                "  id INTEGER NOT NULL PRIMARY KEY,"
-                "  user_id INTEGER NOT NULL,"
-                "  qty INTEGER NOT NULL"
-                ")"
-            ))
-            for sql in (
-                "INSERT INTO orders (id, user_id, qty) VALUES (10, 1, 2)",
-                "INSERT INTO orders (id, user_id, qty) VALUES (11, 2, 5)",
-            ):
-                conn.execute(text(sql))
-
-    try:
-        run_query_with_retry(_seed)
-    finally:
-        engine.dispose()
-
-
 def _remove_container(name: str) -> None:
     if _dont_kill():
         logger.info(
@@ -471,10 +393,6 @@ def _external_config(
     )
 
 
-def _should_reseed_external(prefix: str, backend: str) -> bool:
-    return _truthy(f"{prefix}__{backend}_RESEED")
-
-
 # --- Public fixtures ------------------------------------------------
 
 
@@ -503,7 +421,6 @@ def _build_config(
     _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
     _tune_db2_for_concurrency(name, cfg.database)
     _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
-    _seed_schema(cfg)
     return cfg
 
 
@@ -513,8 +430,6 @@ def db2_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
         prefix=_DB2_PREFIX, backend=_DB2_BACKEND, fixture="db2_config",
     )
     if external is not None:
-        if _should_reseed_external(_DB2_PREFIX, _DB2_BACKEND):
-            _seed_schema(external)
         yield external
         return
 
@@ -562,21 +477,6 @@ def db2_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     finally:
         if worker_id == "master":
             _remove_container(_DB2_CONTAINER)
-
-
-# Per-test re-seed so write tests don't leak rows into subsequent
-# reader tests. The session-scoped ``db2_config`` keeps the
-# container itself alive.
-@pytest.fixture
-def fresh_db2(db2_config, tmp_path_factory, worker_id) -> DBConfig:
-    if worker_id == "master":
-        _seed_schema(db2_config)
-    else:
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-        lock_path = root_tmp_dir / "docker_db2_config_seed.lock"
-        with FileLock(str(lock_path)):
-            _seed_schema(db2_config)
-    return db2_config
 
 
 # --- CDC fixtures ---------------------------------------------------

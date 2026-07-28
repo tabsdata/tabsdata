@@ -41,30 +41,8 @@ from tabsdatak.conn.db2.error import (
 pytestmark = pytest.mark.db2
 
 
-def _src_conn() -> Db2SrcConn:
-    return Db2SrcConn(
-        uri="db2://db2.example.com:50000/SAMPLE",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"db2.timeout": 30},
-    )
-
-
-def _dest_conn() -> Db2DestConn:
-    return Db2DestConn(
-        uri="db2://db2.example.com:50000/SAMPLE",
-        credentials=UserPassword(
-            user=Secret("etl"),
-            password=Secret("hunter2"),
-        ),
-        conn_cfg={"db2.timeout": 30},
-    )
-
-
 # ---------------------------------------------------------------------------
-# Db2SrcConn / Db2DestConn
+# Db2Conn
 # ---------------------------------------------------------------------------
 
 

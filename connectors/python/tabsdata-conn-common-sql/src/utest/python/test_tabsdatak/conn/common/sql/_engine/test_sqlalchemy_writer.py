@@ -355,6 +355,41 @@ class _RowcountForbidden:
         raise AssertionError("rowcount must not be read for ibm_db")
 
 
+def test_qualify_for_write_qualifies_unqualified_name_on_ibm_db_sa():
+    # ibm_db_sa's default_schema_name is the authorization ID, not the CURRENT
+    # SCHEMA statements run under, so has_table would probe the wrong schema and
+    # miss an existing table. The session is asked instead; DB2 returns the
+    # special register space-padded.
+    ibm = MagicMock()
+    ibm.dialect.name = "ibm_db_sa"
+    ibm.execute.return_value.scalar.return_value = "D_TUCU_0_DB2   "
+    assert saw._qualify_for_write(ibm, "td_dest") == "D_TUCU_0_DB2.td_dest"
+
+
+def test_qualify_for_write_leaves_an_already_qualified_name_alone():
+    ibm = MagicMock()
+    ibm.dialect.name = "ibm_db_sa"
+    assert saw._qualify_for_write(ibm, "OTHER.td_dest") == "OTHER.td_dest"
+    ibm.execute.assert_not_called()
+
+
+def test_qualify_for_write_keeps_the_bare_name_when_no_schema_comes_back():
+    ibm = MagicMock()
+    ibm.dialect.name = "ibm_db_sa"
+    ibm.execute.return_value.scalar.return_value = None
+    assert saw._qualify_for_write(ibm, "td_dest") == "td_dest"
+
+
+def test_qualify_for_write_is_a_noop_for_the_other_dialects():
+    # Their default_schema_name already is where an unqualified CREATE lands, so
+    # nothing is qualified and no extra round trip is spent asking.
+    for other in ("sqlite", "postgresql", "mysql", "oracle", "mssql"):
+        conn = MagicMock()
+        conn.dialect.name = other
+        assert saw._qualify_for_write(conn, "td_dest") == "td_dest"
+        conn.execute.assert_not_called()
+
+
 def test_write_database_options_only_for_ibm_db_sa():
     ibm = MagicMock()
     ibm.dialect.name = "ibm_db_sa"
