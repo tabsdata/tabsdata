@@ -65,7 +65,10 @@ else is *delegated* to the matching command module discovered on disk —
 for domain verbs. The available commands and their help come straight from those
 files. A model is available for a system when its assets are present under
 ``systems/<slug>/domain/models/<model>/`` — DDL for a SQL system, a snowfakery
-recipe and load mapping for the salesforce org.
+recipe and load mapping for the salesforce org. A verb exists when *some* system
+exposes it, so one aimed at a system that does not (``restart`` on an object
+store, ``modify-data`` on an append-only topic) is rejected naming what that
+system does support.
 
 Descriptors are addressed by *name* (a file in the store dir) and stored
 encrypted. The long-running verbs accept ``--latch FILE`` to be waitable in the
@@ -132,7 +135,10 @@ _SYS_CATALOG: dict[str, tuple[str, str | None]] = {
     constants.V_STATUS: ("sys_status", None),
     constants.V_PURGE: ("sys_purge", "supports_purge"),
     constants.V_RESTART: ("sys_restart", "is_container"),
-    constants.V_FETCH_BIN: ("sys_fetch_bin", "is_container"),
+    # Ungated on purpose: `fetch-bin --type ALL` is the handy way to pull every
+    # image at once, so a system with none warns and is skipped rather than
+    # failing the run.
+    constants.V_FETCH_BIN: ("sys_fetch_bin", None),
 }
 _DOM_CATALOG: dict[str, tuple[str, str | None]] = {
     constants.V_CREATE: ("dom_create", None),
@@ -157,6 +163,29 @@ def _catalog(tool: str) -> dict[str, tuple[str, str | None]]:
 
 def _has_verb(cls: type, cap: str | None) -> bool:
     return cap is None or bool(getattr(cls, cap, False))
+
+
+def _system_verbs(tool: str, slug: str) -> list[str]:
+    """The verbs `slug` exposes — those whose capability flag it sets."""
+    cls = systems.get_class(slug)
+    return [v for v, (_, cap) in _catalog(tool).items() if _has_verb(cls, cap)]
+
+
+def _require_verb(tool: str, slug: str, verb: str) -> None:
+    """Reject a verb the target system does not expose.
+
+    ``_discover`` gates the tool's *vocabulary* — a verb exists when some system
+    exposes it — which leaves the per-system half: without this, a verb reaches
+    the shared command for a backend that never implements the capability behind
+    it, and the run dies somewhere inside on a missing attribute instead of
+    saying so up front."""
+    _, cap = _catalog(tool)[verb]
+    if _has_verb(systems.get_class(slug), cap):
+        return
+    raise TdxError(
+        f"{tool}: system '{slug}' does not support '{verb}' "
+        f"(it supports: {', '.join(_system_verbs(tool, slug))})"
+    )
 
 
 def _summary(module: ModuleType) -> str:
@@ -267,8 +296,8 @@ def _resolve(
             if verb == constants.V_FETCH_BIN and (
                 slug.upper() == constants.TARGET_ALL or "," in slug
             ):
-                # a representative container; fetch-bin's run() re-derives the
-                # full set from --type ALL / the comma list itself.
+                # a stand-in target; fetch-bin's run() re-derives the full set
+                # from --type ALL / the comma list itself.
                 slug = _default_slug(tool, verb)
             return slug, None, None, None, store_dir
         name = cli.peek(rest, constants.OPT_SYS)
@@ -834,6 +863,7 @@ def _dispatch(tool: str, argv: list[str]) -> int:
     if batched is not None:
         return batched
     slug, name, info, path, store_dir = _resolve(tool, verb, rest)
+    _require_verb(tool, slug, verb)
     system = systems.get(slug)
     if info is not None:
         # Bind the resolved descriptor so a backend that would read config from

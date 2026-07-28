@@ -6,6 +6,10 @@
 
 ``--type ALL`` pulls the images for every container system, ``--type a,b`` for
 the listed ones; the pulled images are de-duplicated across the selection.
+
+A system that runs no container has nothing to pull. Naming one is a warning and
+a skip, never a failure, so pre-pulling everything in one go stays a single
+command whatever the selection holds.
 """
 
 from __future__ import annotations
@@ -35,9 +39,13 @@ def _slugs(ctx: cli.Context) -> list[str]:
 
 def run(ctx: cli.Context) -> int:
     require_docker()
-    slugs = _slugs(ctx)
     images: dict[str, str] = {}
-    for slug in slugs:
+    slugs: list[str] = []
+    for slug in _slugs(ctx):
+        if not getattr(systems.get_class(slug), "is_container", False):
+            console.warn(f"{slug} runs no container — nothing to fetch")
+            continue
+        slugs.append(slug)
         for image, plat in systems.get(slug).docker_images():
             images[image] = plat
     if not images:
