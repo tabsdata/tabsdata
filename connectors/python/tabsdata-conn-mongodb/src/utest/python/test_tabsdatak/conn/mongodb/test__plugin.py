@@ -649,13 +649,13 @@ def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
 # ---------------------------------------------------------------------------
 
 
-def test_decimal_codec_options_encodes_decimal128():
+def test_codec_options_encodes_decimal128():
     import decimal
 
     import bson
     from bson.decimal128 import Decimal128
 
-    opts = plugin._decimal_codec_options()
+    opts = plugin._codec_options()
     doc = {
         "gnp": decimal.Decimal("193.00"),
         "nested": {"rate": decimal.Decimal("1.5")},
@@ -669,6 +669,54 @@ def test_decimal_codec_options_encodes_decimal128():
     assert isinstance(wire["lst"][0], Decimal128)
     assert wire["none"] is None
     assert bson.decode(raw, codec_options=opts)["gnp"] == decimal.Decimal("193.00")
+
+
+def test_codec_options_encodes_date_at_midnight_utc():
+    import datetime
+
+    import bson
+
+    raw = bson.encode(
+        {"d": datetime.date(2026, 7, 14)}, codec_options=plugin._codec_options()
+    )
+    assert bson.decode(raw)["d"] == datetime.datetime(
+        2026, 7, 14, 0, 0, tzinfo=datetime.timezone.utc
+    ).replace(tzinfo=None)
+
+
+def test_codec_options_encodes_time_on_the_sentinel_date():
+    import datetime
+
+    import bson
+
+    raw = bson.encode(
+        {"t": datetime.time(9, 30, 15)}, codec_options=plugin._codec_options()
+    )
+    # BSON has no time-of-day type, so the time rides the sentinel date.
+    assert bson.decode(raw)["t"] == datetime.datetime(1970, 1, 1, 9, 30, 15)
+    assert plugin.SENTINEL_DATE == datetime.date(1970, 1, 1)
+
+
+def test_codec_options_encodes_timedelta_as_nanoseconds():
+    import datetime
+
+    import bson
+
+    raw = bson.encode(
+        {"u": datetime.timedelta(seconds=90)}, codec_options=plugin._codec_options()
+    )
+    # Nanoseconds, matching what the SQL connectors write for a duration.
+    assert bson.decode(raw)["u"] == 90_000_000_000
+
+
+def test_codec_options_leaves_a_datetime_alone():
+    import datetime
+
+    import bson
+
+    stamp = datetime.datetime(2026, 7, 14, 9, 30, 15)
+    raw = bson.encode({"ts": stamp}, codec_options=plugin._codec_options())
+    assert bson.decode(raw)["ts"] == stamp
 
 
 def test_write_out_opens_collection_with_decimal_codec(monkeypatch, work_dir):

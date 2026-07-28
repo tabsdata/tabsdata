@@ -151,6 +151,16 @@ class MongoDBDest(Dest):
             `mongodb.logging_level`. Note: `pymongo.*` options are
             read from the connection's `conn_cfg`, not here.
 
+    Note:
+        BSON has no type for three of the values a table can carry, so the
+        write converts them: a `Date` becomes a BSON datetime at midnight
+        UTC, a `Time` becomes a BSON datetime on the sentinel date
+        **1970-01-01** UTC (`09:30:15` reads back as
+        `1970-01-01T09:30:15Z`), and a `Duration` becomes an integer count
+        of nanoseconds. A reader recovers the original by dropping the
+        added part. `Decimal` maps to BSON `Decimal128` and round-trips
+        exactly.
+
     Examples:
         Append documents, letting MongoDB auto-generate `_id` (the
         id field is `None`):

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import datetime
 import functools
 import logging
 from dataclasses import dataclass
@@ -158,18 +159,43 @@ def _default_database_name(client: Any) -> str | None:
     return db.name if db is not None else None
 
 
-@functools.lru_cache(maxsize=1)
-def _decimal_codec_options() -> Any:
-    """CodecOptions that BSON-encode ``decimal.Decimal`` as ``Decimal128``.
+SENTINEL_DATE = datetime.date(1970, 1, 1)
 
-    Polars materialises parquet Decimal columns as Python ``decimal.Decimal``
-    (via ``iter_rows``), which pymongo cannot BSON-encode natively. A
-    ``TypeRegistry`` codec maps every such value in the document -- including
-    values nested inside sub-documents and lists -- to ``bson.Decimal128``.
+
+@functools.lru_cache(maxsize=1)
+def _codec_options() -> Any:
+    """CodecOptions for the Python values polars hands us that BSON has no
+    native type for.
+
+    Polars materialises parquet columns as plain Python objects (via
+    ``iter_rows``), and pymongo cannot BSON-encode four of them. A
+    ``TypeRegistry`` converts each one wherever it appears in the document,
+    including nested inside sub-documents and lists:
+
+    - ``decimal.Decimal`` -> ``bson.Decimal128``, the natural equivalent.
+    - ``datetime.date`` -> a BSON datetime at midnight UTC. BSON has no
+      date-only type; a reader recovers the date by dropping the time.
+    - ``datetime.time`` -> a BSON datetime on the sentinel date
+      **1970-01-01** UTC, so ``09:30:15`` reads back as
+      ``1970-01-01T09:30:15Z``. Same convention the SQL connectors use for
+      engines without a time-of-day type.
+    - ``datetime.timedelta`` -> an integer count of **nanoseconds**, which is
+      what the SQL connectors write for a duration.
+
+    Decimal is registered both ways -- ``Decimal128`` means nothing else, so it
+    can decode back to ``decimal.Decimal``. The other three are encode-only
+    (``TypeEncoder``): date and time both land on a BSON datetime, so a decoder
+    could not tell which to return, and a stored datetime has to keep reading
+    back as a datetime.
     """
     import decimal
 
-    from bson.codec_options import CodecOptions, TypeCodec, TypeRegistry
+    from bson.codec_options import (
+        CodecOptions,
+        TypeCodec,
+        TypeEncoder,
+        TypeRegistry,
+    )
     from bson.decimal128 import Decimal128
 
     class _DecimalCodec(TypeCodec):
@@ -182,7 +208,36 @@ def _decimal_codec_options() -> Any:
         def transform_bson(self, value: Decimal128) -> decimal.Decimal:
             return value.to_decimal()
 
-    return CodecOptions(type_registry=TypeRegistry([_DecimalCodec()]))
+    class _DateEncoder(TypeEncoder):
+        python_type = datetime.date
+
+        def transform_python(self, value: datetime.date) -> datetime.datetime:
+            return datetime.datetime.combine(
+                value, datetime.time.min, tzinfo=datetime.timezone.utc
+            )
+
+    class _TimeEncoder(TypeEncoder):
+        python_type = datetime.time
+
+        def transform_python(self, value: datetime.time) -> datetime.datetime:
+            return datetime.datetime.combine(
+                SENTINEL_DATE, value, tzinfo=datetime.timezone.utc
+            )
+
+    class _TimedeltaEncoder(TypeEncoder):
+        python_type = datetime.timedelta
+
+        def transform_python(self, value: datetime.timedelta) -> int:
+            return value // datetime.timedelta(microseconds=1) * 1000
+
+    return CodecOptions(
+        type_registry=TypeRegistry([
+            _DecimalCodec(),
+            _DateEncoder(),
+            _TimeEncoder(),
+            _TimedeltaEncoder(),
+        ])
+    )
 
 
 def _ensure_clean_collection(collection: "Collection") -> None:
@@ -303,9 +358,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
 
         db_name, coll_name = _split_collection(collection_fqn, default_db)
         database = client[db_name]
-        collection = database.get_collection(
-            coll_name, codec_options=_decimal_codec_options()
-        )
+        collection = database.get_collection(coll_name, codec_options=_codec_options())
 
         if dest.if_collection_exists == "replace":
             _ensure_clean_collection(collection)
