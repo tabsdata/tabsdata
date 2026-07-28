@@ -23,14 +23,12 @@ from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AzureAccountKey,
-    GCPJson,
     UserPassword,
 )
 from tabsdatak.conn.druid import (
     AzBlobLocation,
     DruidDestConn,
     DruidDest,
-    GCSLocation,
     S3Location,
 )
 
@@ -106,14 +104,6 @@ def _s3_staging() -> S3Location:
             access_key_id=Secret("AKIA..."),
             secret_access_key=Secret("secret"),
         ),
-        base_path="/staging",
-    )
-
-
-def _gcs_staging() -> GCSLocation:
-    return GCSLocation(
-        bucket="staging-bucket",
-        credentials=GCPJson(json=Secret('{"type": "service_account"}')),
         base_path="/staging",
     )
 
@@ -406,16 +396,6 @@ def test_build_input_source_s3():
     assert src["properties"]["secretAccessKey"] == "secret"
 
 
-def test_build_input_source_gcs_native_no_credentials():
-    src = impl.build_input_source(
-        _gcs_staging(),
-        ["gs://staging-bucket/staging/part-0.parquet"],
-    )
-    assert src["type"] == "google"
-    assert src["uris"] == ["gs://staging-bucket/staging/part-0.parquet"]
-    assert "properties" not in src  # native google input source
-
-
 def test_build_input_source_azure():
     src = impl.build_input_source(
         _az_staging(),
@@ -435,9 +415,6 @@ def test_staged_uri_for_each_flavor():
     assert impl.staged_uri(_s3_staging(), "staging/x.parquet") == (
         "s3://staging-bucket/staging/x.parquet"
     )
-    assert impl.staged_uri(_gcs_staging(), "staging/x.parquet") == (
-        "gs://staging-bucket/staging/x.parquet"
-    )
     assert impl.staged_uri(_az_staging(), "staging/x.parquet") == (
         "azureStorage://acct/td-stage/staging/x.parquet"
     )
@@ -449,12 +426,6 @@ def test_transporter_env_s3():
     assert env[transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID] == "AKIA..."
     assert env[transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY] == "secret"
     assert env[transporter1.SERVER_SIDE_AWS_REGION] == "us-east-1"
-
-
-def test_transporter_env_gcs():
-    # noinspection PyProtectedMember
-    env = impl._transporter_env(_gcs_staging(), HANDLER)
-    assert transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON in env
 
 
 def test_transporter_env_azure():

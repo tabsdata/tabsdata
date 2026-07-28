@@ -83,4 +83,4 @@ class DruidErrorCode(ErrorCode):
     DRUID_14 = ErrorDef(
         ConnInitException,
         "Cannot create GCSLocation",
-    )  # GCSLocation
+    )  # reserved: GCSLocation is commented out in __init__.py (no GCS staging)

@@ -24,7 +24,6 @@ from tabsdatak.conn.druid import (
     CloudLocation,
     DruidDest,
     DruidDestConn,
-    GCSLocation,
     S3Location,
 )
 from tabsdatak.conn.druid.error import DruidErrorCode
@@ -92,9 +91,11 @@ def staged_uri(location: CloudLocation, key: str) -> str:
     if isinstance(location, S3Location):
         bucket = location._bucket()
         return f"s3://{bucket}/{key}"
-    if isinstance(location, GCSLocation):
-        bucket = location._bucket()
-        return f"gs://{bucket}/{key}"
+    # No GCS staging for Druid -- see the commented-out
+    # GCSLocation in __init__.py for why.
+    # if isinstance(location, GCSLocation):
+    #     bucket = location._bucket()
+    #     return f"gs://{bucket}/{key}"
     if isinstance(location, AzBlobLocation):
         container = location._container()
         account = _convert(location.credentials.account_name, str)
@@ -125,12 +126,14 @@ def _transporter_target(
             secret_key_env=handler.aws_secret_access_key_env,
             region_env=handler.aws_region_env,
         )
-    if isinstance(location, GCSLocation):
-        bucket = location._bucket()
-        return handler.gcs_location(
-            uri=f"gs://{bucket}/{key}",
-            service_account_key_env=handler.gcp_service_account_json_env,
-        )
+    # No GCS staging for Druid -- see the commented-out
+    # GCSLocation in __init__.py for why.
+    # if isinstance(location, GCSLocation):
+    #     bucket = location._bucket()
+    #     return handler.gcs_location(
+    #         uri=f"gs://{bucket}/{key}",
+    #         service_account_key_env=handler.gcp_service_account_json_env,
+    #     )
     if isinstance(location, AzBlobLocation):
         container = location._container()
         return handler.azure_location(
@@ -157,12 +160,14 @@ def _transporter_env(
             handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
             handler.aws_region_env: location._region(),
         }
-    if isinstance(location, GCSLocation):
-        return {
-            handler.gcp_service_account_json_env: _convert(
-                location.credentials.json, str
-            ),
-        }
+    # No GCS staging for Druid -- see the commented-out
+    # GCSLocation in __init__.py for why.
+    # if isinstance(location, GCSLocation):
+    #     return {
+    #         handler.gcp_service_account_json_env: _convert(
+    #             location.credentials.json, str
+    #         ),
+    #     }
     if isinstance(location, AzBlobLocation):
         creds = location.credentials
         return {
@@ -241,14 +246,16 @@ def build_input_source(location: CloudLocation, uris: list[str]) -> dict:
                 "secretAccessKey": _convert(creds.secret_access_key, str),
             },
         }
-    if isinstance(location, GCSLocation):
-        # The native ``google`` input source does not support per-task
-        # credentials; the Druid cluster must have access via
-        # ``GOOGLE_APPLICATION_CREDENTIALS`` baked in.
-        return {
-            "type": "google",
-            "uris": uris,
-        }
+    # No GCS staging for Druid -- see the commented-out
+    # GCSLocation in __init__.py for why.
+    # if isinstance(location, GCSLocation):
+    #     # The native ``google`` input source does not support per-task
+    #     # credentials; the Druid cluster must have access via
+    #     # ``GOOGLE_APPLICATION_CREDENTIALS`` baked in.
+    #     return {
+    #         "type": "google",
+    #         "uris": uris,
+    #     }
     if isinstance(location, AzBlobLocation):
         creds = location.credentials
         return {

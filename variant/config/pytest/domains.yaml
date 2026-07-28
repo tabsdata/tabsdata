@@ -32,9 +32,6 @@
   size: 200
 - name: druid
   sys: druid
-- name: druid_world
-  sys: druid
-  model: world
 - name: fs
   sys: fs
 - name: fs_employees_xs

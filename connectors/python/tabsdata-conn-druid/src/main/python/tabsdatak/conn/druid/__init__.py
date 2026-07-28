@@ -8,7 +8,7 @@ Imported from `tabsdatak.conn.druid`:
 
 * `DruidDestConn` -- the connection: the Overlord URL, a
   `UserPassword` for basic auth, and a cloud `staging` area
-  (`S3Location` / `AzBlobLocation` / `GCSLocation`). Registered
+  (`S3Location` / `AzBlobLocation`). Registered
   on a collection, not passed to a decorator.
 * `DruidDest` -- the `@subscriber` destination: a list of
   datasource names, one output slot per datasource.
@@ -58,8 +58,6 @@ from tabsdatak.conn.common.types import (
     AzureAccountKey,
     CfgSpec,
     CloudRelativePathSpec,
-    GCPJson,
-    GCSBucketSpec,
     S3BucketSpec,
     StrOrSecretConstraints,
     UserPassword,
@@ -127,8 +125,8 @@ class CloudLocation(_api.DescriptorBase, ABC):
 
     :categories: destination
 
-    Concrete subclasses (`S3Location` / `AzBlobLocation` /
-    `GCSLocation`) are set as the connection's `staging` field; the
+    Concrete subclasses (`S3Location` / `AzBlobLocation`) are set as
+    the connection's `staging` field; the
     plugin uploads parquet there before submitting the Druid ingestion
     task.
     """
@@ -208,37 +206,57 @@ class AzBlobLocation(CloudLocation):
         return _convert(self.base_path, str)
 
 
-@_api.dataclass(DruidErrorCode.DRUID_14, kw_only=True)
-class GCSLocation(CloudLocation):
-    """GCS staging area for `DruidDest`.
-
-    :categories: destination
-
-    The plugin uploads parquet to the bucket, then issues a Druid
-    ingestion spec referencing the GCS input source.
-
-    Args:
-        bucket: A valid GCS bucket name.
-        credentials: `GCPJson` service-account JSON credentials.
-        base_path: Object-key prefix from the bucket root; starts with
-            `/`, has no trailing `/` and no empty segments (`//`)
-            (the leading `/` is trimmed when forming the key).
-            Defaults to `/`.
-        cfg: Optional connector config for the GCS client (see
-            `CfgSpec`).
-    """
-
-    __kind__ = "druidGcsLocation"
-    bucket: GCSBucketSpec
-    credentials: GCPJson
-    base_path: CloudRelativePathSpec = "/"
-    cfg: CfgSpec | None = None
-
-    def _bucket(self) -> str:
-        return _convert(self.bucket, str)
-
-    def _base_path(self) -> str:
-        return _convert(self.base_path, str)
+# GCS staging is not offered for Druid.
+#
+# Druid's native `google` input source accepts no per-task credentials: the
+# cluster reads the staged object under its own ambient identity, so the
+# credentials would have to be baked into the Druid deployment as
+# GOOGLE_APPLICATION_CREDENTIALS rather than passed on the connection. A
+# `GCSLocation` a user could fill in would therefore be a lie -- the upload
+# would succeed and the ingestion would fail with a 401 -- so there is no
+# public surface for it. Kept commented rather than deleted so it is obvious
+# what is missing and why, should Druid ever gain per-task GCS credentials.
+# @_api.dataclass(DruidErrorCode.DRUID_14, kw_only=True)
+# class GCSLocation(CloudLocation):
+#     """GCS staging area for `DruidDest`.
+#
+#     :categories: destination
+#
+#     The plugin uploads parquet to the bucket, then issues a Druid
+#     ingestion spec referencing the GCS input source.
+#
+#     Args:
+#         bucket: A valid GCS bucket name.
+#         credentials: `GCPJson` service-account JSON credentials.
+#         base_path: Object-key prefix from the bucket root; starts with
+#             `/`, has no trailing `/` and no empty segments (`//`)
+#             (the leading `/` is trimmed when forming the key).
+#             Defaults to `/`.
+#         cfg: Optional connector config for the GCS client (see
+#             `CfgSpec`).
+#
+#     Note:
+#         `credentials` authenticate the **upload** only. Druid's native
+#         `google` input source accepts no per-task credentials, so the
+#         cluster reads the staged object under its own ambient identity
+#         and must have `GOOGLE_APPLICATION_CREDENTIALS` granting access
+#         to `bucket` -- otherwise the ingestion task fails with a 401
+#         from `storage.googleapis.com`. `S3Location` and
+#         `AzBlobLocation` carry their credentials in the ingestion spec
+#         and need no cluster-side setup.
+#     """
+#
+#     __kind__ = "druidGcsLocation"
+#     bucket: GCSBucketSpec
+#     credentials: GCPJson
+#     base_path: CloudRelativePathSpec = "/"
+#     cfg: CfgSpec | None = None
+#
+#     def _bucket(self) -> str:
+#         return _convert(self.bucket, str)
+#
+#     def _base_path(self) -> str:
+#         return _convert(self.base_path, str)
 
 
 # --- Connection ------------------------------------------------------
@@ -258,7 +276,7 @@ class DruidDestConn(Conn):
             `http://druid.example:8081`. Accepts a plain string or a
             `Secret`.
         staging: Cloud staging area for parquet uploads -- an
-            `S3Location`, `AzBlobLocation` or `GCSLocation`.
+            `S3Location` or `AzBlobLocation`.
         credentials: `UserPassword` for Overlord HTTP basic auth.
         conn_cfg: Optional connector config dict (see `CfgSpec`).
 
