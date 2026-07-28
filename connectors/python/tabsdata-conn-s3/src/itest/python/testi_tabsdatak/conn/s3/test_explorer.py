@@ -2,17 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""End-to-end ``S3ConnectionExplorer`` tests against a real S3 bucket.
-
-The ``s3_world_xs`` domain (provisioned by tdx) holds the world dataset laid
-out as ``<base_path>/<format>/<table>.<format>`` -- three tables
-(``country`` / ``city`` / ``country_language``) in three formats
-(``csv`` / ``ndjson`` / ``parquet``). The explorer talks to S3 directly via
-``boto3`` (no transporter binary): ``check_connect`` proves auth + bucket
-existence, ``metadata`` lists the objects under ``base_path``, and ``data``
-previews the first rows of a blob (csv via streamed lines, ndjson via
-newline-delimited JSON, parquet via pyarrow range requests).
-"""
+"""S3 explorer integration tests against a provisioned bucket prefix"""
 
 from __future__ import annotations
 
@@ -20,30 +10,23 @@ import re
 import uuid
 
 import pytest
+from tabsdatax.itest.fixture.backends.s3 import S3Domain, s3_domain
+from testi_tabsdatak.conn.s3.backend import credentials, src_conn
 
-from tabsdatak.api import Secret
 from tabsdatak.conn.common.file._explorer import FileStorageEntity
-from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3SrcConn
 from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 
-from tabsdatax.itest.fixture.backends.s3 import (
-    S3Domain,
-    S3System,
-    s3_domain,
-    s3_system,
-)
-
 pytestmark = pytest.mark.s3
 
-_TABLES = ("country", "city", "country_language")
-_FORMATS = ("csv", "ndjson", "parquet")
+TABLES = ("country", "city", "country_language")
+FORMATS = ("csv", "ndjson", "parquet")
 
-# The first five city rows (in id order). The staged files include the `id`
+# The first five city rows (in id order). The staged objects include the `id`
 # column (native int for ndjson / parquet; string for csv, like every other
 # value). ndjson / parquet preserve native types; csv comes back with every
 # value as a string.
-_WLD_CITY_HEAD = [
+CITY_HEAD = [
     {
         "id": 1,
         "name": "Kabul",
@@ -81,23 +64,6 @@ _WLD_CITY_HEAD = [
     },
 ]
 
-
-def _creds(cfg: S3Domain) -> AwsAccessSecretKey:
-    return AwsAccessSecretKey(
-        access_key_id=Secret(cfg.access_key),
-        secret_access_key=Secret(cfg.secret_key),
-    )
-
-
-def _conn_from(cfg: S3Domain) -> S3SrcConn:
-    return S3SrcConn(
-        bucket=cfg.bucket,
-        region=cfg.region,
-        credentials=_creds(cfg),
-        base_path="/" + str(cfg.base_path).strip("/"),
-    )
-
-
 _TS_RE = re.compile(r"_\d{8}T\d{6}_\d+(?=\.[^.]+$)")
 
 
@@ -127,22 +93,20 @@ def _entity_by_file(
 # ---------------------------------------------------------------------------
 
 
-@s3_system("s3")
 @s3_domain("s3_world_xs")
-def test_check_connect_succeeds(system_s3: S3System, domain_s3_world_xs: S3Domain):
+def test_check_connect_succeeds(domain_s3_world_xs: S3Domain):
     # Contract: returns None on success and must not raise.
-    assert S3ConnectionExplorer().check_connect(_conn_from(domain_s3_world_xs)) is None
+    domain = domain_s3_world_xs
+    conn = src_conn(domain, domain.base_path)
+    assert S3ConnectionExplorer().check_connect(conn) is None
 
 
-@s3_system("s3")
 @s3_domain("s3_world_xs")
-def test_check_connect_nonexistent_bucket_raises(
-    system_s3: S3System, domain_s3_world_xs: S3Domain
-):
+def test_check_connect_nonexistent_bucket_raises(domain_s3_world_xs: S3Domain):
     bad = S3SrcConn(
         bucket=f"td-does-not-exist-{uuid.uuid4().hex}",
         region=domain_s3_world_xs.region,
-        credentials=_creds(domain_s3_world_xs),
+        credentials=credentials(domain_s3_world_xs),
     )
     with pytest.raises(Exception):
         S3ConnectionExplorer().check_connect(bad)
@@ -153,16 +117,14 @@ def test_check_connect_nonexistent_bucket_raises(
 # ---------------------------------------------------------------------------
 
 
-@s3_system("s3")
 @s3_domain("s3_world_xs")
-def test_metadata_lists_domain_objects(
-    system_s3: S3System, domain_s3_world_xs: S3Domain
-):
-    entities = S3ConnectionExplorer().metadata(_conn_from(domain_s3_world_xs))
+def test_metadata_lists_domain_objects(domain_s3_world_xs: S3Domain):
+    domain = domain_s3_world_xs
+    entities = S3ConnectionExplorer().metadata(src_conn(domain, domain.base_path))
 
     assert entities and all(isinstance(e, FileStorageEntity) for e in entities)
     assert all(e.scheme == "s3" for e in entities)
-    assert all(e.bucket == domain_s3_world_xs.bucket for e in entities)
+    assert all(e.bucket == domain.bucket for e in entities)
 
     # Every object reports its size (bytes) and last-modified timestamp.
     assert all(isinstance(e.size, int) and e.size > 0 for e in entities)
@@ -170,31 +132,29 @@ def test_metadata_lists_domain_objects(
 
     # Exactly the world dataset: three tables in three formats.
     assert {_logical(e.file.pattern) for e in entities} == {
-        f"{table}.{fmt}" for table in _TABLES for fmt in _FORMATS
+        f"{table}.{fmt}" for table in TABLES for fmt in FORMATS
     }
 
 
-@s3_system("s3")
 @s3_domain("s3_world_xs")
-def test_metadata_sniffs_format(system_s3: S3System, domain_s3_world_xs: S3Domain):
-    entities = S3ConnectionExplorer().metadata(_conn_from(domain_s3_world_xs))
+def test_metadata_sniffs_format(domain_s3_world_xs: S3Domain):
+    domain = domain_s3_world_xs
+    entities = S3ConnectionExplorer().metadata(src_conn(domain, domain.base_path))
     by_name = {_logical(e.file.pattern): e for e in entities}
-    for fmt in _FORMATS:
+    for fmt in FORMATS:
         assert by_name[f"city.{fmt}"].file.format == fmt
 
 
 # ---------------------------------------------------------------------------
-# data -- first-rows preview per format
+# data
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("fmt", _FORMATS)
-@s3_system("s3")
+@pytest.mark.parametrize("fmt", FORMATS)
 @s3_domain("s3_world_xs")
-def test_data_returns_first_rows(
-    system_s3: S3System, domain_s3_world_xs: S3Domain, fmt: str
-):
-    conn = _conn_from(domain_s3_world_xs)
+def test_data_returns_first_rows(domain_s3_world_xs: S3Domain, fmt: str):
+    domain = domain_s3_world_xs
+    conn = src_conn(domain, domain.base_path)
     explorer = S3ConnectionExplorer()
     entity = _entity_by_file(explorer.metadata(conn), f"city.{fmt}")
 
@@ -203,7 +163,7 @@ def test_data_returns_first_rows(
     assert isinstance(rows, list)
     # csv comes back as strings; ndjson / parquet keep native types.
     if fmt == "csv":
-        expected = [{k: str(v) for k, v in r.items()} for r in _WLD_CITY_HEAD]
+        expected = [{k: str(v) for k, v in r.items()} for r in CITY_HEAD]
     else:
-        expected = _WLD_CITY_HEAD
+        expected = CITY_HEAD
     assert rows == expected
