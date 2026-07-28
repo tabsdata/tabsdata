@@ -2,19 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""End-to-end ``LocalFileExplorer`` tests against a tdx-provisioned directory.
-
-The ``fs_world_xs`` domain (provisioned by tdx) is a real directory on disk
-holding the world dataset laid out as
-``<base_path>/<format>/<table>_<stamp>.<format>`` -- three tables
-(``country`` / ``city`` / ``country_language``) in three formats
-(``csv`` / ``ndjson`` / ``parquet``). Unlike the object-storage explorers there
-are no credentials and no bucket: ``check_connect`` proves the ``base_path`` is
-a directory, ``metadata`` walks it recursively and lists every file found (with
-size + last-modified), and ``data`` previews the first rows of a single file
-(csv via streamed lines, ndjson via newline-delimited JSON, parquet via
-pyarrow).
-"""
+"""LocalFile explorer integration tests against a provisioned directory"""
 
 from __future__ import annotations
 
@@ -22,12 +10,8 @@ import re
 import uuid
 
 import pytest
-from tabsdatax.itest.fixture.backends.fs import (
-    FsDomain,
-    FsSystem,
-    fs_domain,
-    fs_system,
-)
+from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
+from testi_tabsdatak.conn.localfile.backend import src_conn
 
 from tabsdatak.conn.common.file._explorer import FileStorageEntity
 from tabsdatak.conn.localfile import LocalFileSrcConn
@@ -35,14 +19,14 @@ from tabsdatak.conn.localfile._explorer import LocalFileExplorer
 
 pytestmark = pytest.mark.localfile
 
-_TABLES = ("country", "city", "country_language")
-_FORMATS = ("csv", "ndjson", "parquet")
+TABLES = ("country", "city", "country_language")
+FORMATS = ("csv", "ndjson", "parquet")
 
 # The first five city rows (in id order). The staged files include the `id`
 # column (native int for ndjson / parquet; string for csv, like every other
 # value). ndjson / parquet preserve native types; csv comes back with every
 # value as a string.
-_WLD_CITY_HEAD = [
+CITY_HEAD = [
     {
         "id": 1,
         "name": "Kabul",
@@ -80,11 +64,6 @@ _WLD_CITY_HEAD = [
     },
 ]
 
-
-def _conn_from(cfg: FsDomain) -> LocalFileSrcConn:
-    return LocalFileSrcConn(base_path="/" + str(cfg.base_path).strip("/"))
-
-
 _TS_RE = re.compile(r"_\d{8}T\d{6}_\d+(?=\.[^.]+$)")
 
 
@@ -114,18 +93,17 @@ def _entity_by_file(
 # ---------------------------------------------------------------------------
 
 
-@fs_system("fs")
 @fs_domain("fs_world_xs")
-def test_check_connect_succeeds(system_fs: FsSystem, domain_fs_world_xs: FsDomain):
+def test_check_connect_succeeds(domain_fs_world_xs: FsDomain):
     # Contract: returns None on success and must not raise.
-    assert LocalFileExplorer().check_connect(_conn_from(domain_fs_world_xs)) is None
+    assert (
+        LocalFileExplorer().check_connect(src_conn(domain_fs_world_xs.base_path))
+        is None
+    )
 
 
-@fs_system("fs")
 @fs_domain("fs_world_xs")
-def test_check_connect_nonexistent_path_raises(
-    system_fs: FsSystem, domain_fs_world_xs: FsDomain
-):
+def test_check_connect_nonexistent_path_raises(domain_fs_world_xs: FsDomain):
     bad = LocalFileSrcConn(base_path=f"/tmp/td-does-not-exist-{uuid.uuid4().hex}")
     with pytest.raises(NotADirectoryError):
         LocalFileExplorer().check_connect(bad)
@@ -136,10 +114,9 @@ def test_check_connect_nonexistent_path_raises(
 # ---------------------------------------------------------------------------
 
 
-@fs_system("fs")
 @fs_domain("fs_world_xs")
-def test_metadata_lists_domain_files(system_fs: FsSystem, domain_fs_world_xs: FsDomain):
-    conn = _conn_from(domain_fs_world_xs)
+def test_metadata_lists_domain_files(domain_fs_world_xs: FsDomain):
+    conn = src_conn(domain_fs_world_xs.base_path)
     entities = LocalFileExplorer().metadata(conn)
 
     assert entities and all(isinstance(e, FileStorageEntity) for e in entities)
@@ -155,31 +132,27 @@ def test_metadata_lists_domain_files(system_fs: FsSystem, domain_fs_world_xs: Fs
 
     # Exactly the world dataset: three tables in three formats.
     assert {_logical(e.file.pattern) for e in entities} == {
-        f"{table}.{fmt}" for table in _TABLES for fmt in _FORMATS
+        f"{table}.{fmt}" for table in TABLES for fmt in FORMATS
     }
 
 
-@fs_system("fs")
 @fs_domain("fs_world_xs")
-def test_metadata_sniffs_format(system_fs: FsSystem, domain_fs_world_xs: FsDomain):
-    entities = LocalFileExplorer().metadata(_conn_from(domain_fs_world_xs))
+def test_metadata_sniffs_format(domain_fs_world_xs: FsDomain):
+    entities = LocalFileExplorer().metadata(src_conn(domain_fs_world_xs.base_path))
     by_name = {_logical(e.file.pattern): e for e in entities}
-    for fmt in _FORMATS:
+    for fmt in FORMATS:
         assert by_name[f"city.{fmt}"].file.format == fmt
 
 
 # ---------------------------------------------------------------------------
-# data -- first-rows preview per format
+# data
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("fmt", _FORMATS)
-@fs_system("fs")
+@pytest.mark.parametrize("fmt", FORMATS)
 @fs_domain("fs_world_xs")
-def test_data_returns_first_rows(
-    system_fs: FsSystem, domain_fs_world_xs: FsDomain, fmt: str
-):
-    conn = _conn_from(domain_fs_world_xs)
+def test_data_returns_first_rows(domain_fs_world_xs: FsDomain, fmt: str):
+    conn = src_conn(domain_fs_world_xs.base_path)
     explorer = LocalFileExplorer()
     entity = _entity_by_file(explorer.metadata(conn), f"city.{fmt}")
 
@@ -188,7 +161,7 @@ def test_data_returns_first_rows(
     assert isinstance(rows, list)
     # csv comes back as strings; ndjson / parquet keep native types.
     if fmt == "csv":
-        expected = [{k: str(v) for k, v in r.items()} for r in _WLD_CITY_HEAD]
+        expected = [{k: str(v) for k, v in r.items()} for r in CITY_HEAD]
     else:
-        expected = _WLD_CITY_HEAD
+        expected = CITY_HEAD
     assert rows == expected
