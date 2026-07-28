@@ -12,11 +12,6 @@ PYTHON_EDITABLE_PACKAGE_SUFFIX = "_finder"
 
 TABSDATA_CONNECTORS_NAMES = [
     "api",
-    "bigquery",
-    "cdc-common",
-    "cdc-db2",
-    "cdc-mysql",
-    "cdc-postgres",
     "cli",
     "common",
     "conn-azureblob",
@@ -42,17 +37,9 @@ TABSDATA_CONNECTORS_NAMES = [
     "conn-snowflake",
     "conn-starrocks",
     "conn-stream-stage",
-    "databricks",
-    "kafka",
     "medallion",
-    "mongodb",
-    "mssql",
-    "salesforce",
-    "schema-evolution",
     "sdk",
     "server",
-    "snowflake",
-    "sql-common",
 ]
 
 TABSDATA_CONNECTORS = {

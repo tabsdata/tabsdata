@@ -8,7 +8,8 @@ import sys
 import warnings
 from importlib.metadata import PackageNotFoundError, requires, version
 
-from tabsdata._utils.constants import POLARS_MODULE_NAME, TABSDATA_MODULE_NAME
+TABSDATA_MODULE_NAME = "tabsdata"
+POLARS_MODULE_NAME = "polars"
 
 STICKY_VERSION_PACKAGES = [POLARS_MODULE_NAME]
 

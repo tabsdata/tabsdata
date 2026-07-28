@@ -3,11 +3,6 @@
 #
 
 tabsdata-api==2.0.0
-tabsdata-bigquery==2.0.0
-tabsdata-cdc-common==2.0.0
-tabsdata-cdc-db2==2.0.0
-tabsdata-cdc-mysql==2.0.0
-tabsdata-cdc-postgres==2.0.0
 tabsdata-cli==2.0.0
 tabsdata-common==2.0.0
 tabsdata-conn-azureblob==2.0.0
@@ -33,14 +28,6 @@ tabsdata-conn-salesforce==2.0.0
 tabsdata-conn-snowflake==2.0.0
 tabsdata-conn-starrocks==2.0.0
 tabsdata-conn-stream-stage==2.0.0
-tabsdata-databricks==2.0.0
-tabsdata-kafka==2.0.0
 tabsdata-medallion==2.0.0
-tabsdata-mongodb==2.0.0
-tabsdata-mssql==2.0.0
-tabsdata-salesforce==2.0.0
-tabsdata-schema-evolution==2.0.0
 tabsdata-sdk==2.0.0
 tabsdata-server==2.0.0
-tabsdata-snowflake==2.0.0
-tabsdata-sql-common==2.0.0

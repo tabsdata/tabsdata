@@ -1,5 +1,0 @@
-#
-# Copyright 2026 Tabsdata Inc.
-#
-
-mysql-replication==1.0.15

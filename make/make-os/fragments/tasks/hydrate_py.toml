@@ -320,15 +320,6 @@ script = [
 
     debug "🔷 🔷 _____ Checking Python hydration by importing key modules..."
 
-    debug "🔸🔸🔸 Checking import: tabsdata"
-    result = exec python -c "import tabsdata"
-    if not eq ${result.code} 0
-        warn "❌ Failed to import: tabsdata"
-        warn "   Error: ${result.stderr}"
-    else
-        debug "✅ Successfully imported: tabsdata"
-    end
-
     debug "🔸🔸🔸 Checking import: tabsdatak"
     result = exec python -c "import tabsdatak"
     if not eq ${result.code} 0
@@ -384,7 +375,7 @@ script = [
     end
 
     debug "🔸🔸🔸 Checking import: td.TableFrame"
-    result = exec python -c "import tabsdata as td; tf = td.TableFrame"
+    result = exec python -c "import tabsdatak as td; tf = td.TableFrame"
     if not eq ${result.code} 0
         warn "❌ Failed to import: td.TableFrame"
         warn "   Error: ${result.stderr}"

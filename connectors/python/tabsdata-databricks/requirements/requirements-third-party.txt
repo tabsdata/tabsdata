@@ -1,6 +1,0 @@
-#
-# Copyright 2025 Tabsdata Inc.
-#
-
-databricks-sdk==0.102.0
-databricks-sql-connector==4.2.5

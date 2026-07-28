@@ -1,5 +1,0 @@
-#
-# Copyright 2025 Tabsdata Inc.
-#
-
-simple-salesforce==1.12.9

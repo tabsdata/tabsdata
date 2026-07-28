@@ -1,6 +1,0 @@
-#
-# Copyright 2026 Tabsdata Inc.
-#
-
-tabsdata-cdc-common==2.0.0
-tabsdata-sql-common==2.0.0

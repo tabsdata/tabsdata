@@ -4,11 +4,6 @@
 
 -r requirements-third-party.txt
 -r ../connectors/python/tabsdata-api/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-bigquery/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-cdc-common/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-cdc-db2/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-cdc-mysql/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-cdc-postgres/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cli/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-common/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-azureblob/requirements/requirements-third-party.txt
@@ -34,14 +29,6 @@
 -r ../connectors/python/tabsdata-conn-snowflake/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-starrocks/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-stream-stage/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-databricks/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-kafka/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-medallion/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-mongodb/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-mssql/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-salesforce/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-schema-evolution/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-sdk/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-server/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-snowflake/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-sql-common/requirements/requirements-third-party.txt

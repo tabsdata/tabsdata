@@ -7,7 +7,7 @@ agate-dbf==0.2.4
 agate-excel==0.4.2
 agate-sql==0.7.3
 annotated-doc==0.0.4
-annotated-types==0.7.0
+annotated-types==0.8.0
 ansi2html==1.9.2
 anyio==4.14.2
 appdirs==1.4.4
@@ -36,7 +36,7 @@ check-manifest==0.51
 click==8.4.2
 colorama==0.4.6
 colorlog==6.10.1
-comrak==0.0.12
+comrak==0.0.15
 contourpy==1.3.3
 coverage==7.15.2
 cryptography==47.0.0
@@ -195,7 +195,7 @@ python-on-whales==0.81.0
 python-slugify==8.0.4
 pytimeparse==1.1.8
 pytokens==0.4.1
-pytz==2026.2
+pytz==2026.3.post1
 pywin32==311 ; sys_platform == 'win32'
 pywin32-ctypes==0.2.3 ; platform_machine != 'ppc64le' and platform_machine != 's390x' and sys_platform == 'win32'
 pyyaml==6.0.3

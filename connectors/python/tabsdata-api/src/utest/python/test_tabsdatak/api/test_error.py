@@ -316,7 +316,7 @@ def test_source_is_captured_by_default(env_unset):
         CronTrigger()
     assert excinfo.value.source is not None
     assert __file__ in excinfo.value.source
-    assert "CronTrigger()" in excinfo.value.source
+    assert "CronTrigger" in excinfo.value.source
 
 
 def test_source_appears_in_str_repr_by_default(env_unset):

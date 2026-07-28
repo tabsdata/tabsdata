@@ -1,5 +1,0 @@
-#
-# Copyright 2025 Tabsdata Inc.
-#
-
-google-cloud-bigquery==3.40.1

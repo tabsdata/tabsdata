@@ -124,7 +124,7 @@ TESTING_APISERVER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/a
 TESTING_PROFILE_CONFIG_FILE = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/resources/profile/workspace/config/proc/regular/apiserver/config/config.yaml", normalize = true }
 TESTING_PROFILE_SUPERVISOR_CONFIG_FILE = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/resources/profile/workspace/config/config.yaml", normalize = true }
 
-UTEST_BOOTEST_SCRIPT = { value = "${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py", normalize = true }
+UTEST_BOOTEST_SCRIPT = { value = "${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdatak/bootest.py", normalize = true }
 ITEST_BOOTEST_SCRIPT = { value = "${PROJECT_PY_TD_TABSDATA_FOLDER}/src/itest/python/testi_tabsdatak/bootest.py", normalize = true }
 
 ITEST_INSTANCES_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/config/pytest/kubernetes.yaml", normalize = true }
