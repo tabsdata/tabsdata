@@ -5,7 +5,7 @@
 //! [`BootConfig`] — the managed server's boot knobs — and the env-resolved
 //! [`database_dir`] it stores its data in.
 
-use super::entry::bootable_server;
+use super::entry::{bootable_server, validate_server};
 use crate::config::{ComponentConfig, EMBEDDED_CREDENTIAL};
 use crate::error::DbError;
 use postgresql_embedded::Settings;
@@ -49,18 +49,19 @@ pub fn database_dir() -> Result<PathBuf, DbError> {
 }
 
 /// Boot knobs from the ([`bootable_server`]-gated) `database_server:` entry:
-/// its URL's port (default 5432) on the env-resolved [`database_dir`];
-/// `${embedded}` (and absence) map to the first-boot generated password.
+/// its configured port on the env-resolved [`database_dir`]; `${embedded}`
+/// (and absence) map to the first-boot generated password.
 pub fn boot_config(server: &ComponentConfig) -> Result<BootConfig, DbError> {
     let server = bootable_server(Some(server))?;
-    let password = server
+    let pg = validate_server(server)?;
+    let password = pg
         .password
         .as_deref()
         .filter(|value| *value != EMBEDDED_CREDENTIAL)
         .map(str::to_owned);
     Ok(BootConfig {
         data_dir: Some(database_dir()?),
-        port: Some(server.conn.url().port().unwrap_or(5432)),
+        port: Some(pg.port),
         persistent: true,
         password,
     })
@@ -81,9 +82,11 @@ mod tests {
         unsafe { std::env::set_var(DATABASE_DIR_ENV, "/tmp/td-boot-config-test") };
         let server: ComponentConfig = serde_yaml::from_str(
             "
-url: postgres://localhost:7432/postgres
-username: postgres
-password: secret
+postgres:
+  host: localhost
+  port: 7432
+  username: postgres
+  password: secret
 ",
         )
         .unwrap();
@@ -94,9 +97,11 @@ password: secret
 
         let server: ComponentConfig = serde_yaml::from_str(
             "
-url: postgres://localhost:7432/postgres
-username: admin
-password: secret
+postgres:
+  host: localhost
+  port: 7432
+  username: admin
+  password: secret
 ",
         )
         .unwrap();
@@ -107,9 +112,9 @@ password: secret
 
         let server: ComponentConfig = serde_yaml::from_str(
             "
-url: postgres://localhost/postgres
-username: ${embedded}
-password: ${embedded}
+postgres:
+  username: ${embedded}
+  password: ${embedded}
 ",
         )
         .unwrap();
@@ -117,11 +122,16 @@ password: ${embedded}
         assert_eq!(boot.port, Some(5432));
         assert!(boot.password.is_none());
 
-        let server: ComponentConfig =
-            serde_yaml::from_str("url: postgres://db.example.com/postgres").unwrap();
+        let server: ComponentConfig = serde_yaml::from_str(
+            "
+postgres:
+  host: db.example.com
+",
+        )
+        .unwrap();
         assert!(matches!(
             boot_config(&server),
-            Err(DbError::NonLocalServerUrl(host)) if host == "db.example.com"
+            Err(DbError::NonLocalServerHost(host)) if host == "db.example.com"
         ));
         unsafe { std::env::remove_var(DATABASE_DIR_ENV) };
     }

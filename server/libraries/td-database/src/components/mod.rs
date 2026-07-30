@@ -19,8 +19,13 @@ pub use apiserver::{APISERVER_COMPONENT_KEY, ApiserverComponent};
 pub use component::*;
 pub use pool::AdminPool;
 
+#[cfg(mysql)]
+use crate::config::MySqlConnect;
+#[cfg(postgres)]
+use crate::config::PostgresConnect;
 use crate::config::{
-    ComponentConfig, DatabaseComponents, DatabaseConfig, EMBEDDED_CREDENTIAL, Schema,
+    BackendConfig, ComponentConfig, ConnectConfig, DatabaseComponents, DatabaseConfig,
+    EMBEDDED_CREDENTIAL, Schema,
 };
 use crate::domain::DomainPools;
 use crate::error::DbError;
@@ -58,28 +63,72 @@ pub fn resolved_schema<'a>(
     ))
 }
 
+/// The identity a component's serving connection logs in as: the entry's
+/// explicit `username` (else the schema-named owner role) and its resolved
+/// password — required, so a missing one is a config error at resolution, not
+/// a failed login later.
+fn serving_credentials(
+    username: Option<&str>,
+    password: Option<&str>,
+    schema: &str,
+) -> Result<(String, String), DbError> {
+    let username = match username {
+        Some(EMBEDDED_CREDENTIAL) => return Err(DbError::EmbeddedUsernameNotAllowed),
+        Some(username) => username.to_owned(),
+        None => schema.to_owned(),
+    };
+    let password = resolve_password(password, EmbeddedPassword::Owner { schema })?
+        .ok_or(DbError::MissingCredentials)?;
+    Ok((username, password))
+}
+
+/// The entry's configured password, from the backends that authenticate.
+fn entry_password(conn: &BackendConfig) -> Option<&str> {
+    match conn {
+        #[cfg(sqlite)]
+        BackendConfig::Sqlite(_) => None,
+        #[cfg(postgres)]
+        BackendConfig::Postgres(c) => c.password.as_deref(),
+        #[cfg(mysql)]
+        BackendConfig::MySql(c) => c.password.as_deref(),
+    }
+}
+
 /// Serving connectable for a component: its entry, mounted on its resolved
-/// schema, logging in as the schema-named owner role.
+/// schema, logging in with its [`serving_credentials`].
 pub fn serving_config(
     components: &DatabaseComponents,
     component: &dyn SchemaComponent,
 ) -> Result<DatabaseConfig, DbError> {
     let entry = component_entry(components, component)?;
     let schema = schema_of(entry, component);
-    let username = match entry.username.as_deref() {
-        Some(EMBEDDED_CREDENTIAL) => return Err(DbError::EmbeddedUsernameNotAllowed),
-        Some(username) => username.to_owned(),
-        None => schema.to_owned(),
+    let conn = match &entry.conn {
+        #[cfg(sqlite)]
+        BackendConfig::Sqlite(c) => ConnectConfig::Sqlite(c.clone()),
+        #[cfg(postgres)]
+        BackendConfig::Postgres(c) => {
+            let (username, password) =
+                serving_credentials(c.username.as_deref(), c.password.as_deref(), schema)?;
+            ConnectConfig::Postgres(PostgresConnect {
+                options: c.clone(),
+                username,
+                password,
+            })
+        }
+        #[cfg(mysql)]
+        BackendConfig::MySql(c) => {
+            let (username, password) =
+                serving_credentials(c.username.as_deref(), c.password.as_deref(), schema)?;
+            ConnectConfig::MySql(MySqlConnect {
+                options: c.clone(),
+                username,
+                password,
+            })
+        }
     };
-    let password = resolve_password(
-        entry.password.as_deref(),
-        EmbeddedPassword::Owner { schema },
-    )?;
     Ok(DatabaseConfig {
-        conn: entry.conn.clone(),
+        conn,
         schema: Some(Schema::new(schema)),
-        username: Some(username),
-        password,
         app_role: None,
         pool: entry.pool.clone(),
     })
@@ -94,7 +143,7 @@ fn owner_credentials(
     let entry = component_entry(components, component)?;
     let schema = schema_of(entry, component);
     let password = resolve_password(
-        entry.password.as_deref(),
+        entry_password(&entry.conn),
         EmbeddedPassword::OwnerCreate { schema },
     )?
     .ok_or(DbError::MissingCredentials)?;

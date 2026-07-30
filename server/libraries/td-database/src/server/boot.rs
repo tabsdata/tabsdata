@@ -9,12 +9,10 @@
 use super::knobs::BootConfig;
 use super::secrets::load_or_create_password;
 use crate::error::DbError;
-use crate::pool::connect::redacted_url;
 use postgresql_embedded::{PostgreSQL, Settings, VersionReq};
 use std::path::Path;
 use std::time::Duration;
 use tracing::{info, warn};
-use url::Url;
 
 /// Read at compile time from the same `POSTGRESQL_VERSION` that
 /// `postgresql_embedded` uses to select the bundled archive, so the runtime
@@ -105,14 +103,13 @@ fn boot_settings(cfg: &BootConfig) -> Result<Settings, DbError> {
     Ok(settings)
 }
 
-/// Install/initialize (idempotent) then start `server`, returning the URL it
-/// listens on.
+/// Install/initialize (idempotent) then start `server`.
 ///
 /// **Always forgets the handle**: its `Drop` runs `pg_ctl stop` whenever
 /// `postmaster.pid` exists. On success the daemon must outlive this process;
 /// on failure (e.g. a lost data_dir race) a `Drop` would stop the *sibling*
 /// that owns the data_dir.
-async fn boot(mut server: PostgreSQL) -> Result<Url, DbError> {
+async fn boot(mut server: PostgreSQL) -> Result<(), DbError> {
     let booted = async {
         server
             .setup()
@@ -121,8 +118,6 @@ async fn boot(mut server: PostgreSQL) -> Result<Url, DbError> {
         server
             .start()
             .await
-            .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
-        Url::parse(&server.settings().url("postgres"))
             .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))
     }
     .await;
@@ -135,11 +130,10 @@ async fn boot(mut server: PostgreSQL) -> Result<Url, DbError> {
 /// loses a race to a running postmaster fails cleanly (see [`boot`]).
 pub(crate) async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
     clear_stale_postmaster(&cfg.data_dir_or_default());
-    let url = boot(PostgreSQL::new(boot_settings(cfg)?)).await?;
-    info!(
-        "Embedded postgres started, listening at {}.",
-        redacted_url(&url)
-    );
+    let settings = boot_settings(cfg)?;
+    let (host, port) = (settings.host.clone(), settings.port);
+    boot(PostgreSQL::new(settings)).await?;
+    info!("Embedded postgres started, listening at {host}:{port}.");
     Ok(())
 }
 
@@ -170,7 +164,9 @@ pub(super) async fn boot_owned(cfg: &BootConfig) -> Result<ServerHandle, DbError
         }
         None => {}
     }
-    let mut server = PostgreSQL::new(boot_settings(cfg)?);
+    let settings = boot_settings(cfg)?;
+    let (host, port) = (settings.host.clone(), settings.port);
+    let mut server = PostgreSQL::new(settings);
     server
         .setup()
         .await
@@ -179,12 +175,7 @@ pub(super) async fn boot_owned(cfg: &BootConfig) -> Result<ServerHandle, DbError
         .start()
         .await
         .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
-    let url = Url::parse(&server.settings().url("postgres"))
-        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
-    info!(
-        "Embedded postgres started (owned), listening at {}.",
-        redacted_url(&url)
-    );
+    info!("Embedded postgres started (owned), listening at {host}:{port}.");
     Ok(ServerHandle { server })
 }
 

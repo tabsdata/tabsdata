@@ -39,7 +39,8 @@ impl TdPool {
     /// (RLS-enforced `td_app` on PostgreSQL). This is a pure application pool: it
     /// holds no privileged connection and does not own the database server's
     /// lifecycle — the embedded server, when used, is booted out of band
-    /// (`td_dbmanager start`), and this pool connects to it by URL. The schema is
+    /// (`td_dbmanager start`), and this pool connects to it like any other
+    /// server. The schema is
     /// assumed to be up to date.
     #[instrument(name = "db.pool.connect", skip_all, level = "info", err(Debug))]
     pub async fn connect(config: &DatabaseConfig) -> Result<Self, DbError> {

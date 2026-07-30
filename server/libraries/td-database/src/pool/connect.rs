@@ -6,25 +6,35 @@
 //! machinery, the [`ConnectRole`] privilege selector, and the [`ConnectOutput`]
 //! it produces. This is *behavior*, not configuration — it opens sqlx pools —
 //! so it lives outside [`crate::config`], which holds only the declarative
-//! types. It never boots a server: the managed one is brought up out of band
-//! by `td_dbmanager` (see [`crate::server`]).
+//! types. Each backend maps its config onto sqlx's native connect options
+//! setter by setter (no `sqlx::any` indirection). It never boots a server: the
+//! managed one is brought up out of band by `td_dbmanager` (see
+//! [`crate::server`]).
 
-use crate::config::{BackendConfig, DatabaseConfig, Schema};
+#[cfg(mysql)]
+use crate::config::MySqlConnect;
+#[cfg(postgres)]
+use crate::config::PostgresConnect;
+#[cfg(sqlite)]
+use crate::config::SqliteConfig;
+use crate::config::{ConnectConfig, DatabaseConfig, Schema, StatementLogConfig};
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
-use sqlx::any::AnyConnectOptions;
 use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
+#[cfg(mysql)]
+use sqlx::{MySqlPool, mysql::MySqlConnectOptions};
+#[cfg(postgres)]
+use sqlx::{PgPool, postgres::PgConnectOptions};
+#[cfg(sqlite)]
+use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 #[cfg(sqlite)]
 use std::fs;
-use std::time::Duration;
+#[cfg(sqlite)]
+use std::path::Path;
 use tracing::debug;
-use tracing::log::LevelFilter;
 #[cfg(sqlite)]
 use tracing::warn;
-use url::Url;
-
-const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 
 /// Which role a [`DatabaseConfig::connect`] should open the pool as.
 ///
@@ -39,13 +49,12 @@ pub(crate) enum ConnectRole {
     Admin,
 }
 
-/// Result of [`DatabaseConfig::connect`]. Bundles the sqlx pool with the URL it
-/// actually connected to and the pinned schema. `connect` only ever connects to a
-/// URL — it never boots a server (embedded is brought up out of band and resolved
-/// to its URL before connecting), so there is no server handle to carry.
+/// Result of [`DatabaseConfig::connect`]. Bundles the sqlx pool with the
+/// pinned schema. `connect` only ever connects to an already-running server —
+/// it never boots one (embedded is brought up out of band), so there is no
+/// server handle to carry.
 pub struct ConnectOutput {
     pub pool: DynamicPool,
-    pub url: Url,
     /// Schema the connection's `search_path` was pinned to. `None` on
     /// SQLite/MySQL, which have no `search_path`; `Some` on PostgreSQL, where it
     /// is the mandatory configured schema.
@@ -53,9 +62,7 @@ pub struct ConnectOutput {
 }
 
 impl DatabaseConfig {
-    /// Connect using this configuration, opening the pool as `role`. For the
-    /// embedded-postgres variant, boots the in-process server first and returns
-    /// the live handle in `ConnectOutput.embedded`.
+    /// Connect using this configuration, opening the pool as `role`.
     ///
     /// On PostgreSQL the role selects the privilege posture (see [`ConnectRole`]):
     /// [`ConnectRole::Admin`] is a single raw-role pool (DDL/provisioning) and
@@ -73,13 +80,15 @@ impl DatabaseConfig {
             ))?
         }
 
-        self.validate()?;
-
         match &self.conn {
             #[cfg(sqlite)]
-            BackendConfig::Sqlite(c) => {
-                Self::try_create_missing_dir(&c.url);
-                let conn_options = self.conn_options(&c.url)?;
+            ConnectConfig::Sqlite(c) => {
+                match &c.path {
+                    Some(path) => try_create_missing_dir(path),
+                    None if !c.in_memory => return Err(DbError::MissingSqlitePath),
+                    None => {}
+                }
+                let conn_options = sqlite_connect_options(c);
                 let (rw, ro) = (
                     // important to create rw first so create_if_missing kicks in
                     self.connect_sqlite(&conn_options, false).await?,
@@ -88,25 +97,22 @@ impl DatabaseConfig {
                 // No RLS on SQLite: admin and serving build the same pool.
                 Ok(ConnectOutput {
                     pool: DynamicPool::Sqlite { ro, rw },
-                    url: (*c.url).clone(),
                     // SQLite has no `search_path`; schema is not consulted.
                     schema: None,
                 })
             }
             #[cfg(postgres)]
-            BackendConfig::Postgres(c) => {
+            ConnectConfig::Postgres(c) => {
                 let schema = self.connect_schema(role)?;
-                let url = self.url_with_credentials(&c.url)?;
-                let conn_options = self.conn_options(&url)?;
+                let conn_options = pg_connect_options(c);
                 let pool = self
                     .connect_postgres_pool(&conn_options, role, schema.as_deref())
                     .await?;
-                Ok(ConnectOutput { pool, url, schema })
+                Ok(ConnectOutput { pool, schema })
             }
             #[cfg(mysql)]
-            BackendConfig::MySql(c) => {
-                let url = self.url_with_credentials(&c.url)?;
-                let conn_options = self.conn_options(&url)?;
+            ConnectConfig::MySql(c) => {
+                let conn_options = mysql_connect_options(c);
                 let (rw, ro) = tokio::try_join!(
                     self.connect_mysql(&conn_options, false),
                     self.connect_mysql(&conn_options, true),
@@ -114,7 +120,6 @@ impl DatabaseConfig {
                 // No RLS on MySQL: admin and serving build the same pool.
                 Ok(ConnectOutput {
                     pool: DynamicPool::MySql { ro, rw },
-                    url: (*c.url).clone(),
                     // MySQL has no `search_path`; schema is not consulted.
                     schema: None,
                 })
@@ -148,7 +153,7 @@ impl DatabaseConfig {
     #[cfg(postgres)]
     async fn connect_postgres_pool(
         &self,
-        conn_options: &AnyConnectOptions,
+        conn_options: &PgConnectOptions,
         role: ConnectRole,
         schema: Option<&str>,
     ) -> Result<DynamicPool, DbError> {
@@ -175,29 +180,6 @@ impl DatabaseConfig {
         }
     }
 
-    /// The connection URL with the configured credentials injected as userinfo,
-    /// for handing to the sqlx connector. Assumes [`DatabaseConfig::validate`]
-    /// already confirmed the credentials are present.
-    #[cfg(any(postgres, mysql))]
-    fn url_with_credentials(&self, url: &Url) -> Result<Url, DbError> {
-        let mut url = url.clone();
-        url.set_username(self.username.as_deref().unwrap_or_default())
-            .and_then(|()| url.set_password(self.password.as_deref()))
-            .map_err(|()| DbError::CredentialsInUrl)?;
-        Ok(url)
-    }
-
-    fn conn_options(&self, url: &Url) -> Result<AnyConnectOptions, DbError> {
-        let conn_options = AnyConnectOptions::from_url(url)
-            .map_err(DbError::FailedToConnectToDatabase)?
-            .log_statements(self.pool.log_level)
-            .log_slow_statements(
-                LevelFilter::Warn,
-                Duration::from_millis(SLOW_QUERIES_THRESHOLD),
-            );
-        Ok(conn_options)
-    }
-
     fn pool_options<DB: Database>(&self, read_only: bool) -> PoolOptions<DB> {
         // The write pool is pinned to a single connection, so all writes in this
         // process serialize through it (in-process check-then-insert can't race).
@@ -218,34 +200,27 @@ impl DatabaseConfig {
             .max_lifetime(self.pool.max_lifetime)
             .idle_timeout(self.pool.idle_timeout)
             .test_before_acquire(self.pool.test_before_acquire)
-    }
-
-    #[cfg(sqlite)]
-    fn try_create_missing_dir(url: &Url) {
-        if let Ok(path) = url.to_file_path()
-            && let Some(parent) = path.parent()
-            && !parent.exists()
-        {
-            if let Err(err) = fs::create_dir_all(parent) {
-                warn!("Failed to create database directory: {parent:?}. Error: {err}");
-            } else {
-                debug!("Created database directory: {parent:?}");
-            }
-        }
+            .acquire_time_level(self.pool.acquire_time_level)
+            .acquire_slow_level(self.pool.acquire_slow_level)
+            .acquire_slow_threshold(self.pool.acquire_slow_threshold)
     }
 
     #[cfg(sqlite)]
     async fn connect_sqlite(
         &self,
-        conn_options: &AnyConnectOptions,
+        conn_options: &SqliteConnectOptions,
         read_only: bool,
-    ) -> Result<sqlx::SqlitePool, sqlx::Error> {
-        let conn_options = sqlx::sqlite::SqliteConnectOptions::try_from(conn_options)?
-            .create_if_missing(!read_only)
-            .busy_timeout(Duration::from_secs(10))
-            .foreign_keys(true)
-            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-            .read_only(read_only);
+    ) -> Result<SqlitePool, sqlx::Error> {
+        // Only the read-write pool may create the file; the read-only pool
+        // opening a missing database is an error, not a silent empty file.
+        let conn_options = if read_only {
+            conn_options
+                .clone()
+                .read_only(true)
+                .create_if_missing(false)
+        } else {
+            conn_options.clone()
+        };
         debug!("Database(read_only:{read_only}). Connection options: {conn_options:#?}");
 
         let pool_options = self.pool_options(read_only);
@@ -268,12 +243,11 @@ impl DatabaseConfig {
     #[cfg(postgres)]
     async fn connect_postgres(
         &self,
-        conn_options: &AnyConnectOptions,
+        conn_options: &PgConnectOptions,
         read_only: bool,
         app_role: bool,
         schema: Option<&str>,
-    ) -> Result<sqlx::PgPool, sqlx::Error> {
-        let conn_options = sqlx::postgres::PgConnectOptions::try_from(conn_options)?;
+    ) -> Result<PgPool, sqlx::Error> {
         // Never log the full connect options — they carry the username and
         // password. Only the non-secret target.
         debug!(
@@ -328,17 +302,16 @@ impl DatabaseConfig {
             "Database(read_only:{read_only}, app_role:{app_role}). Pool options: {pool_options:#?}"
         );
 
-        let pool = pool_options.connect_with(conn_options).await?;
+        let pool = pool_options.connect_with(conn_options.clone()).await?;
         Ok(pool)
     }
 
     #[cfg(mysql)]
     async fn connect_mysql(
         &self,
-        conn_options: &AnyConnectOptions,
+        conn_options: &MySqlConnectOptions,
         read_only: bool,
-    ) -> Result<sqlx::MySqlPool, sqlx::Error> {
-        let conn_options = sqlx::mysql::MySqlConnectOptions::try_from(conn_options)?;
+    ) -> Result<MySqlPool, sqlx::Error> {
         // Never log the full connect options — they carry the username and password.
         debug!(
             read_only,
@@ -360,21 +333,189 @@ impl DatabaseConfig {
             });
         debug!("Database(read_only:{read_only}). Pool options: {pool_options:#?}");
 
-        let pool = pool_options.connect_with(conn_options).await?;
+        let pool = pool_options.connect_with(conn_options.clone()).await?;
         Ok(pool)
     }
 }
 
-/// `url` with userinfo (user[:password]) stripped — for deriving a credential-free
-/// base URL (credentials travel in explicit config fields, never the URL).
-/// Infallible: stripping only fails on cannot-be-a-base URLs, which database URLs
-/// are not.
-#[cfg(all(postgres, feature = "embedded-postgres"))]
-pub(crate) fn redacted_url(url: &Url) -> Url {
-    let mut url = url.clone();
-    url.set_username("").ok();
-    url.set_password(None).ok();
-    url
+/// Statement logging, identical on every backend's options (the only
+/// `ConnectOptions`-trait knobs this module sets).
+fn statement_logging<O: ConnectOptions>(options: O, log: &StatementLogConfig) -> O {
+    options
+        .log_statements(log.log_statements)
+        .log_slow_statements(log.log_slow_statements, log.log_slow_statements_threshold)
+}
+
+/// Map the resolved postgres config onto sqlx's native options, field by
+/// field. The constructor seeds fields from `PG*` env vars (and `new` would
+/// additionally consult `~/.pgpass`), so the connection identity — host, port,
+/// user, password, ssl mode, database — is always set from the config;
+/// remaining unset fields keep the libpq-style env layering.
+#[cfg(postgres)]
+pub(crate) fn pg_connect_options(c: &PostgresConnect) -> PgConnectOptions {
+    let o = &c.options;
+    let mut options = PgConnectOptions::new_without_pgpass()
+        .host(&o.host)
+        .port(o.port)
+        .username(&c.username)
+        .password(&c.password)
+        .ssl_mode(o.ssl_mode.into())
+        .database(o.database.as_deref().unwrap_or(&c.username));
+    if let Some(socket) = &o.socket {
+        options = options.socket(socket);
+    }
+    if let Some(cert) = &o.ssl_root_cert {
+        options = options.ssl_root_cert(cert);
+    }
+    if let Some(pem) = &o.ssl_root_cert_pem {
+        options = options.ssl_root_cert_from_pem(pem.clone().into_bytes());
+    }
+    if let Some(cert) = &o.ssl_client_cert {
+        options = options.ssl_client_cert(cert);
+    }
+    if let Some(pem) = &o.ssl_client_cert_pem {
+        options = options.ssl_client_cert_from_pem(pem);
+    }
+    if let Some(key) = &o.ssl_client_key {
+        options = options.ssl_client_key(key);
+    }
+    if let Some(pem) = &o.ssl_client_key_pem {
+        options = options.ssl_client_key_from_pem(pem);
+    }
+    if let Some(capacity) = o.statement_cache_capacity {
+        options = options.statement_cache_capacity(capacity);
+    }
+    if let Some(name) = &o.application_name {
+        options = options.application_name(name);
+    }
+    if let Some(digits) = o.extra_float_digits {
+        options = options.extra_float_digits(digits);
+    }
+    if !o.options.is_empty() {
+        options = options.options(&o.options);
+    }
+    statement_logging(options, &o.log)
+}
+
+/// Map the sqlite config onto sqlx's native options, field by field.
+/// `read_only` is decided per pool by the caller, never here.
+#[cfg(sqlite)]
+fn sqlite_connect_options(o: &SqliteConfig) -> SqliteConnectOptions {
+    let mut options = SqliteConnectOptions::new()
+        .in_memory(o.in_memory)
+        .create_if_missing(o.create_if_missing)
+        .foreign_keys(o.foreign_keys)
+        .journal_mode(o.journal_mode.into())
+        .busy_timeout(o.busy_timeout)
+        .shared_cache(o.shared_cache)
+        .immutable(o.immutable)
+        .serialized(o.serialized)
+        .optimize_on_close(o.optimize_on_close, o.analysis_limit);
+    if let Some(path) = &o.path {
+        options = options.filename(path);
+    }
+    if let Some(mode) = o.locking_mode {
+        options = options.locking_mode(mode.into());
+    }
+    if let Some(mode) = o.synchronous {
+        options = options.synchronous(mode.into());
+    }
+    if let Some(mode) = o.auto_vacuum {
+        options = options.auto_vacuum(mode.into());
+    }
+    if let Some(size) = o.page_size {
+        options = options.page_size(size);
+    }
+    if let Some(capacity) = o.statement_cache_capacity {
+        options = options.statement_cache_capacity(capacity);
+    }
+    for pragma in &o.pragma {
+        options = options.pragma(pragma.key.clone(), pragma.value.clone());
+    }
+    if let Some(size) = o.command_buffer_size {
+        options = options.command_buffer_size(size);
+    }
+    if let Some(size) = o.row_buffer_size {
+        options = options.row_buffer_size(size);
+    }
+    if let Some(vfs) = &o.vfs {
+        options = options.vfs(vfs.clone());
+    }
+    for extension in &o.extensions {
+        options = match &extension.entrypoint {
+            Some(entrypoint) => {
+                options.extension_with_entrypoint(extension.name.clone(), entrypoint.clone())
+            }
+            None => options.extension(extension.name.clone()),
+        };
+    }
+    statement_logging(options, &o.log)
+}
+
+/// Map the resolved mysql config onto sqlx's native options, field by field.
+#[cfg(mysql)]
+fn mysql_connect_options(c: &MySqlConnect) -> MySqlConnectOptions {
+    let o = &c.options;
+    let mut options = MySqlConnectOptions::new()
+        .host(&o.host)
+        .port(o.port)
+        .username(&c.username)
+        .password(&c.password)
+        .ssl_mode(o.ssl_mode.into())
+        .pipes_as_concat(o.pipes_as_concat)
+        .enable_cleartext_plugin(o.enable_cleartext_plugin)
+        .no_engine_substitution(o.no_engine_substitution)
+        .set_names(o.set_names);
+    if let Some(socket) = &o.socket {
+        options = options.socket(socket);
+    }
+    if let Some(database) = &o.database {
+        options = options.database(database);
+    }
+    if let Some(ca) = &o.ssl_ca {
+        options = options.ssl_ca(ca);
+    }
+    if let Some(pem) = &o.ssl_ca_pem {
+        options = options.ssl_ca_from_pem(pem.clone().into_bytes());
+    }
+    if let Some(cert) = &o.ssl_client_cert {
+        options = options.ssl_client_cert(cert);
+    }
+    if let Some(pem) = &o.ssl_client_cert_pem {
+        options = options.ssl_client_cert_from_pem(pem);
+    }
+    if let Some(key) = &o.ssl_client_key {
+        options = options.ssl_client_key(key);
+    }
+    if let Some(pem) = &o.ssl_client_key_pem {
+        options = options.ssl_client_key_from_pem(pem);
+    }
+    if let Some(capacity) = o.statement_cache_capacity {
+        options = options.statement_cache_capacity(capacity);
+    }
+    if let Some(charset) = &o.charset {
+        options = options.charset(charset);
+    }
+    if let Some(collation) = &o.collation {
+        options = options.collation(collation);
+    }
+    if let Some(timezone) = &o.timezone {
+        options = options.timezone(timezone.clone());
+    }
+    statement_logging(options, &o.log)
+}
+
+#[cfg(sqlite)]
+fn try_create_missing_dir(path: &Path) {
+    if let Some(parent) = path.parent()
+        && !parent.exists()
+    {
+        if let Err(err) = fs::create_dir_all(parent) {
+            warn!("Failed to create database directory: {parent:?}. Error: {err}");
+        } else {
+            debug!("Created database directory: {parent:?}");
+        }
+    }
 }
 
 #[cfg(postgres)]
@@ -407,11 +548,209 @@ fn create_app_role_sql(app_role: &str) -> String {
 /// need no `CREATEROLE`). The schema/table grants are applied later, once the tables
 /// exist, by the `components` module's `AdminPool::ensure_app_role`.
 #[cfg(postgres)]
-async fn provision_app_role(pool: &sqlx::PgPool, app_role: &str) -> Result<(), DbError> {
+async fn provision_app_role(pool: &PgPool, app_role: &str) -> Result<(), DbError> {
     sqlx::query(&create_app_role_sql(app_role))
         .execute(pool)
         .await
         .map_err(DbError::SqlError)?;
     debug!(role = app_role, "Provisioned RLS app role");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(mysql)]
+    use crate::config::MySqlConfig;
+    use crate::config::PoolConfig;
+    #[cfg(postgres)]
+    use crate::config::PostgresConfig;
+    #[cfg(postgres)]
+    use crate::test_utils::server;
+    #[cfg(postgres)]
+    use sqlx::postgres::PgPoolOptions;
+    #[cfg(postgres)]
+    use std::collections::BTreeMap;
+    use std::time::Duration;
+    use tracing::log::LevelFilter;
+
+    #[cfg(postgres)]
+    type TestBackend = sqlx::Postgres;
+    #[cfg(all(sqlite, not(postgres)))]
+    type TestBackend = sqlx::Sqlite;
+
+    fn database_config(pool: PoolConfig) -> DatabaseConfig {
+        #[cfg(postgres)]
+        let conn = ConnectConfig::Postgres(PostgresConnect {
+            options: PostgresConfig::default(),
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        });
+        #[cfg(all(sqlite, not(postgres)))]
+        let conn = ConnectConfig::Sqlite(SqliteConfig::default());
+        DatabaseConfig {
+            conn,
+            schema: None,
+            app_role: None,
+            pool,
+        }
+    }
+
+    #[cfg(postgres)]
+    #[test]
+    fn pg_connect_options_mapping() {
+        let connect = PostgresConnect {
+            options: PostgresConfig {
+                host: "db.example.com".to_string(),
+                port: 6432,
+                database: Some("postgres".to_string()),
+                ..Default::default()
+            },
+            username: "admin".to_string(),
+            password: "secret".to_string(),
+        };
+        let options = pg_connect_options(&connect);
+        assert_eq!(options.get_host(), "db.example.com");
+        assert_eq!(options.get_port(), 6432);
+        assert_eq!(options.get_database(), Some("postgres"));
+        assert_eq!(options.get_username(), "admin");
+    }
+
+    /// With `database:` unset the pool targets the username's database — set
+    /// explicitly so an ambient `PGDATABASE` cannot redirect it.
+    #[cfg(postgres)]
+    #[test]
+    fn pg_connect_options_database_defaults_to_username() {
+        let connect = PostgresConnect {
+            options: PostgresConfig::default(),
+            username: "admin".to_string(),
+            password: "secret".to_string(),
+        };
+        let options = pg_connect_options(&connect);
+        assert_eq!(options.get_database(), Some("admin"));
+    }
+
+    #[cfg(sqlite)]
+    #[test]
+    fn sqlite_connect_options_mapping() {
+        let config = SqliteConfig {
+            path: Some("/tmp/mapping.db".into()),
+            ..Default::default()
+        };
+        let options = sqlite_connect_options(&config);
+        assert_eq!(options.get_filename(), Path::new("/tmp/mapping.db"));
+    }
+
+    #[cfg(sqlite)]
+    #[tokio::test]
+    async fn sqlite_connect_requires_path_or_in_memory() {
+        let config = DatabaseConfig {
+            conn: ConnectConfig::Sqlite(SqliteConfig::default()),
+            schema: None,
+            app_role: None,
+            pool: PoolConfig::default(),
+        };
+        let result = config.connect(ConnectRole::Serving).await;
+        assert!(matches!(result, Err(DbError::MissingSqlitePath)));
+    }
+
+    #[cfg(mysql)]
+    #[test]
+    fn mysql_connect_options_mapping() {
+        let connect = MySqlConnect {
+            options: MySqlConfig {
+                host: "db.example.com".to_string(),
+                port: 3307,
+                database: Some("td".to_string()),
+                ..Default::default()
+            },
+            username: "admin".to_string(),
+            password: "secret".to_string(),
+        };
+        let options = mysql_connect_options(&connect);
+        assert_eq!(options.get_host(), "db.example.com");
+        assert_eq!(options.get_port(), 3307);
+        assert_eq!(options.get_database(), Some("td"));
+        assert_eq!(options.get_username(), "admin");
+    }
+
+    #[test]
+    fn pool_options_full_mapping_on_read_pool() {
+        let pool = PoolConfig {
+            min_connections: 3,
+            max_connections: 17,
+            acquire_timeout: Duration::from_secs(11),
+            max_lifetime: Some(Duration::from_secs(1200)),
+            idle_timeout: None,
+            test_before_acquire: false,
+            acquire_time_level: LevelFilter::Debug,
+            acquire_slow_level: LevelFilter::Error,
+            acquire_slow_threshold: Duration::from_secs(7),
+        };
+        let config = database_config(pool);
+        let options: PoolOptions<TestBackend> = config.pool_options(true);
+        assert_eq!(options.get_min_connections(), 3);
+        assert_eq!(options.get_max_connections(), 17);
+        assert_eq!(options.get_acquire_timeout(), Duration::from_secs(11));
+        assert_eq!(options.get_max_lifetime(), Some(Duration::from_secs(1200)));
+        assert_eq!(options.get_idle_timeout(), None);
+        assert!(!options.get_test_before_acquire());
+        assert_eq!(options.get_acquire_slow_threshold(), Duration::from_secs(7));
+    }
+
+    /// The session settings sqlx exposes no getters for (`application_name`,
+    /// the startup `options` GUCs, `extra_float_digits`) actually reach the
+    /// server — read them back over a live connection. `extra_float_digits: 1`
+    /// is deliberate: sqlx sends `2` when unset, so a dropped mapping fails.
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn pg_connect_options_reach_the_server() {
+        server::ensure_started().await;
+        let base = server::admin_base();
+        let connect = PostgresConnect {
+            options: PostgresConfig {
+                application_name: Some("td-connect-options-test".to_string()),
+                extra_float_digits: Some(1),
+                options: BTreeMap::from([(
+                    "search_path".to_string(),
+                    "information_schema".to_string(),
+                )]),
+                ..base.options
+            },
+            ..base
+        };
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_with(pg_connect_options(&connect))
+            .await
+            .unwrap();
+        let (application_name, search_path, extra_float_digits): (String, String, String) =
+            sqlx::query_as(
+                "SELECT current_setting('application_name'), \
+                 current_setting('search_path'), \
+                 current_setting('extra_float_digits')",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(application_name, "td-connect-options-test");
+        assert_eq!(search_path, "information_schema");
+        assert_eq!(extra_float_digits, "1");
+        pool.close().await;
+    }
+
+    /// The write pool is pinned to a single connection regardless of the
+    /// configured sizes (in-process write serialization).
+    #[test]
+    fn pool_options_pin_write_pool() {
+        let pool = PoolConfig {
+            min_connections: 5,
+            max_connections: 50,
+            ..Default::default()
+        };
+        let config = database_config(pool);
+        let options: PoolOptions<TestBackend> = config.pool_options(false);
+        assert_eq!(options.get_min_connections(), 1);
+        assert_eq!(options.get_max_connections(), 1);
+    }
 }

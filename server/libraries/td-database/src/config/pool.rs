@@ -2,121 +2,68 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! [`PoolConfig`] — the sqlx connection-pool settings shared across all
-//! backends (sizes, timeouts, statement log level).
+//! [`PoolConfig`] — the full sqlx `PoolOptions` surface, shared across all
+//! backends. Times are bare integer seconds.
 
 use serde::{Deserialize, Serialize};
-use serde_with::DurationSeconds;
 use serde_with::serde_as;
+use serde_with::{DisplayFromStr, DurationSeconds};
 use std::time::Duration;
 use tracing::log::LevelFilter;
 
-fn min_connections() -> u32 {
-    1
+fn max_lifetime() -> Option<Duration> {
+    Some(Duration::from_secs(60 * 60))
 }
 
-fn max_connections() -> u32 {
-    10
-}
-
-fn acquire_timeout() -> Duration {
-    Duration::from_secs(30)
-}
-
-fn max_lifetime() -> Duration {
-    Duration::from_secs(60 * 60)
-}
-
-fn idle_timeout() -> Duration {
-    Duration::from_secs(60)
-}
-
-fn test_before_acquire() -> bool {
-    true
-}
-
-fn log_level() -> LevelFilter {
-    LevelFilter::Off
-}
-
-mod log_level_serde {
-    use serde::{Deserializer, Serializer};
-    use std::str::FromStr;
-    use tracing::log::LevelFilter;
-
-    pub(crate) fn serialize<S>(level: &LevelFilter, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&level.to_string())
-    }
-
-    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<LevelFilter, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct V;
-        impl<'de> serde::de::Visitor<'de> for V {
-            type Value = LevelFilter;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("a LevelFilter - off, error, warn, info, debug, trace")
-            }
-            fn visit_bool<E: serde::de::Error>(self, _v: bool) -> Result<LevelFilter, E> {
-                // If off is not inbetween "", serde thinks it is a bool in some cases.
-                Ok(LevelFilter::Off)
-            }
-            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<LevelFilter, E> {
-                LevelFilter::from_str(v).map_err(serde::de::Error::custom)
-            }
-            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<LevelFilter, E> {
-                LevelFilter::from_str(&v).map_err(serde::de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_any(V)
-    }
+fn idle_timeout() -> Option<Duration> {
+    Some(Duration::from_secs(60))
 }
 
 /// Connection pool settings shared across all database backends.
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PoolConfig {
     /// The minimum number of database connections, defaults to `1`.
-    #[serde(default = "min_connections")]
     pub min_connections: u32,
     /// The maximum number of database connections, defaults to `10`.
-    #[serde(default = "max_connections")]
     pub max_connections: u32,
     /// The maximum time to wait for a database connection to be acquired, defaults to `30 seconds`.
-    #[serde(default = "acquire_timeout")]
     #[serde_as(as = "DurationSeconds<u64>")]
     pub acquire_timeout: Duration,
-    /// The maximum lifetime of a database connection, defaults to `60 minutes`.
+    /// The maximum lifetime of a database connection, defaults to `60 minutes`; `~` disables it.
     #[serde(default = "max_lifetime")]
-    #[serde_as(as = "DurationSeconds<u64>")]
-    pub max_lifetime: Duration,
-    /// The maximum time a database connection can be idle, defaults to `60 seconds`.
+    #[serde_as(as = "Option<DurationSeconds<u64>>")]
+    pub max_lifetime: Option<Duration>,
+    /// The maximum time a database connection can be idle, defaults to `60 seconds`; `~` disables it.
     #[serde(default = "idle_timeout")]
-    #[serde_as(as = "DurationSeconds<u64>")]
-    pub idle_timeout: Duration,
+    #[serde_as(as = "Option<DurationSeconds<u64>>")]
+    pub idle_timeout: Option<Duration>,
     /// Whether to test the connection before acquiring it, defaults to `true`.
-    #[serde(default = "test_before_acquire")]
     pub test_before_acquire: bool,
-    /// Log level to be used by the configured connection pool.
-    #[serde(default = "log_level", with = "log_level_serde")]
-    pub log_level: LevelFilter,
+    /// Level every connection acquire is logged at, defaults to `off`.
+    #[serde_as(as = "DisplayFromStr")]
+    pub acquire_time_level: LevelFilter,
+    /// Level acquires slower than the threshold are logged at, defaults to `off`.
+    #[serde_as(as = "DisplayFromStr")]
+    pub acquire_slow_level: LevelFilter,
+    /// Slow-acquire threshold in seconds, defaults to `2`.
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub acquire_slow_threshold: Duration,
 }
 
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            min_connections: min_connections(),
-            max_connections: max_connections(),
-            acquire_timeout: acquire_timeout(),
+            min_connections: 1,
+            max_connections: 10,
+            acquire_timeout: Duration::from_secs(30),
             max_lifetime: max_lifetime(),
             idle_timeout: idle_timeout(),
-            test_before_acquire: test_before_acquire(),
-            log_level: log_level(),
+            test_before_acquire: true,
+            acquire_time_level: LevelFilter::Off,
+            acquire_slow_level: LevelFilter::Off,
+            acquire_slow_threshold: Duration::from_secs(2),
         }
     }
 }
@@ -138,10 +85,35 @@ idle_timeout: 120
 test_before_acquire: false
 ";
         let cfg: PoolConfig = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(cfg.idle_timeout, Duration::from_secs(120));
+        assert_eq!(cfg.idle_timeout, Some(Duration::from_secs(120)));
         assert!(!cfg.test_before_acquire);
         // rest defaults
         assert_eq!(cfg.min_connections, 1);
         assert_eq!(cfg.max_connections, 10);
+        assert_eq!(cfg.acquire_slow_threshold, Duration::from_secs(2));
+    }
+
+    #[test]
+    fn pool_config_null_disables_expiries() {
+        let yaml = "
+max_lifetime: ~
+idle_timeout: ~
+";
+        let cfg: PoolConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.max_lifetime, None);
+        assert_eq!(cfg.idle_timeout, None);
+    }
+
+    #[test]
+    fn pool_config_acquire_log_levels() {
+        let yaml = "
+acquire_time_level: debug
+acquire_slow_level: off
+acquire_slow_threshold: 10
+";
+        let cfg: PoolConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.acquire_time_level, LevelFilter::Debug);
+        assert_eq!(cfg.acquire_slow_level, LevelFilter::Off);
+        assert_eq!(cfg.acquire_slow_threshold, Duration::from_secs(10));
     }
 }

@@ -9,39 +9,38 @@
 //! it instead.
 
 use super::credentials::{EmbeddedPassword, resolve_password};
-use crate::config::{ComponentConfig, DatabaseConfig, EMBEDDED_CREDENTIAL};
+use crate::config::{
+    ComponentConfig, ConnectConfig, DatabaseConfig, EMBEDDED_CREDENTIAL, PostgresConfig,
+    PostgresConnect,
+};
 use crate::error::DbError;
 use std::net::IpAddr;
-use url::Host;
 
 /// The superuser the embedded boot always bakes in.
 pub(crate) const DEFAULT_SUPERUSER: &str = "postgres";
 
-/// Shape rules for the server entry: a PostgreSQL URL, no home schema.
-pub fn validate_server(server: &ComponentConfig) -> Result<(), DbError> {
-    if !server.conn.is_postgres() {
-        return Err(DbError::ServerBackendNotPostgres(
-            server.conn.url().scheme().to_owned(),
-        ));
-    }
+/// Shape rules for the server entry: a PostgreSQL backend, no home schema.
+/// Returns the entry's postgres options as the evidence.
+pub fn validate_server(server: &ComponentConfig) -> Result<&PostgresConfig, DbError> {
+    let pg = server
+        .conn
+        .postgres()
+        .ok_or(DbError::ServerBackendNotPostgres)?;
     if server.schema.is_some() {
         return Err(DbError::ServerSchemaNotAllowed);
     }
-    Ok(())
+    Ok(pg)
 }
 
-/// The boot-path locality rule: loopback or `localhost` counts; no host is
-/// inherently local. `postgres://` is not a "special" scheme for the url
-/// crate, so IP hosts arrive as `Host::Domain` — hence the IP parse there.
+/// The boot-path locality rule: loopback or `localhost` counts; no other host
+/// is inherently local (the config default is `localhost`).
 pub fn is_local(server: &ComponentConfig) -> bool {
-    match server.conn.url().host() {
-        None => true,
-        Some(Host::Domain(domain)) => match domain.parse::<IpAddr>() {
-            Ok(ip) => ip.is_loopback(),
-            Err(_) => domain.eq_ignore_ascii_case("localhost"),
-        },
-        Some(Host::Ipv4(ip)) => ip.is_loopback(),
-        Some(Host::Ipv6(ip)) => ip.is_loopback(),
+    let Some(pg) = server.conn.postgres() else {
+        return false;
+    };
+    match pg.host.parse::<IpAddr>() {
+        Ok(ip) => ip.is_loopback(),
+        Err(_) => pg.host.eq_ignore_ascii_case("localhost"),
     }
 }
 
@@ -51,13 +50,11 @@ pub fn is_local(server: &ComponentConfig) -> bool {
 /// downgrade the missing/non-local cases to logged no-ops.
 pub fn bootable_server(server: Option<&ComponentConfig>) -> Result<&ComponentConfig, DbError> {
     let server = server.ok_or(DbError::MissingServerEntry)?;
-    validate_server(server)?;
+    let pg = validate_server(server)?;
     if !is_local(server) {
-        return Err(DbError::NonLocalServerUrl(
-            server.conn.url().host_str().unwrap_or_default().to_owned(),
-        ));
+        return Err(DbError::NonLocalServerHost(pg.host.clone()));
     }
-    if let Some(username) = server.username.as_deref()
+    if let Some(username) = pg.username.as_deref()
         && username != EMBEDDED_CREDENTIAL
         && username != DEFAULT_SUPERUSER
     {
@@ -70,19 +67,21 @@ pub fn bootable_server(server: Option<&ComponentConfig>) -> Result<&ComponentCon
 /// `${embedded}` resolves to the boot superuser / the password persisted at
 /// first boot; absent credentials are an error.
 pub fn server_connectable(server: &ComponentConfig) -> Result<DatabaseConfig, DbError> {
-    validate_server(server)?;
-    let username = match server.username.as_deref() {
+    let pg = validate_server(server)?;
+    let username = match pg.username.as_deref() {
         Some(EMBEDDED_CREDENTIAL) => DEFAULT_SUPERUSER.to_owned(),
         Some(username) => username.to_owned(),
         None => return Err(DbError::MissingCredentials),
     };
-    let password = resolve_password(server.password.as_deref(), EmbeddedPassword::Superuser)?
+    let password = resolve_password(pg.password.as_deref(), EmbeddedPassword::Superuser)?
         .ok_or(DbError::MissingCredentials)?;
     Ok(DatabaseConfig {
-        conn: server.conn.clone(),
+        conn: ConnectConfig::Postgres(PostgresConnect {
+            options: pg.clone(),
+            username,
+            password,
+        }),
         schema: None,
-        username: Some(username),
-        password: Some(password),
         app_role: None,
         pool: server.pool.clone(),
     })
@@ -101,15 +100,23 @@ mod tests {
     fn server_connectable_explicit_credentials() {
         let entry = server(
             "
-url: postgres://db.example.com:5432/postgres
-username: admin
-password: secret
-max_connections: 2
+postgres:
+  host: db.example.com
+  port: 5432
+  database: postgres
+  username: admin
+  password: secret
+pool:
+  max_connections: 2
 ",
         );
         let config = server_connectable(&entry).unwrap();
-        assert_eq!(config.username.as_deref(), Some("admin"));
-        assert_eq!(config.password.as_deref(), Some("secret"));
+        #[allow(irrefutable_let_patterns)]
+        let ConnectConfig::Postgres(pg) = &config.conn else {
+            panic!("expected postgres connect");
+        };
+        assert_eq!(pg.username, "admin");
+        assert_eq!(pg.password, "secret");
         assert!(config.schema.is_none());
         assert_eq!(config.pool.max_connections, 2);
     }
@@ -117,7 +124,12 @@ max_connections: 2
     #[cfg(postgres)]
     #[test]
     fn server_connectable_requires_credentials() {
-        let entry = server("url: postgres://localhost/postgres");
+        let entry = server(
+            "
+postgres:
+  host: localhost
+",
+        );
         assert!(matches!(
             server_connectable(&entry),
             Err(DbError::MissingCredentials)
@@ -129,27 +141,37 @@ max_connections: 2
     fn server_connectable_embedded_username() {
         let entry = server(
             "
-url: postgres://localhost/postgres
-username: ${embedded}
-password: secret
+postgres:
+  username: ${embedded}
+  password: secret
 ",
         );
         let config = server_connectable(&entry).unwrap();
-        assert_eq!(config.username.as_deref(), Some(DEFAULT_SUPERUSER));
+        #[allow(irrefutable_let_patterns)]
+        let ConnectConfig::Postgres(pg) = &config.conn else {
+            panic!("expected postgres connect");
+        };
+        assert_eq!(pg.username, DEFAULT_SUPERUSER);
     }
 
     #[cfg(all(postgres, sqlite))]
     #[test]
     fn server_shape_rules() {
-        let entry = server("url: file:///tmp/server.db");
+        let entry = server(
+            "
+sqlite:
+  path: /tmp/server.db
+",
+        );
         assert!(matches!(
             validate_server(&entry),
-            Err(DbError::ServerBackendNotPostgres(scheme)) if scheme == "file"
+            Err(DbError::ServerBackendNotPostgres)
         ));
 
         let entry = server(
             "
-url: postgres://localhost/postgres
+postgres:
+  host: localhost
 schema: td_system
 ",
         );
@@ -162,16 +184,25 @@ schema: td_system
     #[cfg(postgres)]
     #[test]
     fn server_locality() {
-        for host in ["localhost", "LOCALHOST", "127.0.0.1", "127.0.0.2", "[::1]"] {
+        for host in ["localhost", "LOCALHOST", "127.0.0.1", "127.0.0.2", "::1"] {
             assert!(is_local(&server(&format!(
-                "url: postgres://{host}:7432/postgres"
+                "
+postgres:
+  host: '{host}'
+  port: 7432
+"
             ))));
         }
-        for host in ["db.example.com", "10.0.0.5", "[2001:db8::1]"] {
+        for host in ["db.example.com", "10.0.0.5", "2001:db8::1"] {
             assert!(!is_local(&server(&format!(
-                "url: postgres://{host}/postgres"
+                "
+postgres:
+  host: '{host}'
+"
             ))));
         }
+        // The default host is localhost, so an empty block is local.
+        assert!(is_local(&server("postgres: {}")));
     }
 
     #[cfg(postgres)]
@@ -182,14 +213,20 @@ schema: td_system
             Err(DbError::MissingServerEntry)
         ));
         assert!(matches!(
-            bootable_server(Some(&server("url: postgres://db.example.com/postgres"))),
-            Err(DbError::NonLocalServerUrl(host)) if host == "db.example.com"
+            bootable_server(Some(&server(
+                "
+postgres:
+  host: db.example.com
+"
+            ))),
+            Err(DbError::NonLocalServerHost(host)) if host == "db.example.com"
         ));
         assert!(matches!(
             bootable_server(Some(&server(
                 "
-url: postgres://localhost/postgres
-username: admin
+postgres:
+  host: localhost
+  username: admin
 "
             ))),
             Err(DbError::ServerUsernameNotBootable(name)) if name == "admin"
@@ -197,8 +234,9 @@ username: admin
         for username in ["postgres", "${embedded}"] {
             bootable_server(Some(&server(&format!(
                 "
-url: postgres://localhost/postgres
-username: {username}
+postgres:
+  host: localhost
+  username: {username}
 "
             ))))
             .unwrap();

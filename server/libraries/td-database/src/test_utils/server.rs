@@ -29,8 +29,9 @@
 //! so they leave it warm and reuse it. Each test isolates itself on its own
 //! uniquely-named schema (see [`super::postgres`]).
 
+use crate::config::{PostgresConfig, PostgresConnect};
 use crate::error::DbError;
-use crate::pool::connect::redacted_url;
+use crate::pool::connect::pg_connect_options;
 use crate::server::{BootConfig, load_password};
 use postgresql_embedded::Settings;
 use sqlx::postgres::PgPoolOptions;
@@ -38,7 +39,6 @@ use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::OnceCell;
-use url::Url;
 
 /// How long a single readiness probe waits for a connection before deeming the
 /// server not (yet) up, and how the boot loop paces re-probes.
@@ -88,15 +88,13 @@ static STARTED: OnceCell<()> = OnceCell::const_new();
 /// connect, which is exactly the signal the boot loop wants.
 async fn probe() -> bool {
     let cfg = embedded_config();
-    let Ok((mut url, user, pass)) = admin_identity(&cfg) else {
+    let Ok(connect) = admin_identity(&cfg) else {
         return false;
     };
-    url.set_username(&user).ok();
-    url.set_password(Some(&pass)).ok();
     match PgPoolOptions::new()
         .max_connections(1)
         .acquire_timeout(PROBE_TIMEOUT)
-        .connect(url.as_str())
+        .connect_with(pg_connect_options(&connect))
         .await
     {
         Ok(pool) => {
@@ -203,30 +201,31 @@ pub async fn ensure_started() {
         .await;
 }
 
-/// Credential-free base URL + superuser credentials for the running shared
-/// server, for building per-schema admin and serving connectables. Call after
-/// [`ensure_started`].
-pub fn admin_base() -> (Url, String, String) {
+/// Superuser connect target for the running shared server, for building
+/// per-schema admin and serving connectables. Call after [`ensure_started`].
+pub fn admin_base() -> PostgresConnect {
     admin_identity(&embedded_config())
         .expect("shared test postgres must be running (call ensure_started first)")
 }
 
-/// Admin URL and superuser identity for the **fixed-port** shared server. The
-/// URL is credential-free; callers supply the identity in explicit fields.
-fn admin_identity(cfg: &BootConfig) -> Result<(Url, String, String), DbError> {
+/// Superuser identity for the **fixed-port** shared server.
+fn admin_identity(cfg: &BootConfig) -> Result<PostgresConnect, DbError> {
     let port = cfg
         .port
         .ok_or_else(|| DbError::EmbeddedPostgres("no fixed port configured".to_string()))?;
-    let settings = Settings {
-        port,
-        ..Settings::default()
-    };
-    let url = Url::parse(&settings.url("postgres"))
-        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
-    let username = Settings::default().username;
+    let settings = Settings::default();
     let password = match cfg.password.clone() {
         Some(password) => password,
         None => load_password(&cfg.data_dir_or_default())?,
     };
-    Ok((redacted_url(&url), username, password))
+    Ok(PostgresConnect {
+        options: PostgresConfig {
+            host: settings.host,
+            port,
+            database: Some("postgres".to_string()),
+            ..Default::default()
+        },
+        username: settings.username,
+        password,
+    })
 }

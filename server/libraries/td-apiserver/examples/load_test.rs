@@ -13,7 +13,7 @@ use td_common::env::DATABASE_DIR_ENV;
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
 use td_database::config::{
-    BackendConfig, ComponentConfig, DatabaseComponents, EMBEDDED_CREDENTIAL, Schema,
+    BackendConfig, ComponentConfig, DatabaseComponents, EMBEDDED_CREDENTIAL, PostgresConfig, Schema,
 };
 use td_database::server::{start_server, stop_server};
 use td_execution::TransactionBy;
@@ -34,7 +34,6 @@ use te_database::{
 };
 use tracing::Level;
 use tracing::{debug, info};
-use url::Url;
 
 /// Schema the load test isolates its objects in.
 const LOAD_TEST_SCHEMA: &str = "td_load_test";
@@ -117,19 +116,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             td_common::tdtestdir!().join("postgres").join("data"),
         )
     };
-    let url = Url::parse(&format!("postgres://localhost:{LOAD_TEST_PORT}/postgres"))?;
+    let target = PostgresConfig {
+        host: "localhost".to_owned(),
+        port: LOAD_TEST_PORT,
+        database: Some("postgres".to_owned()),
+        ..Default::default()
+    };
     let server = ComponentConfig {
-        conn: BackendConfig::from_url(url.clone())?,
+        conn: BackendConfig::Postgres(PostgresConfig {
+            username: Some(EMBEDDED_CREDENTIAL.to_owned()),
+            password: Some(EMBEDDED_CREDENTIAL.to_owned()),
+            ..target.clone()
+        }),
         schema: None,
-        username: Some(EMBEDDED_CREDENTIAL.to_owned()),
-        password: Some(EMBEDDED_CREDENTIAL.to_owned()),
         pool: Default::default(),
     };
     let apiserver_entry = ComponentConfig {
-        conn: BackendConfig::from_url(url)?,
+        conn: BackendConfig::Postgres(PostgresConfig {
+            password: Some(EMBEDDED_CREDENTIAL.to_owned()),
+            ..target
+        }),
         schema: Some(Schema::new(LOAD_TEST_SCHEMA)),
-        username: None,
-        password: Some(EMBEDDED_CREDENTIAL.to_owned()),
         pool: Default::default(),
     };
     let components =

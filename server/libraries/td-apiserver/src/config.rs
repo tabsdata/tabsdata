@@ -356,14 +356,20 @@ mod tests {
     use td_common::id;
     use td_database::components::{ApiserverComponent, resolved_schema};
     use td_objects::types::addresses::NonEmptyAddresses;
+    use tracing::log::LevelFilter;
 
     #[test]
     fn config_crate_loads_database_components() {
         let yaml = r#"
 database:
   apiserver:
-    url: postgres://localhost/tabsdata
-    password: owner_secret
+    postgres:
+      host: localhost
+      database: tabsdata
+      password: owner_secret
+      log_statements: off
+    pool:
+      max_connections: 25
 "#;
         let built = config::Config::builder()
             .add_source(config::Config::try_from(&Config::default()).unwrap())
@@ -372,13 +378,14 @@ database:
             .build()
             .unwrap();
         let config: Config = built.try_deserialize().unwrap();
-        assert_eq!(
-            config
-                .database
-                .get("apiserver")
-                .and_then(|entry| entry.password.as_deref()),
-            Some("owner_secret")
-        );
+        let entry = config.database.get("apiserver").unwrap();
+        let pg = entry.conn.postgres().unwrap();
+        assert_eq!(pg.host, "localhost");
+        assert_eq!(pg.database.as_deref(), Some("tabsdata"));
+        assert_eq!(pg.password.as_deref(), Some("owner_secret"));
+        assert_eq!(pg.log.log_statements, LevelFilter::Off);
+        assert_eq!(entry.pool.max_connections, 25);
+        assert_eq!(entry.pool.min_connections, 1);
     }
 
     #[test]
@@ -390,8 +397,16 @@ orchestrator: kubernetes
         let database_yaml = r#"
 database:
   apiserver:
-    url: postgres://localhost/tabsdata
-    password: owner_secret
+    postgres:
+      host: localhost
+      database: tabsdata
+      password: owner_secret
+"#;
+        let pool_yaml = r#"
+database:
+  apiserver:
+    pool:
+      max_connections: 40
 "#;
         let storage_yaml = r#"
 storage:
@@ -410,6 +425,7 @@ storage:
                 database_yaml,
                 config::FileFormat::Yaml,
             ))
+            .add_source(config::File::from_str(pool_yaml, config::FileFormat::Yaml))
             .add_source(config::File::from_str(
                 storage_yaml,
                 config::FileFormat::Yaml,
@@ -425,6 +441,14 @@ storage:
         assert_eq!(
             resolved_schema(&config.database, &ApiserverComponent).unwrap(),
             "td_apiserver"
+        );
+        // The pool override from the split file merges into the same entry
+        // without clobbering the backend block.
+        let entry = config.database.get("apiserver").unwrap();
+        assert_eq!(entry.pool.max_connections, 40);
+        assert_eq!(
+            entry.conn.postgres().unwrap().password.as_deref(),
+            Some("owner_secret")
         );
         assert_eq!(config.storage_mounts().unwrap().len(), 1);
     }

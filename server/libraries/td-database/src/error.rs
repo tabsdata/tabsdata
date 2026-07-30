@@ -8,11 +8,20 @@ use td_error::td_error;
 #[td_error]
 pub enum DbError {
     #[error(
-        "Unsupported database engine: '{0}'. Tabsdata supports PostgreSQL \
-         (`postgres://…`), SQLite (`file:…`), and MySQL (`mysql://…`). Set the \
-         database `url:` in the configuration to one of these engines."
+        "A database entry needs exactly one backend key (`sqlite:`, `postgres:`, \
+         or `mysql:`) holding its connection options."
     )]
-    UnsupportedDatabase(String) = 0,
+    MissingBackend = 0,
+    #[error(
+        "A database entry has more than one backend key. Keep exactly one of \
+         `sqlite:`, `postgres:`, or `mysql:`."
+    )]
+    MultipleBackends = 5013,
+    #[error(
+        "The `sqlite:` entry has no database file. Set `path:` (or \
+         `in_memory: true` for an ephemeral database)."
+    )]
+    MissingSqlitePath = 5028,
     #[error(
         "Invalid pool configuration: `max_connections` must be greater than 0 \
          (got {0}). Set `max_connections` to a positive value in the database \
@@ -65,43 +74,33 @@ pub enum DbError {
     )]
     MissingSchema = 5023,
     #[error(
-        "The database URL must not embed credentials. Set the `username` and \
-         `password` as explicit configuration fields and remove the \
-         `user:password@` part from the URL."
-    )]
-    CredentialsInUrl = 5028,
-    #[error(
         "Missing database credentials. Set both `username` and `password` in the \
-         database configuration."
+         entry's backend configuration."
     )]
     MissingCredentials = 5029,
     #[error(
-        "Unexpected database credentials. This backend takes no `username` or \
-         `password`; remove them from the database configuration."
-    )]
-    UnexpectedCredentials = 5030,
-    #[error(
         "No `database_server:` section in the configuration. This operation \
-         needs the privileged server connection (its URL and admin credentials)."
+         needs the privileged server connection (its target and admin \
+         credentials)."
     )]
     MissingServerEntry = 5025,
     #[error(
         "No configuration entry for database component '{0}'. Every registered \
-         component needs its own entry under `database:` with its `url:` and \
-         credentials."
+         component needs its own entry under `database:` with its backend \
+         connection and credentials."
     )]
     MissingComponentEntry(String) = 5033,
     #[error(
-        "The `database_server:` URL points at non-local host '{0}', so its \
-         server is not ours to run. Point the URL at localhost to boot a \
+        "The `database_server:` entry points at non-local host '{0}', so its \
+         server is not ours to run. Point the `host:` at localhost to boot a \
          server here."
     )]
-    NonLocalServerUrl(String) = 5034,
+    NonLocalServerHost(String) = 5034,
     #[error(
-        "The `database_server:` backend is '{0}', but the managed server is \
-         PostgreSQL. Set its `url:` to a `postgres://` URL."
+        "The `database_server:` backend is not PostgreSQL, but the managed \
+         server is. Configure the entry under a `postgres:` key."
     )]
-    ServerBackendNotPostgres(String) = 5035,
+    ServerBackendNotPostgres = 5035,
     #[error(
         "The `database_server:` entry must not define a `schema:`. It is the \
          privileged server connection and has no home schema."
@@ -158,9 +157,9 @@ pub enum DbError {
     UnexpectedSchemaEntries { expected: String, actual: String } = 5031,
     #[error(
         "Failed to connect to the database: {0}. Verify the database server is \
-         running and reachable, and that the host, port, credentials, and \
-         database name in the URL are correct (and that any firewall or TLS \
-         settings allow the connection)."
+         running and reachable, and that the configured host, port, credentials, \
+         and database name are correct (and that any firewall or TLS settings \
+         allow the connection)."
     )]
     FailedToConnectToDatabase(#[from] sqlx::Error) = 5007,
     #[error(
@@ -176,12 +175,6 @@ pub enum DbError {
          surrounding log context."
     )]
     SqlError(#[source] sqlx::Error) = 5009,
-    #[error(
-        "Invalid database connection URL: {0}. It must be a well-formed \
-         `postgres://`, `mysql://`, or `file:` URL. Fix the database `url:` in \
-         the configuration."
-    )]
-    DatabaseInvalidUrl(String) = 5013,
     #[error(
         "This Tabsdata instance is edition '{0}', but the binary is edition \
          '{1}'; a '{1}' binary cannot run a '{0}' instance. Run the instance \

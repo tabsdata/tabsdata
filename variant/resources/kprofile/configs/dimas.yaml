@@ -1,0 +1,131 @@
+workspace_apiserver_config:
+  old: |
+    database_server:
+      url: postgres://127.0.0.1:2462/postgres
+      username: ${embedded}
+      password: ${embedded}
+      min_connections: 1
+      max_connections: 2
+      acquire_timeout: 30
+      max_lifetime: 1800
+      idle_timeout: 30
+      test_before_acquire: true
+      log_level: off
+    database:
+      apiserver:
+        url: postgres://127.0.0.1:2462/postgres
+        schema: td_apiserver
+        username: td_apiserver
+        password: ${embedded}
+        min_connections: 5
+        max_connections: 50
+        acquire_timeout: 30
+        max_lifetime: 3600
+        idle_timeout: 60
+        test_before_acquire: true
+        log_level: off
+  new: |
+    database_server:
+      postgres:
+        host: 127.0.0.1
+        port: 2462
+        database: postgres
+        username: ${embedded}
+        password: ${embedded}
+        ssl_mode: verify-ca
+        ssl_root_cert: /etc/tabsdata/certs/ca.pem
+      pool:
+        min_connections: 1
+        max_connections: 2
+        acquire_timeout: 30
+        max_lifetime: 1800
+        idle_timeout: 30
+        test_before_acquire: true
+    database:
+      apiserver:
+        postgres:
+          host: 127.0.0.1
+          port: 2462
+          database: postgres
+          username: td_apiserver
+          password: ${embedded}
+          ssl_mode: verify-ca
+          ssl_root_cert: /etc/tabsdata/certs/ca.pem
+        schema: td_apiserver
+        pool:
+          min_connections: 5
+          max_connections: 50
+          acquire_timeout: 30
+          max_lifetime: 3600
+          idle_timeout: 60
+          test_before_acquire: true
+
+kprofile_dbmanager_database:
+  old: |
+    database_server:
+      url: postgres://${{system:tdk_database_host}}:${{system:tdk_database_port}}/postgres
+      username: ${{secretAuto:postgres_system_user}}
+      password: ${{secretAuto:postgres_password}}
+      min_connections: 1
+      max_connections: 2
+      acquire_timeout: 30
+      max_lifetime: 1800
+      idle_timeout: 30
+      test_before_acquire: true
+      log_level: off
+  new: |
+    database_server:
+      postgres:
+        host: ${{system:tdk_database_host}}
+        port: ${{system:tdk_database_port}}
+        database: postgres
+        username: ${{secretAuto:postgres_system_user}}
+        password: ${{secretAuto:postgres_password}}
+      pool:
+        min_connections: 1
+        max_connections: 2
+        acquire_timeout: 30
+        max_lifetime: 1800
+        idle_timeout: 30
+        test_before_acquire: true
+
+kprofile_apiserver_database:
+  old: |
+    database:
+      apiserver:
+        url: postgres://${{system:tdk_database_host}}:${{system:tdk_database_port}}/postgres
+        schema: td_apiserver
+        username: td_apiserver
+        password: ${{secretAuto:postgres_password}}
+        min_connections: 5
+        max_connections: 50
+        acquire_timeout: 30
+        max_lifetime: 3600
+        idle_timeout: 60
+        test_before_acquire: true
+        log_level: off
+  new: |
+    database:
+      apiserver:
+        postgres:
+          host: ${{system:tdk_database_host}}
+          port: ${{system:tdk_database_port}}
+          database: postgres
+          username: td_apiserver
+          password: ${{secretAuto:postgres_password}}
+        schema: td_apiserver
+        pool:
+          min_connections: 5
+          max_connections: 50
+          acquire_timeout: 30
+          max_lifetime: 3600
+          idle_timeout: 60
+          test_before_acquire: true
+
+kprofile_database_pod_secret_keys:
+  old: |
+    key: DATABASE_SERVER__USERNAME
+    key: DATABASE_SERVER__PASSWORD
+  new: |
+    key: DATABASE_SERVER__POSTGRES__USERNAME
+    key: DATABASE_SERVER__POSTGRES__PASSWORD

@@ -8,9 +8,12 @@
 //! only — this whole module is `#[cfg(postgres)]`.
 
 use crate::components::{ApiserverComponent, SchemaComponent};
+use crate::config::PostgresConnect;
 use crate::dynamic::DynamicConnection;
 use crate::error::DbError;
 use crate::pool::TdPool;
+use crate::pool::connect::pg_connect_options;
+use crate::test_utils::server;
 use sqlx::postgres::PgPoolOptions;
 
 /// Row-level security end to end on real Postgres: reads are scoped to the
@@ -28,10 +31,10 @@ async fn test_rls_project_isolation() {
     db.upgrade().await.unwrap();
 
     // Provision a NOBYPASSRLS app role and connect a second pool as it, via a
-    // raw connection as the pool's bootstrap (superuser) role from the URL.
+    // raw connection as the pool's bootstrap (superuser) role.
     let su = PgPoolOptions::new()
         .max_connections(1)
-        .connect(db.url().as_str())
+        .connect_with(pg_connect_options(&server::admin_base()))
         .await
         .unwrap();
     let schema = db.schema();
@@ -58,12 +61,14 @@ async fn test_rls_project_isolation() {
         sqlx::query(&stmt).execute(&su).await.unwrap();
     }
 
-    let mut url = db.url().clone();
-    url.set_username(&app_user).unwrap();
-    url.set_password(Some("app_pw")).unwrap();
+    let app_connect = PostgresConnect {
+        options: server::admin_base().options,
+        username: app_user.clone(),
+        password: "app_pw".to_string(),
+    };
     let app = PgPoolOptions::new()
         .max_connections(2)
-        .connect(url.as_str())
+        .connect_with(pg_connect_options(&app_connect))
         .await
         .unwrap();
 
@@ -193,7 +198,7 @@ async fn test_rls_project_isolation() {
 /// isolation; `check_rls_posture` on the serving pool must catch it.
 #[tokio::test]
 async fn test_check_rejects_bypassing_serving_role() {
-    use crate::config::{BackendConfig, DatabaseConfig};
+    use crate::config::{ConnectConfig, DatabaseConfig};
 
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
@@ -208,7 +213,7 @@ async fn test_check_rejects_bypassing_serving_role() {
     // A unique name — roles are cluster-global on the shared server.
     let su = PgPoolOptions::new()
         .max_connections(1)
-        .connect(db.url().as_str())
+        .connect_with(pg_connect_options(&server::admin_base()))
         .await
         .unwrap();
     let bypassing = format!("b_{}", td_common::id::id());
@@ -217,19 +222,11 @@ async fn test_check_rejects_bypassing_serving_role() {
         .await
         .unwrap();
 
-    // The URL carries the superuser credentials as userinfo; split them into the
-    // explicit fields the config expects, and pin the bypassing role so the pool's
-    // connections `SET ROLE` it (the superuser may switch to any role).
-    let mut url = db.url().clone();
-    let username = url.username().to_owned();
-    let password = url.password().unwrap_or_default().to_owned();
-    url.set_username("").unwrap();
-    url.set_password(None).unwrap();
+    // Pin the bypassing role so the pool's connections `SET ROLE` it (the
+    // superuser may switch to any role).
     let cfg = DatabaseConfig {
-        conn: BackendConfig::from_url(url).unwrap(),
+        conn: ConnectConfig::Postgres(server::admin_base()),
         schema: Some(db.schema().clone()),
-        username: Some(username),
-        password: Some(password),
         app_role: Some(bypassing.clone()),
         pool: Default::default(),
     };

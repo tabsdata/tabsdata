@@ -162,7 +162,9 @@ fn component_schema_override_resolves() {
 
     let yaml = "
 apiserver:
-  url: postgres://localhost:7432/postgres
+  postgres:
+    host: localhost
+    port: 7432
 ";
     let components: DatabaseComponents = serde_yaml::from_str(yaml).unwrap();
     assert_eq!(
@@ -172,7 +174,9 @@ apiserver:
 
     let yaml = "
 apiserver:
-  url: postgres://localhost:7432/postgres
+  postgres:
+    host: localhost
+    port: 7432
   schema: tenant_a_apiserver
 ";
     let components: DatabaseComponents = serde_yaml::from_str(yaml).unwrap();
@@ -183,38 +187,55 @@ apiserver:
 }
 
 /// Credential semantics of the serving config: explicit values pass through,
-/// absence stays absent (no silent file read), `${embedded}` on the username
-/// is rejected, and `${embedded}` on the password reads the persisted owner
-/// file (hard error when it cannot resolve).
+/// `${embedded}` on the username is rejected, an absent password is a
+/// resolution error (the resolved config requires credentials), and
+/// `${embedded}` on the password reads the persisted owner file (hard error
+/// when it cannot resolve).
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 #[test]
 fn serving_config_credential_semantics() {
     use crate::components::{ApiserverComponent, serving_config};
-    use crate::config::DatabaseComponents;
+    use crate::config::{ConnectConfig, DatabaseComponents, DatabaseConfig};
     use crate::error::DbError;
 
     let parse = |extra: &str| -> DatabaseComponents {
         serde_yaml::from_str(&format!(
             "
 apiserver:
-  url: postgres://localhost:7432/postgres
+  postgres:
+    host: localhost
+    port: 7432
 {extra}"
         ))
         .unwrap()
     };
+    let postgres_connect = |config: &DatabaseConfig| {
+        #[allow(irrefutable_let_patterns)]
+        let ConnectConfig::Postgres(pg) = &config.conn else {
+            panic!("expected postgres connect");
+        };
+        (pg.username.clone(), pg.password.clone())
+    };
 
     // Explicit credentials pass through; username defaults to the owner role.
-    let config = serving_config(&parse("  password: owner_secret"), &ApiserverComponent).unwrap();
-    assert_eq!(config.username.as_deref(), Some("td_apiserver"));
-    assert_eq!(config.password.as_deref(), Some("owner_secret"));
+    let config = serving_config(&parse("    password: owner_secret"), &ApiserverComponent).unwrap();
+    let (username, password) = postgres_connect(&config);
+    assert_eq!(username, "td_apiserver");
+    assert_eq!(password, "owner_secret");
 
-    // Absent password stays absent.
-    let config = serving_config(&parse(""), &ApiserverComponent).unwrap();
-    assert!(config.password.is_none());
+    // An absent password fails at resolution — the resolved config requires
+    // credentials, so a passwordless connect can never be attempted.
+    assert!(matches!(
+        serving_config(&parse(""), &ApiserverComponent),
+        Err(DbError::MissingCredentials)
+    ));
 
     // `${embedded}` is not a valid username source for a component.
     assert!(matches!(
-        serving_config(&parse("  username: ${embedded}"), &ApiserverComponent),
+        serving_config(
+            &parse("    username: ${embedded}\n    password: x"),
+            &ApiserverComponent
+        ),
         Err(DbError::EmbeddedUsernameNotAllowed)
     ));
 
@@ -228,14 +249,15 @@ apiserver:
     )
     .unwrap();
     unsafe { std::env::set_var("TD_DATABASE_DIR", &data_dir) };
-    let config = serving_config(&parse("  password: ${embedded}"), &ApiserverComponent).unwrap();
-    assert_eq!(config.password.as_deref(), Some("from_file"));
+    let config = serving_config(&parse("    password: ${embedded}"), &ApiserverComponent).unwrap();
+    let (_, password) = postgres_connect(&config);
+    assert_eq!(password, "from_file");
 
-    // ...and an unresolvable placeholder is a hard error, unlike absence.
+    // ...and an unresolvable placeholder is a hard error, like absence.
     unsafe { std::env::remove_var("TD_DATABASE_DIR") };
     unsafe { std::env::remove_var("TD_URI_REPOSITORY") };
     assert!(matches!(
-        serving_config(&parse("  password: ${embedded}"), &ApiserverComponent),
+        serving_config(&parse("    password: ${embedded}"), &ApiserverComponent),
         Err(DbError::MissingDatabaseDir)
     ));
 

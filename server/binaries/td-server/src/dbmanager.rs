@@ -115,7 +115,7 @@ async fn create(
     server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
     if let Some(server) = server {
-        warn_url_divergence(components, server);
+        warn_target_divergence(components, server);
     }
     with_server(server, async |admin| {
         info!("Creating database");
@@ -196,24 +196,21 @@ async fn with_server(
     result
 }
 
-/// A component URL pointing at a different server than the entry is
-/// legitimate (e.g. a pooler), but usually a typo'd port — flag it.
-fn warn_url_divergence(components: &DatabaseComponents, server: &ComponentConfig) {
-    const DEFAULT_PORT: u16 = 5432;
-    let server_url = server.conn.url();
-    let server_host = server_url.host_str().unwrap_or_default();
-    let server_port = server_url.port().unwrap_or(DEFAULT_PORT);
+/// A component pointing at a different server than the entry is legitimate
+/// (e.g. a pooler), but usually a typo'd port — flag it.
+fn warn_target_divergence(components: &DatabaseComponents, server: &ComponentConfig) {
+    let Some(server_pg) = server.conn.postgres() else {
+        return;
+    };
     for (key, entry) in components {
-        if !entry.conn.is_postgres() {
+        let Some(pg) = entry.conn.postgres() else {
             continue;
-        }
-        let url = entry.conn.url();
-        let host = url.host_str().unwrap_or_default();
-        let port = url.port().unwrap_or(DEFAULT_PORT);
-        if host != server_host || port != server_port {
+        };
+        if pg.host != server_pg.host || pg.port != server_pg.port {
             warn!(
-                "component '{key}' targets {host}:{port}, but `database_server:` is \
-                 {server_host}:{server_port}; provisioning runs on the latter"
+                "component '{key}' targets {}:{}, but `database_server:` is {}:{}; \
+                 provisioning runs on the latter",
+                pg.host, pg.port, server_pg.host, server_pg.port
             );
         }
     }

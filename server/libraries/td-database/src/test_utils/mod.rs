@@ -19,10 +19,10 @@ use crate::pool::TdPool;
 use std::ops::Deref;
 use std::time::Duration;
 use tracing::warn;
-use url::Url;
 
 pub mod postgres;
 pub mod server;
+#[cfg(sqlite)]
 pub mod sqlite;
 
 /// Pool settings for the shared-server test pools. One server backs the whole
@@ -38,7 +38,7 @@ pub(crate) fn test_pool_config() -> PoolConfig {
         // connection demand far below the server limit even at high concurrency
         // (many test processes × admin + serving + teardown pools at once).
         max_connections: 2,
-        idle_timeout: Duration::from_secs(1),
+        idle_timeout: Some(Duration::from_secs(1)),
         acquire_timeout: Duration::from_secs(120),
         ..Default::default()
     }
@@ -92,9 +92,6 @@ pub struct TestDb {
     pub admin: AdminPool,
     /// The schema the serving pool is scoped to.
     schema: Schema,
-    /// The live server URL **with superuser credentials**, for tests that connect
-    /// their own pools as specific roles.
-    url: Url,
     /// How to drop this test's schema, run on [`Drop`]. [`TestDbCleanup::Noop`] on
     /// sqlite (the temp file is wiped on the next run).
     cleanup: TestDbCleanup,
@@ -147,11 +144,6 @@ pub struct MultiTestDb {
 }
 
 impl TestDb {
-    /// The live database URL (with superuser credentials on the embedded backend).
-    pub fn url(&self) -> &Url {
-        &self.url
-    }
-
     /// The schema the serving pool is scoped to.
     pub fn schema(&self) -> &Schema {
         &self.schema

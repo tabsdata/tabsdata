@@ -17,7 +17,7 @@
 //!   per requested component, brought to its current version.
 //! - [`pool`] — td-database's own `components`/RLS tests: one schema (left un-upgraded;
 //!   the caller applies it via [`TestDb::upgrade`]) plus the privileged handle and
-//!   superuser URL those white-box tests need.
+//!   superuser connect target those white-box tests need.
 //!
 //! # Project scope in tests
 //!
@@ -26,7 +26,7 @@
 //! in tests. Use `db.scoped(p)` (or a service) to re-enforce RLS for a query.
 
 use crate::components::{AdminPool, SchemaComponent};
-use crate::config::{BackendConfig, DatabaseConfig, Schema};
+use crate::config::{ConnectConfig, DatabaseConfig, Schema};
 use crate::pool::TdPool;
 #[cfg(test)]
 use crate::test_utils::TestDb;
@@ -44,14 +44,11 @@ fn unique_schema(index: usize) -> String {
 /// A superuser connectable to the shared server, pinned to `schema`. Used for both
 /// the privileged ([`AdminPool`]) and serving ([`TdPool`]) connects — the schema is
 /// superuser-owned, so there is no per-test owner role; serving `SET ROLE`s the
-/// shared `td_app`. Credentials live in explicit fields (URL credentials rejected).
+/// shared `td_app`.
 fn schema_connectable(schema: &str) -> DatabaseConfig {
-    let (base, su_user, su_pass) = server::admin_base();
     DatabaseConfig {
-        conn: BackendConfig::from_url(base).expect("schema url"),
+        conn: ConnectConfig::Postgres(server::admin_base()),
         schema: Some(Schema::new(schema)),
-        username: Some(su_user),
-        password: Some(su_pass),
         app_role: None,
         pool: test_pool_config(),
     }
@@ -60,12 +57,9 @@ fn schema_connectable(schema: &str) -> DatabaseConfig {
 /// A superuser connectable with no schema pin — for dropping a test's schemas on
 /// teardown.
 fn admin_connectable() -> DatabaseConfig {
-    let (base, su_user, su_pass) = server::admin_base();
     DatabaseConfig {
-        conn: BackendConfig::from_url(base).expect("admin url"),
+        conn: ConnectConfig::Postgres(server::admin_base()),
         schema: None,
-        username: Some(su_user),
-        password: Some(su_pass),
         app_role: None,
         pool: test_pool_config(),
     }
@@ -88,7 +82,7 @@ async fn provision_schema(index: usize) -> (String, DatabaseConfig, AdminPool) {
 
 /// A [`TestDb`] on its **own unique schema** of the shared server, for td-database's
 /// own `components`/RLS tests — which connect their own pools as arbitrary roles via
-/// [`TestDb::url`] (superuser credentials) and create their own roles when they need
+/// [`server::admin_base`] and create their own roles when they need
 /// to mutate role-level state. The schema is superuser-owned and left un-upgraded;
 /// the caller applies it via [`TestDb::upgrade`]. Serving `SET ROLE`s the shared
 /// `td_app`. [`TestDb::drop`] drops the schema.
@@ -99,17 +93,10 @@ pub(crate) async fn pool() -> TestDb {
     let (schema, config, admin) = provision_schema(0).await;
     let serving = TdPool::connect(&config).await.expect("postgres test pool");
 
-    // Superuser URL with credentials inline, for tests that connect raw pools as
-    // specific roles (the RLS tests).
-    let (mut url, su_user, su_pass) = server::admin_base();
-    url.set_username(&su_user).ok();
-    url.set_password(Some(&su_pass)).ok();
-
     TestDb {
         serving,
         admin,
         schema: Schema::new(&schema),
-        url,
         cleanup: TestDbCleanup::PostgresSchemas {
             admin: Box::new(admin_connectable()),
             schemas: vec![schema],

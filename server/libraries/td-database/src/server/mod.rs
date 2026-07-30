@@ -4,7 +4,7 @@
 
 //! The managed database server behind the `database_server:` entry. Nothing
 //! here runs at connect time — the server is brought up out of band
-//! (`td_dbmanager start`/`serve`) and addressed by URL.
+//! (`td_dbmanager start`/`serve`) and addressed by the entry's host/port.
 
 mod credentials;
 mod entry;
@@ -45,7 +45,7 @@ impl ServerHandle {
     }
 }
 
-/// Start the local database server detached, on the entry's URL port, so it
+/// Start the local database server detached, on the entry's port, so it
 /// outlives this call. Idempotent; a no-op without a local entry.
 pub async fn start_server(server: Option<&ComponentConfig>) -> Result<(), DbError> {
     let Some(server) = local_server(server, "start")? else {
@@ -116,7 +116,7 @@ fn local_server<'a>(
             tracing::info!("no `database_server:` configured; nothing to {action}");
             Ok(None)
         }
-        Err(DbError::NonLocalServerUrl(_)) => {
+        Err(DbError::NonLocalServerHost(_)) => {
             tracing::info!("`database_server:` is not local; nothing to {action}");
             Ok(None)
         }
