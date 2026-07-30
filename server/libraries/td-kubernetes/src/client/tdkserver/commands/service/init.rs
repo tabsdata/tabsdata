@@ -28,7 +28,7 @@ use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
 use crate::runtime::instance::cluster::ClusterProperties;
-use crate::runtime::provider::axes::Locality;
+use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
 use crate::runtime::provider::{ClusterProvider, provider_for};
 
 const DEFAULT_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
@@ -185,6 +185,12 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     )
     .await?;
 
+    if provider != ClusterProvider::Kminus {
+        let context = built.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+    }
+
     let mut adjusted = built.cluster_settings(provided.clone())?;
     if save.value
         && provider != ClusterProvider::Kminus
@@ -221,7 +227,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         state: InstanceState::Initialized,
         name: instance.clone(),
         provider,
-        locality: Locality::Local,
+        locality: provider.locality(),
         cluster: ClusterViews {
             provided,
             adjusted,

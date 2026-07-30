@@ -44,12 +44,41 @@ pub fn parse_filename(filename: &str) -> ParsedFileName {
         Some(dot) => (&filename[..dot], &filename[dot..]),
         None => (filename, ""),
     };
-    let mut segments = head.split('_');
-    let name = segments.next().unwrap_or("").to_owned();
-    let tokens = segments.map(str::to_owned).collect();
+    if head.contains('_') {
+        let mut segments = head.split('_');
+        let name = segments.next().unwrap_or("").to_owned();
+        let tokens = segments.map(str::to_owned).collect();
+        return ParsedFileName {
+            name,
+            tokens,
+            extensions: extensions.to_owned(),
+        };
+    }
+    let parts: Vec<&str> = filename.split('.').collect();
+    for (position, part) in parts.iter().enumerate() {
+        if !part.contains('_') {
+            continue;
+        }
+        let mut segments = part.split('_');
+        let stem = segments.next().unwrap_or("");
+        let tokens = segments.map(str::to_owned).collect();
+        let mut name_parts: Vec<&str> = parts[..position].to_vec();
+        name_parts.push(stem);
+        let trailing = &parts[position + 1..];
+        let extensions = if trailing.is_empty() {
+            String::new()
+        } else {
+            format!(".{}", trailing.join("."))
+        };
+        return ParsedFileName {
+            name: name_parts.join("."),
+            tokens,
+            extensions,
+        };
+    }
     ParsedFileName {
-        name,
-        tokens,
+        name: head.to_owned(),
+        tokens: Vec::new(),
         extensions: extensions.to_owned(),
     }
 }

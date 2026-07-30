@@ -13,7 +13,7 @@ use crate::client::registry::{
     td_venv_activate_file,
 };
 use crate::client::session::pin::PinContext;
-use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::arguments::{GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::service::{
     instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
@@ -29,7 +29,7 @@ use crate::runtime::instance::ports::{
     AssignedPort, DEFAULT_BASE_PORT, apply_ports, assign_ports, kminus_api_port,
 };
 use crate::runtime::instance::profile::load_profile;
-use crate::runtime::provider::provider_for;
+use crate::runtime::provider::{cluster_arguments_for, provider_for};
 use crate::runtime::secrets::source::to_secret_name;
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
@@ -134,13 +134,7 @@ pub async fn create_instance(
 
     let assigned = assign_ports(port);
 
-    let cluster = ClusterArguments {
-        provider: Some(settings.provider),
-        context: None,
-        kubeconfig: None,
-        current: false,
-        namespace: None,
-    };
+    let cluster = cluster_arguments_for(&settings);
     let provider = provider_for(
         cluster,
         InstanceArguments::new(Some(settings.name.clone())),

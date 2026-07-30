@@ -38,7 +38,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::profile::bundle::Axis;
-use crate::runtime::provider::axes::{Lifecycle, Location, Platform, Workload};
+use crate::runtime::provider::axes::{Lifecycle, Locality, Location, Platform, Workload};
 use crate::runtime::provider::docker::DockerProvider;
 use crate::runtime::provider::eks::EksProvider;
 use crate::runtime::provider::fargate::FargateProvider;
@@ -139,6 +139,13 @@ impl ClusterProvider {
         match self {
             Self::Kminus | Self::Docker => Location::Local,
             Self::Eks | Self::Fargate => Location::Cloud,
+        }
+    }
+
+    pub fn locality(self) -> Locality {
+        match self {
+            Self::Kminus => Locality::Local,
+            Self::Docker | Self::Eks | Self::Fargate => Locality::Remote,
         }
     }
 
@@ -577,6 +584,26 @@ pub async fn provider_for_instance_any_state(
     provider_for_instance_inner(instance, verbose, None, false).await
 }
 
+pub fn cluster_arguments_for(settings: &InstanceSettings) -> ClusterArguments {
+    if settings.provider == ClusterProvider::Kminus {
+        return ClusterArguments {
+            provider: Some(settings.provider),
+            context: None,
+            kubeconfig: None,
+            current: false,
+            namespace: None,
+        };
+    }
+    let adjusted = &settings.cluster.adjusted;
+    ClusterArguments {
+        provider: Some(settings.provider),
+        context: adjusted.context.clone(),
+        kubeconfig: adjusted.kubeconfig.clone(),
+        current: adjusted.context.is_none(),
+        namespace: adjusted.namespace.clone(),
+    }
+}
+
 async fn provider_for_instance_inner(
     instance: Option<String>,
     verbose: bool,
@@ -600,13 +627,7 @@ async fn provider_for_instance_inner(
         settings.loglevel = Some(loglevel);
         settings.save()?;
     }
-    let cluster = ClusterArguments {
-        provider: Some(settings.provider),
-        context: None,
-        kubeconfig: None,
-        current: false,
-        namespace: None,
-    };
+    let cluster = cluster_arguments_for(&settings);
     provider_for(
         cluster,
         InstanceArguments::new(Some(settings.name.clone())),

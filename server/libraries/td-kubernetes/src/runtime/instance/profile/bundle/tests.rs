@@ -243,3 +243,22 @@ fn group_by_key_groups_variants_together() {
     assert_eq!(groups.get(&apiserver_key).unwrap().len(), 3);
     assert_eq!(groups.get(&inspector_key).unwrap().len(), 1);
 }
+
+#[test]
+fn parse_filename_with_token_in_dotted_stem() {
+    let parsed = parse_filename("apiserver.database_kminus.yaml");
+    assert_eq!(parsed.name, "apiserver.database");
+    assert_eq!(parsed.tokens, vec!["kminus".to_owned()]);
+    assert_eq!(parsed.extensions, ".yaml");
+    assert_eq!(parsed.render_stripped(), "apiserver.database.yaml");
+    assert_eq!(parsed.render(), "apiserver.database_kminus.yaml");
+}
+
+#[test]
+fn parse_filename_with_multiple_tokens_in_dotted_stem() {
+    let parsed = parse_filename("dbmanager.database_kminus_us.yaml");
+    assert_eq!(parsed.name, "dbmanager.database");
+    assert_eq!(parsed.tokens, vec!["kminus".to_owned(), "us".to_owned()]);
+    assert_eq!(parsed.extensions, ".yaml");
+    assert_eq!(parsed.render_stripped(), "dbmanager.database.yaml");
+}
