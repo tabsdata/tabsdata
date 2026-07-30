@@ -8,11 +8,11 @@ use sync_wrapper::SyncStream;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::bundle::BundleDB;
-use td_objects::dxo::function::FunctionVersionDBWithNames;
+use td_objects::dxo::function::{FunctionDB, FunctionVersionDBWithNames};
 use td_objects::types::basic::{BundleHash, FunctionName, FunctionStatus, FunctionVersionId};
 use td_objects::types::stream::BoxedSyncStream;
 use td_objects::{and, not};
-use td_queries::LiveEntry;
+use td_queries::{CurrentEntry, LiveEntry};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
@@ -41,15 +41,34 @@ pub async fn resolve_function_version(
     mut conn: MutRef<DomainConnection<Apiserver>>,
     function_version_id: Ref<FunctionVersionId>,
 ) -> Result<FunctionVersionDBWithNames, TdError> {
-    conn.live()
+    let version = conn
+        .live()
         .fetch_optional::<FunctionVersionDBWithNames>(and!(
             &*function_version_id,
             not!(FunctionStatus::Deleted)
         ))
         .await?
         .ok_or_else(|| {
-            DownloadBundleError::FunctionVersionNotFound(function_version_id.deref().clone()).into()
-        })
+            TdError::from(DownloadBundleError::FunctionVersionNotFound(
+                function_version_id.deref().clone(),
+            ))
+        })?;
+
+    // A version's status is per-version: deleting a function tombstones a fresh
+    // version row but leaves prior versions Active, so a prior version would
+    // still resolve above. Aliveness is the function's *current* row's status.
+    let current = conn
+        .current()
+        .fetch_one::<FunctionDB>(&version.function_id)
+        .await?;
+    if matches!(current.status, FunctionStatus::Deleted) {
+        return Err(DownloadBundleError::FunctionVersionNotFound(
+            function_version_id.deref().clone(),
+        )
+        .into());
+    }
+
+    Ok(version)
 }
 
 pub async fn build_bundle_download(

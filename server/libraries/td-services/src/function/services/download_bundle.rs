@@ -52,6 +52,7 @@ fn service() {
 mod tests {
     use super::*;
     use crate::Context;
+    use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::upload::UploadFunctionService;
     use axum::body::Body;
     use axum::extract::Request;
@@ -68,10 +69,10 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDBBuilder, FunctionPatchDB, FunctionRegister};
     use td_objects::dxo::function_upload::FunctionUpload;
-    use td_objects::rest_urls::CollectionParam;
+    use td_objects::rest_urls::{CollectionParam, FunctionParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleHash, BundleId, CollectionIdName, CollectionName, Decorator,
-        FunctionStatus, FunctionVersionId, ProjectId, UserId,
+        FunctionIdName, FunctionStatus, FunctionVersionId, ProjectId, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -242,6 +243,22 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.api_error(), ApiError::NotFound);
 
+        // The tombstone above makes the function deleted, so a prior Active
+        // version of it (v1) — still Active in its own row — is no longer
+        // downloadable either.
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            FunctionVersionIdParam {
+                function_version_id: v1.id.clone(),
+            },
+        );
+        let err = service
+            .clone()
+            .raw_oneshot(request)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+
         // A patch of a deleted function is hidden with it: deletion does not
         // cascade to the patch row, so the parent's status is what decides.
         let orphan = FunctionPatchDB::builder()
@@ -280,6 +297,81 @@ mod tests {
         let err = service
             .clone()
             .raw_oneshot(request)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_download_bundle_hidden_after_function_deleted(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let context = Context::with_defaults(db.clone());
+
+        let collection_name = CollectionName::try_from("deltest")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let payload = b"BUNDLE-PAYLOAD".to_vec();
+        let bundle_id = upload_bundle(&context, p.id, &collection.name, payload).await?;
+        let create = FunctionRegister::builder()
+            .try_name("joaquin")?
+            .try_description("desc")?
+            .bundle_id(bundle_id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Transformer)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .try_runtime_values("rv")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        let version = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+
+        let service = DownloadBundleService::build(&context).service();
+
+        // While the function is live, its version's bundle downloads.
+        let download = |id: FunctionVersionId| {
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+                FunctionVersionIdParam {
+                    function_version_id: id,
+                },
+            )
+        };
+        service
+            .clone()
+            .raw_oneshot(download(version.id.clone()))
+            .await?;
+
+        // Delete the function through the real service (it tombstones a fresh
+        // Deleted version and leaves this one Active).
+        let delete_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin")?)
+                    .build()?,
+            )
+            .in_project(p.id);
+        DeleteFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(delete_request)
+            .await?;
+
+        // The still-Active version is no longer downloadable once its function is
+        // deleted, matching the endpoint's contract and the history surface.
+        let err = service
+            .clone()
+            .raw_oneshot(download(version.id))
             .await
             .map(|_| ())
             .unwrap_err();
