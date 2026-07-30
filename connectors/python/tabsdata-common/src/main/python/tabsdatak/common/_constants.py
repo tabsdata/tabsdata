@@ -39,55 +39,6 @@ TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 PYTHON_EDITABLE_PACKAGE_PREFIX = "__editable___"
 PYTHON_EDITABLE_PACKAGE_SUFFIX = "_finder"
 
-TABSDATA_CONNECTORS_NAMES = [
-    "api",
-    "bigquery",
-    "cdc-common",
-    "cdc-db2",
-    "cdc-mysql",
-    "cdc-postgres",
-    "cli",
-    "common",
-    "conn-azureblob",
-    "conn-bigquery",
-    "conn-clickhouse",
-    "conn-common",
-    "conn-common-file",
-    "conn-common-sql",
-    "conn-databricks",
-    "conn-db2",
-    "conn-druid",
-    "conn-gcs",
-    "conn-kafka",
-    "conn-localfile",
-    "conn-mongodb",
-    "conn-mssql",
-    "conn-mysql",
-    "conn-oracle",
-    "conn-postgres",
-    "conn-s3",
-    "conn-salesforce",
-    "conn-snowflake",
-    "conn-starrocks",
-    "databricks",
-    "kafka",
-    "mongodb",
-    "mssql",
-    "salesforce",
-    "schema-evolution",
-    "sdk",
-    "server",
-    "snowflake",
-    "sql-common",
-]
-
-TABSDATA_CONNECTORS = {
-    f"tabsdata-{name}": {
-        "is_dev_env": f"TD_TABSDATA_{name.upper().replace('-', '_')}_DEV_PKG"
-    }
-    for name in TABSDATA_CONNECTORS_NAMES
-}
-
 TABSDATA_PACKAGE_NAME = "tabsdata"
 
 TABSDATA_TOOLKIT_PACKAGE_NAME = "tabsdata-toolkit"
@@ -95,13 +46,6 @@ TD_TABSDATA_TOOLKIT_DEV_PKG = "TD_TABSDATA_TOOLKIT_DEV_PKG"
 
 TABSDATA_AGENT_PACKAGE_NAME = "tabsdata-agent"
 TD_TABSDATA_AGENT_DEV_PKG = "TD_TABSDATA_AGENT_DEV_PKG"
-
-TABSDATA_PACKAGES = (
-    [TABSDATA_MODULE_NAME]
-    + [TABSDATA_TOOLKIT_PACKAGE_NAME]
-    + list(TABSDATA_CONNECTORS.keys())
-    + [TABSDATA_AGENT_PACKAGE_NAME]
-)
 
 # --- Truthy / falsy env-var values ----------------------------------------
 
