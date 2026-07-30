@@ -4,6 +4,7 @@
 
 use std::{env, process};
 use td_common::attach::attach;
+use td_common::crypto::install_crypto_provider;
 use td_common::{about, logging};
 use td_process::launcher::hooks;
 use tracing::info;
@@ -30,6 +31,8 @@ fn main() {
         Some(path) => logging::start_with_config_file(&path),
         None => logging::start(),
     }
+
+    install_crypto_provider();
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

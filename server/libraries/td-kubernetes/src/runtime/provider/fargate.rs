@@ -8,15 +8,17 @@ pub mod instance;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use indicatif::MultiProgress;
 use kube::Config;
 use td_common::status::ExitStatus::NoAction;
 
 use td_common::settings::DEFAULT_INSTANCE;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_RUNTIMES_ROOT, DATABASE_SSL_MODE_VERIFY_CA,
-    DATABASE_SSL_ROOT_CERT, FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach, KPROFILE_ASSETS_FAMILY,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_PYENV_AG_ROOT, CONTAINER_PYENV_TD_ROOT,
+    CONTAINER_RUNTIMES_ROOT, DATABASE_SSL_MODE_VERIFY_CA, DATABASE_SSL_ROOT_CERT,
+    FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -27,7 +29,7 @@ use crate::client::session::pin::{FargateInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandResult, abort_with};
-use crate::kube::api::configmap::require_configmap;
+use crate::kube::api::configmap::{get_configmap, require_configmap};
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
 use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
@@ -35,11 +37,12 @@ use crate::kube::kubeconfig::{
 };
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::instance::launcher::provision_pyvenvs;
+use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
 use crate::runtime::instance::staging::promote_staged_profile;
+use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::fargate::cluster::FargateCluster;
 use crate::runtime::provider::fargate::instance::FargateInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
@@ -108,6 +111,12 @@ impl FargateProvider {
         Ok((context, system, profile))
     }
 
+    async fn apply_workload(&self, multi: &MultiProgress) -> CommandResult {
+        self.instance.start(multi).await
+    }
+    async fn teardown_workload(&self, multi: &MultiProgress) -> CommandResult<bool> {
+        self.instance.stop(multi).await
+    }
     async fn create_runtimes_as_pod(&self) -> CommandResult {
         let (context, system, profile) = self.runtimes_context().await?;
         let multi = td_common::logging::multi_progress().unwrap_or_default();
@@ -178,7 +187,7 @@ impl FargateProvider {
         }
 
         let cluster = FargateCluster::new(config.clone());
-        let fargate_instance = FargateInstance::new(config.clone());
+        let fargate_instance = FargateInstance::new(config.clone(), folder.clone());
 
         Ok(Self {
             kubefile,
@@ -225,17 +234,7 @@ impl Provider for FargateProvider {
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {
-        Ok(SystemValues {
-            instance_name: Some(self.name.clone()),
-            namespace_name: Some(self.config.default_namespace.clone()),
-            runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
-            database_ssl_mode: Some(DATABASE_SSL_MODE_VERIFY_CA.to_owned()),
-            database_ssl_root_cert: Some(DATABASE_SSL_ROOT_CERT.to_owned()),
-            uv_default_index: Some(SystemValues::uv_default_index()?),
-            uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::Cluster)?),
-            uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
-            ..SystemValues::default()
-        })
+        system_values_for(&self.name, &self.config.default_namespace)
     }
 
     fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
@@ -319,7 +318,9 @@ impl Provider for FargateProvider {
     }
 
     async fn create_database(&self, _reporter: &dyn Reporter) -> CommandResult {
-        Ok(())
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_database(&context, self.cluster_provider(), &system, &profile, &multi).await
     }
 
     async fn create_runtimes(&self, _reporter: &dyn Reporter) -> CommandResult {
@@ -338,8 +339,12 @@ impl Provider for FargateProvider {
         self.cluster_alive().await && self.instance.is_alive().await
     }
 
-    async fn start_cluster_hook(&self, _reporter: &dyn Reporter) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult {
+        let step = reporter.step("Starting kubernetes cluster");
+        self.cluster.start().await?;
+        step.done("Kubernetes cluster started");
+        handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
+        Ok(())
     }
 
     async fn stop_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
@@ -353,47 +358,92 @@ impl Provider for FargateProvider {
     }
 
     async fn ensure_startable_cluster(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        Ok(())
     }
 
     async fn ensure_stoppable_cluster(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        Ok(())
     }
 
     async fn ensure_restartable_cluster(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        Ok(())
     }
 
-    async fn start_instance_hook(&self, _reporter: &dyn Reporter) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> CommandResult {
+        handle_phase_secrets(self, SecretPhase::InstanceStart).await?;
+        let step = reporter.step("Starting tabsdata instance");
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        self.apply_workload(&multi).await?;
+        step.done("Tabsdata instance started");
+        Ok(())
     }
 
-    async fn stop_instance(&self, _reporter: &dyn Reporter) -> CommandResult<InstanceStopOutcome> {
-        unreachable!("The fargate provider is not yet implemented.")
+    async fn stop_instance(&self, reporter: &dyn Reporter) -> CommandResult<InstanceStopOutcome> {
+        let step = reporter.step("Stopping tabsdata instance");
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        let stopped = self.teardown_workload(&multi).await?;
+        step.done("Tabsdata instance stopped");
+        match stopped {
+            true => Ok(InstanceStopOutcome::Stopped),
+            false => Ok(InstanceStopOutcome::AlreadyStopped),
+        }
     }
 
     async fn ensure_startable_instance(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
+        Ok(())
     }
 
     async fn ensure_stoppable_instance(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
+        Ok(())
     }
 
     async fn ensure_restartable_instance(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
+        Ok(())
     }
 
     async fn ensure_startable_server(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        if cfg!(td_k8s_development) {
+            let context = self.kube_context().await?;
+            if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?
+                && let Some(yaml) = data.get(MANIFEST_FILE)
+            {
+                verify_manifest_compatibility(yaml)?;
+            }
+        }
+        Ok(())
     }
 
     async fn ensure_stoppable_server(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
+        Ok(())
     }
 
     async fn ensure_restartable_server(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
+        Ok(())
     }
 }
 
@@ -402,3 +452,19 @@ impl ContainerProvider for FargateProvider {}
 impl ServerlessProvider for FargateProvider {}
 
 impl CloudProvider for FargateProvider {}
+
+pub fn system_values_for(name: &str, namespace: &str) -> CommandResult<SystemValues> {
+    Ok(SystemValues {
+        instance_name: Some(name.to_owned()),
+        namespace_name: Some(namespace.to_owned()),
+        runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
+        pyenv_td_root: Some(CONTAINER_PYENV_TD_ROOT.to_owned()),
+        pyenv_ag_root: Some(CONTAINER_PYENV_AG_ROOT.to_owned()),
+        database_ssl_mode: Some(DATABASE_SSL_MODE_VERIFY_CA.to_owned()),
+        database_ssl_root_cert: Some(DATABASE_SSL_ROOT_CERT.to_owned()),
+        uv_default_index: Some(SystemValues::uv_default_index()?),
+        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::Cluster)?),
+        uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
+        ..SystemValues::default()
+    })
+}

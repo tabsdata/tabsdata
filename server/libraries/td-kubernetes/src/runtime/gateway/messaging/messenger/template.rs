@@ -20,6 +20,7 @@ pub enum TemplateKind {
     Pod,
     Job,
     CronJob,
+    Service,
 }
 
 impl TemplateKind {
@@ -28,6 +29,7 @@ impl TemplateKind {
             "Pod" => Some(Self::Pod),
             "Job" => Some(Self::Job),
             "CronJob" => Some(Self::CronJob),
+            "Service" => Some(Self::Service),
             _ => None,
         }
     }

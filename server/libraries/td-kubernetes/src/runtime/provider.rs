@@ -158,6 +158,13 @@ impl ClusterProvider {
         }
     }
 
+    pub fn hosts_database(self) -> bool {
+        match self {
+            Self::Kminus => true,
+            Self::Docker | Self::Eks | Self::Fargate => false,
+        }
+    }
+
     pub(crate) fn workload(self) -> Workload {
         match self {
             Self::Kminus => Workload::Process,

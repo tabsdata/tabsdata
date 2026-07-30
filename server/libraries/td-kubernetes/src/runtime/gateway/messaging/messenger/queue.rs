@@ -43,6 +43,15 @@ fn unsupported(id: &str, action: &str) -> QueueError {
     }
 }
 
+fn unexpected_kind(id: &str, kind: &str) -> QueueError {
+    error!(id = %id, kind = %kind, "Template kind not routable by the Kubernetes messaging layer.");
+    QueueError::BackendError {
+        cause: format!(
+            "Template kind '{kind}' is applied by the endpoint phase, not routed as a worker."
+        ),
+    }
+}
+
 fn unexpected(id: &str, kind: &str, payload: &OrchestratorMessagePayload<Value>) -> QueueError {
     error!(id = %id, kind = %kind, "Payload kind not expected in Kubernetes messaging layer.");
     QueueError::BackendError {
@@ -409,6 +418,9 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                 cause: error.to_string(),
                             })?;
                     }
+                    TemplateKind::Service => {
+                        return Err(unexpected_kind(&id, "Service"));
+                    }
                 }
             }
             MessageAction::Stop => match template.kind {
@@ -432,6 +444,9 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                         .map_err(|error| QueueError::BackendError {
                             cause: error.to_string(),
                         })?;
+                }
+                TemplateKind::Service => {
+                    return Err(unexpected_kind(&id, "Service"));
                 }
             },
             MessageAction::Notify => return Err(unsupported(&id, "Notify")),
@@ -469,6 +484,9 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                     .map_err(|error| QueueError::BackendError {
                         cause: error.to_string(),
                     })?;
+            }
+            TemplateKind::Service => {
+                return Err(unexpected_kind(&message.id, "Service"));
             }
         }
         Ok(())

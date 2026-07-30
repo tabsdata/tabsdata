@@ -91,4 +91,9 @@ pub enum LauncherError {
     } = 5013,
     #[error("The init job '{key}' declares no '{label}' label.")]
     MissingInitSequence { key: String, label: String } = 5014,
+    #[error(
+        "Workload '{name}' has the kind '{kind}', which the regular phase does not await; \
+         services are applied by the endpoint phase."
+    )]
+    UnawaitableWorkloadKind { name: String, kind: String } = 5015,
 }

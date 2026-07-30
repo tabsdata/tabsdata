@@ -1,0 +1,106 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-inspector
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Tabsdata inspector init job"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: inspector
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: init
+    tabsdata.com/sequence: "10"
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/instance: tabsdata
+        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/component: inspector
+        app.kubernetes.io/part-of: tabsdata
+        app.kubernetes.io/managed-by: tdkserver
+        tabsdata.com/tier: init
+    spec:
+      restartPolicy: Never
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: inspector
+          image: busybox:1.37
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              for folder in pods configs; do
+                dir="/tabsdata/${folder}"
+                echo "Reading mounted '${folder}' folder under ${dir}"
+                for f in "${dir}"/*; do
+                  [ -f "$f" ] || continue
+                  printf '[inspector]   %s/%s = %s\n' "${folder}" "$(basename "$f")" "$(cat "$f")"
+                done
+              done
+              echo "Done!"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "4Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: pods
+              mountPath: /tabsdata/pods
+              readOnly: true
+            - name: configs
+              mountPath: /tabsdata/configs
+              readOnly: true
+      volumes:
+        - name: pods
+          projected:
+            sources:
+              - configMap:
+                  name: td-sys-apiserver-pod-apiserver.yaml
+              - configMap:
+                  name: td-sys-cron-publisher-pod-cron-publisher.yaml
+              - configMap:
+                  name: td-sys-function-publisher-pod-function-publisher.yaml
+              - configMap:
+                  name: td-sys-function-subscriber-pod-function-subscriber.yaml
+              - configMap:
+                  name: td-sys-function-transformer-pod-function-transformer.yaml
+              - configMap:
+                  name: td-sys-inspector-pod-inspector.yaml
+              - configMap:
+                  name: td-sys-stream-publisher-pod-stream-publisher.yaml
+        - name: configs
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.service.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.database.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.log.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.yaml

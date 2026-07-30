@@ -17,6 +17,7 @@ use std::process;
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use td_common::attach::attach;
+use td_common::crypto::install_crypto_provider;
 use td_common::status::ExitStatus;
 use td_common::{about, logging};
 use td_database::config::{ComponentConfig, DatabaseComponents};
@@ -299,5 +300,6 @@ fn main() {
     }
 
     logging::start();
+    install_crypto_provider();
     run();
 }

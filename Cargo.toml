@@ -640,7 +640,7 @@ version = "0.9.9"
 
 [workspace.dependencies.sqlx]
 version = "0.8.6"
-features = ["chrono", "runtime-tokio"]
+features = ["chrono", "runtime-tokio", "tls-rustls"]
 
 [workspace.dependencies.strum]
 version = "0.28.0"

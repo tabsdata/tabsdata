@@ -17,7 +17,7 @@ metadata:
     app.kubernetes.io/component: database
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
-    tabsdata.com/tier: service
+    tabsdata.com/tier: server
 spec:
   restartPolicy: Always
   nodeName: tdknode

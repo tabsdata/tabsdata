@@ -5,7 +5,7 @@
 pub mod cluster;
 pub mod instance;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use indicatif::MultiProgress;
@@ -14,9 +14,10 @@ use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_RUNTIMES_ROOT, CONTAINER_TABSDATA_ROOT,
-    DATABASE_SSL_MODE_PREFER, FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach,
-    KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, YAML_NULL,
+    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_PYENV_AG_ROOT, CONTAINER_PYENV_TD_ROOT,
+    CONTAINER_RUNTIMES_ROOT, CONTAINER_TABSDATA_ROOT, DATABASE_SSL_MODE_PREFER, FOLDER_REPOSITORY,
+    FOLDER_STORAGE, IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY, YAML_NULL,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -35,7 +36,7 @@ use crate::kube::kubeconfig::{
 };
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::instance::launcher::provision_pyvenvs;
+use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
@@ -184,7 +185,7 @@ impl DockerProvider {
         }
 
         let cluster = DockerCluster::new(config.clone());
-        let docker_instance = DockerInstance::new(config.clone());
+        let docker_instance = DockerInstance::new(config.clone(), folder.clone());
 
         Ok(Self {
             kubefile,
@@ -235,22 +236,7 @@ impl Provider for DockerProvider {
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {
-        let repository_folder = self.folder.join(FOLDER_REPOSITORY);
-        let storage_folder = repository_folder.join(FOLDER_STORAGE);
-        Ok(SystemValues {
-            instance_name: Some(self.name.clone()),
-            namespace_name: Some(self.config.default_namespace.clone()),
-            runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
-            database_ssl_mode: Some(DATABASE_SSL_MODE_PREFER.to_owned()),
-            database_ssl_root_cert: Some(YAML_NULL.to_owned()),
-            repository_path: Some(repository_folder.to_string_lossy().to_string()),
-            storage_path: Some(storage_folder.to_string_lossy().to_string()),
-            storage_url: Some(container_storage_url()),
-            uv_default_index: Some(SystemValues::uv_default_index()?),
-            uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::HostContainer)?),
-            uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
-            ..SystemValues::default()
-        })
+        system_values_for(&self.name, &self.config.default_namespace, &self.folder)
     }
 
     fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
@@ -334,7 +320,9 @@ impl Provider for DockerProvider {
     }
 
     async fn create_database(&self, _reporter: &dyn Reporter) -> CommandResult {
-        Ok(())
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_database(&context, self.cluster_provider(), &system, &profile, &multi).await
     }
 
     async fn create_runtimes(&self, _reporter: &dyn Reporter) -> CommandResult {
@@ -404,14 +392,29 @@ impl Provider for DockerProvider {
     }
 
     async fn ensure_startable_instance(&self) -> CommandResult {
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
         Ok(())
     }
 
     async fn ensure_stoppable_instance(&self) -> CommandResult {
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
         Ok(())
     }
 
     async fn ensure_restartable_instance(&self) -> CommandResult {
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
         Ok(())
     }
 
@@ -428,10 +431,20 @@ impl Provider for DockerProvider {
     }
 
     async fn ensure_stoppable_server(&self) -> CommandResult {
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
         Ok(())
     }
 
     async fn ensure_restartable_server(&self) -> CommandResult {
+        if !self.folder.exists() {
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
+            );
+        }
         Ok(())
     }
 }
@@ -454,4 +467,29 @@ impl DockerProvider {
 
 fn container_storage_url() -> String {
     format!("file://{CONTAINER_TABSDATA_ROOT}/{FOLDER_REPOSITORY}/{FOLDER_STORAGE}/")
+}
+
+pub fn system_values_for(
+    name: &str,
+    namespace: &str,
+    folder: &Path,
+) -> CommandResult<SystemValues> {
+    let repository_folder = folder.join(FOLDER_REPOSITORY);
+    let storage_folder = repository_folder.join(FOLDER_STORAGE);
+    Ok(SystemValues {
+        instance_name: Some(name.to_owned()),
+        namespace_name: Some(namespace.to_owned()),
+        runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
+        pyenv_td_root: Some(CONTAINER_PYENV_TD_ROOT.to_owned()),
+        pyenv_ag_root: Some(CONTAINER_PYENV_AG_ROOT.to_owned()),
+        database_ssl_mode: Some(DATABASE_SSL_MODE_PREFER.to_owned()),
+        database_ssl_root_cert: Some(YAML_NULL.to_owned()),
+        repository_path: Some(repository_folder.to_string_lossy().to_string()),
+        storage_path: Some(storage_folder.to_string_lossy().to_string()),
+        storage_url: Some(container_storage_url()),
+        uv_default_index: Some(SystemValues::uv_default_index()?),
+        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::HostContainer)?),
+        uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
+        ..SystemValues::default()
+    })
 }

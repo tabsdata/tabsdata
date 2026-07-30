@@ -35,6 +35,7 @@ pub mod job;
 pub mod namespace;
 pub mod pod;
 pub mod secret;
+pub mod service;
 
 use std::collections::BTreeMap;
 

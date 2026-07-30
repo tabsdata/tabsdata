@@ -109,7 +109,7 @@ impl UvMode {
     pub fn index_strategy(self) -> String {
         match self {
             Self::Local => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
-            Self::Devpi => UV_INDEX_STRATEGY_BEST_MATCH.to_owned(),
+            Self::Devpi => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
             Self::Pypi => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
             Self::Unset => match environment_index(ENV_UV_INDEX_STRATEGY) {
                 Some(strategy) => strategy,
@@ -154,6 +154,24 @@ pub const FOLDER_UV: &str = ".uv";
 pub const FOLDER_KENVS: &str = "kenvs";
 pub const VENVS_IMAGE: &str = "tdvenvs.tar.zst";
 pub const CONTAINER_RUNTIMES_ROOT: &str = "/tabsdata/runtimes";
+pub const CONTAINER_PYENV_TD_ROOT: &str = concatcp!(
+    CONTAINER_RUNTIMES_ROOT,
+    "/",
+    FOLDER_UV,
+    "/",
+    FOLDER_KENVS,
+    "/",
+    FOLDER_PYENV_TD
+);
+pub const CONTAINER_PYENV_AG_ROOT: &str = concatcp!(
+    CONTAINER_RUNTIMES_ROOT,
+    "/",
+    FOLDER_UV,
+    "/",
+    FOLDER_KENVS,
+    "/",
+    FOLDER_PYENV_AG
+);
 pub const FOLDER_IMAGES: &str = "images";
 pub const FOLDER_PYTHON: &str = "python";
 pub const FOLDER_PYENV_TD: &str = "td";
@@ -237,7 +255,12 @@ pub const DATABASE_NAME_POSTGRES: &str = "postgres";
 pub const YAML_NULL: &str = "null";
 pub const DATABASE_SSL_MODE_PREFER: &str = "prefer";
 pub const DATABASE_SSL_MODE_VERIFY_CA: &str = "verify-ca";
-pub const DATABASE_SSL_ROOT_CERT: &str = "/etc/tabsdata/certs/ca.pem";
+pub const CONTAINER_CERTS_ROOT: &str = "/tabsdata/certs";
+pub const DATABASE_CA_BUNDLE_FILE: &str = "ca.pem";
+pub const DATABASE_CA_BUNDLE_URL: &str =
+    "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
+pub const DATABASE_SSL_ROOT_CERT: &str =
+    concatcp!(CONTAINER_CERTS_ROOT, "/", DATABASE_CA_BUNDLE_FILE);
 
 pub const TABSDATA_LABEL_NAMESPACE: &str = "tabsdata.com/";
 pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";

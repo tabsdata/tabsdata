@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use indicatif::MultiProgress;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Pod, Service};
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 
@@ -17,7 +17,9 @@ use crate::base::error::launcher::LauncherError;
 use crate::client::tdkserver::widgets::phase_spinner_in;
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
-use crate::kube::api::{cronjob as cronjob_api, job as job_api, pod as pod_api};
+use crate::kube::api::{
+    cronjob as cronjob_api, job as job_api, pod as pod_api, service as service_api,
+};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::template::TemplateKind;
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
@@ -58,9 +60,9 @@ async fn create_non_ephemeral_workload(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
-    let service_pods =
-        apply_service_phase(context, cluster_provider, system, profile, multi).await?;
-    wait_service_phase(context, &service_pods, multi).await?;
+    let server_pods = apply_server_phase(context, cluster_provider, system, profile, multi).await?;
+    wait_server_phase(context, &server_pods, multi).await?;
+    apply_endpoint_phase(context, system, profile, multi).await?;
     let init_jobs = apply_init_phase(context, cluster_provider, system, profile, multi).await?;
     wait_init_phase(context, &init_jobs, multi).await?;
     let regular_pods = apply_regular_phase(
@@ -92,6 +94,32 @@ pub async fn stop_workload(context: &KubeContext, multi: &MultiProgress) -> Comm
     delete_ephemeral_workload(context, multi).await?;
     delete_non_ephemeral_workload(context, multi).await?;
     Ok(present)
+}
+
+pub async fn apply_endpoint_phase(
+    context: &KubeContext,
+    system: &SystemValues,
+    profile: &Profile,
+    multi: &MultiProgress,
+) -> CommandResult {
+    let entries = pods_for_tier(profile, Tier::Endpoint)?;
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let phase = phase_spinner_in(multi, &format!("Applying {} endpoint(s)", entries.len()));
+    for (key, yaml) in entries {
+        let bar = phase.add_resource(key);
+        let service = deserialize_pod_entry::<Service>(key, yaml, Tier::Endpoint, system).await?;
+        match service_api::upsert_service(context, &service).await {
+            Ok(_) => bar.finish_with_message(format!("{key} (applied)")),
+            Err(error) => {
+                bar.finish_with_message(format!("{key} (failed)"));
+                return Err(error.into());
+            }
+        }
+    }
+    drop(phase);
+    Ok(())
 }
 
 pub async fn apply_init_phase(
@@ -180,7 +208,7 @@ pub async fn wait_init_phase(
     Ok(())
 }
 
-pub async fn apply_service_phase(
+pub async fn apply_server_phase(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
     system: &SystemValues,
@@ -189,17 +217,14 @@ pub async fn apply_service_phase(
 ) -> CommandResult<Vec<String>> {
     let available_secrets = list_available_secrets(context).await?;
     let mut prepared: Vec<(String, Pod)> = Vec::new();
-    for (key, yaml) in pods_for_tier(profile, Tier::Service)? {
-        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Service, system).await?;
+    for (key, yaml) in pods_for_tier(profile, Tier::Server)? {
+        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Server, system).await?;
         cluster_provider.enrich_regular_pod(&mut pod)?;
         inject_into_pod(profile, key, &mut pod, &available_secrets)?;
         validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
         prepared.push((key.to_owned(), pod));
     }
-    let phase = phase_spinner_in(
-        multi,
-        &format!("Applying {} service pod(s)", prepared.len()),
-    );
+    let phase = phase_spinner_in(multi, &format!("Applying {} server pod(s)", prepared.len()));
     let mut applied: Vec<String> = Vec::new();
     for (key, pod) in prepared {
         let bar = phase.add_resource(&key);
@@ -223,12 +248,12 @@ pub async fn apply_service_phase(
     Ok(applied)
 }
 
-pub async fn wait_service_phase(
+pub async fn wait_server_phase(
     context: &KubeContext,
     pods: &[String],
     multi: &MultiProgress,
 ) -> CommandResult {
-    let phase = phase_spinner_in(multi, &format!("Waiting for {} service pod(s)", pods.len()));
+    let phase = phase_spinner_in(multi, &format!("Waiting for {} server pod(s)", pods.len()));
     for name in pods {
         let bar = phase.add_resource(name);
         let settled = match pod_api::await_pod_condition(context, name, is_pod_settled()).await {
@@ -550,6 +575,14 @@ pub async fn wait_regular_phase(
                     bar.finish_with_message(format!("{name} (ready)"));
                     Ok(())
                 }
+                TemplateKind::Service => {
+                    bar.finish_with_message(format!("{name} (unexpected)"));
+                    Err(LauncherError::UnawaitableWorkloadKind {
+                        name: name.clone(),
+                        kind: format!("{kind:?}"),
+                    }
+                    .into())
+                }
             }
         }
     });
@@ -619,13 +652,19 @@ pub async fn provision_database(
     multi: &MultiProgress,
 ) -> CommandResult {
     let available_secrets = list_available_secrets(context).await?;
+    let hosts_database = cluster_provider.hosts_database();
 
-    let (service_key, service_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
-    let mut service =
-        deserialize_pod_entry::<Pod>(service_key, service_yaml, Tier::Service, system).await?;
-    cluster_provider.enrich_regular_pod(&mut service)?;
-    inject_into_pod(profile, service_key, &mut service, &available_secrets)?;
-    let service_name = pod_name(service_key, &service)?;
+    let server = if hosts_database {
+        let (server_key, server_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
+        let mut service =
+            deserialize_pod_entry::<Pod>(server_key, server_yaml, Tier::Server, system).await?;
+        cluster_provider.enrich_regular_pod(&mut service)?;
+        inject_into_pod(profile, server_key, &mut service, &available_secrets)?;
+        let server_name = pod_name(server_key, &service)?;
+        Some((server_key, service, server_name))
+    } else {
+        None
+    };
 
     let (setup_key, setup_yaml) = pod_for_component(profile, DBMANAGER_COMPONENT)?;
     let mut setup =
@@ -636,25 +675,31 @@ pub async fn provision_database(
 
     let phase = phase_spinner_in(multi, "Provisioning tabsdata database");
 
-    let bar = phase.add_resource(service_key);
-    pod_api::create_pod(context, &service, Vec::new(), Vec::new(), None).await?;
-    pod_api::await_pod_condition(context, &service_name, is_pod_settled()).await?;
-    bar.finish_with_message(format!("{service_key} (started)"));
+    if let Some((server_key, service, server_name)) = &server {
+        let bar = phase.add_resource(server_key);
+        pod_api::create_pod(context, service, Vec::new(), Vec::new(), None).await?;
+        pod_api::await_pod_condition(context, server_name, is_pod_settled()).await?;
+        bar.finish_with_message(format!("{server_key} (started)"));
+    }
 
     let bar = phase.add_resource(setup_key);
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
     let settled = job_api::await_job_condition(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {
         bar.finish_with_message(format!("{setup_key} (failed)"));
-        pod_api::delete_pod(context, &service_name).await?;
+        if let Some((_, _, server_name)) = &server {
+            pod_api::delete_pod(context, server_name).await?;
+        }
         return Err(LauncherError::JobFailed { name: setup_name }.into());
     }
     bar.finish_with_message(format!("{setup_key} (completed)"));
 
-    let bar = phase.add_resource(service_key);
-    pod_api::delete_pod(context, &service_name).await?;
-    pod_api::await_pod_condition(context, &service_name, is_pod_absent()).await?;
-    bar.finish_with_message(format!("{service_key} (stopped)"));
+    if let Some((server_key, _, server_name)) = &server {
+        let bar = phase.add_resource(server_key);
+        pod_api::delete_pod(context, server_name).await?;
+        pod_api::await_pod_condition(context, server_name, is_pod_absent()).await?;
+        bar.finish_with_message(format!("{server_key} (stopped)"));
+    }
 
     drop(phase);
     Ok(())
@@ -672,18 +717,18 @@ pub async fn start_database(
     multi: &MultiProgress,
 ) -> CommandResult {
     let available_secrets = list_available_secrets(context).await?;
-    let (service_key, service_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
+    let (server_key, server_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
     let mut service =
-        deserialize_pod_entry::<Pod>(service_key, service_yaml, Tier::Service, system).await?;
+        deserialize_pod_entry::<Pod>(server_key, server_yaml, Tier::Server, system).await?;
     cluster_provider.enrich_regular_pod(&mut service)?;
-    inject_into_pod(profile, service_key, &mut service, &available_secrets)?;
-    let service_name = pod_name(service_key, &service)?;
+    inject_into_pod(profile, server_key, &mut service, &available_secrets)?;
+    let server_name = pod_name(server_key, &service)?;
 
     let phase = phase_spinner_in(multi, "Starting tabsdata database");
-    let bar = phase.add_resource(service_key);
+    let bar = phase.add_resource(server_key);
     pod_api::create_pod(context, &service, Vec::new(), Vec::new(), None).await?;
-    pod_api::await_pod_condition(context, &service_name, is_pod_settled()).await?;
-    bar.finish_with_message(format!("{service_key} (started)"));
+    pod_api::await_pod_condition(context, &server_name, is_pod_settled()).await?;
+    bar.finish_with_message(format!("{server_key} (started)"));
     drop(phase);
     Ok(())
 }
@@ -693,20 +738,19 @@ pub async fn stop_database(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
-    let (service_key, service_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
-    let service: Pod = serde_yaml::from_str(service_yaml).map_err(|error| {
-        LauncherError::PodDeserializeFailed {
-            key: service_key.to_owned(),
-            tier: Tier::Service.to_string(),
+    let (server_key, server_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
+    let service: Pod =
+        serde_yaml::from_str(server_yaml).map_err(|error| LauncherError::PodDeserializeFailed {
+            key: server_key.to_owned(),
+            tier: Tier::Server.to_string(),
             cause: error.to_string(),
-        }
-    })?;
-    let service_name = pod_name(service_key, &service)?;
+        })?;
+    let server_name = pod_name(server_key, &service)?;
 
     let phase = phase_spinner_in(multi, "Stopping tabsdata database");
-    let bar = phase.add_resource(service_key);
-    pod_api::delete_pod(context, &service_name).await?;
-    bar.finish_with_message(format!("{service_key} (stopped)"));
+    let bar = phase.add_resource(server_key);
+    pod_api::delete_pod(context, &server_name).await?;
+    bar.finish_with_message(format!("{server_key} (stopped)"));
     drop(phase);
     Ok(())
 }
@@ -849,6 +893,7 @@ async fn delete_non_ephemeral_workload(
     let pods_bar = phase.add_resource("Pods");
     let jobs_bar = phase.add_resource("Jobs");
     let cronjobs_bar = phase.add_resource("CronJobs");
+    let services_bar = phase.add_resource("Services");
     let pods_delete = async {
         match pod_api::delete_pods_non_ephemeral(context).await {
             Ok(()) => {
@@ -885,7 +930,21 @@ async fn delete_non_ephemeral_workload(
             }
         }
     };
-    let result = futures::future::try_join3(pods_delete, jobs_delete, cronjobs_delete).await;
+    let services_delete = async {
+        match service_api::delete_services(context).await {
+            Ok(_) => {
+                services_bar.finish_with_message("Services (deleted)");
+                Ok(())
+            }
+            Err(error) => {
+                services_bar.finish_with_message("Services (failed)");
+                Err(CommandError::from(error))
+            }
+        }
+    };
+    let result =
+        futures::future::try_join4(pods_delete, jobs_delete, cronjobs_delete, services_delete)
+            .await;
     drop(phase);
     result?;
     Ok(())

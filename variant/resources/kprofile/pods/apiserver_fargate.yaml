@@ -1,0 +1,279 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: td-apiserver
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Tabsdata apiserver worker"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: apiserver
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: regular
+spec:
+  restartPolicy: Always
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 60
+  dnsPolicy: ClusterFirst
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  initContainers:
+    - name: cabundle
+      image: curlimages/curl:8.11.1
+      imagePullPolicy: IfNotPresent
+      command: ["curl"]
+      args:
+        - --fail
+        - --silent
+        - --show-error
+        - --location
+        - --retry
+        - "3"
+        - --retry-delay
+        - "2"
+        - --output
+        - /tabsdata/certs/ca.pem
+        - https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: certs
+          mountPath: /tabsdata/certs
+    - name: venvloader
+      image: python:3.12-slim
+      imagePullPolicy: IfNotPresent
+      command: ["bash"]
+      args:
+        - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.sh
+        - --output
+        - ${{system:tdk_runtimes_root}}
+        - --storage-config
+        - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+      resources:
+        requests:
+          cpu: "1"
+          memory: "4Gi"
+          ephemeral-storage: "16Gi"
+      env:
+        - name: CONTAINER_ROOT
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+      envFrom:
+        - secretRef:
+            name: td-app-apiserver-secret-config-apiserver.storage.yaml
+          prefix: SECRETS__
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: assets
+          mountPath: /tabsdata/assets
+          readOnly: true
+        - name: config
+          mountPath: /tabsdata/config
+          readOnly: true
+        - name: runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
+    - name: dbready
+      image: ubuntu:24.04
+      imagePullPolicy: IfNotPresent
+      command: ["${{system:tdk_pyenv_td_root}}/bin/td_dbready"]
+      args:
+        - --config-file
+        - /tabsdata/config/apiserver.database.yaml
+        - --log-config-py
+        - /tabsdata/config/tabsdata.log.py.yaml
+        - --log-config-rs
+        - /tabsdata/config/apiserver.log.yaml
+        - --timeout
+        - "600"
+        - --interval
+        - "2"
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "32Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      env:
+        - name: CONTAINER_ROOT
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+      volumeMounts:
+        - name: config
+          mountPath: /tabsdata/config
+          readOnly: true
+        - name: certs
+          mountPath: /tabsdata/certs
+          readOnly: true
+        - name: runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
+          readOnly: true
+    - name: connresextractor
+      image: ubuntu:24.04
+      imagePullPolicy: IfNotPresent
+      command: ["${{system:tdk_pyenv_td_root}}/bin/td_conn_resources_extractor"]
+      args:
+        - --output-dir
+        - /tabsdata/resources/ui/connectors
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      env:
+        - name: CONTAINER_ROOT
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+      volumeMounts:
+        - name: resources
+          mountPath: /tabsdata/resources
+        - name: runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
+          readOnly: true
+  containers:
+    - name: apiserver
+      image: ubuntu:24.04
+      imagePullPolicy: IfNotPresent
+      command: ["${{system:tdk_pyenv_td_root}}/bin/td_apiserver"]
+      args:
+        - --config-file
+        - /tabsdata/config/apiserver.service.yaml
+        - --config-file
+        - /tabsdata/config/apiserver.database.yaml
+        - --config-file
+        - /tabsdata/config/apiserver.storage.yaml
+        - --log-config
+        - /tabsdata/config/apiserver.log.yaml
+        - --resources-folder
+        - /tabsdata/resources
+      ports:
+        - name: public-http
+          containerPort: 2457
+          protocol: TCP
+        - name: private-http
+          containerPort: 2458
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "4Gi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: config
+          mountPath: /tabsdata/config
+          readOnly: true
+        - name: settings
+          mountPath: /tabsdata/settings
+          readOnly: true
+        - name: resources
+          mountPath: /tabsdata/resources
+          readOnly: true
+        - name: certs
+          mountPath: /tabsdata/certs
+          readOnly: true
+        - name: runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
+          readOnly: true
+      env:
+        - name: CONTAINER_ROOT
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+  volumes:
+    - name: config
+      projected:
+        sources:
+          - configMap:
+              name: td-app-apiserver-config-apiserver.service.yaml
+          - configMap:
+              name: td-app-apiserver-config-apiserver.database.yaml
+          - configMap:
+              name: td-app-apiserver-config-apiserver.storage.yaml
+          - configMap:
+              name: td-app-apiserver-config-apiserver.log.yaml
+          - configMap:
+              name: td-app-tabsdata-config-tabsdata.log.py.yaml
+          - configMap:
+              name: td-app-tabsdata-config-tabsdata.yaml
+    - name: assets
+      projected:
+        defaultMode: 493
+        sources:
+          - configMap:
+              name: td-app-venvloader-asset-venvloader.sh
+          - configMap:
+              name: td-app-venvloader-asset-venvloader.py
+    - name: settings
+      configMap:
+        name: td-sys-tabsdata-settings-settings.json
+    - name: resources
+      emptyDir: {}
+    - name: certs
+      emptyDir: {}
+    - name: runtimes
+      emptyDir: {}

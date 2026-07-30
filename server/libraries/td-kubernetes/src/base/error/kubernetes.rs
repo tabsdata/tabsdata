@@ -20,6 +20,7 @@ pub mod namespace;
 pub mod pod;
 pub mod podcontext;
 pub mod secret;
+pub mod service;
 
 use td_error::TdError;
 use thiserror::Error;
@@ -37,6 +38,7 @@ pub use namespace::KubeNamespaceError;
 pub use pod::KubePodError;
 pub use podcontext::KubePodContextError;
 pub use secret::KubeSecretError;
+pub use service::KubeServiceError;
 
 #[derive(Debug, Error)]
 pub enum KubernetesError {
@@ -63,6 +65,8 @@ pub enum KubernetesError {
     #[error(transparent)]
     Secret(#[from] KubeSecretError),
     #[error(transparent)]
+    Service(#[from] KubeServiceError),
+    #[error(transparent)]
     Naming(#[from] NamingError),
 }
 
@@ -80,6 +84,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::Pod(inner) => TdError::new(inner),
             KubernetesError::PodContext(inner) => TdError::new(inner),
             KubernetesError::Secret(inner) => TdError::new(inner),
+            KubernetesError::Service(inner) => TdError::new(inner),
             KubernetesError::Naming(inner) => TdError::new(inner),
         }
     }

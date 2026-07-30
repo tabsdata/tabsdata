@@ -36,14 +36,59 @@ spec:
       terminationGracePeriodSeconds: 60
       dnsPolicy: ClusterFirst
       securityContext:
-        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+      - name: venvloader
+        image: python:3.12-slim
+        imagePullPolicy: IfNotPresent
+        command: ["bash"]
+        args:
+        - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.sh
+        - --output
+        - ${{system:tdk_runtimes_root}}
+        - --storage-config
+        - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+        resources:
+          requests:
+            cpu: "1"
+            memory: "4Gi"
+            ephemeral-storage: "16Gi"
+        env:
+        - name: CONTAINER_ROOT
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+        envFrom:
+        - secretRef:
+            name: td-app-apiserver-secret-config-apiserver.storage.yaml
+          prefix: SECRETS__
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: assets
+          mountPath: /tabsdata/assets
+          readOnly: true
+        - name: config
+          mountPath: /tabsdata/config
+          readOnly: true
+        - name: runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
       containers:
       - name: dbcreate
-        image: tabsdata/kube/tabsdata:2.0.0
+        image: ubuntu:24.04
         imagePullPolicy: IfNotPresent
-        command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/bin/td_dbmanager"]
+        command: ["${{system:tdk_pyenv_td_root}}/bin/td_dbmanager"]
         args:
         - db
         - create
@@ -78,13 +123,27 @@ spec:
         - name: config
           mountPath: /tabsdata/config
           readOnly: true
+        - name: runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
       volumes:
+      - name: assets
+        projected:
+          defaultMode: 493
+          sources:
+          - configMap:
+              name: td-app-venvloader-asset-venvloader.sh
+          - configMap:
+              name: td-app-venvloader-asset-venvloader.py
       - name: config
         projected:
           sources:
+          - configMap:
+              name: td-app-apiserver-config-apiserver.storage.yaml
           - configMap:
               name: td-app-apiserver-config-apiserver.database.yaml
           - configMap:
               name: td-app-dbmanager-config-dbmanager.database.yaml
           - configMap:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+      - name: runtimes
+        emptyDir: {}

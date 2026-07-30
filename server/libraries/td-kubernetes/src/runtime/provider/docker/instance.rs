@@ -5,14 +5,18 @@
 use std::sync::Arc;
 
 use indicatif::MultiProgress;
+use std::path::PathBuf;
+
 use kube::Config;
 
+use crate::client::registry::InstanceSettings;
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::pod::list_pods;
 use crate::kube::context::KubeContext;
-use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
+use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{parse_from_configmaps, read_family_configmaps};
+use crate::runtime::provider::docker::system_values_for;
 use crate::runtime::provider::{ClusterProvider, Instance};
 use crate::runtime::reporting::build_kube_client;
 
@@ -26,11 +30,15 @@ use crate::runtime::instance::manifest::MANIFEST_FILE;
 
 pub struct DockerInstance {
     config: Config,
+    folder: PathBuf,
 }
 
 impl DockerInstance {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn new(config: Config, folder: impl Into<PathBuf>) -> Self {
+        Self {
+            config,
+            folder: folder.into(),
+        }
     }
 
     async fn kube_context(&self) -> CommandResult<KubeContext> {
@@ -55,7 +63,16 @@ impl Instance for DockerInstance {
             .into());
         };
         let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
-        let system = SystemValues::default();
+        let instance_name = self
+            .folder
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.to_owned())
+            .unwrap_or_default();
+        let mut system =
+            system_values_for(&instance_name, &self.config.default_namespace, &self.folder)?;
+        let settings = InstanceSettings::load(&instance_name)?;
+        apply_ports(&mut system, &settings.ports);
         start_workload(&context, ClusterProvider::Docker, &system, &profile, multi).await
     }
 

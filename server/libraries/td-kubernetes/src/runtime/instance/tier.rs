@@ -9,7 +9,8 @@ pub enum Tier {
     Init,
     Regular,
     Ephemeral,
-    Service,
+    Endpoint,
+    Server,
     Setup,
 }
 
@@ -19,7 +20,8 @@ impl Tier {
             Tier::Init => "init",
             Tier::Regular => "regular",
             Tier::Ephemeral => "ephemeral",
-            Tier::Service => "service",
+            Tier::Endpoint => "endpoint",
+            Tier::Server => "server",
             Tier::Setup => "setup",
         }
     }
@@ -29,7 +31,8 @@ impl Tier {
             "init" => Some(Tier::Init),
             "regular" => Some(Tier::Regular),
             "ephemeral" => Some(Tier::Ephemeral),
-            "service" => Some(Tier::Service),
+            "endpoint" => Some(Tier::Endpoint),
+            "server" => Some(Tier::Server),
             "setup" => Some(Tier::Setup),
             _ => None,
         }

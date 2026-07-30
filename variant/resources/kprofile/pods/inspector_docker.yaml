@@ -39,17 +39,8 @@ spec:
       terminationGracePeriodSeconds: 60
       dnsPolicy: ClusterFirst
       securityContext:
-        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-        # Pending decision: not yet enabled.
-        # Run the container under a fixed user and group by setting runAsUser
-        # and runAsGroup, only after confirming the image's own user and
-        # filesystem ownership; set runAsGroup together with runAsUser. fsGroup
-        # is only relevant once the pod has volumes.
-        # runAsUser: 1000
-        # runAsGroup: 1000
-        # fsGroup: 1000
       containers:
         - name: inspector
           image: busybox:1.37
@@ -75,10 +66,6 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-            # Pending decision: not yet enabled.
-        # Mount the root filesystem read-only, only after mapping every writable
-        # path to an emptyDir mount.
-        # readOnlyRootFilesystem: true
           volumeMounts:
             - name: pods
               mountPath: /tabsdata/pods

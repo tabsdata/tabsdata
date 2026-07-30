@@ -61,23 +61,54 @@ spec:
           terminationGracePeriodSeconds: 60
           dnsPolicy: ClusterFirst
           securityContext:
-            runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
+          initContainers:
+            - name: venvloader
+              image: python:3.12-slim
+              imagePullPolicy: IfNotPresent
+              command: ["bash"]
+              args:
+                - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.sh
+                - --output
+                - ${{system:tdk_runtimes_root}}
+                - --storage-config
+                - $(CONTAINER_ROOT)/tabsdata/config-storage/apiserver.storage.yaml
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "4Gi"
+                  ephemeral-storage: "16Gi"
+              env:
+                - name: CONTAINER_ROOT
+                  value: ""
+              envFrom:
+                - secretRef:
+                    name: td-app-apiserver-secret-config-apiserver.storage.yaml
+                  prefix: SECRETS__
+              volumeMounts:
+                - name: assets
+                  mountPath: /tabsdata/assets
+                  readOnly: true
+                - name: config-storage
+                  mountPath: /tabsdata/config-storage
+                  readOnly: true
+                - name: runtimes
+                  mountPath: ${{system:tdk_runtimes_root}}
           containers:
             - name: 1000-cron-publisher
-              image: tabsdata/kube/tabsdata:2.0.0
+              image: ubuntu:24.04
               imagePullPolicy: IfNotPresent
-              command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/bin/td_run_cron_trigger"]
+              command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_cron_trigger"]
               args:
                 - --shared-dir
-                - /tabsdata/shared
+                - $(CONTAINER_ROOT)/tabsdata/shared
                 - --work-dir
-                - /tabsdata/work
+                - $(CONTAINER_ROOT)/tabsdata/work
                 - --log-config
-                - /tabsdata/config/tabsdata.log.py.yaml
+                - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
                 - --liveness
-                - /tabsdata/liveness/liveness
+                - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
                 - --responder-url
                 - env:SECRET__TD_RESPONDER_URL
                 - --responder-method
@@ -85,7 +116,7 @@ spec:
                 - --responder-authorization
                 - env:SECRET__TD_RESPONDER_AUTHORIZATION
                 - --journal-file
-                - /tabsdata/shared/journal/journal.yaml
+                - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
                 - --trigger-url
                 - env:SECRET__TD_TRIGGER_URL
                 - --trigger-method
@@ -114,10 +145,13 @@ spec:
                 - name: POD_TABSDATA_INSTANCE
                   value: "${{system:tdk_instance_name}}"
                 - name: TD_LOG_CONFIG
-                  value: "/tabsdata/config/tabsdata.log.rs.yaml"
+                  value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
               volumeMounts:
                 - name: config-cron-publisher
                   mountPath: /tabsdata/config
+                  readOnly: true
+                - name: runtimes
+                  mountPath: ${{system:tdk_runtimes_root}}
                   readOnly: true
                 - name: shared
                   mountPath: /tabsdata/shared
@@ -129,5 +163,20 @@ spec:
                       name: td-app-tabsdata-config-tabsdata.log.py.yaml
                   - configMap:
                       name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+            - name: assets
+              projected:
+                defaultMode: 493
+                sources:
+                  - configMap:
+                      name: td-app-venvloader-asset-venvloader.sh
+                  - configMap:
+                      name: td-app-venvloader-asset-venvloader.py
+            - name: config-storage
+              projected:
+                sources:
+                  - configMap:
+                      name: td-app-apiserver-config-apiserver.storage.yaml
+            - name: runtimes
+              emptyDir: {}
             - name: shared
               emptyDir: {}
