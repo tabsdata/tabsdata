@@ -94,6 +94,47 @@ impl ClusterProvider {
         }
     }
 
+    pub fn supported(self) -> bool {
+        match self {
+            Self::Kminus | Self::Docker | Self::Fargate => true,
+            Self::Eks => false,
+        }
+    }
+
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::Kminus => "a development kminus cluster",
+            Self::Docker => "the Kubernetes cluster bundled with Docker Desktop on macOS/Windows",
+            Self::Eks => "AWS EKS",
+            Self::Fargate => "AWS EKS-on-Fargate",
+        }
+    }
+
+    pub fn supported_providers() -> impl Iterator<Item = Self> {
+        <Self as clap::ValueEnum>::value_variants()
+            .iter()
+            .copied()
+            .filter(|provider| provider.supported())
+    }
+
+    pub fn supported_descriptions() -> String {
+        Self::supported_providers()
+            .map(|provider| format!("'{}' for {}", provider.as_str(), provider.description()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    pub fn supported_names() -> String {
+        let names: Vec<String> = Self::supported_providers()
+            .map(|provider| format!("'{}'", provider.as_str()))
+            .collect();
+        match names.split_last() {
+            None => String::new(),
+            Some((last, [])) => last.clone(),
+            Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        }
+    }
+
     pub(crate) fn location(self) -> Location {
         match self {
             Self::Kminus | Self::Docker => Location::Local,
@@ -464,6 +505,9 @@ pub async fn provider_for(
     let provider = cluster
         .provider
         .ok_or(ProviderError::ProviderArgumentRequired)?;
+    if !provider.supported() {
+        return Err(ProviderError::NotImplemented(provider.as_str().to_owned()).into());
+    }
     match provider {
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;

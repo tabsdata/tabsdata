@@ -4,6 +4,7 @@
 
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use clap_derive::Args;
 use td_common::status::ExitStatus::GeneralError;
@@ -20,6 +21,13 @@ use crate::core::system::file::copy_tree;
 use crate::runtime::instance::profile::{RenderedConfigmap, load_profile, resolve_kprofile_path};
 use crate::runtime::provider::ClusterProvider;
 
+static PROVIDER_LONG_HELP: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "Provider whose templates are initialized: {}.",
+        ClusterProvider::supported_names()
+    )
+});
+
 #[derive(Debug, Clone, Args)]
 pub struct GetArguments {
     #[arg(
@@ -27,7 +35,7 @@ pub struct GetArguments {
         name = "provider",
         required = true,
         value_enum,
-        long_help = "Provider whose templates are initialized: 'kminus', 'docker', 'eks' or 'fargate'."
+        long_help = PROVIDER_LONG_HELP.as_str()
     )]
     pub provider: ClusterProvider,
 

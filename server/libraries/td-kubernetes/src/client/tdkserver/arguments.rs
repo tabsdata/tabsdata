@@ -3,6 +3,7 @@
 //
 
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use clap::Parser;
 use clap_derive::{Args, Subcommand};
@@ -30,6 +31,15 @@ use crate::client::tdkserver::commands::session::unpin::UnpinArguments;
 // use crate::client::tdkserver::commands::session::SessionCommands;
 // use crate::client::tdkserver::commands::template::TemplateCommands;
 use crate::runtime::provider::ClusterProvider;
+
+static PROVIDER_LONG_HELP: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "Provider of the cluster: {}. \
+         When unspecified, the value from the active tabsdata session is taken; \
+         when no active tabsdata session is set, this argument is required.",
+        ClusterProvider::supported_descriptions()
+    )
+});
 
 #[derive(Debug, Clone, Parser)]
 #[command(
@@ -143,13 +153,7 @@ pub struct ClusterArguments {
         required = false,
         value_enum,
         display_order = 20,
-        long_help = "Provider of the cluster: \
-                     'kminus' for a development kminus cluster, \
-                     'docker' for the Kubernetes cluster bundled with Docker Desktop on macOS/Windows, \
-                     'eks' for AWS EKS, \
-                     'fargate' for AWS EKS-on-Fargate. \
-                     When unspecified, the value from the active tabsdata session is taken; \
-                     when no active tabsdata session is set, this argument is required."
+        long_help = PROVIDER_LONG_HELP.as_str()
     )]
     pub provider: Option<ClusterProvider>,
 

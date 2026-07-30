@@ -125,6 +125,13 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     let provider = cluster.provider.unwrap_or(DEFAULT_PROVIDER);
     cluster.provider = Some(provider);
 
+    if !provider.supported() {
+        return abort_with(
+            NoAction,
+            ProviderError::NotImplemented(provider.as_str().to_owned()),
+        );
+    }
+
     if provider != ClusterProvider::Kminus && loglevel.is_some() {
         return abort_with(
             NoAction,

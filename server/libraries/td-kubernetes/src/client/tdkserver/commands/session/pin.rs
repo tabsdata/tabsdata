@@ -7,9 +7,10 @@ use std::path::PathBuf;
 use clap_derive::Args;
 use td_common::status::ExitStatus::NoAction;
 
+use crate::base::error::provider::ProviderError;
 use crate::client::session::pin::{PinContext, Pins};
 use crate::client::tdkserver::arguments::GlobalArguments;
-use crate::core::system::exit::{CommandResult, abort};
+use crate::core::system::exit::{CommandResult, abort, abort_with};
 use crate::cwarn;
 use crate::runtime::provider::ClusterProvider;
 
@@ -108,6 +109,15 @@ pub async fn command_pin(arguments: PinArguments, _globals: &GlobalArguments) ->
         details,
         autoconfirm,
     } = arguments;
+
+    if let Some(provider) = provider
+        && !provider.supported()
+    {
+        return abort_with(
+            NoAction,
+            ProviderError::NotImplemented(provider.as_str().to_owned()),
+        );
+    }
 
     let values = Pins {
         instance,
