@@ -603,8 +603,27 @@ def _entry_option_argv(entry: dict) -> list[str]:
     return argv
 
 
+def _store_dir_argv(tool: str, store_dir_opt: str | None) -> list[str]:
+    """``--sys-dir DIR`` / ``--domain-dir DIR`` for a child invocation. A manifest
+    run reads the store the caller named, so its children have to write to that
+    same one rather than falling back to the default."""
+    if not store_dir_opt:
+        return []
+    flag = (
+        constants.OPT_DOMAIN_DIR
+        if tool == constants.DOM_TOOL
+        else constants.OPT_SYS_DIR
+    )
+    return [flag, store_dir_opt]
+
+
 def _entry_steps(
-    tool: str, entry: dict, *, force: bool, ports: list[int] | None
+    tool: str,
+    entry: dict,
+    *,
+    force: bool,
+    ports: list[int] | None,
+    store_dir_opt: str | None = None,
 ) -> list[list[str]]:
     """The child invocation(s) that reproduce a manifest entry: a system is one
     ``create``; a domain is a ``create`` -> ``create-model`` -> ``create-data``
@@ -613,6 +632,7 @@ def _entry_steps(
         raise TdxError(f"manifest entry has no 'name': {entry}")
     name = str(entry["name"])
     f = [constants.OPT_FORCE_SHORT] if force else []
+    d = _store_dir_argv(tool, store_dir_opt)
     if tool == constants.SYS_TOOL:
         p = [constants.OPT_PORTS, ",".join(str(x) for x in ports)] if ports else []
         return [
@@ -623,6 +643,7 @@ def _entry_steps(
                 constants.OPT_SYS,
                 name,
                 *p,
+                *d,
                 *f,
                 *_entry_option_argv(entry),
             ]
@@ -634,6 +655,7 @@ def _entry_steps(
             str(entry["sys"]),
             constants.OPT_DOMAIN,
             name,
+            *d,
             *f,
         ]
     ]
@@ -644,6 +666,7 @@ def _entry_steps(
             name,
             constants.OPT_MODEL,
             str(entry["model"]),
+            *d,
             *f,
         ])
     if entry.get("size"):
@@ -653,6 +676,7 @@ def _entry_steps(
             name,
             constants.OPT_SIZE,
             str(entry["size"]),
+            *d,
             *f,
         ])
     return steps
@@ -722,7 +746,9 @@ def _create_from_manifest(tool: str, rest: list[str]) -> int:
     build_failed = 0
     for entry, pool in zip(to_create, pools):
         try:
-            steps = _entry_steps(tool, entry, force=a.force, ports=pool)
+            steps = _entry_steps(
+                tool, entry, force=a.force, ports=pool, store_dir_opt=store_dir_opt
+            )
         except (TdxError, KeyError) as exc:
             console.bad(f"  ! {entry.get('name', entry)}: {exc}")
             build_failed += 1
@@ -742,7 +768,12 @@ def _create_from_manifest(tool: str, rest: list[str]) -> int:
                 batch.run(
                     tool,
                     constants.V_DESTROY,
-                    [selector, ",".join(omitted), constants.OPT_FORCE_SHORT],
+                    [
+                        selector,
+                        ",".join(omitted),
+                        *_store_dir_argv(tool, store_dir_opt),
+                        constants.OPT_FORCE_SHORT,
+                    ],
                 )
                 or rc
             )

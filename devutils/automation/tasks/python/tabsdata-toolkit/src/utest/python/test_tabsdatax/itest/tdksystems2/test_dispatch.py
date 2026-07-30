@@ -78,6 +78,35 @@ def test_unknown_verb_raises():
         _sys(["frobnicate"])
 
 
+def test_manifest_children_are_pointed_at_the_callers_store():
+    """A manifest run reads the store the caller named, so the children it spawns
+    have to write to that one — otherwise create lands in the default store while
+    --sync reconciles against the named one."""
+    sys_steps = tdx._entry_steps(
+        "tdx-system",
+        {"name": "s1", "type": "mysql"},
+        force=False,
+        ports=None,
+        store_dir_opt="/tmp/store",
+    )
+    assert ["--sys-dir", "/tmp/store"] == sys_steps[0][-2:]
+    dom_steps = tdx._entry_steps(
+        "tdx-domain",
+        {"name": "d1", "sys": "s1", "model": "employees", "size": 1},
+        force=False,
+        ports=None,
+        store_dir_opt="/tmp/dstore",
+    )
+    assert len(dom_steps) == 3  # create -> create-model -> create-data
+    for step in dom_steps:
+        assert "--domain-dir" in step and "/tmp/dstore" in step
+    # and nothing is added when the caller did not name one
+    plain = tdx._entry_steps(
+        "tdx-system", {"name": "s1", "type": "mysql"}, force=False, ports=None
+    )
+    assert "--sys-dir" not in plain[0]
+
+
 def test_full_lifecycle(stores, faked):
     assert _sys(["create", "--type", "mysql", "--sys", "sys1"]) == 0
     sdoc = descriptor.load(store.system_path("sys1"))
