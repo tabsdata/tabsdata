@@ -78,6 +78,8 @@ spec:
           value: "${{system:tdk_instance_name}}"
         - name: TD_LOG_CONFIG
           value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+        - name: UV_DEFAULT_INDEX
+          value: "${{system:tdk_uv_default_index}}"
         - name: UV_EXTRA_INDEX_URL
           value: "${{system:tdk_uv_extra_index_url}}"
         - name: UV_INDEX_STRATEGY

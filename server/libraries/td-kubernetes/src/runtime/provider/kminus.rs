@@ -17,6 +17,7 @@ use std::time::Duration;
 use td_common::os::{EXE_SUFFIX, name_program};
 use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
+use td_error::TdError;
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::{info, warn};
 
@@ -435,10 +436,11 @@ impl Provider for KminusProvider {
     }
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
-        match UvMode::from_environment() {
+        match UvMode::from_environment().map_err(TdError::from)? {
             UvMode::Local => self.create_runtimes_as_proc(reporter).await,
             UvMode::Devpi => self.create_runtimes_as_pod(reporter).await,
             UvMode::Pypi => self.create_runtimes_as_pod(reporter).await,
+            UvMode::Unset => self.create_runtimes_as_pod(reporter).await,
         }
     }
 
@@ -950,8 +952,9 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         exe_suffix,
         instance_name,
         database_host: Some(DATABASE_HOST_LOOPBACK.to_owned()),
-        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(false)),
-        uv_index_strategy: Some(SystemValues::uv_index_strategy()),
+        uv_default_index: Some(SystemValues::uv_default_index()?),
+        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(false)?),
+        uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
         ..SystemValues::default()
     })
 }

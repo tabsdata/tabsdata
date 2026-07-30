@@ -71,6 +71,8 @@ pub enum SystemKey {
     ConnectionSecretName,
     #[strum(serialize = "tdk_cron_schedule")]
     CronSchedule,
+    #[strum(serialize = "tdk_uv_default_index")]
+    UvDefaultIndex,
     #[strum(serialize = "tdk_uv_extra_index_url")]
     UvExtraIndexUrl,
     #[strum(serialize = "tdk_uv_index_strategy")]
@@ -118,6 +120,7 @@ pub struct SystemValues {
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
     pub cron_schedule: Option<String>,
+    pub uv_default_index: Option<String>,
     pub uv_extra_index_url: Option<String>,
     pub uv_index_strategy: Option<String>,
 }
@@ -148,19 +151,22 @@ impl SystemValues {
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),
             SystemKey::CronSchedule => self.cron_schedule.as_deref(),
+            SystemKey::UvDefaultIndex => self.uv_default_index.as_deref(),
             SystemKey::UvExtraIndexUrl => self.uv_extra_index_url.as_deref(),
             SystemKey::UvIndexStrategy => self.uv_index_strategy.as_deref(),
         }
     }
 
-    pub fn uv_extra_index_url(container: bool) -> String {
-        UvMode::from_environment()
-            .extra_index_url(container)
-            .to_owned()
+    pub fn uv_default_index() -> Result<String, TdError> {
+        Ok(uv_mode()?.default_index())
     }
 
-    pub fn uv_index_strategy() -> String {
-        UvMode::from_environment().index_strategy().to_owned()
+    pub fn uv_extra_index_url(container: bool) -> Result<String, TdError> {
+        Ok(uv_mode()?.extra_index_url(container))
+    }
+
+    pub fn uv_index_strategy() -> Result<String, TdError> {
+        Ok(uv_mode()?.index_strategy())
     }
 
     pub fn apply_worker_settings(&mut self, settings: &WorkerSettings) {
@@ -168,6 +174,10 @@ impl SystemValues {
         self.connection_configmap_name = settings.connection_configmap_name.clone();
         self.connection_secret_name = settings.connection_secret_name.clone();
     }
+}
+
+fn uv_mode() -> Result<UvMode, TdError> {
+    UvMode::from_environment().map_err(TdError::from)
 }
 
 pub(crate) fn resolve(leaf: &str, values: &SystemValues) -> Result<String, TdError> {

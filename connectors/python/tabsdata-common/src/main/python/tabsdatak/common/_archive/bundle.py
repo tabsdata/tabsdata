@@ -148,10 +148,10 @@ def read_function_source(archive: Path) -> tuple[str, str] | None:
 
     The manifest is a `JsonSerde` envelope whose `spec.func` is
     `"<module>:<qualname>"`; the module resolves against `user_code/`,
-    the same way the runner resolves it at execution time. This is the source that actually runs — unlike
-    the registered snippet, which is display metadata and may have been
-    trimmed. Returns `None` when the bundle carries no manifest, no
-    `func`, or no matching module.
+    the same way the runner resolves it at execution time. This is the source
+    that actually runs — unlike the registered snippet, which is display
+    metadata and may have been trimmed. Returns `None` when the bundle carries
+    no manifest, no `func`, or no matching module.
     """
     manifest: str | None = None
     modules: dict[str, str] = {}

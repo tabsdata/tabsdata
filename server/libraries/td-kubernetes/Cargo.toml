@@ -111,6 +111,7 @@ walkdir = { workspace = true }
 [dev-dependencies]
 td-kubernetes = { workspace = true, features = ["td-test"] }
 http = { workspace = true }
+serial_test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

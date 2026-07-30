@@ -6,7 +6,7 @@ agate==1.14.2
 agate-dbf==0.2.4
 agate-excel==0.4.2
 agate-sql==0.7.3
-annotated-doc==0.0.4
+annotated-doc==0.0.5
 annotated-types==0.8.0
 ansi2html==1.9.2
 anyio==4.14.2

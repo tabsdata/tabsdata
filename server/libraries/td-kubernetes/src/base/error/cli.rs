@@ -12,6 +12,16 @@ pub enum CliError {
     InvalidCommandLine = 1,
     #[error("Invalid shell command.")]
     InvalidShellCommand = 2,
+    #[error(
+        "Environment variable '{variable}' has unsupported value '{value}'; \
+         supported values are: {supported}. Leave it unset to resolve packages from the \
+         uv index environment variables, or from the uv defaults if those are unset too."
+    )]
+    UvModeUnsupported {
+        variable: String,
+        value: String,
+        supported: String,
+    } = 3,
     #[error("Folder '{0}' does not exist.")]
     FolderNotFound(String) = 1000,
     #[error("Folder '{0}' is not empty.")]

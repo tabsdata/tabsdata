@@ -7,14 +7,21 @@ use std::time::Duration;
 use clap_derive::ValueEnum;
 use const_format::concatcp;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+
+use crate::base::error::cli::CliError;
 
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
 pub const ENV_TD_KUBE_UV_MODE: &str = "TD_KUBE_UV_MODE";
 
+pub const ENV_UV_DEFAULT_INDEX: &str = "UV_DEFAULT_INDEX";
+pub const ENV_UV_EXTRA_INDEX_URL: &str = "UV_EXTRA_INDEX_URL";
+pub const ENV_UV_INDEX_STRATEGY: &str = "UV_INDEX_STRATEGY";
+
 pub const DEVPI_INDEX_URL_HOST: &str = "http://localhost:14159/tabsdata/td/+simple/";
 pub const DEVPI_INDEX_URL_CONTAINER: &str =
     "http://host.docker.internal:14159/tabsdata/td/+simple/";
+
+pub const PYPI_INDEX_URL: &str = "https://pypi.org/simple/";
 
 pub const UV_INDEX_STRATEGY_BEST_MATCH: &str = "unsafe-best-match";
 pub const UV_INDEX_STRATEGY_FIRST_INDEX: &str = "first-index";
@@ -28,23 +35,22 @@ pub enum UvMode {
     Local,
     Devpi,
     Pypi,
+    Unset,
 }
 
 impl UvMode {
-    pub fn from_environment() -> Self {
+    pub fn from_environment() -> Result<Self, CliError> {
         let value = std::env::var(ENV_TD_KUBE_UV_MODE).unwrap_or_default();
         match value.trim().to_lowercase().as_str() {
-            UV_MODE_LOCAL => Self::Local,
-            UV_MODE_DEVPI => Self::Devpi,
-            UV_MODE_PYPI => Self::Pypi,
-            "" => Self::Pypi,
-            other => {
-                warn!(
-                    "Unknown value '{other}' for {ENV_TD_KUBE_UV_MODE}; \
-                     falling back to '{UV_MODE_PYPI}'."
-                );
-                Self::Pypi
-            }
+            UV_MODE_LOCAL => Ok(Self::Local),
+            UV_MODE_DEVPI => Ok(Self::Devpi),
+            UV_MODE_PYPI => Ok(Self::Pypi),
+            "" => Ok(Self::Unset),
+            other => Err(CliError::UvModeUnsupported {
+                variable: ENV_TD_KUBE_UV_MODE.to_owned(),
+                value: other.to_owned(),
+                supported: [UV_MODE_LOCAL, UV_MODE_DEVPI, UV_MODE_PYPI].join(", "),
+            }),
         }
     }
 
@@ -53,25 +59,50 @@ impl UvMode {
             Self::Local => UV_MODE_LOCAL,
             Self::Devpi => UV_MODE_DEVPI,
             Self::Pypi => UV_MODE_PYPI,
+            Self::Unset => "",
         }
     }
 
-    pub fn extra_index_url(self, container: bool) -> &'static str {
+    pub fn default_index(self) -> String {
         match self {
-            Self::Local => "",
-            Self::Devpi if container => DEVPI_INDEX_URL_CONTAINER,
-            Self::Devpi => DEVPI_INDEX_URL_HOST,
-            Self::Pypi => "",
+            Self::Local | Self::Devpi | Self::Pypi => String::new(),
+            Self::Unset => {
+                environment_index(ENV_UV_DEFAULT_INDEX).unwrap_or_else(|| PYPI_INDEX_URL.to_owned())
+            }
         }
     }
 
-    pub fn index_strategy(self) -> &'static str {
+    pub fn extra_index_url(self, container: bool) -> String {
         match self {
-            Self::Local => UV_INDEX_STRATEGY_FIRST_INDEX,
-            Self::Devpi => UV_INDEX_STRATEGY_BEST_MATCH,
-            Self::Pypi => UV_INDEX_STRATEGY_FIRST_INDEX,
+            Self::Local => String::new(),
+            Self::Devpi if container => DEVPI_INDEX_URL_CONTAINER.to_owned(),
+            Self::Devpi => DEVPI_INDEX_URL_HOST.to_owned(),
+            Self::Pypi => String::new(),
+            Self::Unset => environment_index(ENV_UV_EXTRA_INDEX_URL).unwrap_or_default(),
         }
     }
+
+    pub fn index_strategy(self) -> String {
+        match self {
+            Self::Local => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
+            Self::Devpi => UV_INDEX_STRATEGY_BEST_MATCH.to_owned(),
+            Self::Pypi => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
+            Self::Unset => match environment_index(ENV_UV_INDEX_STRATEGY) {
+                Some(strategy) => strategy,
+                None if environment_index(ENV_UV_EXTRA_INDEX_URL).is_some() => {
+                    UV_INDEX_STRATEGY_BEST_MATCH.to_owned()
+                }
+                None => String::new(),
+            },
+        }
+    }
+}
+
+fn environment_index(variable: &str) -> Option<String> {
+    std::env::var(variable)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 pub const FOLDER_CLUSTER: &str = "cluster";
@@ -243,3 +274,6 @@ impl LogLevel {
 }
 
 pub const DEFAULT_LOG_LEVEL: LogLevel = LogLevel::Debug;
+
+#[cfg(test)]
+mod tests;
