@@ -1,0 +1,9 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+title: Quickstart (AI)
+description: >-
+  The quickstart data and connections without the functions: a CSV of people
+  and a pair of filesystem connections, left for an AI agent to write the
+  publisher, transformer, and subscriber against.

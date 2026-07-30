@@ -2,8 +2,8 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-title: Quickstart
+title: Quickstart (developer)
 description: >-
   A filesystem publisher, transformer, and subscriber over a CSV of people:
   publish persons.csv, add a full_name column while dropping age,
-  then write the result as JSON Lines.
+  then write the result as JSON Lines. The functions come written.

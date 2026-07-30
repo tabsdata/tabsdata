@@ -1,7 +1,7 @@
 # Copyright 2026 Tabsdata Inc.
 
-Tabsdata Quickstart
-===================
+Tabsdata Quickstart (developer)
+===============================
 
 A small end-to-end dataflow over a CSV of people: publish it as a table,
 reshape it, and write the result out as JSON Lines. Three functions -- a
@@ -39,8 +39,8 @@ then trigger the publisher -- Tabsdata runs the transformer and subscriber
 automatically. Run these commands from the directory that contains qs-example/.
 
   # Create the project and make it the default for the commands below
-  tdk project create --name quickstart
-  tdk pin set --proj quickstart
+  tdk project create --name quickstart-dev
+  tdk pin set --proj quickstart-dev
 
   # Collections: a source (input), a transformation (dataprod), a destination (output)
   tdk collection create --name input --group sources --conn-file qs-example/conn-input.yaml
