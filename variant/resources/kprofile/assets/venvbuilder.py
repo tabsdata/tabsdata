@@ -290,7 +290,9 @@ def setup_workspace(arguments: argparse.Namespace) -> dict[str, str]:
     }
     os.makedirs(tools_bin_home, exist_ok=True)
     os.environ["UV_PYTHON_INSTALL_DIR"] = uv_python_home
-    os.environ[ENV_UV_LINK_MODE] = os.environ.get(ENV_UV_LINK_MODE, UV_LINK_MODE_COPY)
+    os.environ[ENV_UV_LINK_MODE] = (
+        os.environ.get(ENV_UV_LINK_MODE, "").strip() or UV_LINK_MODE_COPY
+    )
     print(f">> Using Python {arguments.python_version} in work folder {work}")
     print(f">> Using uv home {uv_home}")
     print(f">> Using uv link mode {os.environ[ENV_UV_LINK_MODE]}")

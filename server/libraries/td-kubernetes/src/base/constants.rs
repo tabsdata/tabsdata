@@ -116,7 +116,7 @@ impl UvMode {
                 None if environment_index(ENV_UV_EXTRA_INDEX_URL).is_some() => {
                     UV_INDEX_STRATEGY_BEST_MATCH.to_owned()
                 }
-                None => String::new(),
+                None => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
             },
         }
     }
