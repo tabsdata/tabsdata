@@ -1,4 +1,6 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+google-cloud-bigquery==3.40.1
 sqlalchemy-bigquery==1.17.0

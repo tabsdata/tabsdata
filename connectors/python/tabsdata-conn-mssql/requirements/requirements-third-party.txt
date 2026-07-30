@@ -1,3 +1,5 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+pyodbc==5.3.0
