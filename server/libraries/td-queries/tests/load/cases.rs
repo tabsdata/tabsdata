@@ -133,6 +133,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Live,
         status: Status::Implemented,
     },
+    LoadCase {
+        name: "live::fetch_one_for_update",
+        covers: &["Live::fetch_one_for_update"],
+        family: Family::Live,
+        status: Status::Implemented,
+    },
     // generic/current.rs — `_current` view reads.
     LoadCase {
         name: "current::fetch_one",

@@ -383,6 +383,17 @@ async fn time_chain_queries(
                 .await?
         );
     }
+    {
+        let mut tx = db.begin().await.expect("write transaction");
+        let _ = timed!(
+            out,
+            "live::fetch_one_for_update",
+            tx.as_mut_conn()
+                .live()
+                .fetch_one_for_update::<PhysicalFunctionRunDB>(&h.fr_ids[0])
+                .await?
+        );
+    }
     let fvids_one = [h.producer_function_version_id.clone()];
     let _ = timed!(
         out,

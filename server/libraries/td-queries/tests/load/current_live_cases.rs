@@ -165,6 +165,22 @@ async fn load_live_fetch_optional_for_update(db: TdPool) -> Result<(), TdError> 
 }
 
 #[td_test::test(db)]
+async fn load_live_fetch_one_for_update(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    // `FOR UPDATE` needs the read-write transaction; the read pool is read-only.
+    let mut tx = db.begin().await.expect("write transaction");
+    let t = Instant::now();
+    let row = tx
+        .as_mut_conn()
+        .live()
+        .fetch_one_for_update::<PhysicalFunctionRunDB>(&h.fr_ids[0])
+        .await?;
+    record("live::fetch_one_for_update", &db, profile, t, 1, seeded);
+    let _ = row;
+    Ok(())
+}
+
+#[td_test::test(db)]
 async fn load_sessions_purge(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
