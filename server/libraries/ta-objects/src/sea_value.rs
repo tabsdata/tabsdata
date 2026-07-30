@@ -16,6 +16,16 @@ pub trait SeaValue: std::fmt::Debug + Send + Sync {
     /// to resolve the right database column at runtime.
     fn as_type_id(&self) -> std::any::TypeId;
 
+    /// True for `Option<T>` values — the column may hold SQL NULL.
+    fn is_nullable(&self) -> bool {
+        false
+    }
+
+    /// True when this value renders as SQL NULL (an `Option::None`).
+    fn is_sql_null(&self) -> bool {
+        false
+    }
+
     /// Format this value for user display in error messages.
     ///
     /// Strings are single-quoted, `None` variants render as `"null"`.
@@ -49,6 +59,14 @@ impl<T: SeaValue> SeaValue for &T {
     fn as_type_id(&self) -> std::any::TypeId {
         (**self).as_type_id()
     }
+
+    fn is_nullable(&self) -> bool {
+        (**self).is_nullable()
+    }
+
+    fn is_sql_null(&self) -> bool {
+        (**self).is_sql_null()
+    }
 }
 
 /// Opt-in trait for types that can appear as `Option<T>` in query conditions.
@@ -76,5 +94,13 @@ impl<T: NullableSeaValue + 'static> SeaValue for Option<T> {
 
     fn as_type_id(&self) -> std::any::TypeId {
         std::any::TypeId::of::<Self>()
+    }
+
+    fn is_nullable(&self) -> bool {
+        true
+    }
+
+    fn is_sql_null(&self) -> bool {
+        self.is_none()
     }
 }

@@ -2,8 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use super::params::ListQueryParams;
+use super::params::{ListError, ListQueryParams};
 use crate::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder};
+use std::any::type_name;
+use std::collections::HashSet;
 use ta_objects::ListDto;
 use td_error::TdError;
 
@@ -16,6 +18,19 @@ pub fn build_list_response<T>(
 where
     T: ListDto,
 {
+    // A repeated cursor value means the pagination column is not unique here:
+    // the next page would silently skip the rest of the tie group.
+    let mut seen = HashSet::with_capacity(result.len());
+    for row in &result {
+        if !seen.insert(row.pagination_value()) {
+            return Err(ListError::NonUniquePaginationKey(
+                type_name::<T>().to_string(),
+                row.pagination_value(),
+            )
+            .into());
+        }
+    }
+
     let has_more = result.len() > query_params.len;
     if has_more {
         result.truncate(query_params.len);
@@ -308,6 +323,19 @@ mod tests {
         assert_eq!(*resp.data[0].a, "a");
         assert_eq!(*resp.data[1].a, "b");
         assert_eq!(*resp.data[2].a, "c");
+    }
+
+    #[test]
+    fn test_duplicate_cursor_value_is_an_error() {
+        let list_params = ListParamsBuilder::default().len(10usize).build().unwrap();
+        let query_params = make_query_params(10);
+        let result = vec![make_dto("a"), make_dto("b"), make_dto("a")];
+        let err = build_list_response(&list_params, &query_params, result).unwrap_err();
+        let err = err.domain_err::<crate::list::params::ListError>();
+        assert!(matches!(
+            err,
+            crate::list::params::ListError::NonUniquePaginationKey(_, _)
+        ));
     }
 
     // -----------------------------------------------------------------------

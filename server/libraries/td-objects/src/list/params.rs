@@ -7,7 +7,9 @@ use crate::parse::IDENTIFIER_PATTERN;
 use crate::types::basic::LikeFilter;
 use itertools::Itertools;
 use regex::Regex;
-use sea_query::{Condition, Expr, ExprTrait, Iden, LikeExpr, Order as SeaOrder, SelectStatement};
+use sea_query::{
+    Condition, Expr, ExprTrait, Iden, LikeExpr, NullOrdering, Order as SeaOrder, SelectStatement,
+};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use ta_objects::{ListDto, SeaValue, TypedColumns};
@@ -37,6 +39,12 @@ pub enum ListError {
     UndefinedIsFilter(String) = 9,
     #[error("Error parsing value: {0}")]
     InvalidFieldValue(#[source] TdError) = 10,
+    #[error("Empty value for filter '{0}'; use '{0}:is:null' to match NULLs")]
+    EmptyFilterValue(String) = 11,
+    #[error(
+        "Pagination column of {0} is not unique within the listing (cursor value '{1}' repeats); paging would silently skip rows"
+    )]
+    NonUniquePaginationKey(String, String) = 5000,
 }
 
 /// Parse a typed column value string for this order's field.
@@ -47,6 +55,19 @@ fn parse_val<D: ListDto>(
     D::parse_filter_value(field, value)
         .map_err(ListError::InvalidFieldValue)?
         .ok_or(ListError::UndefinedField(field.to_string()))
+}
+
+/// Parse a filter-condition value, rejecting the empty NULL marker — in a
+/// comparison it would build a never-true `col = NULL` predicate.
+fn parse_cond_val<D: ListDto>(
+    field: &<<D as ListDto>::Dao as TypedColumns>::Iden,
+    value: &str,
+) -> Result<Box<dyn SeaValue>, ListError> {
+    let val = parse_val::<D>(field, value)?;
+    if val.is_sql_null() {
+        return Err(ListError::EmptyFilterValue(field.to_string()));
+    }
+    Ok(val)
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +164,9 @@ pub enum IsFilter {
 /// - **Next**:     `(order_col > val) OR (order_col = val AND id_col > id)`
 /// - **Previous**: `(order_col < val) OR (order_col = val AND id_col < id)`
 ///   (the caller must also invert ORDER BY and reverse the result set)
+///
+/// `id_col` is the DTO's `pagination_by` field: it MUST be unique within the
+/// listing, or page boundaries inside a tie group silently skip rows.
 #[derive(Debug)]
 pub enum Pagination<D>
 where
@@ -185,16 +209,41 @@ where
 
         // Cursor-based pagination: select rows "past" the current cursor (order_val, id_val).
         // "Past" means greater-than when sorting ascending, less-than when descending.
-        let past = match (forward, natural_order.sea_order()) {
-            (true, SeaOrder::Asc) | (false, SeaOrder::Desc) => Expr::gt,
-            _ => Expr::lt,
-        };
+        let towards_end = matches!(
+            (forward, natural_order.sea_order()),
+            (true, SeaOrder::Asc) | (false, SeaOrder::Desc)
+        );
+        let past = if towards_end { Expr::gt } else { Expr::lt };
+        let past_id = past(Expr::col(*id_col), Expr::val(id_val.as_sea_value()));
 
-        // WHERE order_col > order_val
-        //    OR (order_col = order_val AND id_col > id_val)
-        past(Expr::col(*order_col), Expr::val(order_val.as_sea_value())).or(Expr::col(*order_col)
-            .eq(Expr::val(order_val.as_sea_value()))
-            .and(past(Expr::col(*id_col), Expr::val(id_val.as_sea_value()))))
+        // Same column: the composite degenerates to the single comparison.
+        if order_col.to_string() == id_col.to_string() {
+            return past_id;
+        }
+
+        // NULLs sort as the largest values (see `apply_to`), a run plain
+        // comparisons never reach — walk it with IS NULL predicates.
+        if order_val.is_sql_null() {
+            let in_null_run = Expr::col(*order_col).is_null().and(past_id);
+            if towards_end {
+                in_null_run
+            } else {
+                in_null_run.or(Expr::col(*order_col).is_not_null())
+            }
+        } else {
+            // WHERE order_col > order_val
+            //    OR (order_col = order_val AND id_col > id_val)
+            let composite = past(Expr::col(*order_col), Expr::val(order_val.as_sea_value())).or(
+                Expr::col(*order_col)
+                    .eq(Expr::val(order_val.as_sea_value()))
+                    .and(past_id),
+            );
+            if order_val.is_nullable() && towards_end {
+                composite.or(Expr::col(*order_col).is_null())
+            } else {
+                composite
+            }
+        }
     }
 
     /// Emit the ORDER BY columns for this pagination direction.
@@ -210,12 +259,15 @@ where
                 order_col, id_col, ..
             } => (order_col, id_col, false),
         };
-        let (primary_dir, id_dir) = if forward {
-            (natural_order.sea_order(), SeaOrder::Asc)
+        let dir = if forward {
+            natural_order.sea_order()
         } else {
-            (natural_order.invert().sea_order(), SeaOrder::Desc)
+            natural_order.invert().sea_order()
         };
-        vec![(*order_col, primary_dir), (*id_col, id_dir)]
+        if order_col.to_string() == id_col.to_string() {
+            return vec![(*id_col, dir)];
+        }
+        vec![(*order_col, dir.clone()), (*id_col, dir)]
     }
 }
 
@@ -253,16 +305,33 @@ where
         }
 
         // --- ORDER BY ---
+        // Client-chosen order columns may be nullable: pin NULLs to the large
+        // end (the Postgres default) — `Pagination::to_expr` relies on it.
+        let pin_nulls = |dir: &SeaOrder| match dir {
+            SeaOrder::Asc => NullOrdering::Last,
+            _ => NullOrdering::First,
+        };
         match &self.pagination {
             Some(pag) => {
-                for (col, dir) in pag.order_exprs(effective_order) {
+                let mut exprs = pag.order_exprs(effective_order).into_iter();
+                if let Some((col, dir)) = exprs.next() {
+                    if self.order.is_some() {
+                        let nulls = pin_nulls(&dir);
+                        base.order_by_with_nulls(col, dir, nulls);
+                    } else {
+                        base.order_by(col, dir);
+                    }
+                }
+                for (col, dir) in exprs {
                     base.order_by(col, dir);
                 }
             }
             None => {
                 if let Some(o) = &self.order {
                     let (id_col, _) = D::pagination_col();
-                    base.order_by(*o.field(), o.sea_order());
+                    let dir = o.sea_order();
+                    let nulls = pin_nulls(&dir);
+                    base.order_by_with_nulls(*o.field(), dir, nulls);
                     base.order_by(id_col, self.natural_order.sea_order());
                 } else {
                     let (id_col, id_dir) = D::pagination_col();
@@ -330,42 +399,42 @@ pub(crate) fn parse_condition<D: ListDto>(
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).eq(parse_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).eq(parse_cond_val::<D>(&col, value)?.as_sea_value()),
             )
         }
         NE => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).ne(parse_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).ne(parse_cond_val::<D>(&col, value)?.as_sea_value()),
             )
         }
         GT => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).gt(parse_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).gt(parse_cond_val::<D>(&col, value)?.as_sea_value()),
             )
         }
         GE => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).gte(parse_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).gte(parse_cond_val::<D>(&col, value)?.as_sea_value()),
             )
         }
         LT => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).lt(parse_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).lt(parse_cond_val::<D>(&col, value)?.as_sea_value()),
             )
         }
         LE => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).lte(parse_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).lte(parse_cond_val::<D>(&col, value)?.as_sea_value()),
             )
         }
         LK => {
@@ -386,8 +455,8 @@ pub(crate) fn parse_condition<D: ListDto>(
             (
                 col,
                 Expr::col(col).between(
-                    parse_val::<D>(&col, parts[0])?.as_sea_value(),
-                    parse_val::<D>(&col, parts[1])?.as_sea_value(),
+                    parse_cond_val::<D>(&col, parts[0])?.as_sea_value(),
+                    parse_cond_val::<D>(&col, parts[1])?.as_sea_value(),
                 ),
             )
         }
@@ -725,6 +794,179 @@ mod tests {
         assert!(res.is_ok());
         let qp = res.unwrap();
         assert!(qp.pagination.is_some());
+    }
+
+    #[ta_objects::Dao]
+    struct RunDao {
+        id: StringType,
+        name: StringType,
+    }
+
+    #[ta_objects::Dto]
+    #[dto(list(on = RunDao))]
+    struct RunDto {
+        #[dto(list(pagination_by = "+", filter))]
+        id: StringType,
+        #[dto(list(filter, order_by))]
+        name: StringType,
+    }
+
+    fn run_sql(list_params: &ListParams) -> String {
+        use sea_query::{PostgresQueryBuilder, Query};
+
+        let qp: ListQueryParams<RunDto> = list_params.try_into().unwrap();
+        qp.apply_to(
+            Query::select()
+                .column(<RunDao as TypedColumns>::Iden::Id)
+                .from(<RunDao as TypedColumns>::Iden::Table)
+                .to_owned(),
+        )
+        .to_string(PostgresQueryBuilder)
+    }
+
+    #[test]
+    fn test_cursor_sql_default_order_next() {
+        let list_params = ListParamsBuilder::default()
+            .len(2usize)
+            .next("i2".to_string())
+            .pagination_id("i2".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(
+            run_sql(&list_params),
+            r#"SELECT "id" FROM "rundao" WHERE "id" > 'i2' ORDER BY "id" ASC LIMIT 3"#
+        );
+    }
+
+    #[test]
+    fn test_cursor_sql_desc_order_next() {
+        // The id tiebreak follows the primary direction.
+        let list_params = ListParamsBuilder::default()
+            .len(2usize)
+            .order_by("name-".to_string())
+            .next("n2".to_string())
+            .pagination_id("i2".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(
+            run_sql(&list_params),
+            r#"SELECT "id" FROM "rundao" WHERE "name" < 'n2' OR ("name" = 'n2' AND "id" < 'i2') ORDER BY "name" DESC NULLS FIRST, "id" DESC LIMIT 3"#
+        );
+    }
+
+    #[test]
+    fn test_cursor_sql_desc_order_previous() {
+        // Previous inverts both columns.
+        let list_params = ListParamsBuilder::default()
+            .len(2usize)
+            .order_by("name-".to_string())
+            .previous("n2".to_string())
+            .pagination_id("i2".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(
+            run_sql(&list_params),
+            r#"SELECT "id" FROM "rundao" WHERE "name" > 'n2' OR ("name" = 'n2' AND "id" > 'i2') ORDER BY "name" ASC NULLS LAST, "id" ASC LIMIT 3"#
+        );
+    }
+
+    #[ta_objects::Dao]
+    struct NullableDao {
+        id: StringType,
+        ended: Option<StringType>,
+    }
+
+    #[ta_objects::Dto]
+    #[dto(list(on = NullableDao))]
+    struct NullableDto {
+        #[dto(list(pagination_by = "+", filter))]
+        id: StringType,
+        #[dto(list(filter, order_by))]
+        ended: Option<StringType>,
+    }
+
+    fn nullable_sql(list_params: &ListParams) -> String {
+        use sea_query::{PostgresQueryBuilder, Query};
+
+        let qp: ListQueryParams<NullableDto> = list_params.try_into().unwrap();
+        qp.apply_to(
+            Query::select()
+                .column(<NullableDao as TypedColumns>::Iden::Id)
+                .from(<NullableDao as TypedColumns>::Iden::Table)
+                .to_owned(),
+        )
+        .to_string(PostgresQueryBuilder)
+    }
+
+    #[test]
+    fn test_empty_filter_value_on_nullable_column_rejected() {
+        let err = parse_condition::<NullableDto>("ended:eq:").unwrap_err();
+        let err = err.domain_err::<ListError>();
+        assert!(matches!(err, ListError::EmptyFilterValue(_)));
+    }
+
+    #[test]
+    fn test_nullable_order_next_reaches_null_run() {
+        // A non-NULL forward cursor must still reach the NULL run at the tail.
+        let list_params = ListParamsBuilder::default()
+            .len(2usize)
+            .order_by("ended".to_string())
+            .next("e2".to_string())
+            .pagination_id("i2".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(
+            nullable_sql(&list_params),
+            r#"SELECT "id" FROM "nullabledao" WHERE "ended" > 'e2' OR ("ended" = 'e2' AND "id" > 'i2') OR "ended" IS NULL ORDER BY "ended" ASC NULLS LAST, "id" ASC LIMIT 3"#
+        );
+    }
+
+    #[test]
+    fn test_nullable_order_next_inside_null_run() {
+        // An empty order value is the NULL cursor: walk the run by id alone.
+        let list_params = ListParamsBuilder::default()
+            .len(2usize)
+            .order_by("ended".to_string())
+            .next("".to_string())
+            .pagination_id("i2".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(
+            nullable_sql(&list_params),
+            r#"SELECT "id" FROM "nullabledao" WHERE "ended" IS NULL AND "id" > 'i2' ORDER BY "ended" ASC NULLS LAST, "id" ASC LIMIT 3"#
+        );
+    }
+
+    #[test]
+    fn test_nullable_order_previous_from_null_run() {
+        // Backing out of the NULL run re-enters the non-NULL rows.
+        let list_params = ListParamsBuilder::default()
+            .len(2usize)
+            .order_by("ended".to_string())
+            .previous("".to_string())
+            .pagination_id("i2".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(
+            nullable_sql(&list_params),
+            r#"SELECT "id" FROM "nullabledao" WHERE ("ended" IS NULL AND "id" < 'i2') OR "ended" IS NOT NULL ORDER BY "ended" DESC NULLS FIRST, "id" DESC LIMIT 3"#
+        );
+    }
+
+    #[test]
+    fn test_nullable_order_desc_next_leaves_null_run() {
+        // Descending puts NULLs first; a non-NULL cursor never re-enters them.
+        let list_params = ListParamsBuilder::default()
+            .len(2usize)
+            .order_by("ended-".to_string())
+            .next("e2".to_string())
+            .pagination_id("i2".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(
+            nullable_sql(&list_params),
+            r#"SELECT "id" FROM "nullabledao" WHERE "ended" < 'e2' OR ("ended" = 'e2' AND "id" < 'i2') ORDER BY "ended" DESC NULLS FIRST, "id" DESC LIMIT 3"#
+        );
     }
 
     #[test]

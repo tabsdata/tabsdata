@@ -70,7 +70,7 @@ mod definitions {
     #[dto(list(on = TransactionDBWithStatus))]
     #[inherits(TransactionDBWithStatus)]
     pub struct Transaction {
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(pagination_by = "+", filter, filter_like))]
         pub id: TransactionId,
         #[dto(list(filter))]
         pub project_id: ProjectId,
@@ -78,7 +78,7 @@ mod definitions {
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like))]
         pub execution_id: ExecutionId,
-        #[dto(list(pagination_by = "+", filter))]
+        #[dto(list(filter, order_by))]
         pub triggered_on: TriggeredOn,
         #[dto(list(filter, order_by))]
         pub started_on: Option<AtTime>,

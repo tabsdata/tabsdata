@@ -155,7 +155,7 @@ mod definitions {
         #[exclude]
         pub recursion_options: Option<Json<RecursionOptions>>, // Added in v3
 
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(pagination_by = "+", filter, filter_like))]
         pub id: ExecutionId,
         #[dto(list(filter))]
         pub project_id: ProjectId,
@@ -163,7 +163,7 @@ mod definitions {
         pub name: Option<ExecutionName>,
         #[dto(list(filter, order_by))]
         pub collection_id: CollectionId,
-        #[dto(list(pagination_by = "+", filter))]
+        #[dto(list(filter, order_by))]
         pub triggered_on: TriggeredOn,
 
         #[dto(list(filter, filter_like, order_by))]

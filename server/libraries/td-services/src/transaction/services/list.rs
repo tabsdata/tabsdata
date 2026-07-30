@@ -126,19 +126,123 @@ mod tests {
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, transactions.len());
-        // All transactions share `triggered_on` (the pagination key), so their
-        // relative order is unspecified — assert membership, not position. (A
-        // plan-stable total order would need the list query to append the unique
-        // id as a final tiebreak; tracked as a follow-up.)
-        for seeded in &transactions {
-            assert!(
-                response.data.iter().any(|t| t.id == seeded.id),
-                "transaction {:?} missing from list",
-                seeded.id
-            );
-        }
+        // Shared `triggered_on`: paging by id makes seed order the response order.
+        let expected: Vec<_> = transactions.iter().map(|t| t.id.clone()).collect();
+        let listed: Vec<_> = response.data.iter().map(|t| t.id.clone()).collect();
+        assert_eq!(listed, expected);
         for t in &response.data {
             assert_eq!(t.triggered_on, transactions[0].triggered_on);
+        }
+        Ok(())
+    }
+
+    /// A page walk returns exactly the full read — tie groups, NULL runs and
+    /// descending order included.
+    #[td_test::test(db)]
+    async fn test_list_transaction_page_walk_matches_full_read(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister::builder()
+            .try_name("walker")?
+            .try_description("page-walk seed")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .try_runtime_values("mock runtime values")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        let function_version = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let transaction_key = TransactionKey::try_from("ANY")?;
+        let mut seeded = 0;
+        for _ in 0..4 {
+            let execution = db.scoped(p.id).seed().execution(&function_version).await?;
+            for _ in 0..6 {
+                db.scoped(p.id)
+                    .seed()
+                    .transaction(&execution, &transaction_key)
+                    .await?;
+                seeded += 1;
+            }
+        }
+
+        let service = TransactionListService::with_defaults(db.clone()).service();
+        let list = |params: ListParams| {
+            let service = service.clone();
+            async move {
+                service
+                    .raw_oneshot(
+                        RequestContext::with(AccessTokenId::default(), UserId::admin())
+                            .list((), params),
+                    )
+                    .await
+            }
+        };
+        let walk = |order_by: Option<String>, len: usize| async move {
+            let mut walked = Vec::new();
+            let mut next = None;
+            let mut pagination_id = None;
+            loop {
+                let page = list(ListParams {
+                    len,
+                    order_by: order_by.clone(),
+                    next: next.clone(),
+                    pagination_id: pagination_id.clone(),
+                    ..ListParams::default()
+                })
+                .await?;
+                walked.extend(page.data.iter().map(|t| t.id.clone()));
+                match (page.next, page.next_pagination_id) {
+                    (Some(n), Some(pid)) => {
+                        next = Some(n);
+                        pagination_id = Some(pid);
+                    }
+                    _ => break,
+                }
+                assert!(walked.len() <= seeded, "walk must terminate");
+            }
+            Ok::<_, TdError>(walked)
+        };
+
+        // `started_on` is NULL on every seeded transaction: ordering by it
+        // walks one NULL run, round-tripping the `next: ""` cursor.
+        for order_by in [
+            None,
+            Some("triggered_on".to_string()),
+            Some("started_on".to_string()),
+        ] {
+            let full = list(ListParams {
+                len: 1000,
+                order_by: order_by.clone(),
+                ..ListParams::default()
+            })
+            .await?;
+            assert_eq!(full.len, seeded);
+            let full_ids: Vec<_> = full.data.iter().map(|t| t.id.clone()).collect();
+
+            for len in [1usize, 5, 7] {
+                let walked = walk(order_by.clone(), len).await?;
+                assert_eq!(walked, full_ids, "order_by={order_by:?} len={len}");
+            }
+
+            // Descending walks the exact reverse.
+            let desc = order_by
+                .clone()
+                .map(|o| format!("{o}-"))
+                .or(Some("id-".to_string()));
+            let walked = walk(desc, 5).await?;
+            let reversed: Vec<_> = full_ids.iter().rev().cloned().collect();
+            assert_eq!(walked, reversed, "descending walk of order_by={order_by:?}");
         }
         Ok(())
     }

@@ -249,7 +249,7 @@ mod definitions {
     #[ta_objects::Dto]
     #[dto(list(on = FunctionRunDBWithNames))]
     pub struct FunctionRun {
-        #[dto(list(filter, order_by))]
+        #[dto(list(pagination_by = "+", filter))]
         pub id: LogicalFunctionRunId,
         #[dto(list(filter))]
         pub project_id: ProjectId,
@@ -264,7 +264,7 @@ mod definitions {
         #[dto(list(filter, order_by))]
         pub function_version_id: FunctionVersionId,
         pub trigger: Trigger,
-        #[dto(list(pagination_by = "+", filter))]
+        #[dto(list(filter, order_by))]
         pub triggered_on: TriggeredOn,
         #[dto(list(filter, order_by))]
         pub triggered_by_id: UserId,

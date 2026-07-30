@@ -142,17 +142,10 @@ mod tests {
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, transactions.len());
-        // All transactions share `triggered_on` (the pagination key), so their
-        // relative order is unspecified — assert membership, not position. (A
-        // plan-stable total order would need the list query to append the unique
-        // id as a final tiebreak; tracked as a follow-up.)
-        for seeded in &transactions {
-            assert!(
-                response.data.iter().any(|t| t.id == seeded.id),
-                "transaction {:?} missing from synchrotron list",
-                seeded.id
-            );
-        }
+        // Shared `triggered_on`: paging by id makes seed order the response order.
+        let expected: Vec<_> = transactions.iter().map(|t| t.id.clone()).collect();
+        let listed: Vec<_> = response.data.iter().map(|t| t.id.clone()).collect();
+        assert_eq!(listed, expected);
         for t in &response.data {
             assert_eq!(t.triggered_on, transactions[0].triggered_on);
         }

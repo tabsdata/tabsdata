@@ -243,7 +243,8 @@ fn gen_list_query(
     let pag_field = pagination_field.ok_or_else(|| {
         syn::Error::new_spanned(
             ident,
-            "#[dto(list(on = ...))] requires exactly one pagination_by field",
+            "#[dto(list(on = ...))] requires exactly one pagination_by field \
+             naming a column unique within the listing",
         )
     })?;
 

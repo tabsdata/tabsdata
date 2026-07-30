@@ -12,13 +12,13 @@ mod definitions {
     #[ta_objects::Dto]
     #[dto(list(on = TransactionDBWithStatus))]
     pub struct SynchrotronResponse {
-        #[dto(list(filter, filter_like))]
+        #[dto(list(pagination_by = "+", filter, filter_like))]
         pub id: TransactionId,
         #[dto(list(filter))]
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like))]
         pub execution_id: ExecutionId,
-        #[dto(list(pagination_by = "+", filter))]
+        #[dto(list(filter, order_by))]
         pub triggered_on: TriggeredOn,
         #[dto(list(filter))]
         pub triggered_by_id: UserId,

@@ -265,7 +265,7 @@ class Collection:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.function_in_collection_list(
                 collection_name=self.name,
                 request_filter=filter,
@@ -338,7 +338,7 @@ class Collection:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.table_list(
                 collection_name=self.name,
                 at=at,
@@ -613,7 +613,7 @@ class Collection:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.function_list_patches(
                 self.name,
                 function_name,
@@ -1413,7 +1413,7 @@ class Function:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.function_list_history(
                 self.collection.name,
                 self.name,
@@ -2007,7 +2007,7 @@ class Role:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.role_permission_list(
                 self.name,
                 request_filter=filter,
@@ -2051,7 +2051,7 @@ class Role:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.role_user_list(
                 self.name,
                 request_filter=filter,
@@ -2764,7 +2764,7 @@ class Table:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.dataversion_list(
                 self.collection.name,
                 self.name,
@@ -3736,7 +3736,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.collection_list(
                 request_filter=filter,
                 order_by=order_by,
@@ -3978,7 +3978,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.execution_list(
                 request_filter=filter,
                 order_by=order_by,
@@ -4166,7 +4166,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.function_list_runs(
                 request_filter=filter,
                 order_by=order_by,
@@ -4462,7 +4462,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.group_list(
                 request_filter=filter,
                 order_by=order_by,
@@ -4767,7 +4767,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.role_list(
                 request_filter=filter,
                 order_by=order_by,
@@ -4861,7 +4861,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.project_list(
                 request_filter=filter,
                 order_by=order_by,
@@ -5143,7 +5143,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.transaction_list(
                 request_filter=filter,
                 order_by=order_by,
@@ -5302,7 +5302,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.users_list(
                 request_filter=filter,
                 order_by=order_by,
@@ -5405,7 +5405,7 @@ class TabsdataServer:
         first_page = True
         next_pagination_id = None
         next_step = None
-        while first_page or (next_pagination_id and next_step):
+        while first_page or (next_pagination_id is not None and next_step is not None):
             response = self.connection.workers_list(
                 request_filter=filter,
                 order_by=order_by,
