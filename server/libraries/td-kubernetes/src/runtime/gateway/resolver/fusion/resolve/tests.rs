@@ -337,9 +337,27 @@ fn literal_quoted_numeric_init_coerces_to_number() {
 }
 
 #[test]
-fn non_string_init_scalar_is_structure_mismatch() {
+fn literal_bare_numeric_init_stays_a_number() {
     let template = "count: ${{literal:n}}\n";
     let init = "count: 7\n";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(value["count"], Value::Number(7.into()));
+}
+
+#[test]
+fn literal_bare_boolean_init_stays_a_boolean() {
+    let template = "enabled: ${{literal:flag}}\n";
+    let init = "enabled: true\n";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(value["enabled"], Value::Bool(true));
+}
+
+#[test]
+fn non_scalar_init_value_is_structure_mismatch() {
+    let template = "count: ${{literal:n}}\n";
+    let init = "count:\n  nested: 7\n";
     let error = resolve_error(template, init);
     assert!(matches!(error, ResolverError::StructureMismatch { .. }));
 }

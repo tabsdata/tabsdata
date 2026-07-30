@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -207,6 +208,7 @@ impl ResolveSession<'_> {
         let resolver = resolver_for(&placeholder.kind, &displayed_path)?;
         let kind = resolver.kind();
         let init_text = scalar_text(init, &displayed_path)?;
+        let init_text = init_text.as_deref();
 
         match kind.behavior() {
             Substitution::Fixed => {
@@ -249,6 +251,7 @@ impl ResolveSession<'_> {
             }
         }
         let init_text = scalar_text(init, &displayed_path)?;
+        let init_text = init_text.as_deref();
         self.expect_verbatim_text(template_text, init_text, &displayed_path)?;
 
         let rendered = splice_placeholders(template_text, |_, placeholder| {
@@ -456,9 +459,11 @@ fn placeholder_identity(placeholder: &Placeholder) -> String {
     }
 }
 
-fn scalar_text<'a>(value: &'a Value, path: &str) -> Result<Option<&'a str>, ResolverError> {
+fn scalar_text<'a>(value: &'a Value, path: &str) -> Result<Option<Cow<'a, str>>, ResolverError> {
     match value {
-        Value::String(text) => Ok(Some(text.as_str())),
+        Value::String(text) => Ok(Some(Cow::Borrowed(text.as_str()))),
+        Value::Number(number) => Ok(Some(Cow::Owned(number.to_string()))),
+        Value::Bool(boolean) => Ok(Some(Cow::Owned(boolean.to_string()))),
         Value::Null => Ok(None),
         _ => Err(ResolverError::StructureMismatch {
             path: path.to_owned(),
