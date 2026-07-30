@@ -93,8 +93,6 @@ spec:
           mountPath: ${{system:tdk_runtimes_root}}
         - name: shuttle
           mountPath: /tabsdata/shuttle
-        - name: storage
-          mountPath: /tabsdata/repository/storage
       volumes:
       - name: assets
         projected:
@@ -113,7 +111,3 @@ spec:
         emptyDir: {}
       - name: shuttle
         emptyDir: {}
-      - name: storage
-        hostPath:
-          path: "${{system:tdk_storage_path}}"
-          type: DirectoryOrCreate

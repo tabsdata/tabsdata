@@ -38,6 +38,38 @@ fn normalize_schema_extension_leaves_plain_configs_untouched() {
 }
 
 #[test]
+fn schema_sidecar_takes_the_provider_token_last_in_the_stem() {
+    let parsed = normalize_schema_name(parse_filename(&normalize_schema_extension(
+        "apiserver.storage.schema_fargate.yaml",
+    )));
+    assert_eq!(parsed.name, "apiserver.storage");
+    assert_eq!(parsed.tokens, vec!["fargate".to_owned()]);
+    assert_eq!(parsed.extensions, ".yamls");
+    assert_eq!(parsed.render_stripped(), "apiserver.storage.yamls");
+}
+
+#[test]
+fn schema_sidecar_without_provider_token_keeps_its_group() {
+    let parsed = normalize_schema_name(parse_filename(&normalize_schema_extension(
+        "apiserver.storage.schema.yaml",
+    )));
+    assert_eq!(parsed.tokens, Vec::<String>::new());
+    assert_eq!(parsed.extensions, ".storage.yamls");
+    assert_eq!(parsed.render_stripped(), "apiserver.storage.yamls");
+}
+
+#[test]
+fn schema_sidecar_groups_with_its_provider_variant() {
+    let base = normalize_schema_name(parse_filename(&normalize_schema_extension(
+        "apiserver.storage.schema.yaml",
+    )));
+    let variant = normalize_schema_name(parse_filename(&normalize_schema_extension(
+        "apiserver.storage.schema_fargate.yaml",
+    )));
+    assert_eq!(base.render_stripped(), variant.render_stripped());
+}
+
+#[test]
 fn is_valid_path_component_accepts_alphanumerics_dash_dot() {
     assert!(is_valid_path_component("foo"));
     assert!(is_valid_path_component("foo-bar"));

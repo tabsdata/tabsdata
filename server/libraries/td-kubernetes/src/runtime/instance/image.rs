@@ -32,8 +32,8 @@ fn write_image(uv_home: &Path, image: &Path) -> Result<(), String> {
         std::fs::remove_file(image).map_err(|error| error.to_string())?;
     }
     let file = File::create(image).map_err(|error| error.to_string())?;
-    let mut encoder = zstd::Encoder::new(file, COMPRESSION_LEVEL)
-        .map_err(|error| error.to_string())?;
+    let mut encoder =
+        zstd::Encoder::new(file, COMPRESSION_LEVEL).map_err(|error| error.to_string())?;
     encoder
         .multithread(std::thread::available_parallelism().map_or(1, |count| count.get() as u32))
         .map_err(|error| error.to_string())?;

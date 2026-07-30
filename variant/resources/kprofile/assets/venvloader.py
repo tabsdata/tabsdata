@@ -7,13 +7,14 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
-import subprocess
 import sys
 import tarfile
 import time
 import urllib.parse
 from pathlib import Path
 
+import boto3
+import botocore.exceptions
 import yaml
 import zstandard
 
@@ -42,8 +43,6 @@ OPTION_SECRET_ACCESS_KEY = "aws_secret_access_key"
 ENV_REGION = "AWS_REGION"
 ENV_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
 ENV_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
-
-AWS_BINARY = "aws"
 
 ENV_UV_MODE = "TD_KUBE_UV_MODE"
 UV_MODE_LOCAL = "local"
@@ -141,21 +140,26 @@ def fetch_file(source: str, target: Path) -> None:
 
 
 def fetch_s3(source: str, target: Path, options: dict[str, str]) -> None:
-    if shutil.which(AWS_BINARY) is None:
-        die("Downloading the image", f"The {AWS_BINARY} command is not available")
-    environment = dict(os.environ)
-    for option, variable in (
-        (OPTION_REGION, ENV_REGION),
-        (OPTION_ACCESS_KEY_ID, ENV_ACCESS_KEY_ID),
-        (OPTION_SECRET_ACCESS_KEY, ENV_SECRET_ACCESS_KEY),
-    ):
-        if options.get(option):
-            environment[variable] = options[option]
-    command = [AWS_BINARY, "s3", "cp", source, str(target), "--only-show-errors"]
+    parsed = urllib.parse.urlparse(source)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+    if not bucket or not key:
+        die("Downloading the image", f"Malformed s3 uri: {source}")
+    client = boto3.client(
+        "s3",
+        region_name=options.get(OPTION_REGION) or os.environ.get(ENV_REGION),
+        aws_access_key_id=options.get(OPTION_ACCESS_KEY_ID)
+        or os.environ.get(ENV_ACCESS_KEY_ID),
+        aws_secret_access_key=options.get(OPTION_SECRET_ACCESS_KEY)
+        or os.environ.get(ENV_SECRET_ACCESS_KEY),
+    )
     trace(f"Downloading {source}")
-    outcome = subprocess.run(command, env=environment, check=False)
-    if outcome.returncode != 0:
-        die("Downloading the image", f"{AWS_BINARY} exited with {outcome.returncode}")
+    try:
+        client.download_file(bucket, key, str(target))
+    except botocore.exceptions.ClientError as error:
+        die("Downloading the image", f"{source}: {error}")
+    except botocore.exceptions.BotoCoreError as error:
+        die("Downloading the image", f"{source}: {error}")
 
 
 def fetch_image(source: str, target: Path, options: dict[str, str]) -> None:

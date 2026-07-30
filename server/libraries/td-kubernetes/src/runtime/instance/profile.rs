@@ -44,11 +44,27 @@ const CONFIGMAP_FAMILIES: &[&Family] = &[
 
 const SCHEMA_EXTENSION: &str = ".yamls";
 const SCHEMA_SOURCE_EXTENSION: &str = ".schema.yaml";
+const SCHEMA_SOURCE_MARKER: &str = ".schema";
+const SCHEMA_SOURCE_SUFFIX: &str = ".yaml";
 
 fn normalize_schema_extension(file_name: &str) -> String {
     match file_name.strip_suffix(SCHEMA_SOURCE_EXTENSION) {
         Some(stem) => format!("{stem}{SCHEMA_EXTENSION}"),
         None => file_name.to_owned(),
+    }
+}
+
+fn normalize_schema_name(parsed: ParsedFileName) -> ParsedFileName {
+    if parsed.extensions != SCHEMA_SOURCE_SUFFIX {
+        return parsed;
+    }
+    match parsed.name.strip_suffix(SCHEMA_SOURCE_MARKER) {
+        Some(stem) => ParsedFileName {
+            name: stem.to_owned(),
+            tokens: parsed.tokens,
+            extensions: SCHEMA_EXTENSION.to_owned(),
+        },
+        None => parsed,
     }
 }
 
@@ -169,7 +185,7 @@ fn load_configmap_folder(
         if !file_type.is_file() {
             continue;
         }
-        let parsed = parse_filename(&normalize_schema_extension(file_name));
+        let parsed = normalize_schema_name(parse_filename(&normalize_schema_extension(file_name)));
         let content = fs::read_to_string(&path).map_err(|error| {
             ProfileError::ReadFailed(path.display().to_string(), error.to_string())
         })?;
@@ -337,7 +353,4 @@ fn is_valid_path_component(name: &str) -> bool {
 pub mod bundle;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    mod profile;
-}
+mod tests;

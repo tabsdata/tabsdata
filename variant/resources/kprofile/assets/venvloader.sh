@@ -55,7 +55,7 @@ run() {
 LOADER="$(cd "$(dirname "$0")" && pwd)/venvloader.py"
 
 PYTHON_BINARY="python3"
-PIP_PACKAGES=("pyyaml" "zstandard")
+PIP_PACKAGES=("boto3" "pyyaml" "zstandard")
 
 show_usage() {
    echo "Usage: $0 [options]"

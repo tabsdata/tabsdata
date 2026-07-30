@@ -1,0 +1,9 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+directives:
+  - at: storage.mounts[*].uri
+    treat: secret
+  - at: storage.mounts[*].options.*
+    treat: secret

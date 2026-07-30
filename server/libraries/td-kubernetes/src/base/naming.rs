@@ -150,27 +150,4 @@ fn normalize_segment(segment: NameSegment, value: &str) -> Result<String, Naming
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn to_fn_pod_name_normalizes_logical_worker_id() {
-        // A logical worker id (`WKR<date>.<counter>`) has a `.` that a kube name
-        // segment forbids; the derived pod name drops it (and lowercases).
-        let name = to_fn_pod_name("function", "WKR20260713.0000000005").unwrap();
-        assert!(name.ends_with("wkr202607130000000005"), "{name}");
-        assert!(DNS_SUBDOMAIN_PATTERN.is_match(&name), "{name}");
-    }
-
-    #[test]
-    fn to_fn_pod_name_accepts_legacy_alnum_worker_id() {
-        // Legacy base32 ids are already alphanumeric and pass through unchanged.
-        let name = to_fn_pod_name("function", "06ABCDEF0123456789ABCDEFGH").unwrap();
-        assert!(name.ends_with("06abcdef0123456789abcdefgh"), "{name}");
-    }
-
-    #[test]
-    fn normalize_segment_rejects_all_separators() {
-        assert!(normalize_segment(NameSegment::WorkerId, "...").is_err());
-    }
-}
+mod tests;

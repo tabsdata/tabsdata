@@ -379,3 +379,38 @@ async fn deserialize_pod_entry_parses_valid_pod() {
     .expect("valid Pod");
     assert_eq!(pod.metadata.name.as_deref(), Some("apiserver"));
 }
+
+fn init_template(sequence: Option<&str>) -> String {
+    let label = match sequence {
+        Some(value) => format!("\n    {SEQUENCE_LABEL}: {value}"),
+        None => String::new(),
+    };
+    format!(
+        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: job\n  labels:\n    \
+         {TIER_LABEL}: init{label}\n"
+    )
+}
+
+#[test]
+fn init_sequence_accepts_quoted_and_bare_numbers() {
+    assert_eq!(
+        init_sequence("job", &init_template(Some("\"7\""))).expect("quoted"),
+        7
+    );
+    assert_eq!(
+        init_sequence("job", &init_template(Some("7"))).expect("bare"),
+        7
+    );
+}
+
+#[test]
+fn init_sequence_rejects_a_non_numeric_label() {
+    let error = init_sequence("job", &init_template(Some("\"first\""))).expect_err("must reject");
+    assert!(matches!(error, LauncherError::InvalidInitSequence { .. }));
+}
+
+#[test]
+fn init_sequence_requires_the_label() {
+    let error = init_sequence("job", &init_template(None)).expect_err("must reject");
+    assert!(matches!(error, LauncherError::MissingInitSequence { .. }));
+}
