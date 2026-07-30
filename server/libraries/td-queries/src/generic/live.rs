@@ -170,6 +170,25 @@ where
         Ok(r)
     }
 
+    /// Fetch the single row matching `condition` **for update** (`SELECT …
+    /// FOR UPDATE`, `LIMIT 1`), erroring if missing. The row lock serializes a
+    /// concurrent read-modify-write on the same row behind this one.
+    pub async fn fetch_one_for_update<D: LiveDao>(
+        self,
+        condition: impl SqlCondition,
+    ) -> Result<D, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let r = select_for_update::<D>(condition)?
+            .limit(1)
+            .build_query_as()
+            .fetch_one(self.executor)
+            .await
+            .map_err(SqlError::on_read::<D>)?;
+        Ok(r)
+    }
+
     /// Fetch every row matching `condition`. No state filter.
     pub async fn fetch_all<D: LiveDao>(
         self,

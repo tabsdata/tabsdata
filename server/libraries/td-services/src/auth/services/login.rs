@@ -2,8 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::AuthError;
 use crate::auth::layers::assert_current_password::assert_current_password;
+use crate::auth::layers::assert_login_user::assert_login_user;
 use crate::auth::layers::assert_no_password_change_required::assert_no_password_change_required;
 use crate::auth::layers::assert_user_enabled::assert_user_enabled;
 use crate::auth::layers::create_access_token::create_access_token;
@@ -12,7 +12,6 @@ use crate::auth::layers::set_session_expiration::set_session_expiration;
 use ta_services::factory::service_factory;
 use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
-use td_error::TdError;
 use td_objects::dxo::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
 use td_objects::dxo::user::UserDB;
 use td_objects::tower_service::with::{With, builder};
@@ -21,7 +20,6 @@ use td_queries::{By, insert};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
-use tower::util::MapErrLayer;
 
 #[service_factory(
     name = LoginService,
@@ -34,38 +32,34 @@ use tower::util::MapErrLayer;
 )]
 fn service() {
     layers!(
-        layers!(
-            // return this type of error for this layer group
-            MapErrLayer::new(|_err| TdError::from(AuthError::AuthenticationFailed)),
-            // setting request time (we don't have request context in this service)
-            from_fn(With::<AtTime>::default),
-            // extract info from request
-            from_fn(With::<Login>::extract::<UserName>),
-            from_fn(With::<Login>::extract::<Password>),
-            // get user from DB
-            from_fn(By::<UserName>::fetch_one::<UserDB>),
-            // check current password
-            from_fn(With::<UserDB>::extract::<PasswordHash>),
-            from_fn(assert_current_password::<Password>),
-        ),
-        layers!(
-            // check user is enabled
-            from_fn(assert_user_enabled),
-            // check password is not required to be changed
-            from_fn(assert_no_password_change_required),
-            // create user session
-            from_fn(With::<UserDB>::extract::<UserId>),
-            from_fn(builder::<SessionDB>),
-            from_fn(With::<UserId>::set::<SessionDBBuilder>),
-            from_fn(With::<AtTime>::set::<SessionDBBuilder>),
-            from_fn(set_session_expiration),
-            from_fn(With::<SessionDBBuilder>::build::<SessionDB>),
-            from_fn(insert::<SessionDB>),
-            // create access token
-            from_fn(create_access_token),
-            // invalidate sessions cache
-            from_fn(refresh_sessions),
-        )
+        // setting request time (we don't have request context in this service)
+        from_fn(With::<AtTime>::default),
+        // extract info from request
+        from_fn(With::<Login>::extract::<UserName>),
+        from_fn(With::<Login>::extract::<Password>),
+        // unknown user and wrong password both surface as AuthenticationFailed so
+        // neither can be distinguished; enabled/password-change errors below keep
+        // their own codes so a valid login can act on them
+        from_fn(By::<UserName>::fetch_optional::<UserDB>),
+        from_fn(assert_login_user),
+        from_fn(With::<UserDB>::extract::<PasswordHash>),
+        from_fn(assert_current_password::<Password>),
+        // check user is enabled
+        from_fn(assert_user_enabled),
+        // check password is not required to be changed
+        from_fn(assert_no_password_change_required),
+        // create user session
+        from_fn(With::<UserDB>::extract::<UserId>),
+        from_fn(builder::<SessionDB>),
+        from_fn(With::<UserId>::set::<SessionDBBuilder>),
+        from_fn(With::<AtTime>::set::<SessionDBBuilder>),
+        from_fn(set_session_expiration),
+        from_fn(With::<SessionDBBuilder>::build::<SessionDB>),
+        from_fn(insert::<SessionDB>),
+        // create access token
+        from_fn(create_access_token),
+        // invalidate sessions cache
+        from_fn(refresh_sessions),
     )
 }
 
@@ -88,6 +82,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_login(db: TdPool) {
         use crate::auth::layers::assert_current_password::assert_current_password;
+        use crate::auth::layers::assert_login_user::assert_login_user;
         use crate::auth::layers::assert_no_password_change_required::assert_no_password_change_required;
         use crate::auth::layers::assert_user_enabled::assert_user_enabled;
         use crate::auth::layers::create_access_token::create_access_token;
@@ -106,7 +101,8 @@ mod tests {
                 type_of_val(&With::<AtTime>::default),
                 type_of_val(&With::<Login>::extract::<UserName>),
                 type_of_val(&With::<Login>::extract::<Password>),
-                type_of_val(&By::<UserName>::fetch_one::<UserDB>),
+                type_of_val(&By::<UserName>::fetch_optional::<UserDB>),
+                type_of_val(&assert_login_user),
                 type_of_val(&With::<UserDB>::extract::<PasswordHash>),
                 type_of_val(&assert_current_password::<Password>),
                 type_of_val(&assert_user_enabled),

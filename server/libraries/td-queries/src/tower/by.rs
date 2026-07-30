@@ -56,6 +56,17 @@ where
         Ok(result)
     }
 
+    pub async fn fetch_one_for_update<D>(
+        mut conn: MutRef<SlotOf<D>>,
+        by: SqlRef<E>,
+    ) -> Result<D, TdError>
+    where
+        D: LiveDao,
+    {
+        let result = conn.live().fetch_one_for_update(&by).await?;
+        Ok(result)
+    }
+
     pub async fn fetch_optional<D>(
         mut conn: MutRef<SlotOf<D>>,
         by: SqlRef<E>,

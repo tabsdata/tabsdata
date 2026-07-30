@@ -2,6 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::auth::layers::assert_session_active::assert_session_active;
+use crate::auth::layers::assert_user_enabled::assert_user_enabled;
 use crate::auth::layers::create_access_token::create_access_token;
 use crate::auth::layers::decode_refresh_token::decode_refresh_token;
 use crate::auth::layers::refresh_sessions::refresh_sessions;
@@ -14,6 +16,7 @@ use td_objects::dxo::auth::{
     SessionDB, SessionDBBuilder, SessionNewTokenDB, SessionNewTokenDBBuilder, TokenResponseX,
 };
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::user::UserDB;
 use td_objects::tower_service::with::{With, builder};
 use td_objects::types::basic::{AccessTokenId, AtTime, RefreshToken, RefreshTokenId, UserId};
 use td_queries::By;
@@ -41,8 +44,13 @@ fn service() {
         // extract refresh token from request
         from_fn(With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
         from_fn(decode_refresh_token),
-        // find session ID by access token ID and refresh token ID
-        from_fn(By::<And![AccessTokenId, RefreshTokenId]>::fetch_one::<SessionDB>),
+        // find and lock the session by access token ID and refresh token ID; the
+        // lock serializes concurrent refreshes so the token can be redeemed once
+        from_fn(By::<And![AccessTokenId, RefreshTokenId]>::fetch_one_for_update::<SessionDB>),
+        from_fn(assert_session_active),
+        // reject a refresh from a disabled user
+        from_fn(By::<UserId>::fetch_one::<UserDB>),
+        from_fn(assert_user_enabled),
         // invalidate session entry with old access token id because of token renewal
         from_fn(With::<SessionNewTokenDBBuilder>::default),
         from_fn(With::<AtTime>::set::<SessionNewTokenDBBuilder>),
@@ -96,8 +104,14 @@ mod tests {
                 // extract refresh token from request
                 type_of_val(&With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
                 type_of_val(&decode_refresh_token),
-                // find session ID by access token ID and refresh token ID
-                type_of_val(&By::<And![AccessTokenId, RefreshTokenId]>::fetch_one::<SessionDB>),
+                // find and lock the session by access token ID and refresh token ID
+                type_of_val(
+                    &By::<And![AccessTokenId, RefreshTokenId]>::fetch_one_for_update::<SessionDB>,
+                ),
+                type_of_val(&assert_session_active),
+                // reject a refresh from a disabled user
+                type_of_val(&By::<UserId>::fetch_one::<UserDB>),
+                type_of_val(&assert_user_enabled),
                 // invalidate session entry with old access token id because of token renewal
                 type_of_val(&With::<SessionNewTokenDBBuilder>::default),
                 type_of_val(&With::<AtTime>::set::<SessionNewTokenDBBuilder>),
@@ -161,6 +175,36 @@ mod tests {
                 panic!("Session not found");
             }
         }
+
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_refresh_rejects_reused_token(db: TdPool) -> Result<(), TdError> {
+        let context = Context::with_defaults(db.clone());
+        let auth_services = AuthServices::build(&context);
+
+        let request = Login::builder()
+            .name(UserName::try_from("admin")?)
+            .password(Password::try_from("tabsdata")?)
+            .build()?;
+        let token_response = auth_services.login.service().raw_oneshot(request).await?;
+        let original_access_token_id = AccessTokenId::from(
+            decode_token(&context.jwt_config, &token_response.access_token)?.jti,
+        );
+        let refresh_token = token_response.refresh_token;
+
+        let request = RequestContext::with(original_access_token_id, UserId::admin())
+            .update((), refresh_token.clone());
+        auth_services.refresh.service().raw_oneshot(request).await?;
+
+        let request = RequestContext::with(original_access_token_id, UserId::admin())
+            .update((), refresh_token);
+        let reused = auth_services.refresh.service().raw_oneshot(request).await;
+        assert!(
+            reused.is_err(),
+            "a redeemed refresh token must not be reusable"
+        );
 
         Ok(())
     }

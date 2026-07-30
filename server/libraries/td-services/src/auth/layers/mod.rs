@@ -3,7 +3,9 @@
 //
 
 pub mod assert_current_password;
+pub mod assert_login_user;
 pub mod assert_no_password_change_required;
+pub mod assert_session_active;
 pub mod assert_user_enabled;
 pub mod cert_download;
 pub mod create_access_token;
