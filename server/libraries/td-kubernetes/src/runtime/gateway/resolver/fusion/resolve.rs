@@ -7,12 +7,13 @@ use std::collections::HashMap;
 
 use serde_yaml::Value;
 
+use crate::base::constants::YAML_NULL;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::{PlaceholderKind, Substitution};
 use crate::runtime::gateway::resolver::placeholder::{SystemValues, resolver_for};
 use crate::runtime::gateway::resolver::walker::{
-    PATH_SEPARATOR, Phase, Placeholder, ResolveContext, SecretEntry, contains_placeholder,
-    parse_bare_placeholder, placeholder_occurrences, splice_placeholders,
+    LiteralOrigin, PATH_SEPARATOR, Phase, Placeholder, ResolveContext, SecretEntry,
+    contains_placeholder, parse_bare_placeholder, placeholder_occurrences, splice_placeholders,
 };
 
 const CONFIG_LABEL: &str = "<config>";
@@ -28,6 +29,7 @@ pub(super) fn resolve_config_file(
     system: &SystemValues,
     auto: &HashMap<String, String>,
     vault: &RefCell<HashMap<String, String>>,
+    literals: &RefCell<HashMap<String, LiteralOrigin>>,
 ) -> Result<ResolveOutcome, ResolverError> {
     let template_value: Value =
         serde_yaml::from_str(template).map_err(|cause| ResolverError::ParseFailed {
@@ -44,6 +46,7 @@ pub(super) fn resolve_config_file(
         system,
         auto,
         vault,
+        literals,
         secrets: Vec::new(),
         values: HashMap::new(),
     };
@@ -68,6 +71,7 @@ struct ResolveSession<'a> {
     system: &'a SystemValues,
     auto: &'a HashMap<String, String>,
     vault: &'a RefCell<HashMap<String, String>>,
+    literals: &'a RefCell<HashMap<String, LiteralOrigin>>,
     secrets: Vec<SecretEntry>,
     values: HashMap<String, String>,
 }
@@ -290,6 +294,7 @@ impl ResolveSession<'_> {
             init_value: init_text,
             auto_value,
             vault: self.vault,
+            literals: self.literals,
             system: self.system,
         }
     }
@@ -471,6 +476,7 @@ fn scalar_value(rendered: String) -> Value {
     match rendered.as_str() {
         "true" => Value::Bool(true),
         "false" => Value::Bool(false),
+        YAML_NULL => Value::Null,
         _ => Value::String(rendered),
     }
 }

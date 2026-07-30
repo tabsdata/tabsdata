@@ -108,7 +108,14 @@ pub struct ResolveContext<'a> {
     pub init_value: Option<&'a str>,
     pub auto_value: Option<&'a str>,
     pub vault: &'a RefCell<HashMap<String, String>>,
+    pub literals: &'a RefCell<HashMap<String, LiteralOrigin>>,
     pub system: &'a super::SystemValues,
+}
+
+#[derive(Clone, Debug)]
+pub struct LiteralOrigin {
+    pub value: String,
+    pub path: String,
 }
 
 pub trait ConcreteResolver {

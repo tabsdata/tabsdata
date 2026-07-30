@@ -4,14 +4,19 @@
 
 database:
   apiserver:
-    url: postgres://${{system:tdk_database_host}}:${{system:tdk_database_port}}/postgres
+    postgres:
+      host: ${{system:tdk_database_host}}
+      port: ${{system:tdk_database_port}}
+      database: ${{system:tdk_database_name}}
+      username: td_apiserver
+      password: ${{secretAuto:postgres_password}}
+      ssl_mode: ${{system:tdk_database_ssl_mode}}
+      ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}
     schema: td_apiserver
-    username: td_apiserver
-    password: ${{secretAuto:postgres_password}}
-    min_connections: 5
-    max_connections: 50
-    acquire_timeout: 30
-    max_lifetime: 3600
-    idle_timeout: 60
-    test_before_acquire: true
-    log_level: off
+    pool:
+      min_connections: 5
+      max_connections: 50
+      acquire_timeout: 30
+      max_lifetime: 3600
+      idle_timeout: 60
+      test_before_acquire: true

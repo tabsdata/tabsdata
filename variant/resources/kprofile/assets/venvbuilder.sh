@@ -30,8 +30,9 @@ step() {
    local started
    started="$(now)"
    trace "BEGIN $description"
-   if ! "$@"; then
-      local status="$?"
+   local status=0
+   "$@" || status="$?"
+   if (( status != 0 )); then
       trace "FAILED $description after $(elapsed_since "$started" "$(now)")s"
       die "$description" "$status"
    fi
@@ -42,7 +43,12 @@ run() {
    local started
    started="$(now)"
    trace "RUN $*"
-   "$@"
+   local status=0
+   "$@" || status="$?"
+   if (( status != 0 )); then
+      trace "RAN in $(elapsed_since "$started" "$(now)")s with exit code $status: $(basename "$1")"
+      return "$status"
+   fi
    trace "RAN in $(elapsed_since "$started" "$(now)")s: $(basename "$1")"
 }
 

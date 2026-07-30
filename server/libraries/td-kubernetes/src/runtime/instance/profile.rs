@@ -264,29 +264,6 @@ async fn resolve_map(
     Ok(data)
 }
 
-pub async fn resolve_profile_entry(
-    loaded: &Profile,
-    resolver: &ConfigurationResolver,
-    family: &Family,
-    key: &str,
-) -> Result<String, ProfileError> {
-    let source = match family.folder {
-        f if f == KPROFILE_PODS_FAMILY.folder => &loaded.pods,
-        f if f == KPROFILE_CONFIGS_FAMILY.folder => &loaded.configs,
-        other => return Err(ProfileError::UnknownFamily(other.to_owned())),
-    };
-    let content = source
-        .get(key)
-        .ok_or_else(|| ProfileError::EntryMissing(family.folder.to_owned(), key.to_owned()))?;
-    resolver.resolve(content).await.map_err(|error| {
-        ProfileError::PlaceholderResolutionFailed(
-            family.folder.to_owned(),
-            key.to_owned(),
-            error.to_string(),
-        )
-    })
-}
-
 pub async fn read_family_configmaps(
     context: &KubeContext,
     family: &Family,

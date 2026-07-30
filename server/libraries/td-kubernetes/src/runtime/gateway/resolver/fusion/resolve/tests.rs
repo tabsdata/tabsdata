@@ -20,6 +20,7 @@ database_server:
         &system,
         &auto,
         &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
     )
     .expect("resolve");
 
@@ -63,9 +64,11 @@ database_server:
     let system = SystemValues::default();
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
-    let first_outcome = resolve_config_file(first, first, &system, &auto, &vault).expect("first");
+    let literals = RefCell::new(HashMap::new());
+    let first_outcome =
+        resolve_config_file(first, first, &system, &auto, &vault, &literals).expect("first");
     let second_outcome =
-        resolve_config_file(second, second, &system, &auto, &vault).expect("second");
+        resolve_config_file(second, second, &system, &auto, &vault, &literals).expect("second");
 
     let values: std::collections::BTreeSet<_> = first_outcome
         .secrets
@@ -82,6 +85,90 @@ database_server:
 }
 
 #[test]
+fn literal_same_category_reuses_value_across_configs() {
+    let first_template = "database:\n  host: ${{literal:dbhost}}\n";
+    let first_init = "database:\n  host: pg.internal\n";
+    let second_template = "dbmanager:\n  host: ${{literal:dbhost}}\n";
+    let second_init = "dbmanager:\n  host: ${{literal:dbhost}}\n";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let vault = RefCell::new(HashMap::new());
+    let literals = RefCell::new(HashMap::new());
+
+    let first = resolve_config_file(
+        first_template,
+        first_init,
+        &system,
+        &auto,
+        &vault,
+        &literals,
+    )
+    .expect("first");
+    let second = resolve_config_file(
+        second_template,
+        second_init,
+        &system,
+        &auto,
+        &vault,
+        &literals,
+    )
+    .expect("second");
+
+    assert!(
+        first.rendered.contains("pg.internal"),
+        "the providing config must render the value: {}",
+        first.rendered
+    );
+    assert!(
+        second.rendered.contains("pg.internal"),
+        "a later config must reuse the value provided elsewhere: {}",
+        second.rendered
+    );
+}
+
+#[test]
+fn literal_and_secret_of_same_category_do_not_share_stores() {
+    let literal_template = "plain:\n  name: ${{literal:postgres_password}}\n";
+    let literal_init = "plain:\n  name: from-literal\n";
+    let secret_template = "guarded:\n  password: ${{secretAuto:postgres_password}}\n";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let vault = RefCell::new(HashMap::new());
+    let literals = RefCell::new(HashMap::new());
+
+    let literal_outcome = resolve_config_file(
+        literal_template,
+        literal_init,
+        &system,
+        &auto,
+        &vault,
+        &literals,
+    )
+    .expect("literal");
+    let secret_outcome = resolve_config_file(
+        secret_template,
+        secret_template,
+        &system,
+        &auto,
+        &vault,
+        &literals,
+    )
+    .expect("secret");
+
+    assert!(literal_outcome.rendered.contains("from-literal"));
+    let generated = secret_outcome
+        .secrets
+        .first()
+        .expect("secret collected")
+        .value
+        .clone();
+    assert_ne!(
+        generated, "from-literal",
+        "a secret must not pick up the literal value of the same category"
+    );
+}
+
+#[test]
 fn secret_auto_prefers_caller_provided_auto_value() {
     let config = "\
 database_server:
@@ -95,6 +182,7 @@ database_server:
         config,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
     .expect("resolve");
@@ -117,6 +205,7 @@ database:
         config,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
     .expect("resolve");
@@ -147,6 +236,7 @@ storage:
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
     .expect("resolve");
@@ -182,6 +272,7 @@ envFrom:
         &system,
         &auto,
         &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
     )
     .expect("envFrom must resolve");
 
@@ -206,6 +297,7 @@ fn resolve(template: &str, init: &str) -> ResolveOutcome {
         &system,
         &auto,
         &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
     )
     .expect("resolve")
 }
@@ -218,6 +310,7 @@ fn resolve_error(template: &str, init: &str) -> ResolverError {
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     ) {
         Ok(_) => panic!("expected resolve error"),
@@ -291,6 +384,7 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
         &system,
         &auto,
         &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
     )
     .expect("resolve embedded");
     assert!(outcome.rendered.contains("0.0.0.0:2457"));
@@ -310,6 +404,7 @@ fn non_editable_placeholder_modified_in_init_errors() {
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     ) {
         Ok(_) => panic!("modified system value must error"),
@@ -447,4 +542,29 @@ fn plain_scalar_without_placeholder_passes_through() {
     let outcome = resolve(template, init);
     assert!(outcome.rendered.contains("name: literal-value"));
     assert!(outcome.secrets.is_empty());
+}
+
+#[test]
+fn system_null_renders_as_a_yaml_null() {
+    let template = "postgres:\n  ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}\n";
+    let system = SystemValues {
+        database_ssl_root_cert: Some("null".to_owned()),
+        ..SystemValues::default()
+    };
+    let auto = HashMap::new();
+    let outcome = resolve_config_file(
+        template,
+        template,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&outcome.rendered).expect("parse");
+    assert!(
+        parsed["postgres"]["ssl_root_cert"].is_null(),
+        "an unset system value must render as a yaml null, got: {}",
+        outcome.rendered
+    );
 }

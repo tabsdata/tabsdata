@@ -6,7 +6,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: td-pymanager
-  namespace: tabsdata
+  namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata pymanager"
     kubernetes.io/change-cause: ""
@@ -36,7 +36,6 @@ spec:
       terminationGracePeriodSeconds: 60
       dnsPolicy: ClusterFirst
       securityContext:
-        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -45,23 +44,19 @@ spec:
         imagePullPolicy: IfNotPresent
         command: ["bash"]
         args:
-        - /tabsdata/assets/venvbuilder.sh
+        - $(CONTAINER_ROOT)/tabsdata/assets/venvbuilder.sh
         - --output
-        - /tabsdata/runtimes
+        - $(CONTAINER_ROOT)/tabsdata/runtimes
         - --storage-config
-        - /tabsdata/config/apiserver.storage.yaml
+        - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         - --transporter-request
-        - /tabsdata/shuttle/request/image-upload.yaml
+        - $(CONTAINER_ROOT)/tabsdata/shuttle/request/image-upload.yaml
         - --transporter-response
-        - /tabsdata/shuttle/response/image-upload.yaml
+        - $(CONTAINER_ROOT)/tabsdata/shuttle/response/image-upload.yaml
         resources:
           requests:
             cpu: "500m"
             memory: "1Gi"
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
         env:
         - name: CONTAINER_ROOT
           value: ""
@@ -76,7 +71,7 @@ spec:
         - name: POD_TABSDATA_INSTANCE
           value: "${{system:tdk_instance_name}}"
         - name: TD_LOG_CONFIG
-          value: "/tabsdata/config/tabsdata.log.rs.yaml"
+          value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
         - name: UV_DEFAULT_INDEX
           value: "${{system:tdk_uv_default_index}}"
         - name: UV_EXTRA_INDEX_URL
@@ -98,6 +93,8 @@ spec:
           mountPath: /tabsdata/runtimes
         - name: shuttle
           mountPath: /tabsdata/shuttle
+        - name: storage
+          mountPath: /tabsdata/repository/storage
       volumes:
       - name: assets
         projected:
@@ -116,3 +113,7 @@ spec:
         emptyDir: {}
       - name: shuttle
         emptyDir: {}
+      - name: storage
+        hostPath:
+          path: "${{system:tdk_storage_path}}"
+          type: DirectoryOrCreate

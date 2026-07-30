@@ -127,6 +127,7 @@ impl ConfigurationResolver {
         let mut visitor = MaterializeVisitor {
             system: &self.system,
             vault: RefCell::new(HashMap::new()),
+            literals: RefCell::new(HashMap::new()),
         };
         walker::walk(&mut value, &mut visitor)?;
         let rendered =
@@ -143,6 +144,7 @@ const CONFIG_LABEL: &str = "<config>";
 struct MaterializeVisitor<'a> {
     system: &'a SystemValues,
     vault: RefCell<HashMap<String, String>>,
+    literals: RefCell<HashMap<String, walker::LiteralOrigin>>,
 }
 
 impl walker::PlaceholderVisitor for MaterializeVisitor<'_> {
@@ -161,6 +163,7 @@ impl walker::PlaceholderVisitor for MaterializeVisitor<'_> {
             init_value: None,
             auto_value: None,
             vault: &self.vault,
+            literals: &self.literals,
             system: self.system,
         };
         Ok(resolver.materialize(&context)?.rendered)

@@ -144,6 +144,8 @@ pub async fn create_instance(
     )
     .await?;
 
+    provider.ensure_creatable_service().await?;
+
     if details {
         let markers = instance_markers(&provider.summary(), instance_pinned);
         preview::create_service(&provider.summary(), &markers);
@@ -193,7 +195,9 @@ pub async fn create_instance(
     settings.state = InstanceState::Created;
     settings.save()?;
 
-    report_venv_activation(&settings.name)?;
+    if provider.cluster_provider().hosts_runtimes()? {
+        report_venv_activation(&settings.name)?;
+    }
 
     Ok(())
 }

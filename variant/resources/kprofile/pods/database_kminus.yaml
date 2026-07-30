@@ -6,7 +6,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: td-database
-  namespace: default
+  namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata database service"
     kubernetes.io/change-cause: ""

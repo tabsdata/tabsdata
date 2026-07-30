@@ -52,6 +52,8 @@ pub enum SystemKey {
     ExeSuffix,
     #[strum(serialize = "tdk_instance_name")]
     InstanceName,
+    #[strum(serialize = "tdk_namespace_name")]
+    NamespaceName,
     #[strum(serialize = "tdk_apiserver_public_port")]
     ApiserverPublicPort,
     #[strum(serialize = "tdk_apiserver_private_port")]
@@ -63,6 +65,12 @@ pub enum SystemKey {
     DatabaseHost,
     #[strum(serialize = "tdk_database_port")]
     DatabasePort,
+    #[strum(serialize = "tdk_database_name")]
+    DatabaseName,
+    #[strum(serialize = "tdk_database_ssl_mode")]
+    DatabaseSslMode,
+    #[strum(serialize = "tdk_database_ssl_root_cert")]
+    DatabaseSslRootCert,
     #[strum(serialize = "tdk_kminus_api_port")]
     KminusApiPort,
     #[strum(serialize = "tdk_connection_configmap_name")]
@@ -110,12 +118,16 @@ pub struct SystemValues {
     pub pyenv_libexec_folder: Option<String>,
     pub exe_suffix: Option<String>,
     pub instance_name: Option<String>,
+    pub namespace_name: Option<String>,
     pub apiserver_public_port: Option<String>,
     pub apiserver_private_port: Option<String>,
     #[cfg(feature = "enterprise")]
     pub aiagent_public_port: Option<String>,
     pub database_host: Option<String>,
     pub database_port: Option<String>,
+    pub database_name: Option<String>,
+    pub database_ssl_mode: Option<String>,
+    pub database_ssl_root_cert: Option<String>,
     pub kminus_api_port: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
@@ -141,12 +153,16 @@ impl SystemValues {
             SystemKey::PyenvLibexecFolder => self.pyenv_libexec_folder.as_deref(),
             SystemKey::ExeSuffix => self.exe_suffix.as_deref(),
             SystemKey::InstanceName => self.instance_name.as_deref(),
+            SystemKey::NamespaceName => self.namespace_name.as_deref(),
             SystemKey::ApiserverPublicPort => self.apiserver_public_port.as_deref(),
             SystemKey::ApiserverPrivatePort => self.apiserver_private_port.as_deref(),
             #[cfg(feature = "enterprise")]
             SystemKey::AiagentPublicPort => self.aiagent_public_port.as_deref(),
             SystemKey::DatabaseHost => self.database_host.as_deref(),
             SystemKey::DatabasePort => self.database_port.as_deref(),
+            SystemKey::DatabaseName => self.database_name.as_deref(),
+            SystemKey::DatabaseSslMode => self.database_ssl_mode.as_deref(),
+            SystemKey::DatabaseSslRootCert => self.database_ssl_root_cert.as_deref(),
             SystemKey::KminusApiPort => self.kminus_api_port.as_deref(),
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),

@@ -24,6 +24,7 @@ use td_common::settings::DEFAULT_INSTANCE;
 #[cfg(unix)]
 use crate::base::constants::KMINUS_MIN_NOFILE;
 use crate::base::constants::LogLevel;
+use crate::base::constants::UvMode;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{ClusterViews, InstanceSettings, InstanceState};
@@ -31,6 +32,7 @@ use crate::client::session::pin::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::runtime::instance::ports::kminus_api_port;
 use std::sync::Arc;
+use td_error::TdError;
 
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::core::system::exit::CommandResult;
@@ -146,6 +148,13 @@ impl ClusterProvider {
         match self {
             Self::Kminus => Locality::Local,
             Self::Docker | Self::Eks | Self::Fargate => Locality::Remote,
+        }
+    }
+
+    pub fn hosts_runtimes(self) -> Result<bool, TdError> {
+        match self {
+            Self::Kminus => Ok(UvMode::from_environment().map_err(TdError::from)? == UvMode::Local),
+            Self::Docker | Self::Eks | Self::Fargate => Ok(false),
         }
     }
 

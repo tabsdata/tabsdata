@@ -6,7 +6,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: td-pymanager
-  namespace: default
+  namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata pymanager"
     kubernetes.io/change-cause: ""

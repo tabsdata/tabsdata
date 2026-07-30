@@ -144,6 +144,8 @@ pub enum ProviderError {
          The instance '{name}' uses the '{provider}' provider."
     )]
     TrashNotSupportedForProvider { name: String, provider: String } = 6005,
+    #[error("No staged instance profile was found at '{0}'.")]
+    StagedProfileMissing(String) = 6006,
     #[error(
         "The cluster is not running. \
          Start it with `tdkserver cluster start ...` and try again."

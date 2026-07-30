@@ -4,6 +4,7 @@
 
 mod resolve;
 
+use crate::runtime::gateway::resolver::walker::LiteralOrigin;
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -52,6 +53,7 @@ pub fn merge(
     let input_configs = input.join(KPROFILE_CONFIGS_FAMILY.folder);
     let empty_auto: HashMap<String, String> = HashMap::new();
     let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    let literals: RefCell<HashMap<String, LiteralOrigin>> = RefCell::new(HashMap::new());
     seed_vault_from_server_secrets(&vault, &profile.configs, server_secrets);
     let mut merged = Vec::new();
     for (file, template) in &profile.configs {
@@ -70,7 +72,14 @@ pub fn merge(
             None => input_content,
         };
         let template = bake_schema_secrets(file, template, &profile.configs)?;
-        let outcome = resolve_config_file(&template, &prefilled, system, &empty_auto, &vault)?;
+        let outcome = resolve_config_file(
+            &template,
+            &prefilled,
+            system,
+            &empty_auto,
+            &vault,
+            &literals,
+        )?;
         merged.push(MergedConfig {
             file: file.clone(),
             rendered: outcome.rendered,
@@ -157,6 +166,7 @@ fn resolve_configs_files(
     let stage_configs = stage.join(KPROFILE_CONFIGS_FAMILY.folder);
     create_folder(&stage_configs)?;
     let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    let literals: RefCell<HashMap<String, LiteralOrigin>> = RefCell::new(HashMap::new());
     let mut by_file = Vec::new();
     for (file, template) in &profile.configs {
         if file.ends_with(SCHEMA_EXTENSION) {
@@ -170,7 +180,8 @@ fn resolve_configs_files(
             }
         })?;
         let template = bake_schema_secrets(file, template, &profile.configs)?;
-        let outcome = resolve_config_file(&template, &init_content, system, auto, &vault)?;
+        let outcome =
+            resolve_config_file(&template, &init_content, system, auto, &vault, &literals)?;
         write_staged(&stage_configs.join(file), &outcome.rendered)?;
         by_file.push((file.clone(), outcome.secrets));
     }

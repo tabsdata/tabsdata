@@ -189,6 +189,11 @@ pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 pub const DEFAULT_INSTANCE_NAME: &str = "tabsdata";
 
 pub const DATABASE_HOST_LOOPBACK: &str = "127.0.0.1";
+pub const DATABASE_NAME_POSTGRES: &str = "postgres";
+pub const YAML_NULL: &str = "null";
+pub const DATABASE_SSL_MODE_PREFER: &str = "prefer";
+pub const DATABASE_SSL_MODE_VERIFY_CA: &str = "verify-ca";
+pub const DATABASE_SSL_ROOT_CERT: &str = "/etc/tabsdata/certs/ca.pem";
 
 pub const TABSDATA_LABEL_NAMESPACE: &str = "tabsdata.com/";
 pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
@@ -215,6 +220,7 @@ pub const TABSDATA_NAME_PREFIX: &str = "td-";
 pub const CONFIGMAP_TABSDATA_MANIFEST: &str = "td-sys-tabsdata-manifest-manifest.yaml";
 pub const CONFIGMAP_TABSDATA_SETTINGS: &str = "td-sys-tabsdata-settings-settings.json";
 pub const CONTAINER_ROOT_ENV: &str = "CONTAINER_ROOT";
+pub const CONTAINER_TABSDATA_ROOT: &str = "/tabsdata";
 pub const CONTAINER_SETTINGS_RELATIVE: &str = "tabsdata/settings/.settings.json";
 
 pub const SECRET_CATEGORY_OPENAI_KEY: &str = "openai-key";

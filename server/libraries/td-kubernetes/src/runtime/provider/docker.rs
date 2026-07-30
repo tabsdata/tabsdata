@@ -13,30 +13,33 @@ use kube::Config;
 use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 
-use std::collections::BTreeMap;
-
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_INSTANCE_NAME, Family, KPROFILE_ASSETS_FAMILY,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_TABSDATA_ROOT, DATABASE_SSL_MODE_PREFER,
+    FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY, YAML_NULL,
 };
 use crate::base::error::provider::ProviderError;
-use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::base::reporter::Reporter;
-use crate::client::registry::ClusterViews;
+use crate::client::registry::{
+    ClusterViews, InstanceSettings, init_stage_folder_in, instances_root,
+};
 use crate::client::session::pin::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandResult, abort_with};
-use crate::kube::api::configmap::get_configmap;
-use crate::kube::api::{
-    create_configmap, ensure_cluster_reachable, ensure_namespace_exists, exists_configmap,
-};
+use crate::kube::api::configmap::{get_configmap, require_configmap};
+use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
+use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
-use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
+use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
+use crate::runtime::instance::launcher::provision_pyvenvs;
 use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::profile::{RenderedConfigmap, load_profile, render_for_configmaps};
+use crate::runtime::instance::ports::apply_ports;
+use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
+use crate::runtime::instance::staging::promote_staged_profile;
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::docker::cluster::DockerCluster;
 use crate::runtime::provider::docker::instance::DockerInstance;
@@ -56,13 +59,65 @@ pub struct DockerProvider {
     cluster: DockerCluster,
     instance: DockerInstance,
     inputs: DockerInputs,
+    name: String,
+    folder: PathBuf,
     verbose: bool,
 }
 
 impl DockerProvider {
+    async fn promote_staged_configmaps(&self) -> CommandResult {
+        let context = self.kube_context().await?;
+        let stage = init_stage_folder_in(&self.folder);
+        if !promote_staged_profile(&context, &stage, &self.folder).await? {
+            return Err(ProviderError::StagedProfileMissing(stage.display().to_string()).into());
+        }
+        Ok(())
+    }
+
+    fn bootstrap_folders(&self) -> CommandResult {
+        let repository = self.folder.join(FOLDER_REPOSITORY);
+        for subfolder in [&repository, &repository.join(FOLDER_STORAGE)] {
+            std::fs::create_dir_all(subfolder).map_err(|error| {
+                ProviderError::InstanceFolderCreateFailed(
+                    subfolder.display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+        }
+        Ok(())
+    }
+
+    async fn runtimes_context(&self) -> CommandResult<(KubeContext, SystemValues, Profile)> {
+        let context = self.kube_context().await?;
+        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
+        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
+        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
+            return Err(ProviderError::ConfigmapEntryMissing(
+                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
+                MANIFEST_FILE.to_owned(),
+            )
+            .into());
+        };
+        let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
+
+        let mut system = self.system_values()?;
+        let settings = InstanceSettings::load(&self.name)?;
+        apply_ports(&mut system, &settings.ports);
+
+        Ok((context, system, profile))
+    }
+
+    async fn create_runtimes_as_pod(&self) -> CommandResult {
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_pyvenvs(&context, self.cluster_provider(), &system, &profile, &multi).await
+    }
+
     pub async fn build(
         cluster: ClusterArguments,
-        _instance: InstanceArguments,
+        instance: InstanceArguments,
         verbose: bool,
     ) -> CommandResult<Self> {
         if cluster.kubeconfig.is_none() && cluster.context.is_none() && !cluster.current {
@@ -114,8 +169,22 @@ impl DockerProvider {
             config.default_namespace = DEFAULT_INSTANCE.to_string();
         }
 
+        let name = instance
+            .name
+            .clone()
+            .unwrap_or_else(|| DEFAULT_INSTANCE.to_string());
+        let folder = instances_root()?.join(&name);
+
+        if let Err(error) = validate_instance_name(&name) {
+            return Err(ProviderError::InvalidInstanceName {
+                name: name.clone(),
+                reason: error.to_string(),
+            }
+            .into());
+        }
+
         let cluster = DockerCluster::new(config.clone());
-        let instance = DockerInstance::new(config.clone());
+        let docker_instance = DockerInstance::new(config.clone());
 
         Ok(Self {
             kubefile,
@@ -123,8 +192,10 @@ impl DockerProvider {
             cluster_name,
             config,
             cluster,
-            instance,
+            instance: docker_instance,
             inputs,
+            name,
+            folder,
             verbose,
         })
     }
@@ -164,8 +235,16 @@ impl Provider for DockerProvider {
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {
+        let repository_folder = self.folder.join(FOLDER_REPOSITORY);
+        let storage_folder = repository_folder.join(FOLDER_STORAGE);
         Ok(SystemValues {
-            instance_name: Some(DEFAULT_INSTANCE_NAME.to_owned()),
+            instance_name: Some(self.name.clone()),
+            namespace_name: Some(self.config.default_namespace.clone()),
+            database_ssl_mode: Some(DATABASE_SSL_MODE_PREFER.to_owned()),
+            database_ssl_root_cert: Some(YAML_NULL.to_owned()),
+            repository_path: Some(repository_folder.to_string_lossy().to_string()),
+            storage_path: Some(storage_folder.to_string_lossy().to_string()),
+            storage_url: Some(container_storage_url()),
             uv_default_index: Some(SystemValues::uv_default_index()?),
             uv_extra_index_url: Some(SystemValues::uv_extra_index_url(true)?),
             uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
@@ -243,11 +322,12 @@ impl Provider for DockerProvider {
         reporter: &dyn Reporter,
     ) -> CommandResult<Box<dyn Transaction>> {
         let step = reporter.step("Preparing kubernetes cluster");
+        self.bootstrap_folders()?;
         self.cluster.create()?;
         step.done("Kubernetes cluster prepared");
-        let step = reporter.step("Storing tabsdata configmap");
-        self.store_configmaps().await?;
-        step.done("Tabsdata configmap stored");
+        let step = reporter.step("Storing tabsdata configmaps");
+        self.promote_staged_configmaps().await?;
+        step.done("Tabsdata configmaps stored");
         handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
         Ok(Box::new(()))
     }
@@ -257,7 +337,7 @@ impl Provider for DockerProvider {
     }
 
     async fn create_runtimes(&self, _reporter: &dyn Reporter) -> CommandResult {
-        Ok(())
+        self.create_runtimes_as_pod().await
     }
 
     async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult {
@@ -362,32 +442,6 @@ impl HostedProvider for DockerProvider {}
 impl LocalProvider for DockerProvider {}
 
 impl DockerProvider {
-    async fn store_configmaps(&self) -> CommandResult {
-        let loaded = load_profile(self.cluster_provider(), self.verbose)?;
-        let resolver = ConfigurationResolver::new(self.system_values()?);
-        let rendered = render_for_configmaps(&loaded, &resolver).await?;
-        let context = self.kube_context().await?;
-        for (family, files) in [
-            (&KPROFILE_PODS_FAMILY, rendered.pods),
-            (&KPROFILE_ASSETS_FAMILY, rendered.assets),
-            (&KPROFILE_CONFIGS_FAMILY, rendered.configs),
-        ] {
-            store_family_configmaps(&context, family, files).await?;
-        }
-        let mut manifest_data = BTreeMap::new();
-        manifest_data.insert(MANIFEST_FILE.to_owned(), rendered.manifest);
-        create_configmap(
-            &context,
-            CONFIGMAP_TABSDATA_MANIFEST,
-            manifest_data,
-            BTreeMap::new(),
-            None,
-            None,
-        )
-        .await?;
-        Ok(())
-    }
-
     async fn apply_workload(&self, multi: &MultiProgress) -> CommandResult {
         self.instance.start(multi).await
     }
@@ -397,25 +451,6 @@ impl DockerProvider {
     }
 }
 
-async fn store_family_configmaps(
-    context: &crate::kube::context::KubeContext,
-    family: &Family,
-    files: RenderedConfigmap,
-) -> CommandResult {
-    for (file, content) in files {
-        let id = id_from_file(&file);
-        let name = to_kube_resource_name(family.scope, id, family.kind, &file)?;
-        let mut data = BTreeMap::new();
-        data.insert(file, content);
-        create_configmap(
-            context,
-            &name,
-            data,
-            BTreeMap::new(),
-            None,
-            Some(family.kind),
-        )
-        .await?;
-    }
-    Ok(())
+fn container_storage_url() -> String {
+    format!("file://{CONTAINER_TABSDATA_ROOT}/{FOLDER_REPOSITORY}/{FOLDER_STORAGE}/")
 }

@@ -9,27 +9,44 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use kube::Config;
+use td_common::status::ExitStatus::NoAction;
 
 use td_common::settings::DEFAULT_INSTANCE;
 
+use crate::base::constants::{
+    CONFIGMAP_TABSDATA_MANIFEST, DATABASE_SSL_MODE_VERIFY_CA, DATABASE_SSL_ROOT_CERT,
+    FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY,
+};
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::client::registry::ClusterViews;
+use crate::client::registry::{
+    ClusterViews, InstanceSettings, init_stage_folder_in, instances_root,
+};
 use crate::client::session::pin::{FargateInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::core::system::exit::CommandResult;
+use crate::client::tdkserver::common::validate_instance_name;
+use crate::core::system::exit::{CommandResult, abort_with};
+use crate::kube::api::configmap::require_configmap;
+use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
+use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
+use crate::runtime::instance::launcher::provision_pyvenvs;
+use crate::runtime::instance::manifest::MANIFEST_FILE;
+use crate::runtime::instance::ports::apply_ports;
+use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
+use crate::runtime::instance::staging::promote_staged_profile;
 use crate::runtime::provider::fargate::cluster::FargateCluster;
 use crate::runtime::provider::fargate::instance::FargateInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
 use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     CloudProvider, Cluster, ClusterProvider, ContainerProvider, Instance, Provider,
-    ServerlessProvider, Transaction,
+    ServerlessProvider, Transaction, handle_phase_secrets,
 };
 use crate::runtime::secrets::{SecretGenerator, SecretPhase};
 
@@ -41,13 +58,65 @@ pub struct FargateProvider {
     cluster: FargateCluster,
     instance: FargateInstance,
     inputs: FargateInputs,
+    name: String,
+    folder: PathBuf,
     verbose: bool,
 }
 
 impl FargateProvider {
+    async fn promote_staged_configmaps(&self) -> CommandResult {
+        let context = self.kube_context().await?;
+        let stage = init_stage_folder_in(&self.folder);
+        if !promote_staged_profile(&context, &stage, &self.folder).await? {
+            return Err(ProviderError::StagedProfileMissing(stage.display().to_string()).into());
+        }
+        Ok(())
+    }
+
+    fn bootstrap_folders(&self) -> CommandResult {
+        let repository = self.folder.join(FOLDER_REPOSITORY);
+        for subfolder in [&repository, &repository.join(FOLDER_STORAGE)] {
+            std::fs::create_dir_all(subfolder).map_err(|error| {
+                ProviderError::InstanceFolderCreateFailed(
+                    subfolder.display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+        }
+        Ok(())
+    }
+
+    async fn runtimes_context(&self) -> CommandResult<(KubeContext, SystemValues, Profile)> {
+        let context = self.kube_context().await?;
+        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
+        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
+        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
+            return Err(ProviderError::ConfigmapEntryMissing(
+                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
+                MANIFEST_FILE.to_owned(),
+            )
+            .into());
+        };
+        let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
+
+        let mut system = self.system_values()?;
+        let settings = InstanceSettings::load(&self.name)?;
+        apply_ports(&mut system, &settings.ports);
+
+        Ok((context, system, profile))
+    }
+
+    async fn create_runtimes_as_pod(&self) -> CommandResult {
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_pyvenvs(&context, self.cluster_provider(), &system, &profile, &multi).await
+    }
+
     pub async fn build(
         cluster: ClusterArguments,
-        _instance: InstanceArguments,
+        instance: InstanceArguments,
         verbose: bool,
     ) -> CommandResult<Self> {
         if cluster.kubeconfig.is_none() && cluster.context.is_none() && !cluster.current {
@@ -94,8 +163,22 @@ impl FargateProvider {
             config.default_namespace = DEFAULT_INSTANCE.to_string();
         }
 
+        let name = instance
+            .name
+            .clone()
+            .unwrap_or_else(|| DEFAULT_INSTANCE.to_string());
+        let folder = instances_root()?.join(&name);
+
+        if let Err(error) = validate_instance_name(&name) {
+            return Err(ProviderError::InvalidInstanceName {
+                name: name.clone(),
+                reason: error.to_string(),
+            }
+            .into());
+        }
+
         let cluster = FargateCluster::new(config.clone());
-        let instance = FargateInstance::new(config.clone());
+        let fargate_instance = FargateInstance::new(config.clone());
 
         Ok(Self {
             kubefile,
@@ -103,8 +186,10 @@ impl FargateProvider {
             cluster_name,
             config,
             cluster,
-            instance,
+            instance: fargate_instance,
             inputs,
+            name,
+            folder,
             verbose,
         })
     }
@@ -140,11 +225,17 @@ impl Provider for FargateProvider {
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {
-        unreachable!("The fargate provider is not yet implemented.")
+        Ok(SystemValues {
+            instance_name: Some(self.name.clone()),
+            namespace_name: Some(self.config.default_namespace.clone()),
+            database_ssl_mode: Some(DATABASE_SSL_MODE_VERIFY_CA.to_owned()),
+            database_ssl_root_cert: Some(DATABASE_SSL_ROOT_CERT.to_owned()),
+            ..SystemValues::default()
+        })
     }
 
     fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
-        unreachable!("The fargate provider is not yet implemented.")
+        Vec::new()
     }
 
     fn summary(&self) -> Summary {
@@ -184,30 +275,55 @@ impl Provider for FargateProvider {
     }
 
     async fn ensure_pinnable_server(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        let context = self.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+        if !exists_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await? {
+            return Err(
+                ProviderError::InstanceNotFound(self.config.default_namespace.clone()).into(),
+            );
+        }
+        Ok(())
     }
 
     async fn ensure_creatable_server(&self) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        let context = self.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+        if exists_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await? {
+            return abort_with(
+                NoAction,
+                ProviderError::InstanceAlreadyExists(self.config.default_namespace.clone()),
+            );
+        }
+        Ok(())
     }
 
     async fn create_cluster_hook(
         &self,
-        _reporter: &dyn Reporter,
+        reporter: &dyn Reporter,
     ) -> CommandResult<Box<dyn Transaction>> {
-        unreachable!("The fargate provider is not yet implemented.")
+        let step = reporter.step("Preparing kubernetes cluster");
+        self.bootstrap_folders()?;
+        self.cluster.create()?;
+        step.done("Kubernetes cluster prepared");
+        let step = reporter.step("Storing tabsdata configmaps");
+        self.promote_staged_configmaps().await?;
+        step.done("Tabsdata configmaps stored");
+        handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
+        Ok(Box::new(()))
     }
 
     async fn create_database(&self, _reporter: &dyn Reporter) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        Ok(())
     }
 
     async fn create_runtimes(&self, _reporter: &dyn Reporter) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        self.create_runtimes_as_pod().await
     }
 
     async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult {
-        unreachable!("The fargate provider is not yet implemented.")
+        Ok(())
     }
 
     async fn cluster_alive(&self) -> bool {
@@ -222,8 +338,14 @@ impl Provider for FargateProvider {
         unreachable!("The fargate provider is not yet implemented.")
     }
 
-    async fn stop_cluster(&self, _reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
-        unreachable!("The fargate provider is not yet implemented.")
+    async fn stop_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
+        let step = reporter.step("Stopping kubernetes cluster");
+        let stopped = self.cluster.stop().await?;
+        step.done("Kubernetes cluster stopped");
+        match stopped {
+            true => Ok(ClusterStopOutcome::Stopped),
+            false => Ok(ClusterStopOutcome::AlreadyStopped),
+        }
     }
 
     async fn ensure_startable_cluster(&self) -> CommandResult {

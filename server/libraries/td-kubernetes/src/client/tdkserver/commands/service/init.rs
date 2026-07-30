@@ -189,6 +189,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         let context = built.kube_context().await?;
         ensure_cluster_reachable(context.client()).await?;
         ensure_namespace_exists(&context).await?;
+        built.ensure_creatable_service().await?;
     }
 
     let mut adjusted = built.cluster_settings(provided.clone())?;
