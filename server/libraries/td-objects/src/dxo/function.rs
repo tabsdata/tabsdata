@@ -210,13 +210,6 @@ mod definitions {
     /// version" query against `functions` is patch-blind by
     /// construction. Reachable only by explicit fvid (replay) or via
     /// the patches list endpoint.
-    ///
-    /// Versioned by `parent_function_version_id`: at any point in time
-    /// each head fvid has at most one current patch (latest
-    /// `defined_on`, `status = Active`). Mint reads through the current
-    /// view via `conn.versioned(at).fetch_*` so a replay scheduled at
-    /// T1 sees the patch active at T1 — not whatever lands between
-    /// request and dispatch. List-patches reads historic instead.
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
     #[dao(
@@ -293,13 +286,88 @@ mod definitions {
         #[dxo(extractor)]
         pub function_id: FunctionId,
         #[dxo(extractor)]
-        pub enabled: Enabled, //  added in v4
+        pub enabled: Enabled,
 
         pub collection: CollectionName,
         /// Group snapshot of the function's collection at view-query time.
         /// Threaded into LFR/LTDV stamping via FunctionNode at plan-build.
         /// No default: the group is project-scoped and must be set explicitly.
         pub group_id: GroupId,
+        pub defined_by: UserName,
+    }
+
+    /// Head versions and patches unified, for version history and
+    /// fvid-addressed reads — the only patch-aware query surface; every
+    /// other function DAO stays patch-blind by construction. Patch rows
+    /// borrow the identity columns they don't own (name, decorator,
+    /// storage fields, ...) from their parent head version and carry
+    /// `patch_of`; head rows have it NULL.
+    #[ta_objects::Dao]
+    #[dao(
+        sql_table = "function_versions__with_names",
+        order_by(col = "defined_on", dir = "desc"),
+        versioned(pk = "id", version_by = "defined_on", partition_by = "function_id"),
+        states(
+            Available = or!(FunctionStatus::Active, FunctionStatus::Frozen),
+        )
+    )]
+    pub struct FunctionVersionDBWithNames {
+        #[dxo(extractor)]
+        pub id: FunctionVersionId,
+        #[dxo(extractor)]
+        pub collection_id: CollectionId,
+        pub name: FunctionName,
+        pub description: Description,
+        pub decorator: Decorator,
+        pub connector: Option<Connector>,
+        pub connection: Option<ConnectionKind>,
+        pub runtime_values: FunctionRuntimeValues,
+        #[dxo(extractor)]
+        pub function_id: FunctionId,
+        pub base_path: Option<BasePath>,
+        pub stage_id: StageId,
+        pub stage_base_path: BasePath,
+        pub storage_version: StorageVersion,
+        pub bundle_id: BundleId,
+        pub snippet: Snippet,
+        pub defined_on: AtTime,
+        pub defined_by_id: UserId,
+        pub status: FunctionStatus,
+        pub enabled: Enabled,
+        pub collection: CollectionName,
+        pub defined_by: UserName,
+        pub patch_of: Option<FunctionVersionId>,
+    }
+
+    /// One row of a function's version history: head versions and
+    /// patches interleaved by `defined_on`. `patch_of` is the parent
+    /// head fvid on patch rows and NULL on head versions.
+    #[ta_objects::Dto]
+    #[dto(list(on = FunctionVersionDBWithNames))]
+    #[inherits(FunctionVersionDBWithNames)]
+    pub struct FunctionVersion {
+        #[dto(list(pagination_by = "+"))]
+        pub id: FunctionVersionId,
+        #[dto(list(filter, filter_like, order_by))]
+        pub name: FunctionName,
+        #[dto(list(filter, filter_like, order_by))]
+        pub description: Description,
+        #[dto(list(filter, order_by))]
+        pub decorator: Decorator,
+        #[dto(list(filter, filter_like, order_by))]
+        pub connector: Option<Connector>,
+        #[dto(list(filter, filter_like, order_by))]
+        pub connection: Option<ConnectionKind>,
+        #[dto(list(filter, order_by))]
+        pub defined_on: AtTime,
+        #[dto(list(filter, order_by))]
+        pub status: FunctionStatus,
+        #[dto(list(filter, order_by))]
+        pub patch_of: Option<FunctionVersionId>,
+
+        #[dto(list(filter, filter_like, order_by))]
+        pub collection: CollectionName,
+        #[dto(list(filter, filter_like, order_by))]
         pub defined_by: UserName,
     }
 

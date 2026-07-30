@@ -21,6 +21,7 @@ pub struct AccessToken;
 pub struct BuildManifest;
 
 #[ta_objects::typed(string)]
+#[derive(Eq, PartialEq)]
 pub struct BundleHash;
 
 #[ta_objects::typed(string(parser = parse_collection), try_from = ToCollectionName)]

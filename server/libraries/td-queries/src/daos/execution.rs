@@ -15,6 +15,7 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalTableDataVersionDBIden,
     LogicalTableDataVersionPointerDBIden,
 };
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{FunctionVersionId, PhysicalTableDataVersionId};
 
@@ -168,11 +169,12 @@ pub(crate) fn list_by_tdv_query(
         .take()
 }
 
-/// List executions that have at least one LFR running the given function
-/// version (or a variant of it — at this layer we only know about the
-/// `function_version_id` set at plan-build).
+/// List executions that ran the given function version id. A head fvid
+/// matches through the LFRs minted at plan-build; a patch fvid matches
+/// through the bound attempts' `function_version_patch_id` — LFRs only
+/// ever carry head fvids, so the patch lives on the PFR side.
 pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> sea_query::SelectStatement {
-    let exists_subq = Query::select()
+    let lfr_subq = Query::select()
         .expr(Expr::value(1))
         .from(LogicalFunctionRunDBIden::Table)
         .and_where(
@@ -190,11 +192,29 @@ pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> sea_query::SelectSt
             .eq(fv_id.as_sea_value()),
         )
         .to_owned();
+    let pfr_subq = Query::select()
+        .expr(Expr::value(1))
+        .from(PhysicalFunctionRunDBIden::Table)
+        .and_where(
+            Expr::col((
+                PhysicalFunctionRunDBIden::Table,
+                PhysicalFunctionRunDBIden::ExecutionId,
+            ))
+            .equals((Iden::Table, Iden::Id)),
+        )
+        .and_where(
+            Expr::col((
+                PhysicalFunctionRunDBIden::Table,
+                PhysicalFunctionRunDBIden::FunctionVersionPatchId,
+            ))
+            .eq(fv_id.as_sea_value()),
+        )
+        .to_owned();
 
     Query::select()
         .columns(DaoOf::columns().into_iter().map(|c| (Iden::Table, c)))
         .from(Iden::Table)
-        .and_where(Expr::exists(exists_subq))
+        .and_where(Expr::exists(lfr_subq).or(Expr::exists(pfr_subq)))
         .take()
 }
 
@@ -247,6 +267,14 @@ mod tests {
         assert!(
             sql.contains(r#""function_version_id""#),
             "should filter on LFR.function_version_id: {sql}"
+        );
+        assert!(
+            sql.contains(r#""physical_function_runs""#),
+            "should reference physical_function_runs for patch attempts: {sql}"
+        );
+        assert!(
+            sql.contains(r#""function_version_patch_id""#),
+            "should filter on PFR.function_version_patch_id: {sql}"
         );
     }
 }

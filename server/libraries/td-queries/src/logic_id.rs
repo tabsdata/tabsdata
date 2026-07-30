@@ -17,7 +17,7 @@ use td_database::sea_query::builder::SeaQueryExt;
 use td_database::sea_query::executor::SeaExecutor;
 use td_error::{TdError, td_error};
 use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::function::{FunctionDB, FunctionPatchDB};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
@@ -76,6 +76,18 @@ where
     Ok(res)
 }
 
+/// Function versions and patches draw from the same `FunctionVersionId`
+/// generator but live in separate tables: the high-water mark is the max
+/// across both, else a restart re-issues ids already taken by patches.
+async fn last_function_version_id<C>(conn: &mut C) -> Result<Option<FunctionVersionId>, TdError>
+where
+    for<'a> &'a mut C: SeaExecutor,
+{
+    let head = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&mut *conn).await?;
+    let patch = find_last_idl::<FunctionPatchDB, FunctionVersionId, FV>(&mut *conn).await?;
+    Ok(head.max(patch))
+}
+
 /// Initializes the logical ID generators for all relevant entities.
 ///
 /// This function should be called at application startup to ensure that the ID generators
@@ -102,7 +114,7 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
     let id = find_last_idl::<TransactionDB, TransactionId, TX>(&mut conn).await?;
     TransactionId::init(id)?;
 
-    let id = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&mut conn).await?;
+    let id = last_function_version_id(&mut conn).await?;
     FunctionVersionId::init(id)?;
 
     let id = find_last_idl::<PhysicalFunctionRunDB, PhysicalFunctionRunId, PFR>(&mut conn).await?;
@@ -172,6 +184,69 @@ mod tests {
             .await?;
         assert!(id.is_none());
         //
+        Ok(())
+    }
+
+    /// Patches take ids from the `FunctionVersionId` generator but land in
+    /// `function_patches`, so the boot-time high-water mark must consider
+    /// both tables — seeding from `functions` alone would re-issue the
+    /// patch's id after a restart.
+    #[td_test::test(db)]
+    async fn test_last_function_version_id_covers_patches(db: TdPool) -> Result<(), TdError> {
+        use crate::LiveEntry;
+        use td_objects::dxo::function::FunctionPatchDB;
+        use td_objects::types::basic::{
+            AtTime, Description, FunctionRuntimeValues, FunctionStatus, Snippet,
+        };
+
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(
+                &CollectionName::try_from("collection")?,
+                &UserId::try_from(ENCODED_ID_SYSTEM)?,
+            )
+            .await?;
+        let create = FunctionRegister::builder()
+            .try_name("f")?
+            .try_description("F")?
+            .bundle_id(BundleId::default())
+            .try_snippet("S")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("t")?])
+            .try_runtime_values("V")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        let function = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let patch = FunctionPatchDB::builder()
+            .parent_function_version_id(function.id.clone())
+            .function_id(function.function_id)
+            .collection_id(function.collection_id)
+            .snippet(Snippet::try_from("S")?)
+            .bundle_id(BundleId::default())
+            .runtime_values(FunctionRuntimeValues::try_from("V")?)
+            .description(Description::try_from("F")?)
+            .defined_on(AtTime::now())
+            .defined_by_id(UserId::try_from(ENCODED_ID_SYSTEM)?)
+            .status(FunctionStatus::Active)
+            .build()?;
+        db.scoped(p.id).live().insert(&patch).await?;
+
+        let head = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&db).await?;
+        assert_eq!(head, Some(function.id));
+        assert!(Some(&patch.id) > head.as_ref());
+
+        let mut conn = db.begin().await.unwrap().into_connection();
+        conn.bypass_project_scope().await.unwrap();
+        let last = last_function_version_id(&mut conn).await?;
+        assert_eq!(last, Some(patch.id));
         Ok(())
     }
 

@@ -1252,6 +1252,7 @@ class Function:
         self.defined_by = kwargs.get("defined_by")
         self.type = kwargs.get("decorator")
         self.enabled = kwargs.get("enabled")
+        self.patch_of = kwargs.get("patch_of")
         self.kwargs = kwargs
         self._data = None
 

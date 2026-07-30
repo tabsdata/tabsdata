@@ -3,6 +3,7 @@
 //
 
 use std::ops::Deref;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
@@ -10,7 +11,8 @@ use td_objects::dxo::function::{FunctionDB, FunctionPatch, FunctionPatchDB};
 use td_objects::types::basic::{
     CollectionId, FunctionIdName, FunctionStatus, FunctionVersionId, Snippet,
 };
-use td_tower::extractors::Ref;
+use td_queries::CurrentEntry;
+use td_tower::extractors::{MutRef, Ref};
 
 #[td_error]
 pub enum CreateFunctionPatchError {
@@ -25,6 +27,7 @@ pub enum CreateFunctionPatchError {
 /// Validate that the parent fvid (`patch_of`) resolves to a function in the
 /// URL's collection, with the URL's function name/id, and not deleted.
 pub async fn assert_patch_parent_matches_url(
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     parent: Ref<FunctionDB>,
     url_collection: Ref<CollectionId>,
     url_function: Ref<FunctionIdName>,
@@ -41,7 +44,13 @@ pub async fn assert_patch_parent_matches_url(
     if !url_matches {
         Err(CreateFunctionPatchError::WrongFunction(parent.id.clone()))?
     }
-    if matches!(parent.status, FunctionStatus::Deleted) {
+    // Deletion tombstones a fresh version row — earlier rows stay Active —
+    // so aliveness is the *current* row's status, not the parent row's.
+    let current: FunctionDB = conn
+        .current()
+        .fetch_one::<FunctionDB>(&parent.function_id)
+        .await?;
+    if matches!(current.status, FunctionStatus::Deleted) {
         Err(CreateFunctionPatchError::DeletedParent(parent.id.clone()))?
     }
     Ok(())

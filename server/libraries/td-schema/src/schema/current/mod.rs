@@ -10,6 +10,7 @@ mod dependencies_current;
 mod executions;
 mod function_patches;
 mod function_patches_current;
+mod function_versions;
 mod functions;
 mod functions_current;
 mod groups;
@@ -48,6 +49,9 @@ use crate::schema::{Entity, SchemaVersion};
 /// td-schema sits below td-objects in the dep graph.
 pub(crate) const POINTER_STATUS_BOUND: &str = "B";
 
+/// `FunctionStatus::Deleted` discriminant, hoisted for the same reason.
+pub(crate) const FUNCTION_STATUS_DELETED: &str = "D";
+
 /// Marker type for the current schema version.
 pub struct Schema;
 
@@ -79,6 +83,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &functions_current::Defs,
     &function_patches::Defs,
     &function_patches_current::Defs,
+    &function_versions::Defs,
     &tables::Defs,
     &tables_current::Defs,
     &dependencies::Defs,

@@ -9,7 +9,7 @@ use td_objects::And;
 use td_objects::NoFilter;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::function::{Function, FunctionDBWithNames};
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersion, FunctionVersionDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::params::FunctionAtIdName;
 use td_objects::tower_service::with::With;
@@ -24,7 +24,7 @@ use td_tower::layers;
 #[service_factory(
     name = FunctionHistoryService,
     request = ListRequest<FunctionAtIdName>,
-    response = ListResponse<Function>,
+    response = ListResponse<FunctionVersion>,
     connection = ConnectionProvider,
     scope = "Project",
     context = AuthzContext,
@@ -52,14 +52,15 @@ fn service() {
         ),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // List (all active versions at the time). Here we want the history, so we do not want
-        // to query the versioned view.
+        // to query the versioned view. Head versions and patches interleave: the
+        // union DAO is the one patch-aware surface.
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionVersion>, _>),
         from_fn(
             By::<FunctionId>::historic_list_full::<
                 NoFilter,
-                { FunctionDBWithNames::Available },
-                Function,
+                { FunctionVersionDBWithNames::Available },
+                FunctionVersion,
             >
         ),
     )
@@ -77,11 +78,13 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
-    use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
+    use td_objects::dxo::function::{FunctionPatchDB, FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName,
+        FunctionRuntimeValues, FunctionStatus, Snippet, UserId,
     };
+    use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -95,7 +98,7 @@ mod tests {
         FunctionHistoryService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<FunctionAtIdName>, ProjectId>, ListResponse<Function>>(&[
+            .assert_service::<Scoped<ListRequest<FunctionAtIdName>, ProjectId>, ListResponse<FunctionVersion>>(&[
                 type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<RequestContext>),
                 type_of_val(
                     &With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>,
@@ -119,14 +122,17 @@ mod tests {
                 ),
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 // List (all active versions at the time). Here we want the history, so we do not want
-                // to query the versioned view.
+                // to query the versioned view. Head versions and patches interleave: the
+                // union DAO is the one patch-aware surface.
                 type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
+                type_of_val(
+                    &With::<ListParams>::try_convert_to::<ListQueryParams<FunctionVersion>, _>,
+                ),
                 type_of_val(
                     &By::<FunctionId>::historic_list_full::<
                         NoFilter,
-                        { FunctionDBWithNames::Available },
-                        Function,
+                        { FunctionVersionDBWithNames::Available },
+                        FunctionVersion,
                     >,
                 ),
             ]);
@@ -184,9 +190,26 @@ mod tests {
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
-        let _response = response?;
+        let updated = response?;
 
         let t2 = AtTime::now();
+
+        // Patch function_2's head version
+        let patch = FunctionPatchDB::builder()
+            .parent_function_version_id(updated.id.clone())
+            .function_id(updated.function_id)
+            .collection_id(collection.id)
+            .snippet(Snippet::try_from("patched snippet")?)
+            .bundle_id(BundleId::default())
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .description(Description::try_from("patched description")?)
+            .defined_on(AtTime::now())
+            .defined_by_id(UserId::admin())
+            .status(FunctionStatus::Active)
+            .build()?;
+        db.scoped(p.id).live().insert(&patch).await?;
+
+        let t2p = AtTime::now();
 
         // Delete function_2
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -281,6 +304,34 @@ mod tests {
 
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
         assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
+        assert!(data.iter().all(|v| v.patch_of.is_none()));
+
+        // t2p -> the patch interleaves with the head versions, borrowing
+        // the parent's name and carrying patch_of
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                FunctionAtIdName::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("function_2")?)
+                    .at(t2p)
+                    .build()?,
+                ListParams::default(),
+            )
+            .in_project(p.id);
+
+        let service = FunctionHistoryService::with_defaults(db.clone()).service();
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+        let data = response.data;
+
+        assert_eq!(data.len(), 3);
+        assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
+        assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
+        assert_eq!(data[2].id, patch.id);
+        assert_eq!(data[2].name, FunctionName::try_from("function_2")?);
+        assert_eq!(data[2].patch_of, Some(updated.id.clone()));
+        assert_eq!(data[2].snippet, Snippet::try_from("patched snippet")?);
+        assert_eq!(data[2].decorator, Decorator::Transformer);
 
         // t3 -> no function to retrieve the history
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())

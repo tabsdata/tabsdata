@@ -9,7 +9,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::function::FunctionVersionDBWithNames;
 use td_objects::rest_urls::FunctionVersionIdParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, FunctionVersionId, ProjectId};
@@ -38,7 +38,7 @@ fn service() {
         // The version id is globally unique; resolve it, then pivot into its
         // project's scope via the collection before the authz check.
         from_fn(resolve_function_version),
-        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
+        from_fn(With::<FunctionVersionDBWithNames>::extract::<CollectionId>),
         from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<ProjectId>),
         from_fn(enter_project_scope),
@@ -66,11 +66,11 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::{FunctionDBBuilder, FunctionRegister};
+    use td_objects::dxo::function::{FunctionDBBuilder, FunctionPatchDB, FunctionRegister};
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionIdName, CollectionName, Decorator,
+        AccessTokenId, AtTime, BundleHash, BundleId, CollectionIdName, CollectionName, Decorator,
         FunctionStatus, FunctionVersionId, ProjectId, UserId,
     };
     use td_queries::LiveEntry;
@@ -96,7 +96,7 @@ mod tests {
                 ),
                 type_of_val(&With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
                 type_of_val(&resolve_function_version),
-                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
+                type_of_val(&With::<FunctionVersionDBWithNames>::extract::<CollectionId>),
                 type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
                 type_of_val(&enter_project_scope),
@@ -159,7 +159,8 @@ mod tests {
         let service = DownloadBundleService::build(&context).service();
 
         // Each version id resolves to its own bundle, regardless of which one
-        // is current — v1 → bundle A, v2 → bundle B.
+        // is current — v1 → bundle A, v2 → bundle B. The ETag is the bundle's
+        // content hash.
         let cases = [
             (&v1, &bundle_a_id, &payload_a),
             (&v2, &bundle_b_id, &payload_b),
@@ -173,7 +174,7 @@ mod tests {
 
             assert_eq!(response.function_version_id, expected_fn.id);
             assert_eq!(response.function_name, expected_fn.name);
-            assert_eq!(response.bundle_id, *expected_bundle);
+            assert_eq!(response.etag, bundle_hash(&db, expected_bundle).await?);
 
             let mut stream = response.stream.into_inner();
             let mut buf = Vec::new();
@@ -182,6 +183,42 @@ mod tests {
             }
             assert_eq!(Bytes::from(buf).as_ref(), expected_payload.as_slice());
         }
+
+        // A patch is addressed by its own version id and serves its own
+        // bundle, under its parent's collection and name.
+        let payload_patch = b"BUNDLE-PAYLOAD-PATCH".to_vec();
+        let bundle_patch_id =
+            upload_bundle(&context, p.id, &collection.name, payload_patch.clone()).await?;
+        let patch = FunctionPatchDB::builder()
+            .id(FunctionVersionId::new())
+            .parent_function_version_id(v2.id.clone())
+            .function_id(v2.function_id)
+            .collection_id(v2.collection_id)
+            .try_snippet("patched snippet")?
+            .bundle_id(bundle_patch_id)
+            .try_runtime_values("rv")?
+            .try_description("patched")?
+            .defined_on(AtTime::now())
+            .defined_by_id(UserId::admin())
+            .build()?;
+        db.scoped(p.id).live().insert(&patch).await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            FunctionVersionIdParam {
+                function_version_id: patch.id.clone(),
+            },
+        );
+        let response = service.clone().raw_oneshot(request).await?;
+
+        assert_eq!(response.function_version_id, patch.id);
+        assert_eq!(response.etag, bundle_hash(&db, &bundle_patch_id).await?);
+        assert_eq!(response.function_name, v2.name);
+        let mut stream = response.stream.into_inner();
+        let mut buf = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            buf.extend_from_slice(&chunk?);
+        }
+        assert_eq!(Bytes::from(buf).as_ref(), payload_patch.as_slice());
 
         // A version whose function has been deleted (status Deleted) is a
         // tombstone, not a downloadable artifact: not found.
@@ -195,6 +232,35 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionIdParam {
                 function_version_id: deleted.id.clone(),
+            },
+        );
+        let err = service
+            .clone()
+            .raw_oneshot(request)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+
+        // A patch of a deleted function is hidden with it: deletion does not
+        // cascade to the patch row, so the parent's status is what decides.
+        let orphan = FunctionPatchDB::builder()
+            .id(FunctionVersionId::new())
+            .parent_function_version_id(deleted.id.clone())
+            .function_id(deleted.function_id)
+            .collection_id(deleted.collection_id)
+            .try_snippet("orphan snippet")?
+            .bundle_id(bundle_patch_id)
+            .try_runtime_values("rv")?
+            .try_description("orphan")?
+            .defined_on(AtTime::now())
+            .defined_by_id(UserId::admin())
+            .build()?;
+        db.scoped(p.id).live().insert(&orphan).await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+            FunctionVersionIdParam {
+                function_version_id: orphan.id.clone(),
             },
         );
         let err = service
@@ -222,73 +288,9 @@ mod tests {
         Ok(())
     }
 
-    /// When the (durable) bundle row has been reaped, the download layer falls
-    /// back to the collection's live base_path and still streams the bytes.
-    #[td_test::test(db)]
-    async fn test_download_bundle_falls_back_to_collection_base_path_when_bundle_row_missing(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?;
-        let context = Context::with_defaults(db.clone());
-
-        let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = db
-            .scoped(p.id)
-            .seed()
-            .collection(&collection_name, &UserId::admin())
-            .await?;
-
-        let payload = b"BUNDLE-PAYLOAD".to_vec();
-        let bundle_id = upload_bundle(&context, p.id, &collection.name, payload.clone()).await?;
-
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("desc")?
-            .bundle_id(bundle_id)
-            .try_snippet("snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("rv")?
-            .reuse_frozen_tables(false)
-            .build()?;
-        let function = db
-            .scoped(p.id)
-            .seed()
-            .function(&collection, &create)
-            .await?;
-
-        // Reap the bundle row, leaving only the storage object and the live
-        // collection base_path to locate it.
-        db.scoped(p.id)
-            .live()
-            .delete::<BundleDB>(&bundle_id)
-            .await?;
-        assert!(
-            db.live()
-                .fetch_optional::<BundleDB>(&bundle_id)
-                .await?
-                .is_none(),
-            "bundle row must be gone before downloading"
-        );
-
-        let service = DownloadBundleService::build(&context).service();
-        let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(FunctionVersionIdParam {
-                function_version_id: function.id.clone(),
-            });
-        let response = service.raw_oneshot(download_request).await?;
-        assert_eq!(response.bundle_id, bundle_id);
-
-        let mut stream = response.stream.into_inner();
-        let mut buf = Vec::new();
-        while let Some(chunk) = stream.next().await {
-            buf.extend_from_slice(&chunk?);
-        }
-        assert_eq!(Bytes::from(buf).as_ref(), payload.as_slice());
-
-        Ok(())
+    async fn bundle_hash(db: &TdPool, bundle_id: &BundleId) -> Result<BundleHash, TdError> {
+        let bundle: BundleDB = db.live().fetch_one::<BundleDB>(bundle_id).await?;
+        Ok(bundle.hash)
     }
 
     async fn upload_bundle(

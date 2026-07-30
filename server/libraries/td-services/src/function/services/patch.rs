@@ -305,6 +305,47 @@ mod tests {
         Ok(())
     }
 
+    /// Deletion tombstones a fresh version row while earlier rows stay
+    /// Active, so the guard must judge aliveness by the function's
+    /// *current* row — patching an old (Active) version of a deleted
+    /// function is refused.
+    #[td_test::test(db)]
+    async fn test_patch_of_deleted_function_rejected(db: TdPool) -> Result<(), TdError> {
+        use td_objects::dxo::function::FunctionDBBuilder;
+        use td_objects::types::basic::{AtTime, FunctionStatus, FunctionVersionId};
+
+        let p = db.seed().test_project().await?;
+        let v0 = seed_function(&db, p.id, "c0", "f0").await;
+        let tombstone = FunctionDBBuilder::try_from(&v0)?
+            .id(FunctionVersionId::new())
+            .defined_on(AtTime::now())
+            .status(FunctionStatus::Deleted)
+            .build()?;
+        db.scoped(p.id).live().insert(&tombstone).await?;
+
+        let response = CreateFunctionPatchService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(patch_request(
+                p.id,
+                "c0",
+                "f0",
+                FunctionPatch::builder()
+                    .patch_of(v0.id.clone())
+                    .bundle_id(BundleId::default())
+                    .try_snippet("snippet")?
+                    .build()?,
+            ))
+            .await;
+
+        let err = response.expect_err("expected refusal");
+        let err = err.domain_err::<CreateFunctionPatchError>();
+        assert!(
+            matches!(err, CreateFunctionPatchError::DeletedParent(_)),
+            "expected DeletedParent, got {err:?}"
+        );
+        Ok(())
+    }
+
     /// Patches point to a parent fvid in `functions`. A patch of a
     /// patch would need the second patch's
     /// `parent_function_version_id` to be the first patch's `id` —

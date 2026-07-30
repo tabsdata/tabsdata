@@ -24,7 +24,7 @@ mod routes {
     use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
     use td_objects::dxo::function::{
         Function, FunctionEnable, FunctionPatch, FunctionPatchRecord, FunctionRegister,
-        FunctionUpdate, FunctionWithTables,
+        FunctionUpdate, FunctionVersion, FunctionWithTables,
     };
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::params::FunctionAtIdName;
@@ -75,7 +75,7 @@ mod routes {
         Path(function_param): Path<FunctionParam>,
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
-    ) -> Result<ListStatus<Function>, ErrorStatus> {
+    ) -> Result<ListStatus<FunctionVersion>, ErrorStatus> {
         let name = FunctionAtIdName::new(function_param, at_param);
         let request = context.list(name, query_params).in_project(project_id);
         let response = state.history.service().oneshot(request).await?;
@@ -254,7 +254,7 @@ mod bundle_route {
     )]
     #[doc = "Download the bundle for a function version. Only Active or Frozen \
             versions are exposed; a version whose function has been deleted is \
-            not found. The bundle's id is exposed as a strong `ETag`."]
+            not found. The bundle's content hash is exposed as a strong `ETag`."]
     pub async fn download_bundle(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
@@ -264,11 +264,11 @@ mod bundle_route {
         let request = context.read(function_version_param);
         let d = state.download_bundle.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::octet_stream(d.stream)
-            .attachment(format_args!(
+            .attachment(format!(
                 "{}-{}.tar.zst",
                 d.function_name, d.function_version_id
             ))
-            .etag(d.bundle_id)
+            .etag(d.etag)
             .immutable()
             .with_if_none_match(if_none_match.map(|TypedHeader(v)| v)))
     }

@@ -7,13 +7,12 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::NoFilter;
-use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionPatchRecord};
 use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, CollectionIdName, FunctionIdName};
+use td_objects::types::basic::{AtTime, CollectionIdName, FunctionId, FunctionIdName};
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -32,32 +31,39 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListRequest<FunctionParam>>::extract::<RequestContext>),
+        // Resolve authz.
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
+        // Resolve function as of now — a deleted function must not resolve,
+        // hiding its patches with it
         from_fn(With::<ListRequest<FunctionParam>>::extract_name::<FunctionParam>),
         from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-        // Resolve collection + authz.
-        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // Resolve function id from the URL.
-        from_fn(By::<And![CollectionId, FunctionIdName]>::assert_exists::<FunctionDBWithNames>),
-        // list function patches (all collections in the current project)
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(
+            By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
+                { FunctionDBWithNames::Available },
+                FunctionDBWithNames,
+            >
+        ),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
+        // list the function's patches
         from_fn(With::<ListRequest<FunctionParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionPatchRecord>, _>),
-        from_fn(By::<()>::list::<NoFilter, FunctionPatchRecord>),
+        from_fn(By::<FunctionId>::list::<NoFilter, FunctionPatchRecord>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::patch::CreateFunctionPatchService;
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
-    use td_error::TdError;
+    use td_error::{ApiError, TdError};
     use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::{FunctionPatch, FunctionRegister};
     use td_objects::types::basic::{
@@ -80,24 +86,28 @@ mod tests {
             .await
             .assert_service::<Scoped<ListRequest<FunctionParam>, ProjectId>, ListResponse<FunctionPatchRecord>>(&[
                 type_of_val(&With::<ListRequest<FunctionParam>>::extract::<RequestContext>),
+                // Resolve authz.
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
+                // Resolve function as of now — a deleted function must not resolve,
+                // hiding its patches with it
                 type_of_val(&With::<ListRequest<FunctionParam>>::extract_name::<FunctionParam>),
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-                // Resolve collection + authz.
-                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // Resolve function id from the URL.
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
-                    &By::<And![CollectionId, FunctionIdName]>::assert_exists::<FunctionDBWithNames>,
+                    &By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
+                        { FunctionDBWithNames::Available },
+                        FunctionDBWithNames,
+                    >,
                 ),
-                // list function patches (all collections in the current project)
+                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
+                // list the function's patches
                 type_of_val(&With::<ListRequest<FunctionParam>>::extract::<ListParams>),
                 type_of_val(
                     &With::<ListParams>::try_convert_to::<ListQueryParams<FunctionPatchRecord>, _>,
                 ),
-                type_of_val(&By::<()>::list::<NoFilter, FunctionPatchRecord>),
+                type_of_val(&By::<FunctionId>::list::<NoFilter, FunctionPatchRecord>),
             ]);
     }
 
@@ -155,7 +165,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_patches_returns_all_patches_latest_first(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _coll = seed_patches_fixture(&db, p.id).await;
+        let coll = seed_patches_fixture(&db, p.id).await;
         let parent: FunctionDBWithNames = {
             db.current()
                 .fetch_one::<FunctionDBWithNames>(and!(
@@ -187,25 +197,85 @@ mod tests {
                 .await?;
         }
 
-        let read_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list(
+        // A patched sibling function, to prove per-function scoping.
+        let register = FunctionRegister::builder()
+            .try_name("f1")?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("t1")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let sibling = db.scoped(p.id).seed().function(&coll, &register).await?;
+        let body = FunctionPatch::builder()
+            .patch_of(sibling.id.clone())
+            .bundle_id(BundleId::default())
+            .try_snippet("sibling patch")?
+            .build()?;
+        let req = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
                 FunctionParam::builder()
                     .collection(CollectionIdName::from_str("c0")?)
-                    .function(FunctionIdName::from_str("f0")?)
+                    .function(FunctionIdName::from_str("f1")?)
                     .build()?,
-                ListParams::default(),
+                body,
             )
             .in_project(p.id);
-        let response = ListFunctionPatchesService::with_defaults(db.clone())
+        let _ = CreateFunctionPatchService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(read_request)
+            .raw_oneshot(req)
             .await?;
 
+        let list = async |function: &str| -> Result<ListResponse<FunctionPatchRecord>, TdError> {
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .list(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str("c0")?)
+                        .function(FunctionIdName::from_str(function)?)
+                        .build()?,
+                    ListParams::default(),
+                )
+                .in_project(p.id);
+            ListFunctionPatchesService::with_defaults(db.clone())
+                .service()
+                .raw_oneshot(request)
+                .await
+        };
+
+        let response = list("f0").await?;
         assert_eq!(response.data.len(), 2);
         assert!(response.data[0].defined_on >= response.data[1].defined_on);
         for v in &response.data {
             assert_eq!(v.parent_function_version_id, parent.id);
         }
+
+        let response = list("f1").await?;
+        assert_eq!(response.data.len(), 1);
+        assert_eq!(response.data[0].parent_function_version_id, sibling.id);
+
+        // Deleting a function hides its patches: the function no longer
+        // resolves, so the listing is not found rather than leaking rows.
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str("c0")?)
+                    .function(FunctionIdName::from_str("f0")?)
+                    .build()?,
+            )
+            .in_project(p.id);
+        DeleteFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await?;
+
+        let err = list("f0").await.map(|_| ()).unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+        let response = list("f1").await?;
+        assert_eq!(response.data.len(), 1);
         Ok(())
     }
 }

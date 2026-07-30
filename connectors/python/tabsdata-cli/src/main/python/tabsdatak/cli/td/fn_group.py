@@ -129,6 +129,7 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
             def _table():
                 table = Table(title="History")
                 table.add_column("ID", style="cyan", no_wrap=True)
+                table.add_column("Patches", no_wrap=True)
                 table.add_column("Name")
                 table.add_column("Description")
                 table.add_column("Created by")
@@ -139,6 +140,7 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                 for function in function_list:
                     table.add_row(
                         str(function.id),
+                        str(function.patch_of or ""),
                         function.name,
                         function.description,
                         function.defined_by,
@@ -1009,8 +1011,8 @@ def patch(
             requirements=None,
         )
         click.echo("Patch registered successfully")
-        click.echo(f"Patch id (fvid): {record.get('id')}")
-        click.echo(f"Patches fvid:    {record.get('parent_function_version_id')}")
+        click.echo(f"Patch id: {record.get('id')}")
+        click.echo(f"Patches:  {record.get('parent_function_version_id')}")
         show_hint(
             ctx,
             "Replay a finished function run against the latest patch "
@@ -1053,8 +1055,8 @@ def list_patches(ctx: click.Context, name: str, coll: str):
 
         def _table():
             table = Table(title="Patches")
-            table.add_column("Patch id (fvid)", style="cyan", no_wrap=True)
-            table.add_column("Patches fvid")
+            table.add_column("Patch id", style="cyan", no_wrap=True)
+            table.add_column("Patches")
             table.add_column("Description")
             table.add_column("Defined on")
             table.add_column("Defined by")

@@ -634,7 +634,7 @@ mod tests {
             .service()
             .raw_oneshot(download_request)
             .await?;
-        assert_eq!(response.bundle_id, function_after.bundle_id);
+        assert_eq!(response.etag, bundle_after[0].hash.clone());
         let mut stream = response.stream.into_inner();
         let mut buf = Vec::new();
         while let Some(chunk) = stream.next().await {
