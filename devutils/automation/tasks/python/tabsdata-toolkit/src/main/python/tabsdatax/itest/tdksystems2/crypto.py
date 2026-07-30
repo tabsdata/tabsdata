@@ -25,6 +25,7 @@ import hashlib
 import os
 import re
 import textwrap
+from contextlib import contextmanager
 
 from tabsdatax.itest.tdksystems2 import constants
 from tabsdatax.itest.tdksystems2.errors import DecryptError, TdxError
@@ -42,10 +43,37 @@ _NONCE_LEN = 12
 
 _key_cache: dict[str, bytes] = {}
 
+# Set only inside `using_secret`. Everything else reads the environment.
+_secret_override: str | None = None
+
+
+@contextmanager
+def using_secret(secret: str, *, what: str):
+    """Read descriptors under `secret` instead of ``$TD_BACKENDS_CRYPTO_KEY`` for
+    the duration of the block. ``connect`` is the two-secret case: the remote
+    descriptor is encrypted under the server's secret, the local one it writes
+    under the client's. `what` names the secret's source in the error a too-short
+    value raises."""
+    global _secret_override
+    if len(secret) < MIN_SECRET_LEN:
+        raise TdxError(
+            f"{what} must be at least {MIN_SECRET_LEN} characters long "
+            f"(it decrypts the remote descriptor)."
+        )
+    prev = _secret_override
+    _secret_override = secret
+    try:
+        yield
+    finally:
+        _secret_override = prev
+
 
 def require_secret() -> str:
-    """The personal secret from ``$TD_BACKENDS_CRYPTO_KEY``, or raise if unset /
-    shorter than 12 chars. The gate for every descriptor read or write."""
+    """The personal secret from ``$TD_BACKENDS_CRYPTO_KEY`` (or the one
+    :func:`using_secret` pins), or raise if unset / shorter than 12 chars. The
+    gate for every descriptor read or write."""
+    if _secret_override is not None:
+        return _secret_override
     secret = os.environ.get(ENV_VAR, "")
     if len(secret) < MIN_SECRET_LEN:
         raise TdxError(

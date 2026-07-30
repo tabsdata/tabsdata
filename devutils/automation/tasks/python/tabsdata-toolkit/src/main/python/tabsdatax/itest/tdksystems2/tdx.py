@@ -17,6 +17,10 @@
     tdx-system purge   --manifest FILE [--external-prefix PREFIX] [-f]
     tdx-system restart --sys NAME|list|ALL | --manifest FILE
     tdx-system fetch-bin [--type TYPE|t1,t2|ALL]
+    tdx-system connect --remote-sys [user@]HOST:PATH --remote-secret-env VAR \\
+                       --sys NAME [--ssh-port N] [--identity KEYFILE] [-f]
+                                          # ssh-tunnel a remote container system;
+                                          # destroy closes the tunnel
     tdx-system secrets --set 1p:<vault> [--out json|export|unset]  # fetch creds
     tdx-system clear-venvs                 # delete the managed venvs
 
@@ -135,6 +139,7 @@ _SYS_CATALOG: dict[str, tuple[str, str | None]] = {
     constants.V_STATUS: ("sys_status", None),
     constants.V_PURGE: ("sys_purge", "supports_purge"),
     constants.V_RESTART: ("sys_restart", "is_container"),
+    constants.V_CONNECT: ("sys_connect", "is_container"),
     # Ungated on purpose: `fetch-bin --type ALL` is the handy way to pull every
     # image at once, so a system with none warns and is skipped rather than
     # failing the run.
@@ -291,6 +296,11 @@ def _resolve(
     )
 
     if tool == constants.SYS_TOOL:
+        if verb == constants.V_CONNECT:
+            # The type is whatever the remote descriptor says, which is only known
+            # once connect has fetched it over ssh — so it resolves its own
+            # backend and this is just a stand-in to dispatch on.
+            return _default_slug(tool, verb), None, None, None, store_dir
         if verb in (constants.V_CREATE, constants.V_FETCH_BIN):
             slug = cli.peek(rest, constants.OPT_TYPE) or _sole_slug()
             if verb == constants.V_FETCH_BIN and (

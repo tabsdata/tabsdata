@@ -65,7 +65,7 @@ def _dom(argv):
 
 def test_verb_discovery():
     assert set(tdx._discover("tdx-system")) == {
-        "create", "destroy", "status", "purge", "fetch-bin", "restart"
+        "create", "destroy", "status", "purge", "fetch-bin", "restart", "connect"
     }
     assert set(tdx._discover("tdx-domain")) == {
         "create", "destroy", "status", "models", "create-model", "create-data",

@@ -6,14 +6,17 @@
 
 A system with domains is not torn down implicitly: ``destroy`` fails and lists
 them, and ``-f`` destroys those domains first (each from its own self-contained
-descriptor) and then the system."""
+descriptor) and then the system.
+
+A *connected* system (see ``sys_connect``) is torn down by closing its tunnel:
+the container itself belongs to the far host and is not ours to remove."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems2 import cli, console, descriptor, store, systems
+from tabsdatax.itest.tdksystems2 import cli, console, descriptor, ssh, store, systems
 from tabsdatax.itest.tdksystems2.errors import TdxError
 
 
@@ -91,12 +94,19 @@ def run(ctx: cli.Context) -> int:
     for info, path in domains:
         _destroy_domain(info, path, force=ctx.args.force)
         console.good(f"  - domain '{info.name}'")
-    try:
-        ctx.system.destroy_system(ctx.info.meta)
-    except Exception as exc:  # noqa: BLE001 - -f removes the descriptor regardless
-        if not ctx.args.force:
-            raise
-        console.warn(f"teardown failed ({exc}); -f: removing descriptor anyway")
+    if ssh.is_tunnelled(ctx.info.meta):
+        # The container belongs to the far host; all this machine owns is the
+        # tunnel, and closing it is the whole teardown.
+        pid = int(ctx.info.meta[ssh.TUNNEL_PID])
+        ssh.close_tunnel(pid)
+        console.good(f"  - ssh tunnel (pid {pid})")
+    else:
+        try:
+            ctx.system.destroy_system(ctx.info.meta)
+        except Exception as exc:  # noqa: BLE001 - -f removes the descriptor regardless
+            if not ctx.args.force:
+                raise
+            console.warn(f"teardown failed ({exc}); -f: removing descriptor anyway")
     ctx.path.unlink(missing_ok=True)
     console.good(f"destroyed system '{ctx.name}'")
     return 0

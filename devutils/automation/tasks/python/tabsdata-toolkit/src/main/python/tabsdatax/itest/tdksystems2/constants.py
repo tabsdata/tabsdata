@@ -40,6 +40,7 @@ V_MODIFY_DATA = "modify-data"
 V_MANIFEST = "manifest"
 V_SECRETS = "secrets"
 V_CLEAR_VENVS = "clear-venvs"
+V_CONNECT = "connect"
 
 # --- option flags ----------------------------------------------------------
 OPT_TYPE = "--type"
@@ -72,6 +73,10 @@ OPT_SYS_PREFIX = "--sys-prefix"
 OPT_DOMAIN_PREFIX = "--domain-prefix"
 OPT_DRY_RUN = "--dry-run"
 OPT_ENV_PREFIX = "--env-prefix"
+OPT_REMOTE_SYS = "--remote-sys"
+OPT_REMOTE_SECRET_ENV = "--remote-secret-env"
+OPT_SSH_PORT = "--ssh-port"
+OPT_IDENTITY = "--identity"
 HELP_FLAGS = ("-h", "--help")
 
 # --- batch execution -------------------------------------------------------

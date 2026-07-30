@@ -67,6 +67,7 @@ _SYS_PLANE_VERBS = frozenset({
     constants.V_STATUS,
     constants.V_RESTART,
     constants.V_FETCH_BIN,
+    constants.V_CONNECT,
 })
 
 # Verbs whose env a model may override (the data plane).
@@ -257,6 +258,10 @@ def target_env(tool: str, argv: list[str]) -> str | None:
     verb, rest = argv[0], argv[1:]
     if verb == constants.V_CLEAR_VENVS:
         return None
+    if verb == constants.V_CONNECT:
+        # It shells out to ssh and writes a descriptor; the system's own drivers
+        # only matter once a domain is created against it.
+        return ENV_C
     if any(a in constants.HELP_FLAGS for a in rest):
         return ENV_C
     if verb in _COMMON_VERBS:
