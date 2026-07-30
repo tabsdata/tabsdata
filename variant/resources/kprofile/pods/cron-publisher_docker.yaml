@@ -41,7 +41,7 @@ spec:
         tabsdata.com/worker: function
     spec:
       backoffLimit: 0
-      ttlSecondsAfterFinished: 60
+      ttlSecondsAfterFinished: 1800
       template:
         metadata:
           labels:

@@ -20,7 +20,7 @@ metadata:
     tabsdata.com/tier: ephemeral
 spec:
   backoffLimit: 0
-  ttlSecondsAfterFinished: 60
+  ttlSecondsAfterFinished: 1800
   template:
     metadata:
       labels:

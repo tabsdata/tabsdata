@@ -20,6 +20,7 @@ metadata:
     tabsdata.com/tier: init
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 1800
   template:
     metadata:
       labels:
