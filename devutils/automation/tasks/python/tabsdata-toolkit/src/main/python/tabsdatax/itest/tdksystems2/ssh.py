@@ -93,7 +93,7 @@ def fetch_remote_file(ep: SshEndpoint, remote_path: str) -> str:
             remote_path,
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
     )
     if cp.returncode != 0:
         raise TdxError(
@@ -175,7 +175,7 @@ def open_tunnel(
 def tunnel_alive(pid: int) -> bool:
     if os.name == "nt":
         cp = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, text=True
+            ["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, encoding="utf-8"
         )
         return str(pid) in cp.stdout
     try:
@@ -203,7 +203,7 @@ def close_tunnel(pid: int) -> None:
 
 def _read_tail(path: str, n: int = 400) -> str:
     try:
-        with open(path, "r", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             return f.read()[-n:].strip()
     except OSError:
         return ""

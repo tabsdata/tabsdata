@@ -104,11 +104,14 @@ def validate_name(name: str) -> None:
 def save(info: SystemInfo | DomainInfo, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(crypto.encrypt(info.model_dump_json(indent=2).encode("utf-8")))
+    path.write_text(
+        crypto.encrypt(info.model_dump_json(indent=2).encode("utf-8")),
+        encoding="utf-8",
+    )
 
 
 def load(path: str | Path) -> SystemInfo | DomainInfo:
-    return loads(Path(path).read_text())
+    return loads(Path(path).read_text(encoding="utf-8"))
 
 
 def loads(text: str) -> SystemInfo | DomainInfo:
@@ -120,7 +123,7 @@ def is_descriptor(path: str | Path) -> bool:
     if not p.is_file():
         return False
     try:
-        return crypto.is_pem(p.read_text())
+        return crypto.is_pem(p.read_text(encoding="utf-8"))
     except OSError:
         return False
 

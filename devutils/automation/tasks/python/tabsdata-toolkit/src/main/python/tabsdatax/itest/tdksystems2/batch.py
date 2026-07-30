@@ -342,7 +342,7 @@ def execute(
             cp = subprocess.run(
                 [sys.executable, "-m", module, *step],
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
             )
             out.append((cp.stdout + cp.stderr).strip())
             rc = cp.returncode

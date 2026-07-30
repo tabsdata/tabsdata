@@ -129,7 +129,7 @@ def container_state(name: str) -> str | None:
     cp = subprocess.run(
         ["docker", "container", "inspect", "-f", "{{.State.Status}}", name],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
     )
     if cp.returncode != 0:
         return None
@@ -143,7 +143,7 @@ def container_id(name: str) -> str | None:
         cp = subprocess.run(
             ["docker", "container", "inspect", "-f", "{{.Id}}", name],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
     except FileNotFoundError as exc:
         raise TdxError("docker is not available") from exc
@@ -165,7 +165,7 @@ def docker_pull(image: str, platform: str = "") -> None:
 
 
 def docker_run(args: list[str]) -> str:
-    cp = subprocess.run(["docker", "run"] + args, capture_output=True, text=True)
+    cp = subprocess.run(["docker", "run"] + args, capture_output=True, encoding="utf-8")
     if cp.returncode != 0:
         raise TdxError(f"docker run failed: {cp.stderr.strip() or cp.stdout.strip()}")
     cid = cp.stdout.strip()
@@ -179,28 +179,32 @@ def docker_rm(name: str, force: bool = False) -> None:
     if force:
         args.append("-f")
     args.append(name)
-    cp = subprocess.run(args, capture_output=True, text=True)
+    cp = subprocess.run(args, capture_output=True, encoding="utf-8")
     if cp.returncode != 0:
         detail = cp.stderr.strip() or cp.stdout.strip()
         raise TdxError(f"could not remove container {name}: {detail}")
 
 
 def docker_start(name: str) -> None:
-    cp = subprocess.run(["docker", "start", name], capture_output=True, text=True)
+    cp = subprocess.run(
+        ["docker", "start", name], capture_output=True, encoding="utf-8"
+    )
     if cp.returncode != 0:
         detail = cp.stderr.strip() or cp.stdout.strip()
         raise TdxError(f"could not start container {name}: {detail}")
 
 
 def docker_stop(name: str) -> None:
-    cp = subprocess.run(["docker", "stop", name], capture_output=True, text=True)
+    cp = subprocess.run(["docker", "stop", name], capture_output=True, encoding="utf-8")
     if cp.returncode != 0:
         detail = cp.stderr.strip() or cp.stdout.strip()
         raise TdxError(f"could not stop container {name}: {detail}")
 
 
 def docker_restart(name: str) -> None:
-    cp = subprocess.run(["docker", "restart", name], capture_output=True, text=True)
+    cp = subprocess.run(
+        ["docker", "restart", name], capture_output=True, encoding="utf-8"
+    )
     if cp.returncode != 0:
         detail = cp.stderr.strip() or cp.stdout.strip()
         raise TdxError(f"could not restart container {name}: {detail}")
@@ -223,7 +227,7 @@ def docker_exec(
         for k, v in env.items():
             args += ["-e", f"{k}={v}"]
     args += [container, *cmd]
-    return subprocess.run(args, input=input, capture_output=True, text=True)
+    return subprocess.run(args, input=input, capture_output=True, encoding="utf-8")
 
 
 def docker_exec_check(container: str, *cmd: str) -> bool:
@@ -286,7 +290,7 @@ def docker_compose(
         if subprocess.run(cmd, env=run_env).returncode != 0:
             raise TdxError(f"docker compose {verb} failed for project {project}")
         return ""
-    cp = subprocess.run(cmd, capture_output=True, text=True, env=run_env)
+    cp = subprocess.run(cmd, capture_output=True, encoding="utf-8", env=run_env)
     if cp.returncode != 0:
         detail = (cp.stderr or cp.stdout or "").strip()
         raise TdxError(f"docker compose {verb} failed for project {project}: {detail}")

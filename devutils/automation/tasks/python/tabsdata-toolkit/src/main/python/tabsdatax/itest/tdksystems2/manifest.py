@@ -35,7 +35,9 @@ def read(path: str) -> list[dict]:
     import yaml
 
     if path == "-":
-        text = sys.stdin.read()
+        # Decode the pipe ourselves: sys.stdin's encoding follows the locale, so
+        # a manifest read under LANG=C would not survive a non-ASCII value.
+        text = sys.stdin.buffer.read().decode("utf-8")
     else:
         try:
             text = Path(path).read_text(encoding="utf-8")

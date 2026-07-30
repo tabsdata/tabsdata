@@ -42,7 +42,7 @@ def fetch(vault: str) -> dict[str, str]:
     cp = subprocess.run(
         ["op", "--vault", vault, "item", "list", "--format=json"],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
     )
     if cp.returncode != 0:
         raise TdxError(
@@ -59,7 +59,7 @@ def fetch(vault: str) -> dict[str, str]:
         cp = subprocess.run(
             ["op", "--vault", vault, "item", "get", title, "--format=json"],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
         if cp.returncode != 0:
             return None

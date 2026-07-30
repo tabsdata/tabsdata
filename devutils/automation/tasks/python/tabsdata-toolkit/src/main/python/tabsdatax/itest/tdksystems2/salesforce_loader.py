@@ -92,7 +92,7 @@ def _load_mapping(path: Path) -> list[dict]:
     (lookup-field -> source table)."""
     import yaml  # pyyaml ships with snowfakery
 
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     steps = []
     for name, spec in raw.items():
         steps.append({

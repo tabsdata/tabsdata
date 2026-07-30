@@ -186,7 +186,8 @@ def ensure(env: str) -> Path:
             what=f"installing {reqs.name} into '{label}'",
         )
     (venv / _MARKER).write_text(
-        "tdx managed venv — delete this directory to force a clean reinstall\n"
+        "tdx managed venv — delete this directory to force a clean reinstall\n",
+        encoding="utf-8",
     )
     print(f">>> '{label}' ready", file=sys.stderr)
     return venv
