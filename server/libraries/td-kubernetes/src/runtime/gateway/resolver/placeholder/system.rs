@@ -13,6 +13,9 @@ use regex::Regex;
 use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator};
 use td_error::TdError;
 
+use crate::base::constants::{
+    ENV_TD_KUBE_UV_INDEX_URL, UV_INDEX_STRATEGY_BEST_MATCH, UV_INDEX_STRATEGY_FIRST_INDEX,
+};
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
@@ -37,6 +40,8 @@ pub enum SystemKey {
     StorageUrl,
     #[strum(serialize = "tdk_storage_path")]
     StoragePath,
+    #[strum(serialize = "tdk_pyenv_base_root")]
+    PyenvBaseRoot,
     #[strum(serialize = "tdk_pyenv_td_root")]
     PyenvTdRoot,
     #[strum(serialize = "tdk_pyenv_ag_root")]
@@ -68,6 +73,10 @@ pub enum SystemKey {
     ConnectionSecretName,
     #[strum(serialize = "tdk_cron_schedule")]
     CronSchedule,
+    #[strum(serialize = "tdk_uv_extra_index_url")]
+    UvExtraIndexUrl,
+    #[strum(serialize = "tdk_uv_index_strategy")]
+    UvIndexStrategy,
 }
 
 impl SystemKey {
@@ -94,6 +103,7 @@ pub struct SystemValues {
     pub database_path: Option<String>,
     pub storage_url: Option<String>,
     pub storage_path: Option<String>,
+    pub pyenv_base_root: Option<String>,
     pub pyenv_td_root: Option<String>,
     pub pyenv_ag_root: Option<String>,
     pub pyenv_scripts_folder: Option<String>,
@@ -110,6 +120,8 @@ pub struct SystemValues {
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
     pub cron_schedule: Option<String>,
+    pub uv_extra_index_url: Option<String>,
+    pub uv_index_strategy: Option<String>,
 }
 
 impl SystemValues {
@@ -121,6 +133,7 @@ impl SystemValues {
             SystemKey::DatabasePath => self.database_path.as_deref(),
             SystemKey::StorageUrl => self.storage_url.as_deref(),
             SystemKey::StoragePath => self.storage_path.as_deref(),
+            SystemKey::PyenvBaseRoot => self.pyenv_base_root.as_deref(),
             SystemKey::PyenvTdRoot => self.pyenv_td_root.as_deref(),
             SystemKey::PyenvAgRoot => self.pyenv_ag_root.as_deref(),
             SystemKey::PyenvScriptsFolder => self.pyenv_scripts_folder.as_deref(),
@@ -137,6 +150,23 @@ impl SystemValues {
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),
             SystemKey::CronSchedule => self.cron_schedule.as_deref(),
+            SystemKey::UvExtraIndexUrl => self.uv_extra_index_url.as_deref(),
+            SystemKey::UvIndexStrategy => self.uv_index_strategy.as_deref(),
+        }
+    }
+
+    pub fn uv_extra_index_url() -> String {
+        std::env::var(ENV_TD_KUBE_UV_INDEX_URL)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_default()
+    }
+
+    pub fn uv_index_strategy() -> String {
+        if Self::uv_extra_index_url().is_empty() {
+            UV_INDEX_STRATEGY_FIRST_INDEX.to_owned()
+        } else {
+            UV_INDEX_STRATEGY_BEST_MATCH.to_owned()
         }
     }
 

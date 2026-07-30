@@ -149,6 +149,7 @@ src/tests/coverage/
 storybook-static/
 tests/bundle*
 target/
+targetk/
 Thumbs.db
 variant/assets/manifest/SOURCETRACK.yaml
 variant/assets/manifest/THIRD-PARTY

@@ -9,6 +9,10 @@ use const_format::concatcp;
 use serde::{Deserialize, Serialize};
 
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
+pub const ENV_TD_KUBE_UV_INDEX_URL: &str = "TD_KUBE_UV_INDEX_URL";
+
+pub const UV_INDEX_STRATEGY_BEST_MATCH: &str = "unsafe-best-match";
+pub const UV_INDEX_STRATEGY_FIRST_INDEX: &str = "first-index";
 
 pub const FOLDER_CLUSTER: &str = "cluster";
 pub const FOLDER_REPOSITORY: &str = "repository";

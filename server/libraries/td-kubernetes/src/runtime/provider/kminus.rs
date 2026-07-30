@@ -919,6 +919,13 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         .into());
     };
     let pyenv_scripts_folder = Some(scripts_name.to_string());
+    let Some(pyenv_base) = scripts_folder.parent() else {
+        return Err(ProviderError::PythonScriptsFolderNameInvalid(
+            scripts_folder.display().to_string(),
+        )
+        .into());
+    };
+    let pyenv_base_root = Some(pyenv_base.to_string_lossy().to_string());
     let pyenv_libexec_folder = Some(LIBEXEC_TABSDATA.to_owned());
     let exe_suffix = Some(EXE_SUFFIX.to_owned());
     let instance_name = folder
@@ -932,6 +939,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         database_path,
         storage_url,
         storage_path,
+        pyenv_base_root,
         pyenv_td_root,
         pyenv_ag_root,
         pyenv_scripts_folder,
@@ -939,6 +947,8 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         exe_suffix,
         instance_name,
         database_host: Some(DATABASE_HOST_LOOPBACK.to_owned()),
+        uv_extra_index_url: Some(SystemValues::uv_extra_index_url()),
+        uv_index_strategy: Some(SystemValues::uv_index_strategy()),
         ..SystemValues::default()
     })
 }
