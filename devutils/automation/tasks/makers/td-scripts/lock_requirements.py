@@ -485,7 +485,7 @@ def lock_pyproject_markers(root: str) -> None:
             "src",
             "utest",
             "python",
-            "test_tabsdata",
+            "test_tabsdatak",
             "pytest.ini",
         )
     ).resolve()
@@ -552,7 +552,7 @@ def lock_pytest_ini(root: str) -> None:
         "src",
         "utest",
         "python",
-        "test_tabsdata",
+        "test_tabsdatak",
         "pytest.ini",
     )
     tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
@@ -569,7 +569,7 @@ def lock_pytest_ini(root: str) -> None:
             "src",
             "utest",
             "python",
-            "test_tabsdata",
+            "test_tabsdatak",
             "pytest.ini",
         )
         tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
@@ -586,7 +586,7 @@ def lock_pytest_ini(root: str) -> None:
                 "src",
                 "utest",
                 "python",
-                "test_tabsdata",
+                "test_tabsdatak",
                 "pytest.ini",
             )
             tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()

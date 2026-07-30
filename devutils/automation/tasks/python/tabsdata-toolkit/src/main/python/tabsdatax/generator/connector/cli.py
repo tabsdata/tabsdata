@@ -45,7 +45,7 @@ TEMPLATE_FOLDER = "templates/connector/tabsdata-{c.package}"
 CONNECTORS_FOLDER = "connectors/python"
 
 ROOT_PYPROJECT = "pyproject.toml"
-PLATFORM_PYTEST_INI = "client/platform/src/utest/python/test_tabsdata/pytest.ini"
+PLATFORM_PYTEST_INI = "client/platform/src/utest/python/test_tabsdatak/pytest.ini"
 RENDER_WIDTH = 1024
 
 console = Console(width=RENDER_WIDTH)
