@@ -30,6 +30,7 @@ use crate::runtime::provider::ClusterProvider;
 
 const DATABASE_COMPONENT: &str = "database";
 const DBMANAGER_COMPONENT: &str = "dbmanager";
+const PYMANAGER_COMPONENT: &str = "pymanager";
 
 const JOB_CONDITION_COMPLETE: &str = "Complete";
 const JOB_CONDITION_FAILED: &str = "Failed";
@@ -530,6 +531,37 @@ fn kind_of_entry(key: &str, yaml: &str) -> Result<TemplateKind, LauncherError> {
         tier: Tier::Regular.to_string(),
         cause: format!("unsupported kind '{kind_text}'"),
     })
+}
+
+pub async fn provision_pyvenvs(
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
+    system: &SystemValues,
+    profile: &Profile,
+    multi: &MultiProgress,
+) -> CommandResult {
+    let available_secrets = list_available_secrets(context).await?;
+
+    let (setup_key, setup_yaml) = pod_for_component(profile, PYMANAGER_COMPONENT)?;
+    let mut setup =
+        deserialize_pod_entry::<Job>(setup_key, setup_yaml, Tier::Setup, system).await?;
+    cluster_provider.enrich_init_job(&mut setup)?;
+    inject_into_job(profile, setup_key, &mut setup, &available_secrets)?;
+    let setup_name = job_name(setup_key, &setup)?;
+
+    let phase = phase_spinner_in(multi, "Provisioning tabsdata python environments");
+
+    let bar = phase.add_resource(setup_key);
+    job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
+    let settled = job_api::await_job_condition(context, &setup_name, is_job_settled()).await?;
+    if settled.as_ref().is_some_and(has_failed_condition) {
+        bar.finish_with_message(format!("{setup_key} (failed)"));
+        return Err(LauncherError::JobFailed { name: setup_name }.into());
+    }
+    bar.finish_with_message(format!("{setup_key} (completed)"));
+
+    drop(phase);
+    Ok(())
 }
 
 pub async fn provision_database(

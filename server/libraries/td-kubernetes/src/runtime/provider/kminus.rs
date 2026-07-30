@@ -46,7 +46,9 @@ use crate::kube::kubeconfig::{
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::instance::launcher::{provision_database, start_database, stop_database};
+use crate::runtime::instance::launcher::{
+    provision_database, provision_pyvenvs, start_database, stop_database,
+};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::{
     PORT_RELEASE_AFTER_KILL_TIMEOUT, apply_ports, database_port, kill_port_holders,
@@ -433,50 +435,7 @@ impl Provider for KminusProvider {
     }
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
-        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
-        fs::create_dir_all(&runtimes_python).map_err(|error| {
-            ProviderError::RuntimesFolderCreateFailed(
-                runtimes_python.display().to_string(),
-                error.to_string(),
-            )
-        })?;
-        let pyvenv = resolve_python_binary(PYVENV_BINARY).map_err(|error| {
-            ProviderError::BinaryNotFound(PYVENV_BINARY.to_owned(), error.to_string())
-        })?;
-        let step = reporter.step("Creating Python virtual environment templates");
-        let mut command = std::process::Command::new(&pyvenv);
-        if self.verbose {
-            command.arg("--verbose");
-        }
-        command.arg("create").arg("--target").arg(&runtimes_python);
-        apply_detached_flags(&mut command);
-        let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
-            Ok(output) => output,
-            Err(error) => {
-                step.fail();
-                return Err(ProviderError::PyvenvCreateFailed {
-                    folder: runtimes_python.display().to_string(),
-                    cause: error.to_string(),
-                }
-                .into());
-            }
-        };
-        if !output.status.success() {
-            step.fail();
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-            return Err(ProviderError::PyvenvCreateFailed {
-                folder: runtimes_python.display().to_string(),
-                cause: stderr,
-            }
-            .into());
-        }
-        step.done("Python virtual environment templates created");
-        info!("Current Python environment tabsdata metadata:");
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            info!("  {line}");
-        }
-        Ok(())
+        self.create_runtimes_as_pod(reporter).await
     }
 
     async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult {
@@ -751,6 +710,60 @@ impl KminusProvider {
         let (context, _system, profile) = self.database_context().await?;
         let multi = td_common::logging::multi_progress().unwrap_or_default();
         stop_database(&context, &profile, &multi).await
+    }
+
+    async fn create_runtimes_as_pod(&self, _reporter: &dyn Reporter) -> CommandResult {
+        let (context, system, profile) = self.database_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_pyvenvs(&context, ClusterProvider::Kminus, &system, &profile, &multi).await
+    }
+
+    #[allow(dead_code)]
+    async fn create_runtimes_as_proc(&self, reporter: &dyn Reporter) -> CommandResult {
+        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
+        fs::create_dir_all(&runtimes_python).map_err(|error| {
+            ProviderError::RuntimesFolderCreateFailed(
+                runtimes_python.display().to_string(),
+                error.to_string(),
+            )
+        })?;
+        let pyvenv = resolve_python_binary(PYVENV_BINARY).map_err(|error| {
+            ProviderError::BinaryNotFound(PYVENV_BINARY.to_owned(), error.to_string())
+        })?;
+        let step = reporter.step("Creating Python virtual environment templates");
+        let mut command = std::process::Command::new(&pyvenv);
+        if self.verbose {
+            command.arg("--verbose");
+        }
+        command.arg("create").arg("--target").arg(&runtimes_python);
+        apply_detached_flags(&mut command);
+        let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
+            Ok(output) => output,
+            Err(error) => {
+                step.fail();
+                return Err(ProviderError::PyvenvCreateFailed {
+                    folder: runtimes_python.display().to_string(),
+                    cause: error.to_string(),
+                }
+                .into());
+            }
+        };
+        if !output.status.success() {
+            step.fail();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(ProviderError::PyvenvCreateFailed {
+                folder: runtimes_python.display().to_string(),
+                cause: stderr,
+            }
+            .into());
+        }
+        step.done("Python virtual environment templates created");
+        info!("Current Python environment tabsdata metadata:");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            info!("  {line}");
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]
