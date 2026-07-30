@@ -161,7 +161,7 @@ def clean_py(project_folder):
         "local_development_artifacts",
         "site",
         "SOURCETRACK.yaml",
-        "tabsdata/service/agent/assets",
+        "tabsdatak/ag/assets",
         "target/build",
         "target/pytest",
         "target/python",

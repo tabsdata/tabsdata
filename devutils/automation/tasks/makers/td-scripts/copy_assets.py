@@ -78,9 +78,8 @@ def copy_assets():  # noqa: C901
         "src",
         "main",
         "python",
-        "tabsdata",
-        "service",
-        "agent",
+        "tabsdatak",
+        "ag",
         "assets",
     )
 
