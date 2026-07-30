@@ -25,6 +25,12 @@ use td_tower::extractors::Ref;
 enum SampleError {
     #[error("SQL Error: {0}")]
     SqlError(#[source] PolarsError) = 0,
+    #[error(
+        "The sample query may only read the sampled table '{0}'; referencing other \
+         tables or file-reading functions (read_csv/read_parquet/read_ipc/read_json) \
+         is not allowed"
+    )]
+    ForbiddenSqlTableReference(String) = 1,
     #[error("Could not create lazy frame to get sample: {0}")]
     LazyFrameError(#[source] PolarsError) = 5000,
     #[error("Could not create Parquet file to get sample, error: {0}")]
@@ -121,7 +127,16 @@ pub async fn get_table_sample(
                 Some(sql) => {
                     let mut sql_context = SQLContext::new();
                     sql_context.register(table_name.as_str(), lazy_frame);
-                    sql_context.execute(sql).map_err(SampleError::SqlError)?
+                    let plan = sql_context.execute(sql).map_err(SampleError::SqlError)?;
+                    // reject file-reading table functions before `collect` reads them
+                    if let Some(other) = sql_context
+                        .get_tables()
+                        .into_iter()
+                        .find(|t| t != table_name.as_str())
+                    {
+                        return Err(SampleError::ForbiddenSqlTableReference(other));
+                    }
+                    plan
                 }
                 None => lazy_frame,
             };
@@ -450,6 +465,26 @@ mod tests {
                 }
             }
         };
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_sql_rejects_file_read() -> Result<(), TdError> {
+        let res = test_get_table_sample(
+            0,
+            SampleLen::MAX as usize,
+            FileFormat::Csv,
+            Some(Sql::try_from("select * from read_csv('/etc/passwd')")?),
+        )
+        .await;
+        match res {
+            Ok(_) => panic!("Should reject reading a file via read_csv"),
+            Err(e) => {
+                if !matches!(e.domain_err(), SampleError::ForbiddenSqlTableReference(_)) {
+                    panic!("Expected ForbiddenSqlTableReference, got: {e}")
+                }
+            }
+        }
         Ok(())
     }
 

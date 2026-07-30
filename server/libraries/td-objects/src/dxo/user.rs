@@ -104,6 +104,9 @@ mod definitions {
     #[dto(list(on = UserDBWithNames))]
     #[inherits(UserDBWithNames)]
     pub struct UserRead {
+        #[exclude]
+        pub password_hash: PasswordHash,
+
         #[dto(list(pagination_by = "+"))]
         pub id: UserId,
         #[dto(list(filter, filter_like, order_by))]
@@ -118,6 +121,9 @@ mod definitions {
     #[dxo(builder(try_from = UserDBWithNames))]
     #[inherits(UserDBWithNames)]
     pub struct UserInfo {
+        #[exclude]
+        pub password_hash: PasswordHash,
+
         #[dxo(builder(skip), setter)]
         pub user_roles: Vec<Role>,
     }
