@@ -273,7 +273,8 @@ impl Params {
                 let secret = self
                     .jwt_secret
                     .to_owned()
-                    .unwrap_or_else(|| config.jwt.secret.clone().unwrap());
+                    .or_else(|| config.jwt.secret.clone())
+                    .ok_or(ConfigError::MissingJWTSecret)?;
                 let expiration = self
                     .access_jwt_expiration
                     .unwrap_or(config.jwt.access_token_expiration);
@@ -305,10 +306,6 @@ impl Params {
                 .extended_params
                 .resolve(config.extended_config.clone())?,
         };
-
-        if config.jwt.secret.is_none() {
-            Err(ConfigError::MissingJWTSecret)?
-        }
 
         if config.storage_mounts()?.is_empty() {
             Err(ConfigError::MissingStorage)?;
@@ -604,5 +601,41 @@ storage:
             partially_resolved_config.request_timeout,
             default_config.request_timeout
         );
+    }
+
+    #[test]
+    fn test_missing_jwt_secret_errors_without_panicking() {
+        let mut config = Config::default();
+        config.jwt.secret = None;
+
+        let params = Params {
+            #[cfg(target_os = "windows")]
+            storage_url: Some(String::from("file:///c:/storage")),
+            #[cfg(not(target_os = "windows"))]
+            storage_url: Some(String::from("file:///storage")),
+            address: None,
+            internal_address: None,
+            ssl_folder: None,
+            resources_folder: None,
+            jwt_secret: None,
+            access_jwt_expiration: None,
+            request_timeout: None,
+            check_frequency: None,
+            stuck_requested_timeout: None,
+            transaction_by: None,
+            etc: None,
+            msg: None,
+            orchestrator: None,
+            security_mode: None,
+            extended_params: ExtendedParams::default(),
+        };
+
+        let result = params.resolve(config);
+        assert!(
+            result.is_err(),
+            "expected an error for a missing JWT secret"
+        );
+        let err = result.err().unwrap();
+        assert!(err.to_string().contains("JWT Secret"), "got: {err}");
     }
 }

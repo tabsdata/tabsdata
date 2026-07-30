@@ -1527,7 +1527,11 @@ class APIServer:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
-            raise APIServerError(response.json())
+            try:
+                detail = response.json()
+            except ValueError:
+                detail = response.text
+            raise APIServerError(detail)
         else:
             return response
 

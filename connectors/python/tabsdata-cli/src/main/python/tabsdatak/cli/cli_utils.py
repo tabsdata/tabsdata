@@ -88,11 +88,13 @@ def is_valid_id(possible_id: str) -> bool:
     """
     Check if the provided string is a valid ID for an APIServer entity,
     for example a worker.
-    A valid ID is a 26 characters long, all capital letters and digits.
+    Matches both id forms 2.0 emits: a 26-character lowercase base32hex id, and a
+    logical id (``<key><YYYYMMDD>-<counter>``, e.g. ``wkr20260728-3``). Uppercase
+    is accepted too since the id decoder is case-insensitive.
     For now only needed in the CLI, if it ever is needed in more places it should be
     moved to general utils.
     """
-    id_pattern = re.compile(r"^([A-Z0-9]{26})$")
+    id_pattern = re.compile(r"^([0-9a-vA-V]{26}|[a-zA-Z]{1,3}[0-9]{8}-[0-9]{1,10})$")
     return bool(id_pattern.match(possible_id))
 
 

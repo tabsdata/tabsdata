@@ -79,6 +79,23 @@ def test_apiserver_error_wraps_non_dict_input_as_description():
     assert e.error_description == "plain text reason"
 
 
+def test_raise_for_status_falls_back_to_text_on_non_json_body():
+    import requests
+
+    class _Resp:
+        text = "expected: Collection name, a [A-Za-z0-9] word"
+
+        def raise_for_status(self):
+            raise requests.exceptions.HTTPError("400")
+
+        def json(self):
+            raise ValueError("not json")
+
+    with pytest.raises(a.APIServerError) as excinfo:
+        a.APIServer.raise_for_status(_Resp())
+    assert "Collection name" in str(excinfo.value)
+
+
 # ---------------------------------------------------------------------------
 # _obtain_certificate_file_path
 # ---------------------------------------------------------------------------

@@ -50,18 +50,29 @@ def _restore_sys_modules():
 # ---------------------------------------------------------------------------
 
 
-def test_is_valid_id_accepts_26char_uppercase_alphanumeric():
-    assert cli_utils.is_valid_id("ABCDEFGHIJ0123456789QRSTUV") is True
+@pytest.mark.parametrize(
+    "good",
+    [
+        "06fqh2ec35u11f1vb50ubkoi48",  # 26-char lowercase base32hex id
+        "ABCDEFGHIJ0123456789QRSTUV",  # uppercase form (decoder is case-insensitive)
+        "wkr20260728-3",  # logical id, unpadded counter
+        "fv20260728-0000000013",  # logical id, zero-padded counter
+    ],
+)
+def test_is_valid_id_accepts_2_0_id_forms(good):
+    assert cli_utils.is_valid_id(good) is True
 
 
 @pytest.mark.parametrize(
     "bad",
     [
         "",  # empty
-        "abcdefghijklmnopqrstuvwxyz",  # lowercase
+        "abcdefghijklmnopqrstuvwxyz",  # base32hex has no w-z
         "ABCDEFGHIJ0123456789QRSTU",  # 25 chars (too short)
         "ABCDEFGHIJ0123456789QRSTUVW",  # 27 chars (too long)
         "ABCDEFGHIJ0123456789QRSTU!",  # invalid char
+        "wkr20260728",  # logical id missing the counter
+        "3",  # a bare list index, not an id
     ],
 )
 def test_is_valid_id_rejects_bad_inputs(bad):
