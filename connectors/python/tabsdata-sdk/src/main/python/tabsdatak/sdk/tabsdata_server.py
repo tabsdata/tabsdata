@@ -4095,7 +4095,7 @@ class TabsdataServer:
         raise_for_status: bool = True,
     ) -> None:
         """
-        Download the bundle of a function version as a tgz archive.
+        Download the bundle of a function version as a tar.zst archive.
 
         The bundle is addressed by its function version id; only Active or
         Frozen versions are downloadable (a version whose function has been
@@ -4104,7 +4104,7 @@ class TabsdataServer:
         Args:
             function_version_id (str): The function version id (fvid) whose
                 bundle will be downloaded.
-            destination_file (str): The path where the tgz bundle is written.
+            destination_file (str): The path where the tar.zst bundle is written.
             raise_for_status (bool, optional): Whether to raise an exception if
                 the request was not successful. Defaults to True.
 

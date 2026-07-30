@@ -43,7 +43,7 @@ def _info_payload(**overrides: Any) -> dict:
         "function": "publish_people",
         "function_run_id": 60,
         "function_bundle": {
-            "uri": "s3://bucket/bundle.tar.gz",
+            "uri": "s3://bucket/bundle.tar.zst",
             "env_prefix": "AWS_",
         },
         "function_stage": {
@@ -147,7 +147,7 @@ def test_load_minimal_fixture():
     assert req.info.transaction_id == 42
     assert req.info.function_run_id == 60
     assert req.info.function_bundle == Location(
-        uri="s3://bucket/bundle.tar.gz", env_prefix="AWS_"
+        uri="s3://bucket/bundle.tar.zst", env_prefix="AWS_"
     )
     assert req.input == ()
     assert len(req.output) == 1
@@ -182,7 +182,7 @@ def test_load_bundle_without_env_prefix(tmp_path):
         tmp_path,
         _request_payload(
             info=_info_payload(
-                function_bundle={"uri": "file:///tmp/b.tgz"},
+                function_bundle={"uri": "file:///tmp/b.tar.zst"},
             ),
         ),
     )
@@ -195,7 +195,7 @@ def test_load_bundle_with_explicit_null_env_prefix(tmp_path):
         tmp_path,
         _request_payload(
             info=_info_payload(
-                function_bundle={"uri": "file:///tmp/b.tgz", "env_prefix": None},
+                function_bundle={"uri": "file:///tmp/b.tar.zst", "env_prefix": None},
             ),
         ),
     )

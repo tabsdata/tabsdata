@@ -126,7 +126,7 @@ function delete   --name NAME [--proj PROJECT] [--col COLLECTION] [-y]
 function get      --name NAME [--proj PROJECT] [--col COLLECTION] [--version V] [--history] [-o]
                               #   --version: details of a specific version (default: current)
 function bundle   --fn-version FVID [--proj PROJECT] --file FILE
-                              #   downloads a function version's bundle (a .tgz archive)
+                              #   downloads a function version's bundle (a .tar.zst archive)
 function list                 [--proj PROJECT] [--col COLLECTION] [--cron] [--stream] [-o]
 function trigger  --name NAME [--proj PROJECT] [--col COLLECTION] [--plan-name N] [--detach]
 function enable   --name NAME [--proj PROJECT] [--col COLLECTION]

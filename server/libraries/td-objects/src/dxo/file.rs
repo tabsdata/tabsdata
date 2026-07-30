@@ -187,19 +187,19 @@ mod tests {
     #[tokio::test]
     async fn attachment_sets_content_disposition() {
         let resp = DownloadResponse::octet_stream(payload_stream(b""))
-            .attachment("foo-bar.tgz")
+            .attachment("foo-bar.tar.zst")
             .into_response();
         let cd = resp.headers().get(CONTENT_DISPOSITION).unwrap();
-        assert!(cd.to_str().unwrap().contains("foo-bar.tgz"));
+        assert!(cd.to_str().unwrap().contains("foo-bar.tar.zst"));
     }
 
     #[tokio::test]
     async fn attachment_accepts_format_args() {
         let resp = DownloadResponse::octet_stream(payload_stream(b""))
-            .attachment(format_args!("{}-{}.tgz", "foo", 42))
+            .attachment(format_args!("{}-{}.tar.zst", "foo", 42))
             .into_response();
         let cd = resp.headers().get(CONTENT_DISPOSITION).unwrap();
-        assert_eq!(cd, "attachment; filename=\"foo-42.tgz\"");
+        assert_eq!(cd, "attachment; filename=\"foo-42.tar.zst\"");
     }
 
     #[tokio::test]

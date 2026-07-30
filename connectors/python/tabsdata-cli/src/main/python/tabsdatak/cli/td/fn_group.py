@@ -221,12 +221,12 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
     "file",
     help=(
         "Path to write the downloaded bundle to. The bundle is a "
-        "gzip-compressed tar archive (.tgz)."
+        "zstandard-compressed tar archive (.tar.zst)."
     ),
 )
 @click.pass_context
 def bundle(ctx: click.Context, fn_version: str, file: str):
-    """Download the bundle of a function version as a tgz archive.
+    """Download the bundle of a function version as a tar.zst archive.
 
     The bundle is addressed by its function version id (fvid); only Active or
     Frozen versions can be downloaded (a version whose function has been
@@ -237,7 +237,7 @@ def bundle(ctx: click.Context, fn_version: str, file: str):
         ctx, "Function version id (fvid) whose bundle will be downloaded"
     )
     file = file or logical_prompt(
-        ctx, "Path to write the downloaded bundle to (a .tgz archive)"
+        ctx, "Path to write the downloaded bundle to (a .tar.zst archive)"
     )
     click.echo(f"Downloading bundle of function version '{fn_version}' to '{file}'")
     click.echo("-" * 10)

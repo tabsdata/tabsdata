@@ -20,7 +20,7 @@ mod definitions {
         #[dxo(setter)]
         pub hash: BundleHash,
         // Storage prefix frozen at upload = collection.base_path. The bundle row is
-        // durable, so it self-locates its .tgz regardless of later collection changes.
+        // durable, so it self-locates its .tar.zst regardless of later collection changes.
         #[dxo(setter)]
         #[builder(default)]
         pub base_path: BasePath,

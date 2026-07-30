@@ -529,7 +529,7 @@ mod tests {
         assert_eq!(info.function_run_id, physical_function_run.id);
 
         let function_path = SPath::parse(format!(
-            "/bundles/c/{}/f/{}.tgz",
+            "/bundles/c/{}/f/{}.tar.zst",
             collection.id, create.bundle_id
         ))?;
         let (uri, mount_def) = context.storage.to_external_uri(&function_path)?;

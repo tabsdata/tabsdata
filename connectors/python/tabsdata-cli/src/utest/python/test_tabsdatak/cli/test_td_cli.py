@@ -120,7 +120,7 @@ def test_fn_update_help_describes_v2_command():
     assert result.exit_code == 0
 
 
-def test_fn_bundle_help_advertises_options_and_tgz():
+def test_fn_bundle_help_advertises_options_and_archive_format():
     runner = CliRunner()
     result = runner.invoke(cli, ["fn", "bundle", "--help"])
     assert result.exit_code == 0
@@ -128,8 +128,8 @@ def test_fn_bundle_help_advertises_options_and_tgz():
     assert "--proj" in out
     assert "--fn-version" in out
     assert "--file" in out
-    # The help must make clear the downloaded file is a tgz archive.
-    assert "tgz" in out
+    # The help must make clear the downloaded file is a zstd tar archive.
+    assert "tar.zst" in out
 
 
 # ---------------------------------------------------------------------------

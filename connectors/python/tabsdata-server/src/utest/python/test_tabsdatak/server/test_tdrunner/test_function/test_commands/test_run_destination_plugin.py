@@ -117,7 +117,7 @@ def built_bundle(tmp_path, user_project, fixture_subscriber) -> Path:
     return extracted
 
 
-def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
+def _write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Path:
     path.write_text(
         yaml.safe_dump({
             "Function": {

@@ -29,7 +29,7 @@ import pytest
 
 
 def info_payload(
-    bundle_uri: str = "file:///bundle.tgz",
+    bundle_uri: str = "file:///bundle.tar.zst",
     **overrides: Any,
 ) -> dict[str, Any]:
     """Build a synthetic ``Function.info`` dict.

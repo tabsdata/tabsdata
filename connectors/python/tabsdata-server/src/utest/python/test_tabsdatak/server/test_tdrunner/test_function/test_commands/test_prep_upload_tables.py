@@ -80,7 +80,7 @@ def _write_request(
     path: Path,
     *,
     output: list | None = None,
-    bundle_uri: str = "file:///bundle.tgz",
+    bundle_uri: str = "file:///bundle.tar.zst",
 ) -> Path:
     wrapped = [_output_table(entry, index) for index, entry in enumerate(output or [])]
     body = {

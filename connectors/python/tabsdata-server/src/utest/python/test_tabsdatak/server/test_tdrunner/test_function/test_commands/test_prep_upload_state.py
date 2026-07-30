@@ -81,7 +81,7 @@ def _write_request(
     path: Path,
     *,
     system_output: list | None = None,
-    bundle_uri: str = "file:///bundle.tgz",
+    bundle_uri: str = "file:///bundle.tar.zst",
 ) -> Path:
     body = {
         "Function": {

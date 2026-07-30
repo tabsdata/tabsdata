@@ -35,7 +35,7 @@ pub enum StorageLocation {
     /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p`
-    /// * `/LOCATION/bundles/c/COLLECTION/f/BUNDLE.tgz`
+    /// * `/LOCATION/bundles/c/COLLECTION/f/BUNDLE.tar.zst`
     /// * `/LOCATION/stages/c/COLLECTION/f/FUNCTION`
     /// * `/LOCATION/checkpoints/c/COLLECTION/f/FUNCTION`
     #[default]
@@ -509,7 +509,7 @@ impl VersionLocationBuilder for V1LocationBuilder {
         if let Some(collection) = &info.collection {
             path = path.child("c")?.child(collection)?;
             if let Some(bundle) = &info.bundle {
-                // Bundles are stored at {LOCATION}/bundles/c/COLLECTION/f/BUNDLE.tgz
+                // Bundles are stored at {LOCATION}/bundles/c/COLLECTION/f/BUNDLE.tar.zst
                 // we need to recalculate the base path accordingly (prefixed by the
                 // base path, not the collection segment built above).
                 path = SPath::parse(info.location.as_str())?
@@ -517,7 +517,7 @@ impl VersionLocationBuilder for V1LocationBuilder {
                     .child("c")?
                     .child(collection)?;
 
-                path = path.child("f")?.child(&format!("{bundle}.tgz"))?;
+                path = path.child("f")?.child(&format!("{bundle}.tar.zst"))?;
             } else if let Some(stage) = &info.stage {
                 // Stages are stored at {LOCATION}/stages/c/COLLECTION/f
                 // we need to recalculate the base path accordingly.
@@ -657,18 +657,20 @@ mod tests {
             .function(&bundle);
         assert_eq!(
             builder.build()?.0,
-            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tgz"))?
+            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tar.zst"))?
         );
         assert_eq!(
             builder.build_meta("foo")?.0,
-            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tgz-foo.meta"))?
+            SPath::parse(format!(
+                "/L/bundles/c/{collection}/f/{bundle}.tar.zst-foo.meta"
+            ))?
         );
 
         let bundle = BundleId::default();
         builder.function(&bundle);
         assert_eq!(
             builder.build()?.0,
-            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tgz"))?
+            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tar.zst"))?
         );
         Ok(())
     }
@@ -804,11 +806,13 @@ mod tests {
             .function(&bundle);
         assert_eq!(
             builder.build()?.0,
-            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
+            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tar.zst"))?
         );
         assert_eq!(
             builder.build_meta("foo")?.0,
-            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz-foo.meta"))?
+            SPath::parse(format!(
+                "/bundles/c/{collection}/f/{bundle}.tar.zst-foo.meta"
+            ))?
         );
         Ok(())
     }

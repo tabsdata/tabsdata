@@ -265,7 +265,7 @@ mod bundle_route {
         let d = state.download_bundle.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::octet_stream(d.stream)
             .attachment(format_args!(
-                "{}-{}.tgz",
+                "{}-{}.tar.zst",
                 d.function_name, d.function_version_id
             ))
             .etag(d.bundle_id)

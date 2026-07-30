@@ -12,7 +12,7 @@ Function:
     function: publish_people
     function_run_id: 60
     function_bundle:
-      uri: s3://bucket/bundle.tar.gz
+      uri: s3://bucket/bundle.tar.zst
       env_prefix: AWS_
     function_stage:
       uri: file:///tmp/stage

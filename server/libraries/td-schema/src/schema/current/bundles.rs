@@ -32,7 +32,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Bundles::CollectionId).text().not_null())
                 .col(ColumnDef::new(Bundles::Hash).text().not_null())
                 // Storage prefix frozen at upload = collection.base_path. The bundle
-                // row is durable (kept, marked on claim), so it self-locates its .tgz.
+                // row is durable (kept, marked on claim), so it self-locates its .tar.zst.
                 .col(ColumnDef::new(Bundles::BasePath).text().not_null())
                 // Lifecycle marker: Pending (uploaded) → Registered (claimed by a
                 // function register/update/patch). Rows are never deleted.

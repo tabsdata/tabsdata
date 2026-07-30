@@ -213,7 +213,7 @@ def _output_table_payload(name: str, *, location: dict) -> dict:
     }
 
 
-def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
+def _write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Path:
     path.write_text(
         yaml.safe_dump({
             "Function": {
@@ -901,7 +901,7 @@ def _bare_info() -> Info:
         function_defined_on=1780000000000,
         function="fn",
         function_run_id=4,
-        function_bundle=Location(uri="file:///bundle.tgz"),
+        function_bundle=Location(uri="file:///bundle.tar.zst"),
         function_stage=Location(uri="file:///stage"),
         triggered_on=1780000000100,
         transaction_id=3,

@@ -54,7 +54,7 @@ def _info(**overrides: Any) -> Info:
         "function_defined_on": 1780000000000,
         "function": "fn",
         "function_run_id": 4,
-        "function_bundle": Location(uri="file:///bundle.tgz"),
+        "function_bundle": Location(uri="file:///bundle.tar.zst"),
         "function_stage": Location(uri="file:///stage"),
         "triggered_on": 1780000000100,
         "transaction_id": 3,
@@ -309,26 +309,26 @@ def test_env_prefix_prepended(tmp_path):
 def test_build_bundle_fetch_request_local(tmp_path):
     """Default _request() helper uses a file:// bundle URI."""
     r = _request()
-    target = tmp_path / "bundle.tar.gz"
+    target = tmp_path / "bundle.tar.zst"
     out = build_bundle_fetch_request(r, target)
     assert len(out.pairs) == 1
     assert isinstance(out.pairs[0].source, LocalFileEndpoint)
-    assert out.pairs[0].source.url == "file:///bundle.tgz"
+    assert out.pairs[0].source.url == "file:///bundle.tar.zst"
     assert isinstance(out.pairs[0].target, LocalFileEndpoint)
-    assert "bundle.tar.gz" in out.pairs[0].target.url
+    assert "bundle.tar.zst" in out.pairs[0].target.url
 
 
 def test_build_bundle_fetch_request_s3(tmp_path):
     r = _request(
         info=_info(
-            function_bundle=Location(uri="s3://b/bundle.tgz", env_prefix="STAGE"),
+            function_bundle=Location(uri="s3://b/bundle.tar.zst", env_prefix="STAGE"),
         ),
     )
-    target = tmp_path / "bundle.tar.gz"
+    target = tmp_path / "bundle.tar.zst"
     out = build_bundle_fetch_request(r, target)
     src = out.pairs[0].source
     assert isinstance(src, S3Endpoint)
-    assert src.url == "s3://b/bundle.tgz"
+    assert src.url == "s3://b/bundle.tar.zst"
     assert src.configs.access_key == EnvRef(name="STAGE_AWS_ACCESS_KEY_ID")
 
 

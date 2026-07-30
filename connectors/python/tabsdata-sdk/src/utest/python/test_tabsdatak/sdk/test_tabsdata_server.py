@@ -574,7 +574,7 @@ def test_download_function_bundle_writes_response_content(tmp_path):
     server = ts.TabsdataServer.__new__(ts.TabsdataServer)
     server.connection = _FakeConnection()
 
-    dest = tmp_path / "bundle.tgz"
+    dest = tmp_path / "bundle.tar.zst"
     server.download_function_bundle("fv-123", str(dest))
 
     assert seen["fvid"] == "fv-123"
