@@ -10,3 +10,6 @@ storage:
   - id: BUNDLES
     path: /bundles
     uri: ${{system:tdk_storage_url}}bundles/
+  - id: IMAGES
+    path: /images
+    uri: ${{system:tdk_storage_url}}images/
