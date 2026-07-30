@@ -10,7 +10,7 @@ use td_common::status::ExitStatus::{Cancelled, GeneralError, NoAction};
 use td_error::TdError;
 use tracing::info;
 
-use crate::base::constants::{DEFAULT_LOG_LEVEL, KUBECONFIG_FILE, LogLevel};
+use crate::base::constants::{DEFAULT_LOG_LEVEL, KUBECONFIG_FILE, LogLevel, SCHEDULER_FARGATE};
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::{InteractiveReporter, Reporter};
@@ -27,6 +27,7 @@ use crate::client::tdkserver::commands::template::get::get_templates;
 use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
+use crate::kube::api::pod::probe_scheduler;
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
 use crate::runtime::instance::cluster::ClusterProperties;
 use crate::runtime::provider::{ClusterProvider, provider_for};
@@ -189,6 +190,18 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         let context = built.kube_context().await?;
         ensure_cluster_reachable(context.client()).await?;
         ensure_namespace_exists(&context).await?;
+        if provider == ClusterProvider::Fargate {
+            if let Some(scheduler) = probe_scheduler(&context).await?
+                && scheduler != SCHEDULER_FARGATE
+            {
+                return Err(ProviderError::FargateProfileMissing {
+                    namespace: context.namespace().to_owned(),
+                    scheduler,
+                    expected: SCHEDULER_FARGATE.to_owned(),
+                }
+                .into());
+            }
+        }
         built.ensure_creatable_service().await?;
     }
 

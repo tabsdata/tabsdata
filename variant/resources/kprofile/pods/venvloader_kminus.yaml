@@ -57,7 +57,7 @@ spec:
           requests:
             cpu: "500m"
             memory: "1Gi"
-            ephemeral-storage: "8Gi"
+            ephemeral-storage: "16Gi"
         env:
         - name: CONTAINER_ROOT
           value: "$(KM_CONTAINER_ROOT)"

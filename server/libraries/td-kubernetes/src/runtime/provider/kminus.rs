@@ -25,9 +25,9 @@ use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DATABASE_NAME_POSTGRES,
     DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, ENV_UV_PYTHON_INSTALL_DIR, FOLDER_CLUSTER,
     FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
-    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV, KPROFILE_ASSETS_FAMILY,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, UvMode, VENVS_IMAGE,
-    YAML_NULL,
+    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV, IndexReach,
+    KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
+    LogLevel, UvMode, VENVS_IMAGE, YAML_NULL,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -973,7 +973,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         database_ssl_mode: Some(DATABASE_SSL_MODE_PREFER.to_owned()),
         database_ssl_root_cert: Some(YAML_NULL.to_owned()),
         uv_default_index: Some(SystemValues::uv_default_index()?),
-        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(false)?),
+        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::Host)?),
         uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
         ..SystemValues::default()
     })

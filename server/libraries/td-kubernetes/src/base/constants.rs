@@ -21,6 +21,11 @@ pub const ENV_UV_PYTHON_INSTALL_DIR: &str = "UV_PYTHON_INSTALL_DIR";
 pub const DEVPI_INDEX_URL_HOST: &str = "http://localhost:14159/tabsdata/td/+simple/";
 pub const DEVPI_INDEX_URL_CONTAINER: &str =
     "http://host.docker.internal:14159/tabsdata/td/+simple/";
+pub const DEVPI_INDEX_URL_CLUSTER: &str =
+    "http://devpi.devpi.svc.cluster.local:14159/tabsdata/td/+simple/";
+
+pub const CONTAINER_HOST_GATEWAY: &str = "host.docker.internal";
+const LOOPBACK_HOSTS: [&str; 4] = ["localhost", "127.0.0.1", "::1", "[::1]"];
 
 pub const PYPI_INDEX_URL: &str = "https://pypi.org/simple/";
 
@@ -37,6 +42,13 @@ pub enum UvMode {
     Devpi,
     Pypi,
     Unset,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexReach {
+    Host,
+    HostContainer,
+    Cluster,
 }
 
 impl UvMode {
@@ -66,20 +78,31 @@ impl UvMode {
 
     pub fn default_index(self) -> String {
         match self {
-            Self::Local | Self::Devpi | Self::Pypi => String::new(),
+            Self::Local => String::new(),
+            Self::Devpi | Self::Pypi => PYPI_INDEX_URL.to_owned(),
             Self::Unset => {
                 environment_index(ENV_UV_DEFAULT_INDEX).unwrap_or_else(|| PYPI_INDEX_URL.to_owned())
             }
         }
     }
 
-    pub fn extra_index_url(self, container: bool) -> String {
+    pub fn extra_index_url(self, reach: IndexReach) -> String {
         match self {
             Self::Local => String::new(),
-            Self::Devpi if container => DEVPI_INDEX_URL_CONTAINER.to_owned(),
-            Self::Devpi => DEVPI_INDEX_URL_HOST.to_owned(),
+            Self::Devpi => match reach {
+                IndexReach::Host => DEVPI_INDEX_URL_HOST.to_owned(),
+                IndexReach::HostContainer => DEVPI_INDEX_URL_CONTAINER.to_owned(),
+                IndexReach::Cluster => DEVPI_INDEX_URL_CLUSTER.to_owned(),
+            },
             Self::Pypi => String::new(),
-            Self::Unset => environment_index(ENV_UV_EXTRA_INDEX_URL).unwrap_or_default(),
+            Self::Unset => match environment_index(ENV_UV_EXTRA_INDEX_URL) {
+                Some(index) => match reach {
+                    IndexReach::Host => index,
+                    IndexReach::HostContainer => reach_from_container(&index),
+                    IndexReach::Cluster => DEVPI_INDEX_URL_CLUSTER.to_owned(),
+                },
+                None => String::new(),
+            },
         }
     }
 
@@ -97,6 +120,22 @@ impl UvMode {
             },
         }
     }
+}
+
+fn reach_from_container(index: &str) -> String {
+    let Ok(mut url) = url::Url::parse(index) else {
+        return index.to_owned();
+    };
+    let Some(host) = url.host_str() else {
+        return index.to_owned();
+    };
+    if !LOOPBACK_HOSTS.contains(&host) {
+        return index.to_owned();
+    }
+    if url.set_host(Some(CONTAINER_HOST_GATEWAY)).is_err() {
+        return index.to_owned();
+    }
+    url.to_string()
 }
 
 fn environment_index(variable: &str) -> Option<String> {
@@ -238,8 +277,16 @@ pub const KUBE_NAME_SEPARATOR: &str = "-";
 pub const KUBE_METADATA_FIELD_NAME: &str = "name";
 pub const KUBE_METADATA_FIELD_UID: &str = "uid";
 
+pub const HTTP_STATUS_FORBIDDEN: u16 = 403;
 pub const HTTP_STATUS_NOT_FOUND: u16 = 404;
 pub const HTTP_STATUS_CONFLICT: u16 = 409;
+
+pub const SCHEDULER_FARGATE: &str = "fargate-scheduler";
+
+pub const PROBE_POD: &str = "td-scheduler-probe";
+pub const PROBE_IMAGE: &str = "busybox:1.37";
+pub const PROBE_CPU: &str = "250m";
+pub const PROBE_MEMORY: &str = "512Mi";
 
 pub const POD_YAML_FIELD_KIND: &str = "kind";
 pub const POD_YAML_FIELD_METADATA: &str = "metadata";

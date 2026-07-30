@@ -12,7 +12,8 @@ use kube::runtime::wait::{Condition, await_condition};
 use tracing::debug;
 
 use crate::base::constants::{
-    DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT, HTTP_STATUS_NOT_FOUND,
+    DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT, HTTP_STATUS_FORBIDDEN,
+    HTTP_STATUS_NOT_FOUND, PROBE_CPU, PROBE_IMAGE, PROBE_MEMORY, PROBE_POD,
 };
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
@@ -22,6 +23,61 @@ use crate::kube::api::{
 };
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
+
+pub async fn probe_scheduler(context: &KubeContext) -> Result<Option<String>, KubernetesError> {
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
+    let parameters = PostParams {
+        dry_run: true,
+        ..PostParams::default()
+    };
+    let admitted = match api
+        .create(&parameters, &probe_pod(context.namespace()))
+        .await
+    {
+        Ok(admitted) => admitted,
+        Err(kube::Error::Api(api_error)) if api_error.code == HTTP_STATUS_FORBIDDEN => {
+            debug!(
+                namespace = context.namespace(),
+                "kube.pod: cannot probe the scheduler; creating pods is not allowed"
+            );
+            return Ok(None);
+        }
+        Err(error) => {
+            return Err(KubePodError::ApplyFailed {
+                namespace: context.namespace().to_owned(),
+                cause: error.to_string(),
+            }
+            .into());
+        }
+    };
+    Ok(admitted.spec.and_then(|spec| spec.scheduler_name))
+}
+
+fn probe_pod(namespace: &str) -> Pod {
+    serde_json::from_value(serde_json::json!({
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": PROBE_POD,
+            "namespace": namespace,
+        },
+        "spec": {
+            "restartPolicy": "Never",
+            "containers": [{
+                "name": "probe",
+                "image": PROBE_IMAGE,
+                "command": ["true"],
+                "resources": {
+                    "requests": {
+                        "cpu": PROBE_CPU,
+                        "memory": PROBE_MEMORY,
+                    },
+                },
+            }],
+        },
+    }))
+    .expect("the scheduler probe pod is a valid pod spec")
+}
 
 pub async fn create_pod(
     context: &KubeContext,

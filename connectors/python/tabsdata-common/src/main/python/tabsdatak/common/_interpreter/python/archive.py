@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -27,6 +28,9 @@ MOUNT_OPTIONS_KEY = "options"
 
 SECRET_ENV_PREFIX = "SECRETS__STORAGE__MOUNTS__"
 SECRET_ENV_OPTIONS_INFIX = "__OPTIONS__"
+SECRET_ENV_URI_SUFFIX = "__URI"
+
+PLACEHOLDER_PREFIX = "${{"
 
 IMAGES_MOUNT_ID = "IMAGES"
 IMAGES_SUBFOLDER = "python"
@@ -42,6 +46,23 @@ def secret_env_name(mount_id: str, option_key: str) -> str:
     )
 
 
+def secret_uri_env_name(mount_id: str) -> str:
+    return f"{SECRET_ENV_PREFIX}{mount_id}{SECRET_ENV_URI_SUFFIX}"
+
+
+def resolve_uri(uri: str, mount_id: str, storage_config: Path) -> str:
+    if not uri.startswith(PLACEHOLDER_PREFIX):
+        return uri
+    variable = secret_uri_env_name(mount_id)
+    resolved = os.environ.get(variable, "").strip()
+    if not resolved:
+        raise MountNotFoundError(
+            f"Mount {mount_id!r} in {storage_config} holds the placeholder {uri!r} "
+            f"and the environment variable {variable} is unset or empty."
+        )
+    return resolved
+
+
 def load_mount(storage_config: Path, mount_id: str) -> tuple[str, list[str]]:
     document = yaml.safe_load(storage_config.read_text(encoding="utf-8"))
     mounts = (document or {}).get(STORAGE_KEY, {}).get(MOUNTS_KEY, []) or []
@@ -54,7 +75,7 @@ def load_mount(storage_config: Path, mount_id: str) -> tuple[str, list[str]]:
                 f"Mount {mount_id!r} in {storage_config} declares no uri."
             )
         options = mount.get(MOUNT_OPTIONS_KEY) or {}
-        return uri, list(options.keys())
+        return resolve_uri(uri, mount_id, storage_config), list(options.keys())
     raise MountNotFoundError(f"Mount {mount_id!r} not found in {storage_config}.")
 
 

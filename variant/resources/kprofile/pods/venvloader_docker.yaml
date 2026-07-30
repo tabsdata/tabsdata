@@ -54,9 +54,9 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         resources:
           requests:
-            cpu: "500m"
-            memory: "1Gi"
-            ephemeral-storage: "8Gi"
+            cpu: "1"
+            memory: "4Gi"
+            ephemeral-storage: "16Gi"
         env:
         - name: CONTAINER_ROOT
           value: ""

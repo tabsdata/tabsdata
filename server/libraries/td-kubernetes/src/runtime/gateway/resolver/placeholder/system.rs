@@ -13,6 +13,7 @@ use regex::Regex;
 use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator};
 use td_error::TdError;
 
+use crate::base::constants::IndexReach;
 use crate::base::constants::UvMode;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
@@ -177,8 +178,8 @@ impl SystemValues {
         Ok(uv_mode()?.default_index())
     }
 
-    pub fn uv_extra_index_url(container: bool) -> Result<String, TdError> {
-        Ok(uv_mode()?.extra_index_url(container))
+    pub fn uv_extra_index_url(reach: IndexReach) -> Result<String, TdError> {
+        Ok(uv_mode()?.extra_index_url(reach))
     }
 
     pub fn uv_index_strategy() -> Result<String, TdError> {

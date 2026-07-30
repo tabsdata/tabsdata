@@ -26,6 +26,9 @@ MOUNT_OPTIONS_KEY = "options"
 
 SECRET_ENV_PREFIX = "SECRETS__STORAGE__MOUNTS__"
 SECRET_ENV_OPTIONS_INFIX = "__OPTIONS__"
+SECRET_ENV_URI_SUFFIX = "__URI"
+
+PLACEHOLDER_PREFIX = "${{"
 
 IMAGES_MOUNT_ID = "IMAGES"
 IMAGES_SUBFOLDER = "python"
@@ -100,6 +103,24 @@ def secret_env_name(mount_id: str, option_key: str) -> str:
     )
 
 
+def secret_uri_env_name(mount_id: str) -> str:
+    return f"{SECRET_ENV_PREFIX}{mount_id}{SECRET_ENV_URI_SUFFIX}"
+
+
+def resolve_uri(uri: str, mount_id: str) -> str:
+    if not uri.startswith(PLACEHOLDER_PREFIX):
+        return uri
+    variable = secret_uri_env_name(mount_id)
+    resolved = os.environ.get(variable, "").strip()
+    if not resolved:
+        die(
+            "Reading the mount",
+            f"Mount {mount_id!r} holds the placeholder {uri!r} and the environment "
+            f"variable {variable} is unset or empty",
+        )
+    return resolved
+
+
 def load_mount(storage_config: Path, mount_id: str) -> tuple[str, dict[str, str]]:
     try:
         document = yaml.safe_load(storage_config.read_text(encoding="utf-8"))
@@ -118,7 +139,7 @@ def load_mount(storage_config: Path, mount_id: str) -> tuple[str, dict[str, str]
             value = os.environ.get(secret_env_name(mount_id, key), "")
             if value:
                 resolved[key] = value
-        return str(uri), resolved
+        return resolve_uri(str(uri), mount_id), resolved
     die("Reading the mount", f"Mount {mount_id!r} not found in {storage_config}")
     raise AssertionError
 

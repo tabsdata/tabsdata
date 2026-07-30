@@ -110,6 +110,17 @@ pub enum ProviderError {
         image: String,
         cause: String,
     } = 5115,
+    #[error(
+        "Namespace '{namespace}' is not covered by any fargate profile, so its pods would be \
+         scheduled by '{scheduler}' instead of '{expected}' and would never start. Create a \
+         profile covering it with: eksctl create fargateprofile --cluster <CLUSTER> \
+         --region <REGION> --name fp-{namespace} --namespace '{namespace}'."
+    )]
+    FargateProfileMissing {
+        namespace: String,
+        scheduler: String,
+        expected: String,
+    } = 5116,
     #[error("Failed to handle {phase} secrets: {cause}.")]
     SecretHandlerFailed { phase: String, cause: String } = 5200,
     #[error("Argument --provider is required when no active context is set.")]

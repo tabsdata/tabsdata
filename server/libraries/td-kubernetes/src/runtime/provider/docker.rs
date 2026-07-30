@@ -15,8 +15,8 @@ use td_common::status::ExitStatus::NoAction;
 
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_RUNTIMES_ROOT, CONTAINER_TABSDATA_ROOT,
-    DATABASE_SSL_MODE_PREFER, FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, YAML_NULL,
+    DATABASE_SSL_MODE_PREFER, FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach,
+    KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, YAML_NULL,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -247,7 +247,7 @@ impl Provider for DockerProvider {
             storage_path: Some(storage_folder.to_string_lossy().to_string()),
             storage_url: Some(container_storage_url()),
             uv_default_index: Some(SystemValues::uv_default_index()?),
-            uv_extra_index_url: Some(SystemValues::uv_extra_index_url(true)?),
+            uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::HostContainer)?),
             uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
             ..SystemValues::default()
         })

@@ -15,7 +15,7 @@ use td_common::settings::DEFAULT_INSTANCE;
 
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_RUNTIMES_ROOT, DATABASE_SSL_MODE_VERIFY_CA,
-    DATABASE_SSL_ROOT_CERT, FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY,
+    DATABASE_SSL_ROOT_CERT, FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach, KPROFILE_ASSETS_FAMILY,
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
@@ -232,7 +232,7 @@ impl Provider for FargateProvider {
             database_ssl_mode: Some(DATABASE_SSL_MODE_VERIFY_CA.to_owned()),
             database_ssl_root_cert: Some(DATABASE_SSL_ROOT_CERT.to_owned()),
             uv_default_index: Some(SystemValues::uv_default_index()?),
-            uv_extra_index_url: Some(SystemValues::uv_extra_index_url(true)?),
+            uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::Cluster)?),
             uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
             ..SystemValues::default()
         })

@@ -56,7 +56,7 @@ PYTHON_VERSION="3.12.13"
 
 PYTHON_MAJOR="3"
 PYTHON_MINOR="12"
-PYTHON_MINIMUM_PATCH="11"
+PYTHON_MINIMUM_PATCH="13"
 
 IMAGE_NAME="tdvenvs"
 IMAGE_SUFFIX=".tar.zst"
@@ -64,6 +64,7 @@ IMAGE_SUFFIX=".tar.zst"
 UV_FOLDER=".uv"
 UV_PYTHON_FOLDER="python"
 UV_KENVS_FOLDER="kenvs"
+UV_LINK_MODE_DEFAULT="${UV_LINK_MODE:-copy}"
 
 TOOLS_HOME="$HOME/.tools"
 TOOLS_BIN_FOLDER="bin"
@@ -167,9 +168,11 @@ setup_workspace() {
    virtual_environment_td="$UV_KENVS_HOME/$VENV_TD"
    virtual_environment_z="$TOOLS_KENVS_HOME/$VENV_Z"
    export UV_PYTHON_INSTALL_DIR="$UV_PYTHON_HOME"
+   export UV_LINK_MODE="$UV_LINK_MODE_DEFAULT"
    echo ">> Using Python $python_version in work folder $work"
    echo ">> Using uv home $UV_HOME"
    echo ">> Using tools home $TOOLS_HOME"
+   echo ">> Using uv link mode $UV_LINK_MODE"
 }
 
 install_prerequisites() {
