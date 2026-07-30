@@ -82,7 +82,7 @@ pub fn server_connectable(server: &ComponentConfig) -> Result<DatabaseConfig, Db
             password,
         }),
         schema: None,
-        app_role: None,
+        app_role: server.app_role.clone(),
         pool: server.pool.clone(),
     })
 }

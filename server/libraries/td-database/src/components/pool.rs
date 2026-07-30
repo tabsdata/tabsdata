@@ -8,7 +8,7 @@ use crate::components::sql::execute_batch_tx;
 #[cfg(postgres)]
 use crate::components::sql::{
     create_owner_role_sql, create_schema_sql, grant_app_role_membership_sql,
-    grant_app_role_privileges_sql,
+    grant_app_role_privileges_sql, grant_owner_set_role_sql,
 };
 use crate::config::{DatabaseConfig, Schema};
 use crate::dynamic::DynamicPool;
@@ -89,6 +89,7 @@ impl AdminPool {
         {
             let stmts = vec![
                 create_owner_role_sql(owner, password),
+                grant_owner_set_role_sql(owner),
                 create_schema_sql(schema, owner),
                 grant_app_role_membership_sql(owner, &self.app_role),
             ];

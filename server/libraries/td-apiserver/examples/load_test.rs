@@ -129,6 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ..target.clone()
         }),
         schema: None,
+        app_role: None,
         pool: Default::default(),
     };
     let apiserver_entry = ComponentConfig {
@@ -137,6 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ..target
         }),
         schema: Some(Schema::new(LOAD_TEST_SCHEMA)),
+        app_role: None,
         pool: Default::default(),
     };
     let components =

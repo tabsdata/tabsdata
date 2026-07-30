@@ -129,7 +129,7 @@ pub fn serving_config(
     Ok(DatabaseConfig {
         conn,
         schema: Some(Schema::new(schema)),
-        app_role: None,
+        app_role: entry.app_role.clone(),
         pool: entry.pool.clone(),
     })
 }

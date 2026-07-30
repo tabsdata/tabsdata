@@ -45,6 +45,12 @@ pub struct ComponentConfig {
     /// Not allowed on the `database_server:` entry.
     #[serde(default)]
     pub schema: Option<Schema>,
+    /// RLS app role override (default: the global
+    /// [`APP_ROLE`](crate::APP_ROLE)). Roles are cluster-global on PostgreSQL,
+    /// so instances sharing a cluster each need their own name here — the
+    /// first creator of a role is the only one holding `ADMIN` on it.
+    #[serde(default)]
+    pub app_role: Option<String>,
     /// Connection pool settings.
     #[serde(default)]
     pub pool: PoolConfig,
@@ -64,6 +70,8 @@ struct ComponentConfigShape {
     mysql: Option<MySqlConfig>,
     #[serde(default)]
     schema: Option<Schema>,
+    #[serde(default)]
+    app_role: Option<String>,
     #[serde(default)]
     pool: PoolConfig,
 }
@@ -93,6 +101,7 @@ impl TryFrom<ComponentConfigShape> for ComponentConfig {
         Ok(ComponentConfig {
             conn,
             schema: shape.schema,
+            app_role: shape.app_role,
             pool: shape.pool,
         })
     }
@@ -112,6 +121,7 @@ postgres:
   database: postgres
   password: owner_secret
 schema: td_apiserver
+app_role: td_app_i1
 pool:
   max_connections: 10
 ";
@@ -121,6 +131,7 @@ pool:
         assert!(pg.username.is_none());
         assert_eq!(pg.password.as_deref(), Some("owner_secret"));
         assert_eq!(entry.schema.as_deref(), Some("td_apiserver"));
+        assert_eq!(entry.app_role.as_deref(), Some("td_app_i1"));
         assert_eq!(entry.pool.max_connections, 10);
         assert_eq!(
             entry.pool.min_connections,
