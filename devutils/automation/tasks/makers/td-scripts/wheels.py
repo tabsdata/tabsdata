@@ -29,9 +29,14 @@ def load(module_name) -> ModuleType:
 logger = load("log").get_logger()
 
 
+EXCLUDED_FOLDERS = frozenset({"targetk"})
+
+
 def wheels(root: Path):
     for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
-        dirnames.sort()
+        dirnames[:] = sorted(
+            dirname for dirname in dirnames if dirname not in EXCLUDED_FOLDERS
+        )
         filenames.sort()
         for filename in filenames:
             if filename.startswith("tabsdata") and filename.endswith(".whl"):

@@ -166,7 +166,7 @@ impl Provider for DockerProvider {
     fn system_values(&self) -> CommandResult<SystemValues> {
         Ok(SystemValues {
             instance_name: Some(DEFAULT_INSTANCE_NAME.to_owned()),
-            uv_extra_index_url: Some(SystemValues::uv_extra_index_url()),
+            uv_extra_index_url: Some(SystemValues::uv_extra_index_url(true)),
             uv_index_strategy: Some(SystemValues::uv_index_strategy()),
             ..SystemValues::default()
         })

@@ -24,7 +24,7 @@ use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DEFAULT_NAMESPACE, FOLDER_CLUSTER,
     FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
     FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, UvMode,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -435,7 +435,11 @@ impl Provider for KminusProvider {
     }
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
-        self.create_runtimes_as_pod(reporter).await
+        match UvMode::from_environment() {
+            UvMode::Local => self.create_runtimes_as_proc(reporter).await,
+            UvMode::Devpi => self.create_runtimes_as_pod(reporter).await,
+            UvMode::Pypi => self.create_runtimes_as_pod(reporter).await,
+        }
     }
 
     async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult {
@@ -718,7 +722,6 @@ impl KminusProvider {
         provision_pyvenvs(&context, ClusterProvider::Kminus, &system, &profile, &multi).await
     }
 
-    #[allow(dead_code)]
     async fn create_runtimes_as_proc(&self, reporter: &dyn Reporter) -> CommandResult {
         let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
         fs::create_dir_all(&runtimes_python).map_err(|error| {
@@ -947,7 +950,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         exe_suffix,
         instance_name,
         database_host: Some(DATABASE_HOST_LOOPBACK.to_owned()),
-        uv_extra_index_url: Some(SystemValues::uv_extra_index_url()),
+        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(false)),
         uv_index_strategy: Some(SystemValues::uv_index_strategy()),
         ..SystemValues::default()
     })

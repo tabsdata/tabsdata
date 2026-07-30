@@ -20,6 +20,7 @@ metadata:
     tabsdata.com/tier: setup
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 1800
   template:
     metadata:
       labels:
@@ -45,11 +46,14 @@ spec:
         command: ["bash"]
         args:
         - /tabsdata/assets/venvbuilder.sh
-        - --help
-#       - --output
-#       - /tabsdata/runtimes
-#       - --storage-config
-#       - /tabsdata/config/apiserver.storage.yaml
+        - --output
+        - /tabsdata/runtimes
+        - --storage-config
+        - /tabsdata/config/apiserver.storage.yaml
+        - --transporter-request
+        - /tabsdata/shuttle/request/image-upload.yaml
+        - --transporter-response
+        - /tabsdata/shuttle/response/image-upload.yaml
         resources:
           requests:
             cpu: "500m"
@@ -73,6 +77,10 @@ spec:
           value: "${{system:tdk_instance_name}}"
         - name: TD_LOG_CONFIG
           value: "/tabsdata/config/tabsdata.log.rs.yaml"
+        - name: UV_EXTRA_INDEX_URL
+          value: "${{system:tdk_uv_extra_index_url}}"
+        - name: UV_INDEX_STRATEGY
+          value: "${{system:tdk_uv_index_strategy}}"
         envFrom:
         - secretRef:
             name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -86,6 +94,8 @@ spec:
           readOnly: true
         - name: runtimes
           mountPath: /tabsdata/runtimes
+        - name: shuttle
+          mountPath: /tabsdata/shuttle
       volumes:
       - name: assets
         projected:
@@ -101,4 +111,6 @@ spec:
           - configMap:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
       - name: runtimes
+        emptyDir: {}
+      - name: shuttle
         emptyDir: {}

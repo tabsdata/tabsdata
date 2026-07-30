@@ -20,6 +20,7 @@ metadata:
     tabsdata.com/tier: setup
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 1800
   template:
     metadata:
       labels:
@@ -43,13 +44,17 @@ spec:
       - name: venvbuilder
         image: /dev/null
         imagePullPolicy: IfNotPresent
-        command: ["$(CONTAINER_ROOT)/tabsdata/assets/venvbuilder.sh"]
+        command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/python${{system:tdk_exe_suffix}}"]
         args:
-        - --help
-#       - --output
-#       - $(CONTAINER_ROOT)/tabsdata/runtimes
-#       - --storage-config
-#       - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+        - $(CONTAINER_ROOT)/tabsdata/assets/venvbuilder.py
+        - --output
+        - $(CONTAINER_ROOT)/tabsdata/runtimes
+        - --storage-config
+        - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+        - --transporter-request
+        - $(CONTAINER_ROOT)/tabsdata/shuttle/request/image-upload.yaml
+        - --transporter-response
+        - $(CONTAINER_ROOT)/tabsdata/shuttle/response/image-upload.yaml
         resources:
           requests:
             cpu: "500m"
@@ -73,6 +78,10 @@ spec:
           value: "${{system:tdk_instance_name}}"
         - name: TD_LOG_CONFIG
           value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+        - name: UV_EXTRA_INDEX_URL
+          value: "${{system:tdk_uv_extra_index_url}}"
+        - name: UV_INDEX_STRATEGY
+          value: "${{system:tdk_uv_index_strategy}}"
         envFrom:
         - secretRef:
             name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -86,13 +95,17 @@ spec:
           readOnly: true
         - name: runtimes
           mountPath: /tabsdata/runtimes
+        - name: shuttle
+          mountPath: /tabsdata/shuttle
+        - name: pyenv
+          mountPath: /tabsdata/pyenv
+          readOnly: true
       volumes:
       - name: assets
         projected:
-          defaultMode: 493
           sources:
           - configMap:
-              name: td-app-venvbuilder-asset-venvbuilder.sh
+              name: td-app-venvbuilder-asset-venvbuilder.py
       - name: config
         projected:
           sources:
@@ -102,3 +115,8 @@ spec:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
       - name: runtimes
         emptyDir: {}
+      - name: shuttle
+        emptyDir: {}
+      - name: pyenv
+        hostPath:
+          path: "${{system:tdk_pyenv_base_root}}"

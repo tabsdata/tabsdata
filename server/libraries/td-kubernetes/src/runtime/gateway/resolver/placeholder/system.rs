@@ -13,9 +13,7 @@ use regex::Regex;
 use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator};
 use td_error::TdError;
 
-use crate::base::constants::{
-    ENV_TD_KUBE_UV_INDEX_URL, UV_INDEX_STRATEGY_BEST_MATCH, UV_INDEX_STRATEGY_FIRST_INDEX,
-};
+use crate::base::constants::UvMode;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
@@ -155,19 +153,14 @@ impl SystemValues {
         }
     }
 
-    pub fn uv_extra_index_url() -> String {
-        std::env::var(ENV_TD_KUBE_UV_INDEX_URL)
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_default()
+    pub fn uv_extra_index_url(container: bool) -> String {
+        UvMode::from_environment()
+            .extra_index_url(container)
+            .to_owned()
     }
 
     pub fn uv_index_strategy() -> String {
-        if Self::uv_extra_index_url().is_empty() {
-            UV_INDEX_STRATEGY_FIRST_INDEX.to_owned()
-        } else {
-            UV_INDEX_STRATEGY_BEST_MATCH.to_owned()
-        }
+        UvMode::from_environment().index_strategy().to_owned()
     }
 
     pub fn apply_worker_settings(&mut self, settings: &WorkerSettings) {

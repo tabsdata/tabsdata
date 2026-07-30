@@ -7,12 +7,72 @@ use std::time::Duration;
 use clap_derive::ValueEnum;
 use const_format::concatcp;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
-pub const ENV_TD_KUBE_UV_INDEX_URL: &str = "TD_KUBE_UV_INDEX_URL";
+pub const ENV_TD_KUBE_UV_MODE: &str = "TD_KUBE_UV_MODE";
+
+pub const DEVPI_INDEX_URL_HOST: &str = "http://localhost:14159/tabsdata/td/+simple/";
+pub const DEVPI_INDEX_URL_CONTAINER: &str =
+    "http://host.docker.internal:14159/tabsdata/td/+simple/";
 
 pub const UV_INDEX_STRATEGY_BEST_MATCH: &str = "unsafe-best-match";
 pub const UV_INDEX_STRATEGY_FIRST_INDEX: &str = "first-index";
+
+pub const UV_MODE_LOCAL: &str = "local";
+pub const UV_MODE_DEVPI: &str = "devpi";
+pub const UV_MODE_PYPI: &str = "pypi";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UvMode {
+    Local,
+    Devpi,
+    Pypi,
+}
+
+impl UvMode {
+    pub fn from_environment() -> Self {
+        let value = std::env::var(ENV_TD_KUBE_UV_MODE).unwrap_or_default();
+        match value.trim().to_lowercase().as_str() {
+            UV_MODE_LOCAL => Self::Local,
+            UV_MODE_DEVPI => Self::Devpi,
+            UV_MODE_PYPI => Self::Pypi,
+            "" => Self::Pypi,
+            other => {
+                warn!(
+                    "Unknown value '{other}' for {ENV_TD_KUBE_UV_MODE}; \
+                     falling back to '{UV_MODE_PYPI}'."
+                );
+                Self::Pypi
+            }
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => UV_MODE_LOCAL,
+            Self::Devpi => UV_MODE_DEVPI,
+            Self::Pypi => UV_MODE_PYPI,
+        }
+    }
+
+    pub fn extra_index_url(self, container: bool) -> &'static str {
+        match self {
+            Self::Local => "",
+            Self::Devpi if container => DEVPI_INDEX_URL_CONTAINER,
+            Self::Devpi => DEVPI_INDEX_URL_HOST,
+            Self::Pypi => "",
+        }
+    }
+
+    pub fn index_strategy(self) -> &'static str {
+        match self {
+            Self::Local => UV_INDEX_STRATEGY_FIRST_INDEX,
+            Self::Devpi => UV_INDEX_STRATEGY_BEST_MATCH,
+            Self::Pypi => UV_INDEX_STRATEGY_FIRST_INDEX,
+        }
+    }
+}
 
 pub const FOLDER_CLUSTER: &str = "cluster";
 pub const FOLDER_REPOSITORY: &str = "repository";
