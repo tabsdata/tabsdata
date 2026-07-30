@@ -218,26 +218,15 @@ for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
     yaml_files_tabsdatak.append(str(relative_path))
 
 console_scripts: list[str] = [
-    "td = tabsdata._cli.td.cli:cli",
     "tdk = tabsdatak.cli.td.cli:cli",
     "td_apiready = tabsdatak.server._tdserver.workers.apiready:main",
-    "td_cfgrsv = tabsdata._tabsserver.tools.config_resolver:main",
     "td_conn_resources_extractor = "
     "tabsdatak.server._tdserver.workers.conn_resources_extractor:main",
     "td_dbready = tabsdatak.server._tdserver.workers.dbready:main",
-    "td_function = tabsdata._tabsserver.invoker:main",
-    "td_invoker = tabsdata._tabsserver.invoker:main",
-    "td_janitor = tabsdata._tabsserver.tools.janitor:main",
-    "td_mntext = tabsdata._tabsserver.tools.mount_extractor:main",
     "td_resource = tabsdatak.common._resources.reader:main",
-    "td_srvinf = tabsdata._tabsserver.tools.server_info:main",
-    "td_stagetrigger = tabsdata._tabsserver.invoker:main",
     "td_pyvenv = tabsdatak.common._interpreter.python.pyvenv:main",
-    "td_upgrader = tabsdata._tabsserver.server.upgrader.upgrader:main",
-    "td_venv = tabsdata._tabsserver.pyenv_creation:main",
     "tdk_table = tabsdatak.server._tdserver.render.table:main",
     "tdk_yaml = tabsdatak.server._tdserver.render.yaml:main",
-    "tdorachk = tabsdata._tabsserver.tools.x_oracle_check:cli",
 ]
 console_scripts.extend(load_console_scripts())
 console_scripts.extend(
