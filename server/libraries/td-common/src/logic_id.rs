@@ -176,9 +176,15 @@ impl<K: KeyId> IdL<K> {
             return Err(IdLError::CannotParse(K::key().to_string(), s.to_string()));
         }
 
-        let key_str = &s[0..K::key().len()];
-        let date_str = &s[K::key().len()..K::key().len() + DATE_LEN];
-        let counter_str = &s[K::key().len() + DATE_LEN + 1..];
+        let key_str = s
+            .get(0..K::key().len())
+            .ok_or_else(|| IdLError::CannotParse(K::key().to_string(), s.to_string()))?;
+        let date_str = s
+            .get(K::key().len()..K::key().len() + DATE_LEN)
+            .ok_or_else(|| IdLError::CannotParse(K::key().to_string(), s.to_string()))?;
+        let counter_str = s
+            .get(K::key().len() + DATE_LEN + 1..)
+            .ok_or_else(|| IdLError::CannotParse(K::key().to_string(), s.to_string()))?;
 
         let date = NaiveDate::parse_from_str(date_str, "%Y%m%d")
             .map_err(|_| IdLError::CannotParse(K::key().to_string(), s.to_string()))?;
@@ -486,6 +492,13 @@ mod tests {
     #[test]
     fn test_parse_invalid_counter() {
         let id_str = "tst20240101-abc";
+        let err = TestId::parse(id_str).unwrap_err();
+        assert!(matches!(err, IdLError::CannotParse(_, _)));
+    }
+
+    #[test]
+    fn test_parse_multibyte_char_does_not_panic() {
+        let id_str = "tst2024010\u{20ac}1";
         let err = TestId::parse(id_str).unwrap_err();
         assert!(matches!(err, IdLError::CannotParse(_, _)));
     }
