@@ -46,6 +46,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         options.add_option_flags(
             parser, sysobj.options(), getattr(sysobj, "env_prefix", "")
         )
+    else:
+        parser.epilog = (
+            f"Each type adds its own options (ports, credentials, ...). Name one "
+            f"to see them: {constants.SYS_TOOL} {constants.V_CREATE} "
+            f"{constants.OPT_TYPE} TYPE -h"
+        )
 
 
 def _where(meta: dict[str, str], name: str) -> str:

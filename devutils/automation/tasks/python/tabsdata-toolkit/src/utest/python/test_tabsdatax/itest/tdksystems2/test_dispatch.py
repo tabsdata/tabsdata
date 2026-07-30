@@ -78,6 +78,28 @@ def test_unknown_verb_raises():
         _sys(["frobnicate"])
 
 
+def test_bare_create_help_shows_no_type_specific_options(capsys):
+    # Without --type there is no type to speak for; borrowing the first
+    # registered system's options would advertise them as generic.
+    with pytest.raises(SystemExit):
+        _sys(["create", "-h"])
+    out = capsys.readouterr().out
+    assert "--api-key" not in out and "ANTHROPIC" not in out
+    assert "--type TYPE -h" in out  # points at where they come from
+    assert "--force" in out  # the generic ones are still there
+
+
+def test_create_help_for_a_named_type_shows_its_options(capsys):
+    with pytest.raises(SystemExit):
+        _sys(["create", "--type", "anthropic", "-h"])
+    out = capsys.readouterr().out
+    assert "--api-key" in out and "ANTHROPIC__API_KEY" in out
+    with pytest.raises(SystemExit):
+        _sys(["create", "--type", "mysql", "-h"])
+    out = capsys.readouterr().out
+    assert "--port" in out and "--api-key" not in out
+
+
 def test_manifest_children_are_pointed_at_the_callers_store():
     """A manifest run reads the store the caller named, so the children it spawns
     have to write to that one — otherwise create lands in the default store while

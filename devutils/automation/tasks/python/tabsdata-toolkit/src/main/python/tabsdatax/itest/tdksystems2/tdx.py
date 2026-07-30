@@ -251,9 +251,11 @@ def _sole_slug() -> str:
     raise TdxError(f"{constants.OPT_TYPE} is required (one of: {', '.join(slugs)})")
 
 
-def _system_or_none(slug: str):
-    """The backend instance for `slug`, or None if it can't be resolved (used to
-    hand the options-driven create its backend for building its `-h` flags)."""
+def _system_or_none(slug: str | None):
+    """The backend instance for `slug`, or None if there is none to resolve (used
+    to hand the options-driven create its backend for building its `-h` flags)."""
+    if not slug:
+        return None
     try:
         return systems.get(slug)
     except TdxError:
@@ -889,14 +891,17 @@ def _dispatch(tool: str, argv: list[str]) -> int:
     wants_help = any(a in constants.HELP_FLAGS for a in rest)
     if wants_help:
         # honour --type so `create --type X -h` shows X's options
-        help_slug = (
-            cli.peek(rest, constants.OPT_TYPE)
-            if verb == constants.V_CREATE and tool == constants.SYS_TOOL
-            else None
-        ) or _default_slug(tool, verb)
+        # A system create shows the named type's own options; with no --type
+        # there is no type to speak for, and borrowing the first registered
+        # system's would advertise them as though every create took them.
+        typed_create = verb == constants.V_CREATE and tool == constants.SYS_TOOL
+        named_type = cli.peek(rest, constants.OPT_TYPE) if typed_create else None
+        help_slug = named_type or _default_slug(tool, verb)
         module = _command_module(tool, help_slug, verb)
         p = ArgumentParser(prog=f"{tool} {verb}", description=_summary(module))
-        p.tdx_system = _system_or_none(help_slug)  # type: ignore[attr-defined]
+        p.tdx_system = _system_or_none(  # type: ignore[attr-defined]
+            None if typed_create and not named_type else help_slug
+        )
         module.add_arguments(p)
         p.parse_args(rest)  # prints help and exits
         return 0
