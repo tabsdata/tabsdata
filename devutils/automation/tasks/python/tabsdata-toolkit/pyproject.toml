@@ -74,11 +74,9 @@ tdkubuntu = "tabsdatax.kubernetes.docker.ubuntu.cli:main"
 tdx-gconnector = "tabsdatax.generator.connector.cli:main"
 tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
 tdx-itest = "tabsdatax.itest.tdkinstance.cli:main"
-#tdx-system = "tabsdatax.itest.tdksystems.tdx_system:main"
-#tdx-domain = "tabsdatax.itest.tdksystems.tdx_domain:main"
 tdx-system = "tabsdatax.itest.tdksystems2.tdx_system2:main"
 tdx-domain = "tabsdatax.itest.tdksystems2.tdx_domain2:main"
-tdx-apidocgen = "tabsdatax.itest.tdksystems.tdx_apidocgen:main"
+tdx-apidocgen = "tabsdatax.generator.apidoc.cli:main"
 tdx-json = "tabsdatax.render.json:main"
 tdx-table = "tabsdatax.render.table:main"
 tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"
@@ -185,17 +183,6 @@ namespaces = true
     "resources/runner/functions/**/*.py",
     "resources/runner/functions/**/*.csv",
 ]
-"tabsdatax.itest.tdksystems" = [
-    "models/*/generator.py",
-    "models/*/changes.py",
-    "models/*/sizing.json",
-    "models/*/*.ddl",
-    "models/*/*.csv",
-    "models/*/*.json",
-    "models/*/*.yml",
-    "models/*/*.md",
-]
-"tabsdatax.itest.tdksystems.systems.druid" = ["*.yaml"]
 "tabsdatax.itest.tdksystems2" = [
     "env-defs/*.requirements",
     "models/*/*.json",

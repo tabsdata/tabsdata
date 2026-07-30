@@ -16,7 +16,7 @@ from urllib.request import urlopen
 import pytest
 import yaml
 
-from tabsdatax.itest.tdksystems.store import instances_dir
+from tabsdatax.itest.tdksystems2.store import instances_dir
 
 Consumer = Literal["tdtest", "aitest", "uitest"]
 MARKER = "tabsdata_instance"
