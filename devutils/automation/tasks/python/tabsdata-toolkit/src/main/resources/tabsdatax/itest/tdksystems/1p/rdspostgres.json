@@ -1,0 +1,54 @@
+{
+  "title": "RDSPostgres",
+  "category": "DATABASE",
+  "fields": [
+    {
+      "id": "database_type",
+      "label": "type",
+      "type": "MENU",
+      "value": "?"
+    },
+    {
+      "id": "hostname",
+      "label": "hostname",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "port",
+      "label": "port",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "username",
+      "label": "username",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "password",
+      "label": "password",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "region",
+      "label": "region",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "aws_account_id",
+      "label": "AWS account ID",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "aws_account_name",
+      "type": "STRING",
+      "label": "AWS account Name",
+      "value": "?"
+    }
+  ]
+}

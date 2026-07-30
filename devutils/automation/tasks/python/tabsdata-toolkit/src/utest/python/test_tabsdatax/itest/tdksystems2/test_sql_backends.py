@@ -11,9 +11,12 @@ create-model / create-data / modify-data verbs work for it.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from tabsdatax.itest.tdksystems2 import datagen, systems
+from tabsdatax.itest.tdksystems2 import datagen, options, systems
+from tabsdatax.itest.tdksystems2.errors import TdxError
 from tabsdatax.itest.tdksystems2.systems._common.sql import SqlContainerBackend
 
 # SQL *data* systems: a SqlContainerBackend subclass that drives a SQLAlchemy
@@ -64,3 +67,147 @@ def test_postgres_dialect_sql():
     assert any("OWNER TO" in s for s in create)
     assert pg.delete_domain_sql("d_x")[0].startswith('DROP DATABASE IF EXISTS "d_x"')
     assert pg.admin_autocommit and pg.admin_db == "postgres"
+
+
+def test_rdspostgres_is_a_remote_provision_only_system():
+    rds = systems.get("rdspostgres")
+    assert not rds.is_container and rds.docker_images() == []
+    assert not (rds.supports_models or rds.supports_data or rds.supports_changes)
+    assert rds.supports_purge and "rdsadmin" in rds.system_schemas
+
+
+def test_rdspostgres_options_come_from_the_environment():
+    opts = systems.get("rdspostgres").options()
+    assert [o.name for o in opts] == [
+        "HOSTNAME", "PORT", "USERNAME", "PASSWORD", "REGION"
+    ]
+    assert all(o.source == options.ENV for o in opts)
+    assert [o.name for o in opts if o.secret] == ["PASSWORD"]
+
+
+def test_rdspostgres_creates_the_owner_before_the_database():
+    # The RDS master user is not a superuser: it must already be a member of the
+    # owner role to create a database owned by it, and the owner needs CREATEROLE
+    # to add roles of its own inside that database.
+    create = systems.get("rdspostgres").create_domain_sql("d_x", "d_x", "pw")
+    assert create[0] == 'CREATE USER "d_x" WITH PASSWORD \'pw\' CREATEROLE'
+    assert create[1] == 'GRANT "d_x" TO CURRENT_USER'
+    assert create[2] == 'CREATE DATABASE "d_x" OWNER "d_x"'
+
+
+_RDS_SSL = "sslmode=verify-full"
+_RDS_CA = "sslrootcert=%2Ftmp%2Fbundle.pem"
+
+
+@pytest.fixture
+def rds(monkeypatch):
+    """The RDS backend with the CA-bundle download stubbed, plus its system
+    meta."""
+    backend = systems.get("rdspostgres")
+    monkeypatch.setattr(type(backend), "ca_bundle", lambda self: "/tmp/bundle.pem")
+    return backend, backend.plan_system(
+        "rds",
+        {
+            "HOSTNAME": "td.eu-west-1.rds.amazonaws.com",
+            "PORT": "5432",
+            "USERNAME": "master",
+            "PASSWORD": "mpw",
+            "REGION": "eu-west-1",
+        },
+    )
+
+
+def test_rdspostgres_domain_targets_the_instance(rds):
+    backend, sys_meta = rds
+    assert sys_meta["LOCATION"] == "postgresql://td.eu-west-1.rds.amazonaws.com:5432"
+
+    meta = backend.domain_meta(sys_meta, "d_u_0_dom", "opw")
+    assert meta["SQLALCHEMY_URI"] == (
+        "postgresql+psycopg2://d_u_0_dom:opw@td.eu-west-1.rds.amazonaws.com:5432"
+        "/d_u_0_dom?sslmode=verify-full"
+    )
+    assert "@" not in meta["URI"] and "/d_u_0_dom?" in meta["URI"]
+    assert meta["SYS_ADMIN_USER"] == "master" and meta["REGION"] == "eu-west-1"
+    assert "SYS_CONTAINER" not in meta
+
+
+def test_rdspostgres_verifies_tls_on_every_connection(rds):
+    backend, sys_meta = rds
+    # tdx's own connection carries the throwaway CA bundle …
+    assert backend._admin_url(backend._admin(sys_meta)).endswith(
+        f"/postgres?{_RDS_SSL}&{_RDS_CA}"
+    )
+    # … the descriptor's URIs verify too, but never name the /tmp bundle.
+    urls = [
+        v
+        for v in backend.domain_meta(sys_meta, "d_u_0_dom", "opw").values()
+        if v.startswith("postgresql+")
+    ]
+    assert urls and all(u.endswith(f"?{_RDS_SSL}") for u in urls)
+    assert not any("sslrootcert" in u for u in urls)
+
+
+def test_rdspostgres_url_survives_a_password_with_a_percent_escape(rds):
+    # SQLAlchemy percent-decodes the credentials it parses out of a URL, so an
+    # RDS master password containing a literal '%41' must not reach the server
+    # as 'A'.
+    from sqlalchemy.engine import make_url
+
+    backend, sys_meta = rds
+    pw = "p%41ss?w#rd&x=1 y"
+    url = backend.sqlalchemy_url("h", "5432", db="postgres", user="ma ster", password=pw)
+    parsed = make_url(url)
+    assert parsed.password == pw and parsed.username == "ma ster"
+    assert dict(parsed.query)["sslmode"] == "verify-full"
+
+
+def test_rdspostgres_ca_bundle_is_a_fresh_pem_in_tmp(monkeypatch, tmp_path):
+    from tabsdatax.itest.tdksystems2.systems.rdspostgres import backend as rdsmod
+
+    fetched = []
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----\n"
+
+    def _urlopen(url, timeout=None):
+        fetched.append(url)
+        return _Resp()
+
+    monkeypatch.setattr(rdsmod.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setattr(rdsmod, "CA_BUNDLE_PATH", str(tmp_path / "bundle.pem"))
+    backend = systems.get("rdspostgres")
+
+    path = backend.ca_bundle()
+    assert fetched == [rdsmod.CA_BUNDLE_URL]
+    assert Path(path).read_bytes().startswith(b"-----BEGIN CERTIFICATE-----")
+    # fetched once per run, not once per connection
+    assert backend.ca_bundle() == path and len(fetched) == 1
+    # nothing but the bundle is left behind (the staged pid file is renamed)
+    assert [p.name for p in tmp_path.iterdir()] == ["bundle.pem"]
+
+
+def test_rdspostgres_rejects_a_ca_bundle_that_is_not_a_pem(monkeypatch):
+    from tabsdatax.itest.tdksystems2.systems.rdspostgres import backend as rdsmod
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"<html>404</html>"
+
+    monkeypatch.setattr(
+        rdsmod.urllib.request, "urlopen", lambda url, timeout=None: _Resp()
+    )
+    with pytest.raises(TdxError, match="did not return a PEM bundle"):
+        systems.get("rdspostgres").ca_bundle()

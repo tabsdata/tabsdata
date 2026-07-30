@@ -33,6 +33,7 @@ _SLUGS: dict[str, tuple[str, str]] = {
     "db2": ("db2", "Db2"),
     "mysqlcdc": ("mysqlcdc", "Mysqlcdc"),
     "postgrescdc": ("postgrescdc", "Postgrescdc"),
+    "rdspostgres": ("rdspostgres", "RdsPostgres"),
     "fs": ("fs", "Fs"),
     "s3": ("s3", "S3"),
     "gcs": ("gcs", "GCS"),
