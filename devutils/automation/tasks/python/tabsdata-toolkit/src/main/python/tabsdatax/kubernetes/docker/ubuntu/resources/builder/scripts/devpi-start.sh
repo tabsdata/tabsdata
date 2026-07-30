@@ -35,7 +35,7 @@ fi
     --port "${DEVPI_PORT}" \
     --serverdir "${DEVPI_DATA}" \
     --indexer-backend null \
-    --max-request-body-size 2147483648 \
+    --max-request-body-size 4294967296 \
     --logger-cfg "${DEVPI_LOGGER}" \
     > "${DEVPI_LOG}" 2>&1 &
 echo $! > "${DEVPI_PID_FILE}"
