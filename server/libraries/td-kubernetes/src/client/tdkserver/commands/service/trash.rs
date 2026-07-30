@@ -25,7 +25,7 @@ use crate::client::tdkserver::render::preview;
 use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use crate::cwarn;
 use crate::runtime::provider::ClusterProvider;
-use crate::runtime::provider::provider_for_instance;
+use crate::runtime::provider::provider_for_instance_any_state;
 
 const TRASH_TIMESTAMP_FORMAT: &str = "%Y.%m.%d.%H.%M.%S%.3f";
 
@@ -168,7 +168,7 @@ pub(crate) async fn stop_if_possible(name: &str, verbose: bool) {
         return;
     }
 
-    let provider = match provider_for_instance(Some(name.to_owned()), verbose, None).await {
+    let provider = match provider_for_instance_any_state(Some(name.to_owned()), verbose).await {
         Ok(provider) => provider,
         Err(error) => {
             cwarn!(
