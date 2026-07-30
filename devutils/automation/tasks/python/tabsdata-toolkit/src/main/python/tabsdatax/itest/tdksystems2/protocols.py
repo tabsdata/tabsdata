@@ -66,6 +66,12 @@ class Backend(Protocol):
         """A host port for the create: the next from the bound pool, else a freshly
         found free one. Only port-using backends implement it."""
 
+    def use_hostname(self, host: str) -> None:
+        """Bind the hostname this create advertises instead of localhost
+        (``--sys-hostname``), so the endpoints ``plan_system`` records are usable
+        from other machines. Only backends that publish one implement it (see
+        ``systems._common.host``)."""
+
     # system lifecycle. `overrides` carries the resolved create options (see
     # `options`) — every declared option is present, so the backend reads its
     # connection settings from here rather than the environment.

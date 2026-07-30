@@ -28,6 +28,8 @@ from tabsdatax.itest.tdksystems2 import (
     store,
 )
 from tabsdatax.itest.tdksystems2.errors import TdxError
+from tabsdatax.itest.tdksystems2.shell import port_open
+from tabsdatax.itest.tdksystems2.systems._common.host import DEFAULT_HOSTNAME
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -35,6 +37,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_sys(parser, required=False, multi=False)
     cli.add_sys_prefix(parser)
     cli.add_ports(parser)
+    cli.add_sys_hostname(parser)
     cli.add_sys_dir(parser)
     cli.add_force(parser)
     cli.add_dry_run(parser)
@@ -60,8 +63,49 @@ def _where(meta: dict[str, str], name: str) -> str:
     if meta.get("LOCATION"):
         return meta["LOCATION"]
     if meta.get("PORT"):
-        return f"localhost:{meta['PORT']}"
+        return f"{meta.get('HOST') or DEFAULT_HOSTNAME}:{meta['PORT']}"
     return meta.get("SYS_PATH") or name
+
+
+def _bind_hostname(sysobj, raw: str | None) -> str:
+    """Bind the advertised hostname for this create, returning what was bound
+    (``""`` when the flag was not given, or the system has no endpoint of its own
+    to advertise). Only a container publishes a host port for tdx to name: an
+    object store or credential-only service has no endpoint at all, and a remote
+    warehouse has one it configures itself. Either way the flag is reported and
+    ignored rather than failing, so ``create --type ALL`` works."""
+    if raw is None:
+        return ""
+    hostname = cli.parse_hostname(raw)
+    use_hostname = getattr(sysobj, "use_hostname", None)
+    if use_hostname is None or not getattr(sysobj, "is_container", False):
+        has_own = use_hostname is not None
+        why = (
+            "takes its host from its own configuration"
+            if has_own
+            else "has no host of its own"
+        )
+        console.warn(f"{sysobj.slug} {why} — {constants.OPT_SYS_HOSTNAME} ignored")
+        return ""
+    use_hostname(hostname)
+    return hostname
+
+
+def _check_reachable(meta: dict[str, str], hostname: str) -> None:
+    """Warn when the advertised endpoint does not answer from this machine.
+
+    Every tdx verb past ``create`` — domain create, the data plane, status — is
+    an ordinary client of the recorded endpoint, so it has to run somewhere the
+    advertised host resolves and routes. That is the point of the flag (the other
+    machine is often the only one that qualifies), but silently handing back a
+    system this box cannot use turns into a driver timeout much later."""
+    port = meta.get("PORT", "")
+    if not port.isdigit() or port_open(hostname, int(port)):
+        return
+    console.warn(
+        f"{hostname}:{port} does not answer from this machine — run the domain "
+        f"commands where {hostname} resolves and routes to it"
+    )
 
 
 def run(ctx: cli.Context) -> int:
@@ -80,15 +124,20 @@ def run(ctx: cli.Context) -> int:
     use_ports = getattr(sysobj, "use_ports", None)
     if use_ports is not None:
         use_ports(cli.parse_ports(a.ports))
+    hostname = _bind_hostname(sysobj, a.sys_hostname)
     values, env_refs, literals = options.resolve(sysobj, a, name)
     meta = sysobj.plan_system(name, values)
     meta["SYSTEM_KIND"] = sysobj.kind
     # Persist the descriptor before provisioning, so a partial start can be torn
     # down from disk with `destroy`.
-    descriptor.write_system(path, sysobj.slug, name, meta, env_refs, literals)
+    descriptor.write_system(path, sysobj.slug, name, meta, env_refs, literals, hostname)
     extra = sysobj.provision_system(meta, force=a.force)
     if extra:
         meta.update(extra)
-        descriptor.write_system(path, sysobj.slug, name, meta, env_refs, literals)
+        descriptor.write_system(
+            path, sysobj.slug, name, meta, env_refs, literals, hostname
+        )
+    if hostname:
+        _check_reachable(meta, hostname)
     console.good(f"created system '{name}' ({sysobj.label}) at {_where(meta, name)}")
     return 0

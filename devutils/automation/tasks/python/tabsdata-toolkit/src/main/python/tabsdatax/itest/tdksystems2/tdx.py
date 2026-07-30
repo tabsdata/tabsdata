@@ -8,9 +8,13 @@
     tdx-system list [--sys-dir DIR]        # systems in the store
     tdx-system manifest [--out FILE]       # YAML manifest of the store
     tdx-system info --sys NAME|list|ALL | --manifest FILE [--format ...] [--prefix P]
-    tdx-system create  --type TYPE [--sys NAME] [--sys-prefix P] [--ports P,..]
+    tdx-system create  --type TYPE [--sys NAME] [--sys-prefix P] [--ports P,..] \\
+                       [--sys-hostname HOST]
     tdx-system create  --type ALL|t1,t2 [--sys-prefix P]   # one per type
                                           # --sys defaults to TYPE; [type options] too
+                                          # --sys-hostname: advertise HOST instead of
+                                          # localhost, so the descriptors (and the
+                                          # domains built on them) work off this box
     tdx-system destroy --sys NAME|s1,s2|ALL | --manifest FILE [-f] [--dry-run]
     tdx-system status  --sys NAME|list|ALL | --manifest FILE
     tdx-system purge   --sys NAME|list|ALL [--external-prefix PREFIX] [-f]

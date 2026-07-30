@@ -176,6 +176,40 @@ def add_ports(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_sys_hostname(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        constants.OPT_SYS_HOSTNAME,
+        dest="sys_hostname",
+        default=None,
+        metavar="HOST",
+        help="hostname the system advertises in its descriptor instead of "
+        "localhost, so the domains created from it are reachable from other "
+        "machines (container systems only)",
+    )
+
+
+def parse_hostname(raw: str) -> str:
+    """Validate the ``--sys-hostname`` value: a bare hostname or IPv4 address.
+
+    Every endpoint the descriptor records is built as ``<host>:<port>``, so a
+    value carrying a scheme, a port or an IPv6 literal would be spliced into a
+    URL that no client — nor tdx's own URL parsing — can read back."""
+    host = raw.strip()
+    if not host:
+        raise TdxError(f"{constants.OPT_SYS_HOSTNAME}: hostname is empty")
+    for char, what in ((":", "a port or an IPv6 literal"), ("/", "a scheme or path")):
+        if char in host:
+            raise TdxError(
+                f"{constants.OPT_SYS_HOSTNAME}: {host!r} contains {what} — pass a "
+                f"bare hostname or IPv4 address"
+            )
+    if any(c.isspace() or c in "@?#[]" for c in host):
+        raise TdxError(
+            f"{constants.OPT_SYS_HOSTNAME}: not a hostname or IPv4 address: {host!r}"
+        )
+    return host
+
+
 def parse_ports(raw: str | None) -> list[int]:
     """Parse the ``--ports`` comma list into port numbers (``[]`` if unset)."""
     ports: list[int] = []

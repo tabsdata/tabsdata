@@ -52,6 +52,9 @@ class SystemInfo(BaseModel):
     # these (`<flag>: value`) but omits the auto-generated defaults (free port,
     # generated password) a fresh create re-derives.
     opt_literals: list[str] = Field(default_factory=list)
+    # the `--sys-hostname` this system was created with (empty = plain localhost),
+    # kept so a manifest replay advertises the same host again.
+    sys_hostname: str = ""
 
 
 class DomainInfo(BaseModel):
@@ -135,6 +138,7 @@ def write_system(
     meta: dict[str, str],
     env_refs: dict[str, str] | None = None,
     opt_literals: list[str] | None = None,
+    sys_hostname: str = "",
 ) -> SystemInfo:
     info = SystemInfo(
         system=slug,
@@ -143,6 +147,7 @@ def write_system(
         meta=dict(meta),
         env_refs=dict(env_refs or {}),
         opt_literals=list(opt_literals or []),
+        sys_hostname=sys_hostname,
     )
     save(info, path)
     return info

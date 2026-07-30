@@ -26,6 +26,7 @@ from tabsdatax.itest.tdksystems2 import datagen
 from tabsdatax.itest.tdksystems2.errors import TdxError
 from tabsdatax.itest.tdksystems2.shell import gen_password, http_ok
 from tabsdatax.itest.tdksystems2.systems._common.containers import ContainersBackend
+from tabsdatax.itest.tdksystems2.systems._common.host import DEFAULT_HOSTNAME
 
 _ADMIN_USER = "admin"
 _SYS_DATASOURCES = frozenset({"wikipedia"})  # tutorial datasource, never a domain
@@ -56,8 +57,8 @@ class Druid(ContainersBackend):
             router = self.next_free_port()
         return {
             "IMAGE": next(img for img, _ in self.compose_images if "druid" in img),
-            "OVERLORD_URL": f"http://localhost:{coordinator}",
-            "ROUTER_URL": f"http://localhost:{router}",
+            "OVERLORD_URL": f"http://{self.hostname}:{coordinator}",
+            "ROUTER_URL": f"http://{self.hostname}:{router}",
             "USER": _ADMIN_USER,
             "PASSWORD": gen_password(),
             "INTERNAL_PASSWORD": gen_password(),
@@ -66,6 +67,12 @@ class Druid(ContainersBackend):
     @staticmethod
     def _port(url: str) -> str:
         return str(urllib.parse.urlsplit(url).port or "")
+
+    def _loopback(self, url: str) -> str:
+        """`url` against the published port on this machine. The stack is brought
+        up and reported on from the docker host, so those probes must not depend
+        on the advertised host resolving here — only the recorded endpoints do."""
+        return f"http://{DEFAULT_HOSTNAME}:{self._port(url)}"
 
     def compose_env(self, meta: dict[str, str]) -> dict[str, str]:
         return {
@@ -77,7 +84,10 @@ class Druid(ContainersBackend):
 
     def wait_ready(self, meta: dict[str, str], timeout: int) -> None:
         user, password = meta.get("USER", ""), meta.get("PASSWORD", "")
-        pending = [f"{meta['OVERLORD_URL']}/status", f"{meta['ROUTER_URL']}/status"]
+        pending = [
+            f"{self._loopback(meta['OVERLORD_URL'])}/status",
+            f"{self._loopback(meta['ROUTER_URL'])}/status",
+        ]
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             pending = [
@@ -96,8 +106,12 @@ class Druid(ContainersBackend):
         user, password = meta.get("USER", ""), meta.get("PASSWORD", "")
         ok = (
             bool(router)
-            and http_ok(f"{router}/status", user=user, password=password)
-            and http_ok(f"{overlord}/status", user=user, password=password)
+            and http_ok(
+                f"{self._loopback(router)}/status", user=user, password=password
+            )
+            and http_ok(
+                f"{self._loopback(overlord)}/status", user=user, password=password
+            )
         )
         return ok, f"{self.label} router {router} {'ready' if ok else 'not ready'}"
 

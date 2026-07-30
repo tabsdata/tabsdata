@@ -23,12 +23,13 @@ from tabsdatax.itest.tdksystems2.shell import (
     docker_compose,
     require_docker,
 )
+from tabsdatax.itest.tdksystems2.systems._common.host import HostMixin
 from tabsdatax.itest.tdksystems2.systems._common.ports import PortPoolMixin
 
 _PROJECT_PREFIX = "tdx2_"
 
 
-class ContainersBackend(PortPoolMixin):
+class ContainersBackend(PortPoolMixin, HostMixin):
     is_container: bool = True
     supports_purge: bool = True
     supports_models: bool = False

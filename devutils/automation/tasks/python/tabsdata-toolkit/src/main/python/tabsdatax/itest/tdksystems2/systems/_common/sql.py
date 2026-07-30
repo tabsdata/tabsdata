@@ -44,6 +44,7 @@ from tabsdatax.itest.tdksystems2.shell import (
     validate_name,
 )
 from tabsdatax.itest.tdksystems2.sql_runner import run_sql_text, run_sql_transactions
+from tabsdatax.itest.tdksystems2.systems._common.host import DEFAULT_HOSTNAME, HostMixin
 from tabsdatax.itest.tdksystems2.systems._common.ports import PortPoolMixin
 
 _CONTAINER_PREFIX = "tdx2_"
@@ -57,7 +58,7 @@ class Admin:
     password: str
 
 
-class SqlContainerBackend(PortPoolMixin):
+class SqlContainerBackend(PortPoolMixin, HostMixin):
     # ---- capability flags (drive verb availability in the dispatcher) ----
     is_container: bool = True
     supports_purge: bool = True
@@ -194,7 +195,7 @@ class SqlContainerBackend(PortPoolMixin):
         return {
             "CONTAINER": self.container_name(name),
             "IMAGE": self.image,
-            "HOST": "localhost",
+            "HOST": self.hostname,
             "PORT": o.get("PORT") or str(self.next_free_port()),
             "USER": self.root_user,
             "PASSWORD": o.get("PASSWORD") or self.generate_password(),
@@ -271,7 +272,8 @@ class SqlContainerBackend(PortPoolMixin):
         if st != "running":
             return False, f"container {cname} is {st}"
         if self.check_ready(cname, meta.get("PASSWORD", "")):
-            return True, f"{self.label} on localhost:{meta.get('PORT', '')}"
+            host = meta.get("HOST", DEFAULT_HOSTNAME)
+            return True, f"{self.label} on {host}:{meta.get('PORT', '')}"
         return False, f"{self.label} container is up but not yet accepting connections"
 
     def restart_system(self, meta: dict[str, str]) -> str:
@@ -285,7 +287,7 @@ class SqlContainerBackend(PortPoolMixin):
 
     def _admin(self, sys_meta: dict[str, str]) -> Admin:
         return Admin(
-            host=sys_meta.get("HOST", "localhost"),
+            host=sys_meta.get("HOST", DEFAULT_HOSTNAME),
             port=sys_meta.get("PORT", ""),
             user=sys_meta.get("USER", self.root_user),
             password=sys_meta.get("PASSWORD", ""),
@@ -356,7 +358,7 @@ class SqlContainerBackend(PortPoolMixin):
 
     def destroy_domain(self, domain_meta: dict[str, str]) -> None:
         admin = Admin(
-            host=domain_meta.get("HOST", "localhost"),
+            host=domain_meta.get("HOST", DEFAULT_HOSTNAME),
             port=domain_meta.get("PORT", ""),
             user=domain_meta.get("SYS_ADMIN_USER", self.root_user),
             password=domain_meta.get("SYS_ADMIN_PASSWORD", ""),
@@ -366,7 +368,7 @@ class SqlContainerBackend(PortPoolMixin):
     def domain_status(self, domain_meta: dict[str, str]) -> tuple[bool, str]:
         from tabsdatax.itest.tdksystems2.shell import port_open
 
-        host = domain_meta.get("HOST", "localhost")
+        host = domain_meta.get("HOST", DEFAULT_HOSTNAME)
         port = domain_meta.get("PORT", "")
         ok = port.isdigit() and port_open(host, int(port))
         return (

@@ -11,8 +11,8 @@ A manifest is a YAML **list** of entries. A SYSTEM entry is
 recorded, so a domain manifest replays under each run's own ``d_<user>_<build>_``
 prefix. Object-store / warehouse / service systems read their connection config
 from the environment at create (and bake it into the descriptor), so a system
-entry records only what create can't re-derive — currently just fs's staging
-root; secrets never enter a manifest.
+entry records only what create can't re-derive — fs's staging root and the
+``--sys-hostname`` a container system advertises; secrets never enter a manifest.
 
 ``tdx-system manifest`` / ``tdx-domain manifest`` dump every system / domain in
 the store; ``create --manifest`` replays a manifest and ``create --manifest
@@ -25,7 +25,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems2 import descriptor, systems as _systems
+from tabsdatax.itest.tdksystems2 import constants, descriptor, systems as _systems
 from tabsdatax.itest.tdksystems2.errors import TdxError
 
 
@@ -76,8 +76,11 @@ def system_entry(info: descriptor.SystemInfo) -> dict:
     is emitted as ``<flag>$: ENV_VAR`` (the value is never written); a non-secret
     literal override is emitted as ``<flag>: value``; secrets and the
     auto-generated defaults a fresh create re-derives (a free port, a generated
-    password) are omitted."""
+    password) are omitted. A system created with ``--sys-hostname`` also records
+    it (``sys-hostname: HOST``), so a replay advertises the same host."""
     entry: dict = {"name": info.name, "type": info.system}
+    if info.sys_hostname:
+        entry[constants.OPT_SYS_HOSTNAME.lstrip("-")] = info.sys_hostname
     backend = _systems.get(info.system)
     for opt in backend.options():
         if opt.name in info.env_refs:

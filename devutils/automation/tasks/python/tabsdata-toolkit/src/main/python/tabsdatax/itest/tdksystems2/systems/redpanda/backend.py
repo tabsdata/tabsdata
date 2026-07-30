@@ -65,11 +65,11 @@ class Redpanda(SqlContainerBackend):
         return {
             "CONTAINER": self.container_name(name),
             "IMAGE": self.image,
-            "HOST": "localhost",
+            "HOST": self.hostname,
             "PORT": str(kport),
             "REGISTRY_PORT": str(reg),
-            "SCHEMA_REGISTRY_URL": f"http://localhost:{reg}",
-            "KAFKA_BROKERS": f"localhost:{kport}",
+            "SCHEMA_REGISTRY_URL": f"http://{self.hostname}:{reg}",
+            "KAFKA_BROKERS": f"{self.hostname}:{kport}",
             "USER": "",
             "PASSWORD": "",
         }
@@ -79,6 +79,9 @@ class Redpanda(SqlContainerBackend):
     ) -> dict[str, str]:
         require_docker()
         container, port, reg = meta["CONTAINER"], meta["PORT"], meta["REGISTRY_PORT"]
+        # A client bootstraps against the external listener and is then redirected
+        # to the address it advertises, so that one is the descriptor's own host.
+        advertised = meta["HOST"]
         if container_exists(container):
             if force:
                 docker_rm(container, force=True)
@@ -109,7 +112,7 @@ class Redpanda(SqlContainerBackend):
             "--kafka-addr",
             f"internal://0.0.0.0:9092,external://0.0.0.0:{port}",
             "--advertise-kafka-addr",
-            f"internal://localhost:9092,external://localhost:{port}",
+            f"internal://localhost:9092,external://{advertised}:{port}",
         ])
         print(f">>> waiting for {self.label} to become ready …")
         self._wait_ready(container, "", self.ready_timeout)
