@@ -30,14 +30,14 @@ pub enum SystemKey {
     RepositoryUrl,
     #[strum(serialize = "tdk_repository_path")]
     RepositoryPath,
-    #[strum(serialize = "tdk_database_url")]
-    DatabaseUrl,
     #[strum(serialize = "tdk_database_path")]
     DatabasePath,
     #[strum(serialize = "tdk_storage_url")]
     StorageUrl,
     #[strum(serialize = "tdk_storage_path")]
     StoragePath,
+    #[strum(serialize = "tdk_runtimes_root")]
+    RuntimesRoot,
     #[strum(serialize = "tdk_pyenv_base_root")]
     PyenvBaseRoot,
     #[strum(serialize = "tdk_pyenv_td_root")]
@@ -107,10 +107,10 @@ pub struct WorkerSettings {
 pub struct SystemValues {
     pub repository_url: Option<String>,
     pub repository_path: Option<String>,
-    pub database_url: Option<String>,
     pub database_path: Option<String>,
     pub storage_url: Option<String>,
     pub storage_path: Option<String>,
+    pub runtimes_root: Option<String>,
     pub pyenv_base_root: Option<String>,
     pub pyenv_td_root: Option<String>,
     pub pyenv_ag_root: Option<String>,
@@ -142,10 +142,10 @@ impl SystemValues {
         match key {
             SystemKey::RepositoryUrl => self.repository_url.as_deref(),
             SystemKey::RepositoryPath => self.repository_path.as_deref(),
-            SystemKey::DatabaseUrl => self.database_url.as_deref(),
             SystemKey::DatabasePath => self.database_path.as_deref(),
             SystemKey::StorageUrl => self.storage_url.as_deref(),
             SystemKey::StoragePath => self.storage_path.as_deref(),
+            SystemKey::RuntimesRoot => self.runtimes_root.as_deref(),
             SystemKey::PyenvBaseRoot => self.pyenv_base_root.as_deref(),
             SystemKey::PyenvTdRoot => self.pyenv_td_root.as_deref(),
             SystemKey::PyenvAgRoot => self.pyenv_ag_root.as_deref(),

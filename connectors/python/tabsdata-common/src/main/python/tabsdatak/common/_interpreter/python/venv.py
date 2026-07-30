@@ -498,6 +498,17 @@ class PythonEnvironment:
                     tar.add(self.root, arcname=self.root.name)
 
     @staticmethod
+    def install(python_version: str, *, verbose: bool = False) -> None:
+        PythonEnvironment.uv(
+            ["python", "install", python_version],
+            verbose=verbose,
+        )
+        PythonEnvironment.uv(
+            ["python", "find", python_version],
+            verbose=verbose,
+        )
+
+    @staticmethod
     def uv(
         arguments: list[str],
         *,

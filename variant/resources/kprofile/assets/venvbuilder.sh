@@ -61,11 +61,9 @@ PYTHON_MINIMUM_PATCH="11"
 IMAGE_NAME="tdvenvs"
 IMAGE_SUFFIX=".tar.zst"
 
-UV_HOME="$HOME/.uv"
+UV_FOLDER=".uv"
 UV_PYTHON_FOLDER="python"
 UV_KENVS_FOLDER="kenvs"
-UV_PYTHON_HOME="$UV_HOME/$UV_PYTHON_FOLDER"
-UV_KENVS_HOME="$UV_HOME/$UV_KENVS_FOLDER"
 
 TOOLS_HOME="$HOME/.tools"
 TOOLS_BIN_FOLDER="bin"
@@ -163,6 +161,9 @@ validate_arguments() {
 setup_workspace() {
    work="$(mktemp -d "${TMPDIR:-/tmp}/tdvenvs.XXXXXX")"
    output_image="$output/$IMAGE_NAME$IMAGE_SUFFIX"
+   UV_HOME="$output/$UV_FOLDER"
+   UV_PYTHON_HOME="$UV_HOME/$UV_PYTHON_FOLDER"
+   UV_KENVS_HOME="$UV_HOME/$UV_KENVS_FOLDER"
    virtual_environment_td="$UV_KENVS_HOME/$VENV_TD"
    virtual_environment_z="$TOOLS_KENVS_HOME/$VENV_Z"
    export UV_PYTHON_INSTALL_DIR="$UV_PYTHON_HOME"

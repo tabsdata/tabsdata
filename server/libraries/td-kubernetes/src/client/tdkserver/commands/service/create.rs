@@ -22,6 +22,7 @@ use crate::client::tdkserver::render::preview;
 use crate::client::tdkserver::render::report::helper::common::activation_command;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::secret::upsert_secret;
+use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::fusion;
 use crate::runtime::gateway::resolver::fusion::FusedSecrets;
@@ -29,7 +30,7 @@ use crate::runtime::instance::ports::{
     AssignedPort, DEFAULT_BASE_PORT, apply_ports, assign_ports, kminus_api_port,
 };
 use crate::runtime::instance::profile::load_profile;
-use crate::runtime::provider::{cluster_arguments_for, provider_for};
+use crate::runtime::provider::{ClusterProvider, cluster_arguments_for, provider_for};
 use crate::runtime::secrets::source::to_secret_name;
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
@@ -144,7 +145,12 @@ pub async fn create_instance(
     )
     .await?;
 
-    provider.ensure_creatable_service().await?;
+    if settings.provider != ClusterProvider::Kminus {
+        let context = provider.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+        provider.ensure_creatable_service().await?;
+    }
 
     if details {
         let markers = instance_markers(&provider.summary(), instance_pinned);

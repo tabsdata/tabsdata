@@ -52,7 +52,12 @@ def main() -> int:
     for line in render(profile):
         print(line)
     if arguments.command == COMMAND_CREATE:
-        return create(profile, arguments.target, verbose=arguments.verbose)
+        return create(
+            profile,
+            arguments.target,
+            archive=arguments.archive,
+            verbose=arguments.verbose,
+        )
     return 0
 
 
@@ -99,6 +104,15 @@ def parse_arguments() -> argparse.Namespace:
         required=True,
         help="Folder where the Python virtual environment templates will be created",
     )
+    create_parser.add_argument(
+        "--archive",
+        action="store_true",
+        default=False,
+        help=(
+            "Compress each Python virtual environment template into a transferable"
+            " image next to it"
+        ),
+    )
     python_parser = subparsers.add_parser(
         COMMAND_PYTHON,
         help=(
@@ -135,14 +149,23 @@ def create(
     profile: EnvironmentProfile,
     target: Path,
     *,
+    archive: bool = False,
     verbose: bool = False,
 ) -> int:
     try:
         target.mkdir(parents=True, exist_ok=True)
+        PythonEnvironment.install(profile.python_version, verbose=verbose)
         recipes = build_recipes(profile)
         with ThreadPoolExecutor(max_workers=len(recipes)) as executor:
             futures = [
-                executor.submit(create_recipe, recipe, profile, target, verbose=verbose)
+                executor.submit(
+                    create_recipe,
+                    recipe,
+                    profile,
+                    target,
+                    archive=archive,
+                    verbose=verbose,
+                )
                 for recipe in recipes
             ]
             for future in futures:
@@ -158,11 +181,13 @@ def create_recipe(
     profile: EnvironmentProfile,
     target: Path,
     *,
+    archive: bool = False,
     verbose: bool = False,
 ) -> None:
     environment = PythonEnvironment(target / recipe.name)
     environment.create(recipe, python_version=profile.python_version, verbose=verbose)
-    environment.archive(target / f"{recipe.name}.tar.zst")
+    if archive:
+        environment.archive(target / f"{recipe.name}.tar.zst")
 
 
 def build_recipes(profile: EnvironmentProfile) -> tuple[VenvRecipe, ...]:

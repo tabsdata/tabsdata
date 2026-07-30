@@ -23,10 +23,11 @@ use tracing::{info, warn};
 
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DATABASE_NAME_POSTGRES,
-    DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES,
-    FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES,
-    FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
-    LIBEXEC_TABSDATA, LogLevel, UvMode, YAML_NULL,
+    DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, ENV_UV_PYTHON_INSTALL_DIR, FOLDER_CLUSTER,
+    FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
+    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, UvMode, VENVS_IMAGE,
+    YAML_NULL,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -48,6 +49,7 @@ use crate::kube::kubeconfig::{
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
+use crate::runtime::instance::image::write_venvs_image;
 use crate::runtime::instance::launcher::{
     provision_database, provision_pyvenvs, start_database, stop_database,
 };
@@ -212,6 +214,7 @@ impl KminusProvider {
             &repository,
             &repository.join(FOLDER_DATABASE),
             &repository.join(FOLDER_STORAGE),
+            &self.folder.join(FOLDER_RUNTIMES),
         ] {
             fs::create_dir_all(subfolder).map_err(|error| {
                 ProviderError::InstanceFolderCreateFailed(
@@ -726,7 +729,15 @@ impl KminusProvider {
     }
 
     async fn create_runtimes_as_proc(&self, reporter: &dyn Reporter) -> CommandResult {
-        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
+        let runtimes_folder = self.folder.join(FOLDER_RUNTIMES);
+        let runtimes_kenvs = runtimes_folder.join(FOLDER_UV).join(FOLDER_KENVS);
+        fs::create_dir_all(&runtimes_kenvs).map_err(|error| {
+            ProviderError::RuntimesFolderCreateFailed(
+                runtimes_kenvs.display().to_string(),
+                error.to_string(),
+            )
+        })?;
+        let runtimes_python = runtimes_folder.join(FOLDER_UV).join(FOLDER_PYTHON);
         fs::create_dir_all(&runtimes_python).map_err(|error| {
             ProviderError::RuntimesFolderCreateFailed(
                 runtimes_python.display().to_string(),
@@ -741,14 +752,15 @@ impl KminusProvider {
         if self.verbose {
             command.arg("--verbose");
         }
-        command.arg("create").arg("--target").arg(&runtimes_python);
+        command.arg("create").arg("--target").arg(&runtimes_kenvs);
+        command.env(ENV_UV_PYTHON_INSTALL_DIR, &runtimes_python);
         apply_detached_flags(&mut command);
         let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
             Ok(output) => output,
             Err(error) => {
                 step.fail();
                 return Err(ProviderError::PyvenvCreateFailed {
-                    folder: runtimes_python.display().to_string(),
+                    folder: runtimes_kenvs.display().to_string(),
                     cause: error.to_string(),
                 }
                 .into());
@@ -758,7 +770,7 @@ impl KminusProvider {
             step.fail();
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
             return Err(ProviderError::PyvenvCreateFailed {
-                folder: runtimes_python.display().to_string(),
+                folder: runtimes_kenvs.display().to_string(),
                 cause: stderr,
             }
             .into());
@@ -769,6 +781,20 @@ impl KminusProvider {
         for line in stdout.lines() {
             info!("  {line}");
         }
+        let uv_home = runtimes_folder.join(FOLDER_UV);
+        let image = runtimes_folder.join(VENVS_IMAGE);
+        let step = reporter.step("Compressing the Python virtual environments");
+        match write_venvs_image(&uv_home, &image) {
+            Ok(()) => step.done("Python virtual environments compressed"),
+            Err(error) => {
+                step.fail();
+                return Err(error.into());
+            }
+        }
+        info!(
+            "Python virtual environments image written to {}",
+            image.display()
+        );
         Ok(())
     }
 
@@ -894,28 +920,17 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         .map(|url| url.to_string());
     let repository_path = Some(repository_folder.to_string_lossy().to_string());
     let database_folder = repository_folder.join(FOLDER_DATABASE);
-    let database_url = url::Url::from_directory_path(&database_folder)
-        .ok()
-        .map(|url| url.to_string());
     let database_path = Some(database_folder.to_string_lossy().to_string());
     let storage_folder = repository_folder.join(FOLDER_STORAGE);
     let storage_url = url::Url::from_directory_path(&storage_folder)
         .ok()
         .map(|url| url.to_string());
     let storage_path = Some(storage_folder.to_string_lossy().to_string());
-    let runtimes_python = folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
-    let pyenv_td_root = Some(
-        runtimes_python
-            .join(FOLDER_PYENV_TD)
-            .to_string_lossy()
-            .to_string(),
-    );
-    let pyenv_ag_root = Some(
-        runtimes_python
-            .join(FOLDER_PYENV_AG)
-            .to_string_lossy()
-            .to_string(),
-    );
+    let runtimes_folder = folder.join(FOLDER_RUNTIMES);
+    let runtimes_root = Some(runtimes_folder.to_string_lossy().to_string());
+    let kenvs = runtimes_folder.join(FOLDER_UV).join(FOLDER_KENVS);
+    let pyenv_td_root = Some(kenvs.join(FOLDER_PYENV_TD).to_string_lossy().to_string());
+    let pyenv_ag_root = Some(kenvs.join(FOLDER_PYENV_AG).to_string_lossy().to_string());
     let scripts_folder = get_python_scripts_folder()
         .map_err(|error| ProviderError::PythonScriptsFolderResolveFailed(error.to_string()))?;
     let Some(scripts_name) = scripts_folder.file_name().and_then(|name| name.to_str()) else {
@@ -941,10 +956,10 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
     Ok(SystemValues {
         repository_url,
         repository_path,
-        database_url,
         database_path,
         storage_url,
         storage_path,
+        runtimes_root,
         pyenv_base_root,
         pyenv_td_root,
         pyenv_ag_root,

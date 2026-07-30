@@ -15,8 +15,8 @@ use td_python::python::get_python_scripts_folder;
 #[cfg(feature = "enterprise")]
 use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::{
-    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, EDIT_FOLDER, FOLDER_PYENV_TD, FOLDER_PYTHON,
-    FOLDER_RUNTIMES, INIT_FOLDER, INPUT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, LogLevel,
+    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, EDIT_FOLDER, FOLDER_KENVS, FOLDER_PYENV_TD,
+    FOLDER_RUNTIMES, FOLDER_UV, INIT_FOLDER, INPUT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, LogLevel,
     SETTINGS_FILE, STAGE_FOLDER, TRASH_FOLDER, VENV_ACTIVATE_FILE,
 };
 use crate::base::error::cli::CliError;
@@ -86,7 +86,8 @@ fn venv_activate_file(venv_root: &Path) -> CommandResult<PathBuf> {
 pub fn td_venv_activate_file(name: &str) -> CommandResult<PathBuf> {
     let venv_root = instance_folder(name)?
         .join(FOLDER_RUNTIMES)
-        .join(FOLDER_PYTHON)
+        .join(FOLDER_UV)
+        .join(FOLDER_KENVS)
         .join(FOLDER_PYENV_TD);
     venv_activate_file(&venv_root)
 }
@@ -95,7 +96,8 @@ pub fn td_venv_activate_file(name: &str) -> CommandResult<PathBuf> {
 pub fn ag_venv_activate_file(name: &str) -> CommandResult<PathBuf> {
     let venv_root = instance_folder(name)?
         .join(FOLDER_RUNTIMES)
-        .join(FOLDER_PYTHON)
+        .join(FOLDER_UV)
+        .join(FOLDER_KENVS)
         .join(FOLDER_PYENV_AG);
     venv_activate_file(&venv_root)
 }

@@ -98,6 +98,7 @@ shlex = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 supports-color = { workspace = true }
 sysinfo = { workspace = true }
+tar = { workspace = true }
 tera = { workspace = true }
 terminal_size = { workspace = true }
 textwrap = { workspace = true }
@@ -107,6 +108,7 @@ tracing = { workspace = true }
 tempfile = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
+zstd = { workspace = true, features = ["zstdmt"] }
 
 [dev-dependencies]
 td-kubernetes = { workspace = true, features = ["td-test"] }

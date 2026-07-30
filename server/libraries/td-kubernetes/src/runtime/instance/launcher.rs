@@ -11,7 +11,7 @@ use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 
 use crate::base::constants::{
-    POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, TIER_LABEL,
+    POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, SEQUENCE_LABEL, TIER_LABEL,
 };
 use crate::base::error::launcher::LauncherError;
 use crate::client::tdkserver::widgets::phase_spinner_in;
@@ -102,14 +102,31 @@ pub async fn apply_init_phase(
     multi: &MultiProgress,
 ) -> CommandResult<Vec<String>> {
     let available_secrets = list_available_secrets(context).await?;
-    let mut prepared: Vec<(String, Job)> = Vec::new();
+    let mut prepared: Vec<(i64, String, Job)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
+        let sequence = init_sequence(key, yaml)?;
         let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init, system).await?;
         cluster_provider.enrich_init_job(&mut job)?;
         inject_into_job(profile, key, &mut job, &available_secrets)?;
         validate_pod(key, cluster_provider.validate_init_job(&job))?;
-        prepared.push((key.to_owned(), job));
+        prepared.push((sequence, key.to_owned(), job));
     }
+    prepared.sort_by(|left, right| left.0.cmp(&right.0));
+    for pair in prepared.windows(2) {
+        if pair[0].0 == pair[1].0 {
+            return Err(LauncherError::DuplicateInitSequence {
+                first: pair[0].1.clone(),
+                second: pair[1].1.clone(),
+                sequence: pair[0].0,
+                label: SEQUENCE_LABEL.to_owned(),
+            }
+            .into());
+        }
+    }
+    let prepared: Vec<(String, Job)> = prepared
+        .into_iter()
+        .map(|(_, key, job)| (key, job))
+        .collect();
     let phase = phase_spinner_in(multi, &format!("Applying {} init job(s)", prepared.len()));
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in prepared {
@@ -276,6 +293,36 @@ fn validate_pod(key: &str, errors: Vec<ValidationError>) -> CommandResult {
         errors: rendered,
     }
     .into())
+}
+
+fn init_sequence(key: &str, yaml: &str) -> Result<i64, LauncherError> {
+    let value: serde_yaml::Value =
+        serde_yaml::from_str(yaml).map_err(|error| LauncherError::PodYamlParseFailed {
+            key: key.to_owned(),
+            cause: error.to_string(),
+        })?;
+    let label = value
+        .get("metadata")
+        .and_then(|metadata| metadata.get("labels"))
+        .and_then(|labels| labels.get(SEQUENCE_LABEL));
+    let Some(label) = label else {
+        return Err(LauncherError::MissingInitSequence {
+            key: key.to_owned(),
+            label: SEQUENCE_LABEL.to_owned(),
+        });
+    };
+    if let Some(sequence) = label.as_i64() {
+        return Ok(sequence);
+    }
+    let rendered = label.as_str().unwrap_or_default();
+    rendered
+        .trim()
+        .parse::<i64>()
+        .map_err(|_| LauncherError::InvalidInitSequence {
+            key: key.to_owned(),
+            value: rendered.to_owned(),
+            label: SEQUENCE_LABEL.to_owned(),
+        })
 }
 
 fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>, LauncherError> {
@@ -842,4 +889,45 @@ async fn delete_non_ephemeral_workload(
     drop(phase);
     result?;
     Ok(())
+}
+
+#[cfg(test)]
+mod sequence_tests {
+    use super::*;
+
+    fn init_template(sequence: Option<&str>) -> String {
+        let label = match sequence {
+            Some(value) => format!("\n    {SEQUENCE_LABEL}: {value}"),
+            None => String::new(),
+        };
+        format!(
+            "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: job\n  labels:\n    \
+             {TIER_LABEL}: init{label}\n"
+        )
+    }
+
+    #[test]
+    fn init_sequence_accepts_quoted_and_bare_numbers() {
+        assert_eq!(
+            init_sequence("job", &init_template(Some("\"7\""))).expect("quoted"),
+            7
+        );
+        assert_eq!(
+            init_sequence("job", &init_template(Some("7"))).expect("bare"),
+            7
+        );
+    }
+
+    #[test]
+    fn init_sequence_rejects_a_non_numeric_label() {
+        let error =
+            init_sequence("job", &init_template(Some("\"first\""))).expect_err("must reject");
+        assert!(matches!(error, LauncherError::InvalidInitSequence { .. }));
+    }
+
+    #[test]
+    fn init_sequence_requires_the_label() {
+        let error = init_sequence("job", &init_template(None)).expect_err("must reject");
+        assert!(matches!(error, LauncherError::MissingInitSequence { .. }));
+    }
 }

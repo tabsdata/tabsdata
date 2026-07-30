@@ -70,4 +70,25 @@ pub enum LauncherError {
         pod_template_key: String,
         secrets: String,
     } = 5007,
+    #[error(
+        "The init jobs '{first}' and '{second}' declare the same sequence {sequence}; \
+         every init job must declare a unique '{label}' label."
+    )]
+    DuplicateInitSequence {
+        first: String,
+        second: String,
+        sequence: i64,
+        label: String,
+    } = 5012,
+    #[error(
+        "The init job '{key}' declares an invalid sequence '{value}' in its '{label}' label; \
+         the sequence must be a whole number."
+    )]
+    InvalidInitSequence {
+        key: String,
+        value: String,
+        label: String,
+    } = 5013,
+    #[error("The init job '{key}' declares no '{label}' label.")]
+    MissingInitSequence { key: String, label: String } = 5014,
 }

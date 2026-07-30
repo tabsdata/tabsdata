@@ -102,6 +102,12 @@ pub enum ProviderError {
         to: String,
         cause: String,
     } = 5110,
+    #[error("Could not compress the Python virtual environments of '{folder}' into '{image}': {cause}.")]
+    VenvsImageWriteFailed {
+        folder: String,
+        image: String,
+        cause: String,
+    } = 5115,
     #[error("Failed to handle {phase} secrets: {cause}.")]
     SecretHandlerFailed { phase: String, cause: String } = 5200,
     #[error("Argument --provider is required when no active context is set.")]

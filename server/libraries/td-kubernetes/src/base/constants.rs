@@ -16,6 +16,7 @@ pub const ENV_TD_KUBE_UV_MODE: &str = "TD_KUBE_UV_MODE";
 pub const ENV_UV_DEFAULT_INDEX: &str = "UV_DEFAULT_INDEX";
 pub const ENV_UV_EXTRA_INDEX_URL: &str = "UV_EXTRA_INDEX_URL";
 pub const ENV_UV_INDEX_STRATEGY: &str = "UV_INDEX_STRATEGY";
+pub const ENV_UV_PYTHON_INSTALL_DIR: &str = "UV_PYTHON_INSTALL_DIR";
 
 pub const DEVPI_INDEX_URL_HOST: &str = "http://localhost:14159/tabsdata/td/+simple/";
 pub const DEVPI_INDEX_URL_CONTAINER: &str =
@@ -110,6 +111,10 @@ pub const FOLDER_REPOSITORY: &str = "repository";
 pub const FOLDER_DATABASE: &str = "database";
 pub const FOLDER_STORAGE: &str = "storage";
 pub const FOLDER_RUNTIMES: &str = "runtimes";
+pub const FOLDER_UV: &str = ".uv";
+pub const FOLDER_KENVS: &str = "kenvs";
+pub const VENVS_IMAGE: &str = "tdvenvs.tar.zst";
+pub const CONTAINER_RUNTIMES_ROOT: &str = "/tabsdata/runtimes";
 pub const FOLDER_IMAGES: &str = "images";
 pub const FOLDER_PYTHON: &str = "python";
 pub const FOLDER_PYENV_TD: &str = "td";
@@ -199,6 +204,7 @@ pub const TABSDATA_LABEL_NAMESPACE: &str = "tabsdata.com/";
 pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
 
 pub const TIER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "tier");
+pub const SEQUENCE_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "sequence");
 pub const CONFIGMAP_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "configmap-family");
 pub const SECRET_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "secret-family");
 pub const SECRET_FAMILY_CONFIG: &str = "secret-config";

@@ -14,9 +14,9 @@ use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_TABSDATA_ROOT, DATABASE_SSL_MODE_PREFER,
-    FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, YAML_NULL,
+    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_RUNTIMES_ROOT, CONTAINER_TABSDATA_ROOT,
+    DATABASE_SSL_MODE_PREFER, FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, YAML_NULL,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -240,6 +240,7 @@ impl Provider for DockerProvider {
         Ok(SystemValues {
             instance_name: Some(self.name.clone()),
             namespace_name: Some(self.config.default_namespace.clone()),
+            runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
             database_ssl_mode: Some(DATABASE_SSL_MODE_PREFER.to_owned()),
             database_ssl_root_cert: Some(YAML_NULL.to_owned()),
             repository_path: Some(repository_folder.to_string_lossy().to_string()),

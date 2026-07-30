@@ -14,9 +14,9 @@ use td_common::status::ExitStatus::NoAction;
 use td_common::settings::DEFAULT_INSTANCE;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, DATABASE_SSL_MODE_VERIFY_CA, DATABASE_SSL_ROOT_CERT,
-    FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY,
+    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_RUNTIMES_ROOT, DATABASE_SSL_MODE_VERIFY_CA,
+    DATABASE_SSL_ROOT_CERT, FOLDER_REPOSITORY, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -228,6 +228,7 @@ impl Provider for FargateProvider {
         Ok(SystemValues {
             instance_name: Some(self.name.clone()),
             namespace_name: Some(self.config.default_namespace.clone()),
+            runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
             database_ssl_mode: Some(DATABASE_SSL_MODE_VERIFY_CA.to_owned()),
             database_ssl_root_cert: Some(DATABASE_SSL_ROOT_CERT.to_owned()),
             ..SystemValues::default()

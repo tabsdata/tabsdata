@@ -4,6 +4,7 @@
 
 pub mod cluster;
 pub mod endpoint;
+pub mod image;
 pub mod injection;
 pub mod launcher;
 pub mod manifest;

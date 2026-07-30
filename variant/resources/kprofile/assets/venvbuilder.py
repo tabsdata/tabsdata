@@ -59,6 +59,8 @@ UV_EXECUTABLE: str = "uv"
 ENV_UV_EXTRA_INDEX_URL: str = "UV_EXTRA_INDEX_URL"
 
 PACKAGE_PREFIX: str = "tabsdata"
+
+CACHE_CLEAN_TIMEOUT: int = 120
 INDEX_LINK_PATTERN: str = r">\s*(tabsdata[A-Za-z0-9._-]*)\s*<"
 
 PACKAGES_TD: list[str] = ["tabsdata[all]"]
@@ -360,7 +362,11 @@ def clean_cache(workspace: dict[str, str]) -> None:
         return
     packages = package_names(index_url)
     print(f">> Cleaning {len(packages)} {PACKAGE_PREFIX} package(s) from the uv cache")
-    run([uv_binary(workspace), "cache", "clean", *packages])
+    command = [uv_binary(workspace), "cache", "clean", "--force", *packages]
+    try:
+        run(command, timeout=CACHE_CLEAN_TIMEOUT)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        print(f">> Skipping the cache clean; {error}")
 
 
 def install_python(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:

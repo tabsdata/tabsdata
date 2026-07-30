@@ -662,6 +662,9 @@ version = "0.38.4"
 version = "0.20.0"
 features = ["ansi"]
 
+[workspace.dependencies.tar]
+version = "0.4.46"
+
 [workspace.dependencies.temp-env]
 version = "0.3.6"
 
@@ -778,6 +781,10 @@ features = ["Win32", "Win32_System_Threading", "Win32_System_Console"]
 
 [workspace.dependencies.wiremock]
 version = "0.6.5"
+
+[workspace.dependencies.zstd]
+version = "0.13.3"
+features = ["zstdmt"]
 
 [build-dependencies]
 

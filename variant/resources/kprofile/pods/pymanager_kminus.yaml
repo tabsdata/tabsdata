@@ -48,7 +48,7 @@ spec:
         args:
         - $(CONTAINER_ROOT)/tabsdata/assets/venvbuilder.py
         - --output
-        - $(CONTAINER_ROOT)/tabsdata/runtimes
+        - ${{system:tdk_runtimes_root}}
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         - --transporter-request
@@ -96,7 +96,7 @@ spec:
           mountPath: /tabsdata/config
           readOnly: true
         - name: runtimes
-          mountPath: /tabsdata/runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
         - name: shuttle
           mountPath: /tabsdata/shuttle
         - name: pyenv
@@ -116,7 +116,8 @@ spec:
           - configMap:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
       - name: runtimes
-        emptyDir: {}
+        hostPath:
+          path: "${{system:tdk_runtimes_root}}"
       - name: shuttle
         emptyDir: {}
       - name: pyenv

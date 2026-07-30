@@ -1,0 +1,27 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+storage:
+  mounts:
+  - id: ROOT
+    path: /
+    uri: s3://tabsdata-eu-north-1-dev-ci/xp-s3/d_dimas_0_s3/root
+    options:
+      aws_region: ${{secret}}
+      aws_access_key_id: ${{secret}}
+      aws_secret_access_key: ${{secret}}
+  - id: BUNDLES
+    path: /bundles
+    uri: s3://tabsdata-eu-north-1-dev-ci/xp-s3/d_dimas_0_s3/bundles
+    options:
+      aws_region: ${{secret}}
+      aws_access_key_id: ${{secret}}
+      aws_secret_access_key: ${{secret}}
+  - id: IMAGES
+    path: /images
+    uri: s3://tabsdata-eu-north-1-dev-ci/xp-s3/d_dimas_0_s3/images
+    options:
+      aws_region: ${{secret}}
+      aws_access_key_id: ${{secret}}
+      aws_secret_access_key: ${{secret}}
