@@ -26,8 +26,10 @@ from sqlalchemy.dialects.mysql import (
 )
 from sqlalchemy.types import LargeBinary, Text
 
+from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
+from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql._cdc_impl import (
     BinlogIngester,
     GtidOffset,
@@ -275,6 +277,32 @@ def _ingester_with_tables(qualified: list[str]) -> BinlogIngester:
         for q in qualified
     }
     return bi
+
+
+# --- _resolve_url / _stream_connection_settings ----------------------
+
+
+def test_resolve_url_injects_mysqlconnector_driver():
+    conn = MagicMock()
+    conn._uri.return_value = "mysql://h:3306/d"
+    conn.credentials = UserPassword(user=Secret("etl"), password=Secret("hunter2"))
+    bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
+    url = bi._resolve_url()
+    assert url.drivername == "mysql+mysqlconnector"
+    assert url.username == "etl"
+    settings = bi._stream_connection_settings()
+    assert settings["host"] == "h"
+    assert settings["port"] == 3306
+    assert settings["user"] == "etl"
+    assert settings["db"] == "d"
+
+
+def test_resolve_url_preserves_explicit_driver():
+    conn = MagicMock()
+    conn._uri.return_value = "mysql+pymysql://h/d"
+    conn.credentials = UserPassword(user=Secret("etl"), password=Secret("hunter2"))
+    bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
+    assert bi._resolve_url().drivername == "mysql+pymysql"
 
 
 def test_schema_table_filter_empty_when_no_tables():

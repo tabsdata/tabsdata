@@ -3,19 +3,24 @@
 #
 
 from typing import TypeAlias
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import urlparse
 
-from sqlalchemy import engine
+from sqlalchemy import engine, make_url
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
 from tabsdatak.conn.mysql import MySQLDestConn, MySQLSrcConn
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.mysql._uri import normalize_mysql_uri
 
 # Either MySQL connection flavour -- source or destination.
 MySQLConn: TypeAlias = MySQLSrcConn | MySQLDestConn
 
 
 class MySQLConnectionExplorer(SqlAlchemyConnectionExplorer):
-    """MySQL metadata via PyMySQL.
+    """MySQL metadata through the same driver resolution as the
+    read/write path, so check-connection exercises the DBAPI a run
+    will actually use.
 
     Restrict the scan by encoding the target database in the URI path.
     """
@@ -35,23 +40,16 @@ class MySQLConnectionExplorer(SqlAlchemyConnectionExplorer):
         })
 
     def engine_kwargs(self, conn: MySQLConn) -> dict:
-        return conn.conn_cfg or {}
+        return {"connect_args": dict(conn.conn_cfg or {})}
 
     def make_url(self, conn: MySQLConn) -> engine.URL:
-        parsed = urlparse(conn._uri())
-        user = password = ""
+        url = make_url(normalize_mysql_uri(conn._uri()))
         if conn.credentials is not None:
-            user = conn.credentials.user.value()
-            password = conn.credentials.password.value()
-        return engine.URL.create(
-            drivername="mysql+pymysql",
-            username=user,
-            password=password,
-            host=parsed.hostname or "localhost",
-            port=parsed.port or 3306,
-            database=(parsed.path or "").lstrip("/"),
-            query=dict(parse_qsl(parsed.query)),
-        )
+            url = url.set(
+                username=conn.credentials.user.value(),
+                password=conn.credentials.password.value(),
+            )
+        return url
 
 
 class MySQLCdcConnectionExplorer(MySQLConnectionExplorer):

@@ -86,6 +86,7 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.mysql import BinlogPosition, GtidPosition
+from tabsdatak.conn.mysql._uri import normalize_mysql_uri
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 
 logger = logging.getLogger(__name__)
@@ -462,7 +463,7 @@ class BinlogIngester(CdcIngester):
     # ------------------------------------------------------------------
 
     def _resolve_url(self) -> URL:
-        url = make_url(self._conn._uri())
+        url = make_url(normalize_mysql_uri(self._conn._uri()))
         creds = self._conn.credentials
         return url.set(
             username=_convert(creds.user, str),

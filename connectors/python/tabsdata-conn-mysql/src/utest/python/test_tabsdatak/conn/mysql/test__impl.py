@@ -102,14 +102,22 @@ def test_build_mysql_engine_preserves_explicit_driver(captured):
     assert captured["url"].drivername == "mysql+pymysql"
 
 
-def test_build_mysql_engine_accepts_mariadb_scheme(captured):
-    # No mariadb default driver -> stays as-is.
+def test_build_mysql_engine_folds_mariadb_scheme_and_injects_driver(captured):
     impl.build_mysql_engine(
         "mariadb://host/db",
         _credentials(),
         connect_args=None,
     )
-    assert captured["url"].drivername == "mariadb"
+    assert captured["url"].drivername == "mysql+mysqlconnector"
+
+
+def test_build_mysql_engine_folds_mariadb_scheme_keeping_explicit_driver(captured):
+    impl.build_mysql_engine(
+        "mariadb+pymysql://host/db",
+        _credentials(),
+        connect_args=None,
+    )
+    assert captured["url"].drivername == "mysql+pymysql"
 
 
 def test_build_mysql_engine_accepts_secret_uri(captured):

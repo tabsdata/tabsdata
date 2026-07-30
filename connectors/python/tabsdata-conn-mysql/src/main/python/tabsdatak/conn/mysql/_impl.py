@@ -13,14 +13,11 @@ from sqlalchemy.engine import Engine
 # noinspection PyProtectedMember
 import tabsdatak.conn.common.sql._engine as _engine
 
-# Submodule imports register ``constants`` / ``sqlalchemy_utils`` as
-# attributes of the ``_engine`` namespace package so the qualified
-# call-sites below resolve.
+# Submodule import registers ``constants`` as an attribute of the
+# ``_engine`` namespace package so the qualified call-sites below
+# resolve.
 # noinspection PyProtectedMember
 import tabsdatak.conn.common.sql._engine.constants  # noqa: F401
-
-# noinspection PyProtectedMember
-import tabsdatak.conn.common.sql._engine.sqlalchemy_utils  # noqa: F401
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
@@ -32,12 +29,8 @@ from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
 from tabsdatak.conn.common.types import CfgSpec, UserPassword, _convert
 from tabsdatak.conn.mysql import MySQLDestConn, MySQLSrcConn, UriSpec
 
-# --- MySQL scheme / driver tables --------------------------------
-
-_SCHEME_ALIASES: dict[str, str] = {}
-
-_DRIVERS: dict[str, str] = {"mysql": "mysqlconnector"}
-
+# noinspection PyProtectedMember
+from tabsdatak.conn.mysql._uri import normalize_mysql_uri
 
 # --- Conn helpers ------------------------------------------------
 
@@ -48,9 +41,7 @@ def build_mysql_engine(
     connect_args: CfgSpec | None,
 ) -> Engine:
     uri = _convert(uri, str)
-    uri = _engine.sqlalchemy_utils.normalize_scheme(uri, aliases=_SCHEME_ALIASES)
-    uri = _engine.sqlalchemy_utils.add_driver_to_uri(uri, drivers=_DRIVERS)
-    url = make_url(uri)
+    url = make_url(normalize_mysql_uri(uri))
 
     user = _convert(credentials.user, str)
     password = _convert(credentials.password, str)
