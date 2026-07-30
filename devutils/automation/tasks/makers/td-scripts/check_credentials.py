@@ -376,9 +376,9 @@ GROUPS: list[Group] = [
         ),
     ),
     Group(
-        "openai (OPENAI_API_KEY)",
-        ["OPENAI_API_KEY"],
-        lambda e: check_openai(e["OPENAI_API_KEY"]),
+        "openai (OPENAI__API_KEY)",
+        ["OPENAI__API_KEY"],
+        lambda e: check_openai(e["OPENAI__API_KEY"]),
     ),
     Group(
         "openai (OPENAI__API_KEY)",
