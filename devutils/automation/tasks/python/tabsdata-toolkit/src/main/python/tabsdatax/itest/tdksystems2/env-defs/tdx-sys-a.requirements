@@ -4,11 +4,18 @@
 
 # Driver set: everything needed to talk to a provisioned system's insides —
 # SQL engines, object stores, kafka, and the data-plane frame writer.
+#
+# A SQL system needs its SQLAlchemy *dialect*, not just its driver: the dialect
+# is what registers the name in Backend.driver. Where the two are separate
+# packages the dialect is what appears here, so keep this list keyed to those
+# names (clickhousedb <- clickhouse-connect, snowflake <- snowflake-sqlalchemy,
+# databricks <- databricks-sqlalchemy).
 
 azure-storage-blob
 boto3
-clickhouse-sqlalchemy
+clickhouse-connect
 confluent-kafka[avro,json,protobuf]
+databricks-sqlalchemy
 fastavro
 google-cloud-bigquery
 google-cloud-storage
@@ -23,6 +30,6 @@ psycopg2-binary
 pyarrow
 pymongo
 pyodbc
-snowflake-connector-python
+snowflake-sqlalchemy
 sqlalchemy
 sqlparse

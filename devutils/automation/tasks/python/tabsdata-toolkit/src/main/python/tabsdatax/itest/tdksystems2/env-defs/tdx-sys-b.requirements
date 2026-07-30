@@ -3,7 +3,8 @@
 #
 
 # Salesforce data plane. Kept apart from tdx-sys-a because cumulusci-plus pins
-# sqlalchemy<2, which conflicts with clickhouse-sqlalchemy's sqlalchemy>=2.
+# sqlalchemy<2, which that env's dialects contradict (databricks-sqlalchemy
+# needs >=2.0.21).
 # simple-salesforce is a direct import of the loader, so it is pinned here
 # rather than left to arrive transitively through cumulusci-plus.
 

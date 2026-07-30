@@ -15,8 +15,8 @@ happens to be active when they are invoked. Each venv holds the toolkit
 
   ``_tdx-sys-b``
       The salesforce data plane (cumulusci-plus + snowfakery). Kept apart
-      because cumulusci-plus pins ``sqlalchemy<2``, which conflicts with
-      ``clickhouse-sqlalchemy``'s ``sqlalchemy>=2``.
+      because cumulusci-plus pins ``sqlalchemy<2``, which the driver set's
+      dialects contradict — ``databricks-sqlalchemy`` needs ``>=2.0.21``.
 
   ``_tdx-sys-c``
       Driver-free — the toolkit's own dependencies only. Store reads and

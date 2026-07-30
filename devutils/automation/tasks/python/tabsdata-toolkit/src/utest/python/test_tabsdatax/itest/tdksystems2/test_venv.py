@@ -158,6 +158,43 @@ def test_every_env_has_a_requirements_file():
         assert _venv.requirements_file(env).is_file(), env
 
 
+def test_the_driver_env_declares_a_dialect_for_every_sql_backend():
+    """A backend's ``driver`` is a SQLAlchemy dialect name, and the package that
+    registers it is often not the one named after the database — clickhousedb
+    comes from clickhouse-connect, snowflake from snowflake-sqlalchemy. Nothing
+    else checks the requirements actually cover them, and a gap only shows as
+    NoSuchModuleError against a live system."""
+    from tabsdatax.itest.tdksystems2 import systems
+
+    reqs = _venv.requirements_file(_venv.ENV_A).read_text(encoding="utf-8")
+    declared = {
+        line.split(";")[0].split("[")[0].strip().lower()
+        for line in reqs.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    # dialect name (Backend.driver, before any "+driver") -> distribution
+    providers = {
+        "clickhousedb": "clickhouse-connect",
+        "databricks": "databricks-sqlalchemy",
+        "snowflake": "snowflake-sqlalchemy",
+        "db2": "ibm_db_sa",
+        "mssql": "pyodbc",
+        "mysql": "mysql-connector-python",
+        "oracle": "oracledb",
+        "postgresql": "psycopg2-binary",
+    }
+    for slug in systems.all_slugs():
+        driver = getattr(systems.get_class(slug), "driver", "")
+        if not driver:
+            continue
+        dialect = driver.split("+")[0]
+        assert dialect in providers, f"{slug}: no known provider for '{dialect}'"
+        assert providers[dialect] in declared, (
+            f"{slug} speaks '{dialect}', which {providers[dialect]} registers — "
+            f"add it to {_venv.requirements_file(_venv.ENV_A).name}"
+        )
+
+
 def test_bootstrap_creates_then_execs(monkeypatch):
     calls: dict[str, object] = {}
     monkeypatch.setattr("sys.argv", ["tdx-system", "types"])
