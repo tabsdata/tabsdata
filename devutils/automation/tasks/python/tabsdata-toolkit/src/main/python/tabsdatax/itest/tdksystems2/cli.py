@@ -97,6 +97,30 @@ def add_sys_dir(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_manifest(parser: argparse.ArgumentParser, action: str) -> None:
+    """Declare ``--manifest FILE`` as an alternative to naming targets.
+
+    The dispatcher peels this off raw argv and fans the verb out over the
+    manifest's entries, so the value never reaches this parser — but the option
+    is real, and without declaring it here ``-h`` would deny it exists."""
+    parser.add_argument(
+        constants.OPT_MANIFEST,
+        default=None,
+        metavar="FILE",
+        help=f"{action} every entry the YAML manifest names, in parallel, "
+        f"instead of naming targets (- = stdin)",
+    )
+
+
+def add_sync(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        constants.OPT_SYNC,
+        action="store_true",
+        help=f"with {constants.OPT_MANIFEST}: reconcile — also destroy store "
+        f"entries the manifest omits",
+    )
+
+
 def add_domain_dir(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         constants.OPT_DOMAIN_DIR,

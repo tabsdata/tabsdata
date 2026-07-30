@@ -100,6 +100,42 @@ def test_create_help_for_a_named_type_shows_its_options(capsys):
     assert "--port" in out and "--api-key" not in out
 
 
+@pytest.mark.parametrize(
+    "tool,verb",
+    [("tdx-system", v) for v in ("create", "destroy", "status", "restart", "purge")]
+    + [("tdx-domain", v) for v in ("create", "destroy", "status")],
+)
+def test_every_verb_that_takes_a_manifest_says_so(tool, verb, capsys):
+    """The dispatcher peels --manifest off raw argv before argparse, so a verb
+    that accepts one can easily fail to declare it — and then -h denies the
+    option exists."""
+    with pytest.raises(SystemExit):
+        tdx._dispatch(tool, [verb, "-h"])
+    assert "--manifest" in capsys.readouterr().out
+
+
+def test_the_verbs_that_declare_a_manifest_are_the_ones_that_honour_it():
+    # what the dispatcher actually intercepts ...
+    intercepts = set(tdx._MANIFEST_VERBS) | {"create"}
+    # ... must be what the catalogs' parsers advertise
+    for tool, catalog in (
+        ("tdx-system", tdx._SYS_CATALOG),
+        ("tdx-domain", tdx._DOM_CATALOG),
+    ):
+        for verb in catalog:
+            module = tdx._command_module(tool, tdx._default_slug(tool, verb), verb)
+            p = tdx.ArgumentParser(prog="x")
+            p.tdx_system = None
+            module.add_arguments(p)
+            declared = any(
+                "--manifest" in (a.option_strings or []) for a in p._actions
+            )
+            assert declared == (verb in intercepts), (
+                f"{tool} {verb}: declares --manifest={declared} but the "
+                f"dispatcher intercepts it={verb in intercepts}"
+            )
+
+
 def test_manifest_children_are_pointed_at_the_callers_store():
     """A manifest run reads the store the caller named, so the children it spawns
     have to write to that one — otherwise create lands in the default store while

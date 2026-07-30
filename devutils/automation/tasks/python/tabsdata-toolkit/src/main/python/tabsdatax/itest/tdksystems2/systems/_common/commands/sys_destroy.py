@@ -26,6 +26,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_force(parser)
     cli.add_dry_run(parser)
     cli.add_latch(parser)
+    cli.add_manifest(parser, "destroy")
 
 
 def _domains_of(sys_uuid: str) -> list[tuple[descriptor.DomainInfo, Path]]:

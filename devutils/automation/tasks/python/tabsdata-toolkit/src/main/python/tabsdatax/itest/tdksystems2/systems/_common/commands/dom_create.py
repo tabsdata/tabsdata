@@ -28,6 +28,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_force(parser)
     cli.add_dry_run(parser)
     cli.add_latch(parser)
+    cli.add_manifest(parser, "create")
+    cli.add_sync(parser)
     parser.add_argument(
         constants.OPT_NAME_IN_SYSTEM,
         default=None,

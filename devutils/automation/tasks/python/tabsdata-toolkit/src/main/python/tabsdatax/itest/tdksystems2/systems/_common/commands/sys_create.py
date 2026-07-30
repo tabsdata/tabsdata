@@ -39,6 +39,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_force(parser)
     cli.add_dry_run(parser)
     cli.add_latch(parser)
+    cli.add_manifest(parser, "create")
+    cli.add_sync(parser)
     # the dispatcher attaches the resolved backend (chosen from --type) so its
     # declarative options become create flags; None on a bare `create -h`.
     sysobj = getattr(parser, "tdx_system", None)

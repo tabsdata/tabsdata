@@ -14,6 +14,7 @@ from tabsdatax.itest.tdksystems2 import cli, console
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_domain(parser)
     cli.add_domain_dir(parser)
+    cli.add_manifest(parser, "report on")
 
 
 def run(ctx: cli.Context) -> int:

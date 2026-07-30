@@ -15,6 +15,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_sys(parser)
     cli.add_sys_dir(parser)
     cli.add_latch(parser)
+    cli.add_manifest(parser, "restart")
 
 
 def run(ctx: cli.Context) -> int:

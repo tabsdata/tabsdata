@@ -17,6 +17,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_force(parser)
     cli.add_dry_run(parser)
     cli.add_latch(parser)
+    cli.add_manifest(parser, "destroy")
 
 
 def run(ctx: cli.Context) -> int:

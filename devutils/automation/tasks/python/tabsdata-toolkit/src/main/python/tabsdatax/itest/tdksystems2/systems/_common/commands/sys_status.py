@@ -15,6 +15,7 @@ from tabsdatax.itest.tdksystems2.shell import port_open
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     cli.add_sys(parser)
     cli.add_sys_dir(parser)
+    cli.add_manifest(parser, "report on")
 
 
 def _tunnel_status(meta: dict[str, str]) -> tuple[bool, str]:
