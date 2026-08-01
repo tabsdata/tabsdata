@@ -44,7 +44,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: inspector
+        - name: 1000-inspector
           image: /dev/null
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_inspector${{system:tdk_exe_suffix}}"]

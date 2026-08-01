@@ -57,8 +57,8 @@ use crate::runtime::instance::launcher::{
 };
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::{
-    PORT_RELEASE_AFTER_KILL_TIMEOUT, apply_ports, database_port, kill_port_holders,
-    wait_for_ports_released, wait_for_ports_released_within,
+    EVERY_PORT, PORT_RELEASE_AFTER_KILL_TIMEOUT, PORT_RELEASE_TIMEOUT, apply_ports, database_port,
+    first_port_in_use, kill_port_holders, wait_for_ports_released, wait_for_ports_released_within,
 };
 use crate::runtime::instance::profile::{
     Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
@@ -247,7 +247,7 @@ impl KminusProvider {
 
     fn ensure_ports_available(&self) -> CommandResult {
         let settings = InstanceSettings::load(&self.name)?;
-        if let Some(entry) = wait_for_ports_released(&settings.ports) {
+        if let Some(entry) = first_port_in_use(&settings.ports, EVERY_PORT, PORT_RELEASE_TIMEOUT) {
             return Err(ProviderError::PortInUse {
                 port: entry.port,
                 caption: entry.caption.clone(),

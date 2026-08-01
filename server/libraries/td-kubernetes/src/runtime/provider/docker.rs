@@ -40,7 +40,9 @@ use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::ports::apply_ports;
+use crate::runtime::instance::ports::{
+    HOST_PUBLISHED_PORTS, NO_PATIENCE, apply_ports, first_port_in_use,
+};
 use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
 use crate::runtime::instance::staging::promote_staged_profile;
 use crate::runtime::instance::verify_manifest_compatibility;
@@ -68,6 +70,18 @@ pub struct DockerProvider {
 }
 
 impl DockerProvider {
+    fn ensure_published_ports_available(&self) -> CommandResult {
+        let settings = InstanceSettings::load(&self.name)?;
+        if let Some(entry) = first_port_in_use(&settings.ports, HOST_PUBLISHED_PORTS, NO_PATIENCE) {
+            return Err(ProviderError::PortInUse {
+                port: entry.port,
+                caption: entry.caption.clone(),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
     async fn promote_staged_configmaps(&self) -> CommandResult {
         let context = self.kube_context().await?;
         let stage = init_stage_folder_in(&self.folder);
@@ -421,6 +435,7 @@ impl Provider for DockerProvider {
     }
 
     async fn ensure_startable_server(&self) -> CommandResult {
+        self.ensure_published_ports_available()?;
         let context = self.kube_context().await?;
         if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?
             && let Some(yaml) = data.get(MANIFEST_FILE)

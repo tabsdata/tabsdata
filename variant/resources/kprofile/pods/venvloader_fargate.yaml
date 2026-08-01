@@ -42,7 +42,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: venvloader
+      - name: 1000-venvloader
         image: python:3.12-slim
         imagePullPolicy: IfNotPresent
         command: ["bash"]
@@ -52,6 +52,8 @@ spec:
         - ${{system:tdk_runtimes_root}}
         - --image
         - tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst
+        - --venv
+        - td
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         resources:

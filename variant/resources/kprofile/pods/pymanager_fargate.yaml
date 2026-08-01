@@ -39,7 +39,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: venvbuilder
+      - name: 1000-venvbuilder
         image: ubuntu:24.04
         imagePullPolicy: IfNotPresent
         command: ["bash"]

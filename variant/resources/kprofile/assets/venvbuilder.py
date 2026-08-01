@@ -190,6 +190,15 @@ def parse_arguments() -> argparse.Namespace:
         help="Output folder (mandatory)",
     )
     parser.add_argument(
+        "--image",
+        dest="image",
+        default=f"{IMAGE_NAME}{IMAGE_SUFFIX}",
+        help=(
+            "Image file name; the venv name is appended to the stem, yielding"
+            f" one image per virtual environment (default: {IMAGE_NAME}{IMAGE_SUFFIX})"
+        ),
+    )
+    parser.add_argument(
         "--version",
         dest="version",
         required=True,
@@ -272,6 +281,20 @@ def validate_arguments(arguments: argparse.Namespace) -> None:
         sys.exit(2)
 
 
+def image_for_venv(image: str, venv: str) -> str:
+    stem = image[: -len(IMAGE_SUFFIX)] if image.endswith(IMAGE_SUFFIX) else image
+    return f"{stem}-{venv}{IMAGE_SUFFIX}"
+
+
+def human_size(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{int(value)} {unit}" if unit == "B" else f"{value:.2f} {unit}"
+        value /= 1024
+    raise AssertionError
+
+
 def setup_workspace(arguments: argparse.Namespace) -> dict[str, str]:
     work = tempfile.mkdtemp(prefix="tdvenvs.")
     output: str = str(arguments.output)
@@ -290,7 +313,7 @@ def setup_workspace(arguments: argparse.Namespace) -> dict[str, str]:
         "tools_home": tools_home,
         "tools_bin_home": tools_bin_home,
         "tools_kenvs_home": tools_kenvs_home,
-        "output_image": os.path.join(output, f"{IMAGE_NAME}{IMAGE_SUFFIX}"),
+        "output_image_td": os.path.join(output, image_for_venv(arguments.image, VENV_TD)),
         "virtual_environment_td": os.path.join(uv_kenvs_home, VENV_TD),
         "virtual_environment_z": os.path.join(tools_kenvs_home, VENV_Z),
     }
@@ -507,8 +530,8 @@ COMPRESS_SCRIPT = """
 import sys
 import zstandard
 
-source, target = sys.argv[1], sys.argv[2]
-level, threads, window_log = int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
+target = sys.argv[1]
+level, threads, window_log = int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 parameters = zstandard.ZstdCompressionParameters.from_level(
     level,
     threads=threads,
@@ -516,30 +539,50 @@ parameters = zstandard.ZstdCompressionParameters.from_level(
     write_content_size=True,
 )
 compressor = zstandard.ZstdCompressor(compression_params=parameters)
-with open(source, "rb") as reader, open(target, "wb") as writer:
-    compressor.copy_stream(reader, writer)
+with open(target, "wb") as writer:
+    compressor.copy_stream(sys.stdin.buffer, writer)
 """
 
 
-def write_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
-    output_image = workspace["output_image"]
-    os.makedirs(arguments.output, exist_ok=True)
-    archive = os.path.join(workspace["work"], f"{IMAGE_NAME}.tar")
-    with tarfile.open(archive, "w") as image:
-        for name in (UV_PYTHON_FOLDER, UV_KENVS_FOLDER):
-            image.add(os.path.join(workspace["uv_home"], name), arcname=name)
-    script = os.path.join(workspace["work"], "compress.py")
-    with open(script, "w") as writer:
-        writer.write(COMPRESS_SCRIPT)
-    run([
+def write_one_image(
+    workspace: dict[str, str],
+    script: str,
+    venv: str,
+    target: str,
+) -> None:
+    started = time.monotonic()
+    trace(f"Writing {target} from {UV_PYTHON_FOLDER} and {UV_KENVS_FOLDER}/{venv}")
+    command = [
         venv_python(workspace["virtual_environment_z"]),
         script,
-        archive,
-        output_image,
+        target,
         ARCHIVE_COMPRESSION_LEVEL,
         ARCHIVE_COMPRESSION_THREADS,
         ARCHIVE_LONG_DISTANCE_WINDOW_LOG,
-    ])
+    ]
+    compressor = subprocess.Popen(command, stdin=subprocess.PIPE)
+    try:
+        with tarfile.open(fileobj=compressor.stdin, mode="w|") as image:
+            for name in (UV_PYTHON_FOLDER, os.path.join(UV_KENVS_FOLDER, venv)):
+                image.add(os.path.join(workspace["uv_home"], name), arcname=name)
+    finally:
+        compressor.stdin.close()
+        status = compressor.wait()
+    if status != 0:
+        raise subprocess.CalledProcessError(status, command)
+    size = os.path.getsize(target)
+    trace(
+        f"Wrote {target}: {human_size(size)} ({size} bytes)"
+        f" in {time.monotonic() - started:.2f}s"
+    )
+
+
+def write_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
+    os.makedirs(arguments.output, exist_ok=True)
+    script = os.path.join(workspace["work"], "compress.py")
+    with open(script, "w") as writer:
+        writer.write(COMPRESS_SCRIPT)
+    write_one_image(workspace, script, VENV_TD, workspace["output_image_td"])
     shutil.rmtree(workspace["work"], ignore_errors=True)
 
 
@@ -547,19 +590,22 @@ def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None
     if not arguments.storage_config:
         print(">> Skipping the image upload; no storage configuration given")
         return
-    run([
-        venv_python(workspace["virtual_environment_td"]),
-        "-m",
-        ARCHIVE_MODULE,
-        "--image",
-        workspace["output_image"],
-        "--storage-config",
-        arguments.storage_config,
-        "--transporter-request",
-        arguments.transporter_request,
-        "--transporter-response",
-        arguments.transporter_response,
-    ])
+    for target in (workspace["output_image_td"],):
+        size = os.path.getsize(target)
+        trace(f"Sending {target}: {human_size(size)} ({size} bytes)")
+        run([
+            venv_python(workspace["virtual_environment_td"]),
+            "-m",
+            ARCHIVE_MODULE,
+            "--image",
+            target,
+            "--storage-config",
+            arguments.storage_config,
+            "--transporter-request",
+            arguments.transporter_request,
+            "--transporter-response",
+            arguments.transporter_response,
+        ])
 
 
 def main() -> None:
@@ -590,7 +636,7 @@ def main() -> None:
     step("Sending the image", send_image, arguments, workspace)
 
     hours = (time.monotonic() - start) / 3600
-    print(f">> Done! Image written to {workspace['output_image']}")
+    print(f">> Done! Image written to {workspace['output_image_td']}")
     print(f">> Elapsed time: {hours:.4f} hours")
 
 

@@ -15,7 +15,7 @@ pub const DEFAULT_BASE_PORT: u16 = 2457;
 
 const PORT_RELEASE_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const PORT_RELEASE_LOG_INTERVAL: Duration = Duration::from_secs(5);
-const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(30);
+pub const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const PORT_RELEASE_AFTER_KILL_TIMEOUT: Duration = Duration::from_secs(15);
 #[cfg(windows)]
 const PORT_HOLDER_KILL_GRACE: Duration = Duration::from_secs(30);
@@ -86,7 +86,34 @@ pub fn port_available(port: u16) -> bool {
     TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok()
 }
 
-pub fn first_unavailable_port(assigned: &[AssignedPort]) -> Option<&AssignedPort> {
+pub const HOST_PUBLISHED_PORTS: &[&str] = &["apiserver_public_port"];
+
+pub const EVERY_PORT: &[&str] = &[];
+
+pub const NO_PATIENCE: Duration = Duration::ZERO;
+
+pub fn first_port_in_use<'a>(
+    assigned: &'a [AssignedPort],
+    roles: &[&str],
+    patience: Duration,
+) -> Option<&'a AssignedPort> {
+    let selected: Vec<&AssignedPort> = assigned
+        .iter()
+        .filter(|entry| roles.is_empty() || roles.contains(&entry.role.as_str()))
+        .collect();
+    if patience.is_zero() {
+        return selected
+            .into_iter()
+            .find(|entry| !port_available(entry.port));
+    }
+    let owned: Vec<AssignedPort> = selected.into_iter().cloned().collect();
+    let blocked = wait_for_ports_released_within(&owned, patience)?
+        .role
+        .clone();
+    assigned.iter().find(|entry| entry.role == blocked)
+}
+
+fn first_unavailable_port(assigned: &[AssignedPort]) -> Option<&AssignedPort> {
     assigned.iter().find(|entry| !port_available(entry.port))
 }
 
@@ -255,3 +282,6 @@ pub fn apply_ports(values: &mut SystemValues, assigned: &[AssignedPort]) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

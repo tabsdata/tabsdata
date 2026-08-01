@@ -91,7 +91,7 @@ show_usage() {
    echo "      --requirements-td FILE     Complementary packages for td    (default: none)"
    echo "  -o, --output FOLDER            Output folder                    (mandatory)"
    echo "      --version VERSION          Tabsdata version to install      (mandatory)"
-   echo "      --image NAME               Image file name                  (default: $IMAGE_NAME$IMAGE_SUFFIX)"
+   echo "      --image NAME               Image file name; the venv name is appended to the stem, yielding one image per virtual environment    (default: $IMAGE_NAME$IMAGE_SUFFIX)"
    echo "      --storage-config FILE      Storage configuration used to copy the image     (default: none)"
    echo "  -h, --help                     Show this help"
 }
@@ -176,9 +176,32 @@ validate_arguments() {
    fi
 }
 
+image_for_venv() {
+   local venv="$1"
+   local base="$image"
+   if [[ "$base" == *"$IMAGE_SUFFIX" ]]; then
+      base="${base%$IMAGE_SUFFIX}"
+   fi
+   echo "$base-$venv$IMAGE_SUFFIX"
+}
+
+human_size() {
+   local bytes="$1"
+   awk -v b="$bytes" 'BEGIN {
+      split("B KiB MiB GiB TiB", unit, " ")
+      i = 1
+      while (b >= 1024 && i < 5) { b /= 1024; i++ }
+      printf (i == 1 ? "%d %s" : "%.2f %s"), b, unit[i]
+   }'
+}
+
+file_size() {
+   wc -c < "$1" | tr -d ' '
+}
+
 setup_workspace() {
    work="$(mktemp -d "${TMPDIR:-/tmp}/tdvenvs.XXXXXX")"
-   output_image="$output/$image"
+   output_image_td="$output/$(image_for_venv "$VENV_TD")"
    UV_HOME="$output/$UV_FOLDER"
    UV_PYTHON_HOME="$UV_HOME/$UV_PYTHON_FOLDER"
    UV_KENVS_HOME="$UV_HOME/$UV_KENVS_FOLDER"
@@ -249,13 +272,13 @@ verify_image() {
    test -d "$virtual_environment_td"
 }
 
-compress_image() {
+write_compressor_script() {
    cat > "$work/compress.py" <<'PYTHON'
 import sys
 import zstandard
 
-source, target = sys.argv[1], sys.argv[2]
-level, threads, window_log = int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
+target = sys.argv[1]
+level, threads, window_log = int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 parameters = zstandard.ZstdCompressionParameters.from_level(
     level,
     threads=threads,
@@ -263,21 +286,45 @@ parameters = zstandard.ZstdCompressionParameters.from_level(
     write_content_size=True,
 )
 compressor = zstandard.ZstdCompressor(compression_params=parameters)
-with open(source, "rb") as reader, open(target, "wb") as writer:
-    compressor.copy_stream(reader, writer)
+with open(target, "wb") as writer:
+    compressor.copy_stream(sys.stdin.buffer, writer)
 PYTHON
-   "$virtual_environment_z/bin/python" "$work/compress.py" \
-      "$1" "$2" \
-      "$ARCHIVE_COMPRESSION_LEVEL" \
-      "$ARCHIVE_COMPRESSION_THREADS" \
-      "$ARCHIVE_LONG_DISTANCE_WINDOW_LOG"
+}
+
+write_one_image() {
+   local venv="$1"
+   local target="$2"
+   local started
+   started="$(now)"
+   trace "Writing $target from $UV_PYTHON_FOLDER and $UV_KENVS_FOLDER/$venv"
+   tar -cf - -C "$UV_HOME" "$UV_PYTHON_FOLDER" "$UV_KENVS_FOLDER/$venv" \
+      | "$virtual_environment_z/bin/python" "$work/compress.py" \
+         "$target" \
+         "$ARCHIVE_COMPRESSION_LEVEL" \
+         "$ARCHIVE_COMPRESSION_THREADS" \
+         "$ARCHIVE_LONG_DISTANCE_WINDOW_LOG"
+   local size
+   size="$(file_size "$target")"
+   trace "Wrote $target: $(human_size "$size") ($size bytes) in $(elapsed_since "$started" "$(now)")s"
 }
 
 write_image() {
    mkdir -p "$output"
-   run tar -cf "$work/$IMAGE_NAME.tar" -C "$UV_HOME" "$UV_PYTHON_FOLDER" "$UV_KENVS_FOLDER"
-   compress_image "$work/$IMAGE_NAME.tar" "$output_image"
+   write_compressor_script
+   write_one_image "$VENV_TD" "$output_image_td"
    rm -rf "$work"
+}
+
+send_one_image() {
+   local target="$1"
+   local size
+   size="$(file_size "$target")"
+   trace "Sending $target: $(human_size "$size") ($size bytes)"
+   run "$virtual_environment_td/bin/python" -m "$ARCHIVE_MODULE" \
+      --image "$target" \
+      --storage-config "$storage_config" \
+      --transporter-request "$transporter_request" \
+      --transporter-response "$transporter_response"
 }
 
 send_image() {
@@ -285,11 +332,7 @@ send_image() {
       echo ">> Skipping the image upload; no storage configuration given"
       return
    fi
-   run "$virtual_environment_td/bin/python" -m "$ARCHIVE_MODULE" \
-      --image "$output_image" \
-      --storage-config "$storage_config" \
-      --transporter-request "$transporter_request" \
-      --transporter-response "$transporter_response"
+   send_one_image "$output_image_td"
 }
 
 main() {
@@ -310,7 +353,7 @@ main() {
 
    local elapsed="$(( SECONDS - start ))"
    local hours="$(awk "BEGIN { printf \"%.4f\", $elapsed / 3600 }")"
-   echo ">> Done! Image written to $output_image"
+   echo ">> Done! Image written to $output_image_td"
    echo ">> Elapsed time: $hours hours"
 }
 

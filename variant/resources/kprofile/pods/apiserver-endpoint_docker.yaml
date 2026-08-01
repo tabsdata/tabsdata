@@ -19,7 +19,7 @@ metadata:
     app.kubernetes.io/managed-by: tdkserver
     tabsdata.com/tier: endpoint
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/part-of: tabsdata

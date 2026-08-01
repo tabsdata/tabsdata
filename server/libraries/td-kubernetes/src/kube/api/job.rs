@@ -6,14 +6,15 @@ use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::{ConfigMap, Secret};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
-use kube::runtime::wait::{Condition, await_condition};
+use kube::runtime::wait::Condition;
 use tracing::debug;
 
 use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    label_tabsdata, owner_ref_for_job, tabsdata_non_ephemeral_selector, tabsdata_selector,
+    AwaitPatience, await_condition_forever, label_tabsdata, owner_ref_for_job,
+    tabsdata_non_ephemeral_selector, tabsdata_selector,
 };
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
@@ -131,10 +132,27 @@ async fn list_jobs_matching(
 pub async fn await_job_condition(
     context: &KubeContext,
     name: &str,
-    condition: impl Condition<Job> + Send + Sync + 'static,
+    condition: impl Condition<Job> + Clone + Send + Sync + 'static,
+) -> Result<Option<Job>, KubernetesError> {
+    await_job_condition_with(context, name, condition, AwaitPatience::Bounded).await
+}
+
+pub async fn await_job_condition_forever(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Job> + Clone + Send + Sync + 'static,
+) -> Result<Option<Job>, KubernetesError> {
+    await_job_condition_with(context, name, condition, AwaitPatience::Forever).await
+}
+
+async fn await_job_condition_with(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Job> + Clone + Send + Sync + 'static,
+    patience: AwaitPatience,
 ) -> Result<Option<Job>, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition(api, name, condition)
+    await_condition_forever(api, name, condition, patience)
         .await
         .map_err(|error| {
             KubeJobError::AwaitFailed {

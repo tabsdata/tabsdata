@@ -30,7 +30,7 @@ spec:
     seccompProfile:
       type: RuntimeDefault
   initContainers:
-    - name: dbready
+    - name: 0000-dbready
       image: /dev/null
       imagePullPolicy: IfNotPresent
       command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_dbready${{system:tdk_exe_suffix}}"]
@@ -74,7 +74,7 @@ spec:
         - name: pyenv
           mountPath: /tabsdata/pyenv
           readOnly: true
-    - name: conn-resources-extractor
+    - name: 0010-conn-resources-extractor
       image: /dev/null
       imagePullPolicy: IfNotPresent
       command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_conn_resources_extractor${{system:tdk_exe_suffix}}"]
@@ -110,7 +110,7 @@ spec:
         - name: resources
           mountPath: /tabsdata/resources
   containers:
-    - name: apiserver
+    - name: 1000-apiserver
       image: /dev/null
       imagePullPolicy: IfNotPresent
       command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_apiserver${{system:tdk_exe_suffix}}"]

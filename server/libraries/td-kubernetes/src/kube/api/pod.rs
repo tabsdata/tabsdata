@@ -8,7 +8,7 @@ use futures::AsyncBufRead;
 use k8s_openapi::api::core::v1::{ConfigMap, Pod, Secret};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, LogParams, PostParams, PropagationPolicy};
-use kube::runtime::wait::{Condition, await_condition};
+use kube::runtime::wait::Condition;
 use tracing::debug;
 
 use crate::base::constants::{
@@ -18,8 +18,8 @@ use crate::base::constants::{
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    LabelFilter, label_tabsdata, owner_ref_for_pod, tabsdata_ephemeral_selector,
-    tabsdata_non_ephemeral_selector, tabsdata_selector,
+    AwaitPatience, LabelFilter, await_condition_forever, label_tabsdata, owner_ref_for_pod,
+    tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector, tabsdata_selector,
 };
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
@@ -220,10 +220,27 @@ async fn list_pods_matching(
 pub async fn await_pod_condition(
     context: &KubeContext,
     name: &str,
-    condition: impl Condition<Pod> + Send + Sync + 'static,
+    condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
+) -> Result<Option<Pod>, KubernetesError> {
+    await_pod_condition_with(context, name, condition, AwaitPatience::Bounded).await
+}
+
+pub async fn await_pod_condition_forever(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
+) -> Result<Option<Pod>, KubernetesError> {
+    await_pod_condition_with(context, name, condition, AwaitPatience::Forever).await
+}
+
+async fn await_pod_condition_with(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
+    patience: AwaitPatience,
 ) -> Result<Option<Pod>, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition(api, name, condition)
+    await_condition_forever(api, name, condition, patience)
         .await
         .map_err(|error| {
             KubePodError::AwaitFailed {

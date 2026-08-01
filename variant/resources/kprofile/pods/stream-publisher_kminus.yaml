@@ -47,7 +47,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: 0010-begin-execution
+        - name: 0000-begin-execution
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_begin_execution${{system:tdk_exe_suffix}}"]
@@ -101,7 +101,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0020-fetch-request
+        - name: 0010-fetch-request
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_fetch_request${{system:tdk_exe_suffix}}"]
@@ -163,7 +163,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0030-localize-fn-bundle
+        - name: 0020-localize-fn-bundle
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_localize_fn_bundle${{system:tdk_exe_suffix}}"]
@@ -233,7 +233,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0900-manifest-trigger
+        - name: 0030-manifest-trigger
           image: function
           imagePullPolicy: IfNotPresent
           restartPolicy: Always

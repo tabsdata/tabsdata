@@ -28,7 +28,7 @@ spec:
     seccompProfile:
       type: RuntimeDefault
   initContainers:
-    - name: cabundle
+    - name: 0000-cabundle
       image: curlimages/curl:8.11.1
       imagePullPolicy: IfNotPresent
       command: ["sh", "-c"]
@@ -51,7 +51,7 @@ spec:
       volumeMounts:
       - name: certs
         mountPath: /tabsdata/certs
-    - name: venvloader
+    - name: 0010-venvloader
       image: python:3.12-slim
       imagePullPolicy: IfNotPresent
       command: ["bash"]
@@ -98,7 +98,7 @@ spec:
           readOnly: true
         - name: runtimes
           mountPath: ${{system:tdk_runtimes_root}}
-    - name: dbready
+    - name: 0020-dbready
       image: ubuntu:24.04
       imagePullPolicy: IfNotPresent
       command: ["${{system:tdk_pyenv_td_root}}/bin/td_dbready"]
@@ -147,7 +147,7 @@ spec:
         - name: runtimes
           mountPath: ${{system:tdk_runtimes_root}}
           readOnly: true
-    - name: conn-resources-extractor
+    - name: 0030-conn-resources-extractor
       image: ubuntu:24.04
       imagePullPolicy: IfNotPresent
       command: ["${{system:tdk_pyenv_td_root}}/bin/td_conn_resources_extractor"]
@@ -188,7 +188,7 @@ spec:
           mountPath: /tabsdata/certs
           readOnly: true
   containers:
-    - name: apiserver
+    - name: 1000-apiserver
       image: ubuntu:24.04
       imagePullPolicy: IfNotPresent
       command: ["${{system:tdk_pyenv_td_root}}/bin/td_apiserver"]

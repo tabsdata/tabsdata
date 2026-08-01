@@ -39,18 +39,125 @@ pub mod secret;
 pub mod service;
 
 use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::future::Future;
+use std::pin::pin;
+use std::time::Duration;
 
+use humantime::format_duration;
 use k8s_openapi::Resource;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
-use kube::core::{Expression, Selector};
+use kube::Api;
+use kube::Resource as KubeResource;
+use kube::core::{ErrorResponse, Expression, Selector};
+use kube::runtime::wait::{Condition, Error as WaitError, await_condition};
+use kube::runtime::watcher::Error as WatcherError;
+use serde::de::DeserializeOwned;
+use tokio::time::{Instant, timeout};
+use tracing::{debug, info};
 
 use crate::base::constants::{
     KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA, TIER_LABEL,
 };
 use crate::base::error::naming::NamingError;
 use crate::runtime::instance::tier::Tier;
+
+const WATCH_EXPIRED_REASON: &str = "Expired";
+
+pub const AWAIT_CONDITION_TIMEOUT: Duration = Duration::from_secs(300);
+
+const AWAIT_CONDITION_HEARTBEAT: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AwaitPatience {
+    Bounded,
+    Forever,
+}
+
+pub async fn await_condition_forever<K>(
+    api: Api<K>,
+    name: &str,
+    condition: impl Condition<K> + Clone,
+    patience: AwaitPatience,
+) -> Result<Option<K>, WaitError>
+where
+    K: Clone + Debug + DeserializeOwned + KubeResource + Send + 'static,
+{
+    let started = Instant::now();
+    loop {
+        let waiting = await_condition(api.clone(), name, condition.clone());
+        let outcome = match patience {
+            AwaitPatience::Bounded => {
+                let remaining = AWAIT_CONDITION_TIMEOUT.saturating_sub(started.elapsed());
+                match heartbeat(waiting, name, started, remaining).await {
+                    Some(outcome) => outcome,
+                    None => {
+                        return Err(WaitError::ProbeFailed(WatcherError::WatchError(
+                            ErrorResponse {
+                                status: "Failure".to_owned(),
+                                message: format!(
+                                    "The wait for '{name}' exceeded the limit of {}",
+                                    format_duration(AWAIT_CONDITION_TIMEOUT)
+                                ),
+                                reason: "Timeout".to_owned(),
+                                code: 504,
+                            },
+                        )));
+                    }
+                }
+            }
+            AwaitPatience::Forever => match heartbeat(waiting, name, started, None).await {
+                Some(outcome) => outcome,
+                None => unreachable!("a forever wait has no deadline"),
+            },
+        };
+        match outcome {
+            Err(WaitError::ProbeFailed(WatcherError::WatchError(response)))
+                if response.reason == WATCH_EXPIRED_REASON
+                    && patience == AwaitPatience::Forever =>
+            {
+                debug!("The watch on '{name}' expired; re-establishing it");
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
+async fn heartbeat<F, T>(
+    waiting: F,
+    name: &str,
+    started: Instant,
+    budget: impl Into<Option<Duration>>,
+) -> Option<T>
+where
+    F: Future<Output = T>,
+{
+    let budget = budget.into();
+    let deadline = budget.map(|budget| Instant::now() + budget);
+    let mut waiting = pin!(waiting);
+    loop {
+        let tick = match deadline {
+            Some(deadline) => {
+                AWAIT_CONDITION_HEARTBEAT.min(deadline.saturating_duration_since(Instant::now()))
+            }
+            None => AWAIT_CONDITION_HEARTBEAT,
+        };
+        match timeout(tick, &mut waiting).await {
+            Ok(outcome) => return Some(outcome),
+            Err(_) => {
+                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    return None;
+                }
+                info!(
+                    "Awaiting '{name}'. Elapsed time:{}",
+                    format_duration(Duration::from_secs(started.elapsed().as_secs()))
+                );
+            }
+        }
+    }
+}
 
 pub use client::{build_incluster_kube_client, build_kube_client};
 pub use cluster::ensure_cluster_reachable;

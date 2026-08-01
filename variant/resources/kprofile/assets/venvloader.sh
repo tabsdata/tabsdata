@@ -63,7 +63,8 @@ show_usage() {
    echo "      --storage-config FILE      Path to apiserver.storage.yaml       (mandatory)"
    echo "      --mount ID                 Storage mount id                     (default: IMAGES)"
    echo "      --subfolder FOLDER         Subfolder under the mount            (default: python)"
-   echo "      --image NAME               Image file name                      (default: tdvenvs.tar.zst)"
+   echo "      --image NAME               Image file name; the venv name is appended to the stem    (default: tdvenvs.tar.zst)"
+   echo "      --venv NAME                Virtual environment to load          (default: td)"
    echo "  -h, --help                     Show this help"
 }
 
@@ -73,6 +74,7 @@ parse_arguments() {
    mount=""
    subfolder=""
    image=""
+   venv=""
    while [[ $# -gt 0 ]]; do
       case "$1" in
          -o|--output)        output="$2";         shift 2 ;;
@@ -80,6 +82,7 @@ parse_arguments() {
          --mount)            mount="$2";          shift 2 ;;
          --subfolder)        subfolder="$2";      shift 2 ;;
          --image)            image="$2";          shift 2 ;;
+         --venv)             venv="$2";           shift 2 ;;
          -h|--help)          show_usage; exit 0 ;;
          *) echo "Unknown option: $1" >&2; show_usage; exit 2 ;;
       esac
@@ -121,6 +124,9 @@ load_image() {
    fi
    if [[ -n "$image" ]]; then
       arguments+=(--image "$image")
+   fi
+   if [[ -n "$venv" ]]; then
+      arguments+=(--venv "$venv")
    fi
    run "$PYTHON_BINARY" "$LOADER" "${arguments[@]}"
 }

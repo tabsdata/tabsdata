@@ -42,7 +42,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: inspector
+        - name: 1000-inspector
           image: busybox:1.37
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]

@@ -45,7 +45,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: cabundle
+        - name: 0000-cabundle
           image: curlimages/curl:8.11.1
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
@@ -68,7 +68,7 @@ spec:
           volumeMounts:
           - name: certs
             mountPath: /tabsdata/certs
-        - name: venvloader
+        - name: 0010-venvloader
           image: python:3.12-slim
           imagePullPolicy: IfNotPresent
           command: ["bash"]
@@ -105,7 +105,7 @@ spec:
               readOnly: true
             - name: runtimes
               mountPath: ${{system:tdk_runtimes_root}}
-        - name: 0000-inspect-function
+        - name: 0020-inspect-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_inspect_function"]
@@ -164,7 +164,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 1000-api-ready
+        - name: 0030-api-ready
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_apiready"]
@@ -213,7 +213,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2000-begin-execution
+        - name: 0040-begin-execution
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_begin_execution"]
@@ -272,7 +272,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2010-fetch-request
+        - name: 0050-fetch-request
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_fetch_request"]
@@ -339,7 +339,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2020-localize-fn-bundle
+        - name: 0060-localize-fn-bundle
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_localize_fn_bundle"]
@@ -414,7 +414,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2030-prep-localize-state
+        - name: 0070-prep-localize-state
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_prep_localize_state"]
@@ -487,7 +487,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2040-run-transporter-localize
+        - name: 0080-run-transporter-localize
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_transporter"]
@@ -554,7 +554,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2050-run-function
+        - name: 0090-run-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_function"]
@@ -625,7 +625,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2060-run-destination-plugin
+        - name: 0100-run-destination-plugin
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_destination_plugin"]
@@ -698,7 +698,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2070-prep-upload-state
+        - name: 0110-prep-upload-state
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_prep_upload_state"]
@@ -765,7 +765,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 2080-run-transporter-state-upload
+        - name: 0120-run-transporter-state-upload
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_transporter"]
@@ -833,7 +833,7 @@ spec:
               mountPath: /tabsdata/certs
               readOnly: true
       containers:
-        - name: 3000-report-completion
+        - name: 1000-report-completion
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_report_completion"]

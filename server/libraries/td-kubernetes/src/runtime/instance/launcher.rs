@@ -255,19 +255,20 @@ pub async fn wait_init_phase(
     let phase = phase_spinner_in(multi, &format!("Waiting for {} init job(s)", jobs.len()));
     for name in jobs {
         let bar = phase.add_resource(name);
-        let settled = match job_api::await_job_condition(context, name, is_job_settled()).await {
-            Ok(Some(job)) => job,
-            Ok(None) => {
-                bar.finish_with_message(format!("{name} (deleted)"));
-                return Err(
-                    LauncherError::JobDeletedBeforeCompletion { name: name.clone() }.into(),
-                );
-            }
-            Err(error) => {
-                bar.finish_with_message(format!("{name} (errored)"));
-                return Err(error.into());
-            }
-        };
+        let settled =
+            match job_api::await_job_condition_forever(context, name, is_job_settled()).await {
+                Ok(Some(job)) => job,
+                Ok(None) => {
+                    bar.finish_with_message(format!("{name} (deleted)"));
+                    return Err(
+                        LauncherError::JobDeletedBeforeCompletion { name: name.clone() }.into(),
+                    );
+                }
+                Err(error) => {
+                    bar.finish_with_message(format!("{name} (errored)"));
+                    return Err(error.into());
+                }
+            };
         if has_failed_condition(&settled) {
             bar.finish_with_message(format!("{name} (failed)"));
             return Err(LauncherError::JobFailed { name: name.clone() }.into());
@@ -325,17 +326,18 @@ pub async fn wait_server_phase(
     let phase = phase_spinner_in(multi, &format!("Waiting for {} server pod(s)", pods.len()));
     for name in pods {
         let bar = phase.add_resource(name);
-        let settled = match pod_api::await_pod_condition(context, name, is_pod_settled()).await {
-            Ok(Some(pod)) => pod,
-            Ok(None) => {
-                bar.finish_with_message(format!("{name} (deleted)"));
-                return Err(LauncherError::PodDeletedBeforeReady { name: name.clone() }.into());
-            }
-            Err(error) => {
-                bar.finish_with_message(format!("{name} (errored)"));
-                return Err(error.into());
-            }
-        };
+        let settled =
+            match pod_api::await_pod_condition_forever(context, name, is_pod_settled()).await {
+                Ok(Some(pod)) => pod,
+                Ok(None) => {
+                    bar.finish_with_message(format!("{name} (deleted)"));
+                    return Err(LauncherError::PodDeletedBeforeReady { name: name.clone() }.into());
+                }
+                Err(error) => {
+                    bar.finish_with_message(format!("{name} (errored)"));
+                    return Err(error.into());
+                }
+            };
         if has_failed_phase(&settled) {
             bar.finish_with_message(format!("{name} (failed)"));
             return Err(LauncherError::PodFailed { name: name.clone() }.into());
@@ -346,7 +348,7 @@ pub async fn wait_server_phase(
     Ok(())
 }
 
-fn is_job_settled() -> impl Condition<Job> {
+fn is_job_settled() -> impl Condition<Job> + Clone {
     |job: Option<&Job>| {
         let Some(status) = job.and_then(|current| current.status.as_ref()) else {
             return false;
@@ -597,8 +599,12 @@ pub async fn wait_regular_phase(
         async move {
             match kind {
                 TemplateKind::CronJob => {
-                    match cronjob_api::await_cronjob_condition(&context, name, cronjob_exists())
-                        .await
+                    match cronjob_api::await_cronjob_condition_forever(
+                        &context,
+                        name,
+                        cronjob_exists(),
+                    )
+                    .await
                     {
                         Ok(Some(_)) => {
                             bar.finish_with_message(format!("{name} (scheduled)"));
@@ -618,7 +624,7 @@ pub async fn wait_regular_phase(
                     }
                 }
                 TemplateKind::Pod | TemplateKind::Job => {
-                    let settled = match pod_api::await_pod_condition(
+                    let settled = match pod_api::await_pod_condition_forever(
                         &context,
                         name,
                         is_pod_settled(),
@@ -664,7 +670,7 @@ pub async fn wait_regular_phase(
     Ok(())
 }
 
-fn cronjob_exists() -> impl Condition<CronJob> {
+fn cronjob_exists() -> impl Condition<CronJob> + Clone {
     |cronjob: Option<&CronJob>| cronjob.is_some()
 }
 
@@ -705,7 +711,8 @@ pub async fn provision_pyvenvs(
 
     let bar = phase.add_resource(setup_key);
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
-    let settled = job_api::await_job_condition(context, &setup_name, is_job_settled()).await?;
+    let settled =
+        job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {
         bar.finish_with_message(format!("{setup_key} (failed)"));
         return Err(LauncherError::JobFailed { name: setup_name }.into());
@@ -750,13 +757,14 @@ pub async fn provision_database(
     if let Some((server_key, service, server_name)) = &server {
         let bar = phase.add_resource(server_key);
         pod_api::create_pod(context, service, Vec::new(), Vec::new(), None).await?;
-        pod_api::await_pod_condition(context, server_name, is_pod_settled()).await?;
+        pod_api::await_pod_condition_forever(context, server_name, is_pod_settled()).await?;
         bar.finish_with_message(format!("{server_key} (started)"));
     }
 
     let bar = phase.add_resource(setup_key);
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
-    let settled = job_api::await_job_condition(context, &setup_name, is_job_settled()).await?;
+    let settled =
+        job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {
         bar.finish_with_message(format!("{setup_key} (failed)"));
         if let Some((_, _, server_name)) = &server {
@@ -769,7 +777,7 @@ pub async fn provision_database(
     if let Some((server_key, _, server_name)) = &server {
         let bar = phase.add_resource(server_key);
         pod_api::delete_pod(context, server_name).await?;
-        pod_api::await_pod_condition(context, server_name, is_pod_absent()).await?;
+        pod_api::await_pod_condition_forever(context, server_name, is_pod_absent()).await?;
         bar.finish_with_message(format!("{server_key} (stopped)"));
     }
 
@@ -777,7 +785,7 @@ pub async fn provision_database(
     Ok(())
 }
 
-fn is_pod_absent() -> impl Condition<Pod> {
+fn is_pod_absent() -> impl Condition<Pod> + Clone {
     |pod: Option<&Pod>| pod.is_none()
 }
 
@@ -799,7 +807,7 @@ pub async fn start_database(
     let phase = phase_spinner_in(multi, "Starting tabsdata database");
     let bar = phase.add_resource(server_key);
     pod_api::create_pod(context, &service, Vec::new(), Vec::new(), None).await?;
-    pod_api::await_pod_condition(context, &server_name, is_pod_settled()).await?;
+    pod_api::await_pod_condition_forever(context, &server_name, is_pod_settled()).await?;
     bar.finish_with_message(format!("{server_key} (started)"));
     drop(phase);
     Ok(())
@@ -869,7 +877,7 @@ fn job_name(key: &str, job: &Job) -> Result<String, LauncherError> {
         })
 }
 
-fn is_pod_settled() -> impl Condition<Pod> {
+fn is_pod_settled() -> impl Condition<Pod> + Clone {
     |pod: Option<&Pod>| {
         let Some(status) = pod.and_then(|current| current.status.as_ref()) else {
             return false;

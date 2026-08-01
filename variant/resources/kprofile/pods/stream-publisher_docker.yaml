@@ -45,7 +45,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: cabundle
+        - name: 0000-cabundle
           image: curlimages/curl:8.11.1
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
@@ -68,7 +68,7 @@ spec:
           volumeMounts:
           - name: certs
             mountPath: /tabsdata/certs
-        - name: venvloader
+        - name: 0010-venvloader
           image: python:3.12-slim
           imagePullPolicy: IfNotPresent
           command: ["bash"]
@@ -95,6 +95,8 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
+            - name: storage
+              mountPath: /tabsdata/repository/storage
             - name: assets
               mountPath: /tabsdata/assets
               readOnly: true
@@ -103,7 +105,7 @@ spec:
               readOnly: true
             - name: runtimes
               mountPath: ${{system:tdk_runtimes_root}}
-        - name: 0010-begin-execution
+        - name: 0020-begin-execution
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_begin_execution"]
@@ -162,7 +164,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 0020-fetch-request
+        - name: 0030-fetch-request
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_fetch_request"]
@@ -229,7 +231,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 0030-localize-fn-bundle
+        - name: 0040-localize-fn-bundle
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_td_root}}/bin/td_localize_fn_bundle"]
@@ -304,7 +306,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-        - name: 0900-manifest-trigger
+        - name: 0050-manifest-trigger
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           restartPolicy: Always
@@ -456,6 +458,10 @@ spec:
               mountPath: /tabsdata/certs
               readOnly: true
       volumes:
+        - name: storage
+          hostPath:
+            path: ${{system:tdk_storage_path}}
+            type: DirectoryOrCreate
         - name: certs
           emptyDir: {}
         - name: config-begin-execution

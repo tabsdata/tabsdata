@@ -42,7 +42,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: venvloader
+      - name: 1000-venvloader
         image: python:3.12-slim
         imagePullPolicy: IfNotPresent
         command: ["bash"]
@@ -50,6 +50,8 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.sh
         - --output
         - ${{system:tdk_runtimes_root}}
+        - --venv
+        - td
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         resources:
@@ -77,6 +79,8 @@ spec:
             name: td-app-apiserver-secret-config-apiserver.storage.yaml
           prefix: SECRETS__
         volumeMounts:
+        - name: storage
+          mountPath: /tabsdata/repository/storage
         - name: assets
           mountPath: /tabsdata/assets
           readOnly: true
@@ -86,6 +90,10 @@ spec:
         - name: runtimes
           mountPath: ${{system:tdk_runtimes_root}}
       volumes:
+      - name: storage
+        hostPath:
+          path: ${{system:tdk_storage_path}}
+          type: DirectoryOrCreate
       - name: assets
         projected:
           defaultMode: 493

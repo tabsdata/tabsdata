@@ -33,6 +33,9 @@ PLACEHOLDER_PREFIX = "${{"
 IMAGES_MOUNT_ID = "IMAGES"
 IMAGES_SUBFOLDER = "python"
 IMAGE_NAME = "tdvenvs.tar.zst"
+IMAGE_SUFFIX = ".tar.zst"
+
+VENV_TD = "td"
 
 UV_FOLDER = ".uv"
 
@@ -92,9 +95,31 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--image",
         default=IMAGE_NAME,
-        help=f"Image file name (default: {IMAGE_NAME})",
+        help=(
+            "Image file name; the venv name is appended to the stem"
+            f" (default: {IMAGE_NAME})"
+        ),
+    )
+    parser.add_argument(
+        "--venv",
+        default=VENV_TD,
+        help=f"Virtual environment to load (default: {VENV_TD})",
     )
     return parser.parse_args()
+
+
+def image_for_venv(image: str, venv: str) -> str:
+    stem = image[: -len(IMAGE_SUFFIX)] if image.endswith(IMAGE_SUFFIX) else image
+    return f"{stem}-{venv}{IMAGE_SUFFIX}"
+
+
+def human_size(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{int(value)} {unit}" if unit == "B" else f"{value:.2f} {unit}"
+        value /= 1024
+    raise AssertionError
 
 
 def secret_env_name(mount_id: str, option_key: str) -> str:
@@ -218,11 +243,14 @@ def main() -> int:
     uv_home = output / UV_FOLDER
 
     uri, options = load_mount(Path(arguments.storage_config), arguments.mount)
-    source = image_uri(uri, arguments.subfolder, arguments.image)
+    name = image_for_venv(arguments.image, arguments.venv)
+    source = image_uri(uri, arguments.subfolder, name)
 
     output.mkdir(parents=True, exist_ok=True)
-    image = output / arguments.image
+    image = output / name
     fetch_image(source, image, options)
+    size = image.stat().st_size
+    trace(f"Downloaded {name}: {human_size(size)} ({size} bytes)")
     clear_uv_home(uv_home)
     extract_image(image, uv_home)
     image.unlink(missing_ok=True)
