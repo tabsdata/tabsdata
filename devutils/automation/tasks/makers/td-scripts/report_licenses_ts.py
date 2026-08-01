@@ -123,6 +123,7 @@ normalized_licenses = {
     "ISC": "Internet Systems Consortium License",                                                                                                                                              # noqa: E231,E241,E501
     "LICENSEREF-NVIDIA-CUFILE-LICENSE": "NVIDIA Proprietary License",                                                                                                                          # noqa: E231,E241,E501
     "LICENSEREF-NVIDIA-CUSPARSELT-LICENSE": "NVIDIA Proprietary License",                                                                                                                      # noqa: E231,E241,E501
+    "LICENSEREF-NVIDIA-PROPRIETARY": "NVIDIA Proprietary License",                                                                                                                             # noqa: E231,E241,E501
     "LICENSEREF-NVIDIA-SOFTWARE-LICENSE": "NVIDIA Proprietary License",                                                                                                                        # noqa: E231,E241,E501
     "MIT AND Apache-2.0": "MIT License, and Apache License Version 2.0",                                                                                                                       # noqa: E231,E241,E501
     "MIT AND BSD-3-Clause": "MIT License, and BSD Revised License (BSD-3-Clause)",                                                                                                             # noqa: E231,E241,E501
