@@ -215,7 +215,7 @@ mod tests {
         };
 
         // `started_on` is NULL on every seeded transaction: ordering by it
-        // walks one NULL run, round-tripping the `next: ""` cursor.
+        // walks one NULL run, round-tripping the `~` NULL cursor.
         for order_by in [
             None,
             Some("triggered_on".to_string()),

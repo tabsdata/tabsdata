@@ -923,11 +923,11 @@ mod tests {
 
     #[test]
     fn test_nullable_order_next_inside_null_run() {
-        // An empty order value is the NULL cursor: walk the run by id alone.
+        // The `~` marker is the NULL cursor: walk the run by id alone.
         let list_params = ListParamsBuilder::default()
             .len(2usize)
             .order_by("ended".to_string())
-            .next("".to_string())
+            .next("~".to_string())
             .pagination_id("i2".to_string())
             .build()
             .unwrap();
@@ -943,7 +943,7 @@ mod tests {
         let list_params = ListParamsBuilder::default()
             .len(2usize)
             .order_by("ended".to_string())
-            .previous("".to_string())
+            .previous("~".to_string())
             .pagination_id("i2".to_string())
             .build()
             .unwrap();
