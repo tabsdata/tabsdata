@@ -165,6 +165,9 @@ _FUNCTIONS = [
 
 _FN_INFO = {
     "id": "FID_1",
+    # Real Function DTOs always carry patch_of (None when the version is not a
+    # patch); ``fn get --show-history`` renders it as the "Patches" column.
+    "patch_of": "FV_0",
     "name": "fn-a",
     "description": "publishes stuff",
     "type": "P",
@@ -761,7 +764,7 @@ CASES: tuple[RenderCase, ...] = (
         "fn-get-history",
         ["fn", "get", "-n", "fn-a", "-c", "coll-a", "--show-history"],
         _set_fn_info_history, [_FN_INFO],
-        ("fn-a", "FID_1", "publishes stuff", "dep1", "trig1", "t1", "t2"),
+        ("fn-a", "FID_1", "FV_0", "publishes stuff", "dep1", "trig1", "t1", "t2"),
     ),
     RenderCase(
         # epoch defined_on (1704067200000) is kept raw in json/yaml but rendered
