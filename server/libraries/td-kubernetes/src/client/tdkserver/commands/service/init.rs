@@ -251,6 +251,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         },
         version: tabsdata_version()
             .map_err(|error| ManifestError::TabsdataVersionResolveFailed(error.to_string()))?,
+        folder: folder.clone(),
         ports: Vec::new(),
         loglevel,
     };

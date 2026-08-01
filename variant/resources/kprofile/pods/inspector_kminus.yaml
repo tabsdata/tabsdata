@@ -70,6 +70,10 @@ spec:
           env:
             - name: CONTAINER_ROOT
               value: "$(KM_CONTAINER_ROOT)"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
       volumes:
         - name: configs
           projected:

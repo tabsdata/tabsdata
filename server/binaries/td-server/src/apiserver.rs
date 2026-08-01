@@ -7,6 +7,7 @@ use td_common::attach::attach;
 use td_common::crypto::install_crypto_provider;
 use td_common::{about, logging};
 use td_process::launcher::hooks;
+use td_process::pathenv::extend_path;
 use tracing::info;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -20,6 +21,7 @@ te_database::force_link!();
 
 #[attach(signal = "td_apiserver")]
 fn main() {
+    extend_path();
     hooks::panic();
 
     if env::args().any(|arg| arg == "about") {

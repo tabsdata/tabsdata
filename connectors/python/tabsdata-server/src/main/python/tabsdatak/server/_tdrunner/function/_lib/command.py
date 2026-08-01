@@ -45,6 +45,7 @@ from tenacity import retry, stop_after_delay, wait_fixed
 
 from tabsdatak._logging import setup_logging
 from tabsdatak.common._enums import WorkerCallbackStatus
+from tabsdatak.common._runtime.pathenv import extend_path
 from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandErrorCode,
     CommandException,
@@ -470,6 +471,7 @@ def command(
     ) -> Callable[[], int]:
         @tabsdata_command(name=name)
         def main() -> int:
+            extend_path()
             args: argparse.Namespace | None = None
             try:
                 parsed = parser().parse_args()

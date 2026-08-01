@@ -7,13 +7,30 @@ use std::path::Path;
 
 use walkdir::WalkDir;
 
+const PYTHON_CACHE_FOLDER: &str = "__pycache__";
+const PYTHON_CACHE_EXTENSIONS: &[&str] = &["pyc", "pyo"];
+
 pub fn is_hidden_or_system(path: &Path) -> bool {
     let dot_prefixed = path
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.starts_with('.'))
         .unwrap_or(false);
-    dot_prefixed || is_os_hidden(path)
+    dot_prefixed || is_os_hidden(path) || is_python_cache(path)
+}
+
+pub fn is_python_cache(path: &Path) -> bool {
+    let named_cache = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name == PYTHON_CACHE_FOLDER)
+        .unwrap_or(false);
+    let compiled = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| PYTHON_CACHE_EXTENSIONS.contains(&extension))
+        .unwrap_or(false);
+    named_cache || compiled
 }
 
 #[cfg(windows)]
@@ -68,3 +85,6 @@ pub fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
 fn has_ignore_marker(path: &Path) -> bool {
     path.is_dir() && path.join(IGNORE_MARKER).exists()
 }
+
+#[cfg(test)]
+mod tests;

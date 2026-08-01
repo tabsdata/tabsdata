@@ -315,16 +315,28 @@ write_image() {
    rm -rf "$work"
 }
 
+shuttle_path() {
+   local base="$1"
+   local tag="$2"
+   local folder="$(dirname "$base")"
+   local name="$(basename "$base")"
+   echo "$folder/${name%.*}-$tag.${name##*.}"
+}
+
 send_one_image() {
    local target="$1"
+   local tag="$2"
+   local request="$(shuttle_path "$transporter_request" "$tag")"
+   local response="$(shuttle_path "$transporter_response" "$tag")"
    local size
    size="$(file_size "$target")"
    trace "Sending $target: $(human_size "$size") ($size bytes)"
+   rm -f "$response"
    run "$virtual_environment_td/bin/python" -m "$ARCHIVE_MODULE" \
       --image "$target" \
       --storage-config "$storage_config" \
-      --transporter-request "$transporter_request" \
-      --transporter-response "$transporter_response"
+      --transporter-request "$request" \
+      --transporter-response "$response"
 }
 
 send_image() {
@@ -332,7 +344,7 @@ send_image() {
       echo ">> Skipping the image upload; no storage configuration given"
       return
    fi
-   send_one_image "$output_image_td"
+   send_one_image "$output_image_td" "$VENV_TD"
 }
 
 main() {

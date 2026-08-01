@@ -17,7 +17,7 @@ use tracing::error;
 
 use crate::base::constants::{CONTAINER_ROOT_ENV, CONTAINER_SETTINGS_RELATIVE};
 use crate::base::naming::{to_fn_pod_name, worker_pod_stem};
-use crate::client::registry::{InstanceSettings, instance_folder};
+use crate::client::registry::InstanceSettings;
 use crate::kube::api::cronjob::{create_cronjob, delete_cronjob};
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
@@ -252,19 +252,9 @@ impl KubernetesOrchestratorMessageQueue {
         let namespace = resolved.namespace.as_deref().unwrap_or_default();
         let cluster = resolved.cluster.as_deref().unwrap_or_default();
         let mut system = match settings.provider {
-            ClusterProvider::Kminus => {
-                let folder =
-                    instance_folder(&settings.name).map_err(|error| QueueError::BackendError {
-                        cause: format!("{error:?}"),
-                    })?;
-                kminus_system_values_for(&folder)
-            }
+            ClusterProvider::Kminus => kminus_system_values_for(&settings.folder),
             ClusterProvider::Docker => {
-                let folder =
-                    instance_folder(&settings.name).map_err(|error| QueueError::BackendError {
-                        cause: format!("{error:?}"),
-                    })?;
-                docker_system_values_for(&settings.name, namespace, &folder)
+                docker_system_values_for(&settings.name, namespace, &settings.folder)
             }
             ClusterProvider::Eks | ClusterProvider::Fargate => {
                 fargate_system_values_for(&settings.name, namespace, cluster)

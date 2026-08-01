@@ -76,6 +76,8 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.sh
             - --output
             - ${{system:tdk_runtimes_root}}
+            - --venv
+            - td
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config-storage/apiserver.storage.yaml
           resources:
@@ -152,6 +154,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-inspect-function
               mountPath: /tabsdata/config
@@ -164,6 +170,10 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
         - name: 0030-api-ready
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -203,6 +213,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-api-ready
               mountPath: /tabsdata/config
@@ -260,6 +274,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-begin-execution
               mountPath: /tabsdata/config
@@ -272,6 +290,10 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
         - name: 0050-fetch-request
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -327,6 +349,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-fetch-request
               mountPath: /tabsdata/config
@@ -339,6 +365,10 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
         - name: 0060-localize-fn-bundle
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -398,6 +428,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -414,6 +448,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
         - name: 0070-prep-localize-state
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -475,6 +515,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-prep-localize-state
               mountPath: /tabsdata/config
@@ -487,6 +531,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
         - name: 0080-run-transporter-state-download
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -538,6 +588,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -554,6 +608,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
         - name: 0090-run-source-plugin
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -613,6 +673,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: ${{system:tdk_connection_secret_name}}
@@ -634,6 +698,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
         - name: 0100-stamp-inputs
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -689,6 +759,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-stamp-inputs
               mountPath: /tabsdata/config
@@ -701,6 +775,10 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
         - name: 0110-run-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -760,6 +838,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-run-function
               mountPath: /tabsdata/config
@@ -772,6 +854,10 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
         - name: 0120-prep-upload-state
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -827,6 +913,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-prep-upload-state
               mountPath: /tabsdata/config
@@ -839,6 +929,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
         - name: 0130-run-transporter-state-upload
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -890,6 +986,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -906,6 +1006,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
         - name: 0140-prep-upload-tables
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -961,6 +1067,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-prep-upload-tables
               mountPath: /tabsdata/config
@@ -973,6 +1083,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
         - name: 0150-run-transporter-tables-upload
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -1024,6 +1140,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -1040,6 +1160,12 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
+            - name: storage
+              mountPath: /tabsdata/repository/storage
       containers:
         - name: 1000-report-completion
           image: ubuntu:24.04
@@ -1096,6 +1222,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-report-completion
               mountPath: /tabsdata/config
@@ -1108,6 +1238,10 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: work
+              mountPath: /tabsdata/work
       volumes:
         - name: storage
           hostPath:
@@ -1258,4 +1392,8 @@ spec:
         - name: runtimes
           emptyDir: {}
         - name: shared
+          emptyDir: {}
+        - name: liveness
+          emptyDir: {}
+        - name: work
           emptyDir: {}

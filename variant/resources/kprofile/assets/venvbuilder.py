@@ -313,7 +313,13 @@ def setup_workspace(arguments: argparse.Namespace) -> dict[str, str]:
         "tools_home": tools_home,
         "tools_bin_home": tools_bin_home,
         "tools_kenvs_home": tools_kenvs_home,
-        "output_image_td": os.path.join(output, image_for_venv(arguments.image, VENV_TD)),
+        "output_image_td": os.path.join(
+            output,
+            image_for_venv(
+                arguments.image,
+                VENV_TD,
+            ),
+        ),
         "virtual_environment_td": os.path.join(uv_kenvs_home, VENV_TD),
         "virtual_environment_z": os.path.join(tools_kenvs_home, VENV_Z),
     }
@@ -586,13 +592,22 @@ def write_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> Non
     shutil.rmtree(workspace["work"], ignore_errors=True)
 
 
+def shuttle_path(base: str, tag: str) -> str:
+    folder, name = os.path.split(base)
+    stem, extension = os.path.splitext(name)
+    return os.path.join(folder, f"{stem}-{tag}{extension}")
+
+
 def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
     if not arguments.storage_config:
         print(">> Skipping the image upload; no storage configuration given")
         return
-    for target in (workspace["output_image_td"],):
+    for target, tag in ((workspace["output_image_td"], VENV_TD),):
         size = os.path.getsize(target)
         trace(f"Sending {target}: {human_size(size)} ({size} bytes)")
+        response = shuttle_path(arguments.transporter_response, tag)
+        if os.path.exists(response):
+            os.remove(response)
         run([
             venv_python(workspace["virtual_environment_td"]),
             "-m",
@@ -602,9 +617,9 @@ def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None
             "--storage-config",
             arguments.storage_config,
             "--transporter-request",
-            arguments.transporter_request,
+            shuttle_path(arguments.transporter_request, tag),
             "--transporter-response",
-            arguments.transporter_response,
+            response,
         ])
 
 

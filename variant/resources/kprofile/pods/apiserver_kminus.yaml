@@ -67,6 +67,10 @@ spec:
               fieldPath: metadata.namespace
         - name: POD_TABSDATA_INSTANCE
           value: "${{system:tdk_instance_name}}"
+        - name: TD_BEFORE_PATH
+          value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+        - name: TD_AFTER_PATH
+          value: ""
       volumeMounts:
         - name: config
           mountPath: /tabsdata/config
@@ -103,6 +107,10 @@ spec:
               fieldPath: metadata.namespace
         - name: POD_TABSDATA_INSTANCE
           value: "${{system:tdk_instance_name}}"
+        - name: TD_BEFORE_PATH
+          value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+        - name: TD_AFTER_PATH
+          value: ""
       volumeMounts:
         - name: pyenv
           mountPath: /tabsdata/pyenv
@@ -176,6 +184,10 @@ spec:
             secretKeyRef:
               name: td-sys-tabsdata-secret-kubeconfig
               key: kubeconfig
+        - name: TD_BEFORE_PATH
+          value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+        - name: TD_AFTER_PATH
+          value: ""
   volumes:
     - name: config
       projected:

@@ -176,6 +176,7 @@ pub const FOLDER_IMAGES: &str = "images";
 pub const FOLDER_PYTHON: &str = "python";
 pub const FOLDER_PYENV_TD: &str = "td";
 pub const FOLDER_PYENV_AG: &str = "ag";
+pub const CONTAINER_PYENV_SCRIPTS_FOLDER: &str = "bin";
 pub const FOLDER_STAGING: &str = "staging";
 pub const FOLDER_PROFILE: &str = "profile";
 pub const FOLDER_KUBE: &str = ".kube";
@@ -225,6 +226,11 @@ pub const KPROFILE_ASSETS_FAMILY: Family = Family {
     scope: Scope::Application,
     kind: "asset",
 };
+
+pub const REQUIREMENTS_TD_ASSET: &str = "requirements-td.txt";
+pub const REQUIREMENTS_AG_ASSET: &str = "requirements-ag.txt";
+
+pub const CUSTOMIZABLE_ASSETS: &[&str] = &[REQUIREMENTS_TD_ASSET, REQUIREMENTS_AG_ASSET];
 
 pub const KIND_SECRET: &str = "secret";
 pub const KIND_SECRET_CONFIG: &str = "secret-config";

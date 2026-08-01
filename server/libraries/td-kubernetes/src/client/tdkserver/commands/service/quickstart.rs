@@ -12,8 +12,9 @@ use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
 use tracing::{info, warn};
 
-use crate::base::constants::{KPROFILE_ASSETS_FAMILY, LogLevel};
 #[cfg(feature = "enterprise")]
+use crate::base::constants::REQUIREMENTS_AG_ASSET;
+use crate::base::constants::{KPROFILE_ASSETS_FAMILY, LogLevel, REQUIREMENTS_TD_ASSET};
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
 use crate::client::registry::{instance_folder, instance_init_input_folder};
@@ -243,10 +244,6 @@ pub async fn command_quickstart(
 
     outcome
 }
-
-const REQUIREMENTS_TD_ASSET: &str = "requirements-td.txt";
-#[cfg(feature = "enterprise")]
-const REQUIREMENTS_AG_ASSET: &str = "requirements-ag.txt";
 
 fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandResult {
     let contents = std::fs::read_to_string(source).map_err(|error| {

@@ -3,6 +3,7 @@
 //
 
 use super::*;
+use crate::base::constants::REQUIREMENTS_TD_ASSET;
 
 fn configs(entries: &[(&str, &str)]) -> RenderedConfigmap {
     entries
@@ -59,7 +60,7 @@ fn compare_family_accepts_exact_match() {
     let temp = tempfile::tempdir().expect("tempdir");
     write_family(temp.path(), "configs", &[("a.yaml", "x"), ("b.yaml", "y")]);
     let canonical = configs(&[("a.yaml", "x"), ("b.yaml", "y")]);
-    let result = compare_family(temp.path(), "configs", &canonical, false);
+    let result = compare_family(temp.path(), "configs", &canonical, false, &[]);
     assert!(result.is_ok());
 }
 
@@ -72,7 +73,7 @@ fn compare_family_rejects_extra_file() {
         &[("a.yaml", "x"), ("extra.yaml", "z")],
     );
     let canonical = configs(&[("a.yaml", "x")]);
-    let error = compare_family(temp.path(), "configs", &canonical, false)
+    let error = compare_family(temp.path(), "configs", &canonical, false, &[])
         .expect_err("extra file must be rejected");
     assert!(matches!(
         error,
@@ -85,7 +86,7 @@ fn compare_family_rejects_missing_file() {
     let temp = tempfile::tempdir().expect("tempdir");
     write_family(temp.path(), "configs", &[("a.yaml", "x")]);
     let canonical = configs(&[("a.yaml", "x"), ("b.yaml", "y")]);
-    let error = compare_family(temp.path(), "configs", &canonical, false)
+    let error = compare_family(temp.path(), "configs", &canonical, false, &[])
         .expect_err("missing file must be rejected");
     assert!(matches!(
         error,
@@ -98,7 +99,7 @@ fn compare_family_strict_rejects_modified_pod() {
     let temp = tempfile::tempdir().expect("tempdir");
     write_family(temp.path(), "pods", &[("worker.yaml", "changed")]);
     let canonical = configs(&[("worker.yaml", "canonical")]);
-    let error = compare_family(temp.path(), "pods", &canonical, true)
+    let error = compare_family(temp.path(), "pods", &canonical, true, &[])
         .expect_err("modified pod must be rejected");
     assert!(matches!(
         error,
@@ -111,8 +112,34 @@ fn compare_family_strict_accepts_unmodified_pod() {
     let temp = tempfile::tempdir().expect("tempdir");
     write_family(temp.path(), "pods", &[("worker.yaml", "canonical")]);
     let canonical = configs(&[("worker.yaml", "canonical")]);
-    let result = compare_family(temp.path(), "pods", &canonical, true);
+    let result = compare_family(temp.path(), "pods", &canonical, true, &[]);
     assert!(result.is_ok());
+}
+
+#[test]
+fn compare_family_strict_accepts_modified_customizable_asset() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_family(
+        temp.path(),
+        "assets",
+        &[(REQUIREMENTS_TD_ASSET, "mimesis==19.1.0")],
+    );
+    let canonical = configs(&[(REQUIREMENTS_TD_ASSET, "")]);
+    let result = compare_family(temp.path(), "assets", &canonical, true, CUSTOMIZABLE_ASSETS);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn compare_family_strict_rejects_modified_asset_outside_the_list() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_family(temp.path(), "assets", &[("venvloader.sh", "changed")]);
+    let canonical = configs(&[("venvloader.sh", "canonical")]);
+    let error = compare_family(temp.path(), "assets", &canonical, true, CUSTOMIZABLE_ASSETS)
+        .expect_err("a non customizable asset must be rejected");
+    assert!(matches!(
+        error,
+        ResolverError::InitializationTemplateModified { .. }
+    ));
 }
 
 #[test]

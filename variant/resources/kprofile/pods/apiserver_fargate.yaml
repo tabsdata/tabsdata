@@ -61,6 +61,8 @@ spec:
         - ${{system:tdk_runtimes_root}}
         - --image
         - tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst
+        - --venv
+        - td
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
       resources:
@@ -137,6 +139,10 @@ spec:
           value: "${{system:tdk_instance_name}}"
         - name: SSL_CERT_FILE
           value: "/tabsdata/certs/ca-public.pem"
+        - name: TD_BEFORE_PATH
+          value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+        - name: TD_AFTER_PATH
+          value: ""
       volumeMounts:
         - name: config
           mountPath: /tabsdata/config
@@ -178,6 +184,10 @@ spec:
           value: "${{system:tdk_instance_name}}"
         - name: SSL_CERT_FILE
           value: "/tabsdata/certs/ca-public.pem"
+        - name: TD_BEFORE_PATH
+          value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+        - name: TD_AFTER_PATH
+          value: ""
       volumeMounts:
         - name: resources
           mountPath: /tabsdata/resources
@@ -264,6 +274,10 @@ spec:
           value: "${{system:tdk_instance_name}}"
         - name: SSL_CERT_FILE
           value: "/tabsdata/certs/ca-public.pem"
+        - name: TD_BEFORE_PATH
+          value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+        - name: TD_AFTER_PATH
+          value: ""
   volumes:
     - name: config
       projected:

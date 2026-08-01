@@ -69,6 +69,10 @@ spec:
       value: "${{system:tdk_database_path}}"
     - name: TD_LOG_CONFIG
       value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+    - name: TD_BEFORE_PATH
+      value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+    - name: TD_AFTER_PATH
+      value: ""
     volumeMounts:
     - name: config
       mountPath: /tabsdata/config

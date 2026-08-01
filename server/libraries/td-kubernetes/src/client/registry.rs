@@ -142,6 +142,7 @@ pub struct InstanceSettings {
     pub locality: Locality,
     pub cluster: ClusterViews,
     pub version: String,
+    pub folder: PathBuf,
     #[serde(default)]
     pub ports: Vec<AssignedPort>,
     #[serde(default)]

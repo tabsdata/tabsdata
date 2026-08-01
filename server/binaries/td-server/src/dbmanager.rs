@@ -25,6 +25,7 @@ use td_database::error::DbError;
 use td_database::server::{bootable_server, serve_server, start_server, stop_server};
 use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
+use td_process::pathenv::extend_path;
 use te_database as dbm;
 use tracing::{error, info, warn};
 
@@ -298,6 +299,7 @@ fn run() {
 
 #[attach(signal = "td_dbmanager")]
 fn main() {
+    extend_path();
     hooks::panic();
 
     if env::args().any(|arg| arg == "about") {

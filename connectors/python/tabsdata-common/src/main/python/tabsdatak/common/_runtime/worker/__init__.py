@@ -12,6 +12,7 @@ import threading
 from abc import ABC, abstractmethod
 from typing import Sequence
 
+from tabsdatak.common._runtime.pathenv import extend_path
 from tabsdatak.common._runtime.worker.error import (
     ExitCode,
     WorkerErrorCode,
@@ -48,6 +49,7 @@ class Worker(ABC):
     def perform(self) -> None: ...
 
     def run(self) -> int:
+        extend_path()
         self.setup_signal_handlers()
         # noinspection PyBroadException
         try:

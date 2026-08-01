@@ -13,7 +13,7 @@ use std::path::Path;
 use serde_yaml::Value;
 
 use crate::base::constants::{
-    KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    CUSTOMIZABLE_ASSETS, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
@@ -49,6 +49,7 @@ pub fn merge(
         KPROFILE_CONFIGS_FAMILY.folder,
         &profile.configs,
         false,
+        &[],
     )?;
     let input_configs = input.join(KPROFILE_CONFIGS_FAMILY.folder);
     let empty_auto: HashMap<String, String> = HashMap::new();
@@ -130,16 +131,23 @@ pub fn fuse(
     stage: &Path,
 ) -> Result<FusedSecrets, ResolverError> {
     wipe_stage(stage)?;
-    compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true)?;
-    compare_family(init, KPROFILE_ASSETS_FAMILY.folder, &profile.assets, true)?;
+    compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true, &[])?;
+    compare_family(
+        init,
+        KPROFILE_ASSETS_FAMILY.folder,
+        &profile.assets,
+        true,
+        CUSTOMIZABLE_ASSETS,
+    )?;
     compare_family(
         init,
         KPROFILE_CONFIGS_FAMILY.folder,
         &profile.configs,
         false,
+        &[],
     )?;
     stage_pods_files(profile, stage)?;
-    stage_assets_files(profile, stage)?;
+    stage_assets_files(profile, init, stage)?;
     let secrets = resolve_configs_files(profile, system, auto, init, stage)?;
     stage_manifest_file(profile, stage)?;
     Ok(secrets)
@@ -228,10 +236,22 @@ fn stage_pods_files(profile: &Profile, stage: &Path) -> Result<(), ResolverError
     Ok(())
 }
 
-fn stage_assets_files(profile: &Profile, stage: &Path) -> Result<(), ResolverError> {
+fn stage_assets_files(profile: &Profile, init: &Path, stage: &Path) -> Result<(), ResolverError> {
+    let init_assets = init.join(KPROFILE_ASSETS_FAMILY.folder);
     let stage_assets = stage.join(KPROFILE_ASSETS_FAMILY.folder);
     create_folder(&stage_assets)?;
     for (file, content) in &profile.assets {
+        if CUSTOMIZABLE_ASSETS.contains(&file.as_str()) {
+            let init_file = init_assets.join(file);
+            let init_content = fs::read_to_string(&init_file).map_err(|cause| {
+                ResolverError::InitializationReadFailed {
+                    path: init_file.display().to_string(),
+                    cause: cause.to_string(),
+                }
+            })?;
+            write_staged(&stage_assets.join(file), &init_content)?;
+            continue;
+        }
         write_staged(&stage_assets.join(file), content)?;
     }
     Ok(())
@@ -266,6 +286,7 @@ fn compare_family(
     family: &str,
     canonical: &RenderedConfigmap,
     strict_content: bool,
+    customizable: &[&str],
 ) -> Result<(), ResolverError> {
     let family_folder = init.join(family);
     let present = read_flat_family(&family_folder, family)?;
@@ -289,6 +310,9 @@ fn compare_family(
 
     if strict_content {
         for (file, content) in canonical {
+            if customizable.contains(&file.as_str()) {
+                continue;
+            }
             let path = family_folder.join(file);
             let present_content = fs::read_to_string(&path).map_err(|cause| {
                 ResolverError::InitializationReadFailed {

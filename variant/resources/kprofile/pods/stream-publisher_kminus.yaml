@@ -92,6 +92,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-begin-execution
               mountPath: /tabsdata/config
@@ -154,6 +158,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           volumeMounts:
             - name: config-fetch-request
               mountPath: /tabsdata/config
@@ -220,6 +228,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -289,6 +301,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
@@ -356,6 +372,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
           envFrom:
             - secretRef:
                 name: ${{system:tdk_connection_secret_name}}

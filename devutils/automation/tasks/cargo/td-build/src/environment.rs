@@ -4,6 +4,7 @@
 
 use crate::structure::find_workspace_root;
 use std::error::Error;
+use std::path::Path;
 use std::{env, fs};
 
 const ENV_TD_UI_MODE: &str = "TD_UI_MODE";
@@ -74,5 +75,37 @@ pub fn set_environment_variables() -> Result<(), Box<dyn Error>> {
     println!("cargo:rustc-env={ENV_TD_UI_DIR}={ui_dir}");
     println!("cargo:rustc-env={ENV_TD_UI_INDEX}={ui_index}");
 
+    println!("cargo:rerun-if-env-changed={ENV_TD_UI_MODE}");
+    println!("cargo:rerun-if-changed={ui_dir}");
+    for entry in walk_ui_folder(&ui_dir_path) {
+        println!("cargo:rerun-if-changed={entry}");
+    }
+
     Ok(())
+}
+
+fn walk_ui_folder(folder: &Path) -> Vec<String> {
+    let mut entries = Vec::new();
+    let mut pending = vec![folder.to_path_buf()];
+    while let Some(current) = pending.pop() {
+        let Ok(children) = fs::read_dir(&current) else {
+            continue;
+        };
+        for child in children.flatten() {
+            let path = child.path();
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with('.'))
+            {
+                continue;
+            }
+            if path.is_dir() {
+                pending.push(path);
+            } else if let Some(name) = path.to_str() {
+                entries.push(name.to_owned());
+            }
+        }
+    }
+    entries
 }
