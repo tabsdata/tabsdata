@@ -29,6 +29,7 @@ HTTP_OK = 200
 REQUEST_TIMEOUT = 5.0
 
 ARG_CONFIG_FILE = "--config-file"
+ARG_HOST = "--host"
 ARG_LOG_CONFIG = "--log-config"
 ARG_TIMEOUT = "--timeout"
 ARG_INTERVAL = "--interval"
@@ -36,13 +37,19 @@ ARG_INTERVAL = "--interval"
 PROG = "td_apiready"
 DESCRIPTION = "Wait until the apiserver becomes reachable."
 CONFIG_FILE_HELP = "Path to an apiserver configuration file. Repeatable."
+HOST_HELP = (
+    "Host to reach the apiserver at, overriding the configured one. Required "
+    "when the apiserver runs in another network namespace, where its bind "
+    "address names nothing reachable."
+)
 LOG_CONFIG_HELP = "Path to a logging configuration YAML for this worker."
 TIMEOUT_HELP = "Maximum number of seconds to wait for the apiserver."
 INTERVAL_HELP = "Number of seconds between readiness checks."
 METAVAR_PATH = "PATH"
+METAVAR_HOST = "HOST"
 
 
-def ping_url(config_files: list[str]) -> str:
+def ping_url(config_files: list[str], host: str | None = None) -> str:
     merged: dict = {}
     for config_file in config_files:
         with open(config_file, encoding="utf-8") as handle:
@@ -51,10 +58,12 @@ def ping_url(config_files: list[str]) -> str:
     addresses = merged.get(ADDRESSES_KEY) or []
     if not addresses:
         raise ApiReadyErrorCode.API_READY_1.exception(key=ADDRESSES_KEY)
-    host, _, port = str(addresses[0]).rpartition(":")
-    if host in WILDCARD_HOSTS:
-        host = LOCAL_HOST
-    return PING_URL_TEMPLATE.format(host=host, port=port)
+    configured_host, _, port = str(addresses[0]).rpartition(":")
+    if host:
+        return PING_URL_TEMPLATE.format(host=host, port=port)
+    if configured_host in WILDCARD_HOSTS:
+        configured_host = LOCAL_HOST
+    return PING_URL_TEMPLATE.format(host=configured_host, port=port)
 
 
 class ApiReady(PollWorker):
@@ -102,6 +111,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=CONFIG_FILE_HELP,
     )
     parser.add_argument(
+        ARG_HOST,
+        default=None,
+        metavar=METAVAR_HOST,
+        help=HOST_HELP,
+    )
+    parser.add_argument(
         ARG_LOG_CONFIG,
         required=True,
         metavar=METAVAR_PATH,
@@ -126,7 +141,7 @@ def main() -> int:
     args = build_parser().parse_args()
     setup_logging(args.log_config)
     worker = ApiReady(
-        url=ping_url(args.config_file),
+        url=ping_url(args.config_file, args.host),
         timeout=args.timeout,
         interval=args.interval,
     )

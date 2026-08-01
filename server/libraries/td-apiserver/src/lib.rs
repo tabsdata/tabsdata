@@ -13,6 +13,7 @@ use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_execution::{SchedulerConfig, SchedulerNotify};
+use td_objects::types::addresses::InternalServerEndpoint;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -160,13 +161,25 @@ pub fn run() {
                 error!("Error retrieving internal addresses: {e:#?}");
                 ExitStatus::GeneralError
             })?;
-            let internal_addresses = Arc::new(internal_addresses);
+            let internal_endpoint = InternalServerEndpoint::new(
+                internal_addresses,
+                config.advertised_internal_host.as_ref(),
+            )
+            .map_err(|e| {
+                error!("Error resolving the internal server endpoint: {e:#?}");
+                ExitStatus::GeneralError
+            })?;
+            info!(
+                "Workers will call back on {}",
+                internal_endpoint.authority()
+            );
+            let internal_endpoint = Arc::new(internal_endpoint);
 
             let scheduler_context = SchedulerCtx::new(
                 db.clone(),
                 storage.clone(),
                 bridge.clone(),
-                internal_addresses.clone(),
+                internal_endpoint.clone(),
                 scheduler_notify,
                 Arc::new(config.jwt.clone()),
                 Arc::new(SchedulerConfig {

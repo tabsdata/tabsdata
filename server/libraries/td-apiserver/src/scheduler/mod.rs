@@ -10,7 +10,7 @@ use td_common::jwt::JwtConfig;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
 use td_execution::{SchedulerConfig, SchedulerNotify};
-use td_objects::types::addresses::InternalServerAddresses;
+use td_objects::types::addresses::InternalServerEndpoint;
 use td_services::scheduler::services::SchedulerContext;
 use td_storage::Storage;
 use tokio::sync::watch;
@@ -26,7 +26,7 @@ impl SchedulerCtx {
         db: TdPool,
         storage: Arc<Storage>,
         bridge: Arc<BridgeProviderHandle>,
-        internal_addresses: Arc<InternalServerAddresses>,
+        internal_endpoint: Arc<InternalServerEndpoint>,
         scheduler_notify: Arc<SchedulerNotify>,
         jwt_config: Arc<JwtConfig>,
         scheduler_config: Arc<SchedulerConfig>,
@@ -35,7 +35,7 @@ impl SchedulerCtx {
             db,
             storage,
             bridge,
-            internal_addresses,
+            internal_endpoint,
             scheduler_notify,
             jwt_config,
             scheduler_config,

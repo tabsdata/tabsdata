@@ -109,7 +109,7 @@ licensecheck==2025.1.0
 linkify-it-py==2.1.0
 log-symbols==0.0.14
 loguru==0.7.3
-markdown==3.10.2
+markdown==3.10.3
 markdown-it-py==4.2.0
 markdown2==2.5.5
 markupsafe==3.0.3

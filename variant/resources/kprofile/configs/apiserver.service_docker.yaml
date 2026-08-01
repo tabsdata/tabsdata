@@ -1,0 +1,22 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+addresses:
+- 0.0.0.0:${{system:tdk_apiserver_public_port}}
+internal_addresses:
+- 0.0.0.0:${{system:tdk_apiserver_private_port}}
+advertised_internal_host: td-apiserver.${{system:tdk_namespace_name}}.svc.cluster.local
+password:
+  algorithm: argon2id
+  version: 19
+  memory_cost_mib: 20
+  time_cost: 2
+  parallelism_cost: 1
+jwt:
+  secret: ${{secretAuto:jwt_signing_key}}
+  access_token_expiration: 3600
+request_timeout: 60
+check_frequency: 60
+stuck_requested_timeout: 120
+orchestrator: kubernetes

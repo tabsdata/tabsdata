@@ -18,7 +18,7 @@ use td_objects::dxo::worker::{CronTriggerConfig, WorkerDBWithNames};
 use td_objects::dxo::yaml::cron_trigger::CronTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, cron_trigger};
 use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, RESOLVE_WORKER, UPDATE_WORKER};
-use td_objects::types::addresses::InternalServerAddresses;
+use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::{AtTime, WorkerConfig};
 use td_tower::extractors::Ref;
 use tracing::{instrument, warn};
@@ -31,7 +31,7 @@ use tracing::{instrument, warn};
 )]
 pub async fn create_locked_cron_trigger_workers_start_request(
     bridge: Ref<BridgeProviderHandle>,
-    server_addresses: Ref<InternalServerAddresses>,
+    server_endpoint: Ref<InternalServerEndpoint>,
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
@@ -45,11 +45,11 @@ pub async fn create_locked_cron_trigger_workers_start_request(
         .iter()
         .map(|cron_trigger_worker| {
             let bridge = bridge.clone();
-            let server_addresses = server_addresses.clone();
+            let server_endpoint = server_endpoint.clone();
             let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
-                let server_address = server_addresses.first();
+                let server_address = server_endpoint.authority();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,
@@ -181,7 +181,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
 )]
 pub async fn create_locked_cron_trigger_workers_stop_request(
     bridge: Ref<BridgeProviderHandle>,
-    server_addresses: Ref<InternalServerAddresses>,
+    server_endpoint: Ref<InternalServerEndpoint>,
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
@@ -191,11 +191,11 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
         .iter()
         .map(|cron_trigger_worker| {
             let bridge = bridge.clone();
-            let server_addresses = server_addresses.clone();
+            let server_endpoint = server_endpoint.clone();
             let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
-                let server_address = server_addresses.first();
+                let server_address = server_endpoint.authority();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,

@@ -5,10 +5,12 @@
 //! API Server CLI configuration and parameters.
 
 use clap::{Args, ValueEnum};
+use http::uri::Authority;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::net::{AddrParseError, SocketAddr};
 use std::path::PathBuf;
+use std::str::FromStr;
 use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_bridge::Orchestrator;
@@ -23,12 +25,50 @@ use td_security::config::PasswordHashingConfig;
 use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
 
+fn deserialize_optional_authority<'de, D>(deserializer: D) -> Result<Option<Authority>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: Option<String> = Option::deserialize(deserializer)?;
+    match raw {
+        None => Ok(None),
+        Some(raw) if raw.trim().is_empty() => Ok(None),
+        Some(raw) => Authority::from_str(raw.trim())
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
+}
+
+fn serialize_optional_authority<S>(
+    authority: &Option<Authority>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match authority {
+        None => serializer.serialize_none(),
+        Some(authority) => serializer.serialize_str(authority.as_str()),
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, FieldAccessors)]
 pub struct Config {
     #[serde(default)]
     pub addresses: ApiServerAddresses,
     #[serde(default)]
     pub internal_addresses: InternalServerAddresses,
+    /// Host other workloads reach the internal server at, replacing the bound
+    /// one in the callback urls handed to workers. Needed wherever the bind
+    /// address names nothing reachable from another network namespace, as a
+    /// wildcard does. Any port here is ignored: the bound one is used. Unset
+    /// keeps the bound address.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_authority",
+        serialize_with = "serialize_optional_authority"
+    )]
+    pub advertised_internal_host: Option<Authority>,
     pub password: PasswordHashingConfig,
     pub jwt: JwtConfig,
     pub request_timeout: i64, // in seconds
@@ -132,6 +172,7 @@ impl Default for Config {
         Self {
             addresses: ApiServerAddresses::default(),
             internal_addresses: InternalServerAddresses::default(),
+            advertised_internal_host: None,
             password: PasswordHashingConfig::default(),
             jwt: JwtConfig::default(),
             request_timeout: 60,
@@ -268,6 +309,7 @@ impl Params {
                 .transpose()?
                 .map(InternalServerAddresses)
                 .unwrap_or(config.internal_addresses.clone()),
+            advertised_internal_host: config.advertised_internal_host.clone(),
             password: config.password.clone(),
             jwt: {
                 let secret = self
@@ -341,6 +383,8 @@ pub enum ConfigError {
     MissingStorageConfig = 6,
     #[error("The url specified in storage.url is wrong: {0}")]
     InvalidMountDefinition(#[source] StorageError) = 7,
+    #[error("Could not resolve the advertised internal host '{0}': {1}")]
+    UnresolvableAdvertisedHost(String, String) = 8,
 }
 
 #[cfg(test)]

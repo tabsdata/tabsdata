@@ -27,7 +27,7 @@ use td_objects::dxo::worker::{
     UpdateWorkerDB, UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames,
 };
 use td_objects::tower_service::with::With;
-use td_objects::types::addresses::InternalServerAddresses;
+use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::{LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId};
 use td_queries::By;
 use td_queries::insert_vec;
@@ -44,7 +44,7 @@ use td_tower::{layer, layers};
     scope = "Global",
     context = Storage,
     context = BridgeProviderHandle,
-    context = InternalServerAddresses,
+    context = InternalServerEndpoint,
     context = SchedulerNotify,
     context = JwtConfig,
     context = SchedulerConfig,

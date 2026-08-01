@@ -127,10 +127,10 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/resources
       ports:
         - name: public-http
-          containerPort: 2457
+          containerPort: ${{system:tdk_apiserver_public_port}}
           protocol: TCP
         - name: private-http
-          containerPort: 2458
+          containerPort: ${{system:tdk_apiserver_private_port}}
           protocol: TCP
       resources:
         requests:

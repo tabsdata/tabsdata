@@ -25,7 +25,7 @@ use td_objects::rest_urls::internal::{
     DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
     RESOLVE_WORKER, UPDATE_WORKER,
 };
-use td_objects::types::addresses::InternalServerAddresses;
+use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::{AtTime, FunctionVersionId, WorkerConfig};
 use td_queries::LfrEntry;
 use td_storage::Storage;
@@ -42,7 +42,7 @@ use tracing::{instrument, warn};
 pub async fn create_locked_stage_trigger_workers_start_request(
     bridge: Ref<BridgeProviderHandle>,
     storage: Ref<Storage>,
-    server_addresses: Ref<InternalServerAddresses>,
+    server_endpoint: Ref<InternalServerEndpoint>,
     jwt: Ref<JwtConfig>,
     mut conn: MutRef<DomainConnection<Apiserver>>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
@@ -77,7 +77,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
         let result = put_stage_trigger_start(
             &bridge,
             &storage,
-            &server_addresses,
+            &server_endpoint,
             &jwt,
             &function_by_fvid,
             kubernetes,
@@ -99,14 +99,14 @@ pub async fn create_locked_stage_trigger_workers_start_request(
 async fn put_stage_trigger_start(
     bridge: &BridgeProviderHandle,
     storage: &Storage,
-    server_addresses: &InternalServerAddresses,
+    server_endpoint: &InternalServerEndpoint,
     jwt: &JwtConfig,
     function_by_fvid: &HashMap<FunctionVersionId, FunctionDBWithBundleBasePath>,
     kubernetes: bool,
     stage_trigger_worker: &WorkerDBWithNames,
 ) -> Result<(), TdError> {
     let worker_id = stage_trigger_worker.id.to_string();
-    let server_address = server_addresses.first();
+    let server_address = server_endpoint.authority();
     let callback = internal_post_callback(
         jwt,
         server_address,
@@ -274,7 +274,7 @@ async fn put_stage_trigger_start(
 )]
 pub async fn create_locked_stage_trigger_workers_stop_request(
     bridge: Ref<BridgeProviderHandle>,
-    server_addresses: Ref<InternalServerAddresses>,
+    server_endpoint: Ref<InternalServerEndpoint>,
     jwt: Ref<JwtConfig>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
@@ -284,11 +284,11 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
         .iter()
         .map(|stage_trigger_worker| {
             let bridge = bridge.clone();
-            let server_addresses = server_addresses.clone();
+            let server_endpoint = server_endpoint.clone();
             let jwt = jwt.clone();
             async move {
                 let worker_id = stage_trigger_worker.id.to_string();
-                let server_address = server_addresses.first();
+                let server_address = server_endpoint.authority();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,

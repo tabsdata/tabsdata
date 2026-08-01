@@ -7,8 +7,8 @@
 //! token bound to that request's route + path-param ids.
 
 use http::Method;
+use http::uri::Authority;
 use std::collections::{BTreeMap, HashMap};
-use std::net::SocketAddr;
 use td_common::jwt::{JwtConfig, encode_internal_token};
 use td_common::worker::{Callback, HttpCallback, HttpRequest};
 use td_error::td_error;
@@ -30,7 +30,7 @@ pub enum WorkerRequestError {
 /// header. The internal router validates that token against the actual request.
 pub(crate) fn internal_request(
     jwt: &JwtConfig,
-    server_address: &SocketAddr,
+    server_address: &Authority,
     method: Method,
     pattern: &str,
     bindings: &[(&str, &str)],
@@ -59,7 +59,7 @@ pub(crate) fn internal_request(
 /// Tokenized POST callback (the responder a worker reports status on).
 pub(crate) fn internal_post_callback(
     jwt: &JwtConfig,
-    server_address: &SocketAddr,
+    server_address: &Authority,
     pattern: &str,
     bindings: &[(&str, &str)],
 ) -> Result<Callback, WorkerRequestError> {
@@ -78,7 +78,7 @@ pub(crate) fn internal_post_callback(
 /// Tokenized GET callback (e.g. the kubernetes resolver a pod pulls from).
 pub(crate) fn internal_get_callback(
     jwt: &JwtConfig,
-    server_address: &SocketAddr,
+    server_address: &Authority,
     pattern: &str,
     bindings: &[(&str, &str)],
 ) -> Result<Callback, WorkerRequestError> {

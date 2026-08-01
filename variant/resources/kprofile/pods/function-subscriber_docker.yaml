@@ -141,6 +141,8 @@ spec:
           args:
             - --config-file
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.service.yaml
+            - --host
+            - td-apiserver.${{system:tdk_namespace_name}}.svc.cluster.local
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --timeout

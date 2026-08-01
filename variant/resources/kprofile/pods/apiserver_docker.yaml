@@ -117,7 +117,7 @@ spec:
         - name: runtimes
           mountPath: ${{system:tdk_runtimes_root}}
           readOnly: true
-    - name: connresextractor
+    - name: conn-resources-extractor
       image: ubuntu:24.04
       imagePullPolicy: IfNotPresent
       command: ["${{system:tdk_pyenv_td_root}}/bin/td_conn_resources_extractor"]
@@ -170,10 +170,10 @@ spec:
         - /tabsdata/resources
       ports:
         - name: public-http
-          containerPort: 2457
+          containerPort: ${{system:tdk_apiserver_public_port}}
           protocol: TCP
         - name: private-http
-          containerPort: 2458
+          containerPort: ${{system:tdk_apiserver_private_port}}
           protocol: TCP
       resources:
         requests:

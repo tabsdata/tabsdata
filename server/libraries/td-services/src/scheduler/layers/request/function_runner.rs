@@ -20,7 +20,7 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::rest_urls::internal::{RESOLVE_WORKER, UPDATE_FUNCTION_RUN_WORKER};
-use td_objects::types::addresses::InternalServerAddresses;
+use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::{
     AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId,
     WorkerMessageStatus, WorkerStatus, WorkerType,
@@ -216,7 +216,7 @@ pub async fn pfr_ids_from_dispatched_workers(
 pub async fn create_locked_function_runner_workers_start_request(
     bridge: Ref<BridgeProviderHandle>,
     storage: Ref<Storage>,
-    server_addresses: Ref<InternalServerAddresses>,
+    server_endpoint: Ref<InternalServerEndpoint>,
     mut conn: MutRef<DomainConnection<Apiserver>>,
     at: Ref<AtTime>,
     jwt: Ref<JwtConfig>,
@@ -241,7 +241,7 @@ pub async fn create_locked_function_runner_workers_start_request(
         let result = async {
             let worker_id = WorkerId::new();
 
-            let server_address = server_addresses.first();
+            let server_address = server_endpoint.authority();
             let fr_id = f.id.to_string();
             let w_id = worker_id.to_string();
             let bindings = [
