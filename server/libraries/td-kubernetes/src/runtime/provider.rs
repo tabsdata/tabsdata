@@ -40,6 +40,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::profile::bundle::Axis;
+use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::axes::{Lifecycle, Locality, Location, Platform, Workload};
 use crate::runtime::provider::docker::DockerProvider;
 use crate::runtime::provider::eks::EksProvider;
@@ -590,14 +591,31 @@ pub async fn provider_for_instance(
     verbose: bool,
     loglevel: Option<LogLevel>,
 ) -> CommandResult<Box<dyn Provider>> {
-    provider_for_instance_inner(instance, verbose, loglevel, true).await
+    provider_for_instance_inner(instance, verbose, loglevel, true, false).await
 }
 
 pub async fn provider_for_instance_any_state(
     instance: Option<String>,
     verbose: bool,
 ) -> CommandResult<Box<dyn Provider>> {
-    provider_for_instance_inner(instance, verbose, None, false).await
+    provider_for_instance_inner(instance, verbose, None, false, false).await
+}
+
+pub async fn provider_for_instance_mutating(
+    instance: Option<String>,
+    verbose: bool,
+    loglevel: Option<LogLevel>,
+) -> CommandResult<Box<dyn Provider>> {
+    provider_for_instance_inner(instance, verbose, loglevel, true, true).await
+}
+
+/// Same as [`provider_for_instance_mutating`], for commands that act on an instance
+/// in any state.
+pub async fn provider_for_instance_mutating_any_state(
+    instance: Option<String>,
+    verbose: bool,
+) -> CommandResult<Box<dyn Provider>> {
+    provider_for_instance_inner(instance, verbose, None, false, true).await
 }
 
 pub fn cluster_arguments_for(settings: &InstanceSettings) -> ClusterArguments {
@@ -625,6 +643,7 @@ async fn provider_for_instance_inner(
     verbose: bool,
     loglevel: Option<LogLevel>,
     require_created: bool,
+    require_version_match: bool,
 ) -> CommandResult<Box<dyn Provider>> {
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
     let mut settings = if require_created {
@@ -632,6 +651,9 @@ async fn provider_for_instance_inner(
     } else {
         InstanceSettings::load(&instance)?
     };
+    if require_version_match {
+        verify_instance_version(&settings.name, &settings.version)?;
+    }
     if let Some(loglevel) = loglevel {
         if settings.provider != ClusterProvider::Kminus {
             return Err(ProviderError::ArgumentNotValidForProvider {

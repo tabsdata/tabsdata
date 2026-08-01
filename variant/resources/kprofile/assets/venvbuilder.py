@@ -190,6 +190,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Output folder (mandatory)",
     )
     parser.add_argument(
+        "--version",
+        dest="version",
+        required=True,
+        help="Tabsdata version to install",
+    )
+    parser.add_argument(
         "--storage-config",
         dest="storage_config",
         default="",
@@ -455,6 +461,10 @@ def has_requirements(file: str) -> bool:
         )
 
 
+def pinned(packages: list[str], version: str) -> list[str]:
+    return [f"{package}=={version}" for package in packages]
+
+
 def install_one_set_of_packages(
     workspace: dict[str, str],
     virtual_environment: str,
@@ -478,7 +488,7 @@ def install_packages(arguments: argparse.Namespace, workspace: dict[str, str]) -
     install_one_set_of_packages(
         workspace,
         workspace["virtual_environment_td"],
-        PACKAGES_TD,
+        pinned(PACKAGES_TD, arguments.version),
         arguments.requirements_td,
     )
 

@@ -90,6 +90,7 @@ show_usage() {
    echo "  -p, --python VERSION           Python version                   (default: $PYTHON_VERSION)"
    echo "      --requirements-td FILE     Complementary packages for td    (default: none)"
    echo "  -o, --output FOLDER            Output folder                    (mandatory)"
+   echo "      --version VERSION          Tabsdata version to install      (mandatory)"
    echo "      --image NAME               Image file name                  (default: $IMAGE_NAME$IMAGE_SUFFIX)"
    echo "      --storage-config FILE      Storage configuration used to copy the image     (default: none)"
    echo "  -h, --help                     Show this help"
@@ -100,6 +101,7 @@ parse_arguments() {
    requirements_td=""
    output=""
    image="$IMAGE_NAME$IMAGE_SUFFIX"
+   version=""
    storage_config=""
    transporter_request=""
    transporter_response=""
@@ -109,6 +111,7 @@ parse_arguments() {
          --requirements-td)   requirements_td="$2"; shift 2 ;;
          -o|--output)         output="$2";          shift 2 ;;
          --image)             image="$2";           shift 2 ;;
+         --version)           version="$2";         shift 2 ;;
          --storage-config)    storage_config="$2";  shift 2 ;;
          --transporter-request)  transporter_request="$2";  shift 2 ;;
          --transporter-response) transporter_response="$2"; shift 2 ;;
@@ -148,6 +151,12 @@ validate_arguments() {
 
    if [[ -z "$image" ]]; then
       echo "Image file name must not be empty" >&2
+      exit 2
+   fi
+
+   if [[ -z "$version" ]]; then
+      echo "Tabsdata version is mandatory" >&2
+      show_usage
       exit 2
    fi
 
@@ -229,9 +238,9 @@ has_requirements() {
 
 install_packages() {
    if has_requirements "$requirements_td"; then
-      run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]" -r "$requirements_td"
+      run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]==$version" -r "$requirements_td"
    else
-      run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]"
+      run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]==$version"
    fi
 }
 

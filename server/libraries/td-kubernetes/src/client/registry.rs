@@ -141,6 +141,7 @@ pub struct InstanceSettings {
     pub provider: ClusterProvider,
     pub locality: Locality,
     pub cluster: ClusterViews,
+    pub version: String,
     #[serde(default)]
     pub ports: Vec<AssignedPort>,
     #[serde(default)]

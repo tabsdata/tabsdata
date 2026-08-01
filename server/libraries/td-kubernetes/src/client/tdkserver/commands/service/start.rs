@@ -16,7 +16,7 @@ use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::cwarn;
-use crate::runtime::provider::provider_for_instance;
+use crate::runtime::provider::provider_for_instance_mutating;
 
 #[derive(Debug, Clone, Args)]
 pub struct StartArguments {
@@ -82,7 +82,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
-    let provider = provider_for_instance(instance.value, verbose, loglevel).await?;
+    let provider = provider_for_instance_mutating(instance.value, verbose, loglevel).await?;
     provider.ensure_startable_service().await?;
 
     if provider.service_alive().await {

@@ -24,6 +24,7 @@ use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::preview;
 use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use crate::cwarn;
+use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::provider_for_instance_any_state;
 
@@ -71,6 +72,23 @@ pub struct TrashArguments {
     pub yes: Option<bool>,
 }
 
+async fn assert_trashable(name: &str, verbose: bool) -> CommandResult {
+    let Ok(settings) = InstanceSettings::load(name) else {
+        return Ok(());
+    };
+    if verify_instance_version(&settings.name, &settings.version).is_ok() {
+        return Ok(());
+    }
+    let Ok(provider) = provider_for_instance_any_state(Some(name.to_owned()), verbose).await else {
+        return Ok(());
+    };
+    if provider.service_dead().await {
+        return Ok(());
+    }
+    verify_instance_version(&settings.name, &settings.version)?;
+    Ok(())
+}
+
 pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments) -> CommandResult {
     let TrashArguments {
         instance,
@@ -103,6 +121,8 @@ pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments)
             &trash_root.display().to_string(),
         );
     }
+    assert_trashable(&name, verbose).await?;
+
     if !confirm(yes.value, "Proceed with trashing the instance?")? {
         info!("Operation cancelled.");
         return Ok(());

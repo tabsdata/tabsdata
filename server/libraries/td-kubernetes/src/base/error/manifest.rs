@@ -20,6 +20,16 @@ pub enum ManifestError {
          Run 'tdkserver upgrade <instance>' first."
     )]
     VersionMismatches { running: String, entries: String } = 1,
+    #[error(
+        "Instance '{instance}' was initialized with tabsdata '{found}'; \
+         the running tabsdata SDK is '{running}'. Use the matching SDK version, \
+         or re-initialize the instance."
+    )]
+    InstanceVersionMismatch {
+        instance: String,
+        found: String,
+        running: String,
+    } = 2,
     #[error("Manifest is missing entry '{0}'.")]
     EntryMissing(String) = 1000,
     #[error("Could not parse version '{0}': {1}.")]

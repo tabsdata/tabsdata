@@ -8,10 +8,12 @@ use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::{Cancelled, GeneralError, NoAction};
 use td_error::TdError;
+use td_python::tabsdata::tabsdata_version;
 use tracing::info;
 
 use crate::base::constants::{DEFAULT_LOG_LEVEL, KUBECONFIG_FILE, LogLevel, SCHEDULER_FARGATE};
 use crate::base::error::cli::CliError;
+use crate::base::error::manifest::ManifestError;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::registry::{
@@ -247,6 +249,8 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
             adjusted,
             resolved,
         },
+        version: tabsdata_version()
+            .map_err(|error| ManifestError::TabsdataVersionResolveFailed(error.to_string()))?,
         ports: Vec::new(),
         loglevel,
     };

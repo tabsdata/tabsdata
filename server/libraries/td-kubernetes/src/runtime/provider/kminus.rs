@@ -29,6 +29,8 @@ use crate::base::constants::{
     KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
     LogLevel, UvMode, VENVS_IMAGE, YAML_NULL,
 };
+use td_python::tabsdata::tabsdata_version;
+
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{
@@ -588,17 +590,15 @@ impl Provider for KminusProvider {
                 ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
         }
-        if cfg!(td_k8s_development) {
-            let manifest_path = self.cluster.staging_profile_path().join(MANIFEST_FILE);
-            if manifest_path.exists() {
-                let yaml = fs::read_to_string(&manifest_path).map_err(|error| {
-                    ProviderError::StagingReadFailed(
-                        manifest_path.display().to_string(),
-                        error.to_string(),
-                    )
-                })?;
-                verify_manifest_compatibility(&yaml)?;
-            }
+        let manifest_path = self.cluster.staging_profile_path().join(MANIFEST_FILE);
+        if manifest_path.exists() {
+            let yaml = fs::read_to_string(&manifest_path).map_err(|error| {
+                ProviderError::StagingReadFailed(
+                    manifest_path.display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+            verify_manifest_compatibility(&yaml)?;
         }
         Ok(())
     }
@@ -967,6 +967,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         pyenv_libexec_folder,
         exe_suffix,
         instance_name,
+        tabsdata_version: Some(tabsdata_version()?),
         namespace_name: Some(DEFAULT_NAMESPACE.to_owned()),
         database_host: Some(DATABASE_HOST_LOOPBACK.to_owned()),
         database_name: Some(DATABASE_NAME_POSTGRES.to_owned()),

@@ -38,3 +38,16 @@ pub fn verify_manifest_compatibility(manifest_yaml: &str) -> Result<(), Manifest
         }
     }
 }
+
+pub fn verify_instance_version(instance: &str, found: &str) -> Result<(), ManifestError> {
+    let running = tabsdata_version()
+        .map_err(|error| ManifestError::TabsdataVersionResolveFailed(error.to_string()))?;
+    if found == running {
+        return Ok(());
+    }
+    Err(ManifestError::InstanceVersionMismatch {
+        instance: instance.to_owned(),
+        found: found.to_owned(),
+        running,
+    })
+}

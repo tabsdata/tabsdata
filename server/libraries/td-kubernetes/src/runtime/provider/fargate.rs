@@ -20,6 +20,8 @@ use crate::base::constants::{
     FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
     KPROFILE_PODS_FAMILY,
 };
+use td_python::tabsdata::tabsdata_version;
+
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{
@@ -422,13 +424,11 @@ impl Provider for FargateProvider {
     }
 
     async fn ensure_startable_server(&self) -> CommandResult {
-        if cfg!(td_k8s_development) {
-            let context = self.kube_context().await?;
-            if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?
-                && let Some(yaml) = data.get(MANIFEST_FILE)
-            {
-                verify_manifest_compatibility(yaml)?;
-            }
+        let context = self.kube_context().await?;
+        if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?
+            && let Some(yaml) = data.get(MANIFEST_FILE)
+        {
+            verify_manifest_compatibility(yaml)?;
         }
         Ok(())
     }
@@ -467,6 +467,7 @@ pub fn system_values_for(
         instance_name: Some(name.to_owned()),
         namespace_name: Some(namespace.to_owned()),
         cluster_name: Some(cluster.to_owned()),
+        tabsdata_version: Some(tabsdata_version()?),
         runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
         pyenv_td_root: Some(CONTAINER_PYENV_TD_ROOT.to_owned()),
         pyenv_ag_root: Some(CONTAINER_PYENV_AG_ROOT.to_owned()),

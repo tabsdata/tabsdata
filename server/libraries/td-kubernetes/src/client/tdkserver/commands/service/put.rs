@@ -33,7 +33,7 @@ use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::profile::load_profile;
 use crate::runtime::provider::Provider;
-use crate::runtime::provider::provider_for_instance;
+use crate::runtime::provider::provider_for_instance_mutating;
 use crate::runtime::secrets::settler::auto_fill_generated_secrets;
 use crate::runtime::secrets::source::to_secret_name;
 
@@ -101,7 +101,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     let apply = apply.unwrap_or(false);
     let verbose = globals.verbose;
 
-    let provider = provider_for_instance(instance.value, verbose, None).await?;
+    let provider = provider_for_instance_mutating(instance.value, verbose, None).await?;
     let name = provider.summary().instance_name.unwrap_or_default();
 
     let profile = load_profile(provider.cluster_provider(), verbose)?;

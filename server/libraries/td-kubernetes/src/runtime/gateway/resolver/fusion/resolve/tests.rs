@@ -612,3 +612,23 @@ fn system_null_renders_as_a_yaml_null() {
         outcome.rendered
     );
 }
+
+#[test]
+fn tabsdata_version_splices_into_a_pinned_requirement() {
+    let template = "package: tabsdata[all]==${{system:tdk_tabsdata_version}}\n";
+    let system = SystemValues {
+        tabsdata_version: Some("2.0.0".to_owned()),
+        ..SystemValues::default()
+    };
+    let auto = HashMap::new();
+    let outcome = resolve_config_file(
+        template,
+        template,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve version");
+    assert!(outcome.rendered.contains("tabsdata[all]==2.0.0"));
+}

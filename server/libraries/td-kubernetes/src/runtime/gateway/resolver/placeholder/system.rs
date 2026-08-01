@@ -57,6 +57,8 @@ pub enum SystemKey {
     NamespaceName,
     #[strum(serialize = "tdk_cluster_name")]
     ClusterName,
+    #[strum(serialize = "tdk_tabsdata_version")]
+    TabsdataVersion,
     #[strum(serialize = "tdk_apiserver_public_port")]
     ApiserverPublicPort,
     #[strum(serialize = "tdk_apiserver_private_port")]
@@ -123,6 +125,7 @@ pub struct SystemValues {
     pub instance_name: Option<String>,
     pub namespace_name: Option<String>,
     pub cluster_name: Option<String>,
+    pub tabsdata_version: Option<String>,
     pub apiserver_public_port: Option<String>,
     pub apiserver_private_port: Option<String>,
     #[cfg(feature = "enterprise")]
@@ -159,6 +162,7 @@ impl SystemValues {
             SystemKey::InstanceName => self.instance_name.as_deref(),
             SystemKey::NamespaceName => self.namespace_name.as_deref(),
             SystemKey::ClusterName => self.cluster_name.as_deref(),
+            SystemKey::TabsdataVersion => self.tabsdata_version.as_deref(),
             SystemKey::ApiserverPublicPort => self.apiserver_public_port.as_deref(),
             SystemKey::ApiserverPrivatePort => self.apiserver_private_port.as_deref(),
             #[cfg(feature = "enterprise")]

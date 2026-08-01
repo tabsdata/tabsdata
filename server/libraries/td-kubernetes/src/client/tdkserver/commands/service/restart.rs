@@ -17,7 +17,7 @@ use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
-use crate::runtime::provider::{Provider, provider_for_instance};
+use crate::runtime::provider::{Provider, provider_for_instance_mutating};
 
 #[derive(Debug, Clone, Args)]
 pub struct RestartArguments {
@@ -86,7 +86,7 @@ pub async fn command_restart(
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
-    let provider = provider_for_instance(instance.value, verbose, loglevel).await?;
+    let provider = provider_for_instance_mutating(instance.value, verbose, loglevel).await?;
     provider.ensure_startable_service().await?;
 
     let not_dead = !provider.service_dead().await;

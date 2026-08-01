@@ -25,7 +25,7 @@ use crate::runtime::instance::ports::{AssignedPort, apiserver_public_port, datab
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::summary::Summary;
 
-fn list_columns() -> [ReportColumn<'static>; 8] {
+fn list_columns() -> [ReportColumn<'static>; 9] {
     [
         ReportColumn {
             header: "Name",
@@ -37,6 +37,10 @@ fn list_columns() -> [ReportColumn<'static>; 8] {
         },
         ReportColumn {
             header: "Provider",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "Version",
             color_scheme: None,
         },
         ReportColumn {
@@ -85,6 +89,10 @@ fn instance_row(row: &InstanceRow) -> Vec<String> {
         .settings
         .map(|settings| settings.provider.as_str().to_owned())
         .unwrap_or_else(|| UNGATHERED_CELL.to_owned());
+    let version = row
+        .settings
+        .map(version_cell)
+        .unwrap_or_else(|| UNGATHERED_CELL.to_owned());
     let state = row
         .settings
         .map(|settings| settings.state.as_str().to_owned())
@@ -111,6 +119,7 @@ fn instance_row(row: &InstanceRow) -> Vec<String> {
         row.name.to_owned(),
         row.folder.display().to_string(),
         provider,
+        version,
         state,
         status,
         public_port,
@@ -129,6 +138,10 @@ fn port_cell(
             .map(|port| port.to_string())
             .unwrap_or_else(|| ABSENT_CELL.to_owned()),
     }
+}
+
+fn version_cell(settings: &InstanceSettings) -> String {
+    settings.version.clone()
 }
 
 pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<bool>) {
@@ -156,6 +169,7 @@ pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<b
     info!("  - state........: {}", settings.state.as_str());
     info!("  - status.......: {status}");
     info!("  - locality.....: {}", settings.locality.as_str());
+    info!("  - version......: {}", version_cell(settings));
     render_summary_lines(&summary);
     info!("Assigned ports:");
     for entry in &settings.ports {
@@ -232,6 +246,7 @@ pub fn restarted_service(summary: &Summary) {
 pub fn initialized_service(settings: &InstanceSettings) {
     info!("Initialized tabsdata instance '{}'.", settings.name);
     info!("  - state........: {}", settings.state.as_str());
+    info!("  - version......: {}", version_cell(settings));
     if settings.provider == ClusterProvider::Kminus {
         match settings.loglevel {
             Some(loglevel) => info!("  - log level....: {}", loglevel.as_str()),

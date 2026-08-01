@@ -51,6 +51,8 @@ spec:
         - ${{system:tdk_runtimes_root}}
         - --requirements-td
         - $(CONTAINER_ROOT)/tabsdata/assets/requirements-td.txt
+        - --version
+        - ${{system:tdk_tabsdata_version}}
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         - --transporter-request

@@ -30,6 +30,7 @@ use crate::runtime::instance::ports::{
     AssignedPort, DEFAULT_BASE_PORT, apply_ports, assign_ports, kminus_api_port,
 };
 use crate::runtime::instance::profile::load_profile;
+use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::{ClusterProvider, cluster_arguments_for, provider_for};
 use crate::runtime::secrets::source::to_secret_name;
 use clap_derive::Args;
@@ -127,6 +128,7 @@ pub async fn create_instance(
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
 
     let mut settings = InstanceSettings::load_required(&instance, &[InstanceState::Initialized])?;
+    verify_instance_version(&settings.name, &settings.version)?;
 
     let init = instance_init_input_folder(&settings.name)?;
     let stage = instance_init_stage_folder(&settings.name)?;
