@@ -1,0 +1,27 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: td-apiserver
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Grants the apiserver role to the apiserver service account"
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: apiserver
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: authorization
+subjects:
+- kind: ServiceAccount
+  name: td-apiserver
+  namespace: ${{system:tdk_namespace_name}}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: td-apiserver

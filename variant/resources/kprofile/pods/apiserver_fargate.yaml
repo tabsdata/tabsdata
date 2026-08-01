@@ -20,8 +20,8 @@ metadata:
     tabsdata.com/tier: regular
 spec:
   restartPolicy: Always
-  serviceAccountName: default
-  automountServiceAccountToken: false
+  serviceAccountName: td-apiserver
+  automountServiceAccountToken: true
   terminationGracePeriodSeconds: 60
   dnsPolicy: ClusterFirst
   securityContext:
@@ -46,8 +46,9 @@ spec:
         - https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
       resources:
         requests:
-          cpu: "50m"
-          memory: "64Mi"
+          cpu: "250m"
+          memory: "512Mi"
+          ephemeral-storage: "2Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -67,7 +68,7 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
       resources:
         requests:
-          cpu: "1"
+          cpu: "2"
           memory: "4Gi"
           ephemeral-storage: "16Gi"
       env:
@@ -117,8 +118,9 @@ spec:
         - "2"
       resources:
         requests:
-          cpu: "50m"
-          memory: "32Mi"
+          cpu: "250m"
+          memory: "512Mi"
+          ephemeral-storage: "2Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -155,8 +157,9 @@ spec:
         - /tabsdata/resources/ui/connectors
       resources:
         requests:
-          cpu: "100m"
-          memory: "128Mi"
+          cpu: "250m"
+          memory: "512Mi"
+          ephemeral-storage: "2Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -205,8 +208,9 @@ spec:
           protocol: TCP
       resources:
         requests:
-          cpu: "100m"
-          memory: "4Gi"
+          cpu: "4"
+          memory: "8Gi"
+          ephemeral-storage: "16Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:

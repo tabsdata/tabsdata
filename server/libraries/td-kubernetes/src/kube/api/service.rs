@@ -22,7 +22,7 @@ pub async fn upsert_service(
         .metadata
         .name
         .clone()
-        .ok_or_else(|| KubeServiceError::MissingName)?;
+        .ok_or(KubeServiceError::MissingName)?;
     match api.get_opt(&name).await {
         Ok(Some(existing)) => {
             service.metadata.resource_version = existing.metadata.resource_version;

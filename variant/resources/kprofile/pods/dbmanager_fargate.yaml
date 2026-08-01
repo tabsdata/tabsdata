@@ -57,8 +57,9 @@ spec:
         - https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
         resources:
           requests:
-            cpu: "50m"
-            memory: "64Mi"
+            cpu: "250m"
+            memory: "512Mi"
+            ephemeral-storage: "2Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -78,7 +79,7 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         resources:
           requests:
-            cpu: "1"
+            cpu: "2"
             memory: "4Gi"
             ephemeral-storage: "16Gi"
         env:
@@ -125,13 +126,16 @@ spec:
         - /tabsdata/config/dbmanager.database.yaml
         resources:
           requests:
-            cpu: "50m"
-            memory: "128Mi"
+            cpu: "1"
+            memory: "4Gi"
+            ephemeral-storage: "16Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
         env:
+        - name: PATH
+          value: "${{system:tdk_pyenv_td_root}}/bin:/usr/local/bin:/usr/bin:/bin"
         - name: CONTAINER_ROOT
           value: ""
         - name: POD_NAME

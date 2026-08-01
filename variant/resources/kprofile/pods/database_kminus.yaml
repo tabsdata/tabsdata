@@ -45,8 +45,9 @@ spec:
       protocol: TCP
     resources:
       requests:
-        cpu: "100m"
-        memory: "512Mi"
+        cpu: "1"
+        memory: "2Gi"
+        ephemeral-storage: "4Gi"
     securityContext:
       allowPrivilegeEscalation: false
       capabilities:

@@ -48,7 +48,8 @@ spec:
       resources:
         requests:
           cpu: "50m"
-          memory: "32Mi"
+          memory: "64Mi"
+          ephemeral-storage: "1Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -82,8 +83,9 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/resources/ui/connectors
       resources:
         requests:
-          cpu: "100m"
-          memory: "128Mi"
+          cpu: "50m"
+          memory: "64Mi"
+          ephemeral-storage: "1Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -132,8 +134,9 @@ spec:
           protocol: TCP
       resources:
         requests:
-          cpu: "100m"
+          cpu: "2"
           memory: "4Gi"
+          ephemeral-storage: "4Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:

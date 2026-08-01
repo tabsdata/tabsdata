@@ -19,6 +19,7 @@ pub mod messaging;
 pub mod namespace;
 pub mod pod;
 pub mod podcontext;
+pub mod rbac;
 pub mod secret;
 pub mod service;
 
@@ -37,6 +38,7 @@ pub use messaging::KubeMessagingError;
 pub use namespace::KubeNamespaceError;
 pub use pod::KubePodError;
 pub use podcontext::KubePodContextError;
+pub use rbac::KubeRbacError;
 pub use secret::KubeSecretError;
 pub use service::KubeServiceError;
 
@@ -63,6 +65,8 @@ pub enum KubernetesError {
     #[error(transparent)]
     PodContext(#[from] KubePodContextError),
     #[error(transparent)]
+    Rbac(#[from] KubeRbacError),
+    #[error(transparent)]
     Secret(#[from] KubeSecretError),
     #[error(transparent)]
     Service(#[from] KubeServiceError),
@@ -83,6 +87,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::Namespace(inner) => TdError::new(inner),
             KubernetesError::Pod(inner) => TdError::new(inner),
             KubernetesError::PodContext(inner) => TdError::new(inner),
+            KubernetesError::Rbac(inner) => TdError::new(inner),
             KubernetesError::Secret(inner) => TdError::new(inner),
             KubernetesError::Service(inner) => TdError::new(inner),
             KubernetesError::Naming(inner) => TdError::new(inner),

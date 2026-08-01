@@ -21,6 +21,9 @@ pub enum TemplateKind {
     Job,
     CronJob,
     Service,
+    ServiceAccount,
+    Role,
+    RoleBinding,
 }
 
 impl TemplateKind {
@@ -30,7 +33,17 @@ impl TemplateKind {
             "Job" => Some(Self::Job),
             "CronJob" => Some(Self::CronJob),
             "Service" => Some(Self::Service),
+            "ServiceAccount" => Some(Self::ServiceAccount),
+            "Role" => Some(Self::Role),
+            "RoleBinding" => Some(Self::RoleBinding),
             _ => None,
+        }
+    }
+
+    pub fn is_workload(&self) -> bool {
+        match self {
+            Self::Pod | Self::Job | Self::CronJob => true,
+            Self::Service | Self::ServiceAccount | Self::Role | Self::RoleBinding => false,
         }
     }
 }
@@ -112,6 +125,9 @@ fn parse_template(manifest: &str) -> Result<Option<PodTemplate>, KubernetesError
             kind: kind_text.clone(),
         }
     })?;
+    if !kind.is_workload() {
+        return Ok(None);
+    }
     Ok(Some(PodTemplate {
         component,
         kind,

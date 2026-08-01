@@ -418,8 +418,11 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                 cause: error.to_string(),
                             })?;
                     }
-                    TemplateKind::Service => {
-                        return Err(unexpected_kind(&id, "Service"));
+                    TemplateKind::Service
+                    | TemplateKind::ServiceAccount
+                    | TemplateKind::Role
+                    | TemplateKind::RoleBinding => {
+                        return Err(unexpected_kind(&id, "authorization or service"));
                     }
                 }
             }
@@ -445,8 +448,11 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             cause: error.to_string(),
                         })?;
                 }
-                TemplateKind::Service => {
-                    return Err(unexpected_kind(&id, "Service"));
+                TemplateKind::Service
+                | TemplateKind::ServiceAccount
+                | TemplateKind::Role
+                | TemplateKind::RoleBinding => {
+                    return Err(unexpected_kind(&id, "authorization or service"));
                 }
             },
             MessageAction::Notify => return Err(unsupported(&id, "Notify")),
@@ -485,8 +491,11 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                         cause: error.to_string(),
                     })?;
             }
-            TemplateKind::Service => {
-                return Err(unexpected_kind(&message.id, "Service"));
+            TemplateKind::Service
+            | TemplateKind::ServiceAccount
+            | TemplateKind::Role
+            | TemplateKind::RoleBinding => {
+                return Err(unexpected_kind(&message.id, "authorization or service"));
             }
         }
         Ok(())

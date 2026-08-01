@@ -57,9 +57,9 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/shuttle/response/image-upload.yaml
         resources:
           requests:
-            cpu: "500m"
-            memory: "1Gi"
-            ephemeral-storage: "16Gi"
+            cpu: "1"
+            memory: "2Gi"
+            ephemeral-storage: "4Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

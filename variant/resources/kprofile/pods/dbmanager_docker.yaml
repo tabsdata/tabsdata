@@ -52,8 +52,8 @@ spec:
         resources:
           requests:
             cpu: "1"
-            memory: "4Gi"
-            ephemeral-storage: "16Gi"
+            memory: "2Gi"
+            ephemeral-storage: "4Gi"
         env:
         - name: CONTAINER_ROOT
           value: ""
@@ -98,13 +98,16 @@ spec:
         - /tabsdata/config/dbmanager.database.yaml
         resources:
           requests:
-            cpu: "50m"
-            memory: "128Mi"
+            cpu: "1"
+            memory: "2Gi"
+            ephemeral-storage: "4Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
         env:
+        - name: PATH
+          value: "${{system:tdk_pyenv_td_root}}/bin:/usr/local/bin:/usr/bin:/bin"
         - name: CONTAINER_ROOT
           value: ""
         - name: POD_NAME

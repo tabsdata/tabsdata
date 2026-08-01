@@ -34,6 +34,7 @@ pub mod helpers;
 pub mod job;
 pub mod namespace;
 pub mod pod;
+pub mod rbac;
 pub mod secret;
 pub mod service;
 

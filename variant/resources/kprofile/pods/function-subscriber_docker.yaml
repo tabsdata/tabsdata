@@ -58,8 +58,8 @@ spec:
           resources:
             requests:
               cpu: "1"
-              memory: "4Gi"
-              ephemeral-storage: "16Gi"
+              memory: "2Gi"
+              ephemeral-storage: "4Gi"
           env:
             - name: CONTAINER_ROOT
               value: ""
@@ -103,8 +103,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -148,8 +149,9 @@ spec:
             - "2"
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -197,8 +199,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -258,8 +261,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -323,8 +327,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -394,8 +399,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -451,8 +457,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/state-download.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -520,8 +527,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/state
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "2"
+              memory: "4Gi"
+              ephemeral-storage: "8Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -581,8 +589,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "2"
+              memory: "4Gi"
+              ephemeral-storage: "8Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -648,8 +657,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -705,8 +715,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/state-upload.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -771,8 +782,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/response/response.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

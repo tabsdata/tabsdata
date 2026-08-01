@@ -58,8 +58,8 @@ spec:
           resources:
             requests:
               cpu: "1"
-              memory: "4Gi"
-              ephemeral-storage: "16Gi"
+              memory: "2Gi"
+              ephemeral-storage: "4Gi"
           env:
             - name: CONTAINER_ROOT
               value: ""
@@ -103,8 +103,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -164,8 +165,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -229,8 +231,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           resources:
             requests:
-              cpu: "50m"
-              memory: "32Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -297,8 +300,9 @@ spec:
             - "30"
           resources:
             requests:
-              cpu: "50m"
-              memory: "64Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -363,8 +367,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/out
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
+              cpu: "500m"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

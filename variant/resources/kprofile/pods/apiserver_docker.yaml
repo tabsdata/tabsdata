@@ -20,8 +20,8 @@ metadata:
     tabsdata.com/tier: regular
 spec:
   restartPolicy: Always
-  serviceAccountName: default
-  automountServiceAccountToken: false
+  serviceAccountName: td-apiserver
+  automountServiceAccountToken: true
   terminationGracePeriodSeconds: 60
   dnsPolicy: ClusterFirst
   securityContext:
@@ -41,8 +41,8 @@ spec:
       resources:
         requests:
           cpu: "1"
-          memory: "4Gi"
-          ephemeral-storage: "16Gi"
+          memory: "2Gi"
+          ephemeral-storage: "4Gi"
       env:
         - name: CONTAINER_ROOT
           value: ""
@@ -91,7 +91,8 @@ spec:
       resources:
         requests:
           cpu: "50m"
-          memory: "32Mi"
+          memory: "64Mi"
+          ephemeral-storage: "1Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -125,8 +126,9 @@ spec:
         - /tabsdata/resources/ui/connectors
       resources:
         requests:
-          cpu: "100m"
-          memory: "128Mi"
+          cpu: "50m"
+          memory: "64Mi"
+          ephemeral-storage: "1Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -175,8 +177,9 @@ spec:
           protocol: TCP
       resources:
         requests:
-          cpu: "100m"
+          cpu: "2"
           memory: "4Gi"
+          ephemeral-storage: "4Gi"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:

@@ -77,8 +77,8 @@ spec:
               resources:
                 requests:
                   cpu: "1"
-                  memory: "4Gi"
-                  ephemeral-storage: "16Gi"
+                  memory: "2Gi"
+                  ephemeral-storage: "4Gi"
               env:
                 - name: CONTAINER_ROOT
                   value: ""
@@ -125,8 +125,9 @@ spec:
                 - env:SECRET__TD_TRIGGER_AUTHORIZATION
               resources:
                 requests:
-                  cpu: "50m"
-                  memory: "64Mi"
+                  cpu: "500m"
+                  memory: "1Gi"
+                  ephemeral-storage: "2Gi"
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:
