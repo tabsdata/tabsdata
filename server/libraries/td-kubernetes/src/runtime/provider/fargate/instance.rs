@@ -31,13 +31,15 @@ use crate::runtime::instance::manifest::MANIFEST_FILE;
 pub struct FargateInstance {
     config: Config,
     folder: PathBuf,
+    cluster_name: String,
 }
 
 impl FargateInstance {
-    pub fn new(config: Config, folder: impl Into<PathBuf>) -> Self {
+    pub fn new(config: Config, folder: impl Into<PathBuf>, cluster_name: String) -> Self {
         Self {
             config,
             folder: folder.into(),
+            cluster_name,
         }
     }
 
@@ -69,7 +71,11 @@ impl Instance for FargateInstance {
             .and_then(|name| name.to_str())
             .map(|name| name.to_owned())
             .unwrap_or_default();
-        let mut system = system_values_for(&instance_name, &self.config.default_namespace)?;
+        let mut system = system_values_for(
+            &instance_name,
+            &self.config.default_namespace,
+            &self.cluster_name,
+        )?;
         let settings = InstanceSettings::load(&instance_name)?;
         apply_ports(&mut system, &settings.ports);
         start_workload(&context, ClusterProvider::Fargate, &system, &profile, multi).await

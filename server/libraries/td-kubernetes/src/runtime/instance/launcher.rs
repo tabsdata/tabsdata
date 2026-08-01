@@ -109,7 +109,10 @@ pub async fn apply_authorization_phase(
     if entries.is_empty() {
         return Ok(());
     }
-    let phase = phase_spinner_in(multi, &format!("Applying {} authorization(s)", entries.len()));
+    let phase = phase_spinner_in(
+        multi,
+        &format!("Applying {} authorization(s)", entries.len()),
+    );
     let mut ordered: Vec<(&str, &str, TemplateKind)> = Vec::new();
     for (key, yaml) in entries {
         let kind = kind_of_entry(key, yaml)?;

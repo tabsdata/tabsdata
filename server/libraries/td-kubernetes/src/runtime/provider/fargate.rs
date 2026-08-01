@@ -187,7 +187,8 @@ impl FargateProvider {
         }
 
         let cluster = FargateCluster::new(config.clone());
-        let fargate_instance = FargateInstance::new(config.clone(), folder.clone());
+        let fargate_instance =
+            FargateInstance::new(config.clone(), folder.clone(), cluster_name.clone());
 
         Ok(Self {
             kubefile,
@@ -234,7 +235,11 @@ impl Provider for FargateProvider {
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {
-        system_values_for(&self.name, &self.config.default_namespace)
+        system_values_for(
+            &self.name,
+            &self.config.default_namespace,
+            &self.cluster_name,
+        )
     }
 
     fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
@@ -453,10 +458,15 @@ impl ServerlessProvider for FargateProvider {}
 
 impl CloudProvider for FargateProvider {}
 
-pub fn system_values_for(name: &str, namespace: &str) -> CommandResult<SystemValues> {
+pub fn system_values_for(
+    name: &str,
+    namespace: &str,
+    cluster: &str,
+) -> CommandResult<SystemValues> {
     Ok(SystemValues {
         instance_name: Some(name.to_owned()),
         namespace_name: Some(namespace.to_owned()),
+        cluster_name: Some(cluster.to_owned()),
         runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
         pyenv_td_root: Some(CONTAINER_PYENV_TD_ROOT.to_owned()),
         pyenv_ag_root: Some(CONTAINER_PYENV_AG_ROOT.to_owned()),

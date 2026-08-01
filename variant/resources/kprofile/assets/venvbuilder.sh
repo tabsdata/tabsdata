@@ -90,6 +90,7 @@ show_usage() {
    echo "  -p, --python VERSION           Python version                   (default: $PYTHON_VERSION)"
    echo "      --requirements-td FILE     Complementary packages for td    (default: none)"
    echo "  -o, --output FOLDER            Output folder                    (mandatory)"
+   echo "      --image NAME               Image file name                  (default: $IMAGE_NAME$IMAGE_SUFFIX)"
    echo "      --storage-config FILE      Storage configuration used to copy the image     (default: none)"
    echo "  -h, --help                     Show this help"
 }
@@ -98,6 +99,7 @@ parse_arguments() {
    python_version="$PYTHON_VERSION"
    requirements_td=""
    output=""
+   image="$IMAGE_NAME$IMAGE_SUFFIX"
    storage_config=""
    transporter_request=""
    transporter_response=""
@@ -106,6 +108,7 @@ parse_arguments() {
          -p|--python)         python_version="$2";  shift 2 ;;
          --requirements-td)   requirements_td="$2"; shift 2 ;;
          -o|--output)         output="$2";          shift 2 ;;
+         --image)             image="$2";           shift 2 ;;
          --storage-config)    storage_config="$2";  shift 2 ;;
          --transporter-request)  transporter_request="$2";  shift 2 ;;
          --transporter-response) transporter_response="$2"; shift 2 ;;
@@ -143,6 +146,11 @@ validate_arguments() {
       exit 2
    fi
 
+   if [[ -z "$image" ]]; then
+      echo "Image file name must not be empty" >&2
+      exit 2
+   fi
+
    if [[ -n "$storage_config" && ! -f "$storage_config" ]]; then
       echo "Storage configuration file not found: $storage_config" >&2
       exit 1
@@ -161,7 +169,7 @@ validate_arguments() {
 
 setup_workspace() {
    work="$(mktemp -d "${TMPDIR:-/tmp}/tdvenvs.XXXXXX")"
-   output_image="$output/$IMAGE_NAME$IMAGE_SUFFIX"
+   output_image="$output/$image"
    UV_HOME="$output/$UV_FOLDER"
    UV_PYTHON_HOME="$UV_HOME/$UV_PYTHON_FOLDER"
    UV_KENVS_HOME="$UV_HOME/$UV_KENVS_FOLDER"

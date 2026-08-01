@@ -66,7 +66,10 @@ where
 
 async fn delete_named<K>(context: &KubeContext, name: &str) -> Result<(), KubernetesError>
 where
-    K: Resource<DynamicType = (), Scope = NamespaceResourceScope> + Clone + Debug + DeserializeOwned,
+    K: Resource<DynamicType = (), Scope = NamespaceResourceScope>
+        + Clone
+        + Debug
+        + DeserializeOwned,
 {
     let api: Api<K> = Api::namespaced(context.client().clone(), context.namespace());
     match api.delete(name, &DeleteParams::default()).await {
@@ -83,7 +86,10 @@ where
 
 async fn delete_all<K>(context: &KubeContext) -> Result<bool, KubernetesError>
 where
-    K: Resource<DynamicType = (), Scope = NamespaceResourceScope> + Clone + Debug + DeserializeOwned,
+    K: Resource<DynamicType = (), Scope = NamespaceResourceScope>
+        + Clone
+        + Debug
+        + DeserializeOwned,
 {
     let api: Api<K> = Api::namespaced(context.client().clone(), context.namespace());
     let selector = tabsdata_selector(None);

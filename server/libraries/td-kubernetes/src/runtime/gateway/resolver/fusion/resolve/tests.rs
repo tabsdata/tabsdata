@@ -409,6 +409,32 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
 }
 
 #[test]
+fn venv_archive_name_splices_cluster_and_namespace() {
+    let template =
+        "image: tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst\n";
+    let system = SystemValues {
+        cluster_name: Some("tabsdata-dev".to_owned()),
+        namespace_name: Some("tabsdatao15".to_owned()),
+        ..SystemValues::default()
+    };
+    let auto = HashMap::new();
+    let outcome = resolve_config_file(
+        template,
+        template,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve archive name");
+    assert!(
+        outcome
+            .rendered
+            .contains("tdvenvs-tabsdata-dev-tabsdatao15.tar.zst")
+    );
+}
+
+#[test]
 fn non_editable_placeholder_modified_in_init_errors() {
     let template = "port: ${{system:tdk_apiserver_public_port}}\n";
     let init = "port: \"9999\"\n";

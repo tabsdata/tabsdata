@@ -59,6 +59,8 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.sh
         - --output
         - ${{system:tdk_runtimes_root}}
+        - --image
+        - tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
       resources:
