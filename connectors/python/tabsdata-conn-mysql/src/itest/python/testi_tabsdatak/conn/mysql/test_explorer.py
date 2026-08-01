@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import DBAPIError
 from tabsdatax.itest.fixture.backends.mysql import MysqlDomain, mysql_domain
 from testi_tabsdatak.conn.common.sql.employees_model import (
     DEPARTMENT_ROWS,
@@ -57,8 +57,9 @@ def test_check_connect_bad_credentials_raises(
         ),
     )
     # A failed MySQL logon surfaces as a mysql-connector error wrapped by
-    # SQLAlchemy (OperationalError is what a rejected password raises).
-    with pytest.raises(OperationalError):
+    # SQLAlchemy (DBAPIError is the common base of those: a rejected password
+    # carries SQLSTATE 28000, which mysql-connector maps to ProgrammingError).
+    with pytest.raises(DBAPIError):
         MySQLConnectionExplorer().check_connect(bad)
 
 
