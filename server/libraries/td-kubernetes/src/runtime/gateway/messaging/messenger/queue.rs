@@ -34,7 +34,10 @@ use crate::runtime::gateway::messaging::messenger::template::{
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, WorkerSettings};
 use crate::runtime::instance::ports::apply_ports;
-use crate::runtime::provider::kminus::system_values_for;
+use crate::runtime::provider::ClusterProvider;
+use crate::runtime::provider::docker::system_values_for as docker_system_values_for;
+use crate::runtime::provider::fargate::system_values_for as fargate_system_values_for;
+use crate::runtime::provider::kminus::system_values_for as kminus_system_values_for;
 
 fn unsupported(id: &str, action: &str) -> QueueError {
     error!(id = %id, action = %action, "Action not yet supported in Kubernetes messaging layer.");
@@ -245,10 +248,29 @@ impl KubernetesOrchestratorMessageQueue {
                 cause: format!("{error:?}"),
             }
         })?;
-        let folder = instance_folder(&settings.name).map_err(|error| QueueError::BackendError {
-            cause: format!("{error:?}"),
-        })?;
-        let mut system = system_values_for(&folder).map_err(|error| QueueError::BackendError {
+        let resolved = &settings.cluster.resolved;
+        let namespace = resolved.namespace.as_deref().unwrap_or_default();
+        let cluster = resolved.cluster.as_deref().unwrap_or_default();
+        let mut system = match settings.provider {
+            ClusterProvider::Kminus => {
+                let folder =
+                    instance_folder(&settings.name).map_err(|error| QueueError::BackendError {
+                        cause: format!("{error:?}"),
+                    })?;
+                kminus_system_values_for(&folder)
+            }
+            ClusterProvider::Docker => {
+                let folder =
+                    instance_folder(&settings.name).map_err(|error| QueueError::BackendError {
+                        cause: format!("{error:?}"),
+                    })?;
+                docker_system_values_for(&settings.name, namespace, &folder)
+            }
+            ClusterProvider::Eks | ClusterProvider::Fargate => {
+                fargate_system_values_for(&settings.name, namespace, cluster)
+            }
+        }
+        .map_err(|error| QueueError::BackendError {
             cause: format!("{error:?}"),
         })?;
         apply_ports(&mut system, &settings.ports);

@@ -446,6 +446,15 @@ def create_virtual_environment(
     )
 
 
+def has_requirements(file: str) -> bool:
+    if not file or not os.path.isfile(file):
+        return False
+    with open(file, encoding="utf-8") as reader:
+        return any(
+            line.strip() and not line.lstrip().startswith("#") for line in reader
+        )
+
+
 def install_one_set_of_packages(
     workspace: dict[str, str],
     virtual_environment: str,
@@ -460,7 +469,7 @@ def install_one_set_of_packages(
         venv_python(virtual_environment),
         *packages,
     ]
-    if requirements:
+    if has_requirements(requirements):
         command += ["-r", requirements]
     run(command)
 

@@ -21,7 +21,7 @@ use td_database::domain::{DbDomain, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use tower::{Layer, Service};
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
 /// ServiceEntry is a layer wrapping InitService.
 pub struct ServiceEntry<Res> {
@@ -126,7 +126,11 @@ where
                     Ok(handler)
                 }
                 Err(e) => {
-                    error!("{e:#?}");
+                    if e.api_error().is_internal() {
+                        error!("{e:#?}");
+                    } else {
+                        warn!("{e:#?}");
+                    }
                     Err(e)
                 }
             }?;

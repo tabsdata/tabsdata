@@ -249,7 +249,7 @@ impl Provider for FargateProvider {
     fn summary(&self) -> Summary {
         Summary {
             provider: ClusterProvider::Fargate,
-            instance_name: None,
+            instance_name: Some(self.name.clone()),
             instance_path: None,
             kubeconfig_path: Some(self.kubefile.clone()),
             context: Some(self.context.clone()),

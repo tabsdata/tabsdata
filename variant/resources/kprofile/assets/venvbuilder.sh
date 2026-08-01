@@ -221,8 +221,14 @@ create_virtual_environment() {
    run uv pip install --python "$virtual_environment_td/bin/python" --upgrade pip
 }
 
+has_requirements() {
+   local file="$1"
+   [[ -n "$file" && -f "$file" ]] || return 1
+   grep -qE '^[[:space:]]*[^[:space:]#]' "$file"
+}
+
 install_packages() {
-   if [[ -n "$requirements_td" ]]; then
+   if has_requirements "$requirements_td"; then
       run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]" -r "$requirements_td"
    else
       run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]"

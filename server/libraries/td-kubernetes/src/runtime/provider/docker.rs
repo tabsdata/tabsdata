@@ -246,7 +246,7 @@ impl Provider for DockerProvider {
     fn summary(&self) -> Summary {
         Summary {
             provider: ClusterProvider::Docker,
-            instance_name: None,
+            instance_name: Some(self.name.clone()),
             instance_path: None,
             kubeconfig_path: Some(self.kubefile.clone()),
             context: Some(self.context.clone()),

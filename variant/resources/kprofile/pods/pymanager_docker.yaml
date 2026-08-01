@@ -47,6 +47,8 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/assets/venvbuilder.sh
         - --output
         - ${{system:tdk_runtimes_root}}
+        - --requirements-td
+        - $(CONTAINER_ROOT)/tabsdata/assets/requirements-td.txt
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         - --transporter-request
@@ -103,6 +105,8 @@ spec:
           sources:
           - configMap:
               name: td-app-venvbuilder-asset-venvbuilder.sh
+          - configMap:
+              name: td-app-requirements-td-asset-requirements-td.txt
       - name: config
         projected:
           sources:

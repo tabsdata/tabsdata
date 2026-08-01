@@ -3,17 +3,20 @@
 //
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
 #[cfg(feature = "enterprise")]
 use td_common::status::ExitStatus::Cancelled;
-use tracing::warn;
+use td_error::TdError;
+use tracing::{info, warn};
 
-use crate::base::constants::LogLevel;
+use crate::base::constants::{KPROFILE_ASSETS_FAMILY, LogLevel};
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
-use crate::client::registry::instance_folder;
+use crate::base::error::cli::CliError;
+use crate::client::registry::{instance_folder, instance_init_input_folder};
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
@@ -90,6 +93,31 @@ pub struct QuickstartArguments {
     pub anthropic_key: Option<String>,
 
     #[arg(
+        long = "reqs-td",
+        name = "reqs-td",
+        required = false,
+        value_name = "FILE",
+        display_order = 130,
+        long_help = "Complementary packages for the td virtual environment. The file \
+                     replaces the empty requirements-td.txt of the initialized instance \
+                     and is installed when the virtual environment is built."
+    )]
+    pub requirements_td: Option<PathBuf>,
+
+    #[cfg(feature = "enterprise")]
+    #[arg(
+        long = "reqs-ag",
+        name = "reqs-ag",
+        required = false,
+        value_name = "FILE",
+        display_order = 140,
+        long_help = "Complementary packages for the ag virtual environment. The file \
+                     replaces the empty requirements-ag.txt of the initialized instance \
+                     and is installed when the virtual environment is built."
+    )]
+    pub requirements_ag: Option<PathBuf>,
+
+    #[arg(
         long,
         name = "save",
         required = false,
@@ -142,6 +170,9 @@ pub async fn command_quickstart(
         details,
         yes,
         loglevel,
+        requirements_td,
+        #[cfg(feature = "enterprise")]
+        requirements_ag,
     } = arguments;
 
     #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
@@ -172,7 +203,18 @@ pub async fn command_quickstart(
     let preexisting = folder.exists();
 
     let outcome = run_quickstart(
-        instance, cluster, port, save, details, yes, loglevel, &overrides, globals,
+        instance,
+        cluster,
+        port,
+        save,
+        details,
+        yes,
+        loglevel,
+        requirements_td,
+        #[cfg(feature = "enterprise")]
+        requirements_ag,
+        &overrides,
+        globals,
     )
     .await;
 
@@ -202,6 +244,30 @@ pub async fn command_quickstart(
     outcome
 }
 
+const REQUIREMENTS_TD_ASSET: &str = "requirements-td.txt";
+#[cfg(feature = "enterprise")]
+const REQUIREMENTS_AG_ASSET: &str = "requirements-ag.txt";
+
+fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandResult {
+    let contents = std::fs::read_to_string(source).map_err(|error| {
+        TdError::from(CliError::FileReadFailed {
+            file: source.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    let target = instance_init_input_folder(instance)?
+        .join(KPROFILE_ASSETS_FAMILY.folder)
+        .join(asset);
+    std::fs::write(&target, contents).map_err(|error| {
+        TdError::from(CliError::FileWriteFailed {
+            file: target.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    info!("Wrote {} from {}", asset, source.display());
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_quickstart(
     instance: Option<String>,
@@ -211,6 +277,8 @@ async fn run_quickstart(
     details: Option<bool>,
     yes: Option<bool>,
     loglevel: Option<LogLevel>,
+    requirements_td: Option<PathBuf>,
+    #[cfg(feature = "enterprise")] requirements_ag: Option<PathBuf>,
     overrides: &HashMap<String, String>,
     globals: &GlobalArguments,
 ) -> CommandResult {
@@ -226,6 +294,17 @@ async fn run_quickstart(
         globals,
     )
     .await?;
+
+    let target_instance = resolved_instance(instance.clone(), &PinContext::pins())
+        .value
+        .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    if let Some(source) = &requirements_td {
+        persist_requirements(&target_instance, REQUIREMENTS_TD_ASSET, source)?;
+    }
+    #[cfg(feature = "enterprise")]
+    if let Some(source) = &requirements_ag {
+        persist_requirements(&target_instance, REQUIREMENTS_AG_ASSET, source)?;
+    }
 
     let pins = PinContext::pins();
     let resolved_instance_value = resolved_instance(instance.clone(), &pins);
