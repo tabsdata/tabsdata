@@ -144,6 +144,28 @@ impl<'c> DynamicConnection<'c> {
         Ok(())
     }
 
+    /// Stage a transaction-local GUC holding a secret, passed as a bound
+    /// parameter so the value never appears in any SQL text — client batch
+    /// logs, server statement logs, and wire captures only ever see
+    /// `set_config($1, $2, true)`. The GUC evaporates on commit/rollback;
+    /// **must** run inside a transaction. No-op on SQLite/MySQL.
+    #[cfg_attr(not(postgres), allow(unused_variables))]
+    pub async fn set_local_secret(&mut self, name: &str, value: &str) -> Result<(), Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                sqlx::query("SELECT set_config($1, $2, true)")
+                    .bind(name)
+                    .bind(value)
+                    .execute(&mut **h)
+                    .await?;
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Switch this connection's transaction to project-scope bypass:
     /// PostgreSQL `SET LOCAL app.bypass_rls = 'on'`, which the row-level
     /// security policies admit for cross-project (system / scheduler / admin)

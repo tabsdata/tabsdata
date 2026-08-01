@@ -31,7 +31,7 @@ use crate::domain::DomainPools;
 use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::server::{EmbeddedPassword, resolve_password, server_connectable};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The config entry for a component; every registered component must have one.
 pub(crate) fn component_entry<'a>(
@@ -43,24 +43,18 @@ pub(crate) fn component_entry<'a>(
         .ok_or_else(|| DbError::MissingComponentEntry(component.key().to_owned()))
 }
 
-/// The schema a component is mounted on: its entry's `schema:`, else the
-/// component's default. The owner role takes the same name.
-fn schema_of<'a>(entry: &'a ComponentConfig, component: &'a dyn SchemaComponent) -> &'a str {
-    entry
-        .schema
-        .as_deref()
-        .unwrap_or_else(|| component.default_schema())
+/// The schema a component is mounted on (the owner role takes the same name):
+/// [`ComponentConfig::schema`] with this component's key and static default.
+fn schema_of(entry: &ComponentConfig, component: &dyn SchemaComponent) -> Result<String, DbError> {
+    entry.schema(component.key(), component.default_schema())
 }
 
 /// [`schema_of`], resolving the component's entry from the map.
-pub fn resolved_schema<'a>(
-    components: &'a DatabaseComponents,
-    component: &'a dyn SchemaComponent,
-) -> Result<&'a str, DbError> {
-    Ok(schema_of(
-        component_entry(components, component)?,
-        component,
-    ))
+pub fn resolved_schema(
+    components: &DatabaseComponents,
+    component: &dyn SchemaComponent,
+) -> Result<String, DbError> {
+    schema_of(component_entry(components, component)?, component)
 }
 
 /// The identity a component's serving connection logs in as: the entry's
@@ -101,14 +95,14 @@ pub fn serving_config(
     component: &dyn SchemaComponent,
 ) -> Result<DatabaseConfig, DbError> {
     let entry = component_entry(components, component)?;
-    let schema = schema_of(entry, component);
+    let schema = schema_of(entry, component)?;
     let conn = match &entry.conn {
         #[cfg(sqlite)]
         BackendConfig::Sqlite(c) => ConnectConfig::Sqlite(c.clone()),
         #[cfg(postgres)]
         BackendConfig::Postgres(c) => {
             let (username, password) =
-                serving_credentials(c.username.as_deref(), c.password.as_deref(), schema)?;
+                serving_credentials(c.username.as_deref(), c.password.as_deref(), &schema)?;
             ConnectConfig::Postgres(PostgresConnect {
                 options: c.clone(),
                 username,
@@ -118,7 +112,7 @@ pub fn serving_config(
         #[cfg(mysql)]
         BackendConfig::MySql(c) => {
             let (username, password) =
-                serving_credentials(c.username.as_deref(), c.password.as_deref(), schema)?;
+                serving_credentials(c.username.as_deref(), c.password.as_deref(), &schema)?;
             ConnectConfig::MySql(MySqlConnect {
                 options: c.clone(),
                 username,
@@ -128,8 +122,8 @@ pub fn serving_config(
     };
     Ok(DatabaseConfig {
         conn,
-        schema: Some(Schema::new(schema)),
-        app_role: entry.app_role.clone(),
+        schema: Some(Schema::new(&schema)),
+        app_role: Some(entry.app_role()?),
         pool: entry.pool.clone(),
     })
 }
@@ -137,17 +131,16 @@ pub fn serving_config(
 /// The owner role (the schema name) and its password for provisioning. Role
 /// creation needs a password, so absence is an error.
 fn owner_credentials(
-    components: &DatabaseComponents,
+    entry: &ComponentConfig,
     component: &dyn SchemaComponent,
 ) -> Result<(String, String), DbError> {
-    let entry = component_entry(components, component)?;
-    let schema = schema_of(entry, component);
+    let schema = schema_of(entry, component)?;
     let password = resolve_password(
         entry_password(&entry.conn),
-        EmbeddedPassword::OwnerCreate { schema },
+        EmbeddedPassword::OwnerCreate { schema: &schema },
     )?
     .ok_or(DbError::MissingCredentials)?;
-    Ok((schema.to_owned(), password))
+    Ok((schema, password))
 }
 
 async fn admin_pool_for(
@@ -164,14 +157,17 @@ async fn serving_for(
     crate::db(&serving_config(components, component)?).await
 }
 
-/// Create every registered component's schema and owner role on the privileged
-/// pool.
+/// Create every registered component's schema, owner role and app role on the
+/// privileged pool. Each component provisions its own entry's app role — not
+/// the privileged entry's — so serving `SET ROLE` targets what was created.
 pub async fn provision_all(
     components: &DatabaseComponents,
     admin: &AdminPool,
 ) -> Result<(), DbError> {
     for component in registered() {
-        let (owner, password) = owner_credentials(components, component)?;
+        let entry = component_entry(components, component)?;
+        let (owner, password) = owner_credentials(entry, component)?;
+        let app_role = entry.app_role()?;
         component
             .provision(
                 admin,
@@ -179,6 +175,7 @@ pub async fn provision_all(
                     schema: &owner,
                     owner: &owner,
                     password: &password,
+                    app_role: &app_role,
                 },
             )
             .await?;
@@ -235,9 +232,15 @@ pub async fn check(key: &str, serving: &TdPool) -> Result<(), DbError> {
 /// Drop every registered component's schema and owner role. Destructive; the
 /// caller guards.
 pub async fn drop_all(components: &DatabaseComponents, admin: &AdminPool) -> Result<(), DbError> {
+    let mut app_roles = BTreeSet::new();
     for component in registered() {
-        let (owner, _) = owner_credentials(components, component)?;
+        let entry = component_entry(components, component)?;
+        let (owner, _) = owner_credentials(entry, component)?;
         admin.drop_schema(&owner, &owner).await?;
+        app_roles.insert(entry.app_role()?);
+    }
+    for app_role in app_roles {
+        admin.drop_app_role(&app_role).await?;
     }
     Ok(())
 }

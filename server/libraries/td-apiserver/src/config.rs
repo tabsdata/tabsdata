@@ -433,11 +433,11 @@ storage:
         let config: Config = built.try_deserialize().unwrap();
         assert_eq!(config.request_timeout, 90);
         assert_eq!(config.orchestrator, Orchestrator::Kubernetes);
-        // The apiserver entry omits `schema:`, so it resolves to the
-        // component's default.
+        // The apiserver entry omits `schema:`, so it derives from the
+        // database name.
         assert_eq!(
             resolved_schema(&config.database, &ApiserverComponent).unwrap(),
-            "td_apiserver"
+            "tabsdata_apiserver"
         );
         // The pool override from the split file merges into the same entry
         // without clobbering the backend block.

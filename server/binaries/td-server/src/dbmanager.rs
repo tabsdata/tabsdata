@@ -128,8 +128,14 @@ async fn create(
     // Baseline *content* is seeded on the serving pools (not the privileged
     // pool), so it runs after the schema structure is provisioned and upgraded.
     dbm::seed_all(components).await?;
-    info!("Database created");
+    info!(schemas = ?resolved_schemas(components)?, "Database created");
     Ok(())
+}
+
+fn resolved_schemas(components: &DatabaseComponents) -> Result<Vec<String>, DbError> {
+    dbm::registered()
+        .map(|component| dbm::resolved_schema(components, component))
+        .collect()
 }
 
 /// Runs as each schema's owner (DDL on its own schema) — no privileged pool.
@@ -171,7 +177,7 @@ async fn drop_components(
     with_server(server, async |admin| {
         info!("Dropping database");
         dbm::drop_all(components, admin).await?;
-        info!("Database dropped");
+        info!(schemas = ?resolved_schemas(components)?, "Database dropped");
         Ok(())
     })
     .await

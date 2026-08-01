@@ -35,22 +35,24 @@ pub enum DbError {
     )]
     InvalidConnections(u32, u32) = 2,
     #[error(
-        "The Tabsdata database schema has not been created. Create it by running \
-         `tdserver create` (or start the server with database auto-create \
-         enabled)."
+        "The Tabsdata database schema has not been created. Create it with \
+         `tdserver create` on a managed instance, or `td_dbmanager db create` \
+         directly against an external database."
     )]
     DatabaseSchemaDoesNotExist = 5000,
     #[error(
         "The Tabsdata database schema is out of date and must be upgraded: {0}. \
-         Back up the database, then run `tdserver upgrade` (or `tdserver upgrade \
-         --instance <instance>` for a non-default instance)."
+         Back up the database, then run `tdserver upgrade` on a managed instance \
+         (`--instance <instance>` for a non-default one), or `td_dbmanager db \
+         upgrade` directly against an external database."
     )]
     DatabaseNeedsUpgrade(String) = 5001,
     #[error(
         "The Tabsdata database belongs to major version '{0}' and cannot be \
          opened by major version '{1}'. Cross-major upgrade is not supported: \
-         back up the existing database, create a fresh one with this binary \
-         (`tdserver create`), and re-ingest your data."
+         back up the existing database, create a fresh one with this release \
+         (`tdserver create` or `td_dbmanager db create`), and re-ingest your \
+         data."
     )]
     IncompatibleMajorVersion(usize, usize) = 5017,
     #[error(
@@ -62,15 +64,15 @@ pub enum DbError {
     DatabaseIsNewer(String, usize) = 5002,
     #[error(
         "The Tabsdata database is corrupted: {0}. Restore from a known-good \
-         backup; if none is available, create a fresh database with `tdserver \
-         create` and re-ingest your data."
+         backup; if none is available, create a fresh database (`tdserver \
+         create` or `td_dbmanager db create`) and re-ingest your data."
     )]
     DatabaseCorrupted(String) = 5003,
     #[error(
-        "No database schema in the configuration. PostgreSQL backends require an \
-         explicit `schema:` so each component's objects stay isolated in their \
-         own schema. Set `schema:` (e.g. `schema: td_apiserver`) in the database \
-         configuration."
+        "No schema resolved for the PostgreSQL connection. Component \
+         connections derive it from the database name (`<database>_<component>`) \
+         or take an explicit `schema:`; this connection was built with neither. \
+         Set `database:` on the backend entry, or an explicit `schema:`."
     )]
     MissingSchema = 5023,
     #[error(
@@ -106,6 +108,18 @@ pub enum DbError {
          privileged server connection and has no home schema."
     )]
     ServerSchemaNotAllowed = 5036,
+    #[error(
+        "The `database_server:` entry must not define an `app_role:`. It is \
+         the privileged server connection; each component's own entry carries \
+         the app role it provisions and serves with."
+    )]
+    ServerAppRoleNotAllowed = 5042,
+    #[error(
+        "Identifier '{0}' exceeds PostgreSQL's 63-byte limit (it would be \
+         silently truncated). Use a shorter database name, or set an explicit \
+         `schema:` / `app_role:` on the entry."
+    )]
+    IdentifierTooLong(String) = 5043,
     #[error(
         "`${{embedded}}` is not valid for a component's `username`: the owner \
          role name is the schema name, which is already the default when the \
@@ -166,7 +180,8 @@ pub enum DbError {
         "Failed to create or upgrade the database schema: {0}. The connecting \
          (upgrader) role may lack CREATE/ALTER on the application schema, or a \
          previous run left the schema partially migrated. Check the role's \
-         privileges and the server logs, then retry `tdserver upgrade`."
+         privileges and the server logs, then retry the upgrade (`tdserver \
+         upgrade` or `td_dbmanager db upgrade`)."
     )]
     FailedToCreateOrUpgradeDatabaseSchema(#[source] sqlx::Error) = 5008,
     #[error(
@@ -203,13 +218,14 @@ pub enum DbError {
     EmbeddedPostgres(String) = 5018,
     #[error(
         "Cannot switch the connection to the row-level-security app role '{0}'. \
-         The role must exist and the connecting role must be a member of it. Run: \
-         CREATE ROLE \"{0}\" NOBYPASSRLS; GRANT \"{0}\" TO <connecting role>; \
-         GRANT USAGE ON SCHEMA public TO \"{0}\"; \
-         GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"{0}\". \
-         (Underlying error: {1})"
+         The role must exist and the connecting role must be a member of it — \
+         run `td_dbmanager db create` against this database, or grant it \
+         manually: CREATE ROLE \"{0}\" NOBYPASSRLS; GRANT \"{0}\" TO \
+         <connecting role>; GRANT USAGE ON SCHEMA \"{1}\" TO \"{0}\"; \
+         GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{1}\" \
+         TO \"{0}\". (Underlying error: {2})"
     )]
-    AppRoleNotSwitchable(String, #[source] sqlx::Error) = 5019,
+    AppRoleNotSwitchable(String, String, #[source] sqlx::Error) = 5019,
     #[error(
         "PostgreSQL server version is too old: server_version_num={0}, but project \
          isolation requires {1} or newer. Views are created `WITH (security_invoker = true)` \

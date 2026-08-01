@@ -29,6 +29,9 @@ pub fn validate_server(server: &ComponentConfig) -> Result<&PostgresConfig, DbEr
     if server.schema.is_some() {
         return Err(DbError::ServerSchemaNotAllowed);
     }
+    if server.app_role.is_some() {
+        return Err(DbError::ServerAppRoleNotAllowed);
+    }
     Ok(pg)
 }
 
@@ -81,8 +84,11 @@ pub fn server_connectable(server: &ComponentConfig) -> Result<DatabaseConfig, Db
             username,
             password,
         }),
+        // The privileged pool never serves and never provisions an app role of
+        // its own — each component's entry carries the app role it needs, and
+        // `validate_server` rejects the key on this entry.
         schema: None,
-        app_role: server.app_role.clone(),
+        app_role: None,
         pool: server.pool.clone(),
     })
 }
@@ -178,6 +184,18 @@ schema: td_system
         assert!(matches!(
             validate_server(&entry),
             Err(DbError::ServerSchemaNotAllowed)
+        ));
+
+        let entry = server(
+            "
+postgres:
+  host: localhost
+app_role: td_app_i1
+",
+        );
+        assert!(matches!(
+            validate_server(&entry),
+            Err(DbError::ServerAppRoleNotAllowed)
         ));
     }
 

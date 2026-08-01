@@ -4,11 +4,13 @@
 
 //! [`AdminPool`] — the privileged admin/upgrader pool used by the `components` module.
 
+use crate::components::ProvisionSpec;
 use crate::components::sql::execute_batch_tx;
 #[cfg(postgres)]
 use crate::components::sql::{
-    create_owner_role_sql, create_schema_sql, grant_app_role_membership_sql,
-    grant_app_role_privileges_sql, grant_owner_set_role_sql,
+    OWNER_PASSWORD_GUC, create_app_role_sql, create_owner_role_sql, create_schema_sql,
+    drop_app_role_sql, execute_batch_tx_with_secrets, grant_app_role_membership_sql,
+    grant_app_role_privileges_sql, grant_app_role_self_membership_sql,
 };
 use crate::config::{DatabaseConfig, Schema};
 use crate::dynamic::DynamicPool;
@@ -73,33 +75,50 @@ impl AdminPool {
             .expect("No schema configured: only the PostgreSQL backend carries one. Guard on the backend kind before calling schema()")
     }
 
-    /// Provision a schema: the login-capable owner role, the schema it owns,
-    /// and the owner's [`APP_ROLE`] membership. Idempotent. Table grants come
-    /// later ([`Self::ensure_app_role`]), once tables exist.
-    pub async fn provision_schema(
-        &self,
-        schema: &str,
-        owner: &str,
-        password: &str,
-    ) -> Result<(), DbError> {
+    /// Provision a component: the login-capable owner role, the schema it
+    /// owns, the entry's RLS app role, and the owner's membership in it.
+    /// Idempotent. Table grants come later ([`Self::ensure_app_role`]), once
+    /// tables exist. The app role comes from the spec — the component entry's
+    /// own — not from this (privileged, server-entry) pool's config.
+    pub async fn provision_schema(&self, spec: &ProvisionSpec<'_>) -> Result<(), DbError> {
         if !matches!(self.kind().into(), Backend::Postgres) {
             return Ok(());
         }
         #[cfg(postgres)]
         {
             let stmts = vec![
-                create_owner_role_sql(owner, password),
-                grant_owner_set_role_sql(owner),
-                create_schema_sql(schema, owner),
-                grant_app_role_membership_sql(owner, &self.app_role),
+                create_owner_role_sql(spec.owner),
+                create_schema_sql(spec.schema, spec.owner),
+                create_app_role_sql(spec.app_role),
+                grant_app_role_membership_sql(spec.owner, spec.app_role),
             ];
-            execute_batch_tx(&self.pool, &stmts).await?;
+            execute_batch_tx_with_secrets(
+                &self.pool,
+                &[(OWNER_PASSWORD_GUC, spec.password)],
+                &stmts,
+            )
+            .await?;
             debug!(
-                owner,
-                schema,
-                role = self.app_role,
-                "Provisioned schema and owner"
+                owner = spec.owner,
+                schema = spec.schema,
+                role = spec.app_role,
+                "Provisioned schema, owner and app role"
             );
+        }
+        Ok(())
+    }
+
+    /// Create this pool's RLS app role if missing — the test factories'
+    /// explicit replacement for what used to be an admin-connect side effect.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) async fn create_app_role(&self) -> Result<(), DbError> {
+        if !matches!(self.kind().into(), Backend::Postgres) {
+            return Ok(());
+        }
+        #[cfg(postgres)]
+        {
+            execute_batch_tx(&self.pool, &[create_app_role_sql(&self.app_role)]).await?;
+            debug!(role = self.app_role, "Ensured RLS app role exists");
         }
         Ok(())
     }
@@ -145,6 +164,20 @@ impl AdminPool {
         Ok(())
     }
 
+    /// Drop an instance-scoped app role at `db drop` (tolerant — see
+    /// [`drop_app_role_sql`]). Runs after every component's schema is gone.
+    pub async fn drop_app_role(&self, app_role: &str) -> Result<(), DbError> {
+        if !matches!(self.kind().into(), Backend::Postgres) {
+            return Ok(());
+        }
+        #[cfg(postgres)]
+        {
+            execute_batch_tx(&self.pool, &[drop_app_role_sql(app_role)]).await?;
+            debug!(role = app_role, "Dropped app role");
+        }
+        Ok(())
+    }
+
     /// Refuse a PostgreSQL server older than 15: the schema emits
     /// `security_invoker` views (15+); without them views would evaluate as
     /// their superuser owner and bypass project isolation.
@@ -184,9 +217,16 @@ impl AdminPool {
         }
         #[cfg(postgres)]
         {
+            // Role + membership first (no-ops when they hold), so `db upgrade`
+            // self-heals a changed/dropped app role when the connected role
+            // can, and otherwise fails at the actual cause, not the grant.
             // `ALTER DEFAULT PRIVILEGES` auto-grants future tables, so a later
             // migration doesn't silently leave the app role without access.
-            let stmts = grant_app_role_privileges_sql(self.schema(), &self.app_role);
+            let mut stmts = vec![
+                create_app_role_sql(&self.app_role),
+                grant_app_role_self_membership_sql(&self.app_role),
+            ];
+            stmts.extend(grant_app_role_privileges_sql(self.schema(), &self.app_role));
             execute_batch_tx(&self.pool, &stmts).await?;
             debug!(role = self.app_role, "Ensured RLS app role");
         }

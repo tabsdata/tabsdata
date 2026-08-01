@@ -8,11 +8,9 @@ database:
       host: ${{literal:tdk_database_host}}
       port: ${{literal:tdk_database_port}}
       database: ${{literal:tdk_database_name}}
-      username: td_apiserver
       password: ${{secretAuto:postgres_password}}
       ssl_mode: ${{system:tdk_database_ssl_mode}}
       ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}
-    schema: td_apiserver
     pool:
       min_connections: 5
       max_connections: 50

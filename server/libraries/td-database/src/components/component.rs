@@ -20,6 +20,9 @@ pub struct ProvisionSpec<'a> {
     pub schema: &'a str,
     pub owner: &'a str,
     pub password: &'a str,
+    /// The RLS app role this component's serving connections `SET ROLE` to —
+    /// the entry's own, not the privileged server entry's.
+    pub app_role: &'a str,
 }
 
 /// One self-describing schema component. Each phase takes the pool whose
@@ -38,11 +41,9 @@ pub trait SchemaComponent: Send + Sync + 'static {
     /// This component's schema content.
     fn schema_source(&self) -> &'static dyn SchemaSource;
 
-    /// Create the schema and its owner role.
+    /// Create the schema, its owner role, and its RLS app role.
     async fn provision(&self, admin: &AdminPool, spec: &ProvisionSpec<'_>) -> Result<(), DbError> {
-        admin
-            .provision_schema(spec.schema, spec.owner, spec.password)
-            .await
+        admin.provision_schema(spec).await
     }
 
     /// Bring the schema to its current version, then grant the RLS app role.

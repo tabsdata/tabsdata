@@ -11,10 +11,14 @@
 //!   and edition gates.
 //! * [`rls`] — td-database's row-level-security machinery once the schema is
 //!   applied (postgres only).
+//! * [`provisioning`] — [`AdminPool::provision_schema`](crate::components::AdminPool)
+//!   as a non-superuser `CREATEROLE` admin (postgres only).
 //!
 //! This module holds the shared query helpers; the submodules reach them via
 //! `super::`.
 
+#[cfg(postgres)]
+mod provisioning;
 #[cfg(postgres)]
 mod rls;
 mod seeded;

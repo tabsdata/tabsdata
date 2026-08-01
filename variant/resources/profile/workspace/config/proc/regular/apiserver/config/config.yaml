@@ -21,32 +21,36 @@ request_timeout: 60
 check_frequency: 60
 stuck_requested_timeout: 120
 orchestrator: supervisor
-# The server td_dbmanager boots on this URL's port; ${embedded} = the
+# The server td_dbmanager boots on this entry's port; ${embedded} = the
 # generated credentials persisted next to the data dir.
 database_server:
-  url: postgres://127.0.0.1:2462/postgres
-  username: ${embedded}
-  password: ${embedded}
-  min_connections: 1
-  max_connections: 2
-  acquire_timeout: 30
-  max_lifetime: 1800
-  idle_timeout: 30
-  test_before_acquire: true
-  log_level: off
+  postgres:
+    host: 127.0.0.1
+    port: 2462
+    database: postgres
+    username: ${embedded}
+    password: ${embedded}
+  pool:
+    min_connections: 1
+    max_connections: 2
+    acquire_timeout: 30
+    max_lifetime: 1800
+    idle_timeout: 30
+    test_before_acquire: true
 database:
   apiserver:
-    url: postgres://127.0.0.1:2462/postgres
-    schema: td_apiserver
-    username: td_apiserver
-    password: ${embedded}
-    min_connections: 5
-    max_connections: 50
-    acquire_timeout: 30
-    max_lifetime: 3600
-    idle_timeout: 60
-    test_before_acquire: true
-    log_level: off
+    postgres:
+      host: 127.0.0.1
+      port: 2462
+      database: postgres
+      password: ${embedded}
+    pool:
+      min_connections: 5
+      max_connections: 50
+      acquire_timeout: 30
+      max_lifetime: 3600
+      idle_timeout: 60
+      test_before_acquire: true
 storage:
   mounts:
     - id: ROOT

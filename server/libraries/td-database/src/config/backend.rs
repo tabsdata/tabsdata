@@ -54,4 +54,16 @@ impl BackendConfig {
             _ => None,
         }
     }
+
+    /// The configured database name, on the backends that have one.
+    pub fn database(&self) -> Option<&str> {
+        match self {
+            #[cfg(sqlite)]
+            Self::Sqlite(_) => None,
+            #[cfg(postgres)]
+            Self::Postgres(c) => c.database.as_deref(),
+            #[cfg(mysql)]
+            Self::MySql(c) => c.database.as_deref(),
+        }
+    }
 }

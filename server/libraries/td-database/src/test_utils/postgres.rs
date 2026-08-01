@@ -66,13 +66,15 @@ fn admin_connectable() -> DatabaseConfig {
 }
 
 /// Create this test's own unique, superuser-owned schema on the shared server and
-/// open the privileged [`AdminPool`] for it. The privileged connect also ensures
-/// the cluster-global `td_app`. Shared by [`pool`] and [`pools`]; both then connect
-/// their serving pool(s) to the same `config` (returned to avoid rebuilding it).
+/// open the privileged [`AdminPool`] for it. Explicitly ensures the cluster-global
+/// `td_app` (connects never provision roles). Shared by [`pool`] and [`pools`];
+/// both then connect their serving pool(s) to the same `config` (returned to
+/// avoid rebuilding it).
 async fn provision_schema(index: usize) -> (String, DatabaseConfig, AdminPool) {
     let schema = unique_schema(index);
     let config = schema_connectable(&schema);
     let admin = AdminPool::connect(&config).await.expect("privileged pool");
+    admin.create_app_role().await.expect("create app role");
     admin
         .create_schema(&schema)
         .await

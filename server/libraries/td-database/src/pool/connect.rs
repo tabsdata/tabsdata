@@ -20,6 +20,8 @@ use crate::config::SqliteConfig;
 use crate::config::{ConnectConfig, DatabaseConfig, Schema, StatementLogConfig};
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
+#[cfg(postgres)]
+use sqlx::Connection;
 use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
 #[cfg(mysql)]
@@ -65,10 +67,10 @@ impl DatabaseConfig {
     /// Connect using this configuration, opening the pool as `role`.
     ///
     /// On PostgreSQL the role selects the privilege posture (see [`ConnectRole`]):
-    /// [`ConnectRole::Admin`] is a single raw-role pool (DDL/provisioning) and
-    /// also provisions [`APP_ROLE`](crate::APP_ROLE); [`ConnectRole::Serving`] is
-    /// the RLS-enforced `td_app` read/write pair and assumes the role already
-    /// exists. SQLite/MySQL ignore the role (no RLS).
+    /// [`ConnectRole::Admin`] is a single raw-role pool (DDL/provisioning);
+    /// [`ConnectRole::Serving`] is the RLS-enforced app-role read/write pair
+    /// and requires the role to exist — provisioning creates it, never a
+    /// connect. SQLite/MySQL ignore the role (no RLS).
     pub(crate) async fn connect(&self, role: ConnectRole) -> Result<ConnectOutput, DbError> {
         if self.pool.max_connections == u32::MIN {
             Err(DbError::InvalidMaxConnections(self.pool.max_connections))?
@@ -142,14 +144,13 @@ impl DatabaseConfig {
     /// Build the PostgreSQL pool for `role` (see [`ConnectRole`]).
     ///
     /// [`ConnectRole::Admin`] opens a single raw-role connection for reads and
-    /// writes (DDL/provisioning rights intact) and provisions
-    /// [`APP_ROLE`](crate::APP_ROLE) — idempotent and privilege-free when the role
-    /// already exists (external deployments pre-create it). No session default
-    /// GUC: an unscoped write into a project-scoped table fails closed.
+    /// writes (DDL/provisioning rights intact). No session default GUC: an
+    /// unscoped write into a project-scoped table fails closed.
     ///
     /// [`ConnectRole::Serving`] opens the RLS-enforced read/write pair whose
-    /// `after_connect` switches to `td_app`; the role must already exist (the
-    /// admin path provisioned it beforehand).
+    /// `after_connect` switches to the app role; the role must already exist
+    /// and be switchable — provisioning (`db create`) creates and grants it,
+    /// never a connect.
     #[cfg(postgres)]
     async fn connect_postgres_pool(
         &self,
@@ -162,21 +163,57 @@ impl DatabaseConfig {
                 let raw = self
                     .connect_postgres(conn_options, false, false, schema)
                     .await?;
-                provision_app_role(&raw, self.app_role()).await?;
                 Ok(DynamicPool::Postgres {
                     ro: raw.clone(),
                     rw: raw,
                 })
             }
-            // The serving role never provisions: the admin path (embedded boot,
-            // or `dbmanager` for an external database) created `td_app` beforehand.
             ConnectRole::Serving => {
+                self.probe_app_role(conn_options, self.require_schema()?)
+                    .await?;
                 let (rw, ro) = tokio::try_join!(
                     self.connect_postgres(conn_options, false, true, schema),
                     self.connect_postgres(conn_options, true, true, schema),
                 )?;
                 Ok(DynamicPool::Postgres { ro, rw })
             }
+        }
+    }
+
+    /// Prove the app role is switchable on one throwaway connection before
+    /// building the serving pools. The pools cannot report this themselves: a
+    /// failing `after_connect` is retried until the acquire deadline and
+    /// surfaces only as `PoolTimedOut`, so an unprovisioned database would
+    /// burn the whole timeout and then blame the pool. The probe fails fast
+    /// with [`DbError::AppRoleNotSwitchable`] on `22023` (role does not exist —
+    /// GUC validation, not `42704`) or `42501` (connecting role is not a
+    /// member); both mean provisioning (`db create`) has not run against this
+    /// database. Bounded by the pool's acquire timeout — a raw connect has
+    /// none, and the probe must not hang where the pools would have timed out.
+    #[cfg(postgres)]
+    async fn probe_app_role(
+        &self,
+        conn_options: &PgConnectOptions,
+        schema: &str,
+    ) -> Result<(), DbError> {
+        let switched = tokio::time::timeout(self.pool.acquire_timeout, async {
+            let mut conn = conn_options.connect().await?;
+            let switched = sqlx::query(&format!("SET ROLE \"{}\"", self.app_role()))
+                .execute(&mut conn)
+                .await;
+            let _ = conn.close().await;
+            switched
+        })
+        .await
+        .unwrap_or(Err(sqlx::Error::PoolTimedOut));
+        match switched {
+            Ok(_) => Ok(()),
+            Err(e) => match e.as_database_error().and_then(|db| db.code()) {
+                Some(code) if code == "22023" || code == "42501" => Err(
+                    DbError::AppRoleNotSwitchable(self.app_role().to_owned(), schema.to_owned(), e),
+                ),
+                _ => Err(DbError::FailedToConnectToDatabase(e)),
+            },
         }
     }
 
@@ -237,9 +274,9 @@ impl DatabaseConfig {
     /// requests run under row-level security on a pool that authenticated as a
     /// superuser (embedded) or schema owner. When false (the **admin/upgrader**
     /// pool) the connection keeps its raw role and its DDL/provisioning rights.
-    /// The role must already exist for `SET ROLE` to succeed — embedded
-    /// provisions it before building the serving pools; external deployments
-    /// pre-create it.
+    /// The role must already exist for `SET ROLE` to succeed — provisioning
+    /// (`db create`) creates it before any serving pool opens, and
+    /// [`Self::probe_app_role`] has already proven the switch works.
     #[cfg(postgres)]
     async fn connect_postgres(
         &self,
@@ -260,8 +297,9 @@ impl DatabaseConfig {
         );
 
         let schema = schema.map(str::to_owned);
-        // The role serving connections switch to (the global `td_app` by default;
-        // a per-test role under test configs). Captured so the closure is 'static.
+        // The role serving connections switch to (the global `td_app` by
+        // default; per-instance on shared clusters, per-test on the shared
+        // test server). Captured so the closure is 'static.
         let serving_role = self.app_role().to_owned();
         let pool_options = self
             .pool_options(read_only)
@@ -518,45 +556,6 @@ fn try_create_missing_dir(path: &Path) {
     }
 }
 
-#[cfg(postgres)]
-fn create_app_role_sql(app_role: &str) -> String {
-    // Race-safe idempotent create: a `IF NOT EXISTS` check followed by `CREATE ROLE`
-    // is not atomic across concurrent sessions — two can both pass the check and one
-    // then hits a duplicate-key error. Create unconditionally and swallow the
-    // duplicate instead (the shared app role is provisioned by every admin connect,
-    // so concurrent first-connects would otherwise collide).
-    // Guard the create with an existence check so the common case (role already
-    // present) is a lock-free read of `pg_roles` — important when every admin
-    // connect provisions it under high concurrency. Only the first, racing creators
-    // write `pg_authid`; the inner handler swallows the lost-race duplicate
-    // (`unique_violation`) or an already-existing role (`duplicate_object`).
-    format!(
-        "DO $$ BEGIN \
-           IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{app_role}') THEN \
-             BEGIN CREATE ROLE \"{app_role}\" NOBYPASSRLS; \
-             EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END; \
-           END IF; \
-         END $$"
-    )
-}
-
-/// Create the row-level-security app role (`app_role`, the global
-/// [`APP_ROLE`](crate::APP_ROLE) in production) if it does not exist, `NOBYPASSRLS`. Called on the admin pool during
-/// connect — *before* the serving pools' `after_connect` `SET ROLE` runs — so the
-/// switch can succeed. Idempotent, and privilege-free when the role already exists
-/// (the `IF NOT EXISTS` guard means external deployments, which pre-create the role,
-/// need no `CREATEROLE`). The schema/table grants are applied later, once the tables
-/// exist, by the `components` module's `AdminPool::ensure_app_role`.
-#[cfg(postgres)]
-async fn provision_app_role(pool: &PgPool, app_role: &str) -> Result<(), DbError> {
-    sqlx::query(&create_app_role_sql(app_role))
-        .execute(pool)
-        .await
-        .map_err(DbError::SqlError)?;
-    debug!(role = app_role, "Provisioned RLS app role");
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -737,6 +736,34 @@ mod tests {
         assert_eq!(search_path, "information_schema");
         assert_eq!(extra_float_digits, "1");
         pool.close().await;
+    }
+
+    /// A serving connect whose app role cannot be switched to (missing role —
+    /// provisioning never ran) surfaces as [`DbError::AppRoleNotSwitchable`],
+    /// not as an opaque pool timeout.
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn serving_connect_surfaces_unswitchable_app_role() {
+        server::ensure_started().await;
+        let config = DatabaseConfig {
+            conn: ConnectConfig::Postgres(server::admin_base()),
+            schema: Some(Schema::new("public")),
+            app_role: Some(format!("td_no_role_{}", td_common::id::id())),
+            pool: PoolConfig {
+                max_connections: 2,
+                acquire_timeout: Duration::from_secs(3),
+                ..Default::default()
+            },
+        };
+        let error = config
+            .connect(ConnectRole::Serving)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert!(
+            matches!(error, DbError::AppRoleNotSwitchable(..)),
+            "expected AppRoleNotSwitchable, got: {error:?}"
+        );
     }
 
     /// The write pool is pinned to a single connection regardless of the

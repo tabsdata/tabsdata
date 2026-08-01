@@ -8,6 +8,7 @@
 
 use super::Schema;
 use super::backend::BackendConfig;
+use super::connection::app_role_or_default;
 #[cfg(mysql)]
 use super::mysql::MySqlConfig;
 use super::pool::PoolConfig;
@@ -40,20 +41,54 @@ pub struct ComponentConfig {
     /// Connection target, selected by the backend key (`postgres:`, ...).
     #[serde(flatten)]
     pub conn: BackendConfig,
-    /// Schema override (default: the component's
-    /// [`default_schema`](crate::components::SchemaComponent::default_schema)).
-    /// Not allowed on the `database_server:` entry.
+    /// Schema (and owner-role) override; defaults to `<database>_<key>` — see
+    /// [`Self::schema`]. Not allowed on the `database_server:` entry.
     #[serde(default)]
     pub schema: Option<Schema>,
-    /// RLS app role override (default: the global
-    /// [`APP_ROLE`](crate::APP_ROLE)). Roles are cluster-global on PostgreSQL,
-    /// so instances sharing a cluster each need their own name here — the
-    /// first creator of a role is the only one holding `ADMIN` on it.
+    /// RLS app role override; defaults to `<database>_app` — see
+    /// [`Self::app_role`].
     #[serde(default)]
     pub app_role: Option<String>,
     /// Connection pool settings.
     #[serde(default)]
     pub pool: PoolConfig,
+}
+
+/// PostgreSQL truncates longer identifiers silently (`NAMEDATALEN`), so the
+/// created role/schema would not match the configured name.
+const POSTGRES_IDENTIFIER_BYTES: usize = 63;
+
+fn checked_identifier(name: String) -> Result<String, DbError> {
+    if name.len() > POSTGRES_IDENTIFIER_BYTES {
+        return Err(DbError::IdentifierTooLong(name));
+    }
+    Ok(name)
+}
+
+impl ComponentConfig {
+    /// The entry's schema (and owner-role) name: the explicit `schema:`, else
+    /// `<database>_<key>` — cluster-global role names derived from the
+    /// database name keep instances sharing a PostgreSQL cluster from
+    /// colliding — else the component's static default (backends without a
+    /// database name).
+    pub fn schema(&self, key: &str, default_schema: &str) -> Result<String, DbError> {
+        checked_identifier(match (&self.schema, self.conn.database()) {
+            (Some(schema), _) => schema.to_string(),
+            (None, Some(database)) => format!("{database}_{key}"),
+            (None, None) => default_schema.to_owned(),
+        })
+    }
+
+    /// The entry's RLS app role: the explicit `app_role:`, else
+    /// `<database>_app` (see [`Self::schema`]), else the global
+    /// [`APP_ROLE`](crate::APP_ROLE).
+    pub fn app_role(&self) -> Result<String, DbError> {
+        checked_identifier(match (&self.app_role, self.conn.database()) {
+            (Some(app_role), _) => app_role.clone(),
+            (None, Some(database)) => format!("{database}_app"),
+            (None, None) => app_role_or_default(None).to_owned(),
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -232,6 +267,70 @@ pool:
         let restored: ComponentConfig =
             serde_yaml::from_str(&serde_yaml::to_string(&entry).unwrap()).unwrap();
         assert_eq!(entry, restored);
+    }
+
+    /// Names derive from the database (`<db>_<key>`, `<db>_app`) so instances
+    /// sharing a cluster never collide on cluster-global role names; explicit
+    /// config wins; backends without a database name keep the static defaults.
+    #[cfg(postgres)]
+    #[test]
+    fn component_config_derived_names() {
+        let entry: ComponentConfig = serde_yaml::from_str(
+            "
+postgres:
+  host: localhost
+  database: d_tenant
+",
+        )
+        .unwrap();
+        assert_eq!(
+            entry.schema("apiserver", "td_apiserver").unwrap(),
+            "d_tenant_apiserver"
+        );
+        assert_eq!(entry.app_role().unwrap(), "d_tenant_app");
+
+        let explicit: ComponentConfig = serde_yaml::from_str(
+            "
+postgres:
+  host: localhost
+  database: d_tenant
+schema: my_schema
+app_role: my_app
+",
+        )
+        .unwrap();
+        assert_eq!(
+            explicit.schema("apiserver", "td_apiserver").unwrap(),
+            "my_schema"
+        );
+        assert_eq!(explicit.app_role().unwrap(), "my_app");
+
+        let no_database: ComponentConfig = serde_yaml::from_str(
+            "
+postgres:
+  host: localhost
+",
+        )
+        .unwrap();
+        assert_eq!(
+            no_database.schema("apiserver", "td_apiserver").unwrap(),
+            "td_apiserver"
+        );
+        assert_eq!(no_database.app_role().unwrap(), crate::APP_ROLE);
+
+        let long: ComponentConfig = serde_yaml::from_str(&format!(
+            "
+postgres:
+  host: localhost
+  database: {}
+",
+            "d".repeat(60)
+        ))
+        .unwrap();
+        assert!(matches!(
+            long.schema("apiserver", "td_apiserver"),
+            Err(DbError::IdentifierTooLong(_))
+        ));
     }
 
     /// The placeholder must survive yaml as a plain string.

@@ -59,20 +59,28 @@ pub struct DatabaseConfig {
     /// [`Self::connect`] fails with [`DbError::MissingSchema`] when unset. Ignored
     /// by SQLite and MySQL, which have no `search_path`.
     pub schema: Option<Schema>,
-    /// The RLS app role serving connections `SET ROLE` to. `None` means the global
-    /// default [`APP_ROLE`](crate::APP_ROLE) (`td_app`) — what production always
-    /// uses. Tests set a per-test role so they can isolate role-level state (e.g.
-    /// flipping `BYPASSRLS`) on the shared server.
+    /// The RLS app role serving connections `SET ROLE` to. `None` means the
+    /// global default [`APP_ROLE`](crate::APP_ROLE) (`td_app`). Deployments
+    /// sharing a PostgreSQL cluster set a per-instance role (the fargate
+    /// templates derive one from the database name); tests set a per-test
+    /// role so they can isolate role-level state (e.g. flipping `BYPASSRLS`)
+    /// on the shared server.
     pub app_role: Option<String>,
     /// Connection pool settings.
     pub pool: PoolConfig,
+}
+
+/// The single home of the app-role default: provisioning and serving must
+/// resolve the same role or `SET ROLE` targets one that was never created.
+pub(crate) fn app_role_or_default(app_role: Option<&str>) -> &str {
+    app_role.unwrap_or(crate::APP_ROLE)
 }
 
 impl DatabaseConfig {
     /// The RLS app role serving connections `SET ROLE` to: the configured override,
     /// else the global default [`APP_ROLE`](crate::APP_ROLE).
     pub fn app_role(&self) -> &str {
-        self.app_role.as_deref().unwrap_or(crate::APP_ROLE)
+        app_role_or_default(self.app_role.as_deref())
     }
 
     /// The configured PostgreSQL schema, or [`DbError::MissingSchema`] when

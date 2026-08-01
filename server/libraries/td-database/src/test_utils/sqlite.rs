@@ -69,6 +69,7 @@ pub async fn pools(components: &[&'static dyn SchemaComponent]) -> MultiTestDb {
                     schema,
                     owner: schema,
                     password: "",
+                    app_role: crate::APP_ROLE,
                 },
             )
             .await
