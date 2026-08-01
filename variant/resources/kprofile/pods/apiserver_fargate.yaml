@@ -31,19 +31,14 @@ spec:
     - name: cabundle
       image: curlimages/curl:8.11.1
       imagePullPolicy: IfNotPresent
-      command: ["curl"]
+      command: ["sh", "-c"]
       args:
-        - --fail
-        - --silent
-        - --show-error
-        - --location
-        - --retry
-        - "3"
-        - --retry-delay
-        - "2"
-        - --output
-        - /tabsdata/certs/ca.pem
-        - https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+      - |
+        set -eu
+        curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+           --output /tabsdata/certs/ca-public.pem https://curl.se/ca/cacert.pem
+        curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+           --output /tabsdata/certs/ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
       resources:
         requests:
           cpu: "250m"
@@ -54,8 +49,8 @@ spec:
         capabilities:
           drop: ["ALL"]
       volumeMounts:
-        - name: certs
-          mountPath: /tabsdata/certs
+      - name: certs
+        mountPath: /tabsdata/certs
     - name: venvloader
       image: python:3.12-slim
       imagePullPolicy: IfNotPresent
@@ -138,6 +133,8 @@ spec:
               fieldPath: metadata.namespace
         - name: POD_TABSDATA_INSTANCE
           value: "${{system:tdk_instance_name}}"
+        - name: SSL_CERT_FILE
+          value: "/tabsdata/certs/ca-public.pem"
       volumeMounts:
         - name: config
           mountPath: /tabsdata/config
@@ -177,11 +174,16 @@ spec:
               fieldPath: metadata.namespace
         - name: POD_TABSDATA_INSTANCE
           value: "${{system:tdk_instance_name}}"
+        - name: SSL_CERT_FILE
+          value: "/tabsdata/certs/ca-public.pem"
       volumeMounts:
         - name: resources
           mountPath: /tabsdata/resources
         - name: runtimes
           mountPath: ${{system:tdk_runtimes_root}}
+          readOnly: true
+        - name: certs
+          mountPath: /tabsdata/certs
           readOnly: true
   containers:
     - name: apiserver
@@ -211,6 +213,16 @@ spec:
           cpu: "4"
           memory: "8Gi"
           ephemeral-storage: "16Gi"
+      readinessProbe:
+        httpGet:
+          path: /api/v1/ping
+          port: public-http
+        periodSeconds: 5
+        failureThreshold: 3
+      lifecycle:
+        preStop:
+          exec:
+            command: ["sleep", "12"]
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -248,6 +260,8 @@ spec:
               fieldPath: spec.serviceAccountName
         - name: POD_TABSDATA_INSTANCE
           value: "${{system:tdk_instance_name}}"
+        - name: SSL_CERT_FILE
+          value: "/tabsdata/certs/ca-public.pem"
   volumes:
     - name: config
       projected:

@@ -42,19 +42,14 @@ spec:
       - name: cabundle
         image: curlimages/curl:8.11.1
         imagePullPolicy: IfNotPresent
-        command: ["curl"]
+        command: ["sh", "-c"]
         args:
-        - --fail
-        - --silent
-        - --show-error
-        - --location
-        - --retry
-        - "3"
-        - --retry-delay
-        - "2"
-        - --output
-        - /tabsdata/certs/ca.pem
-        - https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+        - |
+          set -eu
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+             --output /tabsdata/certs/ca-public.pem https://curl.se/ca/cacert.pem
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+             --output /tabsdata/certs/ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
         resources:
           requests:
             cpu: "250m"
@@ -150,6 +145,8 @@ spec:
           value: "${{system:tdk_instance_name}}"
         - name: TD_LOG_CONFIG
           value: "/tabsdata/config/tabsdata.log.rs.yaml"
+        - name: SSL_CERT_FILE
+          value: "/tabsdata/certs/ca-public.pem"
         volumeMounts:
         - name: config
           mountPath: /tabsdata/config

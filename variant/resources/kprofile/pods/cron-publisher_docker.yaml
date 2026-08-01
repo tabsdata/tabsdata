@@ -64,6 +64,29 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           initContainers:
+            - name: cabundle
+              image: curlimages/curl:8.11.1
+              imagePullPolicy: IfNotPresent
+              command: ["sh", "-c"]
+              args:
+              - |
+                set -eu
+                curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+                   --output /tabsdata/certs/ca-public.pem https://curl.se/ca/cacert.pem
+                curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+                   --output /tabsdata/certs/ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                  ephemeral-storage: "2Gi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+              - name: certs
+                mountPath: /tabsdata/certs
             - name: venvloader
               image: python:3.12-slim
               imagePullPolicy: IfNotPresent
@@ -147,6 +170,8 @@ spec:
                   value: "${{system:tdk_instance_name}}"
                 - name: TD_LOG_CONFIG
                   value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+                - name: SSL_CERT_FILE
+                  value: "/tabsdata/certs/ca-public.pem"
               volumeMounts:
                 - name: config-cron-publisher
                   mountPath: /tabsdata/config
@@ -156,7 +181,12 @@ spec:
                   readOnly: true
                 - name: shared
                   mountPath: /tabsdata/shared
+                - name: certs
+                  mountPath: /tabsdata/certs
+                  readOnly: true
           volumes:
+            - name: certs
+              emptyDir: {}
             - name: config-cron-publisher
               projected:
                 sources:

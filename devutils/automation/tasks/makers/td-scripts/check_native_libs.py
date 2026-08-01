@@ -77,11 +77,14 @@ LINUX_SYSTEM_LIBS = {
     "linux-vdso",
 }
 
-# manylinux2014 (PEP 599) guaranteed libraries for x86_64.
-# Only these dynamic dependencies are acceptable in cross-compiled.
+# manylinux2014 (PEP 599) guaranteed libraries. Only these dynamic
+# dependencies are acceptable in cross-compiled. The policy's library set is
+# common to every architecture; only the dynamic loader name differs, so both
+# the x86_64 and the aarch64 loaders are listed.
 # See: https://peps.python.org/pep-0599/#the-manylinux2014-policy
 MANYLINUX2014_ALLOWED_LIBS = {
     "ld-linux-x86-64.so.2",
+    "ld-linux-aarch64.so.1",
     "libc.so.6",
     "libcrypt.so.1",
     "libdl.so.2",

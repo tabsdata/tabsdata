@@ -688,14 +688,22 @@ script = [
 
     td_target = get_env TD_TARGET
     is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
+    is_aarch64-unknown-linux-musl = eq ${td_target} "aarch64-unknown-linux-musl"
     if ${is_x86_64-unknown-linux-musl}
+        td_docker_platform = set "linux/amd64"
+        td_manylinux_image = set "quay.io/pypa/manylinux2014_x86_64"
+    else
+        td_docker_platform = set "linux/arm64"
+        td_manylinux_image = set "quay.io/pypa/manylinux2014_aarch64"
+    end
+    if ${is_x86_64-unknown-linux-musl} or ${is_aarch64-unknown-linux-musl}
         debug "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
         cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
         td_profile = set ${td-profile}
         td_rust_quiet = set ${td-rust-quiet}
 
-        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
+        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
         td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.94.0"
         td_script = set "${td_script} && . $HOME/.cargo/env"
@@ -712,7 +720,7 @@ script = [
         td_script = set "${td_script} && python3.12 -m maturin --version"
         td_script = set "${td_script} && patchelf --version"
         td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/python/modules/to-foundation/Cargo.toml --features extension-module"
-        exec --fail-on-error docker run --platform linux/amd64 --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc "${td_script}"
+        exec --fail-on-error docker run --platform ${td_docker_platform} --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc "${td_script}"
 
         debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER}/target"
         exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER}/target
@@ -828,14 +836,22 @@ script = [
 
     td_target = get_env TD_TARGET
     is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
+    is_aarch64-unknown-linux-musl = eq ${td_target} "aarch64-unknown-linux-musl"
     if ${is_x86_64-unknown-linux-musl}
+        td_docker_platform = set "linux/amd64"
+        td_manylinux_image = set "quay.io/pypa/manylinux2014_x86_64"
+    else
+        td_docker_platform = set "linux/arm64"
+        td_manylinux_image = set "quay.io/pypa/manylinux2014_aarch64"
+    end
+    if ${is_x86_64-unknown-linux-musl} or ${is_aarch64-unknown-linux-musl}
         debug "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
         cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
         td_profile = set ${td-profile}
         td_rust_quiet = set ${td-rust-quiet}
 
-        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
+        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
         td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.94.0"
         td_script = set "${td_script} && . $HOME/.cargo/env"
@@ -852,7 +868,7 @@ script = [
         td_script = set "${td_script} && python3.12 -m maturin --version"
         td_script = set "${td_script} && patchelf --version"
         td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
-        exec --fail-on-error docker run --platform linux/amd64 --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc "${td_script}"
+        exec --fail-on-error docker run --platform ${td_docker_platform} --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc "${td_script}"
 
         debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target"
         exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target
@@ -968,14 +984,22 @@ script = [
 
     td_target = get_env TD_TARGET
     is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
+    is_aarch64-unknown-linux-musl = eq ${td_target} "aarch64-unknown-linux-musl"
     if ${is_x86_64-unknown-linux-musl}
+        td_docker_platform = set "linux/amd64"
+        td_manylinux_image = set "quay.io/pypa/manylinux2014_x86_64"
+    else
+        td_docker_platform = set "linux/arm64"
+        td_manylinux_image = set "quay.io/pypa/manylinux2014_aarch64"
+    end
+    if ${is_x86_64-unknown-linux-musl} or ${is_aarch64-unknown-linux-musl}
         debug "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
         cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
         td_profile = set ${td-profile}
         td_rust_quiet = set ${td-rust-quiet}
 
-        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
+        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
         td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.94.0"
         td_script = set "${td_script} && . $HOME/.cargo/env"
@@ -992,7 +1016,7 @@ script = [
         td_script = set "${td_script} && python3.12 -m maturin --version"
         td_script = set "${td_script} && patchelf --version"
         td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/extensions/tz-tableframe/Cargo.toml --features extension-module"
-        exec --fail-on-error docker run --platform linux/amd64 --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc "${td_script}"
+        exec --fail-on-error docker run --platform ${td_docker_platform} --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc "${td_script}"
 
         debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target"
         exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target
