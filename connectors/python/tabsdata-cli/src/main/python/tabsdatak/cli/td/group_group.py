@@ -12,12 +12,15 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_list,
+    echo_more_results,
     hint_common_solutions,
     logical_prompt,
     make_console,
+    max_result_option,
     output_option,
     proj_option,
     render,
+    take,
     verify_login_or_prompt,
 )
 
@@ -121,13 +124,14 @@ def get(ctx: click.Context, name: str):
 @group.command()
 @proj_option
 @output_option
+@max_result_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all groups"""
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_groups = server.groups
+        list_of_groups, truncated = take(ctx, server.list_groups_generator())
 
         def _table():
             table = Table(title="Groups")
@@ -148,6 +152,7 @@ def list(ctx: click.Context):
             click.echo()
 
         render(ctx, data=lambda: [g._data for g in list_of_groups], table=_table)
+        echo_more_results(ctx, truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list groups: {e}")

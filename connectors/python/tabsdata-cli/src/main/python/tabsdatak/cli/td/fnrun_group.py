@@ -13,12 +13,15 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_time,
     collection_label,
+    echo_more_results,
     hint_common_solutions,
     logical_prompt,
     make_console,
+    max_result_option,
     output_format,
     output_option,
     render,
+    take,
     verify_login_or_prompt,
 )
 from tabsdatak.cli.td.execution_utils import (
@@ -82,6 +85,7 @@ def fnrun():
     "--trx", type=str, help="ID of the transaction to filter function runs by."
 )
 @output_option
+@max_result_option
 @click.pass_context
 def list_runs(
     ctx: click.Context,
@@ -112,7 +116,9 @@ def list_runs(
                 echo_plan_status(server, plan)
             if trx:
                 echo_transaction_status(server, trx)
-        list_of_function_runs = server.list_function_runs(filter=request_filter)
+        list_of_function_runs, truncated = take(
+            ctx, server.list_function_runs_generator(filter=request_filter)
+        )
 
         if output_format(ctx) != "table":
             render(
@@ -120,12 +126,14 @@ def list_runs(
                 data=[r._data for r in list_of_function_runs],
                 table=lambda: None,
             )
+            echo_more_results(ctx, truncated)
             return
 
         click.echo()
         console = make_console()
         console.print(function_runs_table(list_of_function_runs))
         click.echo(f"Number of function runs: {len(list_of_function_runs)}")
+        echo_more_results(ctx, truncated)
         click.echo()
     except Exception as e:
         hint_common_solutions(ctx, e)

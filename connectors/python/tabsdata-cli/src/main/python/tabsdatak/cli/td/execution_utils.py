@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+from itertools import islice
 from time import sleep
 from typing import TYPE_CHECKING, Callable, List
 
@@ -23,6 +24,7 @@ from tabsdatak.cli.cli_utils import (
     make_console,
     output_format,
     render,
+    take,
 )
 from tabsdatak.sdk.status_utils.execution import user_execution_status_to_api
 from tabsdatak.sdk.status_utils.function_run import user_function_run_status_to_api
@@ -179,23 +181,28 @@ def obtain_list_worker_filters(
     return request_filter
 
 
-def obtain_execution_list(server: TabsdataServer, request_filter, last: bool):
-    list_of_executions = server.list_executions(
+def obtain_execution_list(
+    ctx: click.Context, server: TabsdataServer, request_filter, last: bool
+) -> tuple[list, bool]:
+    executions = server.list_executions_generator(
         filter=request_filter,
         order_by="triggered_on-",
     )
+    # The listing is newest-first, so --last needs a single row, never a page.
     if last:
-        list_of_executions = list_of_executions[:1]
-    return list_of_executions
+        return list(islice(executions, 1)), False
+    return take(ctx, executions)
 
 
-def obtain_transaction_list(server: TabsdataServer, request_filter, last: bool):
-    list_of_transactions = server.list_transactions(
+def obtain_transaction_list(
+    ctx: click.Context, server: TabsdataServer, request_filter, last: bool
+) -> tuple[list, bool]:
+    transactions = server.list_transactions_generator(
         filter=request_filter, order_by="triggered_on-"
     )
     if last:
-        list_of_transactions = list_of_transactions[:1]
-    return list_of_transactions
+        return list(islice(transactions, 1)), False
+    return take(ctx, transactions)
 
 
 def echo_plan_status(server: TabsdataServer, plan: str) -> None:

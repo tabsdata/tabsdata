@@ -3781,6 +3781,31 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
+    def list_functions_generator(
+        self,
+        collection_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Function]:
+        """
+        Yield the functions in a collection, fetching pages as they are consumed.
+
+        Args:
+            collection_name (str): The name of the collection.
+
+        Returns:
+            Generator[Function]: The functions in the collection.
+
+        Raises:
+            APIServerError: If the functions could not be listed.
+        """
+        return Collection(self.connection, collection_name).list_functions_generator(
+            filter=filter,
+            order_by=order_by,
+            raise_for_status=raise_for_status,
+        )
+
     def update_collection(
         self,
         name: str,
@@ -3892,6 +3917,33 @@ class TabsdataServer:
         """
         table = Table(self.connection, collection_name, table_name)
         return table.list_dataversions(
+            filter=filter, order_by=order_by, raise_for_status=raise_for_status, at=at
+        )
+
+    def list_dataversions_generator(
+        self,
+        collection_name: str,
+        table_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+        at: int | None = None,
+    ) -> Generator[DataVersion]:
+        """
+        Yield the data versions of a table in a collection, fetching pages as
+        they are consumed.
+
+        Args:
+            collection_name (str): The name of the collection.
+
+        Returns:
+            Generator[DataVersion]: The data versions of the table.
+
+        Raises:
+            APIServerError: If the data versions could not be listed.
+        """
+        table = Table(self.connection, collection_name, table_name)
+        return table.list_dataversions_generator(
             filter=filter, order_by=order_by, raise_for_status=raise_for_status, at=at
         )
 
@@ -4333,6 +4385,24 @@ class TabsdataServer:
         """List patch versions for a function (latest first)."""
         collection = Collection(self.connection, collection_name)
         return collection.list_function_patches(
+            function_name,
+            filter=filter,
+            order_by=order_by,
+            raise_for_status=raise_for_status,
+        )
+
+    def list_function_patches_generator(
+        self,
+        collection_name: str,
+        function_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[dict]:
+        """Yield patch versions for a function (latest first), fetching pages as
+        they are consumed."""
+        collection = Collection(self.connection, collection_name)
+        return collection.list_function_patches_generator(
             function_name,
             filter=filter,
             order_by=order_by,
@@ -5049,6 +5119,28 @@ class TabsdataServer:
         """
         collection = Collection(self.connection, collection_name)
         return collection.list_tables(
+            at=at, at_trx=at_trx, filter=filter, order_by=order_by
+        )
+
+    def list_tables_generator(
+        self,
+        collection_name: str,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        filter: List[str] | str = None,
+        order_by: str = None,
+    ) -> Generator[Table]:
+        """
+        Yield the tables in a collection, fetching pages as they are consumed.
+
+        Args:
+            collection_name (str): The name of the collection.
+
+        Returns:
+            Generator[Table]: The tables in the collection.
+        """
+        collection = Collection(self.connection, collection_name)
+        return collection.list_tables_generator(
             at=at, at_trx=at_trx, filter=filter, order_by=order_by
         )
 

@@ -69,6 +69,10 @@ Applied where shown in each command. Every value option takes an argument.
   -p, --proj   PROJECT            Target project. Default: pinned project.
   -c, --col    COLLECTION         Target collection. Default: pinned collection.
   -o, --output {table|json|yaml}  Output format. Default: table.
+      --max-result N              Maximum rows a `list` command shows. Default: 100.
+                                  0 lists everything. When rows are left over,
+                                  the command says so (on stderr under
+                                  --output json|yaml, so stdout stays parseable).
   -y, --yes                       Skip the confirmation prompt (destructive ops).
   -h, --help                      Show help.
 ```

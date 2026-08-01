@@ -9,11 +9,14 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
+    echo_more_results,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     make_console,
+    max_result_option,
     store_pinned_objects,
+    take,
     verify_login_or_prompt,
 )
 from tabsdatak.sdk.tabsdata_server import (
@@ -428,13 +431,14 @@ def info(ctx: click.Context, name: str):
 
 
 @role.command()
+@max_result_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all roles"""
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_roles = server.roles
+        list_of_roles, truncated = take(ctx, server.list_roles_generator())
 
         table = Table(title="Roles")
         table.add_column("Name", style="cyan", no_wrap=True)
@@ -456,6 +460,7 @@ def list(ctx: click.Context):
         console = make_console()
         console.print(table)
         click.echo(f"Number of roles: {len(list_of_roles)}")
+        echo_more_results(ctx, truncated)
         click.echo()
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -464,6 +469,7 @@ def list(ctx: click.Context):
 
 @role.command()
 @click.option("--name", "-n", help="Name of the role to which the permissions belong.")
+@max_result_option
 @click.pass_context
 def list_perm(ctx: click.Context, name: str):
     """List all permissions of a role"""
@@ -476,7 +482,7 @@ def list_perm(ctx: click.Context, name: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         role = server.get_role(name)
-        list_of_permissions = role.permissions
+        list_of_permissions, truncated = take(ctx, role.list_permissions_generator())
 
         table = Table(title="Permissions")
         table.add_column("ID", style="cyan", no_wrap=True)
@@ -510,6 +516,7 @@ def list_perm(ctx: click.Context, name: str):
         console = make_console()
         console.print(table)
         click.echo(f"Number of permissions: {len(list_of_permissions)}")
+        echo_more_results(ctx, truncated)
         click.echo()
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -518,6 +525,7 @@ def list_perm(ctx: click.Context, name: str):
 
 @role.command()
 @click.option("--name", "-n", help="Name of the role to which the users belong.")
+@max_result_option
 @click.pass_context
 def list_user(ctx: click.Context, name: str):
     """List all users of a role"""
@@ -530,7 +538,7 @@ def list_user(ctx: click.Context, name: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         role = server.get_role(name)
-        list_of_users = role.users
+        list_of_users, truncated = take(ctx, role.list_users_generator())
 
         table = Table(title="Users")
         table.add_column("Name", style="cyan", no_wrap=True)
@@ -545,6 +553,7 @@ def list_user(ctx: click.Context, name: str):
         console = make_console()
         console.print(table)
         click.echo(f"Number of users: {len(list_of_users)}")
+        echo_more_results(ctx, truncated)
         click.echo()
     except Exception as e:
         hint_common_solutions(ctx, e)

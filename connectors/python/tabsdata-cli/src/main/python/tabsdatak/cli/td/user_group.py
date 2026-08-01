@@ -8,11 +8,14 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    echo_more_results,
     hint_common_solutions,
     logical_prompt,
     make_console,
+    max_result_option,
     output_option,
     render,
+    take,
     verify_login_or_prompt,
 )
 
@@ -128,12 +131,15 @@ def get(ctx: click.Context, name: str):
 
 @user.command()
 @output_option
+@max_result_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all users"""
     verify_login_or_prompt(ctx)
     try:
-        list_of_users = ctx.obj["tabsdataserver"].users
+        list_of_users, truncated = take(
+            ctx, ctx.obj["tabsdataserver"].list_users_generator()
+        )
 
         def _table():
             table = Table(title="Users")
@@ -149,6 +155,7 @@ def list(ctx: click.Context):
             click.echo()
 
         render(ctx, data=lambda: [u._data for u in list_of_users], table=_table)
+        echo_more_results(ctx, truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list users: {e}")

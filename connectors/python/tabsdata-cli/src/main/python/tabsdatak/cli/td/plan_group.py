@@ -13,8 +13,10 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_time,
     collection_label,
+    echo_more_results,
     hint_common_solutions,
     make_console,
+    max_result_option,
     output_format,
     output_option,
     render,
@@ -99,6 +101,7 @@ def plan():
     ),
 )
 @output_option
+@max_result_option
 @click.pass_context
 def list_plans(
     ctx: click.Context,
@@ -124,7 +127,9 @@ def list_plans(
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
-        list_of_executions = obtain_execution_list(server, request_filter, last)
+        list_of_executions, truncated = obtain_execution_list(
+            ctx, server, request_filter, last
+        )
 
         if output_format(ctx) != "table":
             render(
@@ -132,13 +137,14 @@ def list_plans(
                 data=[e._data for e in list_of_executions],
                 table=lambda: None,
             )
+            echo_more_results(ctx, truncated)
             return
 
         if monitor:
             click.echo("Waiting for the plans to finish...")
             list_of_executions = live_monitor(
                 list_of_executions,
-                lambda: obtain_execution_list(server, request_filter, last),
+                lambda: obtain_execution_list(ctx, server, request_filter, last)[0],
                 plans_table,
                 lambda e: e.status in EXECUTION_FINAL_STATUSES,
             )
@@ -147,6 +153,7 @@ def list_plans(
             click.echo()
             console = make_console()
             console.print(plans_table(list_of_executions))
+        echo_more_results(ctx, truncated)
         click.echo()
         if not all([
             aux_exe.status in EXECUTION_SUCCESSFUL_FINAL_STATUSES

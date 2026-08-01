@@ -11,11 +11,14 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    echo_more_results,
     hint_common_solutions,
     logical_prompt,
     make_console,
+    max_result_option,
     output_option,
     render,
+    take,
     verify_login_or_prompt,
 )
 
@@ -108,13 +111,14 @@ def get(ctx: click.Context, name: str):
 
 @project.command()
 @output_option
+@max_result_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all projects"""
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_projects = server.projects
+        list_of_projects, truncated = take(ctx, server.list_projects_generator())
 
         def _table():
             table = Table(title="Projects")
@@ -135,6 +139,7 @@ def list(ctx: click.Context):
             click.echo()
 
         render(ctx, data=lambda: [p._data for p in list_of_projects], table=_table)
+        echo_more_results(ctx, truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list projects: {e}")

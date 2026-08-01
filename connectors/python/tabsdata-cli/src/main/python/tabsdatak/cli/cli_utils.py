@@ -24,8 +24,9 @@ import re
 import sys
 from contextlib import contextmanager
 from importlib.metadata import PackageNotFoundError, version
+from itertools import islice
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence
 
 import rich_click as click
 from rich_click import Option, UsageError
@@ -423,6 +424,69 @@ def render(ctx: click.Context, *, data, table) -> None:
     text = serialize(payload, fmt)
     # YAML already ends with a newline; JSON does not.
     click.echo(text, nl=(fmt == "json"))
+
+
+# ---------------------------------------------------------------------------
+# Listing size: --max-result.
+# ---------------------------------------------------------------------------
+
+DEFAULT_MAX_RESULT = 100
+
+
+def _apply_max_result(ctx: click.Context, param, value):
+    """``--max-result`` callback: stash the cap on the context so the command's
+    listing helper can apply it."""
+    ctx.ensure_object(dict)
+    ctx.obj["max_result"] = DEFAULT_MAX_RESULT if value is None else value
+    return value
+
+
+def max_result_option(fn):
+    """Decorator adding ``--max-result`` to a list command."""
+    return click.option(
+        "--max-result",
+        "max_result",
+        type=click.IntRange(min=0),
+        default=DEFAULT_MAX_RESULT,
+        show_default=True,
+        expose_value=False,
+        callback=_apply_max_result,
+        help="Maximum number of rows to list. Use 0 for no limit.",
+    )(fn)
+
+
+def max_result(ctx: click.Context) -> int:
+    """The active row cap for this command (0 means no limit)."""
+    return (ctx.obj or {}).get("max_result", DEFAULT_MAX_RESULT)
+
+
+def take(ctx: click.Context, rows: Iterable) -> tuple[list, bool]:
+    """Drain a listing generator up to the active ``--max-result``.
+
+    Fetches one row beyond the cap so a full page is distinguishable from a
+    truncated one, then discards it. Returns the capped rows and whether the
+    server holds more."""
+    limit = max_result(ctx)
+    if not limit:
+        return list(rows), False
+    capped = list(islice(rows, limit + 1))
+    if len(capped) > limit:
+        return capped[:limit], True
+    return capped, False
+
+
+def echo_more_results(ctx: click.Context, truncated: bool) -> None:
+    """Tell the user the listing was cut short by ``--max-result``.
+
+    In the machine formats the notice goes to stderr so stdout stays a single
+    parseable document."""
+    if not truncated:
+        return
+    message = (
+        f"More results available: showing the first {max_result(ctx)}. Raise "
+        "'--max-result <N>', or pass '--max-result 0' for all."
+    )
+    click.echo(message, err=output_format(ctx) != "table")
 
 
 def load_pinned_objects(ctx: click.Context):

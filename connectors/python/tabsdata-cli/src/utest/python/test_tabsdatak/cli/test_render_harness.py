@@ -389,8 +389,19 @@ class RenderCase:
     table_values: tuple[str, ...]
 
 
+def _wire_listing(c: MagicMock, name: str, rows: list) -> None:
+    """Wire a paginated listing on the mock client.
+
+    The list commands consume the ``*_generator`` twin (so ``--max-result`` can
+    stop early), while the embedded listings inside ``get``-style commands still
+    call the materializing method; both are wired to the same rows. The
+    generator is a fresh iterator per call, as the real one is."""
+    getattr(c, name).return_value = rows
+    getattr(c, f"{name}_generator").side_effect = lambda *a, **k: iter(rows)
+
+
 def _set_user_list(c: MagicMock) -> None:
-    c.users = [_DTO(u) for u in _USERS]
+    _wire_listing(c, "list_users", [_DTO(u) for u in _USERS])
 
 
 def _set_user_info(c: MagicMock) -> None:
@@ -398,7 +409,7 @@ def _set_user_info(c: MagicMock) -> None:
 
 
 def _set_group_list(c: MagicMock) -> None:
-    c.groups = [_DTO(g) for g in _GROUPS]
+    _wire_listing(c, "list_groups", [_DTO(g) for g in _GROUPS])
 
 
 def _set_group_info(c: MagicMock) -> None:
@@ -411,7 +422,7 @@ def _set_group_info(c: MagicMock) -> None:
 
 
 def _set_project_list(c: MagicMock) -> None:
-    c.projects = [_DTO(p) for p in _PROJECTS]
+    _wire_listing(c, "list_projects", [_DTO(p) for p in _PROJECTS])
 
 
 def _set_project_info(c: MagicMock) -> None:
@@ -419,7 +430,7 @@ def _set_project_info(c: MagicMock) -> None:
 
 
 def _set_collection_list(c: MagicMock) -> None:
-    c.collections = [_DTO(x) for x in _COLLECTIONS]
+    _wire_listing(c, "list_collections", [_DTO(x) for x in _COLLECTIONS])
 
 
 def _set_collection_info(c: MagicMock) -> None:
@@ -431,7 +442,7 @@ def _set_auth_info(c: MagicMock) -> None:
 
 
 def _set_fn_list(c: MagicMock) -> None:
-    c.list_functions.return_value = [_DTO(f) for f in _FUNCTIONS]
+    _wire_listing(c, "list_functions", [_DTO(f) for f in _FUNCTIONS])
 
 
 def _set_fn_info(c: MagicMock) -> None:
@@ -443,54 +454,70 @@ def _set_fn_info(c: MagicMock) -> None:
 
 
 def _set_plan_list(c: MagicMock) -> None:
-    c.list_executions.return_value = [
-        _DTO(
-            _EXECUTIONS[0],
-            collection=_DTO({"name": "coll-a"}),
-            function=_DTO({"name": "fn-a"}),
-        )
-    ]
+    _wire_listing(
+        c,
+        "list_executions",
+        [
+            _DTO(
+                _EXECUTIONS[0],
+                collection=_DTO({"name": "coll-a"}),
+                function=_DTO({"name": "fn-a"}),
+            )
+        ],
+    )
 
 
 def _set_trx_list(c: MagicMock) -> None:
-    c.list_transactions.return_value = [
-        _DTO(
-            _TRANSACTIONS[0],
-            execution=_DTO({"id": "EID_1"}),
-            collection=_DTO({"name": "coll-a"}),
-        )
-    ]
+    _wire_listing(
+        c,
+        "list_transactions",
+        [
+            _DTO(
+                _TRANSACTIONS[0],
+                execution=_DTO({"id": "EID_1"}),
+                collection=_DTO({"name": "coll-a"}),
+            )
+        ],
+    )
 
 
 def _set_run_list(c: MagicMock) -> None:
-    c.list_function_runs.return_value = [
-        _DTO(
-            _FUNCTION_RUNS[0],
-            collection=_DTO({"name": "coll-a"}),
-            function=_DTO({"name": "fn-a"}),
-            execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-            transaction=_DTO({"id": "TID_1"}),
-        )
-    ]
+    _wire_listing(
+        c,
+        "list_function_runs",
+        [
+            _DTO(
+                _FUNCTION_RUNS[0],
+                collection=_DTO({"name": "coll-a"}),
+                function=_DTO({"name": "fn-a"}),
+                execution=_DTO({"name": "plan-a", "id": "EID_1"}),
+                transaction=_DTO({"id": "TID_1"}),
+            )
+        ],
+    )
 
 
 def _set_worker_list(c: MagicMock) -> None:
-    c.list_workers.return_value = [
-        _DTO(
-            _WORKERS[0],
-            collection=_DTO({"name": "coll-a"}),
-            function=_DTO({"name": "fn-a"}),
-            execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-            transaction=_DTO({"id": "TID_1"}),
-            # the id/patch columns read the raw row via `.kwargs`
-            kwargs={
-                "logical_function_run_id": "LFR_1",
-                "execution_id": "EID_1",
-                "transaction_id": "TID_1",
-                "function_version_patch_id": "FV_9",
-            },
-        )
-    ]
+    _wire_listing(
+        c,
+        "list_workers",
+        [
+            _DTO(
+                _WORKERS[0],
+                collection=_DTO({"name": "coll-a"}),
+                function=_DTO({"name": "fn-a"}),
+                execution=_DTO({"name": "plan-a", "id": "EID_1"}),
+                transaction=_DTO({"id": "TID_1"}),
+                # the id/patch columns read the raw row via `.kwargs`
+                kwargs={
+                    "logical_function_run_id": "LFR_1",
+                    "execution_id": "EID_1",
+                    "transaction_id": "TID_1",
+                    "function_version_patch_id": "FV_9",
+                },
+            )
+        ],
+    )
 
 
 def _set_plan_info(c: MagicMock) -> None:
@@ -527,7 +554,9 @@ def _set_run_info(c: MagicMock) -> None:
 
 
 def _set_table_list(c: MagicMock) -> None:
-    c.list_tables.return_value = [_DTO(_TABLES[0], function=_DTO({"name": "fn-a"}))]
+    _wire_listing(
+        c, "list_tables", [_DTO(_TABLES[0], function=_DTO({"name": "fn-a"}))]
+    )
 
 
 def _set_table_schema(c: MagicMock) -> None:
@@ -554,11 +583,11 @@ def _set_fn_info_history(c: MagicMock) -> None:
 
 
 def _set_fn_list_patches(c: MagicMock) -> None:
-    c.list_function_patches.return_value = _PATCHES
+    _wire_listing(c, "list_function_patches", _PATCHES)
 
 
 def _set_table_versions(c: MagicMock) -> None:
-    c.list_dataversions.return_value = [_DTO(_DATAVERSIONS[0])]
+    _wire_listing(c, "list_dataversions", [_DTO(_DATAVERSIONS[0])])
 
 
 def _set_perm_list_user(c: MagicMock) -> None:

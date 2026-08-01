@@ -13,8 +13,10 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_time,
     collection_label,
+    echo_more_results,
     hint_common_solutions,
     make_console,
+    max_result_option,
     output_format,
     output_option,
     render,
@@ -100,6 +102,7 @@ def trx():
     ),
 )
 @output_option
+@max_result_option
 @click.pass_context
 def list_transactions(
     ctx: click.Context,
@@ -125,7 +128,9 @@ def list_transactions(
         )
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
-        list_of_transactions = obtain_transaction_list(server, request_filter, last)
+        list_of_transactions, truncated = obtain_transaction_list(
+            ctx, server, request_filter, last
+        )
 
         if output_format(ctx) != "table":
             render(
@@ -133,13 +138,14 @@ def list_transactions(
                 data=[t._data for t in list_of_transactions],
                 table=lambda: None,
             )
+            echo_more_results(ctx, truncated)
             return
 
         if monitor:
             click.echo("Waiting for the transactions to finish...")
             list_of_transactions = live_monitor(
                 list_of_transactions,
-                lambda: obtain_transaction_list(server, request_filter, last),
+                lambda: obtain_transaction_list(ctx, server, request_filter, last)[0],
                 transactions_table,
                 lambda t: t.status in TRANSACTION_FINAL_STATUSES,
             )
@@ -148,6 +154,7 @@ def list_transactions(
             click.echo()
             console = make_console()
             console.print(transactions_table(list_of_transactions))
+        echo_more_results(ctx, truncated)
         click.echo()
         if not all([
             aux_trx.status in TRANSACTION_SUCCESSFUL_FINAL_STATUSES

@@ -16,15 +16,18 @@ from tabsdatak.cli.cli_utils import (
     beautify_list,
     beautify_time,
     collection_label,
+    echo_more_results,
     get_currently_pinned_object,
     hint_common_solutions,
     load_info_and_project_root,
     logical_prompt,
     make_console,
+    max_result_option,
     output_option,
     proj_option,
     render,
     show_hint,
+    take,
     verify_login_or_prompt,
 )
 from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
@@ -262,6 +265,7 @@ def bundle(ctx: click.Context, fn_version: str, file: str):
     "-c",
     help="Name of the collection to which the functions belong.",
 )
+@max_result_option
 @click.pass_context
 def list_functions(ctx: click.Context, coll: str):
     """List all functions in a collection"""
@@ -276,7 +280,7 @@ def list_functions(ctx: click.Context, coll: str):
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_functions = server.list_functions(coll)
+        list_of_functions, truncated = take(ctx, server.list_functions_generator(coll))
 
         def _table():
             table = Table(title="Functions")
@@ -305,6 +309,7 @@ def list_functions(ctx: click.Context, coll: str):
             data=lambda: [f._data for f in list_of_functions],
             table=_table,
         )
+        echo_more_results(ctx, truncated)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -1037,6 +1042,7 @@ def patch(
     "-c",
     help="Name of the collection to which the function belongs.",
 )
+@max_result_option
 @click.pass_context
 def list_patches(ctx: click.Context, name: str, coll: str):
     """List patch versions of a function (latest first)."""
@@ -1051,7 +1057,9 @@ def list_patches(ctx: click.Context, name: str, coll: str):
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        patches = server.list_function_patches(coll, name)
+        patches, truncated = take(
+            ctx, server.list_function_patches_generator(coll, name)
+        )
 
         def _table():
             table = Table(title="Patches")
@@ -1085,6 +1093,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
 
         # `patches` is already the raw list of patch dicts -> full info as-is.
         render(ctx, data=lambda: patches, table=_table)
+        echo_more_results(ctx, truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list patches: {e}")

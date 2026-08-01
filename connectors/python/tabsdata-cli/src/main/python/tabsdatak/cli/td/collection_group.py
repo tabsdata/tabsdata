@@ -14,15 +14,18 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
+    echo_more_results,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     make_console,
+    max_result_option,
     output_option,
     proj_option,
     render,
     resolve_all_projects,
     serialize,
+    take,
     verify_login_or_prompt,
 )
 
@@ -345,6 +348,7 @@ def connection(ctx: click.Context, output: str, name: str):
 @proj_option
 @all_projects_option
 @output_option
+@max_result_option
 @click.pass_context
 def list(ctx: click.Context, all_projects: bool):
     """List all collections"""
@@ -352,7 +356,7 @@ def list(ctx: click.Context, all_projects: bool):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         spanning = resolve_all_projects(ctx, all_projects)
-        list_of_collections = server.collections
+        list_of_collections, truncated = take(ctx, server.list_collections_generator())
 
         def _table():
             table = Table(title="Collections")
@@ -381,6 +385,7 @@ def list(ctx: click.Context, all_projects: bool):
             data=lambda: [c._data for c in list_of_collections],
             table=_table,
         )
+        echo_more_results(ctx, truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list collections: {e}")

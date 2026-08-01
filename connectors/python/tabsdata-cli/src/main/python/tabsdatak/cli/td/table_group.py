@@ -13,13 +13,16 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
     beautify_time,
+    echo_more_results,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     make_console,
+    max_result_option,
     output_option,
     proj_option,
     render,
+    take,
     verify_login_or_prompt,
 )
 
@@ -222,6 +225,7 @@ def download(
     mutually_exclusive=["at"],
 )
 @output_option
+@max_result_option
 @click.pass_context
 def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
     """List all tables in a collection"""
@@ -236,8 +240,11 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
         request_filter = []
         if name:
             request_filter.append(f"name:lk:{name}")
-        list_of_tables = server.list_tables(
-            coll, filter=request_filter, at=at, at_trx=at_trx
+        list_of_tables, truncated = take(
+            ctx,
+            server.list_tables_generator(
+                coll, filter=request_filter, at=at, at_trx=at_trx
+            ),
         )
 
         def _table():
@@ -275,6 +282,7 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
             data=lambda: [t._data for t in list_of_tables],
             table=_table,
         )
+        echo_more_results(ctx, truncated)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -509,6 +517,7 @@ def schema(
     help="The name of the table to which the data belongs.",
 )
 @output_option
+@max_result_option
 @click.pass_context
 def versions(ctx: click.Context, coll: str, name: str):
     """
@@ -526,7 +535,10 @@ def versions(ctx: click.Context, coll: str, name: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         # /data-versions returns all statuses; the CLI lists committed only.
-        data_version_list = server.list_dataversions(coll, name, filter="status:eq:C")
+        data_version_list, truncated = take(
+            ctx,
+            server.list_dataversions_generator(coll, name, filter="status:eq:C"),
+        )
 
         def _table():
             table = Table(title="Data versions")
@@ -566,6 +578,7 @@ def versions(ctx: click.Context, coll: str, name: str):
             data=lambda: [dv._data for dv in data_version_list],
             table=_table,
         )
+        echo_more_results(ctx, truncated)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
