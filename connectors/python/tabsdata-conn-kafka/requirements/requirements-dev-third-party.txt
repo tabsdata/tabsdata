@@ -1,3 +1,5 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+confluent-kafka[avro,json,protobuf,schemaregistry]==2.14.0
