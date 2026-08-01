@@ -50,6 +50,17 @@ pub enum ProviderError {
     )]
     PortInUse { port: u16, caption: String } = 5111,
     #[error(
+        "Port {port} ({caption}) is already claimed by the service '{service}' of namespace \
+         '{namespace}'. That service never obtained an external address, so the port is held \
+         without serving. Delete that instance, or configure this one with different ports."
+    )]
+    PortClaimedByService {
+        port: u16,
+        caption: String,
+        namespace: String,
+        service: String,
+    } = 5117,
+    #[error(
         "Port {port} ({caption}) was still in use after stopping the instance; it did not release \
          in time."
     )]

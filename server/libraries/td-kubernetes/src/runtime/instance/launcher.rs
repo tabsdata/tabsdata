@@ -11,10 +11,12 @@ use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 
+use crate::base::constants::SERVICE_TYPE_LOAD_BALANCER;
 use crate::base::constants::{
     POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, SEQUENCE_LABEL, TIER_LABEL,
 };
 use crate::base::error::launcher::LauncherError;
+use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::widgets::phase_spinner_in;
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
@@ -28,6 +30,7 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::injection::{
     inject_into_cronjob, inject_into_job, inject_into_pod, list_available_secrets,
 };
+use crate::runtime::instance::ports::AssignedPort;
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
 use crate::runtime::provider::ClusterProvider;
@@ -41,6 +44,59 @@ const JOB_CONDITION_FAILED: &str = "Failed";
 const JOB_CONDITION_STATUS_TRUE: &str = "True";
 const POD_CONDITION_READY: &str = "Ready";
 const POD_CONDITION_STATUS_TRUE: &str = "True";
+
+pub async fn ensure_ports_unclaimed(
+    context: &KubeContext,
+    assigned: &[AssignedPort],
+    filter: &[&str],
+) -> CommandResult {
+    let services = service_api::list_services_everywhere(context, None).await?;
+    for entry in assigned {
+        if !filter.is_empty() && !filter.contains(&entry.role.as_str()) {
+            continue;
+        }
+        for service in &services {
+            if service.metadata.namespace.as_deref() == Some(context.namespace()) {
+                continue;
+            }
+            if !claims_port_unbound(service, entry.port) {
+                continue;
+            }
+            return Err(ProviderError::PortClaimedByService {
+                port: entry.port,
+                caption: entry.caption.clone(),
+                namespace: service.metadata.namespace.clone().unwrap_or_default(),
+                service: service.metadata.name.clone().unwrap_or_default(),
+            }
+            .into());
+        }
+    }
+    Ok(())
+}
+
+fn claims_port_unbound(service: &Service, port: u16) -> bool {
+    let Some(spec) = &service.spec else {
+        return false;
+    };
+    if spec.type_.as_deref() != Some(SERVICE_TYPE_LOAD_BALANCER) {
+        return false;
+    }
+    let claims = spec
+        .ports
+        .iter()
+        .flatten()
+        .any(|declared| declared.port == i32::from(port));
+    if !claims {
+        return false;
+    }
+    let bound = service
+        .status
+        .as_ref()
+        .and_then(|status| status.load_balancer.as_ref())
+        .and_then(|balancer| balancer.ingress.as_ref())
+        .is_some_and(|ingress| !ingress.is_empty());
+    !bound
+}
 
 pub async fn start_workload(
     context: &KubeContext,

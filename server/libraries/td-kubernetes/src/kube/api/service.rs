@@ -114,3 +114,21 @@ pub async fn list_services(
             .into()
         })
 }
+
+pub async fn list_services_everywhere(
+    context: &KubeContext,
+    filter: Option<LabelFilter<'_>>,
+) -> Result<Vec<Service>, KubernetesError> {
+    let api: Api<Service> = Api::all(context.client().clone());
+    let selector = tabsdata_selector(filter);
+    let parameters = ListParams::default().labels(&selector.to_string());
+    api.list(&parameters)
+        .await
+        .map(|list| list.items)
+        .map_err(|error| {
+            KubeServiceError::ListEverywhereFailed {
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}

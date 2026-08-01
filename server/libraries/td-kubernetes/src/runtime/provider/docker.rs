@@ -41,7 +41,7 @@ use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, Cl
 use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::{
-    HOST_PUBLISHED_PORTS, NO_PATIENCE, apply_ports, first_port_in_use,
+    CHECK_ONLY_PUBLISHED_PORTS_FILTER, NO_PATIENCE, apply_ports, ensure_ports_free,
 };
 use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
 use crate::runtime::instance::staging::promote_staged_profile;
@@ -72,14 +72,11 @@ pub struct DockerProvider {
 impl DockerProvider {
     fn ensure_published_ports_available(&self) -> CommandResult {
         let settings = InstanceSettings::load(&self.name)?;
-        if let Some(entry) = first_port_in_use(&settings.ports, HOST_PUBLISHED_PORTS, NO_PATIENCE) {
-            return Err(ProviderError::PortInUse {
-                port: entry.port,
-                caption: entry.caption.clone(),
-            }
-            .into());
-        }
-        Ok(())
+        Ok(ensure_ports_free(
+            &settings.ports,
+            CHECK_ONLY_PUBLISHED_PORTS_FILTER,
+            NO_PATIENCE,
+        )?)
     }
 
     async fn promote_staged_configmaps(&self) -> CommandResult {

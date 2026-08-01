@@ -4,23 +4,66 @@
 
 use super::*;
 
-fn assigned(entries: &[(&str, u16)]) -> Vec<AssignedPort> {
+fn assigned(entries: &[(PortRole, u16)]) -> Vec<AssignedPort> {
     entries
         .iter()
         .map(|(role, port)| AssignedPort {
-            role: (*role).to_owned(),
-            caption: (*role).to_owned(),
+            role: role.as_str().to_owned(),
+            caption: role.caption().to_owned(),
             port: *port,
         })
         .collect()
 }
 
 #[test]
+fn every_catalog_role_round_trips_through_its_name() {
+    for role in PORT_CATALOG {
+        assert_eq!(PortRole::from_str(role.as_str()), Some(*role));
+    }
+}
+
+#[test]
+fn an_unknown_role_name_resolves_to_nothing() {
+    assert_eq!(PortRole::from_str("not_a_port_role"), None);
+}
+
+#[test]
+fn assigned_ports_cover_the_whole_catalog() {
+    let ports = assign_ports(DEFAULT_BASE_PORT);
+    assert_eq!(ports.len(), PORT_CATALOG.len());
+    for role in PORT_CATALOG {
+        assert!(ports.iter().any(|entry| entry.role == role.as_str()));
+    }
+}
+
+#[test]
+fn a_port_held_on_the_loopback_address_is_not_available() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let taken = listener.local_addr().unwrap().port();
+    assert!(!port_available(taken));
+}
+
+#[test]
+fn a_port_held_on_the_wildcard_address_is_not_available() {
+    let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+    let taken = listener.local_addr().unwrap().port();
+    assert!(!port_available(taken));
+}
+
+#[test]
+fn a_released_port_becomes_available() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let released = listener.local_addr().unwrap().port();
+    drop(listener);
+    assert!(port_available(released));
+}
+
+#[test]
 fn every_port_selects_all_roles() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let taken = listener.local_addr().unwrap().port();
-    let ports = assigned(&[("apiserver_public_port", 0), ("database_port", taken)]);
-    let found = first_port_in_use(&ports, EVERY_PORT, NO_PATIENCE);
+    let ports = assigned(&[(PortRole::ApiserverPublic, 0), (PortRole::Database, taken)]);
+    let found = first_port_in_use(&ports, CHECK_ALL_PORTS_FILTER, NO_PATIENCE);
     assert_eq!(found.map(|entry| entry.port), Some(taken));
 }
 
@@ -28,21 +71,21 @@ fn every_port_selects_all_roles() {
 fn host_published_ports_ignores_the_other_roles() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let taken = listener.local_addr().unwrap().port();
-    let ports = assigned(&[("database_port", taken)]);
-    assert!(first_port_in_use(&ports, HOST_PUBLISHED_PORTS, NO_PATIENCE).is_none());
+    let ports = assigned(&[(PortRole::Database, taken)]);
+    assert!(first_port_in_use(&ports, CHECK_ONLY_PUBLISHED_PORTS_FILTER, NO_PATIENCE).is_none());
 }
 
 #[test]
 fn a_free_published_port_reports_nothing() {
-    let ports = assigned(&[("apiserver_public_port", 0)]);
-    assert!(first_port_in_use(&ports, HOST_PUBLISHED_PORTS, NO_PATIENCE).is_none());
+    let ports = assigned(&[(PortRole::ApiserverPublic, 0)]);
+    assert!(first_port_in_use(&ports, CHECK_ONLY_PUBLISHED_PORTS_FILTER, NO_PATIENCE).is_none());
 }
 
 #[test]
 fn a_taken_published_port_is_reported() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let taken = listener.local_addr().unwrap().port();
-    let ports = assigned(&[("apiserver_public_port", taken)]);
-    let found = first_port_in_use(&ports, HOST_PUBLISHED_PORTS, NO_PATIENCE);
+    let ports = assigned(&[(PortRole::ApiserverPublic, taken)]);
+    let found = first_port_in_use(&ports, CHECK_ONLY_PUBLISHED_PORTS_FILTER, NO_PATIENCE);
     assert_eq!(found.map(|entry| entry.port), Some(taken));
 }

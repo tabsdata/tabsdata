@@ -32,6 +32,8 @@ pub enum KubeServiceError {
     } = 5003,
     #[error("Could not list services in namespace '{namespace}': {cause}.")]
     ListFailed { namespace: String, cause: String } = 5004,
+    #[error("Could not list services of every namespace: {cause}.")]
+    ListEverywhereFailed { cause: String } = 5006,
     #[error("Service manifest declares no metadata.name.")]
     MissingName = 5005,
 }

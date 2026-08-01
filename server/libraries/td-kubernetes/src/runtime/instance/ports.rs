@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
+use crate::base::error::provider::ProviderError;
 use crate::runtime::gateway::resolver::SystemValues;
 
 pub const DEFAULT_BASE_PORT: u16 = 2457;
@@ -40,6 +41,13 @@ impl PortRole {
             Self::Database => "database_port",
             Self::KminusApi => "kminus_api_port",
         }
+    }
+
+    fn from_str(role: &str) -> Option<Self> {
+        PORT_CATALOG
+            .iter()
+            .copied()
+            .find(|candidate| candidate.as_str() == role)
     }
 
     const fn caption(self) -> &'static str {
@@ -84,11 +92,26 @@ pub fn assign_ports(base: u16) -> Vec<AssignedPort> {
 
 pub fn port_available(port: u16) -> bool {
     TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok()
+        && TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).is_ok()
 }
 
-pub const HOST_PUBLISHED_PORTS: &[&str] = &["apiserver_public_port"];
+pub fn ensure_ports_free(
+    assigned: &[AssignedPort],
+    filter: &[&str],
+    patience: Duration,
+) -> Result<(), ProviderError> {
+    match first_port_in_use(assigned, filter, patience) {
+        Some(entry) => Err(ProviderError::PortInUse {
+            port: entry.port,
+            caption: entry.caption.clone(),
+        }),
+        None => Ok(()),
+    }
+}
 
-pub const EVERY_PORT: &[&str] = &[];
+pub const CHECK_ONLY_PUBLISHED_PORTS_FILTER: &[&str] = &[PortRole::ApiserverPublic.as_str()];
+
+pub const CHECK_ALL_PORTS_FILTER: &[&str] = &[];
 
 pub const NO_PATIENCE: Duration = Duration::ZERO;
 
@@ -271,14 +294,16 @@ pub fn database_port(assigned: &[AssignedPort]) -> Option<u16> {
 pub fn apply_ports(values: &mut SystemValues, assigned: &[AssignedPort]) {
     for entry in assigned {
         let port = entry.port.to_string();
-        match entry.role.as_str() {
-            "apiserver_public_port" => values.apiserver_public_port = Some(port),
-            "apiserver_private_port" => values.apiserver_private_port = Some(port),
+        let Some(role) = PortRole::from_str(&entry.role) else {
+            continue;
+        };
+        match role {
+            PortRole::ApiserverPublic => values.apiserver_public_port = Some(port),
+            PortRole::ApiserverPrivate => values.apiserver_private_port = Some(port),
             #[cfg(feature = "enterprise")]
-            "aiagent_public_port" => values.aiagent_public_port = Some(port),
-            "database_port" => values.database_port = Some(port),
-            "kminus_api_port" => values.kminus_api_port = Some(port),
-            _ => {}
+            PortRole::AiagentPublic => values.aiagent_public_port = Some(port),
+            PortRole::Database => values.database_port = Some(port),
+            PortRole::KminusApi => values.kminus_api_port = Some(port),
         }
     }
 }

@@ -26,8 +26,10 @@ use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::fusion;
 use crate::runtime::gateway::resolver::fusion::FusedSecrets;
+use crate::runtime::instance::launcher::ensure_ports_unclaimed;
 use crate::runtime::instance::ports::{
-    AssignedPort, DEFAULT_BASE_PORT, apply_ports, assign_ports, kminus_api_port,
+    AssignedPort, DEFAULT_BASE_PORT, NO_PATIENCE, apply_ports, assign_ports, ensure_ports_free,
+    kminus_api_port,
 };
 use crate::runtime::instance::profile::load_profile;
 use crate::runtime::instance::verify_instance_version;
@@ -136,6 +138,9 @@ pub async fn create_instance(
     let profile = load_profile(settings.provider, verbose)?;
 
     let assigned = assign_ports(port);
+    if let Some(filter) = settings.provider.ports_to_check_on_host() {
+        ensure_ports_free(&assigned, filter, NO_PATIENCE)?;
+    }
 
     let cluster = cluster_arguments_for(&settings);
     let provider = provider_for(
@@ -152,6 +157,9 @@ pub async fn create_instance(
         ensure_cluster_reachable(context.client()).await?;
         ensure_namespace_exists(&context).await?;
         provider.ensure_creatable_service().await?;
+        if let Some(filter) = settings.provider.ports_to_check_on_host() {
+            ensure_ports_unclaimed(&context, &assigned, filter).await?;
+        }
     }
 
     if details {

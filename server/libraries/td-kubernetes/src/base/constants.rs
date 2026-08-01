@@ -232,6 +232,8 @@ pub const REQUIREMENTS_AG_ASSET: &str = "requirements-ag.txt";
 
 pub const CUSTOMIZABLE_ASSETS: &[&str] = &[REQUIREMENTS_TD_ASSET, REQUIREMENTS_AG_ASSET];
 
+pub const SERVICE_TYPE_LOAD_BALANCER: &str = "LoadBalancer";
+
 pub const KIND_SECRET: &str = "secret";
 pub const KIND_SECRET_CONFIG: &str = "secret-config";
 pub const KIND_MANIFEST: &str = "manifest";
