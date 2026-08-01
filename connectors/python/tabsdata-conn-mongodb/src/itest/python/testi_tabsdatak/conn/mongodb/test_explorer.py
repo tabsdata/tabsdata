@@ -30,15 +30,18 @@ CITY_DOCUMENTS = [
 
 
 @pytest.fixture
-def seeded(domain_mongodb: MongoDBDomain) -> Iterator[str]:
+def seeded(request, domain_mongodb: MongoDBDomain) -> Iterator[str]:
     """The mongodb domain carries no model, so the explorer is introspected against
-    a collection the test writes itself; yields its name."""
+    a collection the test writes itself; yields its name. The name is per-test:
+    the domain is a single shared database, so a fixed name would let tests
+    running in parallel seed and drop each other's collection."""
+    collection = f"{CITIES}_{request.node.name.removeprefix('test_')}"
     db = store(domain_mongodb)
-    db.write_collection(CITIES, CITY_DOCUMENTS)
+    db.write_collection(collection, CITY_DOCUMENTS)
     try:
-        yield CITIES
+        yield collection
     finally:
-        db.drop_collection(CITIES)
+        db.drop_collection(collection)
 
 
 def _entity_by_collection(
