@@ -78,6 +78,19 @@ pub struct GlobalArguments {
         long_help = "Show the output of each step that this command runs."
     )]
     pub verbose: bool,
+
+    #[arg(
+        long,
+        name = "keep-progress",
+        required = false,
+        global = true,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        display_order = 135,
+        long_help = "Keep the progress line of each step that this command runs, instead of \
+                     clearing it when the step finishes [true/false]."
+    )]
+    pub keep_progress: bool,
 }
 
 #[derive(Debug, Clone, Subcommand)]

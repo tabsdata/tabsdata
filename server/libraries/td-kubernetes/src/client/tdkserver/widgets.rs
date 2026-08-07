@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use colored::Colorize;
@@ -108,9 +110,20 @@ impl Spinner {
     }
 }
 
+static KEEP_PROGRESS: AtomicBool = AtomicBool::new(true);
+
+pub fn set_keep_progress(keep: bool) {
+    KEEP_PROGRESS.store(keep, Ordering::Relaxed);
+}
+
+pub fn keep_progress() -> bool {
+    KEEP_PROGRESS.load(Ordering::Relaxed)
+}
+
 pub struct PhaseSpinner {
     multi: MultiProgress,
     header: ProgressBar,
+    resources: Mutex<Vec<ProgressBar>>,
 }
 
 pub fn phase_spinner(message: &str) -> PhaseSpinner {
@@ -127,7 +140,11 @@ pub fn phase_spinner_in(parent: &MultiProgress, message: &str) -> PhaseSpinner {
     );
     header.set_message(message.to_owned());
     header.enable_steady_tick(Duration::from_millis(120));
-    PhaseSpinner { multi, header }
+    PhaseSpinner {
+        multi,
+        header,
+        resources: Mutex::new(Vec::new()),
+    }
 }
 
 impl PhaseSpinner {
@@ -139,12 +156,37 @@ impl PhaseSpinner {
         );
         bar.set_message(name.to_owned());
         bar.enable_steady_tick(Duration::from_millis(120));
+        if let Ok(mut bars) = self.resources.lock() {
+            bars.push(bar.clone());
+        }
         bar
+    }
+
+    fn flush_resources(&self) {
+        let Ok(mut bars) = self.resources.lock() else {
+            return;
+        };
+        for bar in bars.drain(..) {
+            if keep_progress() {
+                let _ = self.multi.println(format!("  {}", bar.message()));
+            }
+            bar.finish_and_clear();
+        }
     }
 }
 
 impl Drop for PhaseSpinner {
     fn drop(&mut self) {
+        self.flush_resources();
+        if keep_progress() {
+            let elapsed =
+                humantime::format_duration(Duration::from_secs(self.header.elapsed().as_secs()));
+            let line = format!(
+                "{SPINNER_DONE_MARKER} {} ({elapsed})",
+                self.header.message()
+            );
+            let _ = self.multi.println(&line);
+        }
         self.header.finish_and_clear();
     }
 }

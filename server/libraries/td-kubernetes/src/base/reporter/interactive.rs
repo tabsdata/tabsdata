@@ -6,7 +6,10 @@ use std::time::{Duration, Instant};
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use crate::base::reporter::{Reporter, STEP_DONE_MARKER, StepBackend, StepHandle};
+use crate::base::reporter::{
+    Reporter, STEP_DONE_MARKER, STEP_FAIL_MARKER, STEP_START_MARKER, StepBackend, StepHandle,
+};
+use crate::client::tdkserver::widgets::keep_progress;
 
 pub struct InteractiveReporter {
     multi: MultiProgress,
@@ -49,6 +52,7 @@ struct InteractiveStep {
     bar: ProgressBar,
     started_at: Instant,
     depth: usize,
+    message: String,
 }
 
 impl InteractiveStep {
@@ -57,11 +61,16 @@ impl InteractiveStep {
         bar.set_style(style_for_depth(depth));
         bar.set_message(message.to_owned());
         bar.enable_steady_tick(Duration::from_millis(120));
+        if keep_progress() {
+            let indent = "  ".repeat(depth);
+            let _ = multi.println(format!("{indent}{STEP_START_MARKER} {message}"));
+        }
         Self {
             multi,
             bar,
             started_at: Instant::now(),
             depth,
+            message: message.to_owned(),
         }
     }
 }
@@ -98,6 +107,10 @@ impl StepBackend for InteractiveStep {
     }
 
     fn done(self: Box<Self>, message: &str) {
+        if !keep_progress() {
+            self.bar.finish_and_clear();
+            return;
+        }
         if self.depth == 0 {
             let elapsed = humantime::format_duration(Duration::from_secs(
                 self.started_at.elapsed().as_secs(),
@@ -113,6 +126,12 @@ impl StepBackend for InteractiveStep {
     }
 
     fn fail(self: Box<Self>) {
+        if keep_progress() {
+            let indent = "  ".repeat(self.depth);
+            let _ = self
+                .multi
+                .println(format!("{indent}{STEP_FAIL_MARKER} {}", self.message));
+        }
         self.bar.finish_and_clear();
     }
 }

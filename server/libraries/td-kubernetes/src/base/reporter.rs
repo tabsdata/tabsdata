@@ -83,3 +83,5 @@ pub(super) trait StepBackend: Send + Sync {
 }
 
 pub(super) const STEP_DONE_MARKER: &str = "\u{2714}";
+pub(super) const STEP_START_MARKER: &str = "\u{25b6}";
+pub(super) const STEP_FAIL_MARKER: &str = "\u{2718}";

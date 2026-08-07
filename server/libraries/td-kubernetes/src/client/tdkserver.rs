@@ -12,6 +12,7 @@ use clap::{CommandFactory, Parser};
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{Arguments, Commands, GlobalArguments};
+use crate::client::tdkserver::widgets::set_keep_progress;
 // use crate::client::tdkserver::commands::cluster::command_cluster;
 // use crate::client::tdkserver::commands::config::command_config;
 // use crate::client::tdkserver::commands::instance::command_instance;
@@ -49,6 +50,7 @@ impl TabsDataKubernetesClient {
         let arguments = Arguments::parse();
         let globals = arguments.globals;
         let verbose = globals.verbose;
+        set_keep_progress(globals.keep_progress);
         match self.dispatch(arguments.command, globals).await {
             Ok(()) => ExitStatus::Success,
             Err(error) => {

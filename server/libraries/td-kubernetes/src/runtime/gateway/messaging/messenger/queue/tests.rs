@@ -82,10 +82,13 @@ fn function_start_routes_with_decorator() {
             }),
         );
     let routing = derive_routing("process", &payload).unwrap();
-    let stem = worker_pod_stem(&WorkerName::Function);
     assert_eq!(
         routing.template_key,
-        format!("{}-{}", stem, Decorator::Publisher.as_ref())
+        format!(
+            "{}-{}",
+            worker_pod_stem(&WorkerName::Function),
+            Decorator::Publisher.as_ref()
+        )
     );
     assert_eq!(routing.prefix, "pub");
     assert!(matches!(routing.action, MessageAction::Start));
@@ -133,7 +136,6 @@ fn stream_publisher_start_routes_by_worker_name() {
             }),
         );
     let routing = derive_routing("work", &payload).unwrap();
-    let stem = worker_pod_stem(&WorkerName::StageTrigger);
     assert_eq!(
         routing.template_key,
         publisher_key(&WorkerName::StageTrigger)
@@ -153,7 +155,6 @@ fn stream_publisher_stop_routes_by_worker_name() {
             }),
         );
     let routing = derive_routing("work", &payload).unwrap();
-    let stem = worker_pod_stem(&WorkerName::StageTrigger);
     assert_eq!(
         routing.template_key,
         publisher_key(&WorkerName::StageTrigger)
@@ -195,7 +196,6 @@ fn cron_publisher_start_routes_by_worker_name() {
             },
         ));
     let routing = derive_routing("task", &payload).unwrap();
-    let stem = worker_pod_stem(&WorkerName::CronTrigger);
     assert_eq!(
         routing.template_key,
         publisher_key(&WorkerName::CronTrigger)
@@ -215,7 +215,6 @@ fn cron_publisher_stop_routes_by_worker_name() {
             },
         ));
     let routing = derive_routing("task", &payload).unwrap();
-    let stem = worker_pod_stem(&WorkerName::CronTrigger);
     assert_eq!(
         routing.template_key,
         publisher_key(&WorkerName::CronTrigger)
