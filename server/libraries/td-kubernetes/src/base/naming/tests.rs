@@ -13,7 +13,7 @@ fn to_fn_pod_name_normalizes_logical_worker_id() {
 
 #[test]
 fn to_fn_pod_name_accepts_legacy_alnum_worker_id() {
-    let name = to_fn_pod_name("trf", "06ABCDEF0123456789ABCDEFGH").unwrap();
+    let name = to_fn_pod_name("tfr", "06ABCDEF0123456789ABCDEFGH").unwrap();
     assert_eq!(name, "trf-06abcdef0123456789abcdefgh");
 }
 
@@ -34,7 +34,7 @@ fn worker_name_prefix_maps_each_worker_and_decorator() {
     );
     assert_eq!(
         worker_name_prefix(&WorkerName::Function, Some(&Decorator::Transformer)),
-        "trf"
+        "tfr"
     );
     assert_eq!(worker_name_prefix(&WorkerName::Function, None), "fun");
     assert_eq!(worker_name_prefix(&WorkerName::CronTrigger, None), "crn");

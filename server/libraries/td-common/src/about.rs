@@ -4,6 +4,7 @@
 
 use chrono::FixedOffset;
 use colored::Colorize;
+use unicode_width::UnicodeWidthStr;
 use std::env;
 use std::process::Command;
 #[cfg(not(windows))]
@@ -158,9 +159,9 @@ macro_rules! add_git_sections {
                 let description = env::var(concat!("VERGEN_GIT_", $prefix, "_DESCRIPTION")).unwrap_or_default();
                 let section_title = format!("Git Information - {}", description);
 
-                let author_name = env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_AUTHOR_NAME")).unwrap_or_default();
-                let author_email = env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_AUTHOR_EMAIL")).unwrap_or_default();
-                let commit_author = format!("{} <{}>", author_name.trim(), author_email.trim());
+                // let author_name = env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_AUTHOR_NAME")).unwrap_or_default();
+                // let author_email = env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_AUTHOR_EMAIL")).unwrap_or_default();
+                // let commit_author = format!("{} <{}>", author_name.trim(), author_email.trim());
 
                 $git_data.push((
                     section_title.clone(),
@@ -171,8 +172,8 @@ macro_rules! add_git_sections {
                         ("Commit Long Hash".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_LONG_HASH")).unwrap_or_default().trim().to_string()),
                         ("Commit Date".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_DATE")).unwrap_or_default().trim().to_string()),
                         ("Commit Timestamp".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_TIMESTAMP")).unwrap_or_default().trim().to_string()),
-                        ("Commit Author".to_string(), commit_author),
-                        ("Commit Message".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_MESSAGE")).unwrap_or_default().trim().to_string()),
+                        // ("Commit Author".to_string(), commit_author),
+                        // ("Commit Message".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_MESSAGE")).unwrap_or_default().trim().to_string()),
                         ("Commit Count".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_COMMIT_COUNT")).unwrap_or_default().trim().to_string()),
                         ("Describe".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_DESCRIBE")).unwrap_or_default().trim().to_string()),
                         ("Dirty".to_string(), env::var(concat!("VERGEN_GIT_", $prefix, "_DIRTY")).unwrap_or_default().trim().to_string()),
@@ -204,7 +205,8 @@ pub fn show_build_metadata() {
     }
 
     fn pad_to_width(content: &str, width: usize) -> String {
-        format!("{:<width$}", content, width = width)
+        let used = content.width();
+        format!("{content}{}", " ".repeat(width.saturating_sub(used)))
     }
 
     let version = env::var("TD_VERSION").unwrap_or_else(|_| "-".to_string());
@@ -367,7 +369,7 @@ pub fn show_build_metadata() {
     ));
 
     sections.push((
-        "System Information",
+        "Build System Information",
         vec![
             ("Host", sysinfo_host.trim()),
             ("User", sysinfo_user.trim()),
@@ -384,28 +386,28 @@ pub fn show_build_metadata() {
 
     let max_caption_length = sections
         .iter()
-        .flat_map(|(_, items)| items.iter().map(|(key, _)| key.chars().count()))
+        .flat_map(|(_, items)| items.iter().map(|(key, _)| key.width()))
         .max()
         .unwrap_or(0);
 
     let max_value_length = sections
         .iter()
-        .flat_map(|(_, items)| items.iter().map(|(_, value)| value.chars().count()))
+        .flat_map(|(_, items)| items.iter().map(|(_, value)| value.width()))
         .max()
         .unwrap_or(0);
 
     let max_title_length = sections
         .iter()
-        .map(|(title, _)| title.chars().count())
+        .map(|(title, _)| title.width())
         .max()
         .unwrap_or(0);
 
     let max_header_length = header_line_about
         .chars()
         .count()
-        .max(header_line_version.chars().count())
-        .max(header_line_edition.chars().count())
-        .max(header_line_mode.chars().count());
+        .max(header_line_version.width())
+        .max(header_line_edition.width())
+        .max(header_line_mode.width());
 
     let left_padding = 1;
     let right_padding = 1;
@@ -451,13 +453,17 @@ pub fn show_build_metadata() {
 
     println!("\n{top_border}");
 
-    let header_about_length = header_line_about.chars().count();
+    let header_about_length = header_line_about.width();
     let header_about_padding_left = (inner_width - header_about_length) / 2;
     let header_about_content = format!(
         "{}{}{}",
         " ".repeat(header_about_padding_left),
         header_line_about,
-        " ".repeat(inner_width - header_about_padding_left - header_about_length)
+        " ".repeat(
+            inner_width
+                .saturating_sub(header_about_padding_left)
+                .saturating_sub(header_about_length),
+        )
     );
     let header_about_padded = pad_to_width(&header_about_content, inner_width);
     let header_about_display = if use_colors {
@@ -467,13 +473,17 @@ pub fn show_build_metadata() {
     };
     println!("{} {} {}", border_char, header_about_display, border_char);
 
-    let header_version_length = header_line_version.chars().count();
+    let header_version_length = header_line_version.width();
     let header_version_padding_left = (inner_width - header_version_length) / 2;
     let header_version_content = format!(
         "{}{}{}",
         " ".repeat(header_version_padding_left),
         &header_line_version,
-        " ".repeat(inner_width - header_version_padding_left - header_version_length)
+        " ".repeat(
+            inner_width
+                .saturating_sub(header_version_padding_left)
+                .saturating_sub(header_version_length),
+        )
     );
     let header_version_padded = pad_to_width(&header_version_content, inner_width);
     let header_version_display = if use_colors {
@@ -483,13 +493,17 @@ pub fn show_build_metadata() {
     };
     println!("{} {} {}", border_char, header_version_display, border_char);
 
-    let header_edition_length = header_line_edition.chars().count();
+    let header_edition_length = header_line_edition.width();
     let header_edition_padding_left = (inner_width - header_edition_length) / 2;
     let header_edition_content = format!(
         "{}{}{}",
         " ".repeat(header_edition_padding_left),
         &header_line_edition,
-        " ".repeat(inner_width - header_edition_padding_left - header_edition_length)
+        " ".repeat(
+            inner_width
+                .saturating_sub(header_edition_padding_left)
+                .saturating_sub(header_edition_length),
+        )
     );
     let header_edition_padded = pad_to_width(&header_edition_content, inner_width);
     let header_edition_display = if use_colors {
@@ -499,13 +513,17 @@ pub fn show_build_metadata() {
     };
     println!("{} {} {}", border_char, header_edition_display, border_char);
 
-    let header_mode_length = header_line_mode.chars().count();
+    let header_mode_length = header_line_mode.width();
     let header_mode_padding_left = (inner_width - header_mode_length) / 2;
     let header_mode_content = format!(
         "{}{}{}",
         " ".repeat(header_mode_padding_left),
         &header_line_mode,
-        " ".repeat(inner_width - header_mode_padding_left - header_mode_length)
+        " ".repeat(
+            inner_width
+                .saturating_sub(header_mode_padding_left)
+                .saturating_sub(header_mode_length),
+        )
     );
     let header_mode_padded = pad_to_width(&header_mode_content, inner_width);
     let header_mode_display = if use_colors {
@@ -531,9 +549,9 @@ pub fn show_build_metadata() {
         println!("{} {} {}", border_char, blank_line, border_char);
 
         for (key, value) in items {
-            let key_len = key.chars().count();
-            let value_len = value.chars().count();
-            let dots_needed = max_caption_length - key_len;
+            let key_len = key.width();
+            let value_len = value.width();
+            let dots_needed = max_caption_length.saturating_sub(key_len);
             let caption_with_dots = format!("{}{}", key, ".".repeat(dots_needed));
 
             let content_line = format!("{}: {}", caption_with_dots, value);
@@ -546,7 +564,12 @@ pub fn show_build_metadata() {
                 format!(
                     "{}{}",
                     colored_line,
-                    " ".repeat(inner_width - max_caption_length - 2 - value_len)
+                    " ".repeat(
+                        inner_width
+                            .saturating_sub(max_caption_length)
+                            .saturating_sub(2)
+                            .saturating_sub(value_len),
+                    )
                 )
             } else {
                 content_padded

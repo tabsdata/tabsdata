@@ -10,7 +10,7 @@ etc.) are exercised end-to-end against a live ``td`` invocation in the
 CLI integration suite; here we test what's purely functional:
 
 * ``is_valid_id`` / ``beautify_list`` / ``beautify_time``
-* the temporary ``tdabout`` / ``td_resource`` stand-ins
+* the temporary ``td_resource`` stand-in
 * ``MutuallyExclusiveOption``
 """
 
@@ -103,19 +103,6 @@ def test_beautify_time_returns_other_strings_verbatim():
 # ---------------------------------------------------------------------------
 # Temporary stand-ins (replaced in a future ticket)
 # ---------------------------------------------------------------------------
-
-
-def test_tdabout_prints_package_and_version(capsys):
-    cli_utils.tdabout("tabsdata-cli")
-    captured = capsys.readouterr()
-    assert "tabsdata-cli" in captured.out
-
-
-def test_tdabout_unknown_package_prints_unknown_version(capsys):
-    cli_utils.tdabout("definitely-not-an-installed-package")
-    captured = capsys.readouterr()
-    assert "definitely-not-an-installed-package" in captured.out
-    assert "unknown" in captured.out
 
 
 def test_td_resource_raises_filenotfound_for_missing_resource():

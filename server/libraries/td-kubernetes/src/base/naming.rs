@@ -21,7 +21,7 @@ pub fn worker_name_prefix(worker: &WorkerName, decorator: Option<&Decorator>) ->
     match worker {
         WorkerName::Function => match decorator {
             Some(Decorator::Publisher) => "pub",
-            Some(Decorator::Transformer) => "trf",
+            Some(Decorator::Transformer) => "tfr",
             Some(Decorator::Subscriber) => "sub",
             None => "fun",
         },

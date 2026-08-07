@@ -95,6 +95,8 @@ pub struct GlobalArguments {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    #[command(about = "Show build metadata and system information")]
+    About,
     #[command(about = "Initialize, create and start a tabsdata instance in one step")]
     Quickstart(QuickstartArguments),
     #[command(about = "Produce an editable input config folder for a tabsdata instance")]

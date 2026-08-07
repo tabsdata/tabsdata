@@ -11,6 +11,8 @@ pub mod widgets;
 use clap::{CommandFactory, Parser};
 
 use crate::cerror;
+use td_build::version::TABSDATA_VERSION;
+
 use crate::client::tdkserver::arguments::{Arguments, Commands, GlobalArguments};
 use crate::client::tdkserver::widgets::set_keep_progress;
 // use crate::client::tdkserver::commands::cluster::command_cluster;
@@ -66,6 +68,10 @@ impl TabsDataKubernetesClient {
             None => {
                 Arguments::command().print_help().ok();
                 println!();
+                Ok(())
+            }
+            Some(Commands::About) => {
+                td_common::about::tdabout(TABSDATA_VERSION);
                 Ok(())
             }
             Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,

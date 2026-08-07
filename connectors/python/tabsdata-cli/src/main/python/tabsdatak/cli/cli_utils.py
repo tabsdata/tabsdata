@@ -4,8 +4,6 @@
 
 """Shared helpers for the ``tdk`` CLI.
 
-Also hosts a temporary stand-in for :func:`tdabout` that mirrors the
-legacy ``tabsdatak.common._information.about.dabout`` surface so the
 ``tdk`` migration can land without dragging in the explicitly-excluded
 ``_utils/internal/`` subtree. Placeholder pending a proper v2 port
 (see TODO block below).
@@ -79,36 +77,6 @@ SERVER_URL_DEFAULTS_HELP = (
     f"If omitted, the protocol defaults to '{DEFAULT_SERVER_PROTOCOL}' and the "
     f"port to {DEFAULT_APISERVER_PORT}."
 )
-
-
-# ---------------------------------------------------------------------------
-# Temporary stand-in for legacy ``_utils.internal._about.tdabout``.
-#
-# TODO(tabsdatak-migration): this is a placeholder so the ``tdk`` CLI
-# migration can land without porting the explicitly-excluded
-# ``tabsdata/_utils/internal/`` subtree. Replace with a proper v2
-# implementation in a follow-up ticket once the v2 packaging story
-# is settled. Until then, ``tdabout`` prints a one-line banner via
-# importlib.metadata.
-# ---------------------------------------------------------------------------
-
-
-_DEFAULT_ABOUT_PACKAGE = "tabsdata-cli"
-
-
-def tdabout(package_name: str = _DEFAULT_ABOUT_PACKAGE) -> None:
-    """Print a one-line banner naming the package and its version.
-
-    TODO(tabsdatak-migration): replace with the proper v2 ``tdabout``
-    once the legacy ``_utils/internal/_about.py`` is ported. The
-    current placeholder is intentionally minimal -- it does not walk
-    every related package or read build-time manifests.
-    """
-    try:
-        pkg_version = version(package_name)
-    except PackageNotFoundError:
-        pkg_version = "unknown"
-    print(f"{package_name} {pkg_version}", file=sys.stdout)
 
 
 def is_valid_id(possible_id: str) -> bool:

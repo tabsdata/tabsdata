@@ -17,6 +17,7 @@ except PackageNotFoundError:
     __version__ = "0.0.0"
 
 from tabsdatak.cli._registry import collect_cli_commands
+from tabsdatak.common._information.about import tdabout
 from tabsdatak.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
     OPTION_PROMPT,
@@ -32,7 +33,6 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     make_console,
     store_cli_options,
-    tdabout,
     utils_login,
     verify_login_or_prompt,
 )

@@ -19,7 +19,7 @@ botocore-stubs==1.43.14
 build==1.5.0
 cachetools==6.2.6
 certifi==2026.7.22
-cffi==2.1.0 ; platform_python_implementation != 'PyPy'
+cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.4.9
 click==8.4.2
 click-repl==0.3.0
@@ -40,16 +40,16 @@ fastparquet==2026.3.0
 filelock==3.25.2
 fsspec==2026.7.0
 google-api-core==2.30.3
-google-auth==2.56.2
+google-auth==2.56.3
 google-cloud-bigquery==3.40.1
-google-cloud-core==2.6.0
+google-cloud-core==2.6.1
 google-cloud-storage==3.10.0
 google-cloud-storage-control==1.10.0
 google-crc32c==1.8.0
-google-resumable-media==2.10.0
-googleapis-common-protos==1.75.0
+google-resumable-media==2.10.1
+googleapis-common-protos==1.75.1
 greenlet==3.5.4 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
-grpc-google-iam-v1==0.14.4
+grpc-google-iam-v1==0.14.5
 grpcio==1.83.0
 grpcio-status==1.83.0
 grpcio-tools==1.80.0
@@ -84,13 +84,13 @@ orjson==3.11.7
 packaging==26.0
 pandas==2.3.3
 pillow==12.1.1
-pip==26.2
+pip==26.2.1
 pip-tools==7.5.3
 platformdirs==4.9.4
 polars==1.39.3
 polars-runtime-32==1.39.3
 prompt-toolkit==3.0.52
-proto-plus==1.28.2
+proto-plus==1.28.3
 protobuf==6.33.6
 psycopg2-binary==2.9.11
 py-cpuinfo==9.0.0
