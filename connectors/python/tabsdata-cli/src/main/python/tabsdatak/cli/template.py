@@ -63,7 +63,7 @@ import textwrap
 import types as _types
 import typing
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
@@ -156,7 +156,7 @@ def list_connectors() -> list[ConnectorInfo]:
     return rows
 
 
-def resolve_conn(type_: str, direction: Optional[str]) -> ConnectorInfo:
+def resolve_conn(type_: str, direction: str | None) -> ConnectorInfo:
     """Resolve a connector ``type`` (+ optional ``direction``) to its binding.
 
     Infers the direction when the type is unambiguous; raises a clear
@@ -208,7 +208,7 @@ def _members(ann: Any) -> list[Any]:
     return out
 
 
-def _ref_class(first: Any) -> Optional[type]:
+def _ref_class(first: Any) -> type | None:
     """If the union's first member is a :class:`~tabsdatak.api.Secret`
     reference type, return it (else ``None``).
     Drives both the static sample and the wizard's secret-style prompt."""
@@ -217,7 +217,7 @@ def _ref_class(first: Any) -> Optional[type]:
     return None
 
 
-def _type_comment(members: list[Any]) -> Optional[str]:
+def _type_comment(members: list[Any]) -> str | None:
     """A one-line note listing the forms a field accepts, in the union's
     declaration order -- e.g. a ``str`` | ``Secret`` field (uri, bucket,
     region) -> ``accepts: str:<value> | secret:<value>``. The plain arm of a
@@ -262,7 +262,7 @@ def _first_concrete(cls: type) -> type:
     return subs[0]
 
 
-def _pattern_of(ann: Any) -> Optional[str]:
+def _pattern_of(ann: Any) -> str | None:
     """The first regex pattern declared on the annotation's ``Annotated``
     metadata (``StringConstraints``), for wizard display."""
     candidates = (
@@ -279,7 +279,7 @@ def _pattern_of(ann: Any) -> Optional[str]:
     return None
 
 
-def _field_pattern(fi: Any) -> Optional[str]:
+def _field_pattern(fi: Any) -> str | None:
     """The regex a field advertises for the wizard prompt. Checks the
     annotation's inline ``Annotated`` metadata first, then the field-level
     metadata -- where a field's ``ValueConstraints`` ends up once pydantic
@@ -408,7 +408,7 @@ def _placeholder_value(members: list[Any], default: Any, path: str) -> Any:
     return _scalar_placeholder([members[0]], default, path)
 
 
-def _expected_note(members: list[Any]) -> Optional[str]:
+def _expected_note(members: list[Any]) -> str | None:
     """A very short 'what's expected' note for a union / dict / list / choice
     field — shown on optional fields and commented-out ones. ``None`` for a
     plain single-form scalar."""
@@ -432,7 +432,7 @@ def _expected_note(members: list[Any]) -> Optional[str]:
 
 def _field_comment_lines(
     name: str, members: list[Any], value: Any, required: bool, default: Any
-) -> Optional[list[str]]:
+) -> list[str] | None:
     """The content lines of the comment block shown above a real (uncommented)
     field (borders are added by :func:`_set_block_comment`). A required fill-in
     placeholder gets::
@@ -621,7 +621,7 @@ def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> Commen
 # ---------------------------------------------------------------------------
 
 # prompt(path, *, secret, optional, default, pattern, choices) -> str | None
-PromptFn = Callable[..., Optional[str]]
+PromptFn = Callable[..., str | None]
 
 
 def build_template_interactive(conn_cls: type, prompt: PromptFn) -> dict:

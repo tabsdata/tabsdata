@@ -235,6 +235,10 @@ def test_validate_rejects_non_connection_type():
 
 def test_members_unwraps_union_and_annotated():
     assert template._members(typing.Union[str, Secret]) == [str, Secret]
+    # `_members` drops `None` for either union spelling: a connector author
+    # may write PEP-604 `int | None` or the older `typing.Optional[int]`,
+    # which have different origins (`types.UnionType` vs `typing.Union`).
+    assert template._members(int | None) == [int]
     assert template._members(typing.Optional[int]) == [int]
 
 

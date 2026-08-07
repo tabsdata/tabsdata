@@ -3,7 +3,7 @@
 #
 
 from dataclasses import field
-from typing import Optional, Union
+from typing import Union
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Entity
@@ -78,7 +78,7 @@ class MongoDBEntity(Entity):
     collection: str = ""
     collection_type: str = "collection"
     indexes: list[MongoIndex] = field(default_factory=list)
-    validator: Optional[MongoValidator] = None
+    validator: MongoValidator | None = None
 
     def fqn(self) -> str:
         return self.connection_type.entity_fqn({
