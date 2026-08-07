@@ -1,0 +1,20 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+database:
+  apiserver:
+    postgres:
+      host: ${{literal:tdk_database_host}}
+      port: ${{literal:tdk_database_port}}
+      database: ${{literal:tdk_database_name}}
+      password: ${{secretAuto:postgres_password}}
+      ssl_mode: ${{system:tdk_database_ssl_mode}}
+      ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}
+    pool:
+      min_connections: 5
+      max_connections: 50
+      acquire_timeout: 30
+      max_lifetime: 3600
+      idle_timeout: 60
+      test_before_acquire: true

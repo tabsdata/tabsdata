@@ -102,8 +102,7 @@ impl ClusterProvider {
 
     pub fn supported(self) -> bool {
         match self {
-            Self::Kminus | Self::Docker | Self::Fargate => true,
-            Self::Eks => false,
+            Self::Kminus | Self::Docker | Self::Eks | Self::Fargate => true,
         }
     }
 

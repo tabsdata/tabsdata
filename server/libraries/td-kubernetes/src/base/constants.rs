@@ -328,7 +328,7 @@ pub const VALUE_YES: &str = "yes";
 pub const VALUE_N: &str = "n";
 pub const VALUE_NO: &str = "no";
 
-pub const DELETE_POD_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+pub const DELETE_POD_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DELETE_POD_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 pub const POD_PHASE_PENDING: &str = "Pending";

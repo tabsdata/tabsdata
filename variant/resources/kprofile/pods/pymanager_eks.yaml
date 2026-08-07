@@ -1,0 +1,126 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-pymanager
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Tabsdata pymanager"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: pymanager
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: setup
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/instance: tabsdata
+        app.kubernetes.io/component: pymanager
+        app.kubernetes.io/part-of: tabsdata
+        app.kubernetes.io/managed-by: tdkserver
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+          effect: NoSchedule
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: 1000-venvbuilder
+        image: ubuntu:24.04
+        imagePullPolicy: IfNotPresent
+        command: ["bash"]
+        args:
+        - $(CONTAINER_ROOT)/tabsdata/assets/venvbuilder.sh
+        - --output
+        - ${{system:tdk_runtimes_root}}
+        - --image
+        - tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst
+        - --requirements-td
+        - $(CONTAINER_ROOT)/tabsdata/assets/requirements-td.txt
+        - --version
+        - ${{system:tdk_tabsdata_version}}
+        - --storage-config
+        - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+        - --transporter-request
+        - $(CONTAINER_ROOT)/tabsdata/shuttle/request/image-upload.yaml
+        - --transporter-response
+        - $(CONTAINER_ROOT)/tabsdata/shuttle/response/image-upload.yaml
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+            ephemeral-storage: "16Gi"
+        env:
+        - name: CONTAINER_ROOT
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+        - name: TD_LOG_CONFIG
+          value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+        - name: UV_DEFAULT_INDEX
+          value: "${{system:tdk_uv_default_index}}"
+        - name: UV_EXTRA_INDEX_URL
+          value: "${{system:tdk_uv_extra_index_url}}"
+        - name: UV_INDEX_STRATEGY
+          value: "${{system:tdk_uv_index_strategy}}"
+        envFrom:
+        - secretRef:
+            name: td-app-apiserver-secret-config-apiserver.storage.yaml
+          prefix: SECRETS__
+        volumeMounts:
+        - name: assets
+          mountPath: /tabsdata/assets
+          readOnly: true
+        - name: config
+          mountPath: /tabsdata/config
+          readOnly: true
+        - name: runtimes
+          mountPath: ${{system:tdk_runtimes_root}}
+        - name: shuttle
+          mountPath: /tabsdata/shuttle
+      volumes:
+      - name: assets
+        projected:
+          defaultMode: 493
+          sources:
+          - configMap:
+              name: td-app-venvbuilder-asset-venvbuilder.sh
+          - configMap:
+              name: td-app-requirements-td-asset-requirements-td.txt
+      - name: config
+        projected:
+          sources:
+          - configMap:
+              name: td-app-apiserver-config-apiserver.storage.yaml
+          - configMap:
+              name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+      - name: runtimes
+        emptyDir: {}
+      - name: shuttle
+        emptyDir: {}
