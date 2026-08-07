@@ -49,9 +49,10 @@ use crate::runtime::provider::eks::EksProvider;
 use crate::runtime::provider::fargate::FargateProvider;
 use crate::runtime::provider::kminus::KminusProvider;
 use crate::runtime::provider::outcome::{
-    ClusterRestartOutcome, ClusterStartOutcome, ClusterStopOutcome, InstanceRestartOutcome,
-    InstanceStartOutcome, InstanceStopOutcome, ServerRestartOutcome, ServerStartOutcome,
-    ServerStopOutcome, ServiceRestartOutcome, ServiceStartOutcome, ServiceStopOutcome,
+    ClusterRestartOutcome, ClusterStartOutcome, ClusterStopOutcome, ImagesOutcome,
+    InstanceRestartOutcome, InstanceStartOutcome, InstanceStopOutcome, ServerRestartOutcome,
+    ServerStartOutcome, ServerStopOutcome, ServiceRestartOutcome, ServiceStartOutcome,
+    ServiceStopOutcome,
 };
 use crate::runtime::provider::summary::Summary;
 use crate::runtime::reporting::build_kube_client;
@@ -348,7 +349,7 @@ pub trait Provider: Send + Sync {
     ) -> CommandResult<Box<dyn Transaction>>;
     async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult;
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult;
-    async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult;
+    async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult<ImagesOutcome>;
 
     async fn cluster_alive(&self) -> bool;
     async fn cluster_dead(&self) -> bool {
@@ -358,7 +359,11 @@ pub trait Provider: Send + Sync {
     fn staging_profile_path(&self) -> Option<std::path::PathBuf> {
         None
     }
+    fn manages_cluster_lifecycle(&self) -> bool;
     async fn start_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStartOutcome> {
+        if !self.manages_cluster_lifecycle() {
+            return Ok(ClusterStartOutcome::NotSupported);
+        }
         if self.cluster_alive().await {
             return Ok(ClusterStartOutcome::AlreadyRunning);
         }
@@ -371,7 +376,7 @@ pub trait Provider: Send + Sync {
         &self,
         reporter: &dyn Reporter,
     ) -> CommandResult<ClusterRestartOutcome> {
-        let stop = if self.cluster_alive().await {
+        let stop = if self.manages_cluster_lifecycle() && self.cluster_alive().await {
             Some(self.stop_cluster(reporter).await?)
         } else {
             None

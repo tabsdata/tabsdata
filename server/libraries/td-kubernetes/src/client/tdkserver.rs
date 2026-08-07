@@ -24,13 +24,13 @@ use crate::client::tdkserver::commands::service::init::command_init;
 use crate::client::tdkserver::commands::service::list::command_list;
 use crate::client::tdkserver::commands::service::put::command_put;
 use crate::client::tdkserver::commands::service::quickstart::command_quickstart;
-use crate::client::tdkserver::commands::service::register::command_register;
+// use crate::client::tdkserver::commands::service::register::command_register;
 use crate::client::tdkserver::commands::service::restart::command_restart;
 use crate::client::tdkserver::commands::service::start::command_start;
 use crate::client::tdkserver::commands::service::status::command_status;
 use crate::client::tdkserver::commands::service::stop::command_stop;
 use crate::client::tdkserver::commands::service::trash::command_trash;
-use crate::client::tdkserver::commands::service::unregister::command_unregister;
+// use crate::client::tdkserver::commands::service::unregister::command_unregister;
 use crate::client::tdkserver::commands::service::view::command_view;
 use crate::client::tdkserver::commands::session::pin::command_pin;
 use crate::client::tdkserver::commands::session::show::command_show;
@@ -74,8 +74,10 @@ impl TabsDataKubernetesClient {
             Some(Commands::Restart(arguments)) => command_restart(arguments, &globals).await,
             Some(Commands::Status(arguments)) => command_status(arguments, &globals).await,
             Some(Commands::Info(arguments)) => command_info(arguments, &globals).await,
-            Some(Commands::Register(arguments)) => command_register(arguments, &globals).await,
-            Some(Commands::Unregister(arguments)) => command_unregister(arguments, &globals).await,
+            // Some(Commands::Register(arguments)) => command_register(arguments, &globals).await,
+            // Some(Commands::Unregister(arguments)) => {
+            //     command_unregister(arguments, &globals).await
+            // }
             Some(Commands::Get(arguments)) => command_get(arguments, &globals).await,
             Some(Commands::Put(arguments)) => command_put(arguments, &globals).await,
             Some(Commands::View(arguments)) => command_view(arguments, &globals).await,

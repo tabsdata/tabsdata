@@ -6,12 +6,20 @@
 pub enum ClusterStartOutcome {
     Started,
     AlreadyRunning,
+    NotSupported,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ClusterStopOutcome {
     Stopped,
     AlreadyStopped,
+    NotSupported,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ImagesOutcome {
+    Created,
+    NotSupported,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

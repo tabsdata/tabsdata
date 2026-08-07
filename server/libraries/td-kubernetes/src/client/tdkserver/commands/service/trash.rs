@@ -25,7 +25,6 @@ use crate::client::tdkserver::render::preview;
 use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use crate::cwarn;
 use crate::runtime::instance::verify_instance_version;
-use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::provider_for_instance_any_state;
 
 const TRASH_TIMESTAMP_FORMAT: &str = "%Y.%m.%d.%H.%M.%S%.3f";
@@ -172,19 +171,11 @@ pub fn trash_instance_folder(name: &str, folder: &Path) -> CommandResult<PathBuf
 }
 
 pub(crate) async fn stop_if_possible(name: &str, verbose: bool) {
-    let settings = match InstanceSettings::load(name) {
-        Ok(settings) => settings,
-        Err(error) => {
-            cwarn!(
-                "Skipping stop; could not read instance settings: {}",
-                render(&error, verbose)
-            );
-            return;
-        }
-    };
-
-    if settings.provider != ClusterProvider::Kminus {
-        info!("Skipping stop; instance provider is not a local kminus instance.");
+    if let Err(error) = InstanceSettings::load(name) {
+        cwarn!(
+            "Skipping stop; could not read instance settings: {}",
+            render(&error, verbose)
+        );
         return;
     }
 

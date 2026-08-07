@@ -68,7 +68,7 @@ use crate::runtime::instance::profile::{
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::runtime::provider::kminus::instance::KminusInstance;
-use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
+use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
 use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     Cluster, ClusterProvider, HostedProvider, Instance, LocalProvider, ProcessProvider, Provider,
@@ -448,7 +448,7 @@ impl Provider for KminusProvider {
         }
     }
 
-    async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult {
+    async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult<ImagesOutcome> {
         let images_target = self.folder.join(FOLDER_IMAGES);
         fs::create_dir_all(&images_target).map_err(|error| {
             ProviderError::ImagesFolderCreateFailed(
@@ -459,7 +459,7 @@ impl Provider for KminusProvider {
         let kprofile_root = resolve_kprofile_path(self.verbose)?;
         let images_source = kprofile_root.join(FOLDER_IMAGES);
         if !images_source.is_dir() {
-            return Ok(());
+            return Ok(ImagesOutcome::Created);
         }
         let step = reporter.step("Copying worker image trees");
         if let Err(cause) = copy_tree(&images_source, &images_target) {
@@ -472,7 +472,7 @@ impl Provider for KminusProvider {
             .into());
         }
         step.done("Worker image trees copied");
-        Ok(())
+        Ok(ImagesOutcome::Created)
     }
 
     async fn cluster_alive(&self) -> bool {
@@ -485,6 +485,10 @@ impl Provider for KminusProvider {
 
     fn staging_profile_path(&self) -> Option<PathBuf> {
         Some(self.cluster.staging_profile_path())
+    }
+
+    fn manages_cluster_lifecycle(&self) -> bool {
+        true
     }
 
     async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult {

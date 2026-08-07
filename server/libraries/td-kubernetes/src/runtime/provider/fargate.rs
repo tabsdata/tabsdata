@@ -47,7 +47,7 @@ use crate::runtime::instance::staging::promote_staged_profile;
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::fargate::cluster::FargateCluster;
 use crate::runtime::provider::fargate::instance::FargateInstance;
-use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
+use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
 use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     CloudProvider, Cluster, ClusterProvider, ContainerProvider, Instance, Provider,
@@ -65,6 +65,7 @@ pub struct FargateProvider {
     inputs: FargateInputs,
     name: String,
     folder: PathBuf,
+    #[allow(dead_code)]
     verbose: bool,
 }
 
@@ -334,8 +335,8 @@ impl Provider for FargateProvider {
         self.create_runtimes_as_pod().await
     }
 
-    async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult {
-        Ok(())
+    async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult<ImagesOutcome> {
+        Ok(ImagesOutcome::NotSupported)
     }
 
     async fn cluster_alive(&self) -> bool {
@@ -346,22 +347,16 @@ impl Provider for FargateProvider {
         self.cluster_alive().await && self.instance.is_alive().await
     }
 
-    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult {
-        let step = reporter.step("Starting kubernetes cluster");
-        self.cluster.start().await?;
-        step.done("Kubernetes cluster started");
-        handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
-        Ok(())
+    fn manages_cluster_lifecycle(&self) -> bool {
+        false
     }
 
-    async fn stop_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
-        let step = reporter.step("Stopping kubernetes cluster");
-        let stopped = self.cluster.stop().await?;
-        step.done("Kubernetes cluster stopped");
-        match stopped {
-            true => Ok(ClusterStopOutcome::Stopped),
-            false => Ok(ClusterStopOutcome::AlreadyStopped),
-        }
+    async fn start_cluster_hook(&self, _reporter: &dyn Reporter) -> CommandResult {
+        handle_phase_secrets(self, SecretPhase::ClusterStart).await
+    }
+
+    async fn stop_cluster(&self, _reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
+        Ok(ClusterStopOutcome::NotSupported)
     }
 
     async fn ensure_startable_cluster(&self) -> CommandResult {

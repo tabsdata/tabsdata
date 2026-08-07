@@ -19,7 +19,7 @@ use crate::client::tdkserver::commands::service::get::GetArguments;
 use crate::client::tdkserver::commands::service::init::InitArguments;
 use crate::client::tdkserver::commands::service::put::PutArguments;
 use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments;
-use crate::client::tdkserver::commands::service::register::RegisterArguments;
+// use crate::client::tdkserver::commands::service::register::RegisterArguments;
 use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
@@ -100,10 +100,10 @@ pub enum Commands {
     Info(InstanceNameArguments),
     #[command(about = "Trash a local kminus tabsdata instance")]
     Trash(TrashArguments),
-    #[command(about = "Register an existing tabsdata instance")]
-    Register(RegisterArguments),
-    #[command(about = "Unregister a tabsdata instance")]
-    Unregister(InstanceNameArguments),
+    // #[command(about = "Register an existing tabsdata instance")]
+    // Register(RegisterArguments),
+    // #[command(about = "Unregister a tabsdata instance")]
+    // Unregister(InstanceNameArguments),
     #[command(
         name = "get-cfg",
         about = "Download the configmaps of a tabsdata instance for editing"

@@ -13,7 +13,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::core::system::exit::CommandResult;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
+use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
 use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     CloudProvider, ClusterProvider, ContainerProvider, HostedProvider, Provider, Transaction,
@@ -101,7 +101,7 @@ impl Provider for EksProvider {
         unreachable!("The eks provider is not yet implemented.")
     }
 
-    async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult {
+    async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult<ImagesOutcome> {
         unreachable!("The eks provider is not yet implemented.")
     }
 
@@ -110,6 +110,10 @@ impl Provider for EksProvider {
     }
 
     async fn instance_alive(&self) -> bool {
+        unreachable!("The eks provider is not yet implemented.")
+    }
+
+    fn manages_cluster_lifecycle(&self) -> bool {
         unreachable!("The eks provider is not yet implemented.")
     }
 

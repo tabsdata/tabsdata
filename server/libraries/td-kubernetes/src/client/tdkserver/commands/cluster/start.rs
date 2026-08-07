@@ -74,6 +74,10 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
             report::component::cluster::started_cluster(&provider.summary())
         }
         ClusterStartOutcome::AlreadyRunning => cwarn!("Cluster is already started."),
+        ClusterStartOutcome::NotSupported => cwarn!(
+            "The cluster lifecycle is not managed by tabsdata for the '{}' provider.",
+            provider.cluster_provider().as_str()
+        ),
     }
 
     Ok(())

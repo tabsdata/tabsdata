@@ -169,11 +169,6 @@ pub enum ProviderError {
          Run 'tdkserver init --instance {name} ...' first."
     )]
     InstanceNotInitialized { name: String, reason: String } = 6004,
-    #[error(
-        "The 'trash' command is only available for local kminus instances. \
-         The instance '{name}' uses the '{provider}' provider."
-    )]
-    TrashNotSupportedForProvider { name: String, provider: String } = 6005,
     #[error("No staged instance profile was found at '{0}'.")]
     StagedProfileMissing(String) = 6006,
     #[error(

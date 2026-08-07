@@ -75,6 +75,10 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
             report::component::cluster::stopped_cluster(&provider.summary())
         }
         ClusterStopOutcome::AlreadyStopped => cwarn!("Nothing to stop."),
+        ClusterStopOutcome::NotSupported => cwarn!(
+            "The cluster lifecycle is not managed by tabsdata for the '{}' provider.",
+            provider.cluster_provider().as_str()
+        ),
     }
 
     Ok(())
