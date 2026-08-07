@@ -17,10 +17,10 @@
   },
   {
     "name": "customer_subscriptions",
-    "sizeable": false
+    "sizeable": true
   },
   {
     "name": "customer_subscription_events",
-    "sizeable": false
+    "sizeable": true
   }
 ]

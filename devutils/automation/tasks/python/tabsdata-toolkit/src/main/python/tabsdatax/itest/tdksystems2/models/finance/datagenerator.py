@@ -5,10 +5,16 @@
 """Data generator for the ``finance`` model.
 
 Subscription-billing data keyed to Salesforce Accounts — the finance half of a
-Salesforce/Finance pair. Fixed-data: it ships a snapshot of SF Accounts in
-``accounts.csv`` and emits one ``customer`` per account deterministically (a
-per-account RNG seeded by the SF Id), so the dataset is reproducible across runs
-and the requested size has no effect. Two entities take deltas: ``customers``
+Salesforce/Finance pair. It ships a snapshot of SF Accounts in ``accounts.csv``
+and emits one ``customer`` per account deterministically (a per-account RNG
+seeded by the SF Id), so the dataset is reproducible across runs.
+
+The account-keyed entities (``customers``, ``payment_methods``) and the plan
+catalogue are fixed by that snapshot — growing them would mint customers with no
+Salesforce Account to join. The size multiplier scales the fact tables instead:
+each customer gets ``--size`` subscriptions (its one current subscription, as at
+size 1, plus past ones) and the matching event history. Two entities take
+deltas: ``customers``
 (insert / update; inserts omit the auto id and give every NOT NULL column a
 value) and the leaf ``customer_subscription_events`` (delete only — nothing
 references it).
@@ -23,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems2.datagen import Entity, Model, OpKind
+from tabsdatax.itest.tdksystems2.datagen import BASE_SIZE, Entity, Model, OpKind
 from tabsdatax.itest.tdksystems2.emit import Column, Table
 
 _ACCOUNTS_CSV = Path(__file__).parent / "accounts.csv"
@@ -102,6 +108,13 @@ STATUS_WEIGHTS = [
     ("CANCELED", 0.10),
     ("EXPIRED", 0.04),
     ("INCOMPLETE", 0.02),
+]
+# Statuses for the past subscriptions a size multiplier adds. Both sit outside
+# the live set the DDL's one-live-per-(customer, plan) unique index covers, so a
+# customer can hold any number of them next to its one current subscription.
+PAST_STATUS_WEIGHTS = [
+    ("CANCELED", 0.70),
+    ("EXPIRED", 0.30),
 ]
 PAYMENT_METHOD_WEIGHTS = [
     ("CARD", 0.75),
@@ -303,7 +316,7 @@ EVENT_COLUMNS = [
 ]
 
 
-def _build_tables(accounts: list[dict]) -> list[Table]:
+def _build_tables(accounts: list[dict], subs_per_customer: int) -> list[Table]:
     plans = _build_plans()
 
     plan_rows = [
@@ -382,156 +395,164 @@ def _build_tables(accounts: list[dict]) -> list[Table]:
 
     sub_rows: list[dict] = []
     event_rows: list[dict] = []
-    for idx, (a, cid) in enumerate(zip(accounts, customer_ids), start=1):
+    sub_id = 0
+    for a, cid in zip(accounts, customer_ids):
         rng = _rng(a["Id"], "sub")
         revenue = float(a["AnnualRevenue"]) if a.get("AnnualRevenue") else None
         employees = (
             int(float(a["NumberOfEmployees"])) if a.get("NumberOfEmployees") else None
         )
-        plan = plans[_plan_index(revenue, employees, rng)]
+        for k in range(subs_per_customer):
+            sub_id += 1
+            plan = plans[_plan_index(revenue, employees, rng)]
 
-        account_created = _parse_sf_dt(a["CreatedDate"])
-        max_start = NOW - timedelta(days=1)
-        if account_created >= max_start:
-            started = account_created
-        else:
-            span_days = max(1, (max_start - account_created).days)
-            started = account_created + timedelta(days=rng.randint(0, span_days))
+            account_created = _parse_sf_dt(a["CreatedDate"])
+            max_start = NOW - timedelta(days=1)
+            if account_created >= max_start:
+                started = account_created
+            else:
+                span_days = max(1, (max_start - account_created).days)
+                started = account_created + timedelta(days=rng.randint(0, span_days))
 
-        status = _pick(rng, STATUS_WEIGHTS)
+            # The first subscription is the customer's live one; the extras a
+            # size multiplier adds are past subscriptions, whose terminal status
+            # keeps the one-live-per-(customer, plan) unique index satisfied.
+            status = _pick(rng, STATUS_WEIGHTS if k == 0 else PAST_STATUS_WEIGHTS)
 
-        trial_start = None
-        trial_end = None
-        if plan.trial_days > 0 and rng.random() < 0.30:
-            trial_start = started
-            trial_end = started + timedelta(days=plan.trial_days)
+            trial_start = None
+            trial_end = None
+            if plan.trial_days > 0 and rng.random() < 0.30:
+                trial_start = started
+                trial_end = started + timedelta(days=plan.trial_days)
 
-        quantity = rng.choices(
-            [1, 1, 1, 2, 5, 10, 25], weights=[0.55, 0.15, 0.10, 0.08, 0.06, 0.04, 0.02]
-        )[0]
-        unit_amount = plan.amount
-        discount_rate = rng.choice([0, 0, 0, 0.05, 0.10, 0.15])
-        discount_amount = round(unit_amount * quantity * discount_rate, 4)
-        taxable = unit_amount * quantity - discount_amount
-        tax_rate = rng.choice([0, 0.05, 0.0725, 0.08])
-        tax_amount = round(taxable * tax_rate, 4)
-        total_amount = round(taxable + tax_amount, 4)
+            quantity = rng.choices(
+                [1, 1, 1, 2, 5, 10, 25],
+                weights=[0.55, 0.15, 0.10, 0.08, 0.06, 0.04, 0.02],
+            )[0]
+            unit_amount = plan.amount
+            discount_rate = rng.choice([0, 0, 0, 0.05, 0.10, 0.15])
+            discount_amount = round(unit_amount * quantity * discount_rate, 4)
+            taxable = unit_amount * quantity - discount_amount
+            tax_rate = rng.choice([0, 0.05, 0.0725, 0.08])
+            tax_amount = round(taxable * tax_rate, 4)
+            total_amount = round(taxable + tax_amount, 4)
 
-        period_start, period_end, _next = _compute_period(started, plan)
-        next_billing: datetime | None = _next
+            period_start, period_end, _next = _compute_period(started, plan)
+            next_billing: datetime | None = _next
 
-        cancel_at = None
-        canceled_at = None
-        ended_at = None
-        cancel_at_period_end = False
-        if status == "CANCELED":
-            canceled_at = period_start + timedelta(days=rng.randint(0, 20))
-            ended_at = canceled_at
-            next_billing = None
-        elif status == "EXPIRED":
-            ended_at = period_end - timedelta(days=1)
-            next_billing = None
-        elif status in ("PAUSED", "INCOMPLETE"):
-            next_billing = None
-        elif status == "TRIALING" and trial_end:
-            next_billing = trial_end
-        elif status == "ACTIVE" and rng.random() < 0.15:
-            cancel_at_period_end = True
-            cancel_at = period_end
+            cancel_at = None
+            canceled_at = None
+            ended_at = None
+            cancel_at_period_end = False
+            if status == "CANCELED":
+                canceled_at = period_start + timedelta(days=rng.randint(0, 20))
+                ended_at = canceled_at
+                next_billing = None
+            elif status == "EXPIRED":
+                ended_at = period_end - timedelta(days=1)
+                next_billing = None
+            elif status in ("PAUSED", "INCOMPLETE"):
+                next_billing = None
+            elif status == "TRIALING" and trial_end:
+                next_billing = trial_end
+            elif status == "ACTIVE" and rng.random() < 0.15:
+                cancel_at_period_end = True
+                cancel_at = period_end
 
-        if status == "TRIALING" and not trial_end:
-            trial_start = started
-            trial_end = started + timedelta(days=max(plan.trial_days, 7))
-            next_billing = trial_end
+            if status == "TRIALING" and not trial_end:
+                trial_start = started
+                trial_end = started + timedelta(days=max(plan.trial_days, 7))
+                next_billing = trial_end
 
-        sub_rows.append({
-            "subscription_id": idx,
-            "customer_id": cid,
-            "plan_id": plan.plan_id,
-            "price_id": plan.price_id,
-            "currency": plan.currency,
-            "unit_amount": unit_amount,
-            "quantity": quantity,
-            "discount_amount": discount_amount,
-            "tax_amount": tax_amount,
-            "total_amount": total_amount,
-            "status": status,
-            "started_at": _to_naive_utc(started),
-            "trial_start": _to_naive_utc(trial_start) if trial_start else None,
-            "trial_end": _to_naive_utc(trial_end) if trial_end else None,
-            "current_period_start": _to_naive_utc(period_start),
-            "current_period_end": _to_naive_utc(period_end),
-            "next_billing_at": _to_naive_utc(next_billing) if next_billing else None,
-            "cancel_at": _to_naive_utc(cancel_at) if cancel_at else None,
-            "canceled_at": _to_naive_utc(canceled_at) if canceled_at else None,
-            "ended_at": _to_naive_utc(ended_at) if ended_at else None,
-            "cancel_at_period_end": cancel_at_period_end,
-            "payment_method_id": default_pm.get(cid),
-            "created_at": _to_naive_utc(started),
-        })
-
-        def _evt(
-            etype: str,
-            fr: str | None,
-            to: str | None,
-            when: datetime,
-            actor: str,
-            sub_id: int = idx,
-        ) -> None:
-            event_rows.append({
+            sub_rows.append({
                 "subscription_id": sub_id,
-                "event_type": etype,
-                "from_status": fr,
-                "to_status": to,
-                "occurred_at": _to_naive_utc(when),
-                "actor": actor,
+                "customer_id": cid,
+                "plan_id": plan.plan_id,
+                "price_id": plan.price_id,
+                "currency": plan.currency,
+                "unit_amount": unit_amount,
+                "quantity": quantity,
+                "discount_amount": discount_amount,
+                "tax_amount": tax_amount,
+                "total_amount": total_amount,
+                "status": status,
+                "started_at": _to_naive_utc(started),
+                "trial_start": _to_naive_utc(trial_start) if trial_start else None,
+                "trial_end": _to_naive_utc(trial_end) if trial_end else None,
+                "current_period_start": _to_naive_utc(period_start),
+                "current_period_end": _to_naive_utc(period_end),
+                "next_billing_at": (
+                    _to_naive_utc(next_billing) if next_billing else None
+                ),
+                "cancel_at": _to_naive_utc(cancel_at) if cancel_at else None,
+                "canceled_at": _to_naive_utc(canceled_at) if canceled_at else None,
+                "ended_at": _to_naive_utc(ended_at) if ended_at else None,
+                "cancel_at_period_end": cancel_at_period_end,
+                "payment_method_id": default_pm.get(cid),
+                "created_at": _to_naive_utc(started),
             })
 
-        _evt("CREATED", None, "INCOMPLETE", started, "system")
-        activation = "TRIALING" if trial_end else "ACTIVE"
-        _evt(
-            "ACTIVATED",
-            "INCOMPLETE",
-            activation,
-            started + timedelta(minutes=1),
-            "system",
-        )
-        if trial_end and status not in ("INCOMPLETE",) and status != "TRIALING":
-            _evt("RENEWED", "TRIALING", status, trial_end, "system")
-        if status in ("ACTIVE", "PAST_DUE", "PAUSED"):
-            cursor = started + timedelta(days=plan.trial_days if trial_end else 0)
-            delta_days = 365 if plan.interval == "YEAR" else 30
-            while cursor + timedelta(days=delta_days) < period_start:
-                cursor = cursor + timedelta(days=delta_days)
-                _evt("RENEWED", "ACTIVE", "ACTIVE", cursor, "system")
-        if status == "PAST_DUE":
+            def _evt(
+                etype: str,
+                fr: str | None,
+                to: str | None,
+                when: datetime,
+                actor: str,
+            ) -> None:
+                event_rows.append({
+                    "subscription_id": sub_id,
+                    "event_type": etype,
+                    "from_status": fr,
+                    "to_status": to,
+                    "occurred_at": _to_naive_utc(when),
+                    "actor": actor,
+                })
+
+            _evt("CREATED", None, "INCOMPLETE", started, "system")
+            activation = "TRIALING" if trial_end else "ACTIVE"
             _evt(
-                "PAYMENT_FAILED",
-                "ACTIVE",
-                "PAST_DUE",
-                period_start + timedelta(days=3),
-                "webhook:stripe",
+                "ACTIVATED",
+                "INCOMPLETE",
+                activation,
+                started + timedelta(minutes=1),
+                "system",
             )
-        if status == "PAUSED":
-            _evt(
-                "PAUSED",
-                "ACTIVE",
-                "PAUSED",
-                period_start + timedelta(days=5),
-                "user:admin",
-            )
-        if cancel_at_period_end:
-            _evt(
-                "CANCEL_SCHEDULED",
-                "ACTIVE",
-                "ACTIVE",
-                period_start + timedelta(days=2),
-                "user:admin",
-            )
-        if status == "CANCELED" and canceled_at:
-            _evt("CANCELED", "ACTIVE", "CANCELED", canceled_at, "user:admin")
-        if status == "EXPIRED" and ended_at:
-            _evt("EXPIRED", "ACTIVE", "EXPIRED", ended_at, "system")
+            if trial_end and status not in ("INCOMPLETE",) and status != "TRIALING":
+                _evt("RENEWED", "TRIALING", status, trial_end, "system")
+            if status in ("ACTIVE", "PAST_DUE", "PAUSED"):
+                cursor = started + timedelta(days=plan.trial_days if trial_end else 0)
+                delta_days = 365 if plan.interval == "YEAR" else 30
+                while cursor + timedelta(days=delta_days) < period_start:
+                    cursor = cursor + timedelta(days=delta_days)
+                    _evt("RENEWED", "ACTIVE", "ACTIVE", cursor, "system")
+            if status == "PAST_DUE":
+                _evt(
+                    "PAYMENT_FAILED",
+                    "ACTIVE",
+                    "PAST_DUE",
+                    period_start + timedelta(days=3),
+                    "webhook:stripe",
+                )
+            if status == "PAUSED":
+                _evt(
+                    "PAUSED",
+                    "ACTIVE",
+                    "PAUSED",
+                    period_start + timedelta(days=5),
+                    "user:admin",
+                )
+            if cancel_at_period_end:
+                _evt(
+                    "CANCEL_SCHEDULED",
+                    "ACTIVE",
+                    "ACTIVE",
+                    period_start + timedelta(days=2),
+                    "user:admin",
+                )
+            if status == "CANCELED" and canceled_at:
+                _evt("CANCELED", "ACTIVE", "CANCELED", canceled_at, "user:admin")
+            if status == "EXPIRED" and ended_at:
+                _evt("EXPIRED", "ACTIVE", "EXPIRED", ended_at, "system")
 
     return [
         Table("subscription_plans", PLAN_COLUMNS, plan_rows),
@@ -600,7 +621,7 @@ class _Finance(Model):
         random.seed(SEED)
         with _ACCOUNTS_CSV.open(newline="", encoding="utf-8") as fh:
             accounts = list(csv.DictReader(fh))
-        return _build_tables(accounts)
+        return _build_tables(accounts, max(1, n // BASE_SIZE))
 
 
 def datagenerator() -> Model:

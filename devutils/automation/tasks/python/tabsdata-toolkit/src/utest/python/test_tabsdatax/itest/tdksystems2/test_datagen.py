@@ -48,6 +48,52 @@ def test_entities_have_sizeable_markers():
     )
 
 
+def _finance(size):
+    mdl = datagen.load_model("finance")
+    tables = mdl.build_initial(
+        random.Random(datagen.INITIAL_SEED), datagen.BASE_SIZE * size
+    )
+    return {t.name: t.rows for t in tables}
+
+
+def test_finance_size_scales_the_fact_tables_only():
+    # finance is pinned to the accounts.csv snapshot: the account-keyed entities
+    # and the plan catalogue keep their row counts, the facts grow with --size.
+    base, scaled = _finance(1), _finance(3)
+    for fixed in ("subscription_plans", "subscription_plan_prices", "customers",
+                  "payment_methods"):
+        assert len(scaled[fixed]) == len(base[fixed])
+    assert len(scaled["customer_subscriptions"]) == 3 * len(
+        base["customer_subscriptions"]
+    )
+    assert len(scaled["customer_subscription_events"]) > len(
+        base["customer_subscription_events"]
+    )
+    assert datagen.sizeable_entities("finance") == [
+        "customer_subscriptions",
+        "customer_subscription_events",
+    ]
+
+
+def test_finance_keeps_one_live_subscription_per_customer_and_plan():
+    # Every SQL flavour of the model carries a partial unique index over the live
+    # statuses, so the subscriptions a multiplier adds must be terminal ones.
+    live = {"TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"}
+    subs = _finance(5)["customer_subscriptions"]
+    keys = [(r["customer_id"], r["plan_id"]) for r in subs if r["status"] in live]
+    assert len(keys) == len(set(keys))
+
+
+def test_finance_events_reference_generated_subscription_ids():
+    # subscription_id is an identity column filled in insert order, so the ids
+    # the generator hands the events must be that same 1..N run.
+    tables = _finance(2)
+    ids = [r["subscription_id"] for r in tables["customer_subscriptions"]]
+    assert ids == list(range(1, len(ids) + 1))
+    events = {r["subscription_id"] for r in tables["customer_subscription_events"]}
+    assert events <= set(ids)
+
+
 def test_initial_data_is_deterministic():
     _, a = _initial(50)
     _, b = _initial(50)
