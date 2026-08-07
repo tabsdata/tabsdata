@@ -30,7 +30,7 @@ RUN python3 --version
 RUN pip --version
 RUN pip3 --version
 
-ENV RUST_VERSION=1.94.0
+ENV RUST_VERSION=1.94.1
 ENV MATURIN_VERSION=1.9.4
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}
