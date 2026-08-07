@@ -121,6 +121,31 @@ def add_sync(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_report(parser: argparse.ArgumentParser) -> None:
+    """Declare ``--report FILE`` — the batch runner's JSON run record.
+
+    Batch verbs (a list / ``ALL`` selector) never reach an argparse parser: the
+    dispatcher peeks this off raw argv. A ``--manifest`` run does parse its
+    options, so it declares the flag here to accept (and document) it."""
+    parser.add_argument(
+        constants.OPT_REPORT,
+        default=None,
+        metavar="FILE",
+        help="write a JSON record of the run (per-target status, seconds and "
+        "output) to FILE",
+    )
+
+
+def add_fail_fast(parser: argparse.ArgumentParser) -> None:
+    """Declare ``--fail-fast`` — see :func:`add_report` on why it is needed."""
+    parser.add_argument(
+        constants.OPT_FAIL_FAST,
+        action="store_true",
+        help="stop launching further targets once one fails (default: attempt "
+        "every target)",
+    )
+
+
 def add_domain_dir(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         constants.OPT_DOMAIN_DIR,

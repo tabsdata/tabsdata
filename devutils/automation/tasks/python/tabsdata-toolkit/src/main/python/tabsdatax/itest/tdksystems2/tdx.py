@@ -64,7 +64,11 @@ replays a YAML manifest in parallel — one system ``create`` each, or one
 ``create`` -> ``create-model`` -> ``create-data`` chain per domain — and
 ``--sync`` reconciles the store to it; a system replay takes
 ``--sys-hostname HOST`` to re-advertise every entry off this box, overriding the
-host the manifest recorded.
+host the manifest recorded, and a manifest replay takes ``--fail-fast`` /
+``--report FILE`` like any other batch. A dumped manifest carries no create
+options for a domain, but an AUTHORED one may pin ``name-in-system: NAME`` (the
+key becomes the create flag) — as ``tdx-xp`` does to hand a suite's domains
+backend container names its example functions can be written against.
 
 Every command re-execs into one of the managed uv venvs before it runs (see
 ``_venv``): a system declares the env its outside (``sys_env``) and its inside
@@ -702,7 +706,10 @@ def _entry_steps(
 ) -> list[list[str]]:
     """The child invocation(s) that reproduce a manifest entry: a system is one
     ``create``; a domain is a ``create`` -> ``create-model`` -> ``create-data``
-    chain (the last two only when the entry records a model / data)."""
+    chain (the last two only when the entry records a model / data). Either way
+    the entry's option keys become flags on the ``create`` (a domain manifest
+    ``manifest`` dumps carries none, but an authored one may pin
+    ``name-in-system``); ``create-model`` / ``create-data`` take none of them."""
     if "name" not in entry:
         raise TdxError(f"manifest entry has no 'name': {entry}")
     name = str(entry["name"])
@@ -732,6 +739,7 @@ def _entry_steps(
             name,
             *d,
             *f,
+            *_entry_option_argv(entry),
         ]
     ]
     if entry.get("model"):
@@ -779,10 +787,12 @@ def _store_names(tool: str, store_dir_opt: str | None) -> set[str]:
 
 def _create_from_manifest(tool: str, rest: list[str]) -> int:
     """``create --manifest FILE`` — create every entry in parallel (each a create
-    [-> create-model -> create-data] chain), heaviest first, continue-on-error.
-    With ``--sync`` also destroy the store entries the manifest omits (reconcile).
-    A system create gets its own disjoint pool of candidate ports (``--ports``),
-    and ``--sys-hostname`` overrides the host every entry advertises."""
+    [-> create-model -> create-data] chain), heaviest first, continue-on-error
+    (``--fail-fast`` stops launching once one fails, ``--report FILE`` records the
+    run as JSON). With ``--sync`` also destroy the store entries the manifest omits
+    (reconcile). A system create gets its own disjoint pool of candidate ports
+    (``--ports``), and ``--sys-hostname`` overrides the host every entry
+    advertises."""
     p = ArgumentParser(prog=f"{tool} {constants.V_CREATE}")
     p.add_argument(
         constants.OPT_MANIFEST,
@@ -796,6 +806,8 @@ def _create_from_manifest(tool: str, rest: list[str]) -> int:
         help="reconcile: also destroy store entries the manifest omits",
     )
     cli.add_force(p)
+    cli.add_report(p)
+    cli.add_fail_fast(p)
     if tool == constants.SYS_TOOL:
         cli.add_sys_hostname(p)
     dir_opt = _add_store_dir(tool, p)
@@ -840,7 +852,17 @@ def _create_from_manifest(tool: str, rest: list[str]) -> int:
             continue
         tasks.append(batch.Task(str(entry["name"]), _entry_weight(tool, entry), steps))
 
-    rc = batch.execute(tool, constants.V_CREATE, tasks) if tasks else 0
+    rc = (
+        batch.execute(
+            tool,
+            constants.V_CREATE,
+            tasks,
+            report_path=a.report,
+            fail_fast=a.fail_fast,
+        )
+        if tasks
+        else 0
+    )
     if a.sync:
         omitted = sorted(existing - manifest_names)
         if omitted:
