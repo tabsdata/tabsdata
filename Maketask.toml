@@ -483,8 +483,11 @@ run_task = [
         "__os__hydrate_py_tabsdata",
         "__os__hydrate_py_connectors",
         "__os__check_hydrate_py",
-        "__td__mark_hydrated_py"
-    ], condition = { env_not_set = ["TD_HYDRATED_PY"] } }
+        "__td__mark_installed_py"
+    ], condition = { env_not_set = ["TD_PY_INSTALLED"] } },
+    { name = [
+        "__td__report_skipped_install_py"
+    ] }
 ]
 
 [tasks.dehydrate]
@@ -515,8 +518,12 @@ description = "Task 'build' for Python projects"
 run_task = [
     { name = [
         "__os__dehydrate_py_tabsdata",
-        "__os__dehydrate_py_connectors"
-    ], condition = { env_not_set = ["TD_HYDRATED_PY"] } }
+        "__os__dehydrate_py_connectors",
+        "__td__mark_uninstalled_py"
+    ], condition = { env_not_set = ["TD_PY_INSTALLED", "TD_PY_UNINSTALLED"] } },
+    { name = [
+        "__td__report_skipped_uninstall_py"
+    ] }
 ]
 
 [tasks.test]
@@ -2151,7 +2158,11 @@ description = "Task 'install' for Python projects"
 run_task = [
     { name = [
         "__os__install_py_connectors",
-        "__os__install_py_tabsdata"
+        "__os__install_py_tabsdata",
+        "__td__mark_installed_py"
+    ], condition = { env_not_set = ["TD_PY_INSTALLED"] } },
+    { name = [
+        "__td__report_skipped_install_py"
     ] }
 ]
 
@@ -2186,7 +2197,11 @@ description = "Task 'crystallize' for Python projects"
 run_task = [
     { name = [
         "__os__install_py_connectors",
-        "__os__install_py_tabsdata"
+        "__os__install_py_tabsdata",
+        "__td__mark_installed_py"
+    ], condition = { env_not_set = ["TD_PY_INSTALLED"] } },
+    { name = [
+        "__td__report_skipped_install_py"
     ] }
 ]
 
@@ -2218,7 +2233,11 @@ category = "10 - Bundle"
 run_task = [
     { name = [
         "__os__uninstall_py_tabsdata",
-        "__os__uninstall_py_connectors"
+        "__os__uninstall_py_connectors",
+        "__td__mark_uninstalled_py"
+    ], condition = { env_not_set = ["TD_PY_INSTALLED", "TD_PY_UNINSTALLED"] } },
+    { name = [
+        "__td__report_skipped_uninstall_py"
     ] }
 ]
 
@@ -2250,7 +2269,11 @@ category = "10 - Bundle"
 run_task = [
     { name = [
         "__os__uninstall_py_tabsdata",
-        "__os__uninstall_py_connectors"
+        "__os__uninstall_py_connectors",
+        "__td__mark_uninstalled_py"
+    ], condition = { env_not_set = ["TD_PY_INSTALLED", "TD_PY_UNINSTALLED"] } },
+    { name = [
+        "__td__report_skipped_uninstall_py"
     ] }
 ]
 
@@ -2444,14 +2467,60 @@ run_task = [
     ] }
 ]
 
-[tasks.__td__mark_hydrated_py]
+[tasks.__td__mark_installed_py]
 plugin = "td-task-tracker"
-category = "11 - Development"
+category = "10 - Bundle"
 private = true
-description = "Record that the python environment is hydrated for this run"
+description = "Record that the python packages are installed for this run"
 script_runner = "@duckscript"
 script = [
     '''
-    set_env TD_HYDRATED_PY true
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_PY_INSTALLED true
+    info "🛖 Python packages installed. Further installs and uninstalls are unnecessary in this run."
+    '''
+]
+
+[tasks.__td__mark_uninstalled_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+description = "Record that the python packages are uninstalled for this run"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_PY_UNINSTALLED true
+    info "🛖 Python packages uninstalled. Further installs and uninstalls are unnecessary in this run."
+    '''
+]
+
+[tasks.__td__report_skipped_install_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+description = "Report that a python install was skipped as unnecessary"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "🪣 Python packages already installed in this run. Skipping install: unnecessary."
+    '''
+]
+
+[tasks.__td__report_skipped_uninstall_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+description = "Report that a python uninstall was skipped as unnecessary"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "🪣 Python packages already settled in this run. Skipping uninstall: unnecessary."
     '''
 ]
