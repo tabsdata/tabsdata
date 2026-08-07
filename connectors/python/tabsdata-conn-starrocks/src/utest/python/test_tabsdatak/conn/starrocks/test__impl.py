@@ -25,6 +25,9 @@ from tabsdatak.conn.starrocks import (
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
+
+# noinspection PyProtectedMember
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.conn.starrocks import _impl as impl
 from tabsdatak.conn.starrocks.error import (
@@ -58,8 +61,7 @@ def test_build_starrocks_engine_uses_mysqlconnector_driver(monkeypatch):
         box["connect_args"] = connect_args
         return MagicMock(name="fake-engine")
 
-    import sqlalchemy
-    monkeypatch.setattr(sqlalchemy, "create_engine", fake_create_engine)
+    monkeypatch.setattr(sqlalchemy_utils, "create_engine", fake_create_engine)
 
     impl.build_starrocks_engine(
         host="sr.example.com",
@@ -80,8 +82,7 @@ def test_build_starrocks_engine_forwards_connect_args(monkeypatch):
         box["connect_args"] = connect_args
         return MagicMock()
 
-    import sqlalchemy
-    monkeypatch.setattr(sqlalchemy, "create_engine", fake_create_engine)
+    monkeypatch.setattr(sqlalchemy_utils, "create_engine", fake_create_engine)
 
     impl.build_starrocks_engine(
         host="h", port=9030, database="d",

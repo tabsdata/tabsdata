@@ -7,17 +7,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import create_engine, make_url
+from sqlalchemy import make_url
 from sqlalchemy.engine import Engine
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.common.sql._engine as _engine
 
-# Submodule import registers ``constants`` as an attribute of the
-# ``_engine`` namespace package so the qualified call-sites below
-# resolve.
+# Submodule imports register ``constants`` / ``sqlalchemy_utils`` as
+# attributes of the ``_engine`` namespace package so the qualified
+# call-sites below resolve.
 # noinspection PyProtectedMember
 import tabsdatak.conn.common.sql._engine.constants  # noqa: F401
+
+# noinspection PyProtectedMember
+import tabsdatak.conn.common.sql._engine.sqlalchemy_utils  # noqa: F401
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
@@ -47,7 +50,9 @@ def build_mysql_engine(
     password = _convert(credentials.password, str)
     url = url.set(username=user, password=password)
 
-    return create_engine(url, connect_args=dict(connect_args or {}))
+    return _engine.sqlalchemy_utils.create_engine(
+        url, connect_args=dict(connect_args or {})
+    )
 
 
 # --- Src: SqlReadCfg adapter + defaults ---------------------------

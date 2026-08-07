@@ -66,12 +66,13 @@ def build_starrocks_engine(
     runtime only needs ``mysql-connector-python`` (which the legacy
     plugin already required) and not a separate driver shim.
     """
-    from sqlalchemy import create_engine
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 
     user = _convert(credentials.user, str)
     password = _convert(credentials.password, str)
     url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
-    return create_engine(url, connect_args=dict(connect_args or {}))
+    return sqlalchemy_utils.create_engine(url, connect_args=dict(connect_args or {}))
 
 
 # --- FILES(...) expression builders ----------------------------------

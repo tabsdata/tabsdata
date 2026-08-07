@@ -12,6 +12,8 @@ from tabsdatak.conn.common.types import UserPassword
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import constants as const
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
@@ -67,7 +69,7 @@ def _dest_conn() -> PostgresDestConn:
 
 @pytest.fixture
 def captured(monkeypatch):
-    """Monkey-patch ``impl.create_engine`` to capture call args."""
+    """Monkey-patch the shared engine proxy to capture call args."""
     box: dict = {}
 
     def fake_create_engine(url, *, connect_args):
@@ -75,7 +77,7 @@ def captured(monkeypatch):
         box["connect_args"] = connect_args
         return _CapturedURL(url, connect_args)
 
-    monkeypatch.setattr(impl, "create_engine", fake_create_engine)
+    monkeypatch.setattr(sqlalchemy_utils, "create_engine", fake_create_engine)
     return box
 
 

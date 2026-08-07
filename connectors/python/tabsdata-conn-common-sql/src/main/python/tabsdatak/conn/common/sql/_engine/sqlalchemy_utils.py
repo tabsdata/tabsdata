@@ -4,7 +4,33 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+import logging
+from typing import Any, Mapping
+
+import sqlalchemy
+from sqlalchemy.engine import URL, Engine
+
+logger = logging.getLogger(__name__)
+
+
+def create_engine(url: str | URL, **kwargs: Any) -> Engine:
+    """Build a SQLAlchemy engine through :func:`sqlalchemy.create_engine`,
+    logging how the URL resolved to a driver and a dialect implementation.
+
+    Every connector creates its engines here so that the resolution is
+    traceable from a function's log alone. The URL is rendered with the
+    password hidden, so the caller may pass one with credentials in it.
+    """
+    engine = sqlalchemy.create_engine(url, **kwargs)
+    logger.info(
+        "SQLAlchemy engine: URI: %s - URL driver name: %s - Engine driver: %s"
+        " - Dialect: %s",
+        engine.url.render_as_string(hide_password=True),
+        engine.url.drivername,
+        engine.driver,
+        type(engine.dialect).__module__,
+    )
+    return engine
 
 
 def normalize_scheme(uri: str, *, aliases: Mapping[str, str]) -> str:

@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import create_engine, make_url
+from sqlalchemy import make_url
 from sqlalchemy.engine import Engine
 
 # noinspection PyProtectedMember
@@ -58,7 +58,9 @@ def build_postgres_engine(
     password = _convert(credentials.password, str)
     url = url.set(username=user, password=password)
 
-    return create_engine(url, connect_args=dict(connect_args or {}))
+    return _engine.sqlalchemy_utils.create_engine(
+        url, connect_args=dict(connect_args or {})
+    )
 
 
 # --- Src: SqlReadCfg adapter + defaults ---------------------------

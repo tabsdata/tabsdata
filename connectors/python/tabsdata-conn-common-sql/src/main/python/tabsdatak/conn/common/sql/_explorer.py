@@ -8,7 +8,6 @@ from typing import ClassVar
 
 from sqlalchemy import (
     column as sa_column,
-    create_engine,
     engine,
     inspect,
     select as sa_select,
@@ -19,6 +18,9 @@ from sqlalchemy.exc import DBAPIError, NoSuchTableError, ResourceClosedError
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
 from tabsdatak.spi import (
     Conn,
@@ -157,7 +159,7 @@ class SqlAlchemyConnectionExplorer(Explorer):
 
     def check_connect(self, conn: Conn) -> None:
         url = self.make_url(conn)
-        eng = create_engine(url, **self.engine_kwargs(conn))
+        eng = sqlalchemy_utils.create_engine(url, **self.engine_kwargs(conn))
         try:
             with eng.connect() as conn:
                 conn.execute(sa_text(self.connectivity_probe()))
@@ -168,7 +170,7 @@ class SqlAlchemyConnectionExplorer(Explorer):
         url = self.make_url(conn)
         restrict_to = self.schema_filter(conn)
 
-        eng = create_engine(url, **self.engine_kwargs(conn))
+        eng = sqlalchemy_utils.create_engine(url, **self.engine_kwargs(conn))
         insp = inspect(eng)
 
         if restrict_to:
@@ -228,7 +230,7 @@ class SqlAlchemyConnectionExplorer(Explorer):
 
     def data(self, conn: Conn, entity: Entity, limit: int = 100) -> list[dict]:
         url = self.make_url(conn)
-        eng = create_engine(url, **self.engine_kwargs(conn))
+        eng = sqlalchemy_utils.create_engine(url, **self.engine_kwargs(conn))
         sql_entity = entity  # type: SQLEntity
         schema = self._data_schema(sql_entity)
         t = sa_table(

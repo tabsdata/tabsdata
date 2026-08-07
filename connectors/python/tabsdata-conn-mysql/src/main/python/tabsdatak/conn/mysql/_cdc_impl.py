@@ -45,7 +45,7 @@ from pymysqlreplication.row_event import (
     UpdateRowsEvent,
     WriteRowsEvent,
 )
-from sqlalchemy import URL, create_engine, make_url, text
+from sqlalchemy import URL, make_url, text
 from sqlalchemy.dialects.mysql import (
     BIT,
     DATETIME,
@@ -66,6 +66,8 @@ from sqlalchemy.dialects.mysql import (
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
@@ -471,7 +473,7 @@ class BinlogIngester(CdcIngester):
         )
 
     def _build_engine(self) -> Any:
-        return create_engine(self._resolve_url())
+        return sqlalchemy_utils.create_engine(self._resolve_url())
 
     def _stream_connection_settings(self) -> dict[str, Any]:
         url = self._resolve_url()

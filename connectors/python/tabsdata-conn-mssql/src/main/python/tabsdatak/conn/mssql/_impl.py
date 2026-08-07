@@ -8,7 +8,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import create_engine, make_url
+from sqlalchemy import make_url
 from sqlalchemy.engine import Engine
 
 # noinspection PyProtectedMember
@@ -70,13 +70,13 @@ def build_mssql_engine(
         url = make_url(f"mssql+pyodbc:///?odbc_connect={encoded}")
         args.setdefault("UID", user)
         args.setdefault("PWD", password)
-        return create_engine(url, connect_args=args)
+        return _engine.sqlalchemy_utils.create_engine(url, connect_args=args)
 
     uri = _engine.sqlalchemy_utils.normalize_scheme(uri, aliases=_SCHEME_ALIASES)
     uri = _engine.sqlalchemy_utils.add_driver_to_uri(uri, drivers=_DRIVERS)
     url = make_url(uri)
     url = url.set(username=user, password=password)
-    return create_engine(url, connect_args=args)
+    return _engine.sqlalchemy_utils.create_engine(url, connect_args=args)
 
 
 # --- Src: SqlReadCfg adapter + defaults ---------------------------

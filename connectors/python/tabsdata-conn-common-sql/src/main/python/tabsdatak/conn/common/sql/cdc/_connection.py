@@ -9,7 +9,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from sqlalchemy import Engine, create_engine, make_url
+from sqlalchemy import Engine, make_url
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import UserPassword, _convert
@@ -55,7 +58,7 @@ class CdcConn(Conn, ABC):
                 password=_convert(conn.credentials.password, str),
             )
         connect_args = dict(getattr(conn, "conn_cfg", None) or {})
-        return create_engine(url, connect_args=connect_args)
+        return sqlalchemy_utils.create_engine(url, connect_args=connect_args)
 
     @staticmethod
     def _default_host() -> str:
