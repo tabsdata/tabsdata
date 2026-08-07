@@ -151,7 +151,10 @@ fn unset_mode_falls_back_to_pypi_when_no_variable_is_set() {
     with_environment(&[], || {
         assert_eq!(UvMode::Unset.default_index(), PYPI_INDEX_URL);
         assert_eq!(UvMode::Unset.extra_index_url(IndexReach::Host), "");
-        assert_eq!(UvMode::Unset.index_strategy(), "");
+        assert_eq!(
+            UvMode::Unset.index_strategy(),
+            UV_INDEX_STRATEGY_FIRST_INDEX
+        );
     });
 }
 
@@ -178,7 +181,10 @@ fn unset_mode_treats_blank_variables_as_absent() {
         || {
             assert_eq!(UvMode::Unset.default_index(), PYPI_INDEX_URL);
             assert_eq!(UvMode::Unset.extra_index_url(IndexReach::Host), "");
-            assert_eq!(UvMode::Unset.index_strategy(), "");
+            assert_eq!(
+                UvMode::Unset.index_strategy(),
+                UV_INDEX_STRATEGY_FIRST_INDEX
+            );
         },
     );
 }

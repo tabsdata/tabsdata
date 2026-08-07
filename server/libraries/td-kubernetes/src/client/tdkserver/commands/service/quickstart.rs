@@ -15,6 +15,7 @@ use tracing::{info, warn};
 #[cfg(feature = "enterprise")]
 use crate::base::constants::REQUIREMENTS_AG_ASSET;
 use crate::base::constants::{KPROFILE_ASSETS_FAMILY, LogLevel, REQUIREMENTS_TD_ASSET};
+#[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
 use crate::client::registry::{instance_folder, instance_init_input_folder};

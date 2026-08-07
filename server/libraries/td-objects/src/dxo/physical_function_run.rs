@@ -7,9 +7,9 @@ mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
+        AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId, ConnectionKind,
         Decorator, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
-        FunctionVersionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, RowCount,
+        FunctionVersionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, ProjectName, RowCount,
         StageId, StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId,
         UserName,
     };
@@ -94,6 +94,8 @@ mod definitions {
     pub struct PhysicalFunctionRunDBWithNames {
         pub name: FunctionName,
         pub collection: CollectionName,
+        pub project: Option<ProjectName>,
+        pub connection: Option<ConnectionKind>,
         pub execution: Option<ExecutionName>,
         pub execution_function_version_id: FunctionVersionId,
         pub triggered_by: UserName,

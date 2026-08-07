@@ -24,6 +24,7 @@ use ta_objects::{Dao, DaoCore};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::bundle::BundleDBIden;
 use td_objects::dxo::collection::CollectionDBIden;
+use td_objects::dxo::connection::ConnectionDBIden;
 use td_objects::dxo::execution::ExecutionDBIden;
 use td_objects::dxo::function::{
     FunctionDB, FunctionDBIden, FunctionDBWithBundleBasePath, FunctionPatchDBIden,
@@ -37,6 +38,7 @@ use td_objects::dxo::physical_function_run::{
     PhysicalFunctionRunDB, PhysicalFunctionRunDBIden, PhysicalFunctionRunDBWithNamesIden,
     PhysicalFunctionRunToExecute,
 };
+use td_objects::dxo::project::ProjectDBIden;
 use td_objects::dxo::user::UserDBIden;
 use td_objects::dxo::worker::WorkerDBIden;
 use td_objects::types::basic::{
@@ -707,6 +709,17 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             Expr::col((CollectionDBIden::Table, CollectionDBIden::ConnectionId)),
             Alias::new("connection_id"),
         )
+        // The connection's type, as its Conn class. NULL whenever the collection
+        // has no connection, as for a transformer.
+        .expr_as(
+            Expr::col((ConnectionDBIden::Table, ConnectionDBIden::Kind)),
+            Alias::new("connection"),
+        )
+        // The run's project name, resolved so a deleted project still reports one.
+        .expr_as(
+            Expr::col((ProjectDBIden::Table, ProjectDBIden::Name)),
+            Alias::new("project"),
+        )
         // COALESCE to the collection's effective prefix so a missing bundle row
         // (anomaly in prod; common in seeds that don't stage a bundle) decodes to a
         // valid prefix rather than NULL.
@@ -768,6 +781,21 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
                 PhysicalFunctionRunDBIden::CollectionId,
             ))
             .equals((CollectionDBIden::Table, CollectionDBIden::Id)),
+        )
+        .join(
+            JoinType::LeftJoin,
+            ConnectionDBIden::Table,
+            Expr::col((CollectionDBIden::Table, CollectionDBIden::ConnectionId))
+                .equals((ConnectionDBIden::Table, ConnectionDBIden::Id)),
+        )
+        .join(
+            JoinType::LeftJoin,
+            ProjectDBIden::Table,
+            Expr::col((
+                PhysicalFunctionRunDBIden::Table,
+                PhysicalFunctionRunDBIden::ProjectId,
+            ))
+            .equals((ProjectDBIden::Table, ProjectDBIden::Id)),
         )
         // Bundle join on the *effective* bundle id (patch's if patched, else head's),
         // matching the coalesced bundle_id projection, to read the bundle's stamped

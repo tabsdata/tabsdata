@@ -13,12 +13,16 @@ use td_bridge::messaging::{
 };
 use td_common::worker::{Callback, Decorator, HttpRequest, MessageAction, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, CronMask, FunctionId, FunctionName, FunctionVersionId, ProjectId,
-    WorkerId,
+    CollectionId, CollectionName, ConnectionKind, CronMask, FunctionId, FunctionName,
+    FunctionVersionId, ProjectId, ProjectName, WorkerId,
 };
 use url::Url;
 
 use super::*;
+
+fn worker_id() -> WorkerId {
+    WorkerId::try_from("00000000000000000000000000").unwrap()
+}
 
 fn resolver() -> Callback {
     Callback::Http(HttpRequest {
@@ -61,14 +65,18 @@ fn function_start_routes_with_decorator() {
         OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
             FunctionRequest::Start(FunctionStartRequest {
                 worker: WorkerName::Function,
-                worker_id: WorkerId::new(),
+                worker_id: worker_id(),
                 decorator: Decorator::Publisher,
                 resolver: resolver(),
                 responder: responder(),
                 project_id: ProjectId::default(),
+                project: Some(ProjectName::try_from("project").unwrap()),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
                 connection_id: None,
+                connection: Some(
+                    ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap(),
+                ),
                 function_id: FunctionId::default(),
                 function: FunctionName::try_from("function").unwrap(),
             }),
@@ -107,15 +115,19 @@ fn stream_publisher_start_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
             StageTriggerRequest::Start(StageTriggerStartRequest {
                 worker: WorkerName::StageTrigger,
-                worker_id: WorkerId::new(),
+                worker_id: worker_id(),
                 decorator: Decorator::Publisher,
                 resolver: resolver(),
                 trigger: trigger(),
                 responder: responder(),
                 project_id: ProjectId::default(),
+                project: Some(ProjectName::try_from("project").unwrap()),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
                 connection_id: None,
+                connection: Some(
+                    ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap(),
+                ),
                 function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
             }),
@@ -136,7 +148,7 @@ fn stream_publisher_stop_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
             StageTriggerRequest::Stop(StageTriggerStopRequest {
                 worker: WorkerName::StageTrigger,
-                worker_id: WorkerId::new(),
+                worker_id: worker_id(),
                 responder: responder(),
             }),
         );
@@ -165,14 +177,18 @@ fn cron_publisher_start_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
             CronStartRequest {
                 worker: WorkerName::CronTrigger,
-                worker_id: WorkerId::new(),
+                worker_id: worker_id(),
                 resolver: resolver(),
                 trigger: trigger(),
                 responder: responder(),
                 project_id: ProjectId::default(),
+                project: Some(ProjectName::try_from("project").unwrap()),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
                 connection_id: None,
+                connection: Some(
+                    ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap(),
+                ),
                 function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
                 schedule: CronMask::try_from("* * * * *").unwrap(),
@@ -194,7 +210,7 @@ fn cron_publisher_stop_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Stop(
             CronStopRequest {
                 worker: WorkerName::CronTrigger,
-                worker_id: WorkerId::new(),
+                worker_id: worker_id(),
                 responder: responder(),
             },
         ));

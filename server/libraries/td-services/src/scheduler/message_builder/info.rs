@@ -79,7 +79,8 @@ mod tests {
     use td_objects::types::basic::{
         AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, ExecutionId,
         FunctionId, FunctionName, FunctionVersionId, PhysicalFunctionRunId,
-        PhysicalFunctionRunStatus, ProjectId, StageId, StorageVersion, TransactionId, Trigger,
+        PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, StorageVersion,
+        TransactionId, Trigger,
         TriggeredOn, UserId, UserName,
     };
 
@@ -119,6 +120,7 @@ mod tests {
             metric_data_bytes: None,
             name: FunctionName::try_from("fn0").unwrap(),
             collection: CollectionName::try_from("c0").unwrap(),
+            project: Some(ProjectName::try_from("p0").unwrap()),
             execution: None,
             execution_function_version_id: FunctionVersionId::new(),
             triggered_by: UserName::try_from("u0").unwrap(),
@@ -127,6 +129,7 @@ mod tests {
             defined_on: AtTime::now(),
             decorator: Decorator::Transformer,
             connection_id: None,
+            connection: None,
             bundle_base_path: BasePath::try_from("/b").unwrap(),
             stage_id: StageId::default(),
             stage_base_path: BasePath::try_from("/s").unwrap(),

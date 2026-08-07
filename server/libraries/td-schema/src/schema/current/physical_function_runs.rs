@@ -8,9 +8,11 @@ use sea_query::{
 };
 
 use super::collections::{Collections, CollectionsResolved};
+use super::connections::Connections;
 use super::executions::Executions;
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
+use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -178,6 +180,9 @@ impl Entity for Defs {
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("name"))
                 .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
                 .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::ConnectionId)), Alias::new("connection_id"))
+                .expr_as(Expr::col((Connections::Table, Connections::Kind)), Alias::new("connection"))
+                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Executions::Table, Executions::FunctionVersionId)), Alias::new("execution_function_version_id"))
                 .expr_as(
@@ -190,6 +195,16 @@ impl Entity for Defs {
                     CollectionsResolved,
                     Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId))
                         .equals((CollectionsResolved, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Connections::Table,
+                    Expr::col((CollectionsResolved, Collections::ConnectionId)).equals((Connections::Table, Connections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    ProjectsResolved,
+                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::ProjectId)).equals((ProjectsResolved, Projects::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

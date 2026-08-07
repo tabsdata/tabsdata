@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 use td_common::worker::{Callback, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionId, CronMask, FunctionName, FunctionVersionId,
-    ProjectId, WorkerId,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, FunctionName, FunctionVersionId,
+    ProjectId, ProjectName, WorkerId,
 };
 
 /// A kubernetes cron-trigger request, modeled as a per-action enum (the
@@ -38,12 +38,16 @@ pub struct CronStartRequest {
     pub responder: Callback,
     /// Project the function being run belongs to.
     pub project_id: ProjectId,
+    /// Project name of the function being run.
+    pub project: Option<ProjectName>,
     /// Collection id of the function being run.
     pub collection_id: CollectionId,
     /// Collection name of the function being run.
     pub collection: CollectionName,
     /// The collection's connection (source/destination collections only).
     pub connection_id: Option<ConnectionId>,
+    /// Type of the collection's connection, as its Conn class.
+    pub connection: Option<ConnectionKind>,
     /// Function version id of the function being run.
     pub function_version_id: FunctionVersionId,
     /// Function name of the function being run.

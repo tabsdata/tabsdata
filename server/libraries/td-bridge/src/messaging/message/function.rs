@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use td_common::worker::{Callback, Decorator, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionId, FunctionId, FunctionName, ProjectId, WorkerId,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, FunctionId, FunctionName, ProjectId, ProjectName, WorkerId,
 };
 
 /// A kubernetes function-runner request, modeled as a per-action enum (the
@@ -36,12 +36,16 @@ pub struct FunctionStartRequest {
     pub responder: Callback,
     /// Project the function being run belongs to.
     pub project_id: ProjectId,
+    /// Project name of the function being run.
+    pub project: Option<ProjectName>,
     /// Collection id of the function being run.
     pub collection_id: CollectionId,
     /// Collection name of the function being run.
     pub collection: CollectionName,
     /// The collection's connection (source/destination collections only).
     pub connection_id: Option<ConnectionId>,
+    /// Type of the collection's connection, as its Conn class.
+    pub connection: Option<ConnectionKind>,
     /// Function id of the function being run.
     pub function_id: FunctionId,
     /// Function name of the function being run.

@@ -8,6 +8,7 @@ use sea_query::{
 };
 
 use super::collections::{Collections, CollectionsResolved};
+use super::connections::Connections;
 use super::executions::Executions;
 use super::functions::Functions;
 use super::logical_function_runs::LogicalFunctionRuns;
@@ -126,6 +127,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
                 .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((CollectionsResolved, Collections::ConnectionId)), Alias::new("connection_id"))
+                .expr_as(Expr::col((Connections::Table, Connections::Kind)), Alias::new("connection"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(Expr::col((Functions::Table, Functions::Enabled)), Alias::new("enabled"))
@@ -141,6 +143,11 @@ impl Entity for Defs {
                     JoinType::LeftJoin,
                     CollectionsResolved,
                     Expr::col((Workers::Table, Workers::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Connections::Table,
+                    Expr::col((CollectionsResolved, Collections::ConnectionId)).equals((Connections::Table, Connections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,
