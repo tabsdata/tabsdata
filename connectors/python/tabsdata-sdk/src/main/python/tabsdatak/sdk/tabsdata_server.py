@@ -2855,6 +2855,7 @@ class Table:
         version: DataVersion | str | None = None,
         offset: int = None,
         len: int = None,
+        sql: str = None,
     ) -> pl.DataFrame:
         """
         Get a sample of a table for a given version as a parquet file. The
@@ -2863,7 +2864,12 @@ class Table:
 
         Args:
             offset (int, optional): The offset of the sample.
-            len (int, optional): The length of the sample.
+            len (int, optional): The length of the sample. Defaults to 100
+                server-side, and cannot be greater than 1000.
+            sql (str, optional): A SQL query run server-side on the table, which
+                is the only queryable relation and is referenced by its own
+                name. The offset is applied before the query and the length caps
+                its result.
         Raises:
             APIServerError: If the sample could not be obtained.
         """
@@ -2897,6 +2903,7 @@ class Table:
             at=at,
             offset=offset,
             len=len,
+            sql=sql,
         ).content
         return pl.read_parquet(parquet_frame)
 
@@ -5153,6 +5160,7 @@ class TabsdataServer:
         version: DataVersion | str | None = None,
         offset: int = None,
         len: int = None,
+        sql: str = None,
     ) -> pl.DataFrame:
         """
         Get a sample of a table for a given version as a parquet file. The
@@ -5163,7 +5171,12 @@ class TabsdataServer:
             collection_name (str): The name of the collection.
             table_name (str): The name of the table.
             offset (int, optional): The offset of the sample.
-            len (int, optional): The length of the sample.
+            len (int, optional): The length of the sample. Defaults to 100
+                server-side, and cannot be greater than 1000.
+            sql (str, optional): A SQL query run server-side on the table, which
+                is the only queryable relation and is referenced by its own
+                name. The offset is applied before the query and the length caps
+                its result.
         Raises:
             APIServerError: If the sample could not be obtained.
         """
@@ -5174,6 +5187,7 @@ class TabsdataServer:
             version=version,
             offset=offset,
             len=len,
+            sql=sql,
         )
 
     def cancel_transaction(self, transaction_id: str) -> requests.Response:

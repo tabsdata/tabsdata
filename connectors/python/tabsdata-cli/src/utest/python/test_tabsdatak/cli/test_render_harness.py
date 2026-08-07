@@ -211,10 +211,10 @@ _TABLES = [
 # ``table schema`` returns a raw list of column dicts.
 _TABLE_SCHEMA = [{"name": "id", "type": "Int64"}, {"name": "label", "type": "String"}]
 
-# ``table sample`` returns a polars DataFrame: json/yaml serialize ``.to_dicts()``
+# ``table data`` returns a polars DataFrame: json/yaml serialize ``.to_dicts()``
 # while the table view just echoes the frame's own repr.
-_SAMPLE_DF = pl.DataFrame({"n": [1, 2], "label": ["x", "y"]})
-_SAMPLE_ROWS = _SAMPLE_DF.to_dicts()
+_TABLE_DATA_DF = pl.DataFrame({"n": [1, 2], "label": ["x", "y"]})
+_TABLE_DATA_ROWS = _TABLE_DATA_DF.to_dicts()
 
 # ``metrics show`` aggregates ``nodes`` into a summary table; the machine formats
 # emit the whole dict verbatim (edges included -- only the table drops them).
@@ -596,8 +596,8 @@ def _set_table_schema(c: MagicMock) -> None:
     c.get_table_schema.return_value = _TABLE_SCHEMA
 
 
-def _set_table_sample(c: MagicMock) -> None:
-    c.sample_table.return_value = _SAMPLE_DF
+def _set_table_data(c: MagicMock) -> None:
+    c.sample_table.return_value = _TABLE_DATA_DF
 
 
 def _set_metrics_show(c: MagicMock) -> None:
@@ -765,12 +765,12 @@ CASES: tuple[RenderCase, ...] = (
         ("id", "Int64", "label", "String"),
     ),
     RenderCase(
-        # table sample's "table" view is just the polars frame's repr, which
+        # table data's "table" view is just the polars frame's repr, which
         # carries the same rows json/yaml get from ``.to_dicts()``.
-        "table-sample",
-        ["table", "sample", "-c", "coll-a", "--name", "tbl-a"],
-        _set_table_sample,
-        _SAMPLE_ROWS,
+        "table-data",
+        ["table", "data", "-c", "coll-a", "--name", "tbl-a"],
+        _set_table_data,
+        _TABLE_DATA_ROWS,
         ("tbl-a", "label", "x", "y"),
     ),
     RenderCase(

@@ -1344,6 +1344,7 @@ class APIServer:
         at: int = None,
         offset: int = None,
         len: int = None,
+        sql: str = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(
@@ -1354,8 +1355,9 @@ class APIServer:
                 "at",
                 "offset",
                 "len",
+                "sql",
             ],
-            [at, offset, len],
+            [at, offset, len, sql],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)

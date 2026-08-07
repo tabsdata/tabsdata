@@ -303,14 +303,27 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
 @click.option(
     "--len",
     type=int,
-    help="Amount of rows to be sampled. If not provided, all rows will be shown.",
+    help=(
+        "Maximum amount of rows to be shown. If not provided, the server default "
+        "of 100 rows applies. Cannot be greater than 1000."
+    ),
 )
 @click.option(
     "--offset",
     type=int,
     help=(
-        "How many rows to skip before starting to sample. If not provided, "
-        "sampling wil start at the first row."
+        "How many rows to skip before starting to read. If not provided, "
+        "reading will start at the first row."
+    ),
+)
+@click.option(
+    "--sql",
+    help=(
+        "A SQL query to run on the table server-side, before the rows are returned. "
+        "The table is the only queryable relation and is referenced by its own name "
+        "(for example, 'SELECT a, b FROM my_table WHERE a > 10'); referencing any "
+        "other table or a file-reading function is rejected. '--offset' is applied "
+        "before the query and '--len' caps its result."
     ),
 )
 @click.option(
@@ -360,18 +373,19 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
 )
 @format_option
 @click.pass_context
-def sample(
+def data(
     ctx: click.Context,
     coll: str,
     name: str,
     len: int,
     offset: int,
+    sql: str,
     file: str,
     at: str,
     at_trx: str,
     version: str,
 ):
-    """Sample rows from the table"""
+    """Show rows of data from the table"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
     coll = (
@@ -381,7 +395,7 @@ def sample(
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        sampled_table = server.sample_table(
+        table_data = server.sample_table(
             coll,
             name,
             at=at,
@@ -389,26 +403,27 @@ def sample(
             version=version,
             len=len,
             offset=offset,
+            sql=sql,
         )
 
         def _table():
             click.echo()
-            click.echo(f"Sample of table '{name}'")
-            click.echo(sampled_table)
+            click.echo(f"Data of table '{name}'")
+            click.echo(table_data)
             click.echo()
 
-        # sampled_table is a polars DataFrame -> its rows are the full info.
-        render(ctx, data=lambda: sampled_table.to_dicts(), table=_table)
+        # table_data is a polars DataFrame -> its rows are the full info.
+        render(ctx, data=lambda: table_data.to_dicts(), table=_table)
 
         if file:
             # Diagnostics to stderr so json/yaml stdout stays parseable.
-            click.echo(f"Saving sample to file '{file}'", err=True)
-            sampled_table.write_ndjson(file)
-            click.echo("Sample saved successfully", err=True)
+            click.echo(f"Saving data to file '{file}'", err=True)
+            table_data.write_ndjson(file)
+            click.echo("Data saved successfully", err=True)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to sample table: {e}")
+        raise click.ClickException(f"Failed to obtain table data: {e}")
 
 
 @table.command()
