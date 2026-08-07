@@ -67,6 +67,7 @@ def _build_inputs_manifest_entries(request: Request, in_dir: Path) -> list[dict]
                 records.append(
                     build_table_record(
                         file=file,
+                        metadata=None,
                         input_idx=member.input_idx,
                         version_pos=member.version_pos,
                         execution_id=(

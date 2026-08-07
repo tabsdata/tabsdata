@@ -56,6 +56,7 @@ from typing import Any
 import yaml
 
 from tabsdatak.error import ErrorCode
+from tabsdatak.spi import MetadataSpec
 
 
 class InvalidManifestError(ValueError):
@@ -70,6 +71,7 @@ MANIFEST_TABLE_POS_KEY = "table_pos"
 MANIFEST_IS_EMPTY_KEY = "is_empty"
 MANIFEST_TABLES_KEY = "tables"
 MANIFEST_FILE_KEY = "file"
+MANIFEST_METADATA_KEY = "metadata"
 MANIFEST_INPUT_IDX_KEY = "input_idx"
 MANIFEST_VERSION_POS_KEY = "version_pos"
 MANIFEST_EXECUTION_ID_KEY = "execution_id"
@@ -83,6 +85,7 @@ _MANIFEST_INPUTS_KEY = "inputs"
 def build_table_record(
     *,
     file: str | None,
+    metadata: MetadataSpec | None,
     input_idx: int | None,
     version_pos: int,
     execution_id: str | None = None,
@@ -92,6 +95,7 @@ def build_table_record(
 ) -> dict[str, Any]:
     return {
         MANIFEST_FILE_KEY: file,
+        MANIFEST_METADATA_KEY: metadata,
         MANIFEST_INPUT_IDX_KEY: input_idx,
         MANIFEST_VERSION_POS_KEY: version_pos,
         MANIFEST_EXECUTION_ID_KEY: execution_id,

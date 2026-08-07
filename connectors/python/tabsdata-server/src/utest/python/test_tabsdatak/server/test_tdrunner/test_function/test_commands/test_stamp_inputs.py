@@ -106,7 +106,9 @@ def _slot_entry(name: str, table_pos: int, files: list[str]) -> dict:
         name=name,
         table_pos=table_pos,
         tables=[
-            build_table_record(file=file, input_idx=index, version_pos=-1)
+            build_table_record(
+                file=file, metadata=None, input_idx=index, version_pos=-1
+            )
             for index, file in enumerate(files)
         ],
     )

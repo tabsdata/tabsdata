@@ -636,18 +636,25 @@ def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
 
 def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
     out = tmp_path / "manifest.yaml"
+    metadata = {
+        "@td.file.path": "s3://bucket/in/a.csv",
+        "@td.file.rows": 2,
+        "@td.file.seconds": 1.5,
+        "@td.file.truncated": True,
+    }
     produced = [
         [
-            TableFileInput(file=Path("/tmp/a.parquet")),
+            TableFileInput(file=Path("/tmp/a.parquet"), metadata=metadata),
             TableFileInput(file=Path("/tmp/b.parquet")),
         ]
     ]
     _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
     data = yaml.safe_load(out.read_text())
 
-    def _record(file):
+    def _record(file, metadata=None):
         return {
             "file": file,
+            "metadata": metadata,
             "input_idx": None,
             "version_pos": -1,
             "execution_id": None,
@@ -656,6 +663,7 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
             "triggered_on": None,
         }
 
+    # Each metadata value type round-trips through the manifest YAML.
     assert data == {
         "inputs": [
             {
@@ -663,7 +671,7 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
                 "table_pos": 0,
                 "is_empty": False,
                 "tables": [
-                    _record("/tmp/a.parquet"),
+                    _record("/tmp/a.parquet", metadata),
                     _record("/tmp/b.parquet"),
                 ],
             }

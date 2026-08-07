@@ -84,15 +84,10 @@ TableFileSpec: TypeAlias = Path
 # Optional per-file metadata a reader may attach to a `TableFileInput`.
 # A convenience for the framework to add each metadata entry as a metadata
 # column on the given parquet file's table: every entry becomes one column, by
-# convention named with a leading `@`. Restricted to JSON-scalar values
-# (`str` / `int` / `float` / `bool`), a flat list of them, or a flat
-# `str`-keyed dict of them -- nothing nested.
+# convention named with a leading `@`. Restricted to a flat `str`-keyed dict
+# of `str`, `int`, `float` and `bool`.
 _MetadataBasicType: TypeAlias = Union[str, int, float, bool]
-MetadataSpec: TypeAlias = Union[
-    _MetadataBasicType,
-    list[_MetadataBasicType],
-    dict[str, _MetadataBasicType],
-]
+MetadataSpec: TypeAlias = dict[str, _MetadataBasicType]
 
 
 @_api.dataclass(ApiErrorCode.API_22)

@@ -21,6 +21,7 @@ import polars as pl
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_INPUT_IDX_KEY,
+    MANIFEST_METADATA_KEY,
     MANIFEST_NAME_KEY,
     MANIFEST_TABLES_KEY,
     load_inputs_manifest_or_raise,
@@ -126,6 +127,8 @@ def run(args: argparse.Namespace) -> int:
         enriched_records: list[dict] = []
         for record in records:
             src = record.get(MANIFEST_FILE_KEY)
+            # TODO Dimas, a dict with @td. columns coming from source plugin
+            _metadata = record.get(MANIFEST_METADATA_KEY)
             if src is None:
                 enriched_records.append(record)
                 continue

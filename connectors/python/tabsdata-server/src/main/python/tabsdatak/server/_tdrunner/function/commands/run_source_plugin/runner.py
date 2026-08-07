@@ -301,6 +301,7 @@ def _write_inputs_manifest(
             tables=[
                 build_table_record(
                     file=_normalise_table_file(f.file),
+                    metadata=f.metadata,
                     input_idx=None,
                     version_pos=-1,
                 )
