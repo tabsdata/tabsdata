@@ -31,6 +31,11 @@ from tabsdatak.conn.salesforce._explorer._soql_explorer import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.salesforce import _reader as reader
+from tabsdatak.conn.salesforce.constants import (
+    SALESFORCE_META_LAST_MODIFIED,
+    SALESFORCE_META_REPORT_ID,
+    SALESFORCE_META_SOQL,
+)
 from tabsdatak.conn.salesforce.error import (
     SalesforceErrorCode,
     SalesforceRuntimeException,
@@ -283,6 +288,43 @@ def test_src_plugin_handles_empty_result_set(monkeypatch, work_dir):
     assert out[0][0].file.exists()
 
 
+def test_src_plugin_reports_soql_and_cutoff_as_metadata(monkeypatch, work_dir):
+    fake = _FakeSF()
+    fake.records_by_query = [[{"attributes": {}, "Id": "001"}]]
+    _patch_login(monkeypatch, fake)
+    src = SalesforceSrc(
+        queries=[
+            "SELECT Id FROM Account WHERE SystemModstamp > $lastModified",
+        ],
+        initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+
+    metadata = out[0][0].metadata
+    # The reported SOQL is the query as sent -- token already substituted.
+    assert metadata[SALESFORCE_META_SOQL] == fake.query_all_iter_calls[0][0]
+    assert "$lastModified" not in metadata[SALESFORCE_META_SOQL]
+    assert metadata[SALESFORCE_META_LAST_MODIFIED].startswith("2026-01-01")
+
+
+def test_src_plugin_metadata_cutoff_empty_without_initial_last_modified(
+    monkeypatch,
+    work_dir,
+):
+    fake = _FakeSF()
+    fake.records_by_query = [[{"attributes": {}, "Id": "001"}]]
+    _patch_login(monkeypatch, fake)
+    src = SalesforceSrc(queries=["SELECT Id FROM Account"])
+    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+
+    # The metadata never changes shape between a full and an
+    # incremental read: both keys are always present.
+    assert out[0][0].metadata == {
+        SALESFORCE_META_SOQL: "SELECT Id FROM Account",
+        SALESFORCE_META_LAST_MODIFIED: "",
+    }
+
+
 # ---------------------------------------------------------------------------
 # _SalesforceReportSrcPlugin -- mock the metadata + restful surface
 # ---------------------------------------------------------------------------
@@ -320,6 +362,67 @@ def test_report_plugin_raises_salesforce_16_on_unsupported_format(
     with pytest.raises(SalesforceRuntimeException) as ei:
         plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_15
+
+
+def _patch_report_run(monkeypatch, parquet_path: Path) -> None:
+    """Stub out everything between report-id resolution and the parquet
+    sink so a report read can be driven without an HTTP layer."""
+    monkeypatch.setattr(
+        reader,
+        "_obtain_report_metadata",
+        lambda _sf, _report_id, _report: (
+            ["C"],
+            {"columnName": {"C": "C"}, "label": {"C": "C"}},
+            ["string"],
+            {"C": {"columnName": "C", "label": "C", "dataType": "string"}},
+        ),
+    )
+    monkeypatch.setattr(reader, "_launch_report_instance", lambda **_kw: "instance-1")
+    monkeypatch.setattr(reader, "_await_report_stream", lambda **_kw: object())
+    monkeypatch.setattr(
+        reader, "_stream_report_to_parquet", lambda **_kw: parquet_path
+    )
+
+
+def test_report_plugin_reports_resolved_id_and_cutoff_as_metadata(
+    monkeypatch,
+    work_dir,
+):
+    fake = _FakeSF()
+    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
+    _patch_login(monkeypatch, fake)
+    _patch_report_run(monkeypatch, work_dir / "0.parquet")
+
+    src = SalesforceReportSrc(
+        # Named by name -- the metadata must carry the *resolved* id.
+        reports=["Quarterly Pipeline"],
+        find_report_by="name",
+        last_modified_column="LastModifiedDate",
+        initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+
+    metadata = out[0][0].metadata
+    assert metadata[SALESFORCE_META_REPORT_ID] == "00O000000000001"
+    assert metadata[SALESFORCE_META_LAST_MODIFIED].startswith("2026-01-01")
+
+
+def test_report_plugin_metadata_cutoff_empty_without_initial_last_modified(
+    monkeypatch,
+    work_dir,
+):
+    fake = _FakeSF()
+    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
+    _patch_login(monkeypatch, fake)
+    _patch_report_run(monkeypatch, work_dir / "0.parquet")
+
+    src = SalesforceReportSrc(reports=["00O000000000001"], find_report_by="id")
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+
+    assert out[0][0].metadata == {
+        SALESFORCE_META_REPORT_ID: "00O000000000001",
+        SALESFORCE_META_LAST_MODIFIED: "",
+    }
 
 
 # ---------------------------------------------------------------------------

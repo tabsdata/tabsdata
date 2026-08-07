@@ -20,7 +20,13 @@ from tabsdatak.conn.salesforce import (
     SalesforceSrcConn,
     SalesforceTokenCredentials,
 )
+from tabsdatak.conn.salesforce.constants import (
+    SALESFORCE_META_LAST_MODIFIED,
+    SALESFORCE_META_REPORT_ID,
+    SALESFORCE_META_SOQL,
+)
 from tabsdatak.conn.salesforce.error import SalesforceErrorCode
+from tabsdatak.spi import TableFileInput
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +125,11 @@ def read_soql_src(
     sf: Any,
     src: SalesforceSrc,
     work_dir: Path,
-) -> list[list[Path]]:
+) -> list[list[TableFileInput]]:
     """Execute every SOQL query in ``src`` against the open Salesforce
     client ``sf`` and return one ``TableMode.SINGLE``-shaped output per
-    query (each inner list has exactly one parquet file).
+    query (each inner list has exactly one parquet file), each carrying
+    the query it ran and the last-modified cutoff as metadata.
 
     Updates ``src.initial_last_modified`` is *not* attempted -- offset
     state lives in the framework's initial-values surface, which the
@@ -136,7 +143,7 @@ def read_soql_src(
         if _SF_LAST_MODIFIED_TOKEN in query and initial_last_modified is None:
             raise SalesforceErrorCode.SALESFORCE_11.exception(query_index=i)
 
-    outputs: list[list[Path]] = []
+    outputs: list[list[TableFileInput]] = []
     for i, query in enumerate(src.queries):
         outputs.append(
             _run_one_soql(
@@ -159,7 +166,7 @@ def _run_one_soql(
     include_deleted: bool,
     initial_last_modified: datetime | None,
     work_dir: Path,
-) -> list[Path]:
+) -> list[TableFileInput]:
     import polars as pl
 
     # Token replacement: the legacy contract is that the value is a
@@ -211,7 +218,17 @@ def _run_one_soql(
             pl.scan_csv(csv_path, raise_if_empty=True).sink_parquet(parquet_path)
         except pl.exceptions.NoDataError:
             pl.DataFrame().write_parquet(parquet_path)
-    return [parquet_path]
+    return [
+        TableFileInput(
+            file=parquet_path,
+            metadata={
+                SALESFORCE_META_SOQL: query,
+                SALESFORCE_META_LAST_MODIFIED: _last_modified_metadata(
+                    initial_last_modified
+                ),
+            },
+        )
+    ]
 
 
 def _format_sf_datetime(dt: datetime) -> str:
@@ -222,6 +239,13 @@ def _format_sf_datetime(dt: datetime) -> str:
     return dt.strftime(_SF_DATE_FORMAT)
 
 
+def _last_modified_metadata(dt: datetime | None) -> str:
+    """The last-modified cutoff as it goes into a query, or empty when
+    the source declares none. Always reported so the metadata does not
+    change shape between an incremental and a full read."""
+    return _format_sf_datetime(dt) if dt is not None else ""
+
+
 # --- Report source -------------------------------------------------------
 
 
@@ -229,10 +253,11 @@ def read_report_src(
     sf: Any,
     src: SalesforceReportSrc,
     work_dir: Path,
-) -> list[list[Path]]:
+) -> list[list[TableFileInput]]:
     """Run every Salesforce report in ``src`` and return per-report
-    parquet outputs."""
-    outputs: list[list[Path]] = []
+    parquet outputs, each carrying the resolved report id and the
+    last-modified cutoff as metadata."""
+    outputs: list[list[TableFileInput]] = []
     for i, report in enumerate(src.reports):
         outputs.append(
             _run_one_report(
@@ -253,7 +278,7 @@ def _run_one_report(
     report: str,
     src: SalesforceReportSrc,
     work_dir: Path,
-) -> list[Path]:
+) -> list[TableFileInput]:
     from tabsdatak.conn.salesforce.error import SalesforceRuntimeException
 
     # Codes that already carry a precise diagnosis: re-raise as-is so
@@ -322,7 +347,17 @@ def _run_one_report(
             cause=e,
             report_index=index,
         )
-    return [parquet_path]
+    return [
+        TableFileInput(
+            file=parquet_path,
+            metadata={
+                SALESFORCE_META_REPORT_ID: report_id,
+                SALESFORCE_META_LAST_MODIFIED: _last_modified_metadata(
+                    src.initial_last_modified
+                ),
+            },
+        )
+    ]
 
 
 def _resolve_report_id(

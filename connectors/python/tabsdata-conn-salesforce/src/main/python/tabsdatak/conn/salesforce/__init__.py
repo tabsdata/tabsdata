@@ -209,6 +209,12 @@ class SalesforceSrc(Src):
 
     :categories: source
 
+    Every table this source publishes automatically carries two
+    metadata columns: `@td.salesforce.soql`, the query that produced
+    the row as it was sent to Salesforce (any `$lastModified` token
+    already substituted), and `@td.salesforce.last_modified`, the
+    `initial_last_modified` cutoff it ran with (empty when unset).
+
     Args:
         queries: SOQL query list; today exactly one entry (one output
             slot). The list shape leaves room for future multi-query
@@ -253,6 +259,12 @@ class SalesforceReportSrc(Src):
     only.
 
     :categories: source
+
+    Every table this source publishes automatically carries two
+    metadata columns: `@td.salesforce.reportId`, the resolved report
+    id that produced the row (even when `reports` named the report by
+    name), and `@td.salesforce.last_modified`, the source's
+    `initial_last_modified` cutoff (empty when unset).
 
     Args:
         reports: Report ids or names, one output slot per entry
