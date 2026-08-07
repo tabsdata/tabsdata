@@ -14,6 +14,8 @@ import argparse
 import logging
 import os
 
+from tabsdatak.server._tdrunner.function._lib.system_info import report_system
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +43,7 @@ def run(args: argparse.Namespace) -> int:
         " ---",
         flush=True,
     )
+    report_system()
     print(
         "--- inspect-function (end) ---",
         flush=True,
