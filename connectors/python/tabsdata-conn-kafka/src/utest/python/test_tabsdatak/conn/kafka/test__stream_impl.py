@@ -20,6 +20,7 @@ from tabsdatak.conn.kafka._stream_impl import (
     RolloverReason,
     build_kafka_configs,
 )
+from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 
 
 pytestmark = pytest.mark.kafka
@@ -76,6 +77,21 @@ def test_messages_buffer_to_parquet_returns_file(tmp_path):
 def test_messages_buffer_to_parquet_empty_returns_none(tmp_path):
     b = MessagesBuffer("evt", _allow_subset)
     assert b.to_parquet(dir_path=tmp_path) is None
+
+
+def test_messages_buffer_to_parquet_leads_with_the_topic_column(tmp_path):
+    import polars as pl
+
+    b = MessagesBuffer("evt", _allow_subset)
+    b.append((10, {"a": 1, "b": "x"}, ("a", "b")))
+    b.append((10, {"a": 2, "b": "y"}, ("a", "b")))
+    frame = pl.read_parquet(b.to_parquet(dir_path=tmp_path))
+
+    assert frame.columns == [KAFKA_META_TOPIC, "a", "b"]
+    assert frame[KAFKA_META_TOPIC].to_list() == ["evt", "evt"]
+    # The payload columns are untouched.
+    assert frame["a"].to_list() == [1, 2]
+    assert frame["b"].to_list() == ["x", "y"]
 
 
 # --- build_kafka_configs --------------------------------------------

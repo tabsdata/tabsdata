@@ -227,6 +227,25 @@ td.SalesforceReportSrc(reports=["Quarterly Pipeline"], find_report_by="name")
 #   @td.salesforce.last_modified  ""
 ```
 
+## Kafka Source Metadata
+
+Every batch staged by `KafkaStreamSrc` automatically carries one metadata
+column — there is nothing to configure:
+
+| Column | Contents |
+|--------|----------|
+| `@td.kafka.topic` | The topic the message was consumed from |
+
+```python
+td.KafkaStreamSrc(topic="users", data_format="avro", schema=AVRO_SCHEMA)
+# Staged rows carry:
+#   @td.kafka.topic  "users"
+```
+
+A stream source stages parquet rather than reporting per-file metadata, so the
+column is written into the data itself — the same way the CDC sources write
+their `@td.cdc.meta.*` columns.
+
 ## Triggers
 
 Control when functions execute:

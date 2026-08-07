@@ -311,6 +311,10 @@ class KafkaStreamSrc(StreamSrc):
     receives the batch as a list of frames and must NOT declare a
     `ctx` parameter. The emitted table name is the `topic`.
 
+    Every batch this source stages automatically carries a
+    `@td.kafka.topic` column holding the topic the message was consumed
+    from.
+
     Args:
         data_format: Payload wire format -- `"avro"`, `"json"` or a
             `Protobuf(message_name=...)` marker.

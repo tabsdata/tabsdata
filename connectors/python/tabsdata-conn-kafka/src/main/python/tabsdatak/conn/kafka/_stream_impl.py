@@ -27,6 +27,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import KafkaSerde, SchemaIdCompatibles, SchemaIdSpec
+from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
     from confluent_kafka import Consumer, Message, Producer
@@ -118,9 +119,9 @@ class MessagesBuffer:
         return self._flushed
 
     def to_parquet(self, dir_path: str | Path) -> Path | None:
-        """Write the buffered messages to a parquet file. Returns
-        ``None`` if the buffer is empty -- caller treats this as
-        a no-op rollover."""
+        """Write the buffered messages to a parquet file, led by the
+        `KAFKA_META_TOPIC` column. Returns ``None`` if the buffer is
+        empty -- caller treats this as a no-op rollover."""
         if not self._messages:
             return None
         file_path = (
@@ -132,7 +133,10 @@ class MessagesBuffer:
 
         column_names = sorted(self._messages[0].keys())
         table = pa.Table.from_pydict(
-            mapping={k: [m.get(k) for m in self._messages] for k in column_names},
+            mapping={
+                KAFKA_META_TOPIC: [self._topic for _ in self._messages],
+                **{k: [m.get(k) for m in self._messages] for k in column_names},
+            },
         )
         pq.write_table(table, file_path)
         self._flushed = True

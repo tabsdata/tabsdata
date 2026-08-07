@@ -34,6 +34,7 @@ from tabsdatak.conn.kafka._serdes import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_plugin import KafkaStreamSrcPlugin
+from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.spi import StreamSrcPluginCtx
 
 pytestmark = [
@@ -465,5 +466,5 @@ def test_stream_src_plugin_schema_change_rollover_segregates_buffers(
 
     assert len(_committed(ctx)) >= 2
     shapes = [set(frame.columns) for frame in _staged_frames(ctx)]
-    assert {"name", "age"} in shapes
-    assert {"name", "city"} in shapes
+    assert {KAFKA_META_TOPIC, "name", "age"} in shapes
+    assert {KAFKA_META_TOPIC, "name", "city"} in shapes
