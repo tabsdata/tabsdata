@@ -50,11 +50,6 @@ spec:
              --output /tabsdata/certs/ca-public.pem https://curl.se/ca/cacert.pem
           curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
              --output /tabsdata/certs/ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-        resources:
-          requests:
-            cpu: "250m"
-            memory: "512Mi"
-            ephemeral-storage: "2Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -74,11 +69,6 @@ spec:
         - td
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
-        resources:
-          requests:
-            cpu: "1"
-            memory: "2Gi"
-            ephemeral-storage: "4Gi"
         env:
         - name: CONTAINER_ROOT
           value: ""
@@ -123,11 +113,6 @@ spec:
         - /tabsdata/config/apiserver.database.yaml
         - --config-file
         - /tabsdata/config/dbmanager.database.yaml
-        resources:
-          requests:
-            cpu: "1"
-            memory: "2Gi"
-            ephemeral-storage: "4Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

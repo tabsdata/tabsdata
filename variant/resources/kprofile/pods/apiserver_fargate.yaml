@@ -59,11 +59,6 @@ spec:
                --output /tabsdata/certs/ca-public.pem https://curl.se/ca/cacert.pem
             curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
                --output /tabsdata/certs/ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -85,11 +80,6 @@ spec:
             - td
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
-          resources:
-            requests:
-              cpu: "2"
-              memory: "4Gi"
-              ephemeral-storage: "16Gi"
           env:
             - name: CONTAINER_ROOT
               value: ""
@@ -135,11 +125,6 @@ spec:
             - "600"
             - --interval
             - "2"
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -180,11 +165,6 @@ spec:
           args:
             - --output-dir
             - /tabsdata/resources/ui/connectors
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -240,11 +220,6 @@ spec:
             - name: private-http
               containerPort: ${{system:tdk_apiserver_private_port}}
               protocol: TCP
-          resources:
-            requests:
-              cpu: "4"
-              memory: "8Gi"
-              ephemeral-storage: "16Gi"
           readinessProbe:
             httpGet:
               path: /api/v1/ping

@@ -69,11 +69,6 @@ spec:
             - "600"
             - --interval
             - "2"
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-              ephemeral-storage: "1Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -109,11 +104,6 @@ spec:
           args:
             - --output-dir
             - $(CONTAINER_ROOT)/tabsdata/resources/ui/connectors
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-              ephemeral-storage: "1Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -164,11 +154,6 @@ spec:
             - name: private-http
               containerPort: ${{system:tdk_apiserver_private_port}}
               protocol: TCP
-          resources:
-            requests:
-              cpu: "2"
-              memory: "4Gi"
-              ephemeral-storage: "4Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

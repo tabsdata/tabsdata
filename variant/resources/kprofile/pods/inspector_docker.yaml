@@ -58,11 +58,6 @@ spec:
                 done
               done
               echo "Done!"
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-              ephemeral-storage: "1Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -52,11 +52,6 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.database.yaml
         - --config-file
         - $(CONTAINER_ROOT)/tabsdata/config/dbmanager.database.yaml
-        resources:
-          requests:
-            cpu: "1"
-            memory: "2Gi"
-            ephemeral-storage: "4Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

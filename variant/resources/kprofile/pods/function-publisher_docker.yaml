@@ -56,11 +56,6 @@ spec:
                --output /tabsdata/certs/ca-public.pem https://curl.se/ca/cacert.pem
             curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
                --output /tabsdata/certs/ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -80,11 +75,6 @@ spec:
             - fn
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config-storage/apiserver.storage.yaml
-          resources:
-            requests:
-              cpu: "1"
-              memory: "2Gi"
-              ephemeral-storage: "4Gi"
           env:
             - name: CONTAINER_ROOT
               value: ""
@@ -128,11 +118,6 @@ spec:
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -189,11 +174,6 @@ spec:
             - "600"
             - --interval
             - "2"
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -248,11 +228,6 @@ spec:
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -323,11 +298,6 @@ spec:
             - env:SECRET__TD_RESOLVER_AUTHORIZATION
             - --request-file
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -402,11 +372,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shuttle/response/bundle-fetch.yaml
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -489,11 +454,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/state-manifest.yaml
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -562,11 +522,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
             - --report
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/state-download.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -647,11 +602,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
             - --state-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/state
-          resources:
-            requests:
-              cpu: "2"
-              memory: "4Gi"
-              ephemeral-storage: "8Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -733,11 +683,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/rich
             - --enriched-inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/enriched-inputs-manifest.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -812,11 +757,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
             - --state-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/state
-          resources:
-            requests:
-              cpu: "2"
-              memory: "4Gi"
-              ephemeral-storage: "8Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -887,11 +827,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-upload.yaml
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -960,11 +895,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-upload.yaml
             - --report
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/state-upload.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -1041,11 +971,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/tables-upload.yaml
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -1114,11 +1039,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/tables-upload.yaml
             - --report
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/tables-upload.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -1196,11 +1116,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/state
             - --out
             - $(CONTAINER_ROOT)/tabsdata/shared/response/response.yaml
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "1Gi"
-              ephemeral-storage: "2Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -67,11 +67,6 @@ spec:
         - name: postgres
           containerPort: ${{system:tdk_database_port}}
           protocol: TCP
-        resources:
-          requests:
-            cpu: "1"
-            memory: "2Gi"
-            ephemeral-storage: "4Gi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

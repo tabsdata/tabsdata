@@ -1,0 +1,37 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+pods:
+  global:
+    # Every entry here is injected as an environment variable into every
+    # container of every pod. A variable a container declares itself is left
+    # alone, so these are defaults rather than overrides.
+    envs: {}
+
+  # Sizing and placement, per component. The values below are the shipped
+  # defaults; editing one changes every container of that component.
+  #
+  # `ephemeral` covers everything triggered from the apiserver -- publishers,
+  # transformers, subscribers, crons and streams -- plus the setup and init
+  # pods. Any component not named here falls into it.
+  #
+  # `selectors` and `tolerations` are empty by default, which leaves scheduling
+  # to the cluster. Fill them in to steer a component onto particular nodes.
+  components:
+    apiserver:
+      resources:
+        cpu: "4"
+        memory: 8Gi
+        disk: 16Gi
+      placement:
+        selectors: {}
+        tolerations: []
+    ephemeral:
+      resources:
+        cpu: "4"
+        memory: 16Gi
+        disk: 16Gi
+      placement:
+        selectors: {}
+        tolerations: []
