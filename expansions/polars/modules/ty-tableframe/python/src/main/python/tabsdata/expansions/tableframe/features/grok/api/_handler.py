@@ -12,8 +12,8 @@ import polars as pl
 from polars._typing import IntoExpr
 from polars.plugins import register_plugin_function
 
-import tabsdata.tableframe.functions.col as td_col
 from tabsdata.expansions.tableframe.expressions import PLUGIN_PATH
+from tabsdatak.tableframe.grok import ColumnDefinition
 
 logger = logging.getLogger()
 
@@ -21,7 +21,7 @@ logger = logging.getLogger()
 @dataclass(frozen=True, slots=True)
 class GrokParser:
     pattern: str
-    schema: dict[str, td_col.Column]
+    schema: dict[str, ColumnDefinition]
     temp_column: str = field(
         init=False, default_factory=lambda: f"__grok_tmp_{uuid.uuid4().hex}"
     )

@@ -4,20 +4,21 @@
 
 import os
 import sys
+from pathlib import Path
 
-TESTS_ROOT_FOLDER = os.path.dirname(__file__)
+TESTS_ROOT_FOLDER = str(Path(__file__).absolute().parent)
 
-TESTING_RESOURCES_PATH = os.path.normpath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "..",  # Go up from test_to_foundation/ to python/
-        "..",  # Go up from python/ to utest/
-        "resources",
-        "test_to_foundation",  # Resources subfolder matching test package
-    )
+# fmt: off
+TESTING_RESOURCES_PATH = str(
+    Path(__file__).absolute()
+    .parent  # test_to_foundation/
+    .parent  # python/
+    .parent  # utest/
+    / "resources"
+    / "test_to_foundation"
 )
+# fmt: on
 
-# Add resources path to sys.path for direct imports
 if os.path.abspath(TESTING_RESOURCES_PATH) not in sys.path:
     sys.path.append(os.path.abspath(TESTING_RESOURCES_PATH))
 

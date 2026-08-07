@@ -9,9 +9,10 @@ from timeit import default_timer as timer
 import polars as pl
 import pytest
 
-import tabsdata as td
-import tabsdata.tableframe.functions.col as td_col
-from tabsdata._utils.temps import tabsdata_temp_folder
+from tabsdatak.common._temps import tabsdata_temp_folder
+from tabsdatak.tableframe import TableFrame, datatypes as td_datatypes
+from tabsdatak.tableframe.functions import col
+from tabsdatak.tableframe.grok import ColumnDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +42,15 @@ class TestGrokCommonPatterns:
             r"%{INT:response_code} %{INT:bytes}"
         )
         schema = {
-            "client_ip": td_col.Column("ip_address", td.String),
-            "ident": td_col.Column("identity", td.String),
-            "auth": td_col.Column("auth_user", td.String),
-            "timestamp": td_col.Column("request_time", td.String),
-            "method": td_col.Column("http_method", td.String),
-            "request": td_col.Column("uri_path", td.String),
-            "http_version": td_col.Column("http_ver", td.Float64),
-            "response_code": td_col.Column("status_code", td.Int32),
-            "bytes": td_col.Column("response_bytes", td.Int64),
+            "client_ip": ColumnDefinition("ip_address", td_datatypes.String),
+            "ident": ColumnDefinition("identity", td_datatypes.String),
+            "auth": ColumnDefinition("auth_user", td_datatypes.String),
+            "timestamp": ColumnDefinition("request_time", td_datatypes.String),
+            "method": ColumnDefinition("http_method", td_datatypes.String),
+            "request": ColumnDefinition("uri_path", td_datatypes.String),
+            "http_version": ColumnDefinition("http_ver", td_datatypes.Float64),
+            "response_code": ColumnDefinition("status_code", td_datatypes.Int32),
+            "bytes": ColumnDefinition("response_bytes", td_datatypes.Int64),
         }
 
         log_data = [
@@ -67,7 +68,7 @@ class TestGrokCommonPatterns:
             ),
         ]
 
-        tf = td.TableFrame(df={"log_entry": log_data}, origin=None)
+        tf = TableFrame.from_dict({"log_entry": log_data})
         result = tf.grok("log_entry", pattern, schema)
 
         assert "ip_address" in result.schema.names()
@@ -92,11 +93,11 @@ class TestGrokCommonPatterns:
             r"%{WORD:process}(?:\[%{INT:pid}\])?: %{GREEDYDATA:message}"
         )
         schema = {
-            "timestamp": td_col.Column("log_time", td.String),
-            "host": td_col.Column("hostname", td.String),
-            "process": td_col.Column("process_name", td.String),
-            "pid": td_col.Column("process_id", td.Int32),
-            "message": td_col.Column("log_message", td.String),
+            "timestamp": ColumnDefinition("log_time", td_datatypes.String),
+            "host": ColumnDefinition("hostname", td_datatypes.String),
+            "process": ColumnDefinition("process_name", td_datatypes.String),
+            "pid": ColumnDefinition("process_id", td_datatypes.Int32),
+            "message": ColumnDefinition("log_message", td_datatypes.String),
         }
 
         log_data = [
@@ -108,7 +109,7 @@ class TestGrokCommonPatterns:
             "Oct 10 13:55:38 server1 httpd[9999]: Connection established",
         ]
 
-        tf = td.TableFrame(df={"syslog": log_data}, origin=None)
+        tf = TableFrame.from_dict({"syslog": log_data})
         result = tf.grok("syslog", pattern, schema)
 
         assert "hostname" in result.schema.names()
@@ -131,11 +132,11 @@ class TestGrokCommonPatterns:
             r"%{WORD:status}"
         )
         schema = {
-            "action": td_col.Column("operation", td.String),
-            "year": td_col.Column("event_year", td.Int64),
-            "user": td_col.Column("username", td.String),
-            "id": td_col.Column("user_id", td.Int64),
-            "status": td_col.Column("result", td.String),
+            "action": ColumnDefinition("operation", td_datatypes.String),
+            "year": ColumnDefinition("event_year", td_datatypes.Int64),
+            "user": ColumnDefinition("username", td_datatypes.String),
+            "id": ColumnDefinition("user_id", td_datatypes.Int64),
+            "status": ColumnDefinition("result", td_datatypes.String),
         }
 
         data = [
@@ -144,7 +145,7 @@ class TestGrokCommonPatterns:
             "update-2023-charlie-1003-success",
         ]
 
-        tf = td.TableFrame(df={"events": data}, origin=None)
+        tf = TableFrame.from_dict({"events": data})
         result = tf.grok("events", pattern, schema)
 
         expected_columns = ["operation", "event_year", "username", "user_id", "result"]
@@ -179,12 +180,12 @@ class TestGrokDataTypes:
             r"%{WORD:bool_str}"
         )
         schema = {
-            "small_int": td_col.Column("tiny", td.Int8),
-            "regular_int": td_col.Column("normal", td.Int32),
-            "big_int": td_col.Column("large", td.Int64),
-            "decimal": td_col.Column("precise", td.Float64),
-            "float_val": td_col.Column("approx", td.Float32),
-            "bool_str": td_col.Column("flag", td.String),
+            "small_int": ColumnDefinition("tiny", td_datatypes.Int8),
+            "regular_int": ColumnDefinition("normal", td_datatypes.Int32),
+            "big_int": ColumnDefinition("large", td_datatypes.Int64),
+            "decimal": ColumnDefinition("precise", td_datatypes.Float64),
+            "float_val": ColumnDefinition("approx", td_datatypes.Float32),
+            "bool_str": ColumnDefinition("flag", td_datatypes.String),
         }
 
         data = [
@@ -193,7 +194,7 @@ class TestGrokDataTypes:
             "0 0 0 0.0 0.0 null",
         ]
 
-        tf = td.TableFrame(df={"numbers": data}, origin=None)
+        tf = TableFrame.from_dict({"numbers": data})
         result = tf.grok("numbers", pattern, schema)
 
         collected = result._lf.collect()
@@ -219,10 +220,10 @@ class TestGrokDataTypes:
             r"%{UUID:record_id}"
         )
         schema = {
-            "iso_date": td_col.Column("event_timestamp", td.String),
-            "category": td_col.Column("event_type", td.String),
-            "description": td_col.Column("details", td.String),
-            "record_id": td_col.Column("uuid", td.String),
+            "iso_date": ColumnDefinition("event_timestamp", td_datatypes.String),
+            "category": ColumnDefinition("event_type", td_datatypes.String),
+            "description": ColumnDefinition("details", td_datatypes.String),
+            "record_id": ColumnDefinition("uuid", td_datatypes.String),
         }
 
         data = [
@@ -236,7 +237,7 @@ class TestGrokDataTypes:
             ),
         ]
 
-        tf = td.TableFrame(df={"log_entries": data}, origin=None)
+        tf = TableFrame.from_dict({"log_entries": data})
         result = tf.grok("log_entries", pattern, schema)
 
         collected = result._lf.collect()
@@ -250,9 +251,9 @@ class TestGrokDataTypes:
         pattern = r"%{WORD:status} " r"%{WORD:active} " r"%{INT:enabled}"
 
         schema = {
-            "status": td_col.Column("is_ok", td.String),
-            "active": td_col.Column("is_active", td.String),
-            "enabled": td_col.Column("is_enabled", td.Int8),
+            "status": ColumnDefinition("is_ok", td_datatypes.String),
+            "active": ColumnDefinition("is_active", td_datatypes.String),
+            "enabled": ColumnDefinition("is_enabled", td_datatypes.Int8),
         }
 
         data = [
@@ -261,7 +262,7 @@ class TestGrokDataTypes:
             "pending unknown -1",
         ]
 
-        tf = td.TableFrame(df={"flags": data}, origin=None)
+        tf = TableFrame.from_dict({"flags": data})
         result = tf.grok("flags", pattern, schema)
 
         collected = result._lf.collect()
@@ -280,9 +281,9 @@ class TestGrokOperations:
     def test_filtering_after_grok(self):
         pattern = r"%{WORD:user} " r"%{INT:score} " r"%{WORD:level}"
         schema = {
-            "user": td_col.Column("player", td.String),
-            "score": td_col.Column("points", td.Int64),
-            "level": td_col.Column("difficulty", td.String),
+            "user": ColumnDefinition("player", td_datatypes.String),
+            "score": ColumnDefinition("points", td_datatypes.Int64),
+            "level": ColumnDefinition("difficulty", td_datatypes.String),
         }
 
         data = [
@@ -292,10 +293,10 @@ class TestGrokOperations:
             "diana 3200 hard",
         ]
 
-        tf = td.TableFrame(df={"game_data": data}, origin=None)
+        tf = TableFrame.from_dict({"game_data": data})
         result = tf.grok("game_data", pattern, schema)
 
-        high_scores = result.filter(td.col("points") > 2000)
+        high_scores = result.filter(col("points") > 2000)
 
         collected = high_scores._lf.collect()
 
@@ -303,7 +304,7 @@ class TestGrokOperations:
         assert "bob" in collected["player"].to_list()
         assert "diana" in collected["player"].to_list()
 
-        hard_level = result.filter(td.col("difficulty") == "hard")
+        hard_level = result.filter(col("difficulty") == "hard")
 
         collected_hard = hard_level._lf.collect()
 
@@ -313,9 +314,9 @@ class TestGrokOperations:
     def test_group_by_after_grok(self):
         pattern = r"%{WORD:department} " r"%{INT:salary} " r"%{WORD:position}"
         schema = {
-            "department": td_col.Column("dept", td.String),
-            "salary": td_col.Column("pay", td.Int64),
-            "position": td_col.Column("role", td.String),
+            "department": ColumnDefinition("dept", td_datatypes.String),
+            "salary": ColumnDefinition("pay", td_datatypes.Int64),
+            "position": ColumnDefinition("role", td_datatypes.String),
         }
 
         data = [
@@ -326,10 +327,10 @@ class TestGrokOperations:
             "engineering 95000 lead",
         ]
 
-        tf = td.TableFrame(df={"employee_data": data}, origin=None)
+        tf = TableFrame.from_dict({"employee_data": data})
         result = tf.grok("employee_data", pattern, schema)
 
-        grouped = result.group_by("dept").agg(td.col("pay").mean().alias("avg_salary"))
+        grouped = result.group_by("dept").agg(col("pay").mean().alias("avg_salary"))
 
         collected = grouped._lf.collect().sort("dept")
 
@@ -342,8 +343,8 @@ class TestGrokOperations:
     def test_joins_after_grok(self):
         pattern = r"%{INT:id} " r"%{WORD:status}"
         schema = {
-            "id": td_col.Column("order_id", td.Int64),
-            "status": td_col.Column("order_status", td.String),
+            "id": ColumnDefinition("order_id", td_datatypes.Int64),
+            "status": ColumnDefinition("order_status", td_datatypes.String),
         }
 
         order_data = [
@@ -352,14 +353,14 @@ class TestGrokOperations:
             "1003 delivered",
         ]
 
-        tf_orders = td.TableFrame(df={"orders": order_data}, origin=None)
+        tf_orders = TableFrame.from_dict({"orders": order_data})
         grok_result = tf_orders.grok("orders", pattern, schema)
 
         lookup_data = {
             "order_id": [1001, 1002, 1003],
             "customer": ["Alice", "Bob", "Charlie"],
         }
-        tf_customers = td.TableFrame(df=lookup_data, origin=None)
+        tf_customers = TableFrame.from_dict(lookup_data)
 
         joined = grok_result.join(tf_customers, on="order_id", how="inner")
 
@@ -372,9 +373,9 @@ class TestGrokOperations:
     def test_window_functions_after_grok(self):
         pattern = r"%{WORD:product} %{INT:quarter} %{INT:sales}"
         schema = {
-            "product": td_col.Column("item", td.String),
-            "quarter": td_col.Column("q", td.Int32),
-            "sales": td_col.Column("revenue", td.Int64),
+            "product": ColumnDefinition("item", td_datatypes.String),
+            "quarter": ColumnDefinition("q", td_datatypes.Int32),
+            "sales": ColumnDefinition("revenue", td_datatypes.Int64),
         }
 
         data = [
@@ -386,10 +387,10 @@ class TestGrokOperations:
             "phone 2 160000",
         ]
 
-        tf = td.TableFrame(df={"sales_data": data}, origin=None)
+        tf = TableFrame.from_dict({"sales_data": data})
         result = tf.grok("sales_data", pattern, schema)
 
-        windowed = result.with_columns(td.col("revenue").rank().alias("rank"))
+        windowed = result.with_columns(col("revenue").rank().alias("rank"))
 
         collected = windowed._lf.collect().sort(["item", "q"])
 
@@ -416,14 +417,14 @@ class TestGrokSchemaOrdering:
     def test_field_ordering_by_schema(self):
         pattern = r"%{WORD:c} " r"%{WORD:a} " r"%{WORD:b}"
         schema = {
-            "a": td_col.Column("alpha", td.String),
-            "b": td_col.Column("beta", td.String),
-            "c": td_col.Column("gamma", td.String),
+            "a": ColumnDefinition("alpha", td_datatypes.String),
+            "b": ColumnDefinition("beta", td_datatypes.String),
+            "c": ColumnDefinition("gamma", td_datatypes.String),
         }
 
         data = ["third first second"]
 
-        tf = td.TableFrame(df={"data": data}, origin=None)
+        tf = TableFrame.from_dict({"data": data})
         result = tf.grok("data", pattern, schema)
 
         schema_names = [schema[k].name or k for k in schema.keys()]
@@ -443,14 +444,14 @@ class TestGrokSchemaOrdering:
     def test_field_renaming(self):
         pattern = r"%{IPV4:ip} " r"%{INT:port} " r"%{WORD:proto}"
         schema = {
-            "ip": td_col.Column("source_address", td.String),
-            "port": td_col.Column("source_port", td.Int32),
-            "proto": td_col.Column("protocol", td.String),
+            "ip": ColumnDefinition("source_address", td_datatypes.String),
+            "port": ColumnDefinition("source_port", td_datatypes.Int32),
+            "proto": ColumnDefinition("protocol", td_datatypes.String),
         }
 
         data = ["192.168.1.100 8080 tcp"]
 
-        tf = td.TableFrame(df={"network": data}, origin=None)
+        tf = TableFrame.from_dict({"network": data})
         result = tf.grok("network", pattern, schema)
 
         result_names = result.schema.names()
@@ -475,14 +476,15 @@ class TestGrokPerformance:
     def setup_method():
         setup_polars_config()
 
+    # noinspection DuplicatedCode
     @pytest.mark.slow
     def test_large_dataset_performance(self):
         pattern = r"%{IPV4:ip} " r"%{WORD:method} " r"%{INT:response} " r"%{INT:bytes}"
         schema = {
-            "ip": td_col.Column("client_ip", td.String),
-            "method": td_col.Column("http_method", td.String),
-            "response": td_col.Column("status_code", td.Int32),
-            "bytes": td_col.Column("response_size", td.Int64),
+            "ip": ColumnDefinition("client_ip", td_datatypes.String),
+            "method": ColumnDefinition("http_method", td_datatypes.String),
+            "response": ColumnDefinition("status_code", td_datatypes.Int32),
+            "bytes": ColumnDefinition("response_size", td_datatypes.Int64),
         }
 
         def generate_log_entry(i: int) -> str:
@@ -501,7 +503,7 @@ class TestGrokPerformance:
         time_taken = end - start
         print(f"Data generation took {time_taken:.2f} seconds")
 
-        tf = td.TableFrame(df={"logs": log_data}, origin=None)
+        tf = TableFrame.from_dict({"logs": log_data})
 
         print("Applying grok pattern...")
         start = timer()
@@ -566,13 +568,13 @@ class TestGrokPerformance:
         print("Testing operations on large result...")
         start = timer()
         method_counts = result.group_by("http_method").agg(
-            td.col("client_ip").count().alias("count")
+            col("client_ip").count().alias("count")
         )
         method_result = method_counts._lf.collect()
         high_traffic = (
             result.group_by("client_ip")
-            .agg(td.col("status_code").count().alias("requests"))
-            .filter(td.col("requests") > 1000)
+            .agg(col("status_code").count().alias("requests"))
+            .filter(col("requests") > 1000)
         )
         high_traffic_count = high_traffic._lf.collect().shape[0]
         end = timer()
@@ -583,6 +585,7 @@ class TestGrokPerformance:
 
         assert len(method_result) == 4
 
+    # noinspection DuplicatedCode
     def test_complex_pattern_performance(self):
         pattern = (
             r"%{TIMESTAMP_ISO8601:timestamp} \[%{WORD:level}\] "
@@ -592,17 +595,17 @@ class TestGrokPerformance:
             r"status=%{INT:status} size=%{INT:size}"
         )
         schema = {
-            "timestamp": td_col.Column("event_time", td.String),
-            "level": td_col.Column("log_level", td.String),
-            "service": td_col.Column("service_name", td.String),
-            "component": td_col.Column("component_name", td.String),
-            "event": td_col.Column("event_type", td.String),
-            "count": td_col.Column("event_count", td.Int32),
-            "user": td_col.Column("username", td.String),
-            "ip": td_col.Column("client_ip", td.String),
-            "duration": td_col.Column("response_time", td.Float64),
-            "status": td_col.Column("http_status", td.Int32),
-            "size": td_col.Column("response_bytes", td.Int64),
+            "timestamp": ColumnDefinition("event_time", td_datatypes.String),
+            "level": ColumnDefinition("log_level", td_datatypes.String),
+            "service": ColumnDefinition("service_name", td_datatypes.String),
+            "component": ColumnDefinition("component_name", td_datatypes.String),
+            "event": ColumnDefinition("event_type", td_datatypes.String),
+            "count": ColumnDefinition("event_count", td_datatypes.Int32),
+            "user": ColumnDefinition("username", td_datatypes.String),
+            "ip": ColumnDefinition("client_ip", td_datatypes.String),
+            "duration": ColumnDefinition("response_time", td_datatypes.Float64),
+            "status": ColumnDefinition("http_status", td_datatypes.Int32),
+            "size": ColumnDefinition("response_bytes", td_datatypes.Int64),
         }
 
         def generate_complex_log(i: int) -> str:
@@ -635,7 +638,7 @@ class TestGrokPerformance:
         time_taken = end - start
         print(f"Generation took {time_taken:.2f} seconds")
 
-        tf = td.TableFrame(df={"complex_logs": log_data}, origin=None)
+        tf = TableFrame.from_dict({"complex_logs": log_data})
 
         print("Applying complex grok pattern...")
         start = timer()
@@ -715,8 +718,8 @@ class TestGrokErrorHandling:
     def test_non_matching_rows(self):
         pattern = r"%{WORD:action} %{INT:value}"
         schema = {
-            "action": td_col.Column("operation", td.String),
-            "value": td_col.Column("amount", td.Int32),
+            "action": ColumnDefinition("operation", td_datatypes.String),
+            "value": ColumnDefinition("amount", td_datatypes.Int32),
         }
 
         data = [
@@ -727,7 +730,7 @@ class TestGrokErrorHandling:
             "delete 50",
         ]
 
-        tf = td.TableFrame(df={"mixed_data": data}, origin=None)
+        tf = TableFrame.from_dict({"mixed_data": data})
         result = tf.grok("mixed_data", pattern, schema)
 
         collected = result._lf.collect()
@@ -745,8 +748,8 @@ class TestGrokErrorHandling:
         pattern = r"%{WORD:first}(?:%{SPACE}%{WORD:second})?"
 
         schema = {
-            "first": td_col.Column("word1", td.String),
-            "second": td_col.Column("word2", td.String),
+            "first": ColumnDefinition("word1", td_datatypes.String),
+            "second": ColumnDefinition("word2", td_datatypes.String),
         }
 
         data = [
@@ -754,7 +757,7 @@ class TestGrokErrorHandling:
             "hello",
         ]
 
-        tf = td.TableFrame(df={"optional_data": data}, origin=None)
+        tf = TableFrame.from_dict({"optional_data": data})
         result = tf.grok("optional_data", pattern, schema)
 
         collected = result._lf.collect()

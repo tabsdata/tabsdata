@@ -13,7 +13,9 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# noinspection unresolved-references
 from test_tabsdatak.bootest import enrich_sys_path
+# noinspection unresolved-references
 from test_te_examples.bootest import TESTING_RESOURCES_PATH
 
 
@@ -30,7 +32,7 @@ _enrich_sys_path()
 import pytest
 from xdist.workermanage import WorkerController
 
-# noinspection PyProtectedMember
+# noinspection PyProtectedMember,unresolved-references
 from test_tabsdatak._testing import setup_tests_logging
 from test_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
 

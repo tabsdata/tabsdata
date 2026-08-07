@@ -15,7 +15,7 @@ and within each scope alphabetically.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import pytest
 
 from tabsdatax.pytesting.plugins.harvester.internal.constants import (
     FIXTURE_SCOPE_ORDER,
@@ -27,9 +27,6 @@ from tabsdatax.pytesting.plugins.harvester.internal.writer import (
     MetaMessage,
     MetaWriter,
 )
-
-if TYPE_CHECKING:
-    import pytest
 
 # Internal pytest fixtures that add noise without actionable insight.
 _BUILTIN_FIXTURES = frozenset({
@@ -138,7 +135,7 @@ class FixtureTracker:
                     kind="fixture",
                     key=fname,
                     payload=FixtureState(
-                        scope=scope,
+                        scope=fixture_scope,
                         lifecycle=FixtureLifecycle.PENDING,
                         autouse=is_autouse,
                         total=count,

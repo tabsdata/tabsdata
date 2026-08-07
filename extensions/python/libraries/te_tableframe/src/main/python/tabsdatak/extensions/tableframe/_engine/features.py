@@ -27,6 +27,12 @@ def install(frame_cls) -> None:
     set_sink_observer(frame_cls, progress.observe)
 
 
+def aggregations(op) -> list:
+    """Expressions aggregating system columns within a group-by ``op``. The OS
+    edition has no self-aggregating system column, so it contributes none."""
+    return []
+
+
 def _join_hook_after(lazyframe, op, views, params):
     # Reassemble the system columns after a join. A join brings a $td.x column
     # from each side, so polars keeps one as $td.x and suffixes the other as

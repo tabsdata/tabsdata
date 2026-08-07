@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pkgutil
 
 # noinspection PyUnboundLocalVariable
@@ -7,5 +9,5 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 # PyCharm correctly recognizes namespace packages.
 
 #
-# Copyright 2025 Tabsdata Inc.
+# Copyright 2026 Tabsdata Inc.
 #

@@ -967,7 +967,11 @@ script = [
                 if ${tabsdatak_subtree_exists}
                     array_push ${generation_folders} ${tabsdatak_subtree}
                 else
-                    dropped_folders = concat ${dropped_folders} " " ${selected_tests_folder}
+                    if is_empty ${packages_filter}
+                        dropped_folders = concat ${dropped_folders} " " ${selected_tests_folder}
+                    else
+                        array_push ${generation_folders} ${selected_tests_folder}
+                    end
                 end
             end
         end
@@ -1416,7 +1420,11 @@ script = [
                 if ${tabsdatak_subtree_exists}
                     array_push ${generation_folders} ${tabsdatak_subtree}
                 else
-                    dropped_folders = concat ${dropped_folders} " " ${selected_tests_folder}
+                    if is_empty ${packages_filter}
+                        dropped_folders = concat ${dropped_folders} " " ${selected_tests_folder}
+                    else
+                        array_push ${generation_folders} ${selected_tests_folder}
+                    end
                 end
             end
         end

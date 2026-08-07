@@ -133,7 +133,7 @@ using = "requirements:requirements.txt"
 [tool.maturin]
 python-source = "python/src/main/python"
 module-name = "tabsdata.expansions.extensions.tableframe._tableframe"
-compatibility = "linux"
+compatibility = "musllinux_1_1"
 auditwheel = "skip"
 
 [tool.ruff]

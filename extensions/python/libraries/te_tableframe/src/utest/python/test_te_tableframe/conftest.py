@@ -5,18 +5,13 @@
 from __future__ import annotations
 
 import logging
-import os
-
-from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
-
-# import sys
-
-# from test_te_tableframe.bootest import TESTS_ROOT_FOLDER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from test_tabsdata.bootest import enrich_sys_path
+# noinspection unresolved-references
+from test_tabsdatak.bootest import enrich_sys_path
+# noinspection unresolved-references
 from test_te_tableframe.bootest import TESTING_RESOURCES_PATH
 
 
@@ -33,8 +28,8 @@ _enrich_sys_path()
 import pytest
 from xdist.workermanage import WorkerController
 
-# noinspection PyProtectedMember
-from tabsdata._utils.tdlogging import setup_tests_logging
+# noinspection PyProtectedMember,unresolved-references
+from test_tabsdatak._testing import setup_tests_logging
 from test_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
 
 

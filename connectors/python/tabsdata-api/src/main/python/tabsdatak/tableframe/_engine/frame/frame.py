@@ -11,6 +11,8 @@ from tabsdatak.tableframe._engine.model.frame import TableFrameState
 
 if TYPE_CHECKING:
     from tabsdatak.tableframe.datatypes import DataType
+    from tabsdatak.tableframe.expr import Expr
+    from tabsdatak.tableframe.grok import ColumnDefinition
 
 
 class EngineFrame(BaseFrame):
@@ -36,10 +38,16 @@ class EngineFrame(BaseFrame):
 
         validate_schema(self._lf)
 
+    @staticmethod
+    def _lazy(frame):
+        import polars as pl
+
+        return frame.lazy() if isinstance(frame, pl.DataFrame) else frame
+
     @classmethod
     def _wrap(cls, lf, state=None) -> Self:
         obj = cls.__new__(cls, **{cls._ACCESS_KEY: cls._ACCESS_SECRET})
-        obj._lf = lf
+        obj._lf = cls._lazy(lf)
         obj._state = state if state is not None else TableFrameState.empty()
         return obj
 
@@ -147,6 +155,7 @@ class EngineFrame(BaseFrame):
         resolved_version = version if version is not None else DataVersion.empty()
         reg = registry()
 
+        df = cls._lazy(df)
         validate_schema(df)
         df = add_system_columns(
             df, reg, mode, index=resolved_idx, version=resolved_version
@@ -197,14 +206,25 @@ class EngineFrame(BaseFrame):
         from tabsdatak.tableframe._engine.constant.column.prefixes import (
             TD_NAMESPACED_VIRTUAL_SYSTEM_COLUMN_PREFIXES,
         )
+        from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
-        names = self._lf.collect_schema().names()
+        # Storing after a function run applies the per-column inception policy:
+        # the columns marked REGENERATE ($td.id, $td.row) are dropped and
+        # recreated, so the stored table carries a fresh identity and a row index
+        # sequential from zero regardless of the ops that produced it.
+        stored = type(self)._build(
+            self._lf,
+            CreationMode.SYS,
+            idx=self._state.genesis.idx if self._state.genesis is not None else None,
+            source=self,
+        )
+        names = stored._lf.collect_schema().names()
         keep = [
             name
             for name in names
             if not name.startswith(TD_NAMESPACED_VIRTUAL_SYSTEM_COLUMN_PREFIXES)
         ]
-        return self._lf.select(keep)
+        return stored._lf.select(keep)
 
     def _sink_native(self, path) -> None:
         self._sink(self._persisted(), path)
@@ -387,3 +407,109 @@ class EngineFrame(BaseFrame):
     #     from tabsdatak.common._actions.dataquality.engine import DataQualityEngine
     #
     #     return DataQualityEngine(self)
+
+    def grok(
+        self,
+        expr: str | Expr,
+        pattern: str,
+        schema: dict[str, ColumnDefinition],
+    ) -> Self:
+        """
+        :categories: string
+
+
+        Parse log text into structured fields using a Grok pattern.
+
+        Applies a Grok pattern to the given column or expression and directly appends
+        **one new column per named capture** in the pattern to the output TableFrame.
+        Rows that do not match the pattern will contain `null` values for the
+        extracted columns.
+
+        Parameters:
+            expr (str | Expr): Column name or expression that resolves to a single
+                string column containing log lines.
+            pattern (str): Grok pattern with named captures (e.g., `%{WORD:user}`).
+            schema (dict[str, ColumnDefinition]): A mapping where each capture name
+                is associated with its corresponding column definition, specifying
+                both the column name and its data type.
+
+        Returns:
+            TableFrame: A new TableFrame with one column per Grok capture added.
+
+        Example:
+
+            >>> from tabsdatak.tableframe import TableFrame, datatypes as td
+            >>> from tabsdatak.tableframe.grok import ColumnDefinition
+            >>>
+            >>> tf = TableFrame.from_dict({"logs": [
+            ...     "alice-login-2023",
+            ...     "bob-logout-2024",
+            ... ]})
+            >>>
+            >>> # Capture 3 fields: user, action, year
+            >>> log_pattern = r"%{WORD:user}-%{WORD:action}-%{INT:year}"
+            >>> log_schema = {
+            ...     "user": ColumnDefinition("user", td.String),
+            ...     "action": ColumnDefinition("action", td.String),
+            ...     "year": ColumnDefinition("year", td.Int64),
+            ... }
+            >>> out = tf.grok("logs", log_pattern, log_schema)
+            >>> out.to_polars_df()
+            ┌──────────────────┬───────┬────────┬──────┐
+            │ logs             ┆ user  ┆ action ┆ year │
+            │ ---              ┆ ---   ┆ ---    ┆ ---  │
+            │ str              ┆ str   ┆ str    ┆ i64  │
+            ╞══════════════════╪═══════╪════════╪══════╡
+            │ alice-login-2023 ┆ alice ┆ login  ┆ 2023 │
+            │ bob-logout-2024  ┆ bob   ┆ logout ┆ 2024 │
+            └──────────────────┴───────┴────────┴──────┘
+
+        Notes:
+            - The function automatically expands the Grok captures into separate
+              columns.
+            - Non-matching rows will show `null` for the extracted columns.
+            - If a pattern defines duplicate capture names, numeric suffixes like
+              `field`, `field[1]` will be used to disambiguate them.
+        """
+
+        import polars as pl
+
+        from tabsdata.expansions.tableframe.features.grok.api._handler import (
+            GrokParser,
+        )
+        from tabsdatak.tableframe._core.translate import unwrap
+
+        def group_by_dtype(dmap):
+            groups = {}
+            for name, dtype in dmap.items():
+                groups.setdefault(dtype, []).append(name)
+            return groups
+
+        target = pl.col(expr) if isinstance(expr, str) else unwrap(expr)
+
+        parser = GrokParser(pattern, schema)
+        grok = parser.rust(target)
+
+        lf = self._lf.with_columns(grok.alias(parser.temp_column))
+
+        fields = [schema[capture].name or capture for capture in schema.keys()]
+        dtypes = {
+            schema[capture].name or capture: schema[capture].dtype or pl.String
+            for capture in schema.keys()
+        }
+
+        lf = (
+            lf
+            .with_columns(
+                pl.col(parser.temp_column).list.to_struct(fields=fields).alias("grok")
+            )
+            .unnest("grok")
+            .with_columns(*[
+                pl.col(column).cast(dtype)
+                for dtype, column in group_by_dtype(dtypes).items()
+                if column
+            ])
+            .drop(parser.temp_column)
+        )
+
+        return self._clone(lf)

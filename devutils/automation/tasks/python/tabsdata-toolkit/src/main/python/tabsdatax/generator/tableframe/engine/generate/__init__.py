@@ -869,15 +869,40 @@ _GROUPBY_REDUCTIONS = frozenset({
 })
 
 
+# Group-by reductions that count ROWS rather than reduce values, so they take no
+# column arguments and need no system-column exclusion. They are expressed as an
+# agg so that system columns aggregating themselves can join the same pass.
+_GROUPBY_COUNTERS = frozenset({
+    "len",
+    "count",
+})
+
+
+def _groupby_counter_body(name: str) -> list[str]:
+    return [
+        f"    def {name}(self, *args, **kwargs):",
+        "        u_args = unwrap(args)",
+        "        u_kwargs = unwrap(kwargs)",
+        f'        system = _system_aggregations("{name}")',
+        f'        return compute("{name}", (self._parent,), {{}},',
+        "            call=lambda *_: self._lgb.agg("
+        f'pl.len().alias("{name}"), *system)'
+        " if system else "
+        f"self._lgb.{name}(*u_args, **u_kwargs))",
+        "",
+    ]
+
+
 def _groupby_reduction_body(name: str) -> list[str]:
     return [
         f"    def {name}(self, *args, **kwargs):",
         "        u_args = unwrap(args)",
         "        u_kwargs = unwrap(kwargs)",
         "        excluded = _system_columns(self._parent)",
+        f'        system = _system_aggregations("{name}")',
         f'        return compute("{name}", (self._parent,), {{}},',
         "            call=lambda *_: self._lgb.agg("
-        f"pl.all().exclude(excluded).{name}(*u_args, **u_kwargs)))",
+        f"pl.all().exclude(excluded).{name}(*u_args, **u_kwargs), *system))",
         "",
     ]
 
@@ -893,6 +918,14 @@ def _system_columns_helper(root: str) -> list[str]:
         "    names = frame._lf.collect_schema().names()",
         "    reg = registry()",
         "    return [n for n in names if reg.kind_of(n) is not ColumnKind.USER]",
+        "",
+        "",
+        "def _system_aggregations(op):",
+        "    # System columns a group-by op aggregates itself; what these are, if",
+        "    # any, is the installed edition's decision.",
+        "    from tabsdatak.extensions.tableframe._engine.features import aggregations",
+        "",
+        "    return aggregations(op)",
         "",
         "",
     ]
@@ -926,6 +959,8 @@ def _render_lazygroupby_py(symbols: list[Symbol], root: str) -> str:
             lines += _agg_body()
         elif name in _GROUPBY_REDUCTIONS:
             lines += _groupby_reduction_body(name)
+        elif name in _GROUPBY_COUNTERS:
+            lines += _groupby_counter_body(name)
         elif _body_kind(symbol) == "compute":
             # An aggregation over the group (len/count/max/...) terminates into a
             # frame; route it through compute over the parent, like agg.

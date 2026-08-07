@@ -20,6 +20,14 @@ def _system_columns(frame):
     return [n for n in names if reg.kind_of(n) is not ColumnKind.USER]
 
 
+def _system_aggregations(op):
+    # System columns a group-by op aggregates itself; what these are, if
+    # any, is the installed edition's decision.
+    from tabsdatak.extensions.tableframe._engine.features import aggregations
+
+    return aggregations(op)
+
+
 class LazyGroupBy:
     # agg-family ops carry lineage / provenance via after / state hooks
     # over the parent; the grouper already captured the plan, so a before
@@ -43,33 +51,44 @@ class LazyGroupBy:
     def len(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        system = _system_aggregations("len")
         return compute(
             "len",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.len(*u_args, **u_kwargs),
+            call=lambda *_: (
+                self._lgb.agg(pl.len().alias("len"), *system)
+                if system
+                else self._lgb.len(*u_args, **u_kwargs)
+            ),
         )
 
     def count(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        system = _system_aggregations("count")
         return compute(
             "count",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.count(*u_args, **u_kwargs),
+            call=lambda *_: (
+                self._lgb.agg(pl.len().alias("count"), *system)
+                if system
+                else self._lgb.count(*u_args, **u_kwargs)
+            ),
         )
 
     def max(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         excluded = _system_columns(self._parent)
+        system = _system_aggregations("max")
         return compute(
             "max",
             (self._parent,),
             {},
             call=lambda *_: self._lgb.agg(
-                pl.all().exclude(excluded).max(*u_args, **u_kwargs)
+                pl.all().exclude(excluded).max(*u_args, **u_kwargs), *system
             ),
         )
 
@@ -77,12 +96,13 @@ class LazyGroupBy:
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         excluded = _system_columns(self._parent)
+        system = _system_aggregations("mean")
         return compute(
             "mean",
             (self._parent,),
             {},
             call=lambda *_: self._lgb.agg(
-                pl.all().exclude(excluded).mean(*u_args, **u_kwargs)
+                pl.all().exclude(excluded).mean(*u_args, **u_kwargs), *system
             ),
         )
 
@@ -90,12 +110,13 @@ class LazyGroupBy:
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         excluded = _system_columns(self._parent)
+        system = _system_aggregations("median")
         return compute(
             "median",
             (self._parent,),
             {},
             call=lambda *_: self._lgb.agg(
-                pl.all().exclude(excluded).median(*u_args, **u_kwargs)
+                pl.all().exclude(excluded).median(*u_args, **u_kwargs), *system
             ),
         )
 
@@ -103,12 +124,13 @@ class LazyGroupBy:
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         excluded = _system_columns(self._parent)
+        system = _system_aggregations("min")
         return compute(
             "min",
             (self._parent,),
             {},
             call=lambda *_: self._lgb.agg(
-                pl.all().exclude(excluded).min(*u_args, **u_kwargs)
+                pl.all().exclude(excluded).min(*u_args, **u_kwargs), *system
             ),
         )
 
@@ -116,12 +138,13 @@ class LazyGroupBy:
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         excluded = _system_columns(self._parent)
+        system = _system_aggregations("n_unique")
         return compute(
             "n_unique",
             (self._parent,),
             {},
             call=lambda *_: self._lgb.agg(
-                pl.all().exclude(excluded).n_unique(*u_args, **u_kwargs)
+                pl.all().exclude(excluded).n_unique(*u_args, **u_kwargs), *system
             ),
         )
 
@@ -129,11 +152,12 @@ class LazyGroupBy:
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         excluded = _system_columns(self._parent)
+        system = _system_aggregations("sum")
         return compute(
             "sum",
             (self._parent,),
             {},
             call=lambda *_: self._lgb.agg(
-                pl.all().exclude(excluded).sum(*u_args, **u_kwargs)
+                pl.all().exclude(excluded).sum(*u_args, **u_kwargs), *system
             ),
         )

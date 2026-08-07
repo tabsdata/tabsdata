@@ -6,8 +6,9 @@ import logging
 
 import polars as pl
 
-import tabsdata as td
-import tabsdata.tableframe.functions.col as td_col
+from tabsdatak.tableframe import TableFrame, datatypes as td_datatypes
+from tabsdatak.tableframe.functions import col
+from tabsdatak.tableframe.grok import ColumnDefinition
 
 # noinspection PyProtectedMember
 from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
@@ -43,21 +44,20 @@ def test_grok():
     )
 
     schema = {
-        "word": td_col.Column("pare", td.String),
-        "word[1]": td_col.Column("mare", td.String),
-        "word[2]": td_col.Column("hereu", td.String),
-        "word[3]": td_col.Column("cabaler", td.String),
-        "year": td_col.Column("any pare", td.Int64),
-        "year[1]": td_col.Column("any mare", td.Int64),
-        "year[2]": td_col.Column("any hereu", td.Int64),
-        "year[3]": td_col.Column("any cabaler", td.Int64),
+        "word": ColumnDefinition("pare", td_datatypes.String),
+        "word[1]": ColumnDefinition("mare", td_datatypes.String),
+        "word[2]": ColumnDefinition("hereu", td_datatypes.String),
+        "word[3]": ColumnDefinition("cabaler", td_datatypes.String),
+        "year": ColumnDefinition("any pare", td_datatypes.Int64),
+        "year[1]": ColumnDefinition("any mare", td_datatypes.Int64),
+        "year[2]": ColumnDefinition("any hereu", td_datatypes.Int64),
+        "year[3]": ColumnDefinition("any cabaler", td_datatypes.Int64),
     }
 
     _ = grok_fields(pattern)
 
-    tf0 = td.TableFrame(
-        df={"family": ["dimas-1968-gemma-1976-kai-2009-guiu-2012"]},
-        origin=None,
+    tf0 = TableFrame.from_dict(
+        {"family": ["dimas-1968-gemma-1976-kai-2009-guiu-2012"]}
     )
     assert tf0
     _ = tf0._lf.collect()
@@ -100,35 +100,30 @@ def test_grok_experimental():
     )
 
     schema = {
-        "word": td_col.Column("pare", td.String),
-        "word[1]": td_col.Column("mare", td.String),
-        "word[2]": td_col.Column("hereu", td.String),
-        "word[3]": td_col.Column("cabaler", td.String),
-        "year": td_col.Column("any pare", td.Int64),
-        "year[1]": td_col.Column("any mare", td.Int64),
-        "year[2]": td_col.Column("any hereu", td.Int64),
-        "year[3]": td_col.Column("any cabaler", td.Int64),
+        "word": ColumnDefinition("pare", td_datatypes.String),
+        "word[1]": ColumnDefinition("mare", td_datatypes.String),
+        "word[2]": ColumnDefinition("hereu", td_datatypes.String),
+        "word[3]": ColumnDefinition("cabaler", td_datatypes.String),
+        "year": ColumnDefinition("any pare", td_datatypes.Int64),
+        "year[1]": ColumnDefinition("any mare", td_datatypes.Int64),
+        "year[2]": ColumnDefinition("any hereu", td_datatypes.Int64),
+        "year[3]": ColumnDefinition("any cabaler", td_datatypes.Int64),
     }
 
     _ = grok_fields(pattern)
 
     grok = GrokParser(pattern, schema)
 
-    tf0 = td.TableFrame(
-        df={"family": ["dimas-1968-gemma-1976-kai-2009-guiu-2012"]},
-        origin=None,
+    tf0 = TableFrame.from_dict(
+        {"family": ["dimas-1968-gemma-1976-kai-2009-guiu-2012"]}
     )
     assert tf0
     _ = tf0._lf.collect()
 
-    tf1 = tf0.with_columns(grok.rust(td.col("family")._expr).alias("grok"))
+    tf1 = tf0.with_columns(grok.rust(col("family")._inner).alias("grok"))
     assert tf1
     _ = tf1._lf.collect()
 
-    tf2 = tf0.with_columns(td.col("family").str.grok(pattern, schema).alias("grok"))
+    tf2 = tf0.grok("family", pattern, schema)
     assert tf2
     _ = tf2._lf.collect()
-
-    tf3 = tf0.grok("family", pattern, schema)
-    assert tf3
-    _ = tf3._lf.collect()
