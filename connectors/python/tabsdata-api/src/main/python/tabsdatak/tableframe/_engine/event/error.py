@@ -47,6 +47,9 @@ class MultipleRowsError(TableFrameRuntimeException): ...
 class EmptyFrameError(TableFrameRuntimeException): ...
 
 
+class UnsupportedMetadataError(TableFrameInitException): ...
+
+
 class TableFrameErrorCode(ErrorCode):
     TF1 = ErrorDef(
         DirectConstructionError,
@@ -86,4 +89,9 @@ class TableFrameErrorCode(ErrorCode):
     TF8 = ErrorDef(
         EmptyFrameError,
         "The {op} operation requires at least one row; the TableFrame is empty.",
+    )
+    TF9 = ErrorDef(
+        UnsupportedMetadataError,
+        "The {column} metadata entry has type {type}; connector columns support "
+        "only str, int, float, and bool.",
     )

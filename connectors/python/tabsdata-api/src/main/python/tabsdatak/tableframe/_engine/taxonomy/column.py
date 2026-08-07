@@ -8,8 +8,8 @@ from enum import Enum, StrEnum
 
 from tabsdatak.tableframe._engine.constant.column.names import (
     TD_EXECUTION_SYSTEM_COLUMN_NAME,
-    TD_FILE_LINE_SYSTEM_COLUMN_NAME,
-    TD_FILE_PATH_SYSTEM_COLUMN_NAME,
+    # TD_FILE_LINE_SYSTEM_COLUMN_NAME,
+    # TD_FILE_PATH_SYSTEM_COLUMN_NAME,
     TD_INDEX_SYSTEM_COLUMN_NAME,
     TD_ITEM_SYSTEM_COLUMN_NAME,
     TD_MAXIMUM_SYSTEM_COLUMN_NAME,
@@ -52,8 +52,11 @@ class SysCol(StrEnum):
     VERSION_TRANSACTION = TD_TRANSACTION_SYSTEM_COLUMN_NAME
     VERSION_VERSION = TD_VERSION_SYSTEM_COLUMN_NAME
     VERSION_TIMESTAMP = TD_TIMESTAMP_SYSTEM_COLUMN_NAME
-    ORIGIN_FILE_PATH = TD_FILE_PATH_SYSTEM_COLUMN_NAME
-    ORIGIN_FILE_LINE = TD_FILE_LINE_SYSTEM_COLUMN_NAME
+    # The origin-file connector columns are retired: connector columns are now
+    # injected per input file from source-plugin metadata. Kept for reference:
+    #
+    # ORIGIN_FILE_PATH = TD_FILE_PATH_SYSTEM_COLUMN_NAME
+    # ORIGIN_FILE_LINE = TD_FILE_LINE_SYSTEM_COLUMN_NAME
 
 
 class VolatileColumns(StrEnum):

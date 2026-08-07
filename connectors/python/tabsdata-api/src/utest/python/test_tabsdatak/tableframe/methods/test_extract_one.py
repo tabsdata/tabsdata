@@ -8,8 +8,8 @@ import polars as pl
 import pytest
 
 from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.column.connector import name_of
 from tabsdatak.tableframe._engine.constant.column.names import (
-    TD_FILE_PATH_SYSTEM_COLUMN_NAME,
     TD_IDENTIFIER_SYSTEM_COLUMN_NAME,
 )
 from tabsdatak.tableframe._engine.event.error import (
@@ -18,6 +18,8 @@ from tabsdatak.tableframe._engine.event.error import (
 )
 
 pytestmark = pytest.mark.tableframe
+
+CONNECTOR_COLUMN = name_of("source")
 
 
 def _frame(data: dict, schema: dict | None = None) -> TableFrame:
@@ -58,7 +60,7 @@ def test_extract_one_excludes_system_columns():
 def test_extract_one_drops_internal_and_connector_columns_by_default():
     frame = _reserved_frame({
         "a": [1],
-        TD_FILE_PATH_SYSTEM_COLUMN_NAME: ["/tmp/f.csv"],
+        CONNECTOR_COLUMN: ["/tmp/f.csv"],
         TD_IDENTIFIER_SYSTEM_COLUMN_NAME: ["id"],
     })
     assert frame.extract_one() == {"a": 1}
@@ -67,12 +69,12 @@ def test_extract_one_drops_internal_and_connector_columns_by_default():
 def test_extract_one_keeps_connector_columns_when_requested():
     frame = _reserved_frame({
         "a": [1],
-        TD_FILE_PATH_SYSTEM_COLUMN_NAME: ["/tmp/f.csv"],
+        CONNECTOR_COLUMN: ["/tmp/f.csv"],
         TD_IDENTIFIER_SYSTEM_COLUMN_NAME: ["id"],
     })
     assert frame.extract_one(with_connector_columns=True) == {
         "a": 1,
-        TD_FILE_PATH_SYSTEM_COLUMN_NAME: "/tmp/f.csv",
+        CONNECTOR_COLUMN: "/tmp/f.csv",
     }
 
 

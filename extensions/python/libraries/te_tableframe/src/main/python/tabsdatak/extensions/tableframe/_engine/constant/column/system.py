@@ -13,8 +13,8 @@ from tabsdatak.extensions.tableframe._engine.column.generator import (
 from tabsdatak.tableframe import datatypes
 from tabsdatak.tableframe._engine.constant.column.names import (
     TD_EXECUTION_SYSTEM_COLUMN_NAME,
-    TD_FILE_LINE_SYSTEM_COLUMN_NAME,
-    TD_FILE_PATH_SYSTEM_COLUMN_NAME,
+    # TD_FILE_LINE_SYSTEM_COLUMN_NAME,
+    # TD_FILE_PATH_SYSTEM_COLUMN_NAME,
     TD_FUNCTION_TIMESTAMP_SYSTEM_COLUMN_NAME,
     TD_IDENTIFIER_SYSTEM_COLUMN_NAME,
     TD_OFFSET_SYSTEM_COLUMN_NAME,
@@ -169,29 +169,35 @@ OPTIONAL: tuple[SystemColumn, ...] = (
     ),
 )
 
-CONNECTOR: tuple[SystemColumn, ...] = (
-    SystemColumn(
-        name=TD_FILE_PATH_SYSTEM_COLUMN_NAME,
-        category=SystemColumnCategory.CONNECTOR,
-        dtype=DTYPE_STRING,
-        default=None,
-        language=Language.PYTHON,
-        inception=Inception.PROPAGATE,
-        required=False,
-        pristine=False,
-        generator=None,
-        aggregation=None,
-    ),
-    SystemColumn(
-        name=TD_FILE_LINE_SYSTEM_COLUMN_NAME,
-        category=SystemColumnCategory.CONNECTOR,
-        dtype=DTYPE_STRING,
-        default=None,
-        language=Language.PYTHON,
-        inception=Inception.PROPAGATE,
-        required=False,
-        pristine=False,
-        generator=None,
-        aggregation=None,
-    ),
-)
+# Connector columns are no longer a fixed set. They are injected per input
+# file from the metadata a source plugin attaches to each `TableFileInput`,
+# so nothing is declared here and the registry resolves them by the `@td.`
+# prefix instead. The former fixed declarations are kept for reference:
+#
+# CONNECTOR: tuple[SystemColumn, ...] = (
+#     SystemColumn(
+#         name=TD_FILE_PATH_SYSTEM_COLUMN_NAME,
+#         category=SystemColumnCategory.CONNECTOR,
+#         dtype=DTYPE_STRING,
+#         default=None,
+#         language=Language.PYTHON,
+#         inception=Inception.PROPAGATE,
+#         required=False,
+#         pristine=False,
+#         generator=None,
+#         aggregation=None,
+#     ),
+#     SystemColumn(
+#         name=TD_FILE_LINE_SYSTEM_COLUMN_NAME,
+#         category=SystemColumnCategory.CONNECTOR,
+#         dtype=DTYPE_STRING,
+#         default=None,
+#         language=Language.PYTHON,
+#         inception=Inception.PROPAGATE,
+#         required=False,
+#         pristine=False,
+#         generator=None,
+#         aggregation=None,
+#     ),
+# )
+CONNECTOR: tuple[SystemColumn, ...] = ()

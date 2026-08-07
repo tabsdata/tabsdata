@@ -31,7 +31,9 @@ from tabsdatak.server._tdrunner.function._lib.request import load_request_or_rai
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
 )
+from tabsdatak.spi import MetadataSpec
 from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.column.connector import add_connector_columns
 from tabsdatak.tableframe._engine.column.generator import IdxGenerator
 from tabsdatak.tableframe._engine.constant.emptiness import EMPTY_VERSION
 from tabsdatak.tableframe._engine.model.frame import DataVersion
@@ -46,6 +48,7 @@ def _stamp_file(
     *,
     version: DataVersion,
     idx: int,
+    metadata: MetadataSpec | None = None,
 ) -> None:
     """Read a raw parquet, stamp framework system columns, write to dest."""
     try:
@@ -56,6 +59,7 @@ def _stamp_file(
         )
 
     try:
+        lf = add_connector_columns(lf, metadata)
         stamped = TableFrame._build(
             lf, CreationMode.RAW, idx=idx, version=version
         ).to_polars_lf(drop_system_columns=False)
@@ -127,15 +131,20 @@ def run(args: argparse.Namespace) -> int:
         enriched_records: list[dict] = []
         for record in records:
             src = record.get(MANIFEST_FILE_KEY)
-            # TODO Dimas, a dict with @td. columns coming from source plugin
-            _metadata = record.get(MANIFEST_METADATA_KEY)
+            metadata = record.get(MANIFEST_METADATA_KEY)
             if src is None:
                 enriched_records.append(record)
                 continue
             src_path = Path(src)
             dest_path = slot_dir / src_path.name
             assigned = idx()
-            _stamp_file(src_path, dest_path, version=version, idx=assigned)
+            _stamp_file(
+                src_path,
+                dest_path,
+                version=version,
+                idx=assigned,
+                metadata=metadata,
+            )
             enriched_records.append({
                 **record,
                 MANIFEST_FILE_KEY: str(dest_path.absolute()),
