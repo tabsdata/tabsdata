@@ -5,6 +5,7 @@
 use std::collections::BTreeSet;
 
 use indicatif::MultiProgress;
+use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{Pod, Service, ServiceAccount};
 use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
@@ -20,15 +21,17 @@ use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::widgets::phase_spinner_in;
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
+use crate::kube::api::deployment::is_deployment_available;
 use crate::kube::api::{
-    cronjob as cronjob_api, job as job_api, pod as pod_api, rbac as rbac_api,
-    service as service_api,
+    cronjob as cronjob_api, deployment as deployment_api, job as job_api, pod as pod_api,
+    rbac as rbac_api, service as service_api,
 };
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::template::TemplateKind;
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::injection::{
-    inject_into_cronjob, inject_into_job, inject_into_pod, list_available_secrets,
+    inject_into_cronjob, inject_into_deployment, inject_into_job, inject_into_pod,
+    list_available_secrets,
 };
 use crate::runtime::instance::ports::AssignedPort;
 use crate::runtime::instance::profile::Profile;
@@ -340,35 +343,92 @@ pub async fn apply_server_phase(
     system: &SystemValues,
     profile: &Profile,
     multi: &MultiProgress,
-) -> CommandResult<Vec<String>> {
+) -> CommandResult<Vec<(TemplateKind, String)>> {
     let available_secrets = list_available_secrets(context).await?;
-    let mut prepared: Vec<(String, Pod)> = Vec::new();
+    let mut prepared: Vec<(String, ServerWorkload)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Server)? {
-        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Server, system).await?;
-        cluster_provider.enrich_regular_pod(&mut pod)?;
-        inject_into_pod(profile, key, &mut pod, &available_secrets)?;
-        validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
-        prepared.push((key.to_owned(), pod));
+        match kind_of_entry(key, yaml)? {
+            TemplateKind::Deployment => {
+                let mut deployment =
+                    deserialize_pod_entry::<Deployment>(key, yaml, Tier::Server, system).await?;
+                cluster_provider.enrich_regular_deployment(&mut deployment)?;
+                inject_into_deployment(profile, key, &mut deployment, &available_secrets)?;
+                validate_pod(
+                    key,
+                    cluster_provider.validate_regular_deployment(&deployment),
+                )?;
+                prepared.push((
+                    key.to_owned(),
+                    ServerWorkload::Deployment(Box::new(deployment)),
+                ));
+            }
+            TemplateKind::Pod => {
+                let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Server, system).await?;
+                cluster_provider.enrich_regular_pod(&mut pod)?;
+                inject_into_pod(profile, key, &mut pod, &available_secrets)?;
+                validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
+                prepared.push((key.to_owned(), ServerWorkload::Pod(Box::new(pod))));
+            }
+            kind => {
+                return Err(LauncherError::PodDeserializeFailed {
+                    key: key.to_owned(),
+                    tier: Tier::Server.to_string(),
+                    cause: format!("unsupported kind '{kind:?}' for the server tier"),
+                }
+                .into());
+            }
+        }
     }
     let phase = phase_spinner_in(multi, &format!("Applying {} server pod(s)", prepared.len()));
-    let mut applied: Vec<String> = Vec::new();
-    for (key, pod) in prepared {
+    let mut applied: Vec<(TemplateKind, String)> = Vec::new();
+    for (key, workload) in prepared {
         let bar = phase.add_resource(&key);
-        let created = match pod_api::create_pod(context, &pod, Vec::new(), Vec::new(), None).await {
-            Ok(created) => {
-                bar.finish_with_message(format!("{key} (applied)"));
-                created
-            }
-            Err(error) => {
-                bar.finish_with_message(format!("{key} (failed)"));
-                return Err(error.into());
-            }
-        };
-        let name = created
-            .metadata
-            .name
-            .ok_or_else(|| LauncherError::PodMissingName { key: key.clone() })?;
-        applied.push(name);
+        let named =
+            match workload {
+                ServerWorkload::Deployment(deployment) => {
+                    match deployment_api::create_deployment(
+                        context,
+                        &deployment,
+                        Vec::new(),
+                        Vec::new(),
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(created) => {
+                            bar.finish_with_message(format!("{key} (applied)"));
+                            (
+                                TemplateKind::Deployment,
+                                created.metadata.name.ok_or_else(|| {
+                                    LauncherError::DeploymentMissingName { key: key.clone() }
+                                })?,
+                            )
+                        }
+                        Err(error) => {
+                            bar.finish_with_message(format!("{key} (failed)"));
+                            return Err(error.into());
+                        }
+                    }
+                }
+                ServerWorkload::Pod(pod) => {
+                    match pod_api::create_pod(context, &pod, Vec::new(), Vec::new(), None).await {
+                        Ok(created) => {
+                            bar.finish_with_message(format!("{key} (applied)"));
+                            (
+                                TemplateKind::Pod,
+                                created.metadata.name.ok_or_else(|| {
+                                    LauncherError::PodMissingName { key: key.clone() }
+                                })?,
+                            )
+                        }
+                        Err(error) => {
+                            bar.finish_with_message(format!("{key} (failed)"));
+                            return Err(error.into());
+                        }
+                    }
+                }
+            };
+        applied.push(named);
     }
     drop(phase);
     Ok(applied)
@@ -376,12 +436,40 @@ pub async fn apply_server_phase(
 
 pub async fn wait_server_phase(
     context: &KubeContext,
-    pods: &[String],
+    workloads: &[(TemplateKind, String)],
     multi: &MultiProgress,
 ) -> CommandResult {
-    let phase = phase_spinner_in(multi, &format!("Waiting for {} server pod(s)", pods.len()));
-    for name in pods {
+    let phase = phase_spinner_in(
+        multi,
+        &format!("Waiting for {} server pod(s)", workloads.len()),
+    );
+    for (kind, name) in workloads {
         let bar = phase.add_resource(name);
+        if matches!(kind, TemplateKind::Deployment) {
+            match deployment_api::await_deployment_condition_forever(
+                context,
+                name,
+                is_deployment_available(),
+            )
+            .await
+            {
+                Ok(Some(_)) => {
+                    bar.finish_with_message(format!("{name} (ready)"));
+                    continue;
+                }
+                Ok(None) => {
+                    bar.finish_with_message(format!("{name} (deleted)"));
+                    return Err(LauncherError::DeploymentDeletedBeforeAvailable {
+                        name: name.clone(),
+                    }
+                    .into());
+                }
+                Err(error) => {
+                    bar.finish_with_message(format!("{name} (errored)"));
+                    return Err(error.into());
+                }
+            }
+        }
         let settled =
             match pod_api::await_pod_condition_forever(context, name, is_pod_settled()).await {
                 Ok(Some(pod)) => pod,
@@ -532,8 +620,14 @@ async fn deserialize_pod_entry<T: DeserializeOwned>(
     })
 }
 
+enum ServerWorkload {
+    Pod(Box<Pod>),
+    Deployment(Box<Deployment>),
+}
+
 enum RegularWorkload {
     Pod(Box<Pod>),
+    Deployment(Box<Deployment>),
     CronJob(Box<CronJob>),
 }
 
@@ -562,6 +656,20 @@ pub async fn apply_regular_phase(
                 inject_into_cronjob(profile, key, &mut cronjob, &available_secrets)?;
                 validate_pod(key, cluster_provider.validate_regular_cronjob(&cronjob))?;
                 prepared.push((key.to_owned(), RegularWorkload::CronJob(Box::new(cronjob))));
+            }
+            (RegularKind::Pod, TemplateKind::Deployment) => {
+                let mut deployment =
+                    deserialize_pod_entry::<Deployment>(key, yaml, Tier::Regular, system).await?;
+                cluster_provider.enrich_regular_deployment(&mut deployment)?;
+                inject_into_deployment(profile, key, &mut deployment, &available_secrets)?;
+                validate_pod(
+                    key,
+                    cluster_provider.validate_regular_deployment(&deployment),
+                )?;
+                prepared.push((
+                    key.to_owned(),
+                    RegularWorkload::Deployment(Box::new(deployment)),
+                ));
             }
             (RegularKind::Pod, TemplateKind::Pod | TemplateKind::Job) => {
                 let mut pod =
@@ -602,6 +710,33 @@ pub async fn apply_regular_phase(
                         None => {
                             bar.finish_with_message(format!("{key} (no name)"));
                             Err(LauncherError::PodMissingName { key: key.clone() }.into())
+                        }
+                    }
+                }
+                RegularWorkload::Deployment(deployment) => {
+                    let created = match deployment_api::create_deployment(
+                        &context,
+                        &deployment,
+                        Vec::new(),
+                        Vec::new(),
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(created) => created,
+                        Err(error) => {
+                            bar.finish_with_message(format!("{key} (failed)"));
+                            return Err::<(TemplateKind, String), CommandError>(error.into());
+                        }
+                    };
+                    match created.metadata.name {
+                        Some(name) => {
+                            bar.finish_with_message(format!("{key} (applied)"));
+                            Ok((TemplateKind::Deployment, name))
+                        }
+                        None => {
+                            bar.finish_with_message(format!("{key} (no name)"));
+                            Err(LauncherError::DeploymentMissingName { key: key.clone() }.into())
                         }
                     }
                 }
@@ -671,6 +806,33 @@ pub async fn wait_regular_phase(
                             Err::<(), CommandError>(
                                 LauncherError::CronJobDeletedBeforeScheduled { name: name.clone() }
                                     .into(),
+                            )
+                        }
+                        Err(error) => {
+                            bar.finish_with_message(format!("{name} (errored)"));
+                            Err(error.into())
+                        }
+                    }
+                }
+                TemplateKind::Deployment => {
+                    match deployment_api::await_deployment_condition_forever(
+                        &context,
+                        name,
+                        is_deployment_available(),
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => {
+                            bar.finish_with_message(format!("{name} (ready)"));
+                            Ok(())
+                        }
+                        Ok(None) => {
+                            bar.finish_with_message(format!("{name} (deleted)"));
+                            Err::<(), CommandError>(
+                                LauncherError::DeploymentDeletedBeforeAvailable {
+                                    name: name.clone(),
+                                }
+                                .into(),
                             )
                         }
                         Err(error) => {
@@ -779,6 +941,105 @@ pub async fn provision_pyvenvs(
     Ok(())
 }
 
+async fn prepare_database_workload(
+    cluster_provider: ClusterProvider,
+    system: &SystemValues,
+    profile: &Profile,
+    available_secrets: &BTreeSet<String>,
+    key: &str,
+    yaml: &str,
+) -> CommandResult<ServerWorkload> {
+    match kind_of_entry(key, yaml)? {
+        TemplateKind::Deployment => {
+            let mut deployment =
+                deserialize_pod_entry::<Deployment>(key, yaml, Tier::Server, system).await?;
+            cluster_provider.enrich_regular_deployment(&mut deployment)?;
+            inject_into_deployment(profile, key, &mut deployment, available_secrets)?;
+            Ok(ServerWorkload::Deployment(Box::new(deployment)))
+        }
+        TemplateKind::Pod => {
+            let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Server, system).await?;
+            cluster_provider.enrich_regular_pod(&mut pod)?;
+            inject_into_pod(profile, key, &mut pod, available_secrets)?;
+            Ok(ServerWorkload::Pod(Box::new(pod)))
+        }
+        kind => Err(LauncherError::PodDeserializeFailed {
+            key: key.to_owned(),
+            tier: Tier::Server.to_string(),
+            cause: format!("unsupported kind '{kind:?}' for the server tier"),
+        }
+        .into()),
+    }
+}
+
+fn database_workload_name(key: &str, workload: &ServerWorkload) -> Result<String, LauncherError> {
+    match workload {
+        ServerWorkload::Deployment(deployment) => deployment_name(key, deployment),
+        ServerWorkload::Pod(pod) => pod_name(key, pod),
+    }
+}
+
+async fn start_database_workload(
+    context: &KubeContext,
+    workload: &ServerWorkload,
+    name: &str,
+) -> CommandResult {
+    match workload {
+        ServerWorkload::Deployment(deployment) => {
+            deployment_api::create_deployment(context, deployment, Vec::new(), Vec::new(), None)
+                .await?;
+            deployment_api::await_deployment_condition_forever(
+                context,
+                name,
+                is_deployment_available(),
+            )
+            .await?;
+        }
+        ServerWorkload::Pod(pod) => {
+            pod_api::create_pod(context, pod, Vec::new(), Vec::new(), None).await?;
+            pod_api::await_pod_condition_forever(context, name, is_pod_settled()).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn delete_database_workload(
+    context: &KubeContext,
+    workload: &ServerWorkload,
+    name: &str,
+) -> CommandResult {
+    match workload {
+        ServerWorkload::Deployment(_) => {
+            deployment_api::delete_deployment(context, name).await?;
+        }
+        ServerWorkload::Pod(_) => {
+            pod_api::delete_pod(context, name).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn await_database_workload_absent(
+    context: &KubeContext,
+    workload: &ServerWorkload,
+    name: &str,
+) -> CommandResult {
+    match workload {
+        ServerWorkload::Deployment(_) => {
+            deployment_api::await_deployment_condition_forever(
+                context,
+                name,
+                is_deployment_absent(),
+            )
+            .await?;
+        }
+        ServerWorkload::Pod(_) => {
+            pod_api::await_pod_condition_forever(context, name, is_pod_absent()).await?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn provision_database(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
@@ -791,12 +1052,17 @@ pub async fn provision_database(
 
     let server = if hosts_database {
         let (server_key, server_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
-        let mut service =
-            deserialize_pod_entry::<Pod>(server_key, server_yaml, Tier::Server, system).await?;
-        cluster_provider.enrich_regular_pod(&mut service)?;
-        inject_into_pod(profile, server_key, &mut service, &available_secrets)?;
-        let server_name = pod_name(server_key, &service)?;
-        Some((server_key, service, server_name))
+        let workload = prepare_database_workload(
+            cluster_provider,
+            system,
+            profile,
+            &available_secrets,
+            server_key,
+            server_yaml,
+        )
+        .await?;
+        let server_name = database_workload_name(server_key, &workload)?;
+        Some((server_key, workload, server_name))
     } else {
         None
     };
@@ -810,10 +1076,9 @@ pub async fn provision_database(
 
     let phase = phase_spinner_in(multi, "Provisioning tabsdata database");
 
-    if let Some((server_key, service, server_name)) = &server {
+    if let Some((server_key, workload, server_name)) = &server {
         let bar = phase.add_resource(server_key);
-        pod_api::create_pod(context, service, Vec::new(), Vec::new(), None).await?;
-        pod_api::await_pod_condition_forever(context, server_name, is_pod_settled()).await?;
+        start_database_workload(context, workload, server_name).await?;
         bar.finish_with_message(format!("{server_key} (started)"));
     }
 
@@ -823,17 +1088,17 @@ pub async fn provision_database(
         job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {
         bar.finish_with_message(format!("{setup_key} (failed)"));
-        if let Some((_, _, server_name)) = &server {
-            pod_api::delete_pod(context, server_name).await?;
+        if let Some((_, workload, server_name)) = &server {
+            delete_database_workload(context, workload, server_name).await?;
         }
         return Err(LauncherError::JobFailed { name: setup_name }.into());
     }
     bar.finish_with_message(format!("{setup_key} (completed)"));
 
-    if let Some((server_key, _, server_name)) = &server {
+    if let Some((server_key, workload, server_name)) = &server {
         let bar = phase.add_resource(server_key);
-        pod_api::delete_pod(context, server_name).await?;
-        pod_api::await_pod_condition_forever(context, server_name, is_pod_absent()).await?;
+        delete_database_workload(context, workload, server_name).await?;
+        await_database_workload_absent(context, workload, server_name).await?;
         bar.finish_with_message(format!("{server_key} (stopped)"));
     }
 
@@ -854,16 +1119,20 @@ pub async fn start_database(
 ) -> CommandResult {
     let available_secrets = list_available_secrets(context).await?;
     let (server_key, server_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
-    let mut service =
-        deserialize_pod_entry::<Pod>(server_key, server_yaml, Tier::Server, system).await?;
-    cluster_provider.enrich_regular_pod(&mut service)?;
-    inject_into_pod(profile, server_key, &mut service, &available_secrets)?;
-    let server_name = pod_name(server_key, &service)?;
+    let workload = prepare_database_workload(
+        cluster_provider,
+        system,
+        profile,
+        &available_secrets,
+        server_key,
+        server_yaml,
+    )
+    .await?;
+    let server_name = database_workload_name(server_key, &workload)?;
 
     let phase = phase_spinner_in(multi, "Starting tabsdata database");
     let bar = phase.add_resource(server_key);
-    pod_api::create_pod(context, &service, Vec::new(), Vec::new(), None).await?;
-    pod_api::await_pod_condition_forever(context, &server_name, is_pod_settled()).await?;
+    start_database_workload(context, &workload, &server_name).await?;
     bar.finish_with_message(format!("{server_key} (started)"));
     drop(phase);
     Ok(())
@@ -915,6 +1184,20 @@ fn pod_for_component<'a>(
     })
 }
 
+fn deployment_name(key: &str, deployment: &Deployment) -> Result<String, LauncherError> {
+    deployment
+        .metadata
+        .name
+        .clone()
+        .ok_or_else(|| LauncherError::DeploymentMissingName {
+            key: key.to_owned(),
+        })
+}
+
+fn is_deployment_absent() -> impl Condition<Deployment> + Clone {
+    |deployment: Option<&Deployment>| deployment.is_none()
+}
+
 fn pod_name(key: &str, pod: &Pod) -> Result<String, LauncherError> {
     pod.metadata
         .name
@@ -962,12 +1245,18 @@ mod tests;
 
 async fn present_non_ephemeral_names(context: &KubeContext) -> CommandResult<BTreeSet<String>> {
     let pods_list = async { pod_api::list_pods_non_ephemeral(context).await };
+    let deployments_list = async { deployment_api::list_deployments_non_ephemeral(context).await };
     let jobs_list = async { job_api::list_jobs_non_ephemeral(context).await };
     let cronjobs_list = async { cronjob_api::list_cronjobs_non_ephemeral(context).await };
-    let (pods, jobs, cronjobs) =
-        futures::future::try_join3(pods_list, jobs_list, cronjobs_list).await?;
+    let (pods, deployments, jobs, cronjobs) =
+        futures::future::try_join4(pods_list, deployments_list, jobs_list, cronjobs_list).await?;
     let mut names = BTreeSet::new();
     names.extend(pods.into_iter().filter_map(|pod| pod.metadata.name));
+    names.extend(
+        deployments
+            .into_iter()
+            .filter_map(|deployment| deployment.metadata.name),
+    );
     names.extend(jobs.into_iter().filter_map(|job| job.metadata.name));
     names.extend(
         cronjobs
@@ -1027,6 +1316,7 @@ async fn delete_non_ephemeral_workload(
 ) -> CommandResult {
     let phase = phase_spinner_in(multi, "Deleting tabsdata non-ephemeral workload");
     let pods_bar = phase.add_resource("Pods");
+    let deployments_bar = phase.add_resource("Deployments");
     let jobs_bar = phase.add_resource("Jobs");
     let cronjobs_bar = phase.add_resource("CronJobs");
     let services_bar = phase.add_resource("Services");
@@ -1039,6 +1329,18 @@ async fn delete_non_ephemeral_workload(
             }
             Err(error) => {
                 pods_bar.finish_with_message("Pods (failed)");
+                Err(CommandError::from(error))
+            }
+        }
+    };
+    let deployments_delete = async {
+        match deployment_api::delete_deployments_non_ephemeral(context).await {
+            Ok(()) => {
+                deployments_bar.finish_with_message("Deployments (deleted)");
+                Ok(())
+            }
+            Err(error) => {
+                deployments_bar.finish_with_message("Deployments (failed)");
                 Err(CommandError::from(error))
             }
         }
@@ -1079,9 +1381,14 @@ async fn delete_non_ephemeral_workload(
             }
         }
     };
-    let result =
-        futures::future::try_join4(pods_delete, jobs_delete, cronjobs_delete, services_delete)
-            .await;
+    let result = futures::future::try_join5(
+        pods_delete,
+        deployments_delete,
+        jobs_delete,
+        cronjobs_delete,
+        services_delete,
+    )
+    .await;
     if result.is_ok() {
         match rbac_api::delete_authorizations(context).await {
             Ok(_) => authorizations_bar.finish_with_message("Authorizations (deleted)"),

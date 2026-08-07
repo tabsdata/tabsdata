@@ -7,6 +7,4 @@ pods:
     # Every entry here is injected as an environment variable into every
     # container of every pod. A variable a container declares itself is left
     # alone, so these are defaults rather than overrides.
-    envs:
-      TDK_SENTINEL: iam
-      TDK_SIGNAL: ping
+    envs: {}

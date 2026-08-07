@@ -18,6 +18,7 @@ use crate::kube::context::KubeContext;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TemplateKind {
     Pod,
+    Deployment,
     Job,
     CronJob,
     Service,
@@ -30,6 +31,7 @@ impl TemplateKind {
     pub fn from_kind(kind: &str) -> Option<Self> {
         match kind {
             "Pod" => Some(Self::Pod),
+            "Deployment" => Some(Self::Deployment),
             "Job" => Some(Self::Job),
             "CronJob" => Some(Self::CronJob),
             "Service" => Some(Self::Service),
@@ -42,7 +44,7 @@ impl TemplateKind {
 
     pub fn is_workload(&self) -> bool {
         match self {
-            Self::Pod | Self::Job | Self::CronJob => true,
+            Self::Pod | Self::Deployment | Self::Job | Self::CronJob => true,
             Self::Service | Self::ServiceAccount | Self::Role | Self::RoleBinding => false,
         }
     }

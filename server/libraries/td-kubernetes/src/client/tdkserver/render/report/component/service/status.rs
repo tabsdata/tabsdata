@@ -4,6 +4,7 @@
 
 use chrono::Utc;
 use cron_descriptor::cronparser::cron_expression_descriptor;
+use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
@@ -15,6 +16,27 @@ use crate::client::tdkserver::render::report::helper::table::{
     ReportColumn, ReportTable, STATUS_COLOR_SCHEME, render_tables,
 };
 use crate::core::system::exit::CommandResult;
+
+fn deployment_columns() -> [ReportColumn<'static>; 4] {
+    [
+        ReportColumn {
+            header: "Name",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "Status",
+            color_scheme: Some(STATUS_COLOR_SCHEME),
+        },
+        ReportColumn {
+            header: "Ready",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "Age",
+            color_scheme: None,
+        },
+    ]
+}
 
 fn pod_columns() -> [ReportColumn<'static>; 4] {
     [
@@ -83,6 +105,24 @@ fn cronjob_columns() -> [ReportColumn<'static>; 5] {
     ]
 }
 
+struct DeploymentRow {
+    name: String,
+    status: String,
+    ready: String,
+    age: String,
+}
+
+impl DeploymentRow {
+    fn cells(&self) -> Vec<String> {
+        vec![
+            self.name.clone(),
+            self.status.clone(),
+            self.ready.clone(),
+            self.age.clone(),
+        ]
+    }
+}
+
 struct PodRow {
     name: String,
     status: String,
@@ -139,7 +179,15 @@ impl CronJobRow {
     }
 }
 
-pub fn cluster_status(pods: &[Pod], jobs: &[Job], cronjobs: &[CronJob]) -> CommandResult {
+pub fn cluster_status(
+    deployments: &[Deployment],
+    pods: &[Pod],
+    jobs: &[Job],
+    cronjobs: &[CronJob],
+) -> CommandResult {
+    let mut deployment_rows: Vec<DeploymentRow> = deployments.iter().map(deployment_row).collect();
+    deployment_rows.sort_by(|left, right| left.name.cmp(&right.name));
+
     let mut pod_rows: Vec<PodRow> = pods
         .iter()
         .filter(|pod| !owned_by_job(pod))
@@ -153,24 +201,30 @@ pub fn cluster_status(pods: &[Pod], jobs: &[Job], cronjobs: &[CronJob]) -> Comma
     let mut cronjob_rows: Vec<CronJobRow> = cronjobs.iter().map(cronjob_row).collect();
     cronjob_rows.sort_by(|left, right| left.name.cmp(&right.name));
 
+    let deployment_columns = deployment_columns();
     let pod_columns = pod_columns();
     let job_columns = job_columns();
     let cronjob_columns = cronjob_columns();
     render_tables(&[
+        ReportTable {
+            title: "Deployments",
+            columns: &deployment_columns,
+            rows: deployment_rows.iter().map(DeploymentRow::cells).collect(),
+        },
         ReportTable {
             title: "Pods",
             columns: &pod_columns,
             rows: pod_rows.iter().map(PodRow::cells).collect(),
         },
         ReportTable {
-            title: "Jobs",
-            columns: &job_columns,
-            rows: job_rows.iter().map(JobRow::cells).collect(),
-        },
-        ReportTable {
             title: "CronJobs",
             columns: &cronjob_columns,
             rows: cronjob_rows.iter().map(CronJobRow::cells).collect(),
+        },
+        ReportTable {
+            title: "Jobs",
+            columns: &job_columns,
+            rows: job_rows.iter().map(JobRow::cells).collect(),
         },
     ])
 }
@@ -180,6 +234,29 @@ fn owned_by_job(pod: &Pod) -> bool {
         .owner_references
         .as_ref()
         .is_some_and(|owners| owners.iter().any(|owner| owner.kind == "Job"))
+}
+
+fn deployment_row(deployment: &Deployment) -> DeploymentRow {
+    let desired = deployment
+        .spec
+        .as_ref()
+        .and_then(|spec| spec.replicas)
+        .unwrap_or(1);
+    let ready = deployment
+        .status
+        .as_ref()
+        .and_then(|status| status.ready_replicas)
+        .unwrap_or(0);
+    DeploymentRow {
+        name: name_of(deployment.metadata.name.as_ref()),
+        status: if ready >= desired {
+            STATUS_RUNNING.to_owned()
+        } else {
+            STATUS_STOPPED.to_owned()
+        },
+        ready: format!("{ready}/{desired}"),
+        age: age(deployment.metadata.creation_timestamp.as_ref()),
+    }
 }
 
 fn pod_row(pod: &Pod) -> PodRow {

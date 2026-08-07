@@ -50,6 +50,12 @@ pub enum LauncherError {
     JobDeletedBeforeCompletion { name: String } = 5002,
     #[error("Regular pod '{name}' was deleted before becoming ready.")]
     PodDeletedBeforeReady { name: String } = 5003,
+    #[error("Regular deployment '{name}' failed.")]
+    DeploymentFailed { name: String } = 5016,
+    #[error("Regular deployment from '{key}' was created without a metadata.name.")]
+    DeploymentMissingName { key: String } = 5017,
+    #[error("Regular deployment '{name}' was deleted before becoming available.")]
+    DeploymentDeletedBeforeAvailable { name: String } = 5018,
     #[error("Regular cronjob from '{key}' was created without a metadata.name.")]
     CronJobMissingName { key: String } = 5010,
     #[error("Regular cronjob '{name}' was deleted before being scheduled.")]

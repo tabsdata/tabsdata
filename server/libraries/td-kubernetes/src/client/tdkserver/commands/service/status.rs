@@ -11,6 +11,7 @@ use crate::client::tdkserver::render::report;
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::kube::api::cronjob::list_cronjobs;
+use crate::kube::api::deployment::list_deployments;
 use crate::kube::api::job::list_jobs;
 use crate::kube::api::pod::list_pods;
 use crate::runtime::provider::provider_for_instance_any_state;
@@ -31,9 +32,10 @@ pub async fn command_status(
         return Ok(());
     }
     let context = provider.kube_context().await?;
+    let deployments = list_deployments(&context).await?;
     let pods = list_pods(&context).await?;
     let jobs = list_jobs(&context).await?;
     let cronjobs = list_cronjobs(&context).await?;
-    report::component::service::status::cluster_status(&pods, &jobs, &cronjobs)?;
+    report::component::service::status::cluster_status(&deployments, &pods, &jobs, &cronjobs)?;
     Ok(())
 }

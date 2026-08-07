@@ -19,6 +19,7 @@ use crate::base::constants::{CONTAINER_ROOT_ENV, CONTAINER_SETTINGS_RELATIVE};
 use crate::base::naming::{to_fn_pod_name, worker_pod_stem};
 use crate::client::registry::InstanceSettings;
 use crate::kube::api::cronjob::{create_cronjob, delete_cronjob};
+use crate::kube::api::deployment::delete_deployment;
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
@@ -430,7 +431,8 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                 cause: error.to_string(),
                             })?;
                     }
-                    TemplateKind::Service
+                    TemplateKind::Deployment
+                    | TemplateKind::Service
                     | TemplateKind::ServiceAccount
                     | TemplateKind::Role
                     | TemplateKind::RoleBinding => {
@@ -452,6 +454,13 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             cause: error.to_string(),
                         }
                     })?;
+                }
+                TemplateKind::Deployment => {
+                    delete_deployment(&self.context, &name)
+                        .await
+                        .map_err(|error| QueueError::BackendError {
+                            cause: error.to_string(),
+                        })?;
                 }
                 TemplateKind::CronJob => {
                     delete_cronjob(&self.context, &name)
@@ -495,6 +504,13 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                         cause: error.to_string(),
                     }
                 })?;
+            }
+            TemplateKind::Deployment => {
+                delete_deployment(&self.context, &name)
+                    .await
+                    .map_err(|error| QueueError::BackendError {
+                        cause: error.to_string(),
+                    })?;
             }
             TemplateKind::CronJob => {
                 delete_cronjob(&self.context, &name)

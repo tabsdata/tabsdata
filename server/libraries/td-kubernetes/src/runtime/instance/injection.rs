@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 
+use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
     Container, EnvVar, EnvVarSource, Pod, PodSpec, SecretKeySelector,
@@ -78,6 +79,23 @@ pub fn inject_into_cronjob(
         .ok_or_else(|| LauncherError::SecretEnvInjectionConfigParseFailed {
             config: pod_template_key.to_owned(),
             cause: "cronjob has no spec.jobTemplate.spec.template.spec".to_owned(),
+        })?;
+    inject_secret_envs(profile, pod_template_key, spec, available_secrets)
+}
+
+pub fn inject_into_deployment(
+    profile: &Profile,
+    pod_template_key: &str,
+    deployment: &mut Deployment,
+    available_secrets: &BTreeSet<String>,
+) -> Result<(), LauncherError> {
+    let spec = deployment
+        .spec
+        .as_mut()
+        .and_then(|deployment_spec| deployment_spec.template.spec.as_mut())
+        .ok_or_else(|| LauncherError::SecretEnvInjectionConfigParseFailed {
+            config: pod_template_key.to_owned(),
+            cause: "deployment has no spec.template.spec".to_owned(),
         })?;
     inject_secret_envs(profile, pod_template_key, spec, available_secrets)
 }

@@ -15,6 +15,7 @@ use std::future::Future;
 use async_trait::async_trait;
 use clap_derive::ValueEnum;
 use indicatif::MultiProgress;
+use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
@@ -246,6 +247,21 @@ impl ClusterProvider {
         let _ = cronjob;
         Ok(())
     }
+
+    pub fn validate_regular_deployment(self, deployment: &Deployment) -> Vec<ValidationError> {
+        let Some(pod) = deployment_pod_template(deployment) else {
+            return Vec::new();
+        };
+        match self.workload() {
+            Workload::Process => process_pod::validate(&pod),
+            Workload::Container => container_pod::validate(&pod),
+        }
+    }
+
+    pub fn enrich_regular_deployment(self, deployment: &mut Deployment) -> CommandResult {
+        let _ = deployment;
+        Ok(())
+    }
 }
 
 fn cronjob_pod_template(cronjob: &CronJob) -> Option<Pod> {
@@ -257,6 +273,15 @@ fn cronjob_pod_template(cronjob: &CronJob) -> Option<Pod> {
         .as_ref()?
         .template
         .clone();
+    Some(Pod {
+        metadata: template.metadata.unwrap_or_default(),
+        spec: template.spec,
+        status: None,
+    })
+}
+
+fn deployment_pod_template(deployment: &Deployment) -> Option<Pod> {
+    let template = deployment.spec.as_ref()?.template.clone();
     Some(Pod {
         metadata: template.metadata.unwrap_or_default(),
         spec: template.spec,
