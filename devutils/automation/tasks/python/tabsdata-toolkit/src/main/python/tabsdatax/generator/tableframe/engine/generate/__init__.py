@@ -720,6 +720,18 @@ _SIGNATURE_OVERRIDES = {
     "functions.concat": (
         "(items: TableFramesSpec, *, how: ConcatMethod = 'vertical') -> TableFrameSpec"
     ),
+    "Schema.to_frame": "(self) -> TableFrame",
+}
+
+# Value-class members with a custom generated body, keyed by symbol id.
+# Schema.to_frame is lazy-only: polars returns a DataFrame when eager is true,
+# which has no wrapper, so eager is forced off and dropped from the signature.
+_VALUE_CLASS_BODIES = {
+    "Schema.to_frame": lambda name: [
+        f"    def {name}(self):",
+        f"        return wrap(self._inner.{name}(eager=False))",
+        "",
+    ],
 }
 
 
@@ -774,7 +786,10 @@ def _render_value_class_py(symbols: list[Symbol], root: str) -> str:
         ]
         for symbol in class_symbols:
             name = _member(symbol)
-            if symbol.is_property:
+            custom = _VALUE_CLASS_BODIES.get(symbol.id)
+            if custom is not None:
+                lines += custom(name)
+            elif symbol.is_property:
                 lines += [
                     "    @property",
                     f"    def {name}(self):",

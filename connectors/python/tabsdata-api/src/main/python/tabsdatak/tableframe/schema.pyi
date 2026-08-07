@@ -129,7 +129,7 @@ class Schema:
         :categories: attributes
         """
 
-    def to_frame(self, *, eager: bool = True) -> TableFrame:
+    def to_frame(self) -> TableFrame:
         """Return an empty `TableFrame` having exactly this schema.
 
         :categories: attributes

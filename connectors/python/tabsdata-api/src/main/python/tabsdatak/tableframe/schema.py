@@ -92,8 +92,8 @@ class Schema(BaseWrapper):
     def to_arrow(self, *args, **kwargs):
         return wrap(self._inner.to_arrow(*unwrap(args), **unwrap(kwargs)))
 
-    def to_frame(self, *args, **kwargs):
-        return wrap(self._inner.to_frame(*unwrap(args), **unwrap(kwargs)))
+    def to_frame(self):
+        return wrap(self._inner.to_frame(eager=False))
 
     def len(self, *args, **kwargs):
         return wrap(self._inner.len(*unwrap(args), **unwrap(kwargs)))
