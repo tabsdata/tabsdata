@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
 from tabsdatak.api import CronTrigger
@@ -31,6 +33,12 @@ class _SpecimenCode(ErrorCode):
     )
     INTERNAL = ErrorDef(ApiInternalException, "Thing {name}, missing resolution")
 
+
+# `_capture_user_source` reports the frame's filename, which the import
+# machinery has already resolved. `tabsdata-ee` reaches this tree through a
+# committed symlink, so `__file__` there is the ee path while the captured
+# frame carries the real one -- resolve before comparing.
+_THIS_FILE = str(pathlib.Path(__file__).resolve())
 
 # ---------------------------------------------------------------------------
 # 1. ``ErrorCodeMeta`` invariants
@@ -327,7 +335,7 @@ def test_source_is_captured_by_default(env_unset):
     with pytest.raises(ApiException) as excinfo:
         CronTrigger()
     assert excinfo.value.source is not None
-    assert __file__ in excinfo.value.source
+    assert _THIS_FILE in excinfo.value.source
     assert "CronTrigger" in excinfo.value.source
 
 
@@ -343,7 +351,7 @@ def test_explicit_truthy_env_var_keeps_capture_on(env_enabled):
     with pytest.raises(ApiException) as excinfo:
         CronTrigger()
     assert excinfo.value.source is not None
-    assert __file__ in excinfo.value.source
+    assert _THIS_FILE in excinfo.value.source
 
 
 @pytest.mark.parametrize(
@@ -395,7 +403,7 @@ def test_capture_survives_synthetic_frames(env_unset):
 def test_direct_construction_also_captures(env_unset):
     e = TabsdataException(api_error=ApiErrorCode.API_1, message="hi")
     assert e.source is not None
-    assert __file__ in e.source
+    assert _THIS_FILE in e.source
 
 
 # ---------------------------------------------------------------------------
