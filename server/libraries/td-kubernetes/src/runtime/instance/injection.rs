@@ -17,6 +17,7 @@ use crate::base::naming::name_from_kube_resource_name;
 use crate::kube::api::{LabelFilter, list_secrets};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::profile::Profile;
+use crate::runtime::instance::tabsdata::{TABSDATA_FILE, TabsdataConfig};
 use crate::runtime::secrets::discovery::{SecretLeaf, extract_secret_leaves};
 use crate::runtime::secrets::source::to_secret_name;
 
@@ -87,6 +88,10 @@ pub fn inject_secret_envs(
     spec: &mut PodSpec,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
+    let globals = collect_global_env_entries(profile)?;
+    if !globals.is_empty() {
+        apply_env_entries(spec, &globals);
+    }
     let mounted = mounted_config_files(spec);
     let entries = collect_env_entries(profile, pod_template_key, &mounted, available_secrets)?;
     if entries.is_empty() {
@@ -94,6 +99,29 @@ pub fn inject_secret_envs(
     }
     apply_env_entries(spec, &entries);
     Ok(())
+}
+
+fn collect_global_env_entries(profile: &Profile) -> Result<Vec<EnvVar>, LauncherError> {
+    let Some(config_yaml) = profile.configs.get(TABSDATA_FILE) else {
+        return Ok(Vec::new());
+    };
+    let config = TabsdataConfig::parse(config_yaml).map_err(|error| {
+        LauncherError::SecretEnvInjectionConfigParseFailed {
+            config: TABSDATA_FILE.to_owned(),
+            cause: error.to_string(),
+        }
+    })?;
+    Ok(config
+        .pods
+        .global
+        .envs
+        .iter()
+        .map(|(name, value)| EnvVar {
+            name: name.clone(),
+            value: Some(value.render()),
+            value_from: None,
+        })
+        .collect())
 }
 
 fn mounted_config_files(spec: &PodSpec) -> BTreeSet<String> {

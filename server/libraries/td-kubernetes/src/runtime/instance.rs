@@ -11,6 +11,7 @@ pub mod manifest;
 pub mod ports;
 pub mod profile;
 pub mod staging;
+pub mod tabsdata;
 pub mod tier;
 
 use td_python::tabsdata::tabsdata_version;

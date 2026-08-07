@@ -236,3 +236,71 @@ fn already_present_env_var_is_not_duplicated() {
         .expect("env");
     assert_eq!(env[0].value.as_deref(), Some("preset"));
 }
+
+#[test]
+fn global_envs_reach_every_container() {
+    let profile = build_profile(&[(
+        "tabsdata.yaml",
+        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n      TD_RETRIES: 3\n",
+    )]);
+    let mut spec = build_pod_spec_mounting(&["apiserver", "sidecar"], &[]);
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    for container in ["apiserver", "sidecar"] {
+        let injected = names(&spec, container);
+        assert!(injected.contains(&"TD_TRACE".to_owned()), "{container}");
+        assert!(injected.contains(&"TD_RETRIES".to_owned()), "{container}");
+    }
+}
+
+#[test]
+fn global_envs_do_not_need_the_config_mounted() {
+    let profile = build_profile(&[(
+        "tabsdata.yaml",
+        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n",
+    )]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    assert!(names(&spec, "apiserver").contains(&"TD_TRACE".to_owned()));
+}
+
+#[test]
+fn an_empty_global_envs_map_injects_nothing() {
+    let profile = build_profile(&[("tabsdata.yaml", "pods:\n  global:\n    envs: {}\n")]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    assert!(names(&spec, "apiserver").is_empty());
+}
+
+#[test]
+fn a_container_env_wins_over_a_global_one() {
+    let profile = build_profile(&[(
+        "tabsdata.yaml",
+        "pods:\n  global:\n    envs:\n      TD_TRACE: global\n",
+    )]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
+    spec.containers[0].env = Some(vec![EnvVar {
+        name: "TD_TRACE".to_owned(),
+        value: Some("container".to_owned()),
+        value_from: None,
+    }]);
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    let value = spec.containers[0]
+        .env
+        .as_ref()
+        .expect("env")
+        .iter()
+        .find(|env| env.name == "TD_TRACE")
+        .and_then(|env| env.value.clone());
+    assert_eq!(value, Some("container".to_owned()));
+}
+
+#[test]
+fn a_non_scalar_global_env_is_a_hard_failure() {
+    let profile = build_profile(&[(
+        "tabsdata.yaml",
+        "pods:\n  global:\n    envs:\n      TD_TRACE:\n        nested: value\n",
+    )]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
+    let outcome = inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new());
+    assert!(outcome.is_err());
+}
