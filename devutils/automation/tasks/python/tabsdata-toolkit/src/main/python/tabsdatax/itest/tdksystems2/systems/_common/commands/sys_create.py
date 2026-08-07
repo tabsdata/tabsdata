@@ -120,12 +120,14 @@ def run(ctx: cli.Context) -> int:
     if a.dry_run:
         console.out(f"would create system '{name}' (type {sysobj.slug})")
         return 0
-    console.out(f"▶ creating system '{name}' ({sysobj.label}) …")
     use_ports = getattr(sysobj, "use_ports", None)
     if use_ports is not None:
         use_ports(cli.parse_ports(a.ports))
     hostname = _bind_hostname(sysobj, a.sys_hostname)
+    # resolve before announcing: an option with no value is a plain usage error,
+    # and saying "creating" first reads as though something was half-built
     values, env_refs, literals = options.resolve(sysobj, a, name)
+    console.out(f"▶ creating system '{name}' ({sysobj.label}) …")
     meta = sysobj.plan_system(name, values)
     meta["SYSTEM_KIND"] = sysobj.kind
     # Persist the descriptor before provisioning, so a partial start can be torn

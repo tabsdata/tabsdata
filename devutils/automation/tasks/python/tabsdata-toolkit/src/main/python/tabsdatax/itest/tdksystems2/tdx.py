@@ -10,7 +10,8 @@
     tdx-system info --sys NAME|list|ALL | --manifest FILE [--format ...] [--prefix P]
     tdx-system create  --type TYPE [--sys NAME] [--sys-prefix P] [--ports P,..] \\
                        [--sys-hostname HOST]
-    tdx-system create  --type ALL|t1,t2 [--sys-prefix P]   # one per type
+    tdx-system create  --type ALL|t1,t2 [--sys-prefix P] [--sys-hostname HOST]
+                                          # one per type ('--sys ALL' is not it)
                                           # --sys defaults to TYPE; [type options] too
                                           # --sys-hostname: advertise HOST instead of
                                           # localhost, so the descriptors (and the
@@ -61,7 +62,9 @@ run record. ``create`` /
 destroy, the domains that would be destroyed too). ``create --manifest FILE``
 replays a YAML manifest in parallel — one system ``create`` each, or one
 ``create`` -> ``create-model`` -> ``create-data`` chain per domain — and
-``--sync`` reconciles the store to it.
+``--sync`` reconciles the store to it; a system replay takes
+``--sys-hostname HOST`` to re-advertise every entry off this box, overriding the
+host the manifest recorded.
 
 Every command re-execs into one of the managed uv venvs before it runs (see
 ``_venv``): a system declares the env its outside (``sys_env``) and its inside
@@ -100,6 +103,7 @@ from tabsdatax.itest.tdksystems2 import (
     cli,
     console,
     constants,
+    crypto,
     descriptor,
     manifest,
     store,
@@ -255,6 +259,51 @@ def _sole_slug() -> str:
     raise TdxError(f"{constants.OPT_TYPE} is required (one of: {', '.join(slugs)})")
 
 
+def _as_type_argv(rest: list[str]) -> str:
+    """`rest` with its ``--sys`` target respelled as ``--type``, for the
+    did-you-mean line."""
+    out = [constants.V_CREATE]
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == constants.OPT_SYS:
+            out.append(constants.OPT_TYPE)
+            if i + 1 < len(rest):
+                out.append(rest[i + 1])
+            i += 2
+            continue
+        if tok.startswith(f"{constants.OPT_SYS}="):
+            out.append(f"{constants.OPT_TYPE}={tok[len(constants.OPT_SYS) + 1 :]}")
+            i += 1
+            continue
+        out.append(tok)
+        i += 1
+    return " ".join(out)
+
+
+def _reject_sys_batch(rest: list[str]) -> None:
+    """Reject a system ``create`` whose ``--sys`` looks like a batch selector.
+
+    A system create batches on ``--type`` — one system per type, named after it —
+    because at create time there is no stored system for ``ALL`` to enumerate;
+    ``--sys`` names the single system to create. Every other verb (and a domain
+    create) does batch on ``--sys``, so the mix-up costs a confusing
+    ``--type is required`` without this."""
+    sel = cli.peek(rest, constants.OPT_SYS)
+    if sel is None:
+        return
+    names = [n.strip() for n in sel.split(",") if n.strip()]
+    if len(names) == 1 and names[0].upper() != constants.TARGET_ALL:
+        return
+    raise TdxError(
+        f"a system {constants.V_CREATE} batches on {constants.OPT_TYPE}, not "
+        f"{constants.OPT_SYS}\n"
+        f"       ({constants.OPT_SYS} names a single system; nothing exists yet "
+        f"to enumerate)\n"
+        f"       did you mean: {constants.SYS_TOOL} {_as_type_argv(rest)}"
+    )
+
+
 def _system_or_none(slug: str | None):
     """The backend instance for `slug`, or None if there is none to resolve (used
     to hand the options-driven create its backend for building its `-h` flags)."""
@@ -308,7 +357,10 @@ def _resolve(
             # backend and this is just a stand-in to dispatch on.
             return _default_slug(tool, verb), None, None, None, store_dir
         if verb in (constants.V_CREATE, constants.V_FETCH_BIN):
-            slug = cli.peek(rest, constants.OPT_TYPE) or _sole_slug()
+            typed = cli.peek(rest, constants.OPT_TYPE)
+            if typed is None and verb == constants.V_CREATE:
+                _reject_sys_batch(rest)
+            slug = typed or _sole_slug()
             if verb == constants.V_FETCH_BIN and (
                 slug.upper() == constants.TARGET_ALL or "," in slug
             ):
@@ -346,23 +398,36 @@ def _resolve(
 
 
 def _store_infos(
-    store_dir: Path, role: str
+    store_dir: Path, role: str, *, strict: bool = False
 ) -> list[descriptor.SystemInfo | descriptor.DomainInfo]:
     """The descriptors of `role` in `store_dir`, sorted by file name, skipping
-    non-descriptors, unreadable files and mismatched roles."""
+    non-descriptors, unreadable files and mismatched roles.
+
+    `strict` turns an unreadable descriptor into an error instead. A manifest is
+    the input to ``create --manifest --sync``, which destroys whatever the
+    manifest omits — so dropping a descriptor nobody could decrypt (the usual
+    cause: the wrong ``$TD_BACKENDS_CRYPTO_KEY``) would quietly arm a reconcile
+    to delete it."""
     if not store_dir.is_dir():
         return []
     out: list[descriptor.SystemInfo | descriptor.DomainInfo] = []
+    unreadable: list[str] = []
     for name in sorted(p.name for p in store_dir.iterdir() if p.is_file()):
         path = store_dir / name
         if not descriptor.is_descriptor(path):
             continue
         try:
             info = descriptor.load(path)
-        except TdxError:
+        except TdxError as exc:
+            unreadable.append(f"  {name}: {exc}")
             continue
         if info.role == role:
             out.append(info)
+    if strict and unreadable:
+        raise TdxError(
+            f"{len(unreadable)} descriptor(s) in {store_dir} could not be read, so "
+            f"a manifest of it would be incomplete:\n" + "\n".join(unreadable)
+        )
     return out
 
 
@@ -526,7 +591,9 @@ def _cmn_sys_manifest(tool: str, rest: list[str]) -> int:
     cli.add_sys_dir(p)
     _add_manifest_out(p)
     a = p.parse_args(rest)
-    infos = _store_infos(store.system_dir(a.sys_dir), constants.ROLE_SYSTEM)
+    infos = _store_infos(
+        store.system_dir(a.sys_dir), constants.ROLE_SYSTEM, strict=True
+    )
     manifest.write(a.out, [manifest.system_entry(i) for i in infos])  # type: ignore[arg-type]
     return 0
 
@@ -536,7 +603,9 @@ def _cmn_dom_manifest(tool: str, rest: list[str]) -> int:
     cli.add_domain_dir(p)
     _add_manifest_out(p)
     a = p.parse_args(rest)
-    infos = _store_infos(store.domain_dir(a.domain_dir), constants.ROLE_DOMAIN)
+    infos = _store_infos(
+        store.domain_dir(a.domain_dir), constants.ROLE_DOMAIN, strict=True
+    )
     manifest.write(a.out, [manifest.domain_entry(i) for i in infos])  # type: ignore[arg-type]
     return 0
 
@@ -712,7 +781,8 @@ def _create_from_manifest(tool: str, rest: list[str]) -> int:
     """``create --manifest FILE`` — create every entry in parallel (each a create
     [-> create-model -> create-data] chain), heaviest first, continue-on-error.
     With ``--sync`` also destroy the store entries the manifest omits (reconcile).
-    A system create gets its own disjoint pool of candidate ports (``--ports``)."""
+    A system create gets its own disjoint pool of candidate ports (``--ports``),
+    and ``--sys-hostname`` overrides the host every entry advertises."""
     p = ArgumentParser(prog=f"{tool} {constants.V_CREATE}")
     p.add_argument(
         constants.OPT_MANIFEST,
@@ -726,8 +796,14 @@ def _create_from_manifest(tool: str, rest: list[str]) -> int:
         help="reconcile: also destroy store entries the manifest omits",
     )
     cli.add_force(p)
+    if tool == constants.SYS_TOOL:
+        cli.add_sys_hostname(p)
     dir_opt = _add_store_dir(tool, p)
     a = p.parse_args(rest)
+    # validated up front so a bad host fails once here, not once per child
+    hostname = (
+        cli.parse_hostname(a.sys_hostname) if getattr(a, "sys_hostname", None) else ""
+    )
     store_dir_opt = getattr(a, dir_opt)
     entries = manifest.read(a.manifest)
     existing = _store_names(tool, store_dir_opt)
@@ -751,6 +827,9 @@ def _create_from_manifest(tool: str, rest: list[str]) -> int:
     tasks: list[batch.Task] = []
     build_failed = 0
     for entry, pool in zip(to_create, pools):
+        if hostname:
+            # the flag wins over whatever host the manifest recorded
+            entry = {**entry, constants.OPT_SYS_HOSTNAME.lstrip("-"): hostname}
         try:
             steps = _entry_steps(
                 tool, entry, force=a.force, ports=pool, store_dir_opt=store_dir_opt
@@ -826,6 +905,16 @@ _MANIFEST_VERBS = {
     constants.V_STATUS,
 }
 
+# Common verbs that read the store, so they need the crypto key up front. The
+# delegated verbs reach it through descriptor.load and already fail loudly;
+# types / secrets / clear-venvs never touch a descriptor and must keep working
+# without a key.
+_STORE_READING_VERBS = {
+    constants.V_LIST,
+    constants.V_INFO,
+    constants.V_MANIFEST,
+}
+
 
 def _maybe_batch(tool: str, verb: str, rest: list[str]) -> int | None:
     """Route a verb to a batch runner; None to fall through to the single path.
@@ -889,6 +978,12 @@ def _dispatch(tool: str, argv: list[str]) -> int:
     verb, rest = argv[0], argv[1:]
     common = _COMMON[tool]
     if verb in common:
+        if verb in _STORE_READING_VERBS and not any(
+            a in constants.HELP_FLAGS for a in rest
+        ):
+            # these read every descriptor they find, and a store they cannot
+            # decrypt reads exactly like an empty one — say so instead
+            crypto.require_secret()
         return common[verb](tool, rest)
     if verb not in _discover(tool):
         raise TdxError(f"{tool}: unknown command '{verb}' (try `{tool} -h`)")

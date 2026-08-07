@@ -220,6 +220,23 @@ def test_domain_create_requires_sys(stores, faked):
         _dom(["create", "--domain", "d"])
 
 
+@pytest.mark.parametrize("sel", ["ALL", "mysql,postgres"])
+def test_system_create_points_a_sys_batch_at_type(sel, stores, faked):
+    """Every other verb batches on --sys, so `create --sys ALL` is an easy slip;
+    it must not surface as a bare '--type is required'."""
+    with pytest.raises(TdxError) as exc:
+        _sys(["create", "--sys", sel, "--sys-hostname", "myhost"])
+    msg = str(exc.value)
+    assert "batches on --type" in msg
+    assert f"create --type {sel} --sys-hostname myhost" in msg
+
+
+def test_system_create_keeps_a_lone_sys_name(stores, faked):
+    # only a batch selector is redirected; --sys still names one system
+    assert _sys(["create", "--type", "mysql", "--sys", "ALLOY"]) == 0
+    assert descriptor.is_descriptor(store.system_path("ALLOY"))
+
+
 def test_name_in_system_overrides_prefix(stores, faked):
     _sys(["create", "--type", "mysql", "--sys", "s"])
     _dom(["create", "--sys", "s", "--domain", "d", "--name-in-system", "verbatim_db"])

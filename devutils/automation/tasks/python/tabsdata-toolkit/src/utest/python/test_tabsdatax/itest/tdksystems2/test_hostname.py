@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatax.itest.tdksystems2 import descriptor, manifest, store, systems, tdx
+from tabsdatax.itest.tdksystems2 import batch, descriptor, manifest, store, systems, tdx
 from tabsdatax.itest.tdksystems2.errors import TdxError
 from tabsdatax.itest.tdksystems2.systems._common.commands import sys_create
 from tabsdatax.itest.tdksystems2.systems.druid import backend as druid
@@ -70,6 +70,19 @@ def test_a_system_with_no_host_says_so_and_still_creates(stores, capsys):
     assert _sys(["create", "--type", "dev", "--sys", "d", "--sys-hostname", HOST]) == 0
     assert "dev has no host of its own" in capsys.readouterr().out
     assert descriptor.load(store.system_path("d")).sys_hostname == ""
+
+
+def test_a_batch_create_hands_the_hostname_to_every_child(monkeypatch):
+    # the flag only reaches a batched create if the expander leaves it in the
+    # child argv — it strips --type/--sys/--ports out from under it
+    monkeypatch.setattr(batch, "port_pools", lambda n: [[] for _ in range(n)])
+    tasks = batch._expand(
+        "tdx-system", "create", ["--type", "mysql,dev", "--sys-hostname", HOST]
+    )
+    assert [t.name for t in tasks] == ["mysql", "dev"]
+    for task in tasks:
+        argv = task.steps[0]
+        assert argv[argv.index("--sys-hostname") + 1] == HOST
 
 
 def test_a_remote_system_is_told_its_host_is_its_own(capsys):
@@ -161,3 +174,52 @@ def test_manifest_replays_the_hostname(tmp_path):
     assert entry["sys-hostname"] == HOST
     argv = tdx._entry_steps("tdx-system", entry, force=False, ports=None)[0]
     assert argv[argv.index("--sys-hostname") + 1] == HOST
+
+
+def _manifest_tasks(tmp_path, monkeypatch, body, *flags):
+    captured: list[batch.Task] = []
+    monkeypatch.setattr(
+        batch, "execute", lambda tool, label, tasks, **kw: captured.extend(tasks) or 0
+    )
+    mf = tmp_path / "m.yaml"
+    mf.write_text(body, encoding="utf-8")
+    rc = tdx._create_from_manifest(
+        "tdx-system", ["--manifest", str(mf), "--sys-dir", str(tmp_path), *flags]
+    )
+    return rc, captured
+
+
+_TWO_ENTRIES = "- name: s1\n  type: mysql\n- name: s2\n  type: mysql\n"
+
+
+def test_manifest_create_hostname_reaches_every_entry(tmp_path, monkeypatch):
+    rc, tasks = _manifest_tasks(
+        tmp_path, monkeypatch, _TWO_ENTRIES, "--sys-hostname", HOST
+    )
+    assert rc == 0 and [t.name for t in tasks] == ["s1", "s2"]
+    for task in tasks:
+        argv = task.steps[0]
+        assert argv[argv.index("--sys-hostname") + 1] == HOST
+
+
+def test_manifest_create_hostname_overrides_the_recorded_one(tmp_path, monkeypatch):
+    body = "- name: s1\n  type: mysql\n  sys-hostname: stale.example.com\n"
+    _, tasks = _manifest_tasks(tmp_path, monkeypatch, body, "--sys-hostname", HOST)
+    argv = tasks[0].steps[0]
+    assert argv.count("--sys-hostname") == 1  # not appended alongside the old one
+    assert argv[argv.index("--sys-hostname") + 1] == HOST
+
+
+def test_manifest_create_without_the_flag_keeps_the_host(tmp_path, monkeypatch):
+    body = "- name: s1\n  type: mysql\n  sys-hostname: from.manifest\n"
+    _, tasks = _manifest_tasks(tmp_path, monkeypatch, body)
+    argv = tasks[0].steps[0]
+    assert argv[argv.index("--sys-hostname") + 1] == "from.manifest"
+
+
+def test_manifest_create_rejects_a_bad_hostname_before_any_child(tmp_path, monkeypatch):
+    # one clean failure here beats the same error repeated by every child
+    with pytest.raises(TdxError):
+        _manifest_tasks(
+            tmp_path, monkeypatch, _TWO_ENTRIES, "--sys-hostname", "http://h:1/x"
+        )

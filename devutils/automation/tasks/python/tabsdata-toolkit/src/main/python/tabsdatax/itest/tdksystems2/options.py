@@ -20,6 +20,11 @@ port (``PORT``), a backend-computed literal (``SYNTH`` — see
 secret; ``literals`` is the list of keys given as a literal ``--<flag> VALUE`` (so
 ``manifest`` re-emits those, but never the auto-generated defaults a fresh create
 re-derives — a free port, a generated password).
+
+A required option left without a value does not stop the walk: every one of them
+is collected and reported in a single error naming the env var and the flag that
+would supply it, so a system configured entirely from the environment takes one
+round trip to fix rather than one per variable.
 """
 
 from __future__ import annotations
@@ -79,11 +84,22 @@ def add_option_flags(
         )
 
 
-def _read_env(var: str, opt: Option) -> str:
-    val = os.environ.get(var, "").strip()
-    if not val and opt.required:
-        raise TdxError(f"env var ${var} is not set (needed for --{opt.flag})")
-    return val
+def _read_env(var: str) -> str:
+    return os.environ.get(var, "").strip()
+
+
+def _missing_error(backend, missing: list[tuple[str, Option]]) -> TdxError:
+    """One error naming every option left without a value, and both ways to
+    supply it. Reporting them one at a time costs a round trip per option, and a
+    system whose whole connection comes from the environment has several."""
+    width = max(len(var) for var, _ in missing)
+    lines = "\n".join(
+        f"  ${var.ljust(width)}   or  --{opt.flag} VALUE" for var, opt in missing
+    )
+    return TdxError(
+        f"{backend.slug}: {len(missing)} required option(s) have no value — set the "
+        f"env var or pass the flag:\n{lines}"
+    )
 
 
 def resolve(backend, ns: argparse.Namespace, name: str) -> tuple[dict, dict, list[str]]:
@@ -96,6 +112,7 @@ def resolve(backend, ns: argparse.Namespace, name: str) -> tuple[dict, dict, lis
     values: dict[str, str] = {}
     env_refs: dict[str, str] = {}
     literals: list[str] = []
+    missing: list[tuple[str, Option]] = []
     for opt in backend.options():
         lit = getattr(ns, f"opt_{opt.name}", None)
         env = getattr(ns, f"env_{opt.name}", None)
@@ -105,16 +122,20 @@ def resolve(backend, ns: argparse.Namespace, name: str) -> tuple[dict, dict, lis
             values[opt.name] = lit
             literals.append(opt.name)
         elif env is not None:
-            val = _read_env(env, opt)
+            val = _read_env(env)
             values[opt.name] = val
             if val:
                 env_refs[opt.name] = env
+            elif opt.required:
+                missing.append((env, opt))
         elif opt.source == ENV:
             var = f"{prefix}__{opt.name}"
-            val = _read_env(var, opt)
+            val = _read_env(var)
             values[opt.name] = val
             if val:
                 env_refs[opt.name] = var
+            elif opt.required:
+                missing.append((var, opt))
         elif opt.source == RANDOM:
             values[opt.name] = backend.generate_password()
         elif opt.source == PORT:
@@ -123,4 +144,6 @@ def resolve(backend, ns: argparse.Namespace, name: str) -> tuple[dict, dict, lis
             values[opt.name] = backend.synth_default(opt.name, name)
         else:  # pragma: no cover - guarded by the Option contract
             raise TdxError(f"option {opt.name}: unknown source {opt.source!r}")
+    if missing:
+        raise _missing_error(backend, missing)
     return values, env_refs, literals
