@@ -59,7 +59,6 @@ from tabsdatak.conn.common.types import (
     CfgSpec,
     CloudRelativePathSpec,
     S3BucketSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -74,9 +73,10 @@ from tabsdatak.spi import Conn
 CredentialsSpec: TypeAlias = UserPassword
 
 UrlSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URL_PATTERN)
+    StrOrSecretSpec,
+    _validation.URL_VALIDATION,
 ]
-DatasourceSpec: TypeAlias = Annotated[str, _validation.DATASOURCE_VALIDATOR]
+DatasourceSpec: TypeAlias = Annotated[str, _validation.DATASOURCE_VALIDATION]
 DruidTableNameSpec: TypeAlias = DatasourceSpec
 DruidTableNamesSpec: TypeAlias = list[DruidTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -108,7 +108,7 @@ DestCfgKey: TypeAlias = Literal[
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

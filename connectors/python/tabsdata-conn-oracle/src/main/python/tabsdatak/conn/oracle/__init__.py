@@ -57,7 +57,6 @@ from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
     EntityWhitelistSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -75,7 +74,8 @@ CredentialsSpec: TypeAlias = UserPassword
 password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
+    StrOrSecretSpec,
+    _validation.URI_VALIDATION,
 ]
 """A SQLAlchemy-style Oracle URI, e.g.
 `oracle+oracledb://host:port/service`. The scheme must be `oracle`
@@ -88,7 +88,7 @@ query."""
 
 OracleTableNameSpec: TypeAlias = Annotated[
     str,
-    _validation.ORACLE_TABLE_FQN_VALIDATOR,
+    _validation.ORACLE_TABLE_FQN_VALIDATION,
 ]
 """An Oracle table name, either `table` or `schema.table` (at most
 two dot-separated parts). Parts may be double-quoted; Oracle has no way
@@ -110,7 +110,7 @@ SrcCfgKey: TypeAlias = Literal[
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -122,7 +122,7 @@ DestCfgKey: TypeAlias = Literal[
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

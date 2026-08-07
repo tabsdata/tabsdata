@@ -81,7 +81,7 @@ def build_gcs_client(
 def unquote_table_fqn(table: str) -> str:
     """Strip outer backticks from a BigQuery table FQN.
 
-    The :data:`tabsdatak.conn.bigquery._validation.BIGQUERY_TABLE_FQN_VALIDATOR`
+    The :data:`tabsdatak.conn.bigquery._validation.BIGQUERY_TABLE_FQN_VALIDATION`
     requires the user-supplied value to be wrapped in outer-only
     backticks (``\\`project.dataset.table\\```). The BigQuery SDK accepts
     a bare ``project.dataset.table`` string in ``load_table_from_uri``

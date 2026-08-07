@@ -48,10 +48,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
-from pydantic import StringConstraints
-
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
+
+# noinspection PyProtectedMember
+import tabsdatak.conn.kafka._validation as _validation
 from tabsdatak.api import StreamSrc, StrOrSecretSpec
 
 # noinspection PyProtectedMember
@@ -60,7 +61,6 @@ from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
     CfgSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -106,11 +106,9 @@ KafkaMessageFormatSpec: TypeAlias = Union[Literal["avro", "json"], Protobuf]
 
 # --- Schema registries ----------------------------------------------
 
-_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR = r".*"
-ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Annotated[
-    StrOrSecretSpec,
-    StrOrSecretConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
-]
+# Unvalidated: the registry rejects a URL it cannot serve, and no local
+# shape check adds anything.
+ConfluentSchemaRegistryUrlNameSpec: TypeAlias = StrOrSecretSpec
 
 
 @_api.dataclass(KafkaErrorCode.KAFKA_2, kw_only=True)
@@ -139,15 +137,11 @@ class ConfluentSchemaRegistry:
         return _convert(self.url, str)
 
 
-_REGISTRY_NAME_RE_STR = r".*"
-RegistryNameSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_REGISTRY_NAME_RE_STR)
-]
+# Unvalidated: registry naming is the registry's business.
+RegistryNameSpec: TypeAlias = StrOrSecretSpec
 
-_SCHEMA_NAME_RE_STR = r".*"
-SchemaNameSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_SCHEMA_NAME_RE_STR)
-]
+# Unvalidated: subject naming is the registry's business.
+SchemaNameSpec: TypeAlias = StrOrSecretSpec
 
 
 @_api.dataclass(KafkaErrorCode.KAFKA_3, kw_only=True)
@@ -198,30 +192,13 @@ SchemaRegistrySpec: TypeAlias = Union[
 
 
 # Bootstrap-server list. A single comma-separated string of (host[:port]).
-_SERVERS_VALUE_PATTERN = r".+"
-KafkaServersSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_SERVERS_VALUE_PATTERN)
-]
+KafkaServersSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.SERVERS_VALIDATION]
 
-# Topic name -- Kafka topics permit a wide alphabet, validation is
-# left to the broker on subscribe.
-_GROUP_VALUE_PATTERN = r".+"
-KafkaGroupSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_GROUP_VALUE_PATTERN)
-]
+KafkaGroupSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.GROUP_VALIDATION]
 
-# Schema
-_SCHEMA_PATTERN = r".+"
-SchemaSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_SCHEMA_PATTERN)],
-]
+SchemaSpec: TypeAlias = Annotated[str, _validation.SCHEMA_VALIDATION]
 
-# Topic name -- Kafka topics permit a wide alphabet, validation is
-# left to the broker on subscribe.
-_TOPIC_PATTERN = r".+"
-KafkaTopicSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_TOPIC_PATTERN)],
-]
+KafkaTopicSpec: TypeAlias = Annotated[str, _validation.TOPIC_VALIDATION]
 
 
 # --- KafkaStreamSrcConn ------------------------------------------------------
@@ -294,7 +271,7 @@ SrcCfgKey: TypeAlias = Literal[
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

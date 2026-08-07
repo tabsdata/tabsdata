@@ -19,30 +19,26 @@ from pydantic import AfterValidator, model_validator
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.conn.common.error import ConnErrorCode
+from tabsdatak.error import ConstraintError
 
 # --- FQN syntax + helpers --------------------------------------------
 
 
-def _validate_nonempty_separator(value: str) -> str:
-    if not value:
-        raise ValueError("FqnDef.separator must be non-empty")
-    return value
+# Field specs. Per-field non-emptiness rules ride the regular pydantic
+# validation pipeline via ``Annotated[..., _api.ValueConstraints(...)]``
+# instead of a hand-written ``__post_init__``. Cross-field rules
+# (``escape``/``outer_only`` each requiring ``quote``) live in
+# ``FqnDef._check_dependencies`` because pydantic field annotations only
+# see one field at a time.
+SEPARATOR_VALIDATION = _api.ValueConstraints(
+    _api.Rule.length(ConnErrorCode.CONN_26, min_len=1)
+)
+QUOTE_VALIDATION = _api.ValueConstraints(
+    _api.Rule.length(ConnErrorCode.CONN_27, min_len=1)
+)
 
-
-def _validate_nonempty_quote(value: str) -> str:
-    if not value:
-        raise ValueError("FqnDef.quote, when set, must be non-empty")
-    return value
-
-
-# Field specs. Per-field non-emptiness rules are enforced via
-# ``Annotated[..., AfterValidator(...)]`` so the regular pydantic
-# validation pipeline carries them, instead of a hand-written
-# ``__post_init__``. Cross-field rules (``escape``/``outer_only`` each
-# requiring ``quote``) live in ``FqnDef._check_dependencies`` because
-# pydantic field annotations only see one field at a time.
-SeparatorSpec: TypeAlias = Annotated[str, AfterValidator(_validate_nonempty_separator)]
-QuoteSpec: TypeAlias = Annotated[str, AfterValidator(_validate_nonempty_quote)]
+SeparatorSpec: TypeAlias = Annotated[str, SEPARATOR_VALIDATION]
+QuoteSpec: TypeAlias = Annotated[str, QUOTE_VALIDATION]
 
 
 @_api.dataclass(ConnErrorCode.CONN_9, kw_only=True)
@@ -416,34 +412,37 @@ def _split_quoted(
             raise ValueError(f"unfqn: trailing separator in FQN: {value!r}")
 
 
-def name_validate(fqn_def: FqnDef, max_parts: int) -> AfterValidator:
-    """Build a pydantic :class:`AfterValidator` for FQN-shaped string
-    fields.
+def name_validate(
+    fqn_def: FqnDef,
+    max_parts: int,
+    syntax: str = "SQL",
+) -> _api.ValueConstraints:
+    """Build the :class:`~tabsdatak._api.ValueConstraints` for an
+    FQN-shaped string field.
 
-    The returned validator runs :func:`unfqn` against ``fqn_def`` to
-    confirm the value parses as a valid FQN in the target syntax, then
-    bounds the number of parts by ``max_parts``. Use it directly in an
+    The rules run :func:`unfqn` against ``fqn_def`` to confirm the value
+    parses as an FQN in the target syntax (``CONN_30``), then bound the
+    number of parts by ``max_parts`` (``CONN_29``). Use directly in an
     :class:`Annotated` type alias::
 
         DatabricksTableNameSpec: TypeAlias = Annotated[
             str,
-            _validation.name_validate(DBX_FQN_DEF, max_parts=3),
+            _validation.name_validate(DBX_FQN_DEF, max_parts=3, syntax="Databricks"),
         ]
 
-    Each call returns a fresh ``AfterValidator``; reuse the alias (or
-    bind the validator to a module-level constant) rather than rebuilding
-    it on every field.
+    Each call builds fresh rules; reuse the alias (or bind the result to a
+    module-level constant) rather than rebuilding it on every field.
 
     Args:
         fqn_def: the FQN syntax (separator / quote / escape /
             ``outer_only``) the value must conform to.
         max_parts: maximum number of parts the value may contain
             (inclusive, must be a positive integer).
+        syntax: the system name reported in the syntax-error message.
 
     Returns:
-        An :class:`AfterValidator` wrapping a closure that raises
-        ``ValueError`` either on a syntax error (via :func:`unfqn`) or
-        when the value exceeds ``max_parts`` parts.
+        A :class:`~tabsdatak._api.ValueConstraints` gating FQN syntax and
+        part count, each rule carrying its own error code.
 
     Raises:
         ValueError: ``max_parts`` is non-positive.
@@ -453,15 +452,41 @@ def name_validate(fqn_def: FqnDef, max_parts: int) -> AfterValidator:
             f"name_validate: max_parts must be a positive integer: {max_parts!r}"
         )
 
-    def _validate(value: str) -> str:
-        parts = unfqn(value, fqn_def)
-        if len(parts) > max_parts:
-            raise ValueError(
-                f"name has {len(parts)} parts, exceeds max_parts={max_parts}: {value!r}"
-            )
-        return value
+    def _parts(value: str) -> list[str | None] | None:
+        try:
+            return unfqn(value, fqn_def)
+        except ValueError:
+            return None
 
-    return AfterValidator(_validate)
+    def _syntax_detail(value: str) -> dict[str, Any]:
+        try:
+            unfqn(value, fqn_def)
+        except ValueError as e:
+            # Strip `unfqn`'s own "unfqn: " prefix; the code supplies the
+            # context, the cause supplies only the reason.
+            return {
+                "value": value,
+                "syntax": syntax,
+                "reason": str(e).removeprefix("unfqn: "),
+            }
+        return {"value": value, "syntax": syntax, "reason": ""}
+
+    return _api.ValueConstraints(
+        _api.Rule(
+            ConnErrorCode.CONN_30,
+            lambda value: _parts(value) is not None,
+            _syntax_detail,
+        ),
+        _api.Rule(
+            ConnErrorCode.CONN_29,
+            lambda value: len(_parts(value) or ()) <= max_parts,
+            lambda value: {
+                "value": value,
+                "parts": len(_parts(value) or ()),
+                "max_parts": max_parts,
+            },
+        ),
+    )
 
 
 # --- FQN splitting helpers -------------------------------------------
@@ -556,14 +581,17 @@ def check_basic(value: Any, *, path: str) -> None:
     if isinstance(value, dict):
         for k, v in value.items():
             if not isinstance(k, str):
-                raise ValueError(
-                    f"conn_cfg has non-str key of type {type(k).__name__} at {path!r}"
+                raise ConstraintError(
+                    ConnErrorCode.CONN_31,
+                    path=repr(path) if path else "<root>",
+                    type=type(k).__name__,
                 )
             check_basic(v, path=f"{path}.{k}" if path else k)
         return
-    raise ValueError(
-        f"conn_cfg has non-basic value of type "
-        f"{type(value).__name__} at {path or '<root>'!r}"
+    raise ConstraintError(
+        ConnErrorCode.CONN_32,
+        path=repr(path) if path else "<root>",
+        type=type(value).__name__,
     )
 
 
@@ -574,7 +602,7 @@ def validate_conn_cfg(value: dict | None) -> dict | None:
     return value
 
 
-CONN_CFG_VALIDATOR = AfterValidator(validate_conn_cfg)
+CONN_CFG_VALIDATION = AfterValidator(validate_conn_cfg)
 
 
 # --- entity_whitelist ------------------------------------------------
@@ -594,11 +622,122 @@ def validate_entity_whitelist(value: list[str] | None) -> list[str] | None:
         try:
             re.compile(pattern)
         except re.error as e:
-            raise ValueError(
-                f"entity_whitelist contains invalid regex at index {i}: "
-                f"{pattern!r}: {e}"
+            # A per-entry rule on a list field: ``ValueConstraints`` gates
+            # text, so the coded error is raised directly here.
+            raise ConstraintError(
+                ConnErrorCode.CONN_28, index=i, value=pattern, reason=str(e)
             ) from e
     return value
 
 
-ENTITY_WHITELIST_VALIDATOR = AfterValidator(validate_entity_whitelist)
+ENTITY_WHITELIST_VALIDATION = AfterValidator(validate_entity_whitelist)
+
+
+# --- Shared field-value rules ----------------------------------------
+#
+# The rules behind the cross-connector field specs in ``types.py``. Each
+# pattern sits with the ``ValueConstraints`` that binds it to an error
+# code; ``types.py`` annotates the matching spec with the constraints, so
+# one rule gates a plain string and a ``Secret``'s hydrated value alike.
+
+
+# The cloud connectors' `base_path` denotes a "folder" (object-key
+# prefix) from the container / bucket root. It is spelled absolute-looking
+# for a consistent UX -- starts with `/`, never ends with one (other than
+# the bare root `/`), no empty segments (no `//`) -- but the leading `/`
+# is trimmed when composing the actual object key (`cloud_full_path` /
+# `normalize_dir_path` do the trimming). Backslash and NUL are forbidden.
+# pydantic_core's regex engine has no lookaround, so the rule is spelled
+# out structurally: a leading `/` followed by zero or more `/`-separated
+# segments, each a run of one or more chars that are not `/`, `\` or NUL;
+# the bare `/` root is allowed. Defaults to `/`.
+_CLOUD_RELATIVE_PATH_RE_STR = r"^/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?$"
+
+CLOUD_RELATIVE_PATH_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(_CLOUD_RELATIVE_PATH_RE_STR, ConnErrorCode.CONN_17)
+)
+
+# The local-filesystem connectors' `base_path` is a real absolute path on
+# the host, so it accepts two shapes: a POSIX absolute path (`/a/b`) or a
+# Windows drive-absolute path (`C:/a/b` or `C:\a\b`, either separator).
+# UNC paths (`\\host\share`) and relative paths are rejected. No empty
+# segments and no NUL in either shape. The Windows branch mirrors the
+# POSIX one: a drive letter, a separator, then zero or more `/`- or `\`-
+# separated non-empty segments.
+_LOCAL_ABSOLUTE_PATH_RE_STR = (
+    r"^(?:/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?"
+    r"|[A-Za-z]:[/\\](?:[^/\\\x00]+(?:[/\\][^/\\\x00]+)*)?)$"
+)
+
+LOCAL_ABSOLUTE_PATH_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(_LOCAL_ABSOLUTE_PATH_RE_STR, ConnErrorCode.CONN_18)
+)
+
+# S3 bucket: 3-63 chars, lowercase letters / digits / hyphens, start
+# and end alphanumeric. (Doesn't capture the imperative reserved-prefix
+# / reserved-suffix / IPv4 checks the cloud provider enforces server-
+# side anyway.)
+_S3_BUCKET_RE_STR = r"^(?:[a-z0-9][a-z0-9-]{1,61}[a-z0-9])$"
+
+S3_BUCKET_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(_S3_BUCKET_RE_STR, ConnErrorCode.CONN_19)
+)
+
+# AWS region: `us-east-1` / `us-gov-west-1` style.
+_AWS_REGION_RE_STR = r"^(?:[a-z]{2}(?:-[a-z]+)+-\d+)$"
+
+AWS_REGION_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(_AWS_REGION_RE_STR, ConnErrorCode.CONN_20)
+)
+
+# GCS bucket: same length / charset rules as S3 plus underscore.
+# Doesn't capture the imperative `goog` prefix / Google-misspelling
+# reserved-substring checks.
+_GCS_BUCKET_RE_STR = r"^(?:[a-z0-9][a-z0-9_-]{1,61}[a-z0-9])$"
+
+GCS_BUCKET_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(_GCS_BUCKET_RE_STR, ConnErrorCode.CONN_21)
+)
+
+# Azure container: lowercase alphanumeric / single hyphens (no
+# leading, trailing, or consecutive hyphens), 3-63 chars. Encoded
+# without lookahead (pydantic_core's regex engine doesn't support it):
+# every char after the first is either alphanumeric, or a single hyphen
+# *followed by* an alphanumeric -- so consecutive / trailing hyphens
+# never match.
+_AZ_CONTAINER_RE_STR = r"^(?:[a-z0-9](?:-?[a-z0-9]){2,62})$"
+
+AZ_CONTAINER_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(_AZ_CONTAINER_RE_STR, ConnErrorCode.CONN_22)
+)
+
+# A DNS hostname or IPv4 literal: dot-separated labels of alphanumerics with
+# internal (not leading / trailing) hyphens. Covers `localhost`,
+# `db.example.com`, `10.0.0.1`. Read the value with `_convert(x, str)`.
+_HOST_RE_STR = (
+    r"^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?"
+    r"(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$"
+)
+
+HOST_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(_HOST_RE_STR, ConnErrorCode.CONN_23)
+)
+
+# A TCP port, 1-65535. The value carries no type on the wire (it is a `str`
+# or a secret), so the rule is the parse itself -- the same coercion
+# `_convert(x, int)` performs at read time, bounded to the port range.
+# `canonical` keeps the coercions pydantic would otherwise allow ("0080",
+# " 80", "+80", "8.0") out.
+
+PORT_VALIDATION = _api.ValueConstraints(
+    _api.Rule.parses_as(int, ConnErrorCode.CONN_24, ge=1, le=65535, canonical=True)
+)
+
+# A boolean flag as text (the value is a `str` or a secret on the wire).
+# The rule is the parse itself, so the accepted tokens are exactly the ones
+# `_convert(x, bool)` understands at read time rather than a regex
+# restating them.
+
+BOOL_VALIDATION = _api.ValueConstraints(
+    _api.Rule.parses_as(bool, ConnErrorCode.CONN_25)
+)

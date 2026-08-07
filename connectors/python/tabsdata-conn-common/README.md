@@ -28,7 +28,7 @@ Shared connector building blocks:
 * `tabsdatak.conn.common_error` — `ConnErrorCode` enum (used by the
   shared validators and cloud-location dataclasses) and the connector
   exception hierarchy (`ConnException` base; `ConnParamTypeException`
-  for pydantic init / `AfterValidator` failures;
+  for pydantic init / `ValueConstraints` failures;
   `ConnValidateException` for cross-field `validate(self)` failures).
 
 Connector-specific types, validators, and error codes belong in the

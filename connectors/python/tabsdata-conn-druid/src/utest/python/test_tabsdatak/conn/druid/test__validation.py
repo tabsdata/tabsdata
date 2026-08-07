@@ -8,6 +8,8 @@ import re
 
 import pytest
 
+from tabsdatak.error import ConstraintError
+
 from tabsdatak.conn.common.error import ConnInitException
 # noinspection PyProtectedMember
 from tabsdatak.conn.druid import _validation
@@ -24,28 +26,28 @@ pytestmark = pytest.mark.druid
 
 @pytest.mark.parametrize("value", ["events", "metrics_v1", pytest.param("a" * 128, id="a128")])
 def test_validate_datasource_accepts_valid(value):
-    assert _validation._validate_datasource(value) == value
+    assert _validation.DATASOURCE_VALIDATION.validate(value) == value
 
 
 @pytest.mark.parametrize("value", ["", pytest.param("a" * 129, id="a129")])
 def test_validate_datasource_rejects_bad_length(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_datasource(value)
-    assert ei.value.api_error is DruidErrorCode.DRUID_3
+    with pytest.raises(ConstraintError) as ei:
+        _validation.DATASOURCE_VALIDATION.validate(value)
+    assert ei.value.code is DruidErrorCode.DRUID_3
 
 
 @pytest.mark.parametrize("value", [".hidden", "_hidden"])
 def test_validate_datasource_rejects_leading_dot_or_underscore(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_datasource(value)
-    assert ei.value.api_error is DruidErrorCode.DRUID_4
+    with pytest.raises(ConstraintError) as ei:
+        _validation.DATASOURCE_VALIDATION.validate(value)
+    assert ei.value.code is DruidErrorCode.DRUID_4
 
 
 @pytest.mark.parametrize("value", ["bad/name", "bad\\name", "bad\x00name"])
 def test_validate_datasource_rejects_forbidden_char(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_datasource(value)
-    assert ei.value.api_error is DruidErrorCode.DRUID_5
+    with pytest.raises(ConstraintError) as ei:
+        _validation.DATASOURCE_VALIDATION.validate(value)
+    assert ei.value.code is DruidErrorCode.DRUID_5
 
 
 # ---------------------------------------------------------------------------

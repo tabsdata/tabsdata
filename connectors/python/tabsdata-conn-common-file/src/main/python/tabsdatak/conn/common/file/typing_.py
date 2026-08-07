@@ -36,7 +36,7 @@ from tabsdatak.conn.common.file import _validation
 # --- Path / format-cfg type aliases ---------------------------------
 
 
-SrcPathNameSpec: TypeAlias = Annotated[str, _validation.SRC_PATH_VALIDATOR]
+SrcPathNameSpec: TypeAlias = Annotated[str, _validation.SRC_PATH_VALIDATION]
 """A single source path, relative to the connection's `base_path`: it
 must not start with `/` (it is relative, not absolute), end with `/`,
 or contain empty segments (`//`). May use a `*` glob in its final
@@ -45,7 +45,7 @@ SrcPathsSpec: TypeAlias = list[SrcPathNameSpec]
 """List of source paths, one output slot per entry (each entry follows
 `SrcPathNameSpec`)."""
 
-DestPathNameSpec: TypeAlias = Annotated[str, _validation.DEST_PATH_VALIDATOR]
+DestPathNameSpec: TypeAlias = Annotated[str, _validation.DEST_PATH_VALIDATION]
 """A single destination path, relative to the connection's `base_path`:
 it must not start with `/` (it is relative, not absolute), end with
 `/`, or contain empty segments (`//`). Globs are not allowed;

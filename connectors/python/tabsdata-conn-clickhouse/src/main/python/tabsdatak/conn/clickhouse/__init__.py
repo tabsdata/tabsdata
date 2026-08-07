@@ -72,7 +72,6 @@ from tabsdatak.conn.common.types import (
     HostSpec,
     PortSpec,
     S3BucketSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -89,14 +88,13 @@ CredentialsSpec: TypeAlias = UserPassword
 # `tabsdatak.conn.common.types` (HostSpec / PortSpec / BoolSpec). Read
 # their parsed values through the `_host` / `_port` / `_secure` getters.
 
-# Database: ClickHouse identifier shape (alphanumeric + underscore).
-_IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
 DatabaseSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_IDENTIFIER_PATTERN)
+    StrOrSecretSpec,
+    _validation.IDENTIFIER_VALIDATION,
 ]
 ClickHouseTableNameSpec: TypeAlias = Annotated[
     str,
-    _validation.CLICKHOUSE_TABLE_FQN_VALIDATOR,
+    _validation.CLICKHOUSE_TABLE_FQN_VALIDATION,
 ]
 ClickHouseTableNamesSpec: TypeAlias = list[ClickHouseTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -108,12 +106,12 @@ SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 # Restricts `ClickHouseDest.dest_cfg` to the keys the destination
 # plugin actually consumes. Pydantic enforces the literal membership
 # of keys at validation time, so unknown keys are rejected at
-# construction; `CONN_CFG_VALIDATOR` reuses the conn_cfg basic-value
+# construction; `CONN_CFG_VALIDATION` reuses the conn_cfg basic-value
 # checks (str/int/float/bool/None, plus list/dict compositions).
 DestCfgKey: TypeAlias = Literal["clickhouse.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

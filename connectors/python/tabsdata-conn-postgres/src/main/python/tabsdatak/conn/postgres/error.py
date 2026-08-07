@@ -115,3 +115,10 @@ class PostgresErrorCode(ErrorCode):
         "Postgres wal2json: pending transaction never committed "
         "(xid={xid!r}); slot may be stuck",
     )  # poll_changes_v2: COMMIT timed out
+
+    # --- Field-value rules (tabsdatak.conn.postgres) ----------------
+    POSTGRES_19 = ErrorDef(
+        ConnInitException,
+        "Postgres URI must start with postgres:// or postgresql:// (optionally "
+        "with a +driver suffix): {value!r}",
+    )  # UriSpec

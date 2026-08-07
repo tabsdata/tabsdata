@@ -17,12 +17,10 @@ from tabsdatak.dataquality._classifier import Classifier
 from tabsdatak.dataquality._error import DataQualityErrorCode
 from tabsdatak.dataquality._operator import Operator
 
-ClassifiersSpec: TypeAlias = Annotated[
-    list[Classifier], _api.NON_EMPTY_LIST_CONSTRAINTS
-]
+ClassifiersSpec: TypeAlias = Annotated[list[Classifier], _api.NON_EMPTY_LIST_FIELD]
 """A non-empty list of `Classifier` instances."""
 
-OperatorsSpec: TypeAlias = Annotated[list[Operator], _api.NON_EMPTY_LIST_CONSTRAINTS]
+OperatorsSpec: TypeAlias = Annotated[list[Operator], _api.NON_EMPTY_LIST_FIELD]
 """A non-empty list of `Operator` instances."""
 
 

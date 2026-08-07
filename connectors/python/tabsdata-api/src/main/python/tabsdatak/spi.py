@@ -223,7 +223,7 @@ class SrcPlugin[C: Conn, S: Src](ABC):
     # if TableMode is SINGLE, inner list must always have 1 element.
 
 
-FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTRAINTS]
+FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_FIELD]
 
 # `arbitrary_types_allowed=True` escape hatch for the `SrcDef` /
 # `StreamSrcDef` / `DestDef` dataclasses below, whose `Type[...]`

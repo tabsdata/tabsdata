@@ -132,3 +132,18 @@ class KafkaErrorCode(ErrorCode):
         ConnInitException,
         "KafkaConnMetaModel validation failed",
     )  # KafkaConnMetaModel
+
+    # --- Field-value rules (tabsdatak.conn.kafka) -------------------
+    # Kafka's alphabets are broad and the broker is the real authority, so
+    # these fields are gated only on being non-empty. The registry-facing
+    # specs carry no rule at all (see the aliases in `__init__`).
+    KAFKA_21 = ErrorDef(
+        ConnInitException, "Kafka bootstrap servers must be non-empty"
+    )  # KafkaServersSpec
+    KAFKA_22 = ErrorDef(
+        ConnInitException, "Kafka consumer group must be non-empty"
+    )  # KafkaGroupSpec
+    KAFKA_23 = ErrorDef(ConnInitException, "schema must be non-empty")  # SchemaSpec
+    KAFKA_24 = ErrorDef(
+        ConnInitException, "Kafka topic must be non-empty"
+    )  # KafkaTopicSpec

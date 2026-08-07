@@ -95,3 +95,24 @@ class DatabricksErrorCode(ErrorCode):
         " the column(s) {columns}. Cast them before writing -- for example to"
         " a timestamp or a string",
     )  # write_all_tables: parquet TIME column, rejected before uploading
+
+    # --- Field-value rules (tabsdatak.conn.databricks) --------------
+    DATABRICKS_14 = ErrorDef(
+        ConnInitException,
+        "not a valid Databricks identifier (up to 255 chars, letters, digits, "
+        "underscore and hyphen, or a backtick-quoted name): {value!r}",
+    )  # IdentifierSpec
+    DATABRICKS_15 = ErrorDef(
+        ConnInitException,
+        "not a valid Databricks warehouse name (1-100 chars, no leading or "
+        "trailing whitespace, no control characters): {value!r}",
+    )  # WarehouseSpec
+    DATABRICKS_16 = ErrorDef(
+        ConnInitException,
+        "not a valid Databricks warehouse id (16 lowercase hex chars): {value!r}",
+    )  # WarehouseIdSpec
+    DATABRICKS_17 = ErrorDef(
+        ConnInitException,
+        "not a valid Databricks qualified name (1 to 3 dot-separated identifier "
+        "parts, e.g. 'catalog.schema.volume'): {value!r}",
+    )  # VolumeSpec

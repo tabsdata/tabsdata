@@ -83,7 +83,6 @@ from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
     EntityWhitelistSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -101,7 +100,8 @@ CredentialsSpec: TypeAlias = UserPassword
 + password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
+    StrOrSecretSpec,
+    _validation.URI_VALIDATION,
 ]
 """A SQLAlchemy-style Postgres URI, e.g.
 `postgres+psycopg2://host:port/db`. The scheme must be `postgres` or
@@ -114,7 +114,7 @@ query."""
 
 PostgresTableNameSpec: TypeAlias = Annotated[
     str,
-    _validation.POSTGRES_TABLE_FQN_VALIDATOR,
+    _validation.POSTGRES_TABLE_FQN_VALIDATION,
 ]
 """A Postgres table name -- `table`, `schema.table` or
 `database.schema.table` (at most three dot-separated parts). Parts may
@@ -137,7 +137,7 @@ SrcCfgKey: TypeAlias = Literal[
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -149,7 +149,7 @@ DestCfgKey: TypeAlias = Literal[
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -418,7 +418,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[
-    Mapping[CdcSrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[CdcSrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

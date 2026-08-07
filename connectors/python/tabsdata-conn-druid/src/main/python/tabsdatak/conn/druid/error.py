@@ -84,3 +84,9 @@ class DruidErrorCode(ErrorCode):
         ConnInitException,
         "Cannot create GCSLocation",
     )  # reserved: GCSLocation is commented out in __init__.py (no GCS staging)
+
+    # --- Field-value rules (tabsdatak.conn.druid) -------------------
+    DRUID_15 = ErrorDef(
+        ConnInitException,
+        "Druid URL must be an http:// or https:// URL: {value!r}",
+    )  # UrlSpec

@@ -282,9 +282,9 @@ def _pattern_of(ann: Any) -> Optional[str]:
 def _field_pattern(fi: Any) -> Optional[str]:
     """The regex a field advertises for the wizard prompt. Checks the
     annotation's inline ``Annotated`` metadata first, then the field-level
-    metadata -- where ``StrOrSecretConstraints`` (and a plain field's
-    ``StringConstraints``) end up once pydantic peels the outer
-    ``Annotated`` off ``fi.annotation``."""
+    metadata -- where a field's ``ValueConstraints`` ends up once pydantic
+    peels the outer ``Annotated`` off ``fi.annotation``. Only regex-shaped
+    rules advertise a pattern; the rules themselves remain the contract."""
     pat = _pattern_of(fi.annotation)
     if pat is not None:
         return pat

@@ -4,70 +4,38 @@
 
 from __future__ import annotations
 
-import re
-
-from pydantic import AfterValidator
-
+# noinspection PyProtectedMember
+import tabsdatak._api as _api
 from tabsdatak.conn.salesforce.error import SalesforceErrorCode
 
 # --- API name -------------------------------------------------------
 
 
-_API_NAME_RE = re.compile(
-    r"[A-Za-z](?:[A-Za-z0-9]|_(?=[A-Za-z0-9]))*"
-    r"(?:__[cr])?"
+_API_NAME_PATTERN = r"[A-Za-z](?:[A-Za-z0-9]|_(?=[A-Za-z0-9]))*(?:__[cr])?"
+
+API_NAME_VALIDATION = _api.ValueConstraints(
+    _api.Rule.length(SalesforceErrorCode.SALESFORCE_5, min_len=1, max_len=80),
+    _api.Rule.matches(_API_NAME_PATTERN, SalesforceErrorCode.SALESFORCE_8),
 )
-
-
-def _validate_api_name(value: str) -> str:
-    if not (1 <= len(value) <= 80):
-        # noinspection PyProtectedMember
-        raise SalesforceErrorCode.SALESFORCE_5.exception(length=len(value), value=value)
-    if not _API_NAME_RE.fullmatch(value):
-        # noinspection PyProtectedMember
-        raise SalesforceErrorCode.SALESFORCE_8.exception(value=value)
-    return value
-
-
-API_NAME_VALIDATOR = AfterValidator(_validate_api_name)
 
 
 # --- Instance URL ----------------------------------------------------
 
-
-_INSTANCE_URL_RE = re.compile(
+# One spelling of the rule: `InstanceUrlSpec` applies it to both arms of its
+# str-or-secret union.
+INSTANCE_URL_PATTERN = (
     r"https://[A-Za-z0-9][A-Za-z0-9.-]*"
     r"\.(?:salesforce|force|cloudforce|salesforce-setup)\.com/?"
 )
 
-
-def _validate_instance_url(value: str) -> str:
-    if not _INSTANCE_URL_RE.fullmatch(value):
-        # noinspection PyProtectedMember
-        raise SalesforceErrorCode.SALESFORCE_6.exception(value=value)
-    return value
-
-
-INSTANCE_URL_VALIDATOR = AfterValidator(_validate_instance_url)
-
-# Pure-regex equivalent for use as ``value_pattern``.
-INSTANCE_URL_PATTERN = (
-    r"^(?:https://[A-Za-z0-9][A-Za-z0-9.-]*"
-    r"\.(?:salesforce|force|cloudforce|salesforce-setup)\.com/?)$"
+INSTANCE_URL_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(INSTANCE_URL_PATTERN, SalesforceErrorCode.SALESFORCE_6)
 )
 
 
 # --- API version -----------------------------------------------------
 
 
-_API_VERSION_RE = re.compile(r"\d{1,3}\.\d{1,2}")
-
-
-def _validate_api_version(value: str) -> str:
-    if not _API_VERSION_RE.fullmatch(value):
-        # noinspection PyProtectedMember
-        raise SalesforceErrorCode.SALESFORCE_7.exception(value=value)
-    return value
-
-
-API_VERSION_VALIDATOR = AfterValidator(_validate_api_version)
+API_VERSION_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(r"\d{1,3}\.\d{1,2}", SalesforceErrorCode.SALESFORCE_7)
+)

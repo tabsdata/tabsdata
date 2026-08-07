@@ -5,7 +5,11 @@
 from __future__ import annotations
 
 # noinspection PyProtectedMember
+import tabsdatak._api as _api
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.mssql.error import MssqlErrorCode
 
 # --- URI / ODBC connection string -----------------------------------
 #
@@ -18,9 +22,14 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 #   ``DRIVER={...};SERVER=...;DATABASE=...``. The adapter wraps it
 #   as ``mssql+pyodbc:///?odbc_connect=<urlencoded>``.
 #
-# Pattern gating ``UriSpec`` via ``StrOrSecretConstraints`` -- enforced on
-# a plain-string URI and on a ``Secret``'s hydrated URI value alike.
+# Pattern gating ``UriSpec`` -- one spelling of the rule, enforced on a
+# plain-string URI and on a ``Secret``'s hydrated URI value alike.
 MSSQL_URI_PATTERN = r"(?i)^(?:(?:mssql(?:\+[a-z0-9]+)?://.*|[A-Za-z][A-Za-z0-9 ]*=.+))$"
+
+MSSQL_URI_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(MSSQL_URI_PATTERN, MssqlErrorCode.MSSQL_10)
+)
+
 # --- Table FQN ------------------------------------------------------
 
 # MSSQL tables can be 1-, 2-, or 3-part: ``table``, ``schema.table``
@@ -36,4 +45,4 @@ _MSSQL_FQN_DEF = FqnDef(
 )
 
 # Validator for the ``MSSQLTableNameSpec`` field.
-MSSQL_TABLE_FQN_VALIDATOR = name_validate(_MSSQL_FQN_DEF, max_parts=3)
+MSSQL_TABLE_FQN_VALIDATION = name_validate(_MSSQL_FQN_DEF, max_parts=3, syntax="MSSQL")

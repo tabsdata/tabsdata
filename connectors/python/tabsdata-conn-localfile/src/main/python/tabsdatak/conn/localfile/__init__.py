@@ -67,7 +67,7 @@ from tabsdatak.spi import Conn
 SrcCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -75,7 +75,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 DestCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

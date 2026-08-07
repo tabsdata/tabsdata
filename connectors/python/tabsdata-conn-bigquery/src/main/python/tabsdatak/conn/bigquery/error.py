@@ -69,3 +69,15 @@ class BigQueryErrorCode(ErrorCode):
         ConnInitException,
         "Cannot create GCSLocation",
     )  # GCSLocation
+
+    # --- Field-value rules (tabsdatak.conn.bigquery) ----------------
+    BIGQUERY_9 = ErrorDef(
+        ConnInitException,
+        "not a valid BigQuery project id (6-30 chars, lowercase letters, digits "
+        "and hyphens, starting with a letter and ending alphanumeric): {value!r}",
+    )  # ProjectSpec
+    BIGQUERY_10 = ErrorDef(
+        ConnInitException,
+        "not a valid BigQuery dataset id (1-1024 chars, ASCII letters, digits "
+        "and underscores): {value!r}",
+    )  # DatasetSpec

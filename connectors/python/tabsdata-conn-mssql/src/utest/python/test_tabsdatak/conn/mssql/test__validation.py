@@ -8,6 +8,8 @@ import re
 
 import pytest
 
+from tabsdatak.error import ConstraintError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.mssql import _validation
 
@@ -69,17 +71,17 @@ def test_mssql_uri_pattern_rejects_invalid(value):
     ],
 )
 def test_mssql_table_fqn_validator_accepts_valid(value):
-    assert _validation.MSSQL_TABLE_FQN_VALIDATOR.func(value) == value
+    assert _validation.MSSQL_TABLE_FQN_VALIDATION.validate(value) == value
 
 
 def test_mssql_table_fqn_validator_rejects_too_many_parts():
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        _validation.MSSQL_TABLE_FQN_VALIDATOR.func("a.b.c.d")
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
+        _validation.MSSQL_TABLE_FQN_VALIDATION.validate("a.b.c.d")
 
 
 def test_mssql_table_fqn_validator_rejects_unterminated_bracket():
-    with pytest.raises(ValueError, match="unterminated quoted identifier"):
-        _validation.MSSQL_TABLE_FQN_VALIDATOR.func("[db.users")
+    with pytest.raises(ConstraintError, match="unterminated quoted identifier"):
+        _validation.MSSQL_TABLE_FQN_VALIDATION.validate("[db.users")
 
 
 def test_mssql_table_fqn_validator_double_quoted_form_no_longer_unwrapped():
@@ -87,8 +89,8 @@ def test_mssql_table_fqn_validator_double_quoted_form_no_longer_unwrapped():
     # legacy double-quoted form (``"name"``) is no longer treated as a
     # quoted identifier. The dots inside still drive splitting, so a
     # 4-segment value like ``"a.b.c.d"`` overflows max_parts=3.
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        _validation.MSSQL_TABLE_FQN_VALIDATOR.func('"a.b.c.d"')
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
+        _validation.MSSQL_TABLE_FQN_VALIDATION.validate('"a.b.c.d"')
 
 
 def test_mssql_fqn_def_uses_brackets_with_doubled_close_escape():

@@ -54,7 +54,6 @@ from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
     EntityWhitelistSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -72,12 +71,13 @@ CredentialsSpec: TypeAlias = UserPassword
 password)."""
 
 UriSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.MSSQL_URI_PATTERN)
+    StrOrSecretSpec,
+    _validation.MSSQL_URI_VALIDATION,
 ]
 QueriesSpec: TypeAlias = list[str]
 MSSQLTableNameSpec: TypeAlias = Annotated[
     str,
-    _validation.MSSQL_TABLE_FQN_VALIDATOR,
+    _validation.MSSQL_TABLE_FQN_VALIDATION,
 ]
 MSSQLTableNamesSpec: TypeAlias = list[MSSQLTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -91,7 +91,7 @@ SrcCfgKey: TypeAlias = Literal[
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -103,7 +103,7 @@ DestCfgKey: TypeAlias = Literal[
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

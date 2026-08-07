@@ -62,9 +62,13 @@ def test_dataclass_tag_codes_carry_a_cannot_create_message(monkeypatch):
 def test_codes_have_expected_names_with_intentional_gap():
     # Four credential dataclass-tag codes (CONN_1..CONN_4), CONN_8 for
     # the ``get_cfg`` invalid-value path, CONN_9 for ``FqnDef``,
-    # CONN_10 for ``GCPHmac``, and CONN_11..CONN_16 for the explorer
+    # CONN_10 for ``GCPHmac``, CONN_11..CONN_16 for the explorer
     # meta-model types (Column, ReportingEntity, ObjectsEntity,
-    # ReportingConnMetaModel, ObjectsConnMetaModel, Property).
+    # ReportingConnMetaModel, ObjectsConnMetaModel, Property), and
+    # CONN_17..CONN_30 for the shared field-value rules -- one code per
+    # spec in ``types.py`` plus the two FQN rules ``name_validate``
+    # builds -- and CONN_31 / CONN_32 for the two ways a cfg tree can
+    # break the JSON-like value rule.
     # CONN_5..CONN_7 were intentionally retired with the CloudLocation
     # move into the per-connector packages; the gap is preserved so
     # callers that still imported the conn-common variants surface
@@ -84,4 +88,20 @@ def test_codes_have_expected_names_with_intentional_gap():
         "CONN_14",
         "CONN_15",
         "CONN_16",
+        "CONN_17",
+        "CONN_18",
+        "CONN_19",
+        "CONN_20",
+        "CONN_21",
+        "CONN_22",
+        "CONN_23",
+        "CONN_24",
+        "CONN_25",
+        "CONN_26",
+        "CONN_27",
+        "CONN_28",
+        "CONN_29",
+        "CONN_30",
+        "CONN_31",
+        "CONN_32",
     ]

@@ -8,6 +8,7 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _validation
 from tabsdatak.conn.common.error import ConnException, ConnInitException
+from tabsdatak.error import ConstraintError
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 
@@ -16,129 +17,129 @@ from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 
 
 def test_src_path_accepts_simple_name():
-    assert _validation.validate_src_path("data.csv") == "data.csv"
+    assert _validation.SRC_PATH_VALIDATION.validate("data.csv") == "data.csv"
 
 
 def test_src_path_accepts_glob_in_basename():
-    assert _validation.validate_src_path("dir/*.csv") == "dir/*.csv"
+    assert _validation.SRC_PATH_VALIDATION.validate("dir/*.csv") == "dir/*.csv"
 
 
 def test_src_path_rejects_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_src_path("")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_1
+    with pytest.raises(ConstraintError) as ei:
+        _validation.SRC_PATH_VALIDATION.validate("")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_1
 
 
 def test_src_path_accepts_backslash_as_separator():
     # A backslash is a valid path separator (normalized per-OS at use time).
-    assert _validation.validate_src_path("dir\\file.csv") == "dir\\file.csv"
+    assert _validation.SRC_PATH_VALIDATION.validate("dir\\file.csv") == "dir\\file.csv"
 
 
 def test_src_path_rejects_dot_segments():
     for value in ("..", "dir/../file.csv", "dir\\..\\file.csv", "./file.csv"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_src_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_3
+        with pytest.raises(ConstraintError) as ei:
+            _validation.SRC_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_3
 
 
 def test_src_path_rejects_token():
     # ${...} substitution tokens are destination-only.
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_src_path("dir/${EXEC_PLAN_ID}.csv")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_4
+    with pytest.raises(ConstraintError) as ei:
+        _validation.SRC_PATH_VALIDATION.validate("dir/${EXEC_PLAN_ID}.csv")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_4
 
 
 def test_src_path_rejects_glob_outside_basename():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_src_path("dir/*/file.csv")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_5
+    with pytest.raises(ConstraintError) as ei:
+        _validation.SRC_PATH_VALIDATION.validate("dir/*/file.csv")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_5
 
 
 def test_src_path_rejects_leading_slash():
     # A source path is relative to the connection's base_path; either
     # separator counts as an (illegal) leading anchor.
     for value in ("/dir/file.csv", "\\dir\\file.csv"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_src_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_22
+        with pytest.raises(ConstraintError) as ei:
+            _validation.SRC_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_22
 
 
 def test_src_path_rejects_trailing_slash():
     for value in ("dir/", "dir\\"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_src_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_23
+        with pytest.raises(ConstraintError) as ei:
+            _validation.SRC_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_23
 
 
 def test_src_path_rejects_double_slash():
     for value in ("dir//file.csv", "dir\\\\file.csv"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_src_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_24
+        with pytest.raises(ConstraintError) as ei:
+            _validation.SRC_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_24
 
 
 # --- dest path ----------------------------------------------------------
 
 
 def test_dest_path_accepts_simple_name():
-    assert _validation.validate_dest_path("out.csv") == "out.csv"
+    assert _validation.DEST_PATH_VALIDATION.validate("out.csv") == "out.csv"
 
 
 def test_dest_path_accepts_known_token():
-    assert _validation.validate_dest_path("out/${EXEC_PLAN_ID}.csv") == "out/${EXEC_PLAN_ID}.csv"
+    assert _validation.DEST_PATH_VALIDATION.validate("out/${EXEC_PLAN_ID}.csv") == "out/${EXEC_PLAN_ID}.csv"
 
 
 def test_dest_path_rejects_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_dest_path("")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_6
+    with pytest.raises(ConstraintError) as ei:
+        _validation.DEST_PATH_VALIDATION.validate("")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_6
 
 
 def test_dest_path_rejects_glob():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_dest_path("out/*.csv")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_9
+    with pytest.raises(ConstraintError) as ei:
+        _validation.DEST_PATH_VALIDATION.validate("out/*.csv")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_9
 
 
 def test_dest_path_rejects_unknown_token():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_dest_path("out/${UNKNOWN_TOKEN}.csv")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_10
+    with pytest.raises(ConstraintError) as ei:
+        _validation.DEST_PATH_VALIDATION.validate("out/${UNKNOWN_TOKEN}.csv")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_10
 
 
 def test_dest_path_accepts_backslash_as_separator():
     # A backslash is a valid path separator (normalized per-OS at use time).
-    assert _validation.validate_dest_path("out\\file.csv") == "out\\file.csv"
+    assert _validation.DEST_PATH_VALIDATION.validate("out\\file.csv") == "out\\file.csv"
 
 
 def test_dest_path_rejects_dot_segments():
     for value in ("..", "out/../file.csv", "out\\..\\file.csv", "./file.csv"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_dest_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_8
+        with pytest.raises(ConstraintError) as ei:
+            _validation.DEST_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_8
 
 
 def test_dest_path_rejects_leading_slash():
     # A destination path is relative to the connection's base_path; either
     # separator counts as an (illegal) leading anchor.
     for value in ("/out/file.csv", "\\out\\file.csv"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_dest_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_25
+        with pytest.raises(ConstraintError) as ei:
+            _validation.DEST_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_25
 
 
 def test_dest_path_rejects_trailing_slash():
     for value in ("out/", "out\\"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_dest_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_26
+        with pytest.raises(ConstraintError) as ei:
+            _validation.DEST_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_26
 
 
 def test_dest_path_rejects_double_slash():
     for value in ("out//file.csv", "out\\\\file.csv"):
-        with pytest.raises(ConnInitException) as ei:
-            _validation.validate_dest_path(value)
-        assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_27
+        with pytest.raises(ConstraintError) as ei:
+            _validation.DEST_PATH_VALIDATION.validate(value)
+        assert ei.value.code is FileCommonErrorCode.FILE_COMMON_27
 
 
 # --- format_cfg ---------------------------------------------------------
@@ -263,15 +264,15 @@ def test_unknown_key_extras_carried_for_programmatic_access():
 
 
 def test_src_path_rejects_null_byte():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_src_path("dir/has\x00null.csv")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_2
+    with pytest.raises(ConstraintError) as ei:
+        _validation.SRC_PATH_VALIDATION.validate("dir/has\x00null.csv")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_2
 
 
 def test_dest_path_rejects_null_byte():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_dest_path("dir/has\x00null.csv")
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_7
+    with pytest.raises(ConstraintError) as ei:
+        _validation.DEST_PATH_VALIDATION.validate("dir/has\x00null.csv")
+    assert ei.value.code is FileCommonErrorCode.FILE_COMMON_7
 
 
 def test_format_cfg_rejects_bad_side():

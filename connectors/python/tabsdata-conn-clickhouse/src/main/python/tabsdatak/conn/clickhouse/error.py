@@ -77,3 +77,10 @@ class ClickHouseErrorCode(ErrorCode):
         ConnInitException,
         "Cannot create GCSLocation",
     )  # GCSLocation (clickhouse-local, GCPHmac credentials)
+
+    # --- Field-value rules (tabsdatak.conn.clickhouse) --------------
+    CLICKHOUSE_11 = ErrorDef(
+        ConnInitException,
+        "not a valid ClickHouse database name (letters, digits and underscores, "
+        "not starting with a digit): {value!r}",
+    )  # DatabaseSpec

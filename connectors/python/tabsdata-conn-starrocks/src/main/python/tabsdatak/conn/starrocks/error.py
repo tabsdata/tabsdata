@@ -74,3 +74,10 @@ class StarRocksErrorCode(ErrorCode):
         ConnInitException,
         "Cannot create GCSLocation",
     )  # GCSLocation
+
+    # --- Field-value rules (tabsdatak.conn.starrocks) ---------------
+    STARROCKS_11 = ErrorDef(
+        ConnInitException,
+        "not a valid StarRocks database name (letters, digits and underscores, "
+        "not starting with a digit): {value!r}",
+    )  # DatabaseSpec

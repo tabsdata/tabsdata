@@ -44,7 +44,6 @@ from tabsdatak.conn.common import _validation as _common_validation
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     CfgSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -62,7 +61,8 @@ CredentialsSpec: TypeAlias = UserPassword
 (user + password / PAT)."""
 
 AccountSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.ACCOUNT_PATTERN)
+    StrOrSecretSpec,
+    _validation.ACCOUNT_VALIDATION,
 ]
 
 
@@ -72,13 +72,14 @@ AccountSpec: TypeAlias = Annotated[
 # follow the same identifier rules.
 
 IdentifierSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.IDENTIFIER_PATTERN)
+    StrOrSecretSpec,
+    _validation.IDENTIFIER_VALIDATION,
 ]
 
 NameSpec: TypeAlias = IdentifierSpec
 SnowflakeTableNameSpec: TypeAlias = Annotated[
     str,
-    _validation.SNOWFLAKE_TABLE_FQN_VALIDATOR,
+    _validation.SNOWFLAKE_TABLE_FQN_VALIDATION,
 ]
 SnowflakeTableNamesSpec: TypeAlias = list[SnowflakeTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -88,7 +89,7 @@ IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 DestCfgKey: TypeAlias = Literal["snowflake.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

@@ -1407,19 +1407,25 @@ def test_secret_field_accepts_hydrated_wire_form():
 
 
 # ===========================================================================
-# SecretValueConstraints -- field-site regex on a Secret's hydrated value.
+# ValueConstraints on a Secret -- field-site rules on the hydrated value.
 #
-# ``Annotated[Secret, SecretValueConstraints(pattern=...)]`` enforces the
-# regex on the secret's *hydrated value*: eagerly at construction (for an
-# inline value or a bare string) and again whenever the runtime
-# re-hydrates the dehydrated marker back into a value. A dehydrated secret
-# carries no value and is left unchecked. The pattern is never serialized.
+# ``Annotated[Secret, ValueConstraints(...)]`` runs the rules against the
+# secret's *hydrated value*: eagerly at construction (for an inline value
+# or a bare string) and again whenever the runtime re-hydrates the
+# dehydrated marker back into a value. A dehydrated secret carries no value
+# and is left unchecked. The rules are never serialized.
+#
+# The same ``ValueConstraints`` object gates a plain ``str`` and both arms
+# of a ``StrOrSecretSpec`` union -- see the union tests below.
 # ===========================================================================
+
+
+_DIGITS = ApiErrorCode.API_24
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _SrcWithConstrainedSecret(Src):
-    s: Annotated[Secret, _api.SecretValueConstraints(pattern=r"\d+")]
+    s: Annotated[Secret, _api.ValueConstraints(_api.Rule.matches(r"\d+", _DIGITS))]
 
 
 @_api.dataclass(ApiErrorCode.API_14)
@@ -1439,7 +1445,10 @@ def test_secret_constraint_accepts_matching_hydrated_value():
 def test_secret_constraint_rejects_violating_hydrated_value():
     with pytest.raises(ApiException) as excinfo:
         _SrcWithConstrainedSecret(s=Secret("nope"))
-    assert excinfo.value.api_error is ApiErrorCode.API_6
+    # The dataclass tag surfaces; the failing rule's own code is rendered
+    # into the message, and pydantic keeps the field location.
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+    assert "s: API-24" in str(excinfo.value)
 
 
 def test_secret_constraint_skips_dehydrated_secret():
@@ -1456,7 +1465,8 @@ def test_secret_constraint_enforced_on_rehydration():
     payload["spec"]["s"] = "secret:nope"
     with pytest.raises(ApiException) as excinfo:
         _SrcWithConstrainedSecret.from_dict(payload)
-    assert excinfo.value.api_error is ApiErrorCode.API_6
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+    assert "API-24" in str(excinfo.value)
 
 
 def test_union_spec_python_is_literal():

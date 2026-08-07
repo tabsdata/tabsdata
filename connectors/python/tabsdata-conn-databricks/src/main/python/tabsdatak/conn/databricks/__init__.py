@@ -59,7 +59,6 @@ from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import (
     CfgSpec,
     EntityWhitelistSpec,
-    StrOrSecretConstraints,
     _convert,
 )
 
@@ -79,24 +78,28 @@ holding the personal access token (PAT)."""
 
 
 IdentifierSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.IDENTIFIER_PATTERN)
+    StrOrSecretSpec,
+    _validation.IDENTIFIER_VALIDATION,
 ]
 
 WarehouseSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
+    StrOrSecretSpec,
+    _validation.WAREHOUSE_NAME_VALIDATION,
 ]
 
 WarehouseIdSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)
+    StrOrSecretSpec,
+    _validation.WAREHOUSE_ID_VALIDATION,
 ]
 
 VolumeSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
+    StrOrSecretSpec,
+    _validation.QUALIFIED_NAME_VALIDATION,
 ]
 QueriesSpec: TypeAlias = list[str]
 DatabricksTableNameSpec: TypeAlias = Annotated[
     str,
-    _validation.DATABRICKS_TABLE_FQN_VALIDATOR,
+    _validation.DATABRICKS_TABLE_FQN_VALIDATION,
 ]
 DatabricksTableNamesSpec: TypeAlias = list[DatabricksTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -107,7 +110,7 @@ SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 SrcCfgKey: TypeAlias = Literal["databricks.logging_level",]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -115,7 +118,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 DestCfgKey: TypeAlias = Literal["databricks.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

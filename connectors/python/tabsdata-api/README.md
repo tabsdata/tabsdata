@@ -27,16 +27,16 @@ the private framework machinery that validates both.
 ## Errors live in their own module — `<module>_error.py`
 
 Every error code and exception type tabsdatak raises lives in
-`tabsdatak.api_error` (`ErrorCategory`, `ErrorDef`, `ErrorCode`,
-`ApiErrorCode`, `TabsdataException`, `ApiException`,
-`ApiParamTypeException`, `ApiValidateException`). They are **not**
-re-exported from `tabsdatak.api`.
+`tabsdatak.error` (`ErrorDef`, `ErrorCode`, `ApiErrorCode`,
+`TabsdataException`, `ConstraintError`, `ApiException`,
+`ApiInitException`, `ApiRuntimeException`, `ApiInternalException`).
+They are **not** re-exported from `tabsdatak.api`.
 
 Rationale: code that only constructs publishers / transformers /
 descriptors does not need any error symbol — it imports
 `tabsdatak.api` and lets exceptions propagate. Code that *cares*
 about reacting to errors (catching a particular exception, branching
-on a specific `ErrorCode` member) imports from `tabsdatak.api_error`
+on a specific `ErrorCode` member) imports from `tabsdatak.error`
 explicitly. The dependency makes the intent visible at the import
 site rather than burying it in a wildcard re-export.
 
@@ -45,15 +45,16 @@ connector ships:
 
 - `tabsdatak.conn.<connector>` — the public descriptor / source /
   destination classes.
-- `tabsdatak.conn.<connector>_error` — the connector's
+- `tabsdatak.conn.<connector>.error` — the connector's
   `<Connector>ErrorCode` enum.
 
-The shared `tabsdatak.conn.common_error` carries the cross-cutting
-`ConnErrorCode`, `ConnException` (base), `ConnParamTypeException`
-(raised by per-field validators / pydantic init) and
-`ConnValidateException` (raised from `validate(self)` hooks). The
-shared `tabsdatak.conn.common_typing` carries the credential
-descriptors and cloud-location dataclasses.
+The shared `tabsdatak.conn.common.error` carries the cross-cutting
+`ConnErrorCode`, `ConnException` (base) and `ConnInitException` (raised
+by per-field `ValueConstraints`, by pydantic init and from
+`validate(self)` hooks). The shared `tabsdatak.conn.common.types`
+carries the credential descriptors and the cross-connector field
+specs; `tabsdatak.conn.common._validation` carries the rules behind
+them.
 
 ## Module layout
 
@@ -62,26 +63,24 @@ import from higher ones.
 
 | Module                  | Audience                                                     | Exports                                                                                                                                                                                                                                                                                                                       |
 | ----------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tabsdatak.api`        | **End users** — publisher / transformer / subscriber authors | `@publisher`, `@auto_publisher`, `@transformer`, `@subscriber`; `Src`, `AutoSrc`, `Dest`, `OnTablesAction` abstract bases; `Conn`, `NamedConn`; `ValRef`, `Var`, `Secret`; `Trigger` / `CronTrigger` / `TablesTrigger` / `AllTablesTrigger`; `TableFrame`; type aliases (see "Type aliases" below). **No** error / exception re-exports. |
-| `tabsdatak.api_error`  | **Anyone reacting to errors**                                | `ErrorCategory`, `ErrorDef`, `ErrorCode`, `ApiErrorCode`, `TabsdataException`, `ApiException`, `ApiParamTypeException`, `ApiValidateException`. Imported directly when callers need to catch / branch on errors.                                                                                                              |
-| `tabsdatak.spi`        | **Connector implementers**                                   | `TableMode`; `SrcDef` / `AutoSrcDef` / `DestDef` (pydantic dataclasses generic over `(<Conn>, <Config>)`); `SrcPlugin` / `AutoSrcPlugin` / `DestPlugin` (generic ABCs with abstract `read_in` / `write_out`); `Explorer`; `SrcContext` / `AutoSrcContext` / `DestContext`; `ParquetFile` / `TableFileSpec` / `ManifestFileSpec`. |
-| `tabsdatak.connectors` | **Framework + tooling**                                      | `avail_srcs()`, `avail_auto_srcs()`, `avail_dests()` — entry-point-driven discovery functions, each returning a fresh `dict[str, <Def>]` keyed by `*_type`. Internal helpers `_get_src` / `_get_auto_src` / `_get_dest` resolve a concrete config class to its def. |
-| `tabsdatak._info`      | **Framework internals**                                      | `PublisherInfo`, `AutoPublisherInfo`, `TransformerInfo`, `SubscriberInfo` — the pydantic dataclasses that back the public decorators, plus their `@model_validator` signature checks and `func` field serde.                                                                                                                |
-| `tabsdatak._api`       | **Framework internals**                                      | `dataclass` wrapper around pydantic (attaches `ApiErrorCode` tags, builds a `ConnParamTypeException` / `ApiParamTypeException` on pydantic `ValidationError`); `JsonSerde` mixin (envelope serde); `DescriptorBase` (`validate` hook + tz check); `check_tz_aware_datetimes`; `callable_to_str` / `callable_from_str`; field-level validator constants (`TABLE_NAME_VALIDATOR`, `COLL_TABLE_NAME_VALIDATOR`, `CRON_MASK_VALIDATOR`, `NAMED_CONNECTION_VALIDATOR`, `ENV_VAR_NAME_VALIDATOR`, `SECRET_REF_VALIDATOR`). |
+| `tabsdatak.api`        | **End users** — publisher / transformer / subscriber authors | `@publisher`, `@stream_publisher`, `@transformer`, `@subscriber`; `Src`, `StreamSrc`, `Dest`, `OnTablesAction` abstract bases; `Conn`; `Secret`; `Trigger` / `CronTrigger` / `TablesTrigger` / `AllTablesTrigger`; `TableFrame`; type aliases (see "Type aliases" below). **No** error / exception re-exports. |
+| `tabsdatak.error`      | **Anyone reacting to errors**                                | `ErrorDef`, `ErrorCode`, `ApiErrorCode`, `TabsdataException`, `ConstraintError`, `ApiException`, `ApiInitException`, `ApiRuntimeException`, `ApiInternalException`. Imported directly when callers need to catch / branch on errors.                                                                                          |
+| `tabsdatak.spi`        | **Connector implementers**                                   | `TableMode`; `SrcDef` / `StreamSrcDef` / `DestDef` (pydantic dataclasses generic over `(<Conn>, <Config>)`); `SrcPlugin` / `StreamSrcPlugin` / `DestPlugin` (generic ABCs with abstract `read_in` / `write_out`); `Explorer`; `SrcContext` / `StreamSrcContext` / `DestContext`; `ParquetFile` / `TableFileSpec` / `ManifestFileSpec`. |
+| `tabsdatak.connectors` | **Framework + tooling**                                      | `avail_srcs()`, `avail_stream_srcs()`, `avail_dests()` — entry-point-driven discovery functions, each returning a fresh `dict[str, <Def>]` keyed by `*_type`. Internal helpers `_get_src` / `_get_stream_src` / `_get_dest` resolve a concrete config class to its def. |
+| `tabsdatak._info`      | **Framework internals**                                      | `PublisherInfo`, `StreamPublisherInfo`, `TransformerInfo`, `SubscriberInfo` — the pydantic dataclasses that back the public decorators, plus their `@model_validator` signature checks and `func` field serde.                                                                                                                |
+| `tabsdatak._api`       | **Framework internals**                                      | `dataclass` wrapper around pydantic (attaches `ApiErrorCode` tags, re-raises a pydantic `ValidationError` as the tagged `TabsdataException`); `JsonSerde` mixin (envelope serde); `DescriptorBase` (`validate` hook + tz check); `check_tz_aware_datetimes`; `callable_to_str` / `callable_from_str`; `Rule` / `ValueConstraints` and the field-level `*_VALIDATION` constants built from them (`TABLE_NAME_VALIDATION`, `COLL_TABLE_NAME_VALIDATION`, `COLL_TABLE_VERSIONS_NAME_VALIDATION`, `CRON_MASK_VALIDATION`). |
 
 ## Type aliases (public, in `tabsdatak.api`)
 
 | Alias                       | Definition                                                  | What it means at a field site |
 | --------------------------- | ----------------------------------------------------------- | ---- |
-| `TableNameSpec`             | `Annotated[str, TABLE_NAME_VALIDATOR]`                      | A bare table name (1-64 chars, `[A-Za-z][A-Za-z0-9_]*`). |
+| `TableNameSpec`             | `Annotated[str, TABLE_NAME_VALIDATION]`                      | A bare table name (1-64 chars, `[A-Za-z][A-Za-z0-9_]*`). |
 | `TableNamesSpec`                | `Annotated[list[TableNameSpec], min_length=1]`              | A non-empty list of table names. |
-| `CollTableNameSpec`         | `Annotated[str, COLL_TABLE_NAME_VALIDATOR]`                 | `<name>` or `<collection>/<name>`. |
+| `CollTableNameSpec`         | `Annotated[str, COLL_TABLE_NAME_VALIDATION]`                 | `<name>` or `<collection>/<name>`. |
 | `CollTableNamesSpec`            | `Annotated[list[CollTableNameSpec], min_length=1]`          | A non-empty list of collection-qualified names. |
-| `CronMaskSpec`              | `Annotated[str, CRON_MASK_VALIDATOR]`                       | A K8s CronJob schedule. |
-| `VarNameSpec`            | `Annotated[str, ENV_VAR_NAME_VALIDATOR]`                    | A POSIX var name (`[A-Za-z_][A-Za-z0-9_]*`). |
-| `SecretRefSpec`             | `Annotated[str, SECRET_REF_VALIDATOR]`                      | A K8s secret reference: `<secret>#<key>`. |
-| `ValOrRefSpec`       | `Union[str, ValRef]`                                        | A value that may be inline or sourced from any `ValRef`. |
-| `InlineConnectionNameSpec`  | `Annotated[str, NAMED_CONNECTION_VALIDATOR]`                | A bare connection identifier (1-64 chars, `[A-Za-z][A-Za-z0-9_]*`). The `NamedConn.name` field is typed `InlineConnectionNameSpec \| Var` -- the union is spelled out at the use site rather than aliased, since a `*NameSpec` alias would falsely promise a single-string shape. |
+| `CollTableVersionsNameSpec`  | `Annotated[str, COLL_TABLE_VERSIONS_NAME_VALIDATION]`        | `[<collection>/]<table>[@<versions>]`, with `<versions>` a single version, a `<version>..<version>` range, the special range `NEW`, or a comma-separated list. |
+| `CronMaskSpec`              | `Annotated[str, CRON_MASK_VALIDATION]`                       | A K8s CronJob schedule. |
+| `StrOrSecretSpec`           | `Annotated[Union[str, Secret], StrOrSecretHandler()]`        | A field that accepts a plain string or a `Secret`. Connector packages narrow it with a `ValueConstraints` that gates both arms with one rule (e.g. `Annotated[StrOrSecretSpec, _validation.URI_VALIDATION]`). |
 | `*TriggerBySpec`            | Unions of `Trigger` subclasses (`CronTrigger` / `TablesTrigger` / `AllTablesTrigger`); publishers do not accept `AllTablesTrigger`. | Per-decorator firing conditions. |
 | `OnTablesActionSpec`        | `Annotated[list[OnTablesAction], min_length=1]`             | Optional hooks attached to a publisher / transformer. |
 
@@ -129,11 +128,11 @@ break the otherwise-circular relationships):
 - `api.py` — imports `_api`. Declares public types, then does a late
   import of `_info` (after `Src` / `Dest` / triggers are bound in its
   namespace so the partial circle resolves), then defines the
-  `publisher` / `auto_publisher` / `transformer` / `subscriber`
+  `publisher` / `stream_publisher` / `transformer` / `subscriber`
   factories.
-- `spi.py` — imports `_api` and `api` (for `Src`, `AutoSrc`, `Dest`,
+- `spi.py` — imports `_api` and `api` (for `Src`, `StreamSrc`, `Dest`,
   `Conn`, `ApiErrorCode`).
-- `_info.py` — imports `_api` and `api` (for `Src`, `AutoSrc`,
+- `_info.py` — imports `_api` and `api` (for `Src`, `StreamSrc`,
   `Dest`, triggers, type aliases). It looks up the binding for a
   source / destination at validation time via
   `tabsdatak.connectors._get_src` / `_get_auto_src` / `_get_dest`,
@@ -193,8 +192,8 @@ break the otherwise-circular relationships):
      `list[TableFrame | None]`) when `definition.table_mode is ARRAY`
    - `output_count = len(self.output_tables)`
 4. Any shape mismatch raises `ValueError`, pydantic wraps it as
-   `ValidationError`, and the `_api.dataclass` wrapper tags it as
-   `ApiParamTypeException(API_4, cause)`.
+   `ValidationError`, and the `_api.dataclass` wrapper re-raises it as
+   the decorator's own tagged exception (`api_error.exception(cause=e)`).
 
 Transformers (`API_5`) and subscribers (`API_6`) follow the same
 pattern: `input_count = len(self.input_tables)` (with
@@ -224,16 +223,12 @@ envelope is:
 | -------------------- | ------------------ |
 | `Trigger`            | `trigger`          |
 | `Conn`               | `connectionDef`    |
-| `NamedConn`          | `connectionRef`    |
 | `Src`                | `sourceDef`        |
-| `AutoSrc`            | `autoSourceDef`    |
+| `StreamSrc`          | `streamSourceDef`  |
 | `Dest`               | `destinationDef`   |
 | `OnTablesAction`     | `onTablesAction`   |
-| `ValRef`             | `valueRef`         |
-| `Var`                | `varRef`           |
-| `Secret`             | `secretRef`        |
 | `PublisherInfo`      | `publisherDef`     |
-| `AutoPublisherInfo`  | `autoPublisherDef` |
+| `StreamPublisherInfo` | `streamPublisherDef` |
 | `TransformerInfo`    | `transformerDef`   |
 | `SubscriberInfo`     | `subscriberDef`    |
 
@@ -274,22 +269,22 @@ the class's current `__api_version__`.
 
 ## Authoring guidance for descriptor subclasses
 
-`Conn` / `Src` / `AutoSrc` / `Dest` / `Trigger` subclasses are
+`Conn` / `Src` / `StreamSrc` / `Dest` / `Trigger` subclasses are
 intended as **pure data classes**:
 
 - Declare typed fields and nothing else. No business logic, no I/O,
   no plugin-style methods. Runtime behavior belongs on the
-  `SrcPlugin` / `AutoSrcPlugin` / `DestPlugin` / `Explorer`
+  `SrcPlugin` / `StreamSrcPlugin` / `DestPlugin` / `Explorer`
   classes that the connector wires into its `SrcDef` /
-  `AutoSrcDef` / `DestDef` binding constant in
+  `StreamSrcDef` / `DestDef` binding constant in
   `_<name>_plugin.py`.
 - Derive computed values via read-only `@property`, not methods.
 - Enforce cross-field invariants by overriding the inherited
   `validate(self)` hook (default no-op, called automatically after
   pydantic's per-field validation). Raise the descriptor's own
-  `VALIDATION`-category code via `code.exception(...)` -- it
-  resolves to a `ConnValidateException` / `ApiValidateException`
-  for connector / api descriptors respectively.
+  code via `code.exception(...)` -- it resolves to the exception class
+  the code's `ErrorDef` names (`ConnInitException` /
+  `ApiInitException` for connector / api descriptors respectively).
 
 Ideally a descriptor subclass has zero methods other than `validate`.
 
@@ -307,7 +302,7 @@ class MyConn(Conn):
 
 ## Field-value contract on descriptor subclasses
 
-`Conn` / `Src` / `AutoSrc` / `Dest` (and `Trigger`) install a shared
+`Conn` / `Src` / `StreamSrc` / `Dest` (and `Trigger`) install a shared
 `@model_validator(mode="after")` that enforces, after pydantic's normal
 field validation:
 
@@ -341,12 +336,10 @@ type aliases:
 
 | Constant                       | What it validates                                                       |
 | ------------------------------ | ----------------------------------------------------------------------- |
-| `TABLE_NAME_VALIDATOR`         | 1-64 char identifier (`[A-Za-z][A-Za-z0-9_]*`).                         |
-| `COLL_TABLE_NAME_VALIDATOR`    | `<name>` or `<collection>/<name>`.                                      |
-| `CRON_MASK_VALIDATOR`          | K8s CronJob schedule (5-field cron, or `@hourly` / `@daily` / etc.).    |
-| `NAMED_CONNECTION_VALIDATOR`   | Same shape as a table identifier.                                       |
-| `ENV_VAR_NAME_VALIDATOR`       | POSIX env var: `[A-Za-z_][A-Za-z0-9_]*`.                                |
-| `SECRET_REF_VALIDATOR`         | `<secret>#<key>` — secret as RFC 1123 DNS subdomain (≤253 chars), key as `[-._a-zA-Z0-9]+`. |
+| `TABLE_NAME_VALIDATION`         | 1-64 char identifier (`[A-Za-z][A-Za-z0-9_]*`).                         |
+| `COLL_TABLE_NAME_VALIDATION`    | `<name>` or `<collection>/<name>`.                                      |
+| `CRON_MASK_VALIDATION`          | K8s CronJob schedule (5-field cron, or `@hourly` / `@daily` / etc.).    |
+| `COLL_TABLE_VERSIONS_NAME_VALIDATION` | A collection-qualified table reference with an optional `@<versions>` suffix. |
 
 ## Running the tests
 

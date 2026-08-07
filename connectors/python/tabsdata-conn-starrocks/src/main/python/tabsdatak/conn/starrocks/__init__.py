@@ -66,7 +66,6 @@ from tabsdatak.conn.common.types import (
     HostSpec,
     PortSpec,
     S3BucketSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -86,14 +85,13 @@ CredentialsSpec: TypeAlias = UserPassword
 # `tabsdatak.conn.common.types` (HostSpec / PortSpec). Read their parsed
 # values through the `_host` / `_port` getters.
 
-# Database: StarRocks identifier shape (alphanumeric + underscore).
-_IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
 DatabaseSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_IDENTIFIER_PATTERN)
+    StrOrSecretSpec,
+    _validation.IDENTIFIER_VALIDATION,
 ]
 StarRocksTableNameSpec: TypeAlias = Annotated[
     str,
-    _validation.STARROCKS_TABLE_FQN_VALIDATOR,
+    _validation.STARROCKS_TABLE_FQN_VALIDATION,
 ]
 StarRocksTableNamesSpec: TypeAlias = list[StarRocksTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -104,7 +102,7 @@ SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 DestCfgKey: TypeAlias = Literal["starrocks.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

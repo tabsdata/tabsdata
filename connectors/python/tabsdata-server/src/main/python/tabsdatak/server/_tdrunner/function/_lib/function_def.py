@@ -38,7 +38,7 @@ from tabsdatak.common._archive.bundle import (
     BUNDLE_MANIFEST_FILENAME,
     BUNDLE_USER_CODE_DIRNAME,
 )
-from tabsdatak.error import ErrorCode
+from tabsdatak.error import ErrorCode, TabsdataException
 
 # Union of every `*Info` shape a command might load.
 FunctionInfo = PublisherInfo | TransformerInfo | SubscriberInfo
@@ -119,6 +119,18 @@ def load_function_def_or_raise(
     except ValidationError as exc:
         raise bad_user_code_code.exception(
             cause=exc, bundle_dir=bundle_dir, detail=str(exc)
+        )
+    except TabsdataException as exc:
+        # ``JsonSerde.from_dict`` re-raises a pydantic ``ValidationError`` as
+        # the descriptor's own tagged exception. What is wrong is still the
+        # function_def's *content*, so it stays a user-code failure; report
+        # the underlying validation error, which names the offending field.
+        if not isinstance(exc.cause, ValidationError):
+            raise bad_bundle_code.exception(
+                cause=exc, bundle_dir=bundle_dir, detail=str(exc)
+            )
+        raise bad_user_code_code.exception(
+            cause=exc.cause, bundle_dir=bundle_dir, detail=str(exc.cause)
         )
     except Exception as exc:
         raise bad_bundle_code.exception(

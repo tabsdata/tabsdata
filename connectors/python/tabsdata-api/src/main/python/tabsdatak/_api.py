@@ -20,8 +20,8 @@ packages import as ``tabsdatak._api`` are:
   for polymorphic loading.
 * :class:`DescriptorBase` -- :class:`JsonSerde` plus the tagging
   the runtime relies on.
-* ``*_CONSTRAINTS`` validators -- per-domain name patterns
-  (table, cron mask, ...).
+* ``*_VALIDATION`` constants -- a :class:`ValueConstraints` per
+  domain field shape (table name, cron mask, ...).
 * :func:`callable_to_str` / :func:`callable_from_str` /
   :func:`qualified_class` / :func:`resolve_class` --
   ``*Info``-side helpers for JSON round-trip of functions /
@@ -30,6 +30,7 @@ packages import as ``tabsdatak._api`` are:
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import functools
 import hashlib
@@ -47,7 +48,6 @@ from typing import Any, Callable, ClassVar, TypeVar, Union, dataclass_transform
 
 from croniter import croniter
 from pydantic import (
-    AfterValidator,
     Field,
     GetCoreSchemaHandler,
     PrivateAttr,
@@ -61,7 +61,7 @@ from pydantic_core import core_schema
 
 # Error codes and exceptions live in `tabsdatak.api_error` so callers
 # only depend on that module when they want to react to errors.
-from tabsdatak.error import ApiErrorCode, ErrorCode
+from tabsdatak.error import ApiErrorCode, ConstraintError, ErrorCode
 
 _C = TypeVar("_C", bound=type)
 
@@ -115,16 +115,236 @@ def dataclass(
                 raise api_error.exception(cause=e)
 
         decorated.__init__ = __init__  # type: ignore[union-attr,method-assign]
+        # Recorded so `JsonSerde.from_dict` / `from_json` translate the same
+        # way construction does -- otherwise deserializing a bad descriptor
+        # leaks a raw pydantic `ValidationError` with no error code.
+        decorated.__api_error__ = api_error  # type: ignore[attr-defined]
         return decorated  # type: ignore[return-value]
 
     return wrap
 
 
 # ---------------------------------------------------------------------------
+# Field-site value rules.
+#
+# ``ValueConstraints`` gates the *text* of a field whatever shape carries
+# it -- a plain ``str``, a :class:`~tabsdatak.api.Secret`, or a
+# ``StrOrSecretSpec`` union. It runs as an after-validator on the parsed
+# value and dispatches on that value rather than on the annotation, so one
+# spelling covers every shape and both union arms are gated by the same
+# rules (no second pattern for the secret arm). A dehydrated secret
+# (``":secret:"``) carries no text and is skipped; the rules are
+# re-applied whenever the runtime rehydrates it, because the hydrated tree
+# is re-validated through the field.
+#
+# Each ``Rule`` pairs a check with the ``ErrorCode`` raised when it fails,
+# so a rejection reports a domain message ("not a valid S3 bucket name")
+# instead of the regex that did the rejecting. A field may carry several
+# rules, each with its own code, so multi-part shapes stay diagnosable.
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class Rule:
+    """One field-value check paired with the error code it raises.
+
+    :categories: error
+
+    Build rules with the factories below rather than the constructor;
+    each returns a ``Rule`` ready to hand to :class:`ValueConstraints`.
+
+    Attributes:
+        code: The `ErrorCode` raised when ``test`` fails.
+        test: Predicate on the field's text -- ``True`` means valid.
+        detail: Maps the text to the kwargs used to render ``code``'s
+            message template.
+        pattern: The regex, when this rule is a regex match -- see
+            :attr:`ValueConstraints.pattern`.
+    """
+
+    code: ErrorCode
+    test: Callable[[str], bool]
+    detail: Callable[[str], dict[str, Any]] = lambda value: {"value": value}
+    pattern: str | None = None
+
+    def apply(self, text: str) -> None:
+        """Raise :class:`~tabsdatak.error.ConstraintError` if ``text``
+        fails this rule."""
+        if not self.test(text):
+            raise ConstraintError(self.code, **self.detail(text))
+
+    @staticmethod
+    def matches(pattern: str, code: ErrorCode) -> "Rule":
+        """The text must fully match ``pattern``.
+
+        Matching is always ``re.fullmatch``, so a leading ``^`` / trailing
+        ``$`` in ``pattern`` is redundant.
+        """
+        compiled = re.compile(pattern)
+        return Rule(
+            code,
+            lambda text: compiled.fullmatch(text) is not None,
+            pattern=pattern,
+        )
+
+    @staticmethod
+    def length(
+        code: ErrorCode, *, min_len: int = 1, max_len: int | None = None
+    ) -> "Rule":
+        """The text length must fall within ``min_len``..``max_len``."""
+        return Rule(
+            code,
+            lambda text: (
+                min_len <= len(text) <= (max_len if max_len is not None else len(text))
+            ),
+            lambda text: {"length": len(text), "value": text},
+        )
+
+    @staticmethod
+    def forbids(chars: str, code: ErrorCode) -> "Rule":
+        """The text must contain none of ``chars``."""
+        forbidden = frozenset(chars)
+        return Rule(code, lambda text: not (forbidden & set(text)))
+
+    @staticmethod
+    def parses_as(
+        type_: type,
+        code: ErrorCode,
+        *,
+        ge: Any = None,
+        le: Any = None,
+        canonical: bool = False,
+    ) -> "Rule":
+        """The text must parse as ``type_`` (optionally within ``ge``..``le``).
+
+        Parsing goes through the same pydantic coercion that
+        ``tabsdatak.conn.common.types._convert`` applies at read time, so
+        a field that validates here is guaranteed to convert there --
+        one source of truth instead of a regex that restates the parser.
+
+        Args:
+            type_: Target type (e.g. ``int`` for a port, ``bool`` for a
+                textual flag).
+            code: Raised when the text does not parse or falls out of
+                bounds.
+            ge: Optional inclusive lower bound on the parsed value.
+            le: Optional inclusive upper bound on the parsed value.
+            canonical: When true, additionally require the text to be the
+                canonical spelling of the parsed value -- rejecting the
+                coercions pydantic would otherwise accept (``"0080"``,
+                ``" 80"``, ``"+80"``, ``"8.0"`` for an ``int``). Leave
+                false where several spellings are legitimately equivalent
+                (``bool``: ``"yes"`` / ``"on"`` / ``"1"``).
+        """
+        annotation: Any = type_
+        if ge is not None or le is not None:
+            annotation = typing.Annotated[type_, Field(ge=ge, le=le)]
+        adapter = TypeAdapter(annotation)
+
+        def test(text: str) -> bool:
+            try:
+                parsed = adapter.validate_python(text)
+            except ValidationError:
+                return False
+            return str(parsed) == text if canonical else True
+
+        return Rule(code, test)
+
+    @staticmethod
+    def check(test: Callable[[str], bool], code: ErrorCode) -> "Rule":
+        """Escape hatch for a rule no factory above expresses -- an FQN
+        parse, a cron-semantics check, anything needing real code."""
+        return Rule(code, test)
+
+
+class ValueConstraints:
+    """Field-site rules for a ``str``, a `Secret`, or a str-or-secret union.
+
+    :categories: error
+
+    Applied as ``Annotated[<shape>, ValueConstraints(<rule>, ...)]`` where
+    ``<shape>`` is ``str``, `Secret`, or
+    :data:`~tabsdatak.api.StrOrSecretSpec`. Rules run in order against the
+    field's text and the first failure raises its own error code; a
+    dehydrated secret carries no text and is skipped.
+
+    Args:
+        rules: The rules the value must satisfy, in evaluation order.
+    """
+
+    def __init__(self, *rules: Rule):
+        if not rules:
+            raise TypeError("ValueConstraints requires at least one Rule")
+        for rule in rules:
+            if not isinstance(rule, Rule):
+                raise TypeError(
+                    f"ValueConstraints expects Rule instances, got {type(rule)!r}"
+                )
+        self._rules = rules
+
+    def __repr__(self) -> str:
+        codes = ", ".join(str(rule.code) for rule in self._rules)
+        return f"ValueConstraints({codes})"
+
+    def validate(self, text: str) -> str:
+        """Apply every rule to ``text``, returning it unchanged when all pass.
+
+        The same entry point the field validator uses, exposed for callers
+        that hold a value outside a descriptor field (and for tests).
+
+        Raises:
+            ConstraintError: the first rule that ``text`` fails.
+        """
+        for rule in self._rules:
+            rule.apply(text)
+        return text
+
+    @property
+    def pattern(self) -> str | None:
+        """The first regex among these rules, or ``None`` if none is
+        regex-shaped.
+
+        Read by callers that want to pre-validate input against the field's
+        shape before handing it over -- the `tdk` connection-template
+        wizard does this to reject a bad entry at the prompt. It is a hint,
+        not the contract: the rules themselves are the contract, and they
+        run in full on construction.
+        """
+        return next(
+            (rule.pattern for rule in self._rules if rule.pattern is not None), None
+        )
+
+    def __get_pydantic_core_schema__(
+        self,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
+    ) -> core_schema.CoreSchema:
+        rules = self._rules
+        base = handler(source_type)
+
+        def check(value: Any) -> Any:
+            # `_Secret`, not the public `tabsdatak.api.Secret`: the public
+            # class is a body-less subclass, so this covers both, and
+            # staying inside `_api` keeps `api.py`'s own constrained fields
+            # from importing a half-initialized `tabsdatak.api` while their
+            # schemas are being built.
+            text = value._value if isinstance(value, _Secret) else value
+            # A dehydrated secret (``None``) and any non-text shape carry
+            # nothing to check.
+            if not isinstance(text, str):
+                return value
+            for rule in rules:
+                rule.apply(text)
+            return value
+
+        return core_schema.no_info_after_validator_function(check, base)
+
+
+# ---------------------------------------------------------------------------
 # Field-level validators exposed for use in `tabsdatak.api` type aliases.
 #
 # Each is exposed as an `AfterValidator` constant so consumers can write:
-#     SomeSpec: TypeAlias = Annotated[str, _CRONMASK_VALIDATOR]
+#     SomeSpec: TypeAlias = Annotated[str, CRON_MASK_VALIDATION]
 # without re-importing the underlying regex / function machinery.
 # ---------------------------------------------------------------------------
 
@@ -211,47 +431,21 @@ _CRON_FIELD_RE_STR = rf"{_CRON_ATOM_RE_STR}(?:/\d+)?(?:,{_CRON_ATOM_RE_STR}(?:/\
 _UNIX_CRON_RE = re.compile(rf"^{_CRON_FIELD_RE_STR}(?:\s+{_CRON_FIELD_RE_STR}){{4}}$")
 
 
-def _validate_table_name(value: str) -> str:
-    if not _IDENTIFIER_RE.fullmatch(value):
-        raise ValueError(
-            f"not a valid table name (1-64 chars, must start with a letter, "
-            f"alphanumeric and underscore only): {value!r}"
-        )
-    return value
-
-
-def _validate_coll_table_name(value: str) -> str:
-    if not _COLL_IDENTIFIER_RE.fullmatch(value):
-        raise ValueError(
-            f"not a valid collection-qualified table name "
-            f"(<identifier> or <identifier>/<identifier>, no whitespace): "
-            f"{value!r}"
-        )
-    return value
-
-
-def _validate_coll_table_versions_name(value: str) -> str:
-    message = (
-        f"not a valid collection-qualified table reference "
-        f"([<collection>/]<table>[@<versions>], with <versions> a single "
-        f"version, a <version>..<version> range, the special range NEW or "
-        f"a comma-separated list, and a version HEAD / INITIAL with an "
-        f"optional ^ or ~N offset, or a fixed id): {value!r}"
-    )
+def _is_coll_table_versions_name(value: str) -> bool:
     match = VERSIONED_TABLE_REGEX.match(value)
     if not match:
-        raise ValueError(message)
+        return False
     collection = match.group("collection")
     table = match.group("table")
     versions = match.group("versions")
     if collection is not None and not _IDENTIFIER_RE.fullmatch(collection):
-        raise ValueError(message)
+        return False
     if not _IDENTIFIER_RE.fullmatch(table):
-        raise ValueError(message)
+        return False
     if versions is not None:
         versions_match = VERSIONS_REGEX.search(versions)
         if not versions_match:
-            raise ValueError(message)
+            return False
         # Mirror parse_versions' second phase: unless the NEW branch
         # (group 1) matched, every member must parse as a version.
         if versions_match.group(1) is None:
@@ -263,28 +457,35 @@ def _validate_coll_table_versions_name(value: str) -> str:
                 members = [versions]
             for member in members:
                 if not VERSION_REGEX.match(member):
-                    raise ValueError(message)
-    return value
+                    return False
+    return True
 
 
-def _validate_cron_mask(value: str) -> str:
-    if value in _K8S_CRON_DESCRIPTORS:
-        return value
-    if not _UNIX_CRON_RE.fullmatch(value):
-        raise ValueError(f"not a Kubernetes CronJob schedule: {value!r}")
-    if not croniter.is_valid(value):
-        raise ValueError(f"invalid cron expression: {value!r}")
-    return value
+def _is_cron_syntax(value: str) -> bool:
+    return value in _K8S_CRON_DESCRIPTORS or bool(_UNIX_CRON_RE.fullmatch(value))
 
 
-TABLE_NAME_CONSTRAINTS = AfterValidator(_validate_table_name)
-COLL_TABLE_NAME_CONSTRAINTS = AfterValidator(_validate_coll_table_name)
-COLL_TABLE_VERSIONS_NAME_CONSTRAINTS = AfterValidator(
-    _validate_coll_table_versions_name
+def _is_cron_semantics(value: str) -> bool:
+    # A descriptor never reaches croniter (it rejects some of the ones K8s
+    # documents); the syntax rule already accepted it.
+    return value in _K8S_CRON_DESCRIPTORS or croniter.is_valid(value)
+
+
+TABLE_NAME_VALIDATION = ValueConstraints(
+    Rule.matches(_IDENTIFIER_RE_STR, ApiErrorCode.API_24)
 )
-CRON_MASK_CONSTRAINTS = AfterValidator(_validate_cron_mask)
+COLL_TABLE_NAME_VALIDATION = ValueConstraints(
+    Rule.matches(_COLL_IDENTIFIER_RE_STR, ApiErrorCode.API_25)
+)
+COLL_TABLE_VERSIONS_NAME_VALIDATION = ValueConstraints(
+    Rule.check(_is_coll_table_versions_name, ApiErrorCode.API_26)
+)
+CRON_MASK_VALIDATION = ValueConstraints(
+    Rule.check(_is_cron_syntax, ApiErrorCode.API_27),
+    Rule.check(_is_cron_semantics, ApiErrorCode.API_28),
+)
 
-NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
+NON_EMPTY_LIST_FIELD = Field(min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -399,73 +600,6 @@ class _Secret:
                 serialize, return_schema=core_schema.str_schema()
             ),
         )
-
-
-# ---------------------------------------------------------------------------
-# Field-site value constraint for `tabsdatak.api.Secret`.
-#
-# Use as ``Annotated[Secret, SecretValueConstraints(pattern=<regex>)]``.
-# The regex is enforced on the secret's *hydrated value*: eagerly at
-# construction for an inline value, and again whenever the runtime
-# re-hydrates the dehydrated marker back into a value (the rehydrated
-# tree is re-validated through the field). A dehydrated secret
-# (``":secret:"``) carries no value and is left unchecked.
-#
-# The pattern is a field-site constraint: it is never serialized (the
-# wire form is just the ``":secret:"`` marker) and is re-applied from the
-# field annotation on every validation. This gates a pure-``Secret``
-# field; to gate a string-or-secret field with a single pattern use
-# ``tabsdatak.conn.common.types.StrOrSecretConstraints`` on a
-# ``StrOrSecretSpec`` instead.
-# ---------------------------------------------------------------------------
-
-
-class SecretValueConstraints:
-    """Field-site regex on the hydrated value of a
-    :class:`~tabsdatak.api.Secret`."""
-
-    def __init__(self, *, pattern: str):
-        if not isinstance(pattern, str):
-            raise TypeError(
-                f"SecretValueConstraints expects a regex string, got {type(pattern)!r}"
-            )
-        self._pattern = pattern
-
-    def __repr__(self) -> str:
-        return f"SecretValueConstraints(pattern={self._pattern!r})"
-
-    def __get_pydantic_core_schema__(
-        self,
-        source_type: Any,
-        handler: GetCoreSchemaHandler,
-    ) -> core_schema.CoreSchema:
-        # Deferred import: keeps the api <-> _api import cycle from racing
-        # at module load (the field schema is built well after both
-        # modules are imported).
-        from tabsdatak.api import Secret
-
-        if not (isinstance(source_type, type) and issubclass(source_type, Secret)):
-            raise TypeError(
-                f"SecretValueConstraints can only annotate Secret subclasses "
-                f"(got {source_type!r})"
-            )
-
-        pattern = self._pattern
-        base = handler(source_type)
-
-        def check(secret: Any) -> Any:
-            # Only a hydrated secret has a value to check; a dehydrated
-            # one (``":secret:"``) is left untouched.
-            value = secret._value
-            if value is not None and re.fullmatch(pattern, value) is None:
-                raise ApiErrorCode.API_6.exception(
-                    name=type(secret).__name__,
-                    pattern=pattern,
-                    value=value,
-                )
-            return secret
-
-        return core_schema.no_info_after_validator_function(check, base)
 
 
 # ---------------------------------------------------------------------------
@@ -965,6 +1099,8 @@ class JsonSerde:
     __kind__: ClassVar[str] = "unknown"
     __api_version__: ClassVar[str] = "1.0"
     __migrations__: ClassVar[dict[str, tuple[str, Callable[[dict], dict]]]] = {}
+    # Set by the `dataclass` decorator on every concrete descriptor.
+    __api_error__: ClassVar[ErrorCode | None] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -978,11 +1114,26 @@ class JsonSerde:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Any:
-        return TypeAdapter(cls).validate_python(d)
+        with cls._tagged_errors():
+            return TypeAdapter(cls).validate_python(d)
 
     @classmethod
     def from_json(cls, s: str | bytes) -> Any:
-        return TypeAdapter(cls).validate_json(s)
+        with cls._tagged_errors():
+            return TypeAdapter(cls).validate_json(s)
+
+    @classmethod
+    @contextlib.contextmanager
+    def _tagged_errors(cls) -> Any:
+        """Translate a pydantic ``ValidationError`` into this descriptor's
+        `ErrorCode`, mirroring what the `dataclass` decorator does for
+        construction, so both paths surface the same exception family."""
+        try:
+            yield
+        except ValidationError as e:
+            if cls.__api_error__ is None:
+                raise
+            raise cls.__api_error__.exception(cause=e) from e
 
     # ------------------------------------------------------------------
     # Pydantic schema hook (inherited by every subclass)

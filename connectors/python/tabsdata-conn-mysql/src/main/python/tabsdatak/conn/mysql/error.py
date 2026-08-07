@@ -113,3 +113,10 @@ class MysqlErrorCode(ErrorCode):
         ConnInitException,
         "Cannot create TimestampPosition",
     )  # mysql-local TimestampPosition dataclass tag
+
+    # --- Field-value rules (tabsdatak.conn.mysql) -------------------
+    MYSQL_19 = ErrorDef(
+        ConnInitException,
+        "MySQL URI must start with mysql:// or mariadb:// (optionally with a "
+        "+driver suffix): {value!r}",
+    )  # UriSpec

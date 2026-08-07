@@ -18,6 +18,7 @@ from tabsdatak.api import (
 )
 from tabsdatak.error import (
     DEBUG_FRAMES_ENV_VAR,
+    ConstraintError,
     ApiErrorCode,
     ApiException,
     ApiInitException,
@@ -950,8 +951,8 @@ def test_parse_versioned_table_ref():
         "abc/abc@HEAD,,HEAD",
     ]
     for value in invalid:
-        with pytest.raises(ValueError):
-            _api._validate_coll_table_versions_name(value)
+        with pytest.raises(ConstraintError):
+            _api.COLL_TABLE_VERSIONS_NAME_VALIDATION.validate(value)
 
     valid = [
         "abc",
@@ -965,7 +966,7 @@ def test_parse_versioned_table_ref():
         "xyz/abc@HEAD~10..HEAD",
     ]
     for value in valid:
-        assert _api._validate_coll_table_versions_name(value) == value
+        assert _api.COLL_TABLE_VERSIONS_NAME_VALIDATION.validate(value) == value
 
 
 def test_parse_valid_versioned_table_refs():
@@ -991,7 +992,7 @@ def test_parse_valid_versioned_table_refs():
         f"collection/table@{FIXED_ID}",
     ]
     for value in valid_tables:
-        assert _api._validate_coll_table_versions_name(value) == value
+        assert _api.COLL_TABLE_VERSIONS_NAME_VALIDATION.validate(value) == value
 
 
 def test_parse_invalid_table_refs():
@@ -1025,5 +1026,5 @@ def test_parse_invalid_table_refs():
         "collection/table@NEW..HEAD^",
     ]
     for value in invalid_table_refs:
-        with pytest.raises(ValueError):
-            _api._validate_coll_table_name(value)
+        with pytest.raises(ConstraintError):
+            _api.COLL_TABLE_NAME_VALIDATION.validate(value)

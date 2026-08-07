@@ -51,7 +51,7 @@ from tabsdatak.api import (
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _validation
+from tabsdatak.conn.common.file import _validation as _file_validation
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
     DestFormatCfgSpec,
@@ -65,9 +65,9 @@ from tabsdatak.conn.common.types import (
     CloudRelativePathSpec,
     GCPJson,
     GCSBucketSpec,
-    StrOrSecretConstraints,
     _convert,
 )
+from tabsdatak.conn.gcs import _validation
 from tabsdatak.conn.gcs.error import GCSErrorCode
 from tabsdatak.spi import Conn
 
@@ -83,11 +83,7 @@ CredentialsSpec: TypeAlias = GCPJson
 service-account JSON key)."""
 
 
-# GCP project id: no regex shape; permissive `.+` enables the
-# bare-string shortcut at the field site.
-ProjectSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=r".+")
-]
+ProjectSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.PROJECT_VALIDATION]
 """A GCP project id: any non-empty string. Accepts a plain string or a
 `Secret`."""
 
@@ -96,7 +92,7 @@ ProjectSpec: TypeAlias = Annotated[
 SrcCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -104,7 +100,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 DestCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -251,7 +247,7 @@ class GCSSrc(Src):
         failure.
         """
         try:
-            _validation.validate_format_cfg(self.format_cfg, side="src")
+            _file_validation.validate_format_cfg(self.format_cfg, side="src")
         except Exception as e:
             raise GCSErrorCode.GCS_3.exception(cause=e, side="src")
 
@@ -301,6 +297,6 @@ class GCSDest(Dest):
         failure.
         """
         try:
-            _validation.validate_format_cfg(self.format_cfg, side="dest")
+            _file_validation.validate_format_cfg(self.format_cfg, side="dest")
         except Exception as e:
             raise GCSErrorCode.GCS_5.exception(cause=e, side="dest")

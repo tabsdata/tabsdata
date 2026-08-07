@@ -22,10 +22,9 @@ from abc import ABC
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Type, TypeAlias, Union
+from typing import Annotated, Type, TypeAlias, Union
 
-from pydantic import GetCoreSchemaHandler, TypeAdapter
-from pydantic_core import core_schema
+from pydantic import TypeAdapter
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -184,84 +183,20 @@ class DataType(Enum):  # PLACEHOLDER
     DATETIME = "datetime"
 
 
-# --- str-or-secret regex constraint ----------------------------------
-
-
-class StrOrSecretConstraints:
-    """Field-site regex gating both arms of a `StrOrSecretSpec`.
-
-    :categories: credentials
-
-    Applied as
-    `Annotated[StrOrSecretSpec, StrOrSecretConstraints(pattern=<re>)]`.
-    The pattern is enforced as a full match on a plain-string value and
-    on a `Secret`'s hydrated value -- at construction and again
-    whenever the runtime re-hydrates the value. A dehydrated `Secret`
-    carries no value and is left unchecked. One `pattern` covers both
-    arms.
-
-    Args:
-        pattern: The regular expression each arm's value must fully
-            match.
-    """
-
-    def __init__(self, *, pattern: str):
-        if not isinstance(pattern, str):
-            raise TypeError(
-                f"StrOrSecretConstraints expects a regex string, got {type(pattern)!r}"
-            )
-        self.pattern = pattern
-
-    def __repr__(self) -> str:
-        return f"StrOrSecretConstraints(pattern={self.pattern!r})"
-
-    def __get_pydantic_core_schema__(
-        self, source_type: Any, handler: GetCoreSchemaHandler
-    ) -> core_schema.CoreSchema:
-        pattern = self.pattern
-        base = handler(source_type)
-
-        def check(value: Any) -> Any:
-            if isinstance(value, Secret):
-                resolved = value._value
-            elif isinstance(value, str):
-                resolved = value
-            else:
-                return value
-            if resolved is not None and re.fullmatch(pattern, resolved) is None:
-                raise ValueError(
-                    f"value {resolved!r} does not match pattern {pattern!r}"
-                )
-            return value
-
-        return core_schema.no_info_after_validator_function(check, base)
-
-
 # --- Cloud-location field specs --------------------------------------
 #
-# Each spec is a `Annotated[StrOrSecretSpec,
-# StrOrSecretConstraints(<regex>)]`. The same location regex is enforced
-# on a plain-string value (spelled `str:<value>` on the wire) and on a
-# `Secret`'s hydrated value (at construction and whenever the runtime
-# re-hydrates the secret). A dehydrated `Secret` carries no value and
-# is left unchecked.
+# Each spec annotates itself with the matching `_validation.*_VALIDATION`,
+# which owns the pattern and the error code. The same rule gates a
+# plain-string value (spelled `str:<value>` on the wire) and a `Secret`'s
+# hydrated value (at construction and whenever the runtime re-hydrates the
+# secret); a dehydrated `Secret` carries no value and is left unchecked.
+# A rejection names the broken rule, never the regex.
 
 
 # --- CloudRelativePath ----------------------------------------------
 
-# The cloud connectors' `base_path` denotes a "folder" (object-key
-# prefix) from the container / bucket root. It is spelled absolute-looking
-# for a consistent UX -- starts with `/`, never ends with one (other than
-# the bare root `/`), no empty segments (no `//`) -- but the leading `/`
-# is trimmed when composing the actual object key (`cloud_full_path` /
-# `normalize_dir_path` do the trimming). Backslash and NUL are forbidden.
-# pydantic_core's regex engine has no lookaround, so the rule is spelled
-# out structurally: a leading `/` followed by zero or more `/`-separated
-# segments, each a run of one or more chars that are not `/`, `\` or NUL;
-# the bare `/` root is allowed. Defaults to `/`.
-_CLOUD_RELATIVE_PATH_RE_STR = r"^/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?$"
 CloudRelativePathSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_CLOUD_RELATIVE_PATH_RE_STR)
+    StrOrSecretSpec, _validation.CLOUD_RELATIVE_PATH_VALIDATION
 ]
 """A cloud object-key prefix, relative to the container/bucket root.
 
@@ -273,19 +208,8 @@ plain string or a `Secret`.
 
 # --- LocalAbsolutePath ----------------------------------------------
 
-# The local-filesystem connectors' `base_path` is a real absolute path on
-# the host, so it accepts two shapes: a POSIX absolute path (`/a/b`) or a
-# Windows drive-absolute path (`C:/a/b` or `C:\a\b`, either separator).
-# UNC paths (`\\host\share`) and relative paths are rejected. No empty
-# segments and no NUL in either shape. The Windows branch mirrors the
-# POSIX one: a drive letter, a separator, then zero or more `/`- or `\`-
-# separated non-empty segments.
-_LOCAL_ABSOLUTE_PATH_RE_STR = (
-    r"^(?:/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?"
-    r"|[A-Za-z]:[/\\](?:[^/\\\x00]+(?:[/\\][^/\\\x00]+)*)?)$"
-)
 LocalAbsolutePathSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_LOCAL_ABSOLUTE_PATH_RE_STR)
+    StrOrSecretSpec, _validation.LOCAL_ABSOLUTE_PATH_VALIDATION
 ]
 """An absolute local-filesystem path: POSIX (`/a/b`) or Windows
 drive-absolute (`C:/a/b` or `C:\\a\\b`). UNC and relative paths are
@@ -337,37 +261,20 @@ def normalize_dir_path(path: str, lead_separator: bool, back_separator: bool) ->
 
 # --- S3 bucket ------------------------------------------------------
 
-# S3 bucket: 3-63 chars, lowercase letters / digits / hyphens, start
-# and end alphanumeric. (Doesn't capture the imperative reserved-prefix
-# / reserved-suffix / IPv4 checks the cloud provider enforces server-
-# side anyway.)
-_S3_BUCKET_RE_STR = r"^(?:[a-z0-9][a-z0-9-]{1,61}[a-z0-9])$"
-S3BucketSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_S3_BUCKET_RE_STR)
-]
+S3BucketSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.S3_BUCKET_VALIDATION]
 """A valid S3 bucket name: 3-63 characters, lowercase letters, digits
 and hyphens, starting and ending with a letter or digit. Accepts a
 plain string or a `Secret`."""
 
 # --- AWS region ----------------------------------------------------
 
-# AWS region: `us-east-1` / `us-gov-west-1` style.
-_AWS_REGION_RE_STR = r"^(?:[a-z]{2}(?:-[a-z]+)+-\d+)$"
-AwsRegionSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_AWS_REGION_RE_STR)
-]
+AwsRegionSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.AWS_REGION_VALIDATION]
 """A valid AWS region name, e.g. `us-east-1` or `us-gov-west-1`.
 Accepts a plain string or a `Secret`."""
 
 # --- GCS bucket -----------------------------------------------------
 
-# GCS bucket: same length / charset rules as S3 plus underscore.
-# Doesn't capture the imperative `goog` prefix / Google-misspelling
-# reserved-substring checks.
-_GCS_BUCKET_RE_STR = r"^(?:[a-z0-9][a-z0-9_-]{1,61}[a-z0-9])$"
-GCSBucketSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_GCS_BUCKET_RE_STR)
-]
+GCSBucketSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.GCS_BUCKET_VALIDATION]
 """A valid GCS bucket name: 3-63 characters, lowercase letters, digits,
 hyphens and underscores, starting and ending with a letter or digit.
 Accepts a plain string or a `Secret`."""
@@ -375,15 +282,8 @@ Accepts a plain string or a `Secret`."""
 
 # --- Azure Blob container ------------------------------------------
 
-# Azure container: lowercase alphanumeric / single hyphens (no
-# leading, trailing, or consecutive hyphens), 3-63 chars. Encoded
-# without lookahead (pydantic_core's regex engine doesn't support it):
-# every char after the first is either alphanumeric, or a single hyphen
-# *followed by* an alphanumeric -- so consecutive / trailing hyphens
-# never match.
-_AZ_CONTAINER_RE_STR = r"^(?:[a-z0-9](?:-?[a-z0-9]){2,62})$"
 AzContainerSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_AZ_CONTAINER_RE_STR)
+    StrOrSecretSpec, _validation.AZ_CONTAINER_VALIDATION
 ]
 """A valid Azure Blob container name: 3-63 characters, lowercase
 letters and digits with single (non-leading, non-trailing) hyphens.
@@ -392,16 +292,7 @@ Accepts a plain string or a `Secret`."""
 
 # --- Host --------------------------------------------------------------
 
-# A DNS hostname or IPv4 literal: dot-separated labels of alphanumerics with
-# internal (not leading / trailing) hyphens. Covers `localhost`,
-# `db.example.com`, `10.0.0.1`. Read the value with `_convert(x, str)`.
-_HOST_RE_STR = (
-    r"^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?"
-    r"(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$"
-)
-HostSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_HOST_RE_STR)
-]
+HostSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.HOST_VALIDATION]
 """A DNS host name or IPv4 literal (e.g. `localhost`,
 `db.example.com`, `10.0.0.1`). Accepts a plain string or a
 `Secret`."""
@@ -409,29 +300,14 @@ HostSpec: TypeAlias = Annotated[
 
 # --- Port --------------------------------------------------------------
 
-# A TCP port, 1-65535 (spelled out per digit since the value never carries a
-# type on the wire -- it is a `str` or a secret). Read the parsed int with
-# `_convert(x, int)`.
-_PORT_RE_STR = (
-    r"^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}"
-    r"|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
-)
-PortSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_PORT_RE_STR)
-]
+PortSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.PORT_VALIDATION]
 """A TCP port number, 1-65535. Accepts a plain string or a `Secret`;
 read the parsed int with `_convert(x, int)`."""
 
 
 # --- Bool --------------------------------------------------------------
 
-# A boolean flag as text (the value is a `str` or a secret on the wire).
-# Accepts the tokens pydantic's bool coercion understands, case-insensitively.
-# Read the parsed bool with `_convert(x, bool)`.
-_BOOL_RE_STR = r"(?i)^(?:true|false|t|f|yes|no|y|n|on|off|1|0)$"
-BoolSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_BOOL_RE_STR)
-]
+BoolSpec: TypeAlias = Annotated[StrOrSecretSpec, _validation.BOOL_VALIDATION]
 """A boolean flag as text: one of `true`/`false`, `t`/`f`,
 `yes`/`no`, `y`/`n`, `on`/`off`, `1`/`0`
 (case-insensitive). Accepts a plain string or a `Secret`; read the
@@ -460,7 +336,7 @@ parsed bool with `_convert(x, bool)`."""
 #   `str` / `int` / `float` / `bool` / `None`, plus
 #   `dict` (str-keyed) and `list`. Anything else is rejected at
 #   construction time. Dict values are validated recursively.
-CfgSpec: TypeAlias = Annotated[dict, _validation.CONN_CFG_VALIDATOR]
+CfgSpec: TypeAlias = Annotated[dict, _validation.CONN_CFG_VALIDATION]
 """Type for a connector `conn_cfg` field: a free-form dict forwarding
 3rd-party-specific configuration.
 
@@ -482,7 +358,7 @@ JSON-like: `str` / `int` / `float` / `bool` / `None`, or a
 # pattern raises a `ValueError` at construction time, which the
 # enclosing dataclass tag wraps as the appropriate connector exception.
 EntityWhitelistSpec: TypeAlias = Annotated[
-    list[str], _validation.ENTITY_WHITELIST_VALIDATOR
+    list[str], _validation.ENTITY_WHITELIST_VALIDATION
 ]
 """Optional list of regex patterns narrowing which of the external
 system's entities (tables / collections / objects / datasets / ...) a

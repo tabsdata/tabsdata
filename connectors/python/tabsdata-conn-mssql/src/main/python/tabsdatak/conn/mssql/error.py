@@ -74,3 +74,10 @@ class MssqlErrorCode(ErrorCode):
         MSSQLRuntimeException,
         "MSSQL write failed (table={table})",
     )  # _MSSQLDestPlugin: write failure inside write_out
+
+    # --- Field-value rules (tabsdatak.conn.mssql) -------------------
+    MSSQL_10 = ErrorDef(
+        ConnInitException,
+        "MSSQL URI must start with mssql:// (optionally with a +driver suffix) "
+        "or be a 'key=value' ODBC connection string: {value!r}",
+    )  # UriSpec

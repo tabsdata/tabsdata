@@ -74,3 +74,10 @@ class OracleErrorCode(ErrorCode):
         OracleRuntimeException,
         "Oracle write failed (table={table})",
     )  # _OracleDestPlugin: write failure inside write_out
+
+    # --- Field-value rules (tabsdatak.conn.oracle) ------------------
+    ORACLE_10 = ErrorDef(
+        ConnInitException,
+        "Oracle URI must start with oracle:// (optionally with a +driver "
+        "suffix): {value!r}",
+    )  # UriSpec

@@ -8,6 +8,8 @@ import re
 
 import pytest
 
+from tabsdatak.error import ConstraintError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
 
@@ -16,7 +18,7 @@ pytestmark = pytest.mark.bigquery
 
 
 # ---------------------------------------------------------------------------
-# Project / dataset patterns (kept inline as regex value_patterns)
+# Project / dataset patterns (kept inline as regex patterns)
 # ---------------------------------------------------------------------------
 
 
@@ -96,7 +98,7 @@ def test_dataset_pattern_rejects_above_max_length():
     ],
 )
 def test_bigquery_table_fqn_validator_accepts_valid(value):
-    assert _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func(value) == value
+    assert _validation.BIGQUERY_TABLE_FQN_VALIDATION.validate(value) == value
 
 
 def test_bigquery_table_fqn_validator_rejects_unwrapped_value():
@@ -104,23 +106,23 @@ def test_bigquery_table_fqn_validator_rejects_unwrapped_value():
     # pair of backticks; a bare ``proj.ds.tbl`` (legal in some
     # downstream SQL dialects but not what we validate against) is
     # rejected.
-    with pytest.raises(ValueError, match="outer_only FQN must be wrapped"):
-        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("proj.ds.tbl")
+    with pytest.raises(ConstraintError, match="outer_only FQN must be wrapped"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATION.validate("proj.ds.tbl")
 
 
 def test_bigquery_table_fqn_validator_rejects_too_many_parts():
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("`a.b.c.d`")
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATION.validate("`a.b.c.d`")
 
 
 def test_bigquery_table_fqn_validator_rejects_unterminated_quote():
-    with pytest.raises(ValueError, match="outer_only FQN must be wrapped"):
-        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("`unterminated")
+    with pytest.raises(ConstraintError, match="outer_only FQN must be wrapped"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATION.validate("`unterminated")
 
 
 def test_bigquery_table_fqn_validator_rejects_empty_string():
-    with pytest.raises(ValueError, match="value must be non-empty"):
-        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("")
+    with pytest.raises(ConstraintError, match="value must be non-empty"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATION.validate("")
 
 
 def test_bigquery_fqn_def_uses_outer_only_backtick_with_backslash_escape():

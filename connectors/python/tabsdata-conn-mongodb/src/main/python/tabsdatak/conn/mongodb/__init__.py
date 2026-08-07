@@ -42,7 +42,6 @@ from tabsdatak.api import Dest, StrOrSecretSpec
 from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import (
     CfgSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -58,10 +57,11 @@ from tabsdatak.spi import Conn
 CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
+    StrOrSecretSpec,
+    _validation.URI_VALIDATION,
 ]
-CollectionSpec: TypeAlias = Annotated[str, _validation.COLLECTION_NAME_VALIDATOR]
-ColumnNameSpec: TypeAlias = Annotated[str, _validation.FIELD_NAME_VALIDATOR]
+CollectionSpec: TypeAlias = Annotated[str, _validation.COLLECTION_NAME_VALIDATION]
+ColumnNameSpec: TypeAlias = Annotated[str, _validation.FIELD_NAME_VALIDATION]
 CollectionsWithIdsSpec: TypeAlias = list[tuple[CollectionSpec, ColumnNameSpec | None]]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 
@@ -70,7 +70,7 @@ IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 DestCfgKey: TypeAlias = Literal["mongodb.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

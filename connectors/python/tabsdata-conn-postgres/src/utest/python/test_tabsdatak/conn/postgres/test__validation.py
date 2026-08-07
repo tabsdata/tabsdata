@@ -8,6 +8,8 @@ import re
 
 import pytest
 
+from tabsdatak.error import ConstraintError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres import _validation
 
@@ -63,17 +65,17 @@ def test_postgres_uri_pattern_rejects_invalid(value):
     ],
 )
 def test_postgres_table_fqn_validator_accepts_valid(value):
-    assert _validation.POSTGRES_TABLE_FQN_VALIDATOR.func(value) == value
+    assert _validation.POSTGRES_TABLE_FQN_VALIDATION.validate(value) == value
 
 
 def test_postgres_table_fqn_validator_rejects_too_many_parts():
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        _validation.POSTGRES_TABLE_FQN_VALIDATOR.func("a.b.c.d")
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
+        _validation.POSTGRES_TABLE_FQN_VALIDATION.validate("a.b.c.d")
 
 
 def test_postgres_table_fqn_validator_rejects_unterminated_quote():
-    with pytest.raises(ValueError, match="unterminated quoted identifier"):
-        _validation.POSTGRES_TABLE_FQN_VALIDATOR.func('"db.users')
+    with pytest.raises(ConstraintError, match="unterminated quoted identifier"):
+        _validation.POSTGRES_TABLE_FQN_VALIDATION.validate('"db.users')
 
 
 def test_postgres_fqn_def_uses_double_quote_and_doubled_quote_escape():

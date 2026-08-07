@@ -50,7 +50,7 @@ from tabsdatak.api import (
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _validation
+from tabsdatak.conn.common.file import _validation as _file_validation
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
     DestFormatCfgSpec,
@@ -81,7 +81,7 @@ CredentialsSpec: TypeAlias = AwsAccessSecretKey
 SrcCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -89,7 +89,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 DestCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -207,7 +207,7 @@ class S3Src(Src):
         failure.
         """
         try:
-            _validation.validate_format_cfg(self.format_cfg, side="src")
+            _file_validation.validate_format_cfg(self.format_cfg, side="src")
         except Exception as e:
             raise S3ErrorCode.S3_3.exception(cause=e, side="src")
 
@@ -292,6 +292,6 @@ class S3Dest(Dest):
         failure.
         """
         try:
-            _validation.validate_format_cfg(self.format_cfg, side="dest")
+            _file_validation.validate_format_cfg(self.format_cfg, side="dest")
         except Exception as e:
             raise S3ErrorCode.S3_5.exception(cause=e, side="dest")

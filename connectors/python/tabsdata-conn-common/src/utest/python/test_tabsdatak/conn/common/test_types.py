@@ -11,14 +11,23 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
-from pydantic import TypeAdapter
+from tabsdatak.error import ConstraintError
+from pydantic import TypeAdapter, ValidationError
 
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
+    AwsRegionSpec,
+    AzContainerSpec,
     AzureAccountKey,
+    BoolSpec,
     CloudRelativePathSpec,
     Credentials,
     GCPJson,
+    GCSBucketSpec,
+    HostSpec,
+    LocalAbsolutePathSpec,
+    PortSpec,
+    S3BucketSpec,
     UserPassword,
 )
 from tabsdatak.conn.common.types import cloud_full_path, normalize_dir_path
@@ -320,4 +329,147 @@ def test_convert_raises_on_uncoercible_secret_to_int():
     with pytest.raises(Exception):
         _convert(Secret("not-a-number"), int)
 
+# ---------------------------------------------------------------------------
+# Shared field-spec rules
+#
+# Every spec in `types.py` is `Annotated[StrOrSecretSpec,
+# _validation.<X>_VALIDATION]`, so one rule gates both arms of the union.
+# These tests pin the two properties that follow from that and would
+# otherwise go unchecked:
+#
+#   * **arm symmetry** -- a plain string and a `Secret` carrying the same
+#     text get the same verdict *and* the same error code, and a dehydrated
+#     `Secret` (no text) is skipped;
+#   * **code identity** -- a rejection reports the spec's own code, so
+#     CONN-19 means "bad S3 bucket" rather than "something failed".
+#
+# The specs are exercised through their aliases (not the `*_VALIDATION`
+# objects) so the union decode runs too: on the wire a plain value is
+# `str:<v>` or bare and a secret is `secret:<v>`, while in Python the value
+# is literal.
+# ---------------------------------------------------------------------------
 
+
+# (spec, its error code, accepted values, rejected values)
+_SPEC_RULES = [
+    pytest.param(
+        S3BucketSpec,
+        ConnErrorCode.CONN_19,
+        ["ok-bucket", "abc", "a-b-c", "a" * 63],
+        ["", "AB", "BAD!", "ab", "-abc", "abc-", "a" * 64, "a_b"],
+        id="S3BucketSpec",
+    ),
+    pytest.param(
+        AwsRegionSpec,
+        ConnErrorCode.CONN_20,
+        ["us-east-1", "us-gov-west-1", "eu-central-1"],
+        ["", "US-EAST-1", "us-east", "useast1", "us-east-"],
+        id="AwsRegionSpec",
+    ),
+    pytest.param(
+        GCSBucketSpec,
+        ConnErrorCode.CONN_21,
+        ["ok-bucket", "ok_bucket", "a-b_c"],
+        ["", "AB", "BAD!", "ab", "-abc", "abc-"],
+        id="GCSBucketSpec",
+    ),
+    pytest.param(
+        AzContainerSpec,
+        ConnErrorCode.CONN_22,
+        ["abc", "a-b-c", "a" * 63],
+        # single hyphens only: no leading, trailing or consecutive ones.
+        ["", "ab", "-abc", "abc-", "a--b", "ABC", "a_b"],
+        id="AzContainerSpec",
+    ),
+    pytest.param(
+        HostSpec,
+        ConnErrorCode.CONN_23,
+        ["localhost", "db.example.com", "10.0.0.1", "a-b.c"],
+        ["", "bad_host", "-host", "host-", "a..b"],
+        id="HostSpec",
+    ),
+    pytest.param(
+        PortSpec,
+        ConnErrorCode.CONN_24,
+        ["1", "80", "9030", "65535"],
+        # out of range, and the coercions `parses_as(canonical=True)` rejects.
+        ["", "0", "65536", "0080", " 80", "+80", "8.0", "abc", "-1"],
+        id="PortSpec",
+    ),
+    pytest.param(
+        BoolSpec,
+        ConnErrorCode.CONN_25,
+        ["true", "False", "t", "f", "yes", "NO", "y", "n", "on", "Off", "1", "0"],
+        ["", "2", "maybe", "tru"],
+        id="BoolSpec",
+    ),
+    pytest.param(
+        LocalAbsolutePathSpec,
+        ConnErrorCode.CONN_18,
+        ["/", "/a", "/a/b", "C:/a", "C:\\a\\b"],
+        # UNC and relative paths, empty segments, trailing separator, NUL.
+        ["", "a", "a/b", "/a/", "//", "/a//b", "\\\\host\\share", "/a\x00"],
+        id="LocalAbsolutePathSpec",
+    ),
+    pytest.param(
+        CloudRelativePathSpec,
+        ConnErrorCode.CONN_17,
+        ["/", "/a", "/a/b", "/data/sub"],
+        ["", "a", "a/b", "/a/", "//", "/a//b", "/a\\b", "/a\x00"],
+        id="CloudRelativePathSpec",
+    ),
+]
+
+
+def _rule_code(exc: Exception) -> object:
+    """The `ConstraintError` code behind a pydantic `ValidationError`."""
+    for err in exc.errors():
+        original = err.get("ctx", {}).get("error")
+        if isinstance(original, ConstraintError):
+            return original.code
+    return None
+
+
+def _reject_code(adapter: TypeAdapter, value: object) -> object:
+    """Validate `value`, requiring rejection, and return the rule's code."""
+    with pytest.raises(ValidationError) as ei:
+        adapter.validate_python(value)
+    return _rule_code(ei.value)
+
+
+@pytest.mark.parametrize(("spec", "code", "valid", "invalid"), _SPEC_RULES)
+def test_spec_accepts_valid_on_both_arms(spec, code, valid, invalid):
+    adapter = TypeAdapter(spec)
+    for value in valid:
+        # Python: the value is literal, plain or wrapped in a Secret.
+        assert adapter.validate_python(value) == value
+        assert adapter.validate_python(Secret(value)) == Secret(value)
+        # Wire: bare, `str:`-marked and `secret:`-marked all decode and pass.
+        assert adapter.validate_json(json.dumps(value)) == value
+        assert adapter.validate_json(json.dumps(f"str:{value}")) == value
+        assert adapter.validate_json(json.dumps(f"secret:{value}")) == Secret(value)
+
+
+@pytest.mark.parametrize(("spec", "code", "valid", "invalid"), _SPEC_RULES)
+def test_spec_rejects_invalid_with_its_own_code(spec, code, valid, invalid):
+    adapter = TypeAdapter(spec)
+    for value in invalid:
+        assert _reject_code(adapter, value) is code, value
+
+
+@pytest.mark.parametrize(("spec", "code", "valid", "invalid"), _SPEC_RULES)
+def test_spec_arms_agree(spec, code, valid, invalid):
+    # The point of one rule per spec: the plain and secret arms cannot
+    # disagree, on the verdict or on the code.
+    adapter = TypeAdapter(spec)
+    for value in invalid:
+        assert _reject_code(adapter, value) is _reject_code(adapter, Secret(value)), value
+
+
+@pytest.mark.parametrize(("spec", "code", "valid", "invalid"), _SPEC_RULES)
+def test_spec_skips_dehydrated_secret(spec, code, valid, invalid):
+    # A dehydrated secret carries no text, so no rule can run on it -- the
+    # value is checked again when the runtime rehydrates it.
+    adapter = TypeAdapter(spec)
+    assert adapter.validate_python(Secret()) == Secret()
+    assert adapter.validate_json(json.dumps(":secret:")) == Secret()

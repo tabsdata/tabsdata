@@ -99,7 +99,7 @@ A type alias that specifies which side of a range is closed (inclusive).
 # --- Value Set Specifications ---
 
 ValuesSpec: TypeAlias = Annotated[
-    frozenset[Union[PythonDataTypeSpec, None]], _api.NON_EMPTY_LIST_CONSTRAINTS
+    frozenset[Union[PythonDataTypeSpec, None]], _api.NON_EMPTY_LIST_FIELD
 ]
 """
 A non-empty set of values to check membership against (``None`` is allowed, to
@@ -124,9 +124,7 @@ A type alias for the bin, either an index [0..100] or a special one
 [none, nan, underflow, overflow]
 """
 
-BinsCriteriaSpec: TypeAlias = Annotated[
-    frozenset[BinSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
-]
+BinsCriteriaSpec: TypeAlias = Annotated[frozenset[BinSpec], _api.NON_EMPTY_LIST_FIELD]
 """A non-empty set of bins used in criteria."""
 
 BinCountSpec: TypeAlias = Annotated[StrictInt, Field(ge=1, le=MAX_BINS)]

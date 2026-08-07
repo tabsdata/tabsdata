@@ -67,17 +67,15 @@ TableFramesSpec: TypeAlias = list[TableFrame | None] | None
 
 # Output-table name in the local flow. Must match the per-flow
 # table-name pattern (alphanumerics, underscores, leading letter).
-TableNameSpec: TypeAlias = Annotated[str, _api.TABLE_NAME_CONSTRAINTS]
-TableNamesSpec: TypeAlias = Annotated[
-    list[TableNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
-]
+TableNameSpec: TypeAlias = Annotated[str, _api.TABLE_NAME_VALIDATION]
+TableNamesSpec: TypeAlias = Annotated[list[TableNameSpec], _api.NON_EMPTY_LIST_FIELD]
 
 # Cross-collection table reference, of shape `"collection/table"`.
 # `TablesTrigger.tables` uses this form so a function can fire on
 # tables that live in a different collection.
-CollTableNameSpec: TypeAlias = Annotated[str, _api.COLL_TABLE_NAME_CONSTRAINTS]
+CollTableNameSpec: TypeAlias = Annotated[str, _api.COLL_TABLE_NAME_VALIDATION]
 CollTableNamesSpec: TypeAlias = Annotated[
-    list[CollTableNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
+    list[CollTableNameSpec], _api.NON_EMPTY_LIST_FIELD
 ]
 
 # Cross-collection table reference with an optional version suffix, of
@@ -85,14 +83,14 @@ CollTableNamesSpec: TypeAlias = Annotated[
 # `input_tables` uses this form so a function can read a specific
 # version, a range of versions, or a list of versions of a table.
 CollTableVersionsNameSpec: TypeAlias = Annotated[
-    str, _api.COLL_TABLE_VERSIONS_NAME_CONSTRAINTS
+    str, _api.COLL_TABLE_VERSIONS_NAME_VALIDATION
 ]
 CollTableVersionsNamesSpec: TypeAlias = Annotated[
-    list[CollTableVersionsNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
+    list[CollTableVersionsNameSpec], _api.NON_EMPTY_LIST_FIELD
 ]
 
 # Five-field cron expression understood by `croniter`.
-CronMaskSpec: TypeAlias = Annotated[str, _api.CRON_MASK_CONSTRAINTS]
+CronMaskSpec: TypeAlias = Annotated[str, _api.CRON_MASK_VALIDATION]
 
 
 @_api.dataclass(ApiErrorCode.API_1)
@@ -288,7 +286,7 @@ class OnTablesAction(ABC, _api.JsonSerde):
 
 
 OnTablesActionSpec: TypeAlias = Annotated[
-    list[OnTablesAction], _api.NON_EMPTY_LIST_CONSTRAINTS
+    list[OnTablesAction], _api.NON_EMPTY_LIST_FIELD
 ]
 
 

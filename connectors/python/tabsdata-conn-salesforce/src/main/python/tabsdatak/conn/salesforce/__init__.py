@@ -55,7 +55,6 @@ from tabsdatak.conn.common.types import (
     CfgSpec,
     Credentials,
     EntityWhitelistSpec,
-    StrOrSecretConstraints,
     _convert,
 )
 
@@ -106,14 +105,13 @@ class SalesforceTokenCredentials(SalesforceCredentials):
 # --- Type aliases ----------------------------------------------------
 
 CredentialsSpec: TypeAlias = SalesforceTokenCredentials
-ApiNameSpec: TypeAlias = Annotated[str, _validation.API_NAME_VALIDATOR]
-ApiVersionSpec: TypeAlias = Annotated[str, _validation.API_VERSION_VALIDATOR]
-ObjectsNameSpec: TypeAlias = Annotated[
-    list[ApiNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
-]
+ApiNameSpec: TypeAlias = Annotated[str, _validation.API_NAME_VALIDATION]
+ApiVersionSpec: TypeAlias = Annotated[str, _validation.API_VERSION_VALIDATION]
+ObjectsNameSpec: TypeAlias = Annotated[list[ApiNameSpec], _api.NON_EMPTY_LIST_FIELD]
 
 InstanceUrlSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.INSTANCE_URL_PATTERN)
+    StrOrSecretSpec,
+    _validation.INSTANCE_URL_VALIDATION,
 ]
 # Salesforce SOQL query list. Today exactly one query (one input
 # slot) -- the list shape leaves room for future multi-query
@@ -153,7 +151,7 @@ FilterSpec: TypeAlias = list[tuple[str, OperatorSpec, str]]
 SrcCfgKey: TypeAlias = Literal["salesforce.logging_level",]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

@@ -8,6 +8,8 @@ import re
 
 import pytest
 
+from tabsdatak.error import ConstraintError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _validation
 
@@ -16,7 +18,7 @@ pytestmark = pytest.mark.databricks
 
 
 # ---------------------------------------------------------------------------
-# Identifier / warehouse patterns (kept inline as regex value_patterns)
+# Identifier / warehouse patterns (kept inline as regex patterns)
 # ---------------------------------------------------------------------------
 
 
@@ -146,17 +148,17 @@ def test_warehouse_id_pattern_rejects_invalid(value):
     ],
 )
 def test_databricks_table_fqn_validator_accepts_valid(value):
-    assert _validation.DATABRICKS_TABLE_FQN_VALIDATOR.func(value) == value
+    assert _validation.DATABRICKS_TABLE_FQN_VALIDATION.validate(value) == value
 
 
 def test_databricks_table_fqn_validator_rejects_too_many_parts():
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        _validation.DATABRICKS_TABLE_FQN_VALIDATOR.func("a.b.c.d")
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
+        _validation.DATABRICKS_TABLE_FQN_VALIDATION.validate("a.b.c.d")
 
 
 def test_databricks_table_fqn_validator_rejects_unterminated_quote():
-    with pytest.raises(ValueError, match="unterminated quoted identifier"):
-        _validation.DATABRICKS_TABLE_FQN_VALIDATOR.func("main.`unterminated")
+    with pytest.raises(ConstraintError, match="unterminated quoted identifier"):
+        _validation.DATABRICKS_TABLE_FQN_VALIDATION.validate("main.`unterminated")
 
 
 def test_databricks_fqn_def_uses_backtick_and_doubled_backtick_escape():

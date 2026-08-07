@@ -71,3 +71,15 @@ class SnowflakeErrorCode(ErrorCode):
         " {table!r} cannot take the column(s) {columns}. Encode them before"
         " writing -- for example base64 into a string",
     )  # write_all_tables: parquet binary column, rejected before loading
+
+    # --- Field-value rules (tabsdatak.conn.snowflake) ---------------
+    SNOWFLAKE_9 = ErrorDef(
+        ConnInitException,
+        "not a valid Snowflake account identifier (letters, digits, dots, "
+        "underscores and hyphens, starting and ending alphanumeric): {value!r}",
+    )  # AccountSpec
+    SNOWFLAKE_10 = ErrorDef(
+        ConnInitException,
+        "not a valid Snowflake identifier (unquoted letters, digits, underscore "
+        "and $, or a double-quoted name): {value!r}",
+    )  # IdentifierSpec

@@ -9,6 +9,7 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation
 from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
+from tabsdatak.error import ConstraintError
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import FqnDef, fqn, unfqn
 
@@ -536,27 +537,28 @@ def test_fqn_unfqn_round_trip(spec, parts):
 
 
 # ---------------------------------------------------------------------------
-# _validation.name_validate -- pydantic AfterValidator builder
+# _validation.name_validate -- ValueConstraints builder
 # ---------------------------------------------------------------------------
 
 
-def test_name_validate_returns_after_validator_instance():
-    from pydantic import AfterValidator
+def test_name_validate_returns_value_constraints_instance():
+    # noinspection PyProtectedMember
+    import tabsdatak._api as _api
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
-    assert isinstance(v, AfterValidator)
+    assert isinstance(v, _api.ValueConstraints)
 
 
 def test_name_validate_returned_validator_passes_valid_name():
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
-    assert v.func("catalog.schema.users") == "catalog.schema.users"
+    assert v.validate("catalog.schema.users") == "catalog.schema.users"
 
 
 def test_name_validate_returned_validator_passes_quoted_name():
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
-    assert v.func("`databricks-ci-catalog`.schema.users") == (
+    assert v.validate("`databricks-ci-catalog`.schema.users") == (
         "`databricks-ci-catalog`.schema.users"
     )
 
@@ -564,30 +566,33 @@ def test_name_validate_returned_validator_passes_quoted_name():
 def test_name_validate_rejects_too_many_parts():
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        v.func("a.b.c.d")
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3") as ei:
+        v.validate("a.b.c.d")
+    assert ei.value.code is ConnErrorCode.CONN_29
 
 
 def test_name_validate_rejects_invalid_syntax():
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
-    with pytest.raises(ValueError, match="unterminated quoted identifier"):
-        v.func("`unterminated")
+    with pytest.raises(ConstraintError, match="unterminated quoted identifier") as ei:
+        v.validate("`unterminated")
+    assert ei.value.code is ConnErrorCode.CONN_30
 
 
 def test_name_validate_rejects_empty_value():
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
-    with pytest.raises(ValueError, match="value must be non-empty"):
-        v.func("")
+    with pytest.raises(ConstraintError, match="value must be non-empty") as ei:
+        v.validate("")
+    assert ei.value.code is ConnErrorCode.CONN_30
 
 
 def test_name_validate_max_parts_1_allows_single_part():
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=1)
-    assert v.func("users") == "users"
-    with pytest.raises(ValueError, match="exceeds max_parts=1"):
-        v.func("schema.users")
+    assert v.validate("users") == "users"
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 1"):
+        v.validate("schema.users")
 
 
 def test_name_validate_rejects_zero_max_parts():
@@ -622,9 +627,9 @@ def test_name_validate_used_in_annotated_type_via_pydantic():
 def test_name_validate_works_with_outer_only_spec():
     from tabsdatak.conn.common._validation import name_validate
     v = name_validate(FqnDef(separator=".", quote="`", outer_only=True), max_parts=3)
-    assert v.func("`proj.ds.tbl`") == "`proj.ds.tbl`"
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        v.func("`a.b.c.d`")
+    assert v.validate("`proj.ds.tbl`") == "`proj.ds.tbl`"
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
+        v.validate("`a.b.c.d`")
 
 
 def test_name_validate_each_call_returns_fresh_validator():
@@ -638,12 +643,12 @@ def test_name_validate_works_with_asymmetric_bracket_spec():
     from tabsdatak.conn.common._validation import name_validate
     spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
     v = name_validate(spec, max_parts=3)
-    assert v.func("[db].[schema].[table]") == "[db].[schema].[table]"
-    assert v.func("db.schema.table") == "db.schema.table"
-    with pytest.raises(ValueError, match="exceeds max_parts=3"):
-        v.func("a.b.c.d")
-    with pytest.raises(ValueError, match="unterminated quoted identifier"):
-        v.func("[unterminated")
+    assert v.validate("[db].[schema].[table]") == "[db].[schema].[table]"
+    assert v.validate("db.schema.table") == "db.schema.table"
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
+        v.validate("a.b.c.d")
+    with pytest.raises(ConstraintError, match="unterminated quoted identifier"):
+        v.validate("[unterminated")
 
 
 # ---------------------------------------------------------------------------
@@ -734,18 +739,21 @@ def test_check_basic_accepts_nested_dict():
 
 
 def test_check_basic_rejects_non_basic_value():
-    with pytest.raises(ValueError, match="non-basic value"):
+    with pytest.raises(ConstraintError, match="must be a string, number") as ei:
         _validation.check_basic({"obj": object()}, path="root")
+    assert ei.value.code is ConnErrorCode.CONN_32
 
 
 def test_check_basic_rejects_non_str_dict_key():
-    with pytest.raises(ValueError, match="non-str key"):
+    with pytest.raises(ConstraintError, match="must be a string") as ei:
         _validation.check_basic({42: "value"}, path="root")  # type: ignore[dict-item]
+    assert ei.value.code is ConnErrorCode.CONN_31
 
 
 def test_check_basic_rejects_object_at_root():
-    with pytest.raises(ValueError, match="non-basic value"):
+    with pytest.raises(ConstraintError, match="at <root>") as ei:
         _validation.check_basic(object(), path="")
+    assert ei.value.code is ConnErrorCode.CONN_32
 
 
 def test_check_basic_path_is_reported_in_error():
@@ -769,8 +777,8 @@ def test_validate_conn_cfg_rejects_invalid():
 
 def test_conn_cfg_validator_constant_is_after_validator():
     # Sanity: the exported constant wraps the function in a pydantic
-    # AfterValidator so callers can use ``Annotated[..., _validation.CONN_CFG_VALIDATOR]``.
-    assert _validation.CONN_CFG_VALIDATOR.func is _validation.validate_conn_cfg
+    # AfterValidator so callers can use ``Annotated[..., _validation.CONN_CFG_VALIDATION]``.
+    assert _validation.CONN_CFG_VALIDATION.func is _validation.validate_conn_cfg
 
 
 # ---------------------------------------------------------------------------
@@ -788,8 +796,11 @@ def test_validate_entity_whitelist_accepts_valid_regexes():
 
 
 def test_validate_entity_whitelist_rejects_invalid_regex():
-    with pytest.raises(ValueError, match="invalid regex"):
+    with pytest.raises(
+        ConstraintError, match="is not a valid regular expression"
+    ) as ei:
         _validation.validate_entity_whitelist([r"valid", r"[unclosed"])
+    assert ei.value.code is ConnErrorCode.CONN_28
 
 
 def test_validate_entity_whitelist_reports_index_of_bad_regex():
@@ -798,4 +809,4 @@ def test_validate_entity_whitelist_reports_index_of_bad_regex():
 
 
 def test_entity_whitelist_validator_constant_is_after_validator():
-    assert _validation.ENTITY_WHITELIST_VALIDATOR.func is _validation.validate_entity_whitelist
+    assert _validation.ENTITY_WHITELIST_VALIDATION.func is _validation.validate_entity_whitelist

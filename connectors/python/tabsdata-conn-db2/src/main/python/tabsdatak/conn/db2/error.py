@@ -141,3 +141,10 @@ class Db2ErrorCode(ErrorCode):
         "Db2 commit sequence {commitseq!r} exceeds the {digits}-digit decimal "
         "limit of the offset position column for {table!r}",
     )  # poll_changes: IBMSNAP_COMMITSEQ too large for decimal128 position
+
+    # --- Field-value rules (tabsdatak.conn.db2) ---------------------
+    DB2_24 = ErrorDef(
+        ConnInitException,
+        "DB2 URI must start with db2:// or ibm_db_sa:// (optionally with a "
+        "+driver suffix): {value!r}",
+    )  # UriSpec

@@ -81,7 +81,6 @@ from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
     EntityWhitelistSpec,
-    StrOrSecretConstraints,
     UserPassword,
     _convert,
 )
@@ -191,7 +190,8 @@ CredentialsSpec: TypeAlias = UserPassword
 password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.MYSQL_URI_PATTERN)
+    StrOrSecretSpec,
+    _validation.MYSQL_URI_VALIDATION,
 ]
 """A SQLAlchemy-style MySQL URI, e.g.
 `mysql+mysqlconnector://host:port/db`. The scheme must be `mysql` or
@@ -202,7 +202,7 @@ QueriesSpec: TypeAlias = list[str]
 """A non-empty, ordered list of SELECT statements -- one output slot per
 query."""
 
-MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATOR]
+MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATION]
 """A MySQL table name, either `table` or `database.table` (at most
 two dot-separated parts). Parts may be backtick-quoted, using the
 doubled-backtick convention to embed a literal backtick."""
@@ -220,7 +220,7 @@ rows; `"replace"` truncates before insert."""
 # Restricts `MySQLSrc.src_cfg` to the keys the source plugin
 # (`_plugin.py` / engine factory) actually consumes. Pydantic
 # enforces the literal membership of keys at validation time, so
-# unknown keys are rejected at construction; `CONN_CFG_VALIDATOR`
+# unknown keys are rejected at construction; `CONN_CFG_VALIDATION`
 # reuses the conn_cfg basic-value checks (str/int/float/bool/None,
 # plus list/dict compositions).
 SrcCfgKey: TypeAlias = Literal[
@@ -230,7 +230,7 @@ SrcCfgKey: TypeAlias = Literal[
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -242,7 +242,7 @@ DestCfgKey: TypeAlias = Literal[
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 
@@ -447,7 +447,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[
-    Mapping[CdcSrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[CdcSrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

@@ -570,7 +570,7 @@ def test_run_read_in_run_env_called_once_and_passed_through(monkeypatch, tmp_pat
 
 def test_run_read_in_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_path):
     def bad_run_env(_c, _h):
-        raise ApiErrorCode.API_6.exception(name="X")
+        raise ApiErrorCode.API_11.exception(name="X")
 
     monkeypatch.setattr(_input_module, "import_one", lambda **_kw: _stub_report([]))
 
@@ -936,7 +936,7 @@ def test_run_write_out_run_env_propagates_to_copy_one(monkeypatch, tmp_path):
 
 def test_run_write_out_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_path):
     def bad_run_env(_c, _h):
-        raise ApiErrorCode.API_6.exception(name="X")
+        raise ApiErrorCode.API_11.exception(name="X")
 
     monkeypatch.setattr(_output_module, "copy_one", lambda **_kw: None)
 

@@ -54,7 +54,6 @@ from tabsdatak.conn.common.types import (
     EntityWhitelistSpec,
     GCPJson,
     GCSBucketSpec,
-    StrOrSecretConstraints,
     _convert,
 )
 from tabsdatak.spi import Conn
@@ -68,15 +67,17 @@ CredentialsSpec: TypeAlias = GCPJson
 
 
 ProjectSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.PROJECT_PATTERN)
+    StrOrSecretSpec,
+    _validation.PROJECT_VALIDATION,
 ]
 
 DatasetSpec: TypeAlias = Annotated[
-    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.DATASET_PATTERN)
+    StrOrSecretSpec,
+    _validation.DATASET_VALIDATION,
 ]
 
 BigQueryTableNameSpec: TypeAlias = Annotated[
-    str, _validation.BIGQUERY_TABLE_FQN_VALIDATOR
+    str, _validation.BIGQUERY_TABLE_FQN_VALIDATION
 ]
 BigQueryTableNamesSpec: TypeAlias = list[BigQueryTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -87,7 +88,7 @@ SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 DestCfgKey: TypeAlias = Literal["bigquery.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
-    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
 
 

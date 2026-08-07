@@ -161,6 +161,16 @@ class ErrorCode(Enum, metaclass=_ErrorCodeMeta):
             )
     """
 
+    def message(self, **kwargs: Any) -> str:
+        """Render this code's message template without raising.
+
+        Args:
+            kwargs: Substituted into the template; missing keys are left
+                as `{name}` placeholders.
+        """
+        error_def: ErrorDef = self.value
+        return error_def.message_template.format_map(_SafeFormatDict(kwargs))
+
     def exception(
         self,
         cause: Exception | None = None,
@@ -180,7 +190,7 @@ class ErrorCode(Enum, metaclass=_ErrorCodeMeta):
             raise.
         """
         error_def: ErrorDef = self.value
-        message = error_def.message_template.format_map(_SafeFormatDict(kwargs))
+        message = self.message(**kwargs)
         return error_def.exception(
             api_error=self,
             message=message,
@@ -255,6 +265,30 @@ class TabsdataException(Exception):
             self.__suppress_context__ = True
 
 
+class ConstraintError(ValueError):
+    """A field-value rule failure, carrying the `ErrorCode` describing it.
+
+    :categories: error
+
+    Raised by `tabsdatak._api.Rule` when a field's text fails one of its
+    checks. Subclasses `ValueError` so pydantic collects it like any other
+    field error: the field location and every sibling field's failure
+    survive into the enclosing `ValidationError`, which a bare
+    `TabsdataException` would short-circuit. `_render_cause` reads `code`
+    back off the instance so the rendered message carries the specific
+    code rather than pydantic's generic "Value error" prefix.
+
+    Attributes:
+        code: The `ErrorCode` for the rule that failed.
+        extra: The kwargs used to render the message.
+    """
+
+    def __init__(self, code: ErrorCode, **kwargs: Any) -> None:
+        self.code = code
+        self.extra = dict(kwargs)
+        super().__init__(code.message(**kwargs))
+
+
 def _render_cause(cause: Exception) -> str:
     errors_fn = getattr(cause, "errors", None)
     if not callable(errors_fn):
@@ -271,6 +305,13 @@ def _render_cause(cause: Exception) -> str:
             return str(cause)
         loc = ".".join(str(p) for p in err.get("loc", ()))
         msg = err.get("msg", "")
+        # A ConstraintError knows its own code and message; pydantic wraps
+        # both behind a generic "Value error, " prefix, so read the
+        # original exception back out of the error context and render the
+        # code instead.
+        original = err.get("ctx", {}).get("error")
+        if isinstance(original, ConstraintError):
+            msg = f"{original.code}: {original}"
         parts.append(f"{loc}: {msg}" if loc else msg)
     return "; ".join(parts)
 
@@ -339,12 +380,9 @@ class ApiErrorCode(ErrorCode):
     # codes keep their stable numbers.)
     API_5 = ErrorDef(ApiInitException, "Secret value must be a string, got {type}")
     # `Secret.__init__` -- a non-string, non-None value was passed.
-    API_6 = ErrorDef(
-        ApiRuntimeException,
-        "Secret {name} value `{value!r}` does not match pattern `{pattern!r}`",
-    )
-    # `SecretValueConstraints` -- field-site pattern-mismatch raise for a
-    # `Secret` carrying a hydrated value that fails the field's regex.
+    # (API_6 was retired with `SecretValueConstraints`; field-value rules now
+    # carry a code per rule via `_api.ValueConstraints` / `_api.Rule`. Its
+    # slot is left vacant so the surviving codes keep their stable numbers.)
     API_11 = ErrorDef(ApiInternalException, "Secret {name}, missing secret resolution ")
     # `Secret.value()` -- reading the value of a dehydrated secret
 
@@ -383,4 +421,36 @@ class ApiErrorCode(ErrorCode):
     API_22 = ErrorDef(ApiInitException, "Cannot create TableFileInput")
     # TableFileInput
     API_23 = ErrorDef(ApiInitException, "Cannot create Entity")
+
+    # --- Field-value rules (tabsdatak.api type aliases) -------------
+    # One code per field spec, raised by the spec's `ValueConstraints`
+    # rules. The message states the rule the value broke, not the regex
+    # that enforced it.
+    API_24 = ErrorDef(
+        ApiInitException,
+        "not a valid table name (1-64 chars, must start with a letter, "
+        "alphanumeric and underscore only): {value!r}",
+    )  # TableNameSpec
+    API_25 = ErrorDef(
+        ApiInitException,
+        "not a valid collection-qualified table name (<identifier> or "
+        "<identifier>/<identifier>, no whitespace): {value!r}",
+    )  # CollTableNameSpec
+    API_26 = ErrorDef(
+        ApiInitException,
+        "not a valid collection-qualified table reference "
+        "([<collection>/]<table>[@<versions>], with <versions> a single version, "
+        "a <version>..<version> range, the special range NEW or a "
+        "comma-separated list, and a version HEAD / INITIAL with an optional ^ "
+        "or ~N offset, or a fixed id): {value!r}",
+    )  # CollTableVersionsNameSpec
+    API_27 = ErrorDef(
+        ApiInitException,
+        "not a Kubernetes CronJob schedule (5 whitespace-separated fields, or "
+        "one of @yearly / @annually / @monthly / @weekly / @daily / @midnight / "
+        "@hourly): {value!r}",
+    )  # CronMaskSpec -- syntax
+    API_28 = ErrorDef(
+        ApiInitException, "invalid cron expression: {value!r}"
+    )  # CronMaskSpec -- semantics
     # Entity

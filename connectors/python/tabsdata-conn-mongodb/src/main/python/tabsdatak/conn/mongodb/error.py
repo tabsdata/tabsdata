@@ -45,10 +45,10 @@ class MongoDBErrorCode(ErrorCode):
         ConnInitException,
         "MongoDBDest validation failed",
     )  # MongoDBDest
-    MONGODB_3 = ErrorDef(
-        ConnInitException,
-        "MongoDB database name must be non-empty",
-    )  # _validate_database_name: empty
+    # (MONGODB_3 / MONGODB_7 / MONGODB_8 / MONGODB_9 were retired with the
+    # database-name validator: no field ever annotated a MongoDB database
+    # name, so they were unreachable. Their slots are left vacant so the
+    # surviving codes keep their stable numbers.)
     MONGODB_4 = ErrorDef(
         ConnInitException,
         "MongoDB collection name must be non-empty",
@@ -61,18 +61,6 @@ class MongoDBErrorCode(ErrorCode):
         ConnInitException,
         "MongoDB URI must start with mongodb:// or mongodb+srv://: {value!r}",
     )  # _validate_uri
-    MONGODB_7 = ErrorDef(
-        ConnInitException,
-        "MongoDB database name exceeds {max} bytes: {value!r}",
-    )  # _validate_database_name: too long
-    MONGODB_8 = ErrorDef(
-        ConnInitException,
-        "MongoDB database name may not contain null: {value!r}",
-    )  # _validate_database_name: null byte
-    MONGODB_9 = ErrorDef(
-        ConnInitException,
-        "MongoDB database name contains forbidden chars {bad!r}: {value!r}",
-    )  # _validate_database_name: forbidden char
     MONGODB_10 = ErrorDef(
         ConnInitException,
         "MongoDB collection name exceeds {max} bytes: {value!r}",

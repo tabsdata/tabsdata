@@ -4,38 +4,9 @@
 
 from __future__ import annotations
 
-import re
-
-from pydantic import AfterValidator
-
+# noinspection PyProtectedMember
+import tabsdatak._api as _api
 from tabsdatak.conn.mongodb.error import MongoDBErrorCode
-
-# --- Database name --------------------------------------------------
-
-
-_DB_NAME_MAX_BYTES = 63
-_DB_FORBIDDEN = set('/\\."$ *<>:|?')
-
-
-def _validate_database_name(value: str) -> str:
-    if not value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_3.exception()
-    if len(value.encode("utf-8")) > _DB_NAME_MAX_BYTES:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_7.exception(max=_DB_NAME_MAX_BYTES, value=value)
-    if "\x00" in value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_8.exception(value=value)
-    bad = sorted(set(value) & _DB_FORBIDDEN)
-    if bad:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_9.exception(bad=bad, value=value)
-    return value
-
-
-DATABASE_NAME_VALIDATOR = AfterValidator(_validate_database_name)
-
 
 # --- Collection ------------------------------------------------------
 
@@ -43,64 +14,42 @@ DATABASE_NAME_VALIDATOR = AfterValidator(_validate_database_name)
 _COLLECTION_MAX = 235  # leaves room for db.<sep>.collection within 255
 
 
-def _validate_collection_name(value: str) -> str:
-    if not value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_4.exception()
-    if len(value.encode("utf-8")) > _COLLECTION_MAX:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_10.exception(max=_COLLECTION_MAX, value=value)
-    if "\x00" in value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_11.exception(value=value)
-    if "$" in value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_12.exception(value=value)
-    if value.startswith("system."):
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_13.exception(value=value)
-    return value
+def _within_utf8_bytes(value: str, limit: int) -> bool:
+    return len(value.encode("utf-8")) <= limit
 
 
-COLLECTION_NAME_VALIDATOR = AfterValidator(_validate_collection_name)
+COLLECTION_NAME_VALIDATION = _api.ValueConstraints(
+    _api.Rule.length(MongoDBErrorCode.MONGODB_4, min_len=1),
+    _api.Rule(
+        MongoDBErrorCode.MONGODB_10,
+        lambda value: _within_utf8_bytes(value, _COLLECTION_MAX),
+        lambda value: {"max": _COLLECTION_MAX, "value": value},
+    ),
+    _api.Rule.forbids("\x00", MongoDBErrorCode.MONGODB_11),
+    _api.Rule.forbids("$", MongoDBErrorCode.MONGODB_12),
+    _api.Rule.check(
+        lambda value: not value.startswith("system."), MongoDBErrorCode.MONGODB_13
+    ),
+)
 
 
 # --- Field name ------------------------------------------------------
 
 
-def _validate_field_name(value: str) -> str:
-    if not value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_5.exception()
-    if "\x00" in value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_14.exception(value=value)
-    if "." in value:
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_15.exception(value=value)
-    if value.startswith("$"):
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_16.exception(value=value)
-    return value
-
-
-FIELD_NAME_VALIDATOR = AfterValidator(_validate_field_name)
+FIELD_NAME_VALIDATION = _api.ValueConstraints(
+    _api.Rule.length(MongoDBErrorCode.MONGODB_5, min_len=1),
+    _api.Rule.forbids("\x00", MongoDBErrorCode.MONGODB_14),
+    _api.Rule.forbids(".", MongoDBErrorCode.MONGODB_15),
+    _api.Rule.check(
+        lambda value: not value.startswith("$"), MongoDBErrorCode.MONGODB_16
+    ),
+)
 
 
 # --- URI -------------------------------------------------------------
 
+URI_PATTERN = r"(?i)mongodb(?:\+srv)?://.*"
 
-_URI_RE = re.compile(r"mongodb(?:\+srv)?://.*", re.IGNORECASE)
-
-
-def _validate_uri(value: str) -> str:
-    if not _URI_RE.fullmatch(value):
-        # noinspection PyProtectedMember
-        raise MongoDBErrorCode.MONGODB_6.exception(value=value)
-    return value
-
-
-URI_VALIDATOR = AfterValidator(_validate_uri)
-
-# Pure-regex equivalent for use as ``value_pattern``.
-URI_PATTERN = r"(?i)^(?:mongodb(?:\+srv)?://.*)$"
+URI_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(URI_PATTERN, MongoDBErrorCode.MONGODB_6)
+)

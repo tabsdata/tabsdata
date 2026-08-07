@@ -77,3 +77,6 @@ class GCSErrorCode(ErrorCode):
         GCSRuntimeException,
         "GCS credential resolution failed: {reason}",
     )  # _GCSSrcPlugin / _GCSDestPlugin: unresolved credential ref
+
+    # --- Field-value rules (tabsdatak.conn.gcs) ---------------------
+    GCS_11 = ErrorDef(ConnInitException, "GCS project must be non-empty")  # ProjectSpec

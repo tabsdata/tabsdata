@@ -20,6 +20,18 @@ from tabsdatak.error import (
 )
 
 
+# A specimen enum owned by these tests. The machinery below exercises
+# template rendering and exception-class dispatch, so it must not be pinned
+# to whichever production code happens to have the right shape today.
+class _SpecimenCode(ErrorCode):
+    INIT = ErrorDef(ApiInitException, "Cannot create Thing")
+    RUNTIME = ErrorDef(
+        ApiRuntimeException,
+        "Secret {name} value `{value!r}` does not match pattern `{pattern!r}`",
+    )
+    INTERNAL = ErrorDef(ApiInternalException, "Thing {name}, missing resolution")
+
+
 # ---------------------------------------------------------------------------
 # 1. ``ErrorCodeMeta`` invariants
 # ---------------------------------------------------------------------------
@@ -79,19 +91,19 @@ def test_exception_picks_class_from_variant(monkeypatch):
     # Disable source capture so the message format is deterministic.
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
 
-    pt = ApiErrorCode.API_2.exception()
+    pt = _SpecimenCode.INIT.exception()
     assert type(pt) is ApiInitException
 
-    val = ApiErrorCode.API_6.exception(name="X")
+    val = _SpecimenCode.RUNTIME.exception(name="X")
     assert type(val) is ApiRuntimeException
 
-    intern = ApiErrorCode.API_11.exception(name="X")
+    intern = _SpecimenCode.INTERNAL.exception(name="X")
     assert type(intern) is ApiInternalException
 
 
 def test_exception_format_map_interpolates_kwargs(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
-    exc = ApiErrorCode.API_6.exception(name="MY_SECRET", value="V", pattern="P")
+    exc = _SpecimenCode.RUNTIME.exception(name="MY_SECRET", value="V", pattern="P")
     assert "Secret MY_SECRET value" in str(exc)
 
 
@@ -99,7 +111,7 @@ def test_exception_safe_format_keeps_unknown_placeholders(monkeypatch):
     # Missing kwargs round-trip as ``{key}`` instead of raising
     # KeyError.
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
-    exc = ApiErrorCode.API_6.exception()  # name/value/pattern missing
+    exc = _SpecimenCode.RUNTIME.exception()  # name/value/pattern missing
     rendered = str(exc)
     assert "{name}" in rendered
     assert exc.extra == {}
@@ -243,12 +255,12 @@ def test_errorcode_str_only_replaces_last_underscore():
 
 def test_tabsdata_exception_renders_with_cause_no_source(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
-    exc = ApiErrorCode.API_6.exception(
+    exc = _SpecimenCode.RUNTIME.exception(
         name="N", value="V", pattern="P", cause=RuntimeError("oops")
     )
     rendered = str(exc)
     # Format: "<code>: <message>: <cause>"
-    assert rendered.startswith("API_6: Secret N value")
+    assert rendered.startswith("RUNTIME: Secret N value")
     assert "oops" in rendered
     # Source is disabled, so no " at " suffix.
     assert " at " not in rendered
@@ -256,7 +268,7 @@ def test_tabsdata_exception_renders_with_cause_no_source(monkeypatch):
 
 def test_tabsdata_exception_renders_with_cause_and_source(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "1")
-    exc = ApiErrorCode.API_6.exception(
+    exc = _SpecimenCode.RUNTIME.exception(
         name="N", value="V", pattern="P", cause=RuntimeError("oops")
     )
     rendered = str(exc)

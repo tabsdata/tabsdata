@@ -5,13 +5,22 @@
 from __future__ import annotations
 
 # noinspection PyProtectedMember
+import tabsdatak._api as _api
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.mysql.error import MysqlErrorCode
 
 # --- URI -------------------------------------------------------------
 
-# Pattern gating ``UriSpec`` via ``StrOrSecretConstraints`` -- enforced on
-# a plain-string URI and on a ``Secret``'s hydrated URI value alike.
+# Pattern gating ``UriSpec`` -- one spelling of the rule, enforced on a
+# plain-string URI and on a ``Secret``'s hydrated URI value alike.
 MYSQL_URI_PATTERN = r"(?i)^(?:(?:mysql|mariadb)(?:\+[a-z0-9]+)?://.*)$"
+
+MYSQL_URI_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(MYSQL_URI_PATTERN, MysqlErrorCode.MYSQL_19)
+)
+
 # --- Table FQN ------------------------------------------------------
 
 # MySQL / MariaDB tables can be referenced as ``table`` or
@@ -22,4 +31,4 @@ _MYSQL_FQN_DEF = FqnDef(separator=".", quote="`", escape="`")
 
 # Validator for the ``MySQLTableNameSpec`` field. Built once from
 # ``FQN_DEF`` so per-field annotations stay declarative.
-MYSQL_TABLE_FQN_VALIDATOR = name_validate(_MYSQL_FQN_DEF, max_parts=2)
+MYSQL_TABLE_FQN_VALIDATION = name_validate(_MYSQL_FQN_DEF, max_parts=2, syntax="MySQL")

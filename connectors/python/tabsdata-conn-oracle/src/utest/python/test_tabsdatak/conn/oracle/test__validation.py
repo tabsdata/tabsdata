@@ -8,6 +8,8 @@ import re
 
 import pytest
 
+from tabsdatak.error import ConstraintError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle import _validation
 
@@ -61,17 +63,17 @@ def test_oracle_uri_pattern_rejects_invalid(value):
     ],
 )
 def test_oracle_table_fqn_validator_accepts_valid(value):
-    assert _validation.ORACLE_TABLE_FQN_VALIDATOR.func(value) == value
+    assert _validation.ORACLE_TABLE_FQN_VALIDATION.validate(value) == value
 
 
 def test_oracle_table_fqn_validator_rejects_too_many_parts():
-    with pytest.raises(ValueError, match="exceeds max_parts=2"):
-        _validation.ORACLE_TABLE_FQN_VALIDATOR.func("a.b.c")
+    with pytest.raises(ConstraintError, match="exceeds the maximum of 2"):
+        _validation.ORACLE_TABLE_FQN_VALIDATION.validate("a.b.c")
 
 
 def test_oracle_table_fqn_validator_rejects_unterminated_quote():
-    with pytest.raises(ValueError, match="unterminated quoted identifier"):
-        _validation.ORACLE_TABLE_FQN_VALIDATOR.func('"db.users')
+    with pytest.raises(ConstraintError, match="unterminated quoted identifier"):
+        _validation.ORACLE_TABLE_FQN_VALIDATION.validate('"db.users')
 
 
 def test_oracle_table_fqn_validator_rejects_doubled_quote_embed():
@@ -79,8 +81,8 @@ def test_oracle_table_fqn_validator_rejects_doubled_quote_embed():
     # escape mechanism for embedding ``"`` in a quoted identifier.
     # ``"a""b"`` parses as the quoted identifier ``a`` followed by an
     # unexpected ``"`` at position 3, surfaced as ``expected separator``.
-    with pytest.raises(ValueError):
-        _validation.ORACLE_TABLE_FQN_VALIDATOR.func('"a""b"')
+    with pytest.raises(ConstraintError):
+        _validation.ORACLE_TABLE_FQN_VALIDATION.validate('"a""b"')
 
 
 def test_oracle_fqn_def_uses_double_quote_and_no_escape():

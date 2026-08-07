@@ -29,7 +29,7 @@ tabsdata-conn-<name>/
     │   ├── python/
     │   │   └── tabsdatak/conn/<name>/
     │   │       ├── __init__.py             # public: descriptors + type aliases
-    │   │       ├── _validation.py          # private: AfterValidator constants
+    │   │       ├── _validation.py          # private: ValueConstraints / Rule constants
     │   │       ├── _plugin.py              # private: plugins, explorer, binding constants
     │   │       ├── error.py                # public: ErrorCode enum
     │   │       └── assets/manifest/
@@ -67,9 +67,9 @@ from __future__ import annotations
 from typing import Annotated, TypeAlias, Union
 
 import tabsdatak._api as _api
-from tabsdatak.api import Dest, Secret, Src
+from tabsdatak.api import Dest, Src, StrOrSecretSpec
 from tabsdatak.conn. < name >._validation
-import URI_VALIDATOR  # noqa
+import URI_VALIDATION  # noqa
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn. < name >.error
 import < Name > ErrorCode
@@ -79,13 +79,12 @@ __all__ = ["<Name>Conn", "<Name>Src", "<Name>Dest",
            "CredentialsSpec", "UriSpec", ...]
 
 CredentialsSpec: TypeAlias = UserPassword
-# A value-string field that accepts a literal or a `Secret`. There is
-# no `ValRef` base any more; secret-bearing fields union the literal
-# shape with `Secret` directly.
-UriSpec: TypeAlias = Union[
-    Annotated[str, URI_VALIDATOR],
-    Annotated[Secret, _api.SecretValueConstraints(...)],
-]
+# A field that accepts a plain string or a `Secret`. One
+# `ValueConstraints` gates both arms -- never write the rule twice.
+# The rules live in `_validation.py` next to their pattern; each carries
+# the error code reported when it fails, so a rejection names the broken
+# rule instead of dumping the regex at the user.
+UriSpec: TypeAlias = Annotated[StrOrSecretSpec, URI_VALIDATION]
 
 
 @_api.dataclass( < Name > ErrorCode. < NAME > _1
@@ -220,7 +219,7 @@ ship just `dest_<name>`.
 
 | Tier             | Where it fires                                          | Exception                  |
 | ---------------- | ------------------------------------------------------- | -------------------------- |
-| `PARAM_TYPE`     | pydantic init / `AfterValidator` in `<name>/_validation.py` | `ConnParamTypeException`   |
+| `PARAM_TYPE`     | pydantic init / `ValueConstraints` in `<name>/_validation.py` | `ConnParamTypeException`   |
 | `VALIDATION`     | descriptor's `validate(self)` hook in `<name>/__init__.py`  | `ConnValidateException`    |
 | runtime          | plugin code paths                                       | `ErrorDef.category` (the class itself) |
 

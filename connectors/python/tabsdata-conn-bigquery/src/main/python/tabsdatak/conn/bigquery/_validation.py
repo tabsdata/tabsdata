@@ -5,21 +5,33 @@
 from __future__ import annotations
 
 # noinspection PyProtectedMember
+import tabsdatak._api as _api
+from tabsdatak.conn.bigquery.error import BigQueryErrorCode
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # --- Project / dataset patterns -------------------------------------
 
-# Pure-regex forms used as ``value_pattern`` on the Secret
-# subclasses for the BigQuery identifier-shaped fields (``project`` /
-# ``dataset``). They are enforced via
-# :class:`~tabsdatak._types.ValOrRef`'s ``re.fullmatch`` on the
-# resolved literal / ref payload at ``value()`` time.
+# Each pattern is paired with the ValueConstraints that binds it to an
+# error code. The field spec annotates itself with the constraints, so
+# one rule gates both arms of a str-or-secret union.
 
 # Project id: 6-30 chars, lowercase letters / digits / hyphens, start
 # with a letter, end alphanumeric.
 PROJECT_PATTERN = r"^(?:[a-z][a-z0-9-]{4,28}[a-z0-9])$"
+
+PROJECT_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(PROJECT_PATTERN, BigQueryErrorCode.BIGQUERY_9)
+)
+
 # Dataset id: 1-1024 chars, ASCII letters / digits / underscores.
 DATASET_PATTERN = r"^(?:[A-Za-z0-9_]{1,1024})$"
+
+DATASET_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(DATASET_PATTERN, BigQueryErrorCode.BIGQUERY_10)
+)
+
 # --- Table FQN ------------------------------------------------------
 
 # BigQuery tables can be referenced as ``project.dataset.table``.
@@ -34,4 +46,6 @@ _BIGQUERY_FQN_DEF = FqnDef(separator=".", quote="`", escape="\\", outer_only=Tru
 
 # Validator for the ``BigQueryTableNameSpec`` field. Up to 3 parts:
 # ``project.dataset.table``.
-BIGQUERY_TABLE_FQN_VALIDATOR = name_validate(_BIGQUERY_FQN_DEF, max_parts=3)
+BIGQUERY_TABLE_FQN_VALIDATION = name_validate(
+    _BIGQUERY_FQN_DEF, max_parts=3, syntax="BigQuery"
+)

@@ -213,7 +213,7 @@ tabsdata-conn-<name>/
 ├── requirements/{first,third}-party.txt + dev-{first,third}-party.txt
 └── src/main/python/tabsdatak/conn/<name>/
     ├── __init__.py        # public: descriptors + type aliases
-    ├── _validation.py     # private: AfterValidator constants
+    ├── _validation.py     # private: ValueConstraints / Rule constants
     ├── _plugin.py         # private: plugins, explorer, binding constants
     ├── error.py           # public: ErrorCode enum
     └── assets/manifest/{VERSION, README-PyPi.md, RELEASE-NOTES, THIRD-PARTY}
@@ -237,17 +237,14 @@ from typing import Annotated, TypeAlias, Union
 
 from pydantic.dataclasses import dataclass
 
-from tabsdatak.api import Dest, Secret, Src
+from tabsdatak.api import Dest, Src, StrOrSecretSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
-from tabsdatak.conn.my._validation import URI_VALIDATOR  # AfterValidator
+from tabsdatak.conn.my._validation import URI_VALIDATION  # ValueConstraints
 from tabsdatak.spi import Conn
 
-# Secret-bearing fields union the literal shape with `Secret`
-# directly — there is no `ValRef` base.
-UriSpec: TypeAlias = Union[
-    Annotated[str, URI_VALIDATOR],
-    Secret,
-]
+# One `ValueConstraints` gates both arms of a str-or-secret field --
+# never write the rule twice.
+UriSpec: TypeAlias = Annotated[StrOrSecretSpec, URI_VALIDATION]
 
 
 @dataclass(kw_only=True)
@@ -362,14 +359,15 @@ Key decisions:
 
   Cross-field `validate(self)` failures raise `ConnValidateException`
   (from `tabsdatak.conn.common_error`) tagged with the connector's
-  `VALIDATION` code. Per-field `AfterValidator` failures raise
+  `VALIDATION` code. Per-field `ValueConstraints` failures raise
   `ConnParamTypeException` tagged with the connector's `PARAM_TYPE`
   code. The single `code.exception(...)` factory dispatches via
   `<Name>ErrorCode.exception_classes()`.
-- Secret-bearing fields union the literal shape with `Secret`
-  directly (e.g. `Union[Annotated[str, URI_VALIDATOR], Secret]`).
-  There is no `ValRef` base or `ValOrRefSpec` alias any more; a
-  field that accepts a secret just lists `Secret` as a union member.
+- Secret-bearing fields use `StrOrSecretSpec` and are gated by a single
+  `ValueConstraints` covering both arms (e.g.
+  `Annotated[StrOrSecretSpec, URI_VALIDATION]`). There is no `ValRef`
+  base or `ValOrRefSpec` alias any more, and the rule is never spelled
+  once per arm.
 - Polymorphic field types (`source: Src`, `destination: Dest`) "just
   work" — no `SerializeAsAny` annotation needed; the JsonSerde schema
   dispatches by actual class. `Conn` subclasses round-trip the same
@@ -428,7 +426,7 @@ back = Conn.from_json(some_envelope_str)   # returns the right subclass
 
 All API-boundary failures raise an `ApiException` subclass —
 `ApiParamTypeException` (single-attribute / pydantic init /
-`AfterValidator`) or `ApiValidateException` (cross-field
+`ValueConstraints`) or `ApiValidateException` (cross-field
 `validate(self)` hook). Both carry:
 
 - `.api_error: ErrorCode` — enum tag identifying *which* boundary
