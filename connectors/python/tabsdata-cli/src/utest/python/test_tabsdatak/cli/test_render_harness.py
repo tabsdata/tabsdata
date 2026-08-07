@@ -1117,29 +1117,34 @@ def test_list_status_echoes_stay_out_of_machine_output(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# ``pin show`` -- kept out of the matrix.
+# ``settings`` -- kept out of the matrix.
 #
-# It is fully offline: it renders ``ctx.obj["pinned_objects"]`` (loaded from
-# ``pinned.json`` in the tabsdata dir) and never calls the server. So instead of
-# a mock client we seed the pinned-objects file in the patched tabsdata dir.
+# It is fully offline: it renders the persisted settings (loaded from
+# ``options.json`` in the tabsdata dir) and never calls the server. So instead
+# of a mock client we seed the settings file in the patched tabsdata dir.
 # ---------------------------------------------------------------------------
 
 
-def test_pin_show_renders_pinned_store_offline(tmp_path):
-    (tmp_path / "pinned.json").write_text(
-        json.dumps({"project": "proj-a", "collection": "coll-a"})
+def test_settings_renders_settings_store_offline(tmp_path):
+    (tmp_path / "options.json").write_text(
+        json.dumps({"pins": {"project": "proj-a", "collection": "coll-a"}})
     )
-    payload = {"project": "proj-a", "collection": "coll-a"}
+    payload = {
+        "hints": "enabled",
+        "prompt": "enabled",
+        "server": None,
+        "pins": {"project": "proj-a", "collection": "coll-a"},
+    }
 
     for fmt in ("json", "yaml"):
         result = _invoke(
-            ["pin", "show", "-o", fmt], client=_client(), tmp_path=tmp_path
+            ["settings", "-o", fmt], client=_client(), tmp_path=tmp_path
         )
         assert result.exit_code == 0, result.output
         got = json.loads(result.output) if fmt == "json" else _load_yaml(result.output)
         assert got == payload
 
     # the default (table) view prints both pinned values.
-    result = _invoke(["pin", "show"], client=_client(), tmp_path=tmp_path)
+    result = _invoke(["settings"], client=_client(), tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert "proj-a" in result.output and "coll-a" in result.output

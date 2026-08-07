@@ -19,17 +19,19 @@ except PackageNotFoundError:
 from tabsdatak.cli._registry import collect_cli_commands
 from tabsdatak.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
+    OPTION_PROMPT,
     RENDER_WIDTH,
+    SERVER_URL_DEFAULTS_HELP,
+    clear_pins,
+    cli_option_enabled,
+    configured_server,
     get_credentials_file_path,
     hint_common_solutions,
     initialise_tabsdata_server_connection,
     load_cli_options,
-    load_pinned_objects,
     logical_prompt,
     make_console,
-    set_current_cli_option,
     store_cli_options,
-    store_pinned_objects,
     tdabout,
     utils_login,
     verify_login_or_prompt,
@@ -51,9 +53,9 @@ from tabsdatak.cli.td import (  # noqa: F401
     group_group,
     metrics_group,
     permission_group,
-    pin_group,
     plan_group,
     project_group,
+    settings_group,
     table_group,
     trx_group,
     user_group,
@@ -249,8 +251,9 @@ class _AiAgentGuardedGroup(click.RichGroup):
     "--no-prompt",
     is_flag=True,
     help=(
-        "Disable all prompts. If a prompt is required for proper execution, "
-        "the command will fail."
+        "Disable all prompts for this invocation. If a prompt is required for "
+        "proper execution, the command will fail. Turn prompting off for good "
+        "with 'tdk set --prompt false'."
     ),
 )
 @click.option(
@@ -265,12 +268,7 @@ class _AiAgentGuardedGroup(click.RichGroup):
 )
 @click.pass_context
 def cli(ctx: click.Context, no_prompt: bool):
-    """Main CLI for the Tabsdata system.
-
-    tdk does not run inside AI agents; agent should use the Tabsdata MCP server
-    instead. Set the environment variable TDK_IN_AGENT=1 to override this guard
-    (agents should not do this override themselves).
-    """
+    """Main CLI for the Tabsdata system."""
     try:
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
         ctx.obj = {
@@ -281,8 +279,13 @@ def cli(ctx: click.Context, no_prompt: bool):
         # when the connection is first built (on first use), so commands that
         # never talk to the server don't construct it or import the server SDK.
         initialise_tabsdata_server_connection(ctx)
-        load_pinned_objects(ctx)
+        # Every persisted setting -- hints, prompt, server, pins -- rides in
+        # the one options store.
         load_cli_options(ctx)
+        # 'tdk set --prompt false' is a standing '--no-prompt'; the flag turns
+        # prompting off for a single invocation.
+        ctx.obj["prompt_setting"] = cli_option_enabled(ctx, OPTION_PROMPT)
+        ctx.obj["no_prompt"] = no_prompt or not ctx.obj["prompt_setting"]
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")
@@ -309,21 +312,6 @@ def shell(ctx: click.Context):
         banner_title="Tabsdata Interactive Shell",
         tool_name="tdk",
     )
-
-
-@cli.command()
-@click.argument("mode", type=click.Choice(["on", "off"]))
-@click.pass_context
-def hints(ctx: click.Context, mode: str):
-    """Toggle hints in the CLI. Provide either 'on' or 'off' as an argument."""
-    if mode == "on":
-        set_current_cli_option(ctx, "hints", "enabled")
-        store_cli_options(ctx)
-        click.echo("Hints enabled. You will now see hints in the CLI.")
-    else:
-        set_current_cli_option(ctx, "hints", "disabled")
-        store_cli_options(ctx)
-        click.echo("Hints disabled. You will no longer see hints in the CLI.")
 
 
 @cli.command()
@@ -376,7 +364,11 @@ def info(third_party: bool, license: bool, release_notes: bool):
 @click.option(
     "--server",
     "-s",
-    help="URL of the Tabsdata Server. Will be prompted for it if not provided.",
+    help=(
+        "URL of the Tabsdata Server. Defaults to the server set with 'tdk set "
+        "--server'; will be prompted for it if neither is provided. "
+        + SERVER_URL_DEFAULTS_HELP
+    ),
 )
 @click.option(
     "--user",
@@ -396,7 +388,9 @@ def info(third_party: bool, license: bool, release_notes: bool):
 @click.pass_context
 def login(ctx: click.Context, server: str, user: str, password: str):
     """Login to the Tabsdata Server"""
-    server = server or logical_prompt(ctx, "Tabsdata Server URL")
+    server = (
+        server or configured_server(ctx) or logical_prompt(ctx, "Tabsdata Server URL")
+    )
     user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
     password = password or logical_prompt(
         ctx,
@@ -425,8 +419,8 @@ def logout(ctx: click.Context):
         except Exception:
             pass
         try:
-            ctx.obj["pinned_objects"] = {}
-            store_pinned_objects(ctx)
+            clear_pins(ctx)
+            store_cli_options(ctx)
         except Exception:
             pass
 

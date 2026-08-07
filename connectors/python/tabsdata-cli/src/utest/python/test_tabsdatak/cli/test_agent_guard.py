@@ -111,7 +111,7 @@ def test_enforce_non_truthy_bypass_still_exits(bypass):
         {"CODEX_THREAD_ID": "thread-xyz"},
     ],
 )
-@pytest.mark.parametrize("args", [["pin", "show"], ["--help"], ["--version"]])
+@pytest.mark.parametrize("args", [["settings"], ["--help"], ["--version"]])
 def test_cli_blocks_when_run_in_agent(env, args):
     # Even --help / --version are gated: the guard runs before click parses args.
     result = CliRunner().invoke(cli, args, env=env)
@@ -134,7 +134,9 @@ def test_cli_bypass_runs_a_real_command(tmp_path):
         patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection"),
     ):
         result = CliRunner().invoke(
-            cli, ["pin", "show"], env={"CODEX_THREAD_ID": "t1", "TDK_IN_AGENT": "yes"}
+            cli,
+            ["settings"],
+            env={"CODEX_THREAD_ID": "t1", "TDK_IN_AGENT": "yes"},
         )
     assert result.exit_code == 0, _result_text(result)
     assert "TDK_IN_AGENT" in _result_text(result)

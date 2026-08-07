@@ -11,11 +11,13 @@ from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
     echo_more_results,
     get_currently_pinned_object,
+    get_pin,
     hint_common_solutions,
     logical_prompt,
     make_console,
     max_result_option,
-    store_pinned_objects,
+    set_pin,
+    store_cli_options,
     take,
     verify_login_or_prompt,
 )
@@ -569,11 +571,11 @@ def pin(ctx: click.Context, name: str):
     click.echo(f"Pinning role: {name}")
     click.echo("-" * 10)
     try:
-        previously_pinned = ctx.obj["pinned_objects"].get("role")
+        previously_pinned = get_pin(ctx, "role")
         if previously_pinned:
             click.echo(f"Unpinning previously pinned role: {previously_pinned}")
-        ctx.obj["pinned_objects"]["role"] = name
-        store_pinned_objects(ctx)
+        set_pin(ctx, "role", name)
+        store_cli_options(ctx)
         click.echo("Role pinned successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -587,12 +589,12 @@ def unpin(ctx: click.Context):
     click.echo("Unpinning role")
     click.echo("-" * 10)
     try:
-        previously_pinned = ctx.obj["pinned_objects"].get("role")
+        previously_pinned = get_pin(ctx, "role")
         if not previously_pinned:
             click.echo("No previously pinned role to unpin.")
         else:
-            ctx.obj["pinned_objects"]["role"] = None
-            store_pinned_objects(ctx)
+            set_pin(ctx, "role", None)
+            store_cli_options(ctx)
             click.echo("Role unpinned successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)

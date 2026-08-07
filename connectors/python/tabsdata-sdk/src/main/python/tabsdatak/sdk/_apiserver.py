@@ -161,7 +161,7 @@ class NoProjectSelectedError(Exception):
 
     def __init__(self):
         super().__init__(
-            "No project selected. Run 'tdk pin set --proj <name>' or pass "
+            "No project selected. Run 'tdk set --proj <name>' or pass "
             "'--proj <name>' to the command."
         )
 

@@ -54,6 +54,32 @@ CONNECTION_FILE = "connection.json"
 # requests-heavy _apiserver module.
 DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
 
+# Keys of the persisted settings in ``options.json``, all managed by ``tdk set``
+# / ``tdk unset``. On/off settings store ENABLED / DISABLED; ``pins`` nests the
+# pinned project and collection.
+OPTION_HINTS = "hints"
+OPTION_PROMPT = "prompt"
+OPTION_SERVER = "server"
+OPTION_PINS = "pins"
+
+ENABLED = "enabled"
+DISABLED = "disabled"
+
+PIN_PROJECT = "project"
+PIN_COLLECTION = "collection"
+
+# Mirrors what tabsdatak.sdk._apiserver.process_url() fills in when a
+# user-typed server URL carries no protocol or no port. Defined locally for the
+# same reason as DEFAULT_TABSDATA_DIRECTORY above, and shared by every place
+# that takes a server URL so they all quote the same defaults.
+DEFAULT_SERVER_PROTOCOL = "http://"
+DEFAULT_APISERVER_PORT = "2457"
+
+SERVER_URL_DEFAULTS_HELP = (
+    f"If omitted, the protocol defaults to '{DEFAULT_SERVER_PROTOCOL}' and the "
+    f"port to {DEFAULT_APISERVER_PORT}."
+)
+
 
 # ---------------------------------------------------------------------------
 # Temporary stand-in for legacy ``_utils.internal._about.tdabout``.
@@ -154,6 +180,23 @@ def prompt_with_escape(message, default=None, hide_input=False):
     return result if result else default
 
 
+def _prompting_disabled_message(ctx: click.Context) -> str:
+    """Why prompting is off, and how to turn it back on: the persisted
+    ``tdk set --prompt false`` outlives the invocation, so it is named ahead of
+    the one-shot ``--no-prompt`` flag."""
+    if not ctx.obj.get("prompt_setting", True):
+        return (
+            "Prompting is disabled by the 'prompt' setting and some required "
+            "values are missing. Please provide the required values or "
+            "re-enable prompting with 'tdk set --prompt true'."
+        )
+    return (
+        "Prompting is disabled and some required "
+        "values are missing. Please provide the "
+        "required values or avoid using '--no-prompt'."
+    )
+
+
 def logical_prompt(
     ctx: click.Context, message: str, default_value=None, hide_input: bool = False
 ):
@@ -164,11 +207,7 @@ def logical_prompt(
 
     if ctx.obj["no_prompt"]:
         if default_value is None:
-            raise click.ClickException(
-                "Prompting is disabled and some required "
-                "values are missing. Please provide the "
-                "required values or avoid using '--no-prompt'."
-            )
+            raise click.ClickException(_prompting_disabled_message(ctx))
         return default_value
     try:
         import sys
@@ -220,7 +259,7 @@ def utils_login(ctx: click.Context, server_url: str, username: str, password: st
 
 
 def request_login_information(ctx: click.Context):
-    server_url = logical_prompt(ctx, "Server URL")
+    server_url = configured_server(ctx) or logical_prompt(ctx, "Server URL")
     username = logical_prompt(ctx, "Username")
     password = logical_prompt(ctx, "Password", hide_input=True)
     return server_url, username, password
@@ -256,7 +295,7 @@ class _LazyTabsdataServer:
             connection.expiration_time = credentials.get("expiration_time")
             # The active project rides on the connection: it defaults to the
             # pinned project, and a per-command `--proj` overrides it.
-            connection.project = self._ctx.obj.get("pinned_objects", {}).get("project")
+            connection.project = get_pin(self._ctx, PIN_PROJECT)
             server = TabsdataServer.__new__(TabsdataServer)
             server.connection = connection
             self._server = server
@@ -279,18 +318,11 @@ def initialise_tabsdata_server_connection(ctx: click.Context):
     ctx.obj["tabsdataserver"] = _LazyTabsdataServer(ctx, credentials)
 
 
-def get_pinned_objects_file_path(ctx: click.Context) -> str:
-    """
-    Get the path to the pinned objects file.
-    """
-    return os.path.join(ctx.obj["tabsdata_directory"], "pinned.json")
-
-
 def get_currently_pinned_object(ctx: click.Context, object: str) -> str | None:
     """
     Get the currently pinned object from the context.
     """
-    currently_pinned = ctx.obj["pinned_objects"].get(object, None)
+    currently_pinned = get_pin(ctx, object)
     if currently_pinned:
         click.echo(f"Using currently pinned {object}: {currently_pinned}")
     return currently_pinned
@@ -489,24 +521,6 @@ def echo_more_results(ctx: click.Context, truncated: bool) -> None:
     click.echo(message, err=output_format(ctx) != "table")
 
 
-def load_pinned_objects(ctx: click.Context):
-    try:
-        with open(get_pinned_objects_file_path(ctx)) as f:
-            pinned_objects = json.load(f)
-        ctx.obj["pinned_objects"] = pinned_objects
-    except FileNotFoundError:
-        ctx.obj["pinned_objects"] = {}
-
-
-def store_pinned_objects(ctx: click.Context):
-    try:
-        with open(get_pinned_objects_file_path(ctx), "w") as f:
-            json.dump(ctx.obj["pinned_objects"], f)
-    except Exception as e:
-        click.echo(f"Failed to store pinned objects: {e}")
-        click.echo("This will not affect the rest of the command execution.")
-
-
 def verify_login_or_prompt(ctx: click.Context):
     if not ctx.obj["tabsdataserver"]:
         click.echo("No credentials found. Please login first.")
@@ -549,9 +563,11 @@ def load_cli_options(ctx: click.Context):
     try:
         with open(get_cli_options_file_path(ctx)) as f:
             cli_options = json.load(f)
-        ctx.obj["cli_options"] = cli_options
     except FileNotFoundError:
-        ctx.obj["cli_options"] = {}
+        cli_options = {}
+    pins = cli_options.get(OPTION_PINS)
+    cli_options[OPTION_PINS] = pins if isinstance(pins, dict) else {}
+    ctx.obj["cli_options"] = cli_options
 
 
 def get_cli_options_file_path(ctx: click.Context) -> str:
@@ -585,14 +601,62 @@ def set_current_cli_option(ctx: click.Context, option: str, value: str):
     ctx.obj["cli_options"][option] = value
 
 
+def clear_current_cli_option(ctx: click.Context, option: str):
+    """
+    Remove a CLI option, restoring its default.
+    """
+    ctx.obj["cli_options"].pop(option, None)
+
+
+def cli_option_enabled(ctx: click.Context, option: str, default: bool = True) -> bool:
+    """Whether an on/off option is enabled. Anything other than the stored
+    ``disabled`` marker reads as enabled."""
+    stored = get_current_cli_option(
+        ctx, option, default=ENABLED if default else DISABLED
+    )
+    return stored != DISABLED
+
+
+def set_cli_option_enabled(ctx: click.Context, option: str, enabled: bool):
+    """Turn an on/off option on or off (persist with
+    :func:`store_cli_options`)."""
+    set_current_cli_option(ctx, option, ENABLED if enabled else DISABLED)
+
+
+def configured_server(ctx: click.Context) -> str | None:
+    """The server URL ``tdk login`` falls back to when given no ``--server``,
+    as set by ``tdk set --server``."""
+    return get_current_cli_option(ctx, OPTION_SERVER)
+
+
+def get_pins(ctx: click.Context) -> dict:
+    """The pinned objects, as stored in the CLI options."""
+    return ctx.obj["cli_options"].setdefault(OPTION_PINS, {})
+
+
+def get_pin(ctx: click.Context, name: str) -> str | None:
+    return get_pins(ctx).get(name)
+
+
+def set_pin(ctx: click.Context, name: str, value: str | None):
+    """Pin (or, with ``None``, unpin) an object (persist with
+    :func:`store_cli_options`)."""
+    get_pins(ctx)[name] = value
+
+
+def clear_pins(ctx: click.Context):
+    """Drop every pin (persist with :func:`store_cli_options`)."""
+    get_pins(ctx).clear()
+
+
 def show_hint(ctx: click.Context, hint: str, final_empty_line: bool = False):
     """
     Show a hint in the CLI.
     """
-    if get_current_cli_option(ctx, "hints", default="enabled") == "enabled":
+    if cli_option_enabled(ctx, OPTION_HINTS):
         click.echo(click.style("Hint: ", fg="green", bold=True), nl=False)
         click.echo(hint)
-        click.echo("Use 'tdk hints off' to stop seeing these hints.")
+        click.echo("Use 'tdk unset --hints' to stop seeing these hints.")
         if final_empty_line:
             click.echo()
 

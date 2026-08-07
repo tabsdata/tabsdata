@@ -42,11 +42,13 @@ def test_top_level_help_lists_expected_subcommands():
         "fnrun",
         "group",
         "metrics",
-        "pin",
         "plan",
         "project",
+        "set",
+        "settings",
         "table",
         "trx",
+        "unset",
         "user",
         "worker",
         "info",
@@ -73,11 +75,13 @@ def test_top_level_help_lists_expected_subcommands():
         "fnrun",
         "group",
         "metrics",
-        "pin",
         "plan",
         "project",
+        "set",
+        "settings",
         "table",
         "trx",
+        "unset",
         "user",
         "worker",
     ],
@@ -204,14 +208,29 @@ def test_full_help_marks_options_required_or_optional():
 # ---------------------------------------------------------------------------
 
 
-def test_pin_group_exposes_expected_subcommands():
-    pin = cli.commands.get("pin")
-    assert pin is not None
-    assert sorted(pin.commands) == ["set", "show", "unset"]
+def test_settings_commands_expose_every_setting():
+    # One flag per setting on both `tdk set` and `tdk unset`: the flag settings
+    # (hints, prompt) and the value ones (server, project, collection).
+    for name in ("set", "unset"):
+        command = cli.commands.get(name)
+        assert command is not None, f"`tdk {name}` missing"
+        opts = {o for p in command.params for o in p.opts}
+        assert {"--hints", "--prompt", "--server", "--proj", "--coll"} <= opts
+
+    settings = cli.commands.get("settings")
+    assert settings is not None
+    assert "--output" in {o for p in settings.params for o in p.opts}
+
+
+def test_config_pin_and_hints_are_not_commands():
+    # The settings live on `tdk set` / `tdk unset` / `tdk settings`; there is no
+    # `tdk config` group and no top-level `pin` / `hints`.
+    for name in ("config", "pin", "hints"):
+        assert cli.commands.get(name) is None
 
 
 def test_project_group_has_crud_only():
-    # pin/unpin/pinned moved to the unified `tdk pin` group.
+    # pin/unpin/pinned moved to `tdk set --proj`.
     project = cli.commands.get("project")
     assert project is not None
     assert sorted(project.commands) == [
@@ -239,10 +258,10 @@ def test_project_scoped_command_exposes_proj():
 
 
 class TestPinSurface:
-    """`tdk pin set/unset/show` over the persisted pinned-objects store. A
-    collection pin requires a pinned project; unpinning or switching the
-    project clears the collection. ``tdk pin unset`` (or ``--proj``) clears
-    both; ``--coll`` clears only the collection."""
+    """`tdk set --proj/--coll` over the persisted settings store. A collection
+    pin requires a pinned project; unpinning or switching the project clears the
+    collection. ``tdk unset --proj`` clears both; ``tdk unset --coll`` clears
+    only the collection."""
 
     def _runner(self, tmp_path):
         return patch(
@@ -250,39 +269,37 @@ class TestPinSurface:
         ), patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection")
 
     def _pinned(self, tmp_path):
-        return json.loads((tmp_path / "pinned.json").read_text())
+        return json.loads((tmp_path / "options.json").read_text())["pins"]
 
     def test_set_with_no_flags_fails(self, tmp_path):
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
-            result = CliRunner().invoke(cli, ["pin", "set"])
+            result = CliRunner().invoke(cli, ["set"])
             assert result.exit_code != 0
-            assert "Nothing to pin" in result.output
+            assert "Nothing to set" in result.output
 
     def test_set_collection_blocked_without_pinned_project(self, tmp_path):
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
-            result = CliRunner().invoke(cli, ["pin", "set", "--coll", "c1"])
+            result = CliRunner().invoke(cli, ["set", "--coll", "c1"])
             assert result.exit_code != 0
             assert "No project pinned" in result.output
-            if (tmp_path / "pinned.json").exists():
+            if (tmp_path / "options.json").exists():
                 assert self._pinned(tmp_path).get("collection") is None
 
     def test_set_collection_allowed_with_pinned_project(self, tmp_path):
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
             runner = CliRunner()
-            assert runner.invoke(cli, ["pin", "set", "--proj", "gamma"]).exit_code == 0
-            result = runner.invoke(cli, ["pin", "set", "--coll", "c1"])
+            assert runner.invoke(cli, ["set", "--proj", "gamma"]).exit_code == 0
+            result = runner.invoke(cli, ["set", "--coll", "c1"])
             assert result.exit_code == 0, result.output
             assert self._pinned(tmp_path).get("collection") == "c1"
 
     def test_set_project_and_collection_together(self, tmp_path):
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
-            result = CliRunner().invoke(
-                cli, ["pin", "set", "--proj", "gamma", "--coll", "c1"]
-            )
+            result = CliRunner().invoke(cli, ["set", "--proj", "gamma", "--coll", "c1"])
             assert result.exit_code == 0, result.output
             pinned = self._pinned(tmp_path)
             assert pinned.get("project") == "gamma"
@@ -292,8 +309,8 @@ class TestPinSurface:
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
             runner = CliRunner()
-            runner.invoke(cli, ["pin", "set", "--proj", "gamma", "--coll", "c1"])
-            unset = runner.invoke(cli, ["pin", "unset", "--coll"])
+            runner.invoke(cli, ["set", "--proj", "gamma", "--coll", "c1"])
+            unset = runner.invoke(cli, ["unset", "--coll"])
             assert unset.exit_code == 0, unset.output
             pinned = self._pinned(tmp_path)
             assert pinned.get("project") == "gamma"
@@ -303,20 +320,27 @@ class TestPinSurface:
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
             runner = CliRunner()
-            runner.invoke(cli, ["pin", "set", "--proj", "gamma", "--coll", "c1"])
-            unset = runner.invoke(cli, ["pin", "unset", "--proj"])
+            runner.invoke(cli, ["set", "--proj", "gamma", "--coll", "c1"])
+            unset = runner.invoke(cli, ["unset", "--proj"])
             assert unset.exit_code == 0, unset.output
             assert "c1" in unset.output  # cascade surfaced
             pinned = self._pinned(tmp_path)
             assert pinned.get("project") is None
             assert pinned.get("collection") is None
 
-    def test_bare_unset_clears_both(self, tmp_path):
+    def test_unset_with_no_flags_fails(self, tmp_path):
+        dir_patch, init_patch = self._runner(tmp_path)
+        with dir_patch, init_patch:
+            result = CliRunner().invoke(cli, ["unset"])
+            assert result.exit_code != 0
+            assert "Nothing to unset" in result.output
+
+    def test_unset_both_pins_together(self, tmp_path):
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
             runner = CliRunner()
-            runner.invoke(cli, ["pin", "set", "--proj", "gamma", "--coll", "c1"])
-            unset = runner.invoke(cli, ["pin", "unset"])
+            runner.invoke(cli, ["set", "--proj", "gamma", "--coll", "c1"])
+            unset = runner.invoke(cli, ["unset", "--proj", "--coll"])
             assert unset.exit_code == 0, unset.output
             pinned = self._pinned(tmp_path)
             assert pinned.get("project") is None
@@ -326,8 +350,8 @@ class TestPinSurface:
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
             runner = CliRunner()
-            runner.invoke(cli, ["pin", "set", "--proj", "gamma", "--coll", "c1"])
-            switched = runner.invoke(cli, ["pin", "set", "--proj", "delta"])
+            runner.invoke(cli, ["set", "--proj", "gamma", "--coll", "c1"])
+            switched = runner.invoke(cli, ["set", "--proj", "delta"])
             assert switched.exit_code == 0, switched.output
             assert "c1" in switched.output  # cascade surfaced
             pinned = self._pinned(tmp_path)
@@ -338,8 +362,8 @@ class TestPinSurface:
         dir_patch, init_patch = self._runner(tmp_path)
         with dir_patch, init_patch:
             runner = CliRunner()
-            runner.invoke(cli, ["pin", "set", "--proj", "gamma", "--coll", "c1"])
-            again = runner.invoke(cli, ["pin", "set", "--proj", "gamma"])
+            runner.invoke(cli, ["set", "--proj", "gamma", "--coll", "c1"])
+            again = runner.invoke(cli, ["set", "--proj", "gamma"])
             assert again.exit_code == 0, again.output
             pinned = self._pinned(tmp_path)
             assert pinned.get("project") == "gamma"

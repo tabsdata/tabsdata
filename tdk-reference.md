@@ -2,7 +2,7 @@
 
 Proposed command surface after the intuitiveness pass:
 
-- **Identifiers are named options** — every command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--fnrun`/`--worker`/`--user` (execution & access); nothing is positional (except `hints {on|off}`).
+- **Identifiers are named options** — every command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--fnrun`/`--worker`/`--user` (execution & access); nothing is positional.
 - **Full canonical names + short aliases**: `collection`/`col`, `function`/`fn`, `transaction`/`trx`.
 - **Execution split into entity subgroups** (`plan`, `transaction`, `fnrun`, `worker`).
 - **Consistent flags**: `--enabled/--disabled`, `-y/--yes` for destructive ops, `-o/--output {table,json,yaml}`.
@@ -40,26 +40,27 @@ Execution
 Ops & access
   metrics                Operational metrics
   permission             Grant/revoke user permissions
-  pin                    Pin a default project/collection locally
   connection             Inspect connector types & build connection docs (offline)
+  set / unset            Persistent CLI settings (pins, server, hints, prompting)
+  settings               Show the persistent CLI settings
 
 Help & misc
   shell                  Interactive shell
   examples               Generate example projects
   info / about / version
-  hints {on|off}
 
 Global options
   -h, --help             Show help
       --version          Show version
-      --no-prompt        Never prompt; fail if input is required
+      --no-prompt        Never prompt; fail if input is required. `tdk set
+                         --prompt false` does the same for every invocation.
       --full             With --help: print the full help for every command and
                          subcommand. Pair with --output text|json (default: text),
                          e.g. `tdk --help --full --output json`.
-
-Note: tdk refuses to run inside AI agents — use the Tabsdata MCP server instead.
-Set TDK_IN_AGENT=1 to override (see Environment).
 ```
+
+tdk refuses to run inside AI agents — use the Tabsdata MCP server instead. Set
+`TDK_IN_AGENT=1` to override (see Environment).
 
 ## Common options
 
@@ -235,13 +236,41 @@ permission revoke --user USER --permission PERM [--proj PROJECT]
 permission list   [--user USER] [--proj PROJECT] [-o]
 ```
 
-## `tdk pin`
+## `tdk set` / `tdk unset` / `tdk settings`
+
+Persistent CLI settings, stored in `options.json` under the Tabsdata directory
+(`~/.tabsdata`) and applied to every later invocation. `set` gives a setting a
+value, `unset` drops what was stored so the default applies again, and `settings`
+shows them all. Each takes any combination of its settings in one command.
 
 ```
-pin set   [--proj PROJECT] [--col COLLECTION]
-pin unset [--proj] [--col]
-pin show
+set   [--hints true|false] [--prompt true|false] [--server SERVER]
+      [--proj PROJECT] [--coll COLLECTION]
+unset [--hints] [--prompt] [--server] [--proj] [--coll] | --all
+settings [-o]                                       # current settings
 ```
+
+`unset --all` is shorthand for every flag at once, leaving every setting at its
+shipped default.
+
+| Setting | What it does |
+|---|---|
+| `--hints true\|false` | Show the hints the CLI adds to errors. Default: true |
+| `--prompt true\|false` | Prompt for a missing value, or fail instead. Default: true |
+| `--server SERVER` | Server `tdk login` uses without `--server` |
+| `--proj PROJECT` | Default project of project-scoped commands |
+| `--coll COLLECTION` | Default collection (requires a pinned project) |
+
+`set --prompt false` is the standing form of the root `--no-prompt` flag: with
+prompting off no command prompts, and one missing a required value fails, naming
+the setting to flip back. The root flag does the same for a single invocation.
+
+A collection pin only resolves under a project, so `unset --proj` unpins the
+collection too, and switching to a different project drops a collection pinned
+under the old one.
+
+A server URL with no protocol defaults to `http://`, and one with no port to
+port `2457` — so `set --server 127.0.0.1` means `http://127.0.0.1:2457`.
 
 ## `tdk auth`
 
@@ -263,8 +292,11 @@ about
 version
 shell
 examples [--dir D] [--guide]
-hints    {on|off}
 ```
+
+`login` takes the server from `tdk set --server` when `--server` is
+omitted, and prompts only when neither is set. The URL defaults to the `http://`
+protocol and port `2457` when it carries neither.
 
 ## Environment
 
