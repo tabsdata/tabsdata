@@ -265,6 +265,7 @@ pub const DEFAULT_NAMESPACE: &str = "default";
 pub const VENV_ACTIVATE_FILE: &str = "activate";
 
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
+pub const PROGRAM_TDK: &str = "tdk";
 
 pub const DEFAULT_INSTANCE_NAME: &str = "tabsdata";
 

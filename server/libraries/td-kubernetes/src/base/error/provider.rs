@@ -69,6 +69,8 @@ pub enum ProviderError {
     TableRenderFailed(String) = 5112,
     #[error("Could not render the document: {0}.")]
     DocumentRenderFailed(String) = 5113,
+    #[error("Could not run 'tdk info': {0}.")]
+    InfoDelegationFailed(String) = 5118,
     #[error("Could not stop kminus cluster: {0}.")]
     KminusStopFailed(String) = 5002,
     #[error("Could not remove staging folder '{0}': {1}.")]

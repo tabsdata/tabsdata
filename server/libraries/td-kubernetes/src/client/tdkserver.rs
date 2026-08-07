@@ -8,12 +8,12 @@ pub mod common;
 pub mod render;
 pub mod widgets;
 
-use clap::{CommandFactory, Parser};
+use clap::CommandFactory;
 
 use crate::cerror;
 use td_build::version::TABSDATA_VERSION;
 
-use crate::client::tdkserver::arguments::{Arguments, Commands, GlobalArguments};
+use crate::client::tdkserver::arguments::{Arguments, Commands, GlobalArguments, parse_arguments};
 use crate::client::tdkserver::widgets::set_keep_progress;
 // use crate::client::tdkserver::commands::cluster::command_cluster;
 // use crate::client::tdkserver::commands::config::command_config;
@@ -24,6 +24,7 @@ use crate::client::tdkserver::commands::service::create::command_create;
 use crate::client::tdkserver::commands::service::get::command_get;
 use crate::client::tdkserver::commands::service::info::command_info;
 use crate::client::tdkserver::commands::service::init::command_init;
+use crate::client::tdkserver::commands::service::inspect::command_inspect;
 use crate::client::tdkserver::commands::service::list::command_list;
 use crate::client::tdkserver::commands::service::put::command_put;
 use crate::client::tdkserver::commands::service::quickstart::command_quickstart;
@@ -49,7 +50,7 @@ pub struct TabsDataKubernetesClient;
 
 impl TabsDataKubernetesClient {
     async fn run(&self) -> ExitStatus {
-        let arguments = Arguments::parse();
+        let arguments = parse_arguments();
         let globals = arguments.globals;
         let verbose = globals.verbose;
         set_keep_progress(globals.keep_progress);
@@ -74,6 +75,7 @@ impl TabsDataKubernetesClient {
                 td_common::about::tdabout(TABSDATA_VERSION);
                 Ok(())
             }
+            Some(Commands::Info(arguments)) => command_info(arguments, &globals).await,
             Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,
             Some(Commands::Init(arguments)) => command_init(arguments, &globals).await,
             Some(Commands::Create(arguments)) => command_create(arguments, &globals).await,
@@ -81,7 +83,7 @@ impl TabsDataKubernetesClient {
             Some(Commands::Stop(arguments)) => command_stop(arguments, &globals).await,
             Some(Commands::Restart(arguments)) => command_restart(arguments, &globals).await,
             Some(Commands::Status(arguments)) => command_status(arguments, &globals).await,
-            Some(Commands::Info(arguments)) => command_info(arguments, &globals).await,
+            Some(Commands::Inspect(arguments)) => command_inspect(arguments, &globals).await,
             // Some(Commands::Register(arguments)) => command_register(arguments, &globals).await,
             // Some(Commands::Unregister(arguments)) => {
             //     command_unregister(arguments, &globals).await

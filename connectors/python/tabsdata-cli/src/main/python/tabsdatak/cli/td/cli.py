@@ -17,7 +17,6 @@ except PackageNotFoundError:
     __version__ = "0.0.0"
 
 from tabsdatak.cli._registry import collect_cli_commands
-from tabsdatak.common._information.about import tdabout
 from tabsdatak.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
     OPTION_PROMPT,
@@ -62,6 +61,7 @@ from tabsdatak.cli.td import (  # noqa: F401
     user_group,
     worker_group,
 )
+from tabsdatak.common._information.about import tdabout
 
 CYAN = "[cyan]"
 NO_CYAN = "[/cyan]"
@@ -321,44 +321,44 @@ def about():
     tdabout()
 
 
-@cli.command()
-@click.option("--third-party", is_flag=True, help="Show the third party dependencies.")
-@click.option("--license", is_flag=True, help="Show the license.")
-@click.option(
-    "--release-notes",
-    is_flag=True,
-    help="Show the release notes of the current version of the CLI.",
-)
-def info(third_party: bool, license: bool, release_notes: bool):
-    """
-    Provide information about license and third party libraries
-    """
+def _show_manifest(resource: str, title: str, dedent: bool = False):
     from tabsdatak.common._resources.reader import td_resource
 
-    if license:
-        license_path = td_resource("assets/manifest/LICENSE")
-        with open(license_path, "r", encoding="utf-8") as f:
-            console.print()
-            console.print(f"{UNDERLINE}License{NO_UNDERLINE}")
-            console.print()
-            console.print(f"{CYAN}{textwrap.dedent(f.read()).strip()}{NO_CYAN}")
-            console.print()
-    if third_party:
-        third_party_path = td_resource("assets/manifest/THIRD-PARTY")
-        with open(third_party_path, "r", encoding="utf-8") as f:
-            console.print()
-            console.print(f"{UNDERLINE}Third Party Dependencies{NO_UNDERLINE}")
-            console.print()
-            console.print(f"{CYAN}{f.read()}{NO_CYAN}")
-            console.print()
-    if release_notes:
-        release_notes_path = td_resource("assets/manifest/RELEASE-NOTES")
-        with open(release_notes_path, "r", encoding="utf-8") as f:
-            console.print()
-            console.print(f"{UNDERLINE}Release Notes{NO_UNDERLINE}")
-            console.print()
-            console.print(f"{CYAN}{f.read()}{NO_CYAN}")
-            console.print()
+    path = td_resource(f"assets/manifest/{resource}")
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    if dedent:
+        content = textwrap.dedent(content).strip()
+    console.print()
+    console.print(f"{UNDERLINE}{title}{NO_UNDERLINE}")
+    console.print()
+    console.print(f"{CYAN}{content}{NO_CYAN}")
+    console.print()
+
+
+@cli.group(no_args_is_help=True)
+def info():
+    """
+    Show the license, third-party dependencies and release notes of tabsdata.
+    """
+
+
+@info.command(name="third-party")
+def third_party():
+    """Show the third-party dependencies of tabsdata."""
+    _show_manifest("THIRD-PARTY", "Third Party Dependencies")
+
+
+@info.command(name="license")
+def license_():
+    """Show the license of tabsdata."""
+    _show_manifest("LICENSE", "License", dedent=True)
+
+
+@info.command(name="release-notes")
+def release_notes():
+    """Show the release notes of the current version of tabsdata."""
+    _show_manifest("RELEASE-NOTES", "Release Notes")
 
 
 @cli.command()

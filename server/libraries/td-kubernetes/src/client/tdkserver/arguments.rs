@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use clap_derive::{Args, Subcommand};
 
 // use crate::client::tdkserver::commands::cluster::ClusterCommands;
@@ -16,6 +16,7 @@ use clap_derive::{Args, Subcommand};
 use crate::client::tdkserver::commands::service::InstanceNameArguments;
 use crate::client::tdkserver::commands::service::create::CreateArguments;
 use crate::client::tdkserver::commands::service::get::GetArguments;
+use crate::client::tdkserver::commands::service::info::InfoCommands;
 use crate::client::tdkserver::commands::service::init::InitArguments;
 use crate::client::tdkserver::commands::service::put::PutArguments;
 use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments;
@@ -54,6 +55,29 @@ pub struct Arguments {
 
     #[command(subcommand)]
     pub command: Option<Commands>,
+}
+
+const AUXILIARY_COMMANDS: [&str; 2] = ["about", "info"];
+
+const GLOBAL_ARGUMENTS: [&str; 2] = ["verbose", "keep-progress"];
+
+const HELP_ARGUMENT: &str = "help";
+
+pub fn parse_arguments() -> Arguments {
+    let mut command = Arguments::command();
+    command.build();
+    for name in AUXILIARY_COMMANDS {
+        let Some(subcommand) = command.find_subcommand_mut(name) else {
+            continue;
+        };
+        let mut hidden = subcommand.clone();
+        for argument in GLOBAL_ARGUMENTS {
+            hidden = hidden.mut_arg(argument, |argument| argument.hide(true));
+        }
+        *subcommand = hidden.mut_arg(HELP_ARGUMENT, |argument| argument);
+    }
+    let matches = command.get_matches();
+    Arguments::from_arg_matches(&matches).unwrap_or_else(|error| error.exit())
 }
 
 #[derive(Debug, Clone, Args)]
@@ -97,6 +121,12 @@ pub struct GlobalArguments {
 pub enum Commands {
     #[command(about = "Show build metadata and system information")]
     About,
+    #[command(
+        subcommand,
+        about = "Show the license, third-party dependencies and release notes of tabsdata",
+        arg_required_else_help = true
+    )]
+    Info(InfoCommands),
     #[command(about = "Initialize, create and start a tabsdata instance in one step")]
     Quickstart(QuickstartArguments),
     #[command(about = "Produce an editable input config folder for a tabsdata instance")]
@@ -112,7 +142,7 @@ pub enum Commands {
     #[command(about = "Show the running workloads of a tabsdata instance")]
     Status(InstanceNameArguments),
     #[command(about = "Show the configuration and state of a tabsdata instance")]
-    Info(InstanceNameArguments),
+    Inspect(InstanceNameArguments),
     #[command(about = "Trash a local kminus tabsdata instance")]
     Trash(TrashArguments),
     // #[command(about = "Register an existing tabsdata instance")]

@@ -144,7 +144,7 @@ fn version_cell(settings: &InstanceSettings) -> String {
     settings.version.clone()
 }
 
-pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<bool>) {
+pub fn instance_inspect(settings: &InstanceSettings, folder: &Path, alive: Option<bool>) {
     let resolved = &settings.cluster.resolved;
     let summary = Summary {
         provider: settings.provider,
