@@ -867,6 +867,7 @@ def enable(
     coll: str,
 ):
     """Enables a function"""
+    verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be updated")
     coll = (
         coll
@@ -908,6 +909,7 @@ def disable(
     coll: str,
 ):
     """Disables a function"""
+    verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be updated")
     coll = (
         coll

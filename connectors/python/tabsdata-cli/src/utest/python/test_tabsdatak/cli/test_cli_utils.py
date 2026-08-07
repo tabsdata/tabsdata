@@ -666,11 +666,17 @@ def test_dynamic_import_wrapper_whose_func_is_a_builtin(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _proj_ctx(server):
+    import rich_click as click
+
+    return click.Context(click.Command("cmd"), obj={"tabsdataserver": server})
+
+
 def test_apply_proj_overrides_active_project():
     from types import SimpleNamespace
 
     server = SimpleNamespace(connection=SimpleNamespace(project="pinned"))
-    ctx = SimpleNamespace(obj={"tabsdataserver": server})
+    ctx = _proj_ctx(server)
 
     # A value overrides the active project on the connection.
     cli_utils._apply_proj(ctx, None, "explicit")
@@ -682,11 +688,21 @@ def test_apply_proj_overrides_active_project():
 
 
 def test_apply_proj_is_a_noop_without_a_server():
-    from types import SimpleNamespace
-
-    ctx = SimpleNamespace(obj={"tabsdataserver": None})
+    ctx = _proj_ctx(None)
     # Must not raise when logged out (no server on the context).
     assert cli_utils._apply_proj(ctx, None, "whatever") == "whatever"
+
+
+def test_apply_proj_marks_the_command_project_scoped():
+    # The option's presence -- not its value -- is what tells
+    # resolve_project_or_prompt to settle the project first.
+    ctx = _proj_ctx(None)
+    cli_utils._apply_proj(ctx, None, None)
+    assert ctx.obj["project_scoped"] is True
+    assert "proj" not in ctx.obj
+
+    cli_utils._apply_proj(ctx, None, "explicit")
+    assert ctx.obj["proj"] == "explicit"
 
 
 def test_proj_option_decorator_adds_proj_flag():

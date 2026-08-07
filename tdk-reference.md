@@ -67,7 +67,9 @@ tdk refuses to run inside AI agents — use the Tabsdata MCP server instead. Set
 Applied where shown in each command. Every value option takes an argument.
 
 ```
-  -p, --proj   PROJECT            Target project. Default: pinned project.
+  -p, --proj   PROJECT            Target project. Default: pinned project; a
+                                  command that needs one and has neither prompts
+                                  for it before any other value.
   -c, --col    COLLECTION         Target collection. Default: pinned collection.
   -o, --output {table|json|yaml}  Output format. Default: table.
       --max-result N              Maximum rows a `list` command shows. Default: 100.

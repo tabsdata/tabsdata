@@ -328,17 +328,29 @@ def get_currently_pinned_object(ctx: click.Context, object: str) -> str | None:
     return currently_pinned
 
 
+def _set_active_project(ctx: click.Context, project: str | None):
+    server = ctx.obj.get("tabsdataserver")
+    if server is not None:
+        server.connection.project = project
+
+
 def _apply_proj(ctx: click.Context, param, value):
     """``--proj`` option callback: target a project for this command.
 
     The active project rides on the server connection. The root group seeds it
     from the pinned project; a per-command ``--proj`` overrides it for this
     invocation. The connection builds project-scoped paths from it and narrows
-    cross-project listings to it, so commands never thread it any further."""
+    cross-project listings to it, so commands never thread it any further.
+
+    Carrying the option on the context too marks the command as project-scoped
+    -- which is what makes :func:`resolve_project_or_prompt` ask for a project
+    before anything else -- and lets a command that has to log in first apply
+    ``--proj`` to the connection that login builds."""
+    ctx.ensure_object(dict)
+    ctx.obj["project_scoped"] = True
     if value:
-        server = ctx.obj.get("tabsdataserver")
-        if server is not None:
-            server.connection.project = value
+        ctx.obj["proj"] = value
+        _set_active_project(ctx, value)
     return value
 
 
@@ -351,7 +363,10 @@ def proj_option(fn):
         "proj",
         expose_value=False,
         callback=_apply_proj,
-        help="Project to target; overrides the pinned project.",
+        help=(
+            "Project to target; overrides the pinned project. Prompted for when "
+            "a command needs one and neither is set."
+        ),
     )(fn)
 
 
@@ -367,6 +382,32 @@ def all_projects_option(fn):
             "--proj project."
         ),
     )(fn)
+
+
+def _spans_projects(ctx: click.Context) -> bool:
+    """Whether this command runs fine with no project at all -- true for the
+    cross-project listings, which are exactly the ones offering
+    ``--all-projects``."""
+    return any(param.name == "all_projects" for param in ctx.command.params)
+
+
+def resolve_project_or_prompt(ctx: click.Context):
+    """Settle the active project before the command prompts for anything else.
+
+    Collections, functions and tables are all addressed within a project, so a
+    project-scoped command with no project selected asks for one first --
+    otherwise it would prompt for a collection only to fail afterwards on the
+    missing project. With prompting off the project is left unset and the
+    request fails with the SDK's ``NoProjectSelectedError``, which names both
+    ways to supply one."""
+    if ctx.obj.get("no_prompt") or not ctx.obj.get("project_scoped"):
+        return
+    if _spans_projects(ctx):
+        return
+    server = ctx.obj.get("tabsdataserver")
+    if server is None or server.connection.project:
+        return
+    _set_active_project(ctx, logical_prompt(ctx, "Name of the project to target"))
 
 
 def resolve_all_projects(ctx: click.Context, all_projects: bool) -> bool:
@@ -522,11 +563,20 @@ def echo_more_results(ctx: click.Context, truncated: bool) -> None:
 
 
 def verify_login_or_prompt(ctx: click.Context):
+    """Settle what every command needs before it runs: a logged-in connection
+    and, for a project-scoped command, an active project. Commands call it as
+    their first statement, so the project is asked for ahead of the collection,
+    function or table it scopes."""
     if not ctx.obj["tabsdataserver"]:
         click.echo("No credentials found. Please login first.")
         server_url, username, password = request_login_information(ctx)
         utils_login(ctx, server_url, username, password)
         initialise_tabsdata_server_connection(ctx)
+        # `--proj` was parsed before there was a connection to put it on; the
+        # login just built one, so apply it now.
+        if ctx.obj.get("proj"):
+            _set_active_project(ctx, ctx.obj["proj"])
+    resolve_project_or_prompt(ctx)
 
 
 class MutuallyExclusiveOption(Option):
