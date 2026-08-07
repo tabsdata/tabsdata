@@ -2,16 +2,18 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-import tabsdata as td
+from tabsdatak.api import TableFrameSpec, transformer
+from tabsdatak.tableframe.functions import col
 
 
-@td.transformer(
-    input_tables="persons",
+@transformer(
+    input_tables=["persons"],
     output_tables=["spanish", "french", "german"],
 )
 def persons_transformer(
-    persons: td.TableFrame,
-) -> (td.TableFrame, td.TableFrame, td.TableFrame):
+    persons: TableFrameSpec,
+) -> tuple[TableFrameSpec, TableFrameSpec, TableFrameSpec]:
+    assert persons is not None
     persons = persons.select([
         "identifier",
         "name",
@@ -21,7 +23,7 @@ def persons_transformer(
     ])
     result = {}
     for nationality in ["Spanish", "French", "German"]:
-        result[nationality] = persons.filter(
-            td.col("nationality").eq(nationality)
-        ).drop("nationality")
+        result[nationality] = persons.filter(col("nationality").eq(nationality)).drop(
+            "nationality"
+        )
     return result["Spanish"], result["French"], result["German"]

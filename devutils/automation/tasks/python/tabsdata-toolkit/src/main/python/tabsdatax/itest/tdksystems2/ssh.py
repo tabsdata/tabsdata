@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 
@@ -105,11 +106,8 @@ def fetch_remote_file(ep: SshEndpoint, remote_path: str) -> str:
 
 def _popen_detached(args: list[str], log_path: str) -> subprocess.Popen:
     logf = open(log_path, "ab")
-    if os.name == "nt":
-        flags = (
-            subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-            | subprocess.CREATE_NEW_PROCESS_GROUP
-        )  # type: ignore[attr-defined]
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
         return subprocess.Popen(
             args,
             stdin=subprocess.DEVNULL,

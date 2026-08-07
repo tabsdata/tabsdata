@@ -169,7 +169,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
     g_harvester_folder = harvester_folder
     g_config = config
-    config._tdx_harvester_folder = harvester_folder
 
     # Initialize SQLite database (controller resets, workers just init)
     if not is_worker:

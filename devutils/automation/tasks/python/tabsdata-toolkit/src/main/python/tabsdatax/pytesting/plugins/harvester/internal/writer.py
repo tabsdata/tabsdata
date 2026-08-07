@@ -23,6 +23,7 @@ import threading
 import time
 import warnings
 from dataclasses import dataclass
+from typing import Any
 
 from tabsdatax.pytesting.plugins.harvester.internal.constants import (
     META_DEBOUNCE_MS,
@@ -204,7 +205,7 @@ class MetaWriter:
                 PluginState,
             )
 
-            factories = {
+            factories: dict[str, Any] = {
                 "phase": PhaseState,
                 "fixture": FixtureState,
                 "marker": MarkerState,

@@ -21,6 +21,7 @@ import json
 
 from tabsdatax.itest.tdksystems2 import cli, console, constants, datagen, descriptor
 from tabsdatax.itest.tdksystems2.errors import TdxError
+from tabsdatax.itest.tdksystems2.systems.salesforce.backend import Salesforce
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -51,8 +52,11 @@ def run(ctx: cli.Context) -> int:
             f"domain '{ctx.name}' already has data; use {constants.OPT_FORCE} to "
             f"wipe the org and reload"
         )
+    assert isinstance(ctx.system, Salesforce)
     entities = salesforce_loader.load(
-        ctx.system.model_assets(model), info.meta, log=console.out
+        ctx.system.model_assets(model),
+        info.meta,
+        log=console.out,
     )
     descriptor.record_data(ctx.path, "1", entities)
     if a.out == constants.OUT_JSON:

@@ -195,8 +195,8 @@ class APIServer:
         # from the pinned project or a command's `--proj` override; `_scoped`
         # builds scoped paths from it and `_project_narrow` narrows
         # cross-project lists to it.
-        self.project = None
-        self._active_project_name_for = None
+        self.project: str | None = None
+        self._active_project_name_for: str | None = None
         self._resolved_active_project_name = None
 
     def _active_project_name(self) -> str:

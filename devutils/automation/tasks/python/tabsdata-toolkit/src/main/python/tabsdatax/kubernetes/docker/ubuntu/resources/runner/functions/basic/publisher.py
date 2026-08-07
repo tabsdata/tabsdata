@@ -2,12 +2,14 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-import tabsdata as td
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
+from tabsdatak.conn.localfile import LocalFileSrc
 
 
-@td.publisher(
-    source=td.LocalFileSource("/root/.td/functions/basic/input/persons.csv"),
-    tables="persons",
+@publisher(
+    source=LocalFileSrc(paths=["persons.csv"]),
+    output_tables=["persons"],
 )
-def persons_publisher(persons: td.TableFrame) -> td.TableFrame:
-    return persons
+def persons_publisher(persons: TableFramesSpec) -> TableFrameSpec:
+    assert persons is not None
+    return persons[0]

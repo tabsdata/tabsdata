@@ -192,17 +192,16 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         let context = built.kube_context().await?;
         ensure_cluster_reachable(context.client()).await?;
         ensure_namespace_exists(&context).await?;
-        if provider == ClusterProvider::Fargate {
-            if let Some(scheduler) = probe_scheduler(&context).await?
-                && scheduler != SCHEDULER_FARGATE
-            {
-                return Err(ProviderError::FargateProfileMissing {
-                    namespace: context.namespace().to_owned(),
-                    scheduler,
-                    expected: SCHEDULER_FARGATE.to_owned(),
-                }
-                .into());
+        if provider == ClusterProvider::Fargate
+            && let Some(scheduler) = probe_scheduler(&context).await?
+            && scheduler != SCHEDULER_FARGATE
+        {
+            return Err(ProviderError::FargateProfileMissing {
+                namespace: context.namespace().to_owned(),
+                scheduler,
+                expected: SCHEDULER_FARGATE.to_owned(),
             }
+            .into());
         }
         built.ensure_creatable_service().await?;
     }

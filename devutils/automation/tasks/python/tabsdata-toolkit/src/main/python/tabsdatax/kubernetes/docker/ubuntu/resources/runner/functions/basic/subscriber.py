@@ -2,17 +2,16 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-import tabsdata as td
+from tabsdatak.api import TableFrameSpec, subscriber
+from tabsdatak.conn.localfile import LocalFileDest
 
 
-@td.subscriber(
-    tables=["spanish", "french"],
-    destination=td.LocalFileDestination([
-        "/root/.td/functions/basic/output/spanish.jsonl",
-        "/root/.td/functions/basic/output/french.jsonl",
-    ]),
+@subscriber(
+    input_tables=["spanish", "french"],
+    destination=LocalFileDest(paths=["spanish.jsonl", "french.jsonl"]),
 )
 def persons_subscriber(
-    spanish: td.TableFrame, french: td.TableFrame
-) -> (td.TableFrame, td.TableFrame):
+    spanish: TableFrameSpec,
+    french: TableFrameSpec,
+) -> tuple[TableFrameSpec, TableFrameSpec]:
     return spanish, french

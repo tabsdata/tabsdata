@@ -83,6 +83,8 @@ class FixtureTracker:
         autouse_fixtures: set[str] = set()
 
         for item in items:
+            if not isinstance(item, pytest.Function):
+                continue
             item_fixtures = set()
             for fname in item.fixturenames:
                 if fname.startswith("_") or fname in _BUILTIN_FIXTURES:
@@ -114,12 +116,12 @@ class FixtureTracker:
 
         # Emit fixture registrations to writer and init in-memory counters
         for fname, count in fixture_counts.items():
-            scope = fixture_scopes.get(fname, "function")
+            fixture_scope = fixture_scopes.get(fname, "function")
             if fname == FIXTURE_NONE:
-                scope = "function"
+                fixture_scope = "function"
             self._known.add(fname)
             self._counts[fname] = {
-                "scope": scope,
+                "scope": fixture_scope,  # type: ignore[dict-item]
                 "total": count,
                 "remaining": count,
                 "passed": 0,

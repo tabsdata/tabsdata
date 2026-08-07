@@ -9,11 +9,11 @@ mod definitions {
     use crate::dxo::yaml::WorkerOutput;
     use crate::dxo::yaml::function::WrittenTable;
     use crate::types::basic::{
-        AtTime, ByteCount, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, Enabled, EpochMs,
-        ExecutionId, ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
-        PhysicalFunctionRunId, ProjectId, ProjectName, RowCount, SizeThreshold, TableVersionCount,
-        TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus,
-        WorkerStatus, WorkerType,
+        AtTime, ByteCount, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask,
+        Enabled, EpochMs, ExecutionId, ExecutionName, FunctionName, FunctionVersionId,
+        LogicalFunctionRunId, PhysicalFunctionRunId, ProjectId, ProjectName, RowCount,
+        SizeThreshold, TableVersionCount, TimeoutThresholdMin, TransactionId, WorkerConfig,
+        WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use chrono::{DateTime, Utc};
     use ta_objects::Buildable;

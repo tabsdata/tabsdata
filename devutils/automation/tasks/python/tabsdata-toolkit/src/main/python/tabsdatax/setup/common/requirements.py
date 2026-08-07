@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Set
+from collections.abc import MutableSet
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,7 +20,7 @@ def read_requirements(
     ignore_tabsdata_packages: bool = True,
     root: str | Path | None = None,
     token: str | None = None,
-    visited: Set[Path] | None = None,
+    visited: MutableSet[Path] | None = None,
 ) -> list[str]:
     if token is None:
         token = str(uuid4())
@@ -47,9 +47,10 @@ def read_requirements(
                 continue
 
             if requirement.startswith("-r"):
-                included_path = requirement.split(maxsplit=1)[1]
-                if not os.path.isabs(included_path):
-                    included_path = requirements_file.parent / included_path
+                included_entry = requirement.split(maxsplit=1)[1]
+                included_path: str | Path = included_entry
+                if not os.path.isabs(included_entry):
+                    included_path = requirements_file.parent / included_entry
                 requirements.extend(
                     read_requirements(
                         included_path,

@@ -79,9 +79,8 @@ mod tests {
     use td_objects::types::basic::{
         AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, ExecutionId,
         FunctionId, FunctionName, FunctionVersionId, PhysicalFunctionRunId,
-        PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, StorageVersion,
-        TransactionId, Trigger,
-        TriggeredOn, UserId, UserName,
+        PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, StorageVersion, TransactionId,
+        Trigger, TriggeredOn, UserId, UserName,
     };
 
     /// Proves each stamped base_path on `PhysicalFunctionRunToExecute` is routed

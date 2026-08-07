@@ -203,9 +203,11 @@ class AnnotationRewriter:
         """Return (rewritten signature, used our-types, used alias names)."""
         rewriter = _Rewriter(self._our_types, self._alias_names)
         try:
-            function = ast.parse(f"def _f{signature}: ...").body[0]
+            parsed = ast.parse(f"def _f{signature}: ...").body[0]
         except SyntaxError:
             return signature, set(), set()
+        assert isinstance(parsed, ast.FunctionDef)
+        function = parsed
         for argument in _all_args(function):
             if argument.annotation is not None:
                 argument.annotation = rewriter.rewrite_standalone(argument.annotation)

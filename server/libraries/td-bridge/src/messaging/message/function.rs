@@ -5,7 +5,8 @@
 use serde::{Deserialize, Serialize};
 use td_common::worker::{Callback, Decorator, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionId, ConnectionKind, FunctionId, FunctionName, ProjectId, ProjectName, WorkerId,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, FunctionId, FunctionName,
+    ProjectId, ProjectName, WorkerId,
 };
 
 /// A kubernetes function-runner request, modeled as a per-action enum (the

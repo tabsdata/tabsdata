@@ -43,8 +43,8 @@ def create_editable_binary_symlinks(
         except OSError as e:
             logger.warning(f"Failed to create destination {venv_dest_dir}: {e}")
             continue
-        for binary_path in binary_paths:
-            binary_path = Path(binary_path)
+        for binary_entry in binary_paths:
+            binary_path = Path(binary_entry)
             if not binary_path.exists():
                 continue
 

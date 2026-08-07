@@ -25,6 +25,7 @@ from time import sleep
 
 import polars as pl
 import pytest
+from tabsdatak.api import Secret
 from tabsdatak.sdk.status_utils.execution import (
     EXECUTION_FINAL_STATUSES,
     EXECUTION_SUCCESSFUL_FINAL_STATUSES,
@@ -101,6 +102,7 @@ def server(instance_tdtest: Instance) -> TabsdataServer:
     Requires ``@tabsdata_instance(consumer="tdtest")`` on the test.
     """
     api = instance_tdtest.apiserver
+    assert api.superuser is not None
     return TabsdataServer(
         f"{api.host}:{api.port}", api.superuser.user, api.superuser.password
     )
@@ -162,10 +164,11 @@ def _connection_document(conn: Conn) -> tuple[str, list[dict]]:
     reference = conn.to_dict()
     data = deepcopy(reference)
     for path, _ in _secret_refs(reference):
-        secret = conn
+        secret: object = conn
         for attr in path.split("."):
             if attr not in ("$", "spec"):
                 secret = getattr(secret, attr)
+        assert isinstance(secret, Secret)
         replace_at(data, path, f"secret:{secret.value()}")
     dehydrated, secrets = dehydrate(data, reference)
     return _template.to_yaml(dehydrated), [

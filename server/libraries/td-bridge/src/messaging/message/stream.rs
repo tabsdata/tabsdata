@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 use td_common::worker::{Callback, Decorator, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionId, ConnectionKind, FunctionName, FunctionVersionId, ProjectId, ProjectName,
-    WorkerId,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, FunctionName, FunctionVersionId,
+    ProjectId, ProjectName, WorkerId,
 };
 
 #[allow(clippy::large_enum_variant)]
