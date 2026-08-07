@@ -12,10 +12,10 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
+    format_option,
     hint_common_solutions,
     logical_prompt,
     make_console,
-    output_option,
     render,
     verify_login_or_prompt,
 )
@@ -190,7 +190,7 @@ def revoke(ctx: click.Context, user: str, permission: str, project: str):
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["user"],
 )
-@output_option
+@format_option
 @click.pass_context
 def list_permissions(ctx: click.Context, user: str, project: str):
     """List a user's permissions, or who has access to a project"""

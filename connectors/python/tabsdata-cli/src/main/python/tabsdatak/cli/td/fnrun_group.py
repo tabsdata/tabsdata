@@ -14,12 +14,12 @@ from tabsdatak.cli.cli_utils import (
     beautify_time,
     collection_label,
     echo_more_results,
+    format_option,
     hint_common_solutions,
     logical_prompt,
     make_console,
     max_result_option,
     output_format,
-    output_option,
     render,
     take,
     verify_login_or_prompt,
@@ -84,7 +84,7 @@ def fnrun():
 @click.option(
     "--trx", type=str, help="ID of the transaction to filter function runs by."
 )
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list_runs(
@@ -142,7 +142,7 @@ def list_runs(
 
 @fnrun.command()
 @click.option("--fnrun", required=True, help="ID of the function run to display.")
-@output_option
+@format_option
 @click.pass_context
 def get(ctx: click.Context, fnrun: str):
     """
@@ -210,7 +210,7 @@ def get(ctx: click.Context, fnrun: str):
         "stdout. Any folders provided before the file must already exist."
     ),
 )
-@output_option
+@format_option
 @click.pass_context
 def logs(ctx: click.Context, fnrun: str, file: str):
     """

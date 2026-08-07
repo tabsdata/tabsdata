@@ -46,7 +46,7 @@ def test_template_emits_yaml():
 def test_template_file_writes_document_to_path(tmp_path):
     # ``--file``/``-f`` writes the template to a file instead of stdout. The
     # template's output path is ``--file`` (the CLI-wide name), NOT ``-o`` --
-    # ``-o/--output`` is reserved for the table/json/yaml format contract.
+    # ``-o/--format`` is reserved for the table/json/yaml format contract.
     out = tmp_path / "conn.yaml"
     result = CliRunner().invoke(
         cli, ["connection", "template", "-t", "local-file-in", "--file", str(out)]

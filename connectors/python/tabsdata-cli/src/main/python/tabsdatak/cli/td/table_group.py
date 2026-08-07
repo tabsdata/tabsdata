@@ -14,12 +14,12 @@ from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
     beautify_time,
     echo_more_results,
+    format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     make_console,
     max_result_option,
-    output_option,
     proj_option,
     render,
     take,
@@ -224,7 +224,7 @@ def download(
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at"],
 )
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
@@ -358,7 +358,7 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
         "created as part of the download)."
     ),
 )
-@output_option
+@format_option
 @click.pass_context
 def sample(
     ctx: click.Context,
@@ -459,7 +459,7 @@ def sample(
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at", "at-trx"],
 )
-@output_option
+@format_option
 @click.pass_context
 def schema(
     ctx: click.Context,
@@ -516,7 +516,7 @@ def schema(
     "--name",
     help="The name of the table to which the data belongs.",
 )
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def versions(ctx: click.Context, coll: str, name: str):

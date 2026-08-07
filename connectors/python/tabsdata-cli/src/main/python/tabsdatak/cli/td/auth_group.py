@@ -13,9 +13,9 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_list,
+    format_option,
     logical_prompt,
     make_console,
-    output_option,
     render,
     verify_login_or_prompt,
 )
@@ -102,7 +102,7 @@ def delete_cert(ctx: click.Context, server: str):
 
 
 @auth.command()
-@output_option
+@format_option
 @click.pass_context
 def info(ctx: click.Context):
     """Display information of the currently authenticated user"""

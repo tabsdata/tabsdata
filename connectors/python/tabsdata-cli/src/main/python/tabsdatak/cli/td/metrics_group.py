@@ -11,9 +11,9 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    format_option,
     hint_common_solutions,
     make_console,
-    output_option,
     proj_option,
     render,
     verify_login_or_prompt,
@@ -198,7 +198,7 @@ def metrics():
     default=None,
     help="Comma-separated function run statuses to include (e.g. `C,D,E`).",
 )
-@output_option
+@format_option
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -270,7 +270,7 @@ def show(
         "Comma-separated non-terminal function run statuses to include (e.g. `S,R,H`)."
     ),
 )
-@output_option
+@format_option
 @click.pass_context
 def inflight(
     ctx: click.Context,

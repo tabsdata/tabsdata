@@ -17,13 +17,13 @@ from tabsdatak.cli.cli_utils import (
     beautify_time,
     collection_label,
     echo_more_results,
+    format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     load_info_and_project_root,
     logical_prompt,
     make_console,
     max_result_option,
-    output_option,
     proj_option,
     render,
     show_hint,
@@ -98,7 +98,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 
 @fn.command()
 @proj_option
-@output_option
+@format_option
 @click.option(
     "--name",
     "-n",
@@ -259,7 +259,7 @@ def bundle(ctx: click.Context, fn_version: str, file: str):
 # shadowing the ``list`` builtin at module scope.
 @fn.command("list")
 @proj_option
-@output_option
+@format_option
 @click.option(
     "--coll",
     "-c",
@@ -1041,7 +1041,7 @@ def patch(
 
 @fn.command("patches")
 @proj_option
-@output_option
+@format_option
 @click.option(
     "--name",
     "-n",

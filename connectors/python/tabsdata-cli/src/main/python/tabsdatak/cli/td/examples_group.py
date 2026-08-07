@@ -21,7 +21,7 @@ import rich_click as click
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
-from tabsdatak.cli.cli_utils import make_console, output_option, render, show_hint
+from tabsdatak.cli.cli_utils import format_option, make_console, render, show_hint
 
 EXAMPLES_RESOURCE = "tdresources/examples"
 META_FILE = "_meta.yaml"
@@ -72,7 +72,7 @@ def _read_meta(example_dir: Path) -> dict:
 
 
 @examples.command("list")
-@output_option
+@format_option
 @click.pass_context
 def list_(ctx: click.Context):
     """List the available examples"""

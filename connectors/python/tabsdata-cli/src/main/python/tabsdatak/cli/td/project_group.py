@@ -12,11 +12,11 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     echo_more_results,
+    format_option,
     hint_common_solutions,
     logical_prompt,
     make_console,
     max_result_option,
-    output_option,
     render,
     take,
     verify_login_or_prompt,
@@ -80,7 +80,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 
 @project.command()
-@output_option
+@format_option
 @click.option("--name", "-n", help="Name of the project to display.")
 @click.pass_context
 def get(ctx: click.Context, name: str):
@@ -110,7 +110,7 @@ def get(ctx: click.Context, name: str):
 
 
 @project.command()
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list(ctx: click.Context):

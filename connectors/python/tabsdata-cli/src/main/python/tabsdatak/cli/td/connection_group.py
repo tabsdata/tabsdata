@@ -17,7 +17,7 @@ import rich_click as click
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
-from tabsdatak.cli.cli_utils import logical_prompt, make_console, output_option, render
+from tabsdatak.cli.cli_utils import format_option, logical_prompt, make_console, render
 
 
 @cli_command
@@ -27,7 +27,7 @@ def connection():
 
 
 @connection.command()
-@output_option
+@format_option
 @click.pass_context
 def types(ctx):
     """List the connection types available from installed connectors"""
@@ -95,7 +95,7 @@ def _emit(document, file):
 @_type_option
 # The template is always a commented YAML document (the "# accepts:" hints are
 # the point, and JSON can't carry them), so there is no output *format* to pick
-# here -- ``-o/--output`` is reserved CLI-wide for that. Use ``--file``/``-f``
+# here -- ``-o/--format`` is reserved CLI-wide for that. Use ``--file``/``-f``
 # for the output path, matching validate/table/exe.
 @click.option(
     "--file",

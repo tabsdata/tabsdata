@@ -214,13 +214,13 @@ def _incoming_argv(args, kwargs) -> list:
 
 def _full_output_format(argv: list) -> str:
     fmt = "text"
-    for flag in ("--output", "-o"):
+    for flag in ("--format", "-o"):
         if flag in argv:
             index = argv.index(flag)
             if index + 1 < len(argv):
                 fmt = argv[index + 1]
     if fmt not in ("text", "json"):
-        click.echo(f"Invalid --output '{fmt}'; expected 'text' or 'json'.", err=True)
+        click.echo(f"Invalid --format '{fmt}'; expected 'text' or 'json'.", err=True)
         raise SystemExit(2)
     return fmt
 
@@ -233,8 +233,8 @@ class _AiAgentGuardedGroup(click.RichGroup):
     ``main`` also intercepts ``--help --full`` (before Click's own ``--help``
     handling) to print the recursive full help for every command and
     subcommand. ``--full`` is only honored together with ``--help``, and
-    ``--output`` only together with ``--full``:
-    ``tdk --help [--full [--output FORMAT]]``."""
+    ``--format`` only together with ``--full``:
+    ``tdk --help [--full [--format FORMAT]]``."""
 
     def main(self, *args, **kwargs):
         enforce_not_in_ai_agent()
@@ -263,8 +263,8 @@ class _AiAgentGuardedGroup(click.RichGroup):
     expose_value=False,
     help=(
         "With --help, print the full help for every command and subcommand, "
-        "then exit. Optionally add '--output text|json' (default: text): "
-        "'tdk --help [--full [--output FORMAT]]'."
+        "then exit. Optionally add '--format text|json' (default: text): "
+        "'tdk --help [--full [--format FORMAT]]'."
     ),
 )
 @click.pass_context

@@ -14,11 +14,11 @@ from tabsdatak.cli.cli_utils import (
     beautify_time,
     collection_label,
     echo_more_results,
+    format_option,
     hint_common_solutions,
     make_console,
     max_result_option,
     output_format,
-    output_option,
     render,
     show_hint,
     verify_login_or_prompt,
@@ -101,7 +101,7 @@ def trx():
         "reach a final state."
     ),
 )
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list_transactions(
@@ -174,7 +174,7 @@ def list_transactions(
 
 @trx.command()
 @click.option("--trx", required=True, help="ID of the transaction to display.")
-@output_option
+@format_option
 @click.pass_context
 def get(ctx: click.Context, trx: str):
     """
@@ -307,7 +307,7 @@ def monitor(ctx: click.Context, trx: str):
         "stdout. Any folders provided before the file must already exist."
     ),
 )
-@output_option
+@format_option
 @click.pass_context
 def logs(ctx: click.Context, trx: str, file: str):
     """

@@ -4,7 +4,7 @@
 
 """Mocked-client harness for the ``tdk`` write / mutating commands.
 
-The read counterpart (``test_render_harness.py``) pins the ``-o/--output``
+The read counterpart (``test_render_harness.py``) pins the ``-o/--format``
 contract; this harness pins the *mutation* contract every write command shares:
 
 * it calls the right ``TabsdataServer`` SDK method with the arguments mapped

@@ -27,12 +27,12 @@ from tabsdatak.cli.cli_utils import (
     all_projects_option,
     beautify_time,
     echo_more_results,
+    format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     make_console,
     max_result_option,
-    output_option,
     proj_option,
     render,
     resolve_all_projects,
@@ -130,7 +130,7 @@ def disable(ctx: click.Context, name: str, coll: str):
 @all_projects_option
 @_name_option("Only list the trigger of this function.")
 @_coll_option("Only list triggers of functions in this collection.")
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list_crons(ctx: click.Context, all_projects: bool, name: str, coll: str):
@@ -171,7 +171,7 @@ def disable_stream(ctx: click.Context, name: str, coll: str):
 @all_projects_option
 @_name_option("Only list the publisher of this function.")
 @_coll_option("Only list publishers of functions in this collection.")
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list_streams(ctx: click.Context, all_projects: bool, name: str, coll: str):

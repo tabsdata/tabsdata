@@ -11,11 +11,11 @@ import rich_click as click
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     echo_more_results,
+    format_option,
     hint_common_solutions,
     make_console,
     max_result_option,
     output_format,
-    output_option,
     render,
     show_hint,
     take,
@@ -73,7 +73,7 @@ def worker():
 )
 @click.option("--fnrun", type=str, help="ID of the function run to filter workers by.")
 @click.option("--trx", type=str, help="ID of the transaction to filter workers by.")
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list_workers(
@@ -147,7 +147,7 @@ def list_workers(
         "stdout. Any folders provided before the file must already exist."
     ),
 )
-@output_option
+@format_option
 @click.pass_context
 def logs(ctx: click.Context, worker: str, file: str):
     """

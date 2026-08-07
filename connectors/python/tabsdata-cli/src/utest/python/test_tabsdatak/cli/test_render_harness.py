@@ -5,7 +5,7 @@
 """Mocked-client renderer harness for the ``tdk`` read commands.
 
 Every ``tdk`` read command (``list`` / ``get``) shares one output contract:
-``-o/--output {table,json,yaml}`` dispatched through
+``-o/--format {table,json,yaml}`` dispatched through
 :func:`tabsdatak.cli.cli_utils.render`. This harness runs each such command
 with a **mocked** ``TabsdataServer`` injected into ``ctx.obj`` and asserts, per
 format, that:

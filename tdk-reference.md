@@ -5,7 +5,7 @@ Proposed command surface after the intuitiveness pass:
 - **Identifiers are named options** — every command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--fnrun`/`--worker`/`--user` (execution & access); nothing is positional.
 - **Full canonical names + short aliases**: `collection`/`col`, `function`/`fn`, `transaction`/`trx`.
 - **Execution split into entity subgroups** (`plan`, `transaction`, `fnrun`, `worker`).
-- **Consistent flags**: `--enabled/--disabled`, `-y/--yes` for destructive ops, `-o/--output {table,json,yaml}`.
+- **Consistent flags**: `--enabled/--disabled`, `-y/--yes` for destructive ops, `-o/--format {table,json,yaml}`.
 - **Pinned-aware defaults**: `--proj` → pinned project, `--col` → pinned collection.
 - `role` and `stage` groups removed; `cron` is back alongside a matching `stream`.
 
@@ -57,8 +57,8 @@ Global options
       --no-prompt        Never prompt; fail if input is required. `tdk set
                          --prompt false` does the same for every invocation.
       --full             With --help: print the full help for every command and
-                         subcommand. Pair with --output text|json (default: text),
-                         e.g. `tdk --help --full --output json`.
+                         subcommand. Pair with --format text|json (default: text),
+                         e.g. `tdk --help --full --format json`.
 ```
 
 tdk refuses to run inside AI agents — use the Tabsdata MCP server instead. Set
@@ -73,11 +73,11 @@ Applied where shown in each command. Every value option takes an argument.
                                   command that needs one and has neither prompts
                                   for it before any other value.
   -c, --col    COLLECTION         Target collection. Default: pinned collection.
-  -o, --output {table|json|yaml}  Output format. Default: table.
+  -o, --format {table|json|yaml}  Output format. Default: table.
       --max-result N              Maximum rows a `list` command shows. Default: 100.
                                   0 lists everything. When rows are left over,
                                   the command says so (on stderr under
-                                  --output json|yaml, so stdout stays parseable).
+                                  --format json|yaml, so stdout stays parseable).
   -y, --yes                       Skip the confirmation prompt (destructive ops).
   -h, --help                      Show help.
 ```

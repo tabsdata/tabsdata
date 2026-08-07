@@ -18,10 +18,10 @@ from tabsdatak.cli.cli_utils import (
     clear_current_cli_option,
     cli_option_enabled,
     configured_server,
+    format_option,
     get_current_cli_option,
     get_pin,
     hint_common_solutions,
-    output_option,
     render,
     set_cli_option_enabled,
     set_current_cli_option,
@@ -191,7 +191,7 @@ def unset_setting(
 
 @cli_command
 @click.command("settings")
-@output_option
+@format_option
 @click.pass_context
 def settings(ctx: click.Context):
     """Show the current settings.

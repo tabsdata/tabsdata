@@ -13,11 +13,11 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_list,
     echo_more_results,
+    format_option,
     hint_common_solutions,
     logical_prompt,
     make_console,
     max_result_option,
-    output_option,
     proj_option,
     render,
     take,
@@ -85,7 +85,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 @group.command()
 @proj_option
-@output_option
+@format_option
 @click.option("--name", "-n", help="Name of the group to display.")
 @click.pass_context
 def get(ctx: click.Context, name: str):
@@ -123,7 +123,7 @@ def get(ctx: click.Context, name: str):
 
 @group.command()
 @proj_option
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list(ctx: click.Context):

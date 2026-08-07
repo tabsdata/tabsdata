@@ -15,12 +15,12 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
     echo_more_results,
+    format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     make_console,
     max_result_option,
-    output_option,
     proj_option,
     render,
     resolve_all_projects,
@@ -254,7 +254,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 @collection.command()
 @proj_option
-@output_option
+@format_option
 @click.option("--name", "-n", help="Name of the collection to display.")
 @click.pass_context
 def get(ctx: click.Context, name: str):
@@ -310,8 +310,8 @@ def get(ctx: click.Context, name: str):
 @proj_option
 @click.option(
     "-o",
-    "--output",
-    "output",
+    "--format",
+    "fmt",
     type=click.Choice(("json", "yaml")),
     default="json",
     show_default=True,
@@ -323,7 +323,7 @@ def get(ctx: click.Context, name: str):
     help="Name of the source/destination collection whose connection to display.",
 )
 @click.pass_context
-def connection(ctx: click.Context, output: str, name: str):
+def connection(ctx: click.Context, fmt: str, name: str):
     """Display the connection of a source/destination collection.
 
     Emits the dehydrated connection document as JSON or YAML; secret and var
@@ -338,7 +338,7 @@ def connection(ctx: click.Context, output: str, name: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         conn_read = _public_connection(server.get_collection_connection(name))
-        click.echo(serialize(conn_read, output), nl=(output == "json"))
+        click.echo(serialize(conn_read, fmt), nl=(fmt == "json"))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display connection: {e}")
@@ -347,7 +347,7 @@ def connection(ctx: click.Context, output: str, name: str):
 @collection.command()
 @proj_option
 @all_projects_option
-@output_option
+@format_option
 @max_result_option
 @click.pass_context
 def list(ctx: click.Context, all_projects: bool):

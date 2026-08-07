@@ -141,12 +141,12 @@ def test_fn_bundle_help_advertises_options_and_archive_format():
 
 
 # ---------------------------------------------------------------------------
-# `tdk --help --full --output text|json`: recursive help over every command.
+# `tdk --help --full --format text|json`: recursive help over every command.
 # ---------------------------------------------------------------------------
 
 
 def test_full_help_text_lists_nested_commands():
-    result = CliRunner().invoke(cli, ["--help", "--full", "--output", "text"])
+    result = CliRunner().invoke(cli, ["--help", "--full", "--format", "text"])
     assert result.exit_code == 0, result.output
     out = result.output
     # Every group and a representative renamed subcommand is present.
@@ -170,7 +170,7 @@ def test_full_help_requires_help_flag():
 
 
 def test_full_help_json_is_a_command_tree():
-    result = CliRunner().invoke(cli, ["--help", "--full", "--output", "json"])
+    result = CliRunner().invoke(cli, ["--help", "--full", "--format", "json"])
     assert result.exit_code == 0, result.output
     tree = json.loads(result.output)
     assert tree["name"] == "tdk"
@@ -183,7 +183,7 @@ def test_full_help_json_is_a_command_tree():
 
 
 def test_full_help_rejects_unknown_output():
-    result = CliRunner().invoke(cli, ["--help", "--full", "--output", "yaml"])
+    result = CliRunner().invoke(cli, ["--help", "--full", "--format", "yaml"])
     assert result.exit_code == 2
 
 
@@ -194,7 +194,7 @@ def test_full_help_marks_options_required_or_optional():
     assert "(required)" in text
 
     tree = json.loads(
-        CliRunner().invoke(cli, ["--help", "--full", "--output", "json"]).output
+        CliRunner().invoke(cli, ["--help", "--full", "--format", "json"]).output
     )
 
     def _options(node):
@@ -223,7 +223,7 @@ def test_settings_commands_expose_every_setting():
 
     settings = cli.commands.get("settings")
     assert settings is not None
-    assert "--output" in {o for p in settings.params for o in p.opts}
+    assert "--format" in {o for p in settings.params for o in p.opts}
 
 
 def test_config_pin_and_hints_are_not_commands():

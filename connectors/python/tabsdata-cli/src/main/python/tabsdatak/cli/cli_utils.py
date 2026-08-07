@@ -427,31 +427,31 @@ def resolve_all_projects(ctx: click.Context, all_projects: bool) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Output rendering: -o/--output {table,json,yaml}.
+# Output rendering: -o/--format {table,json,yaml}.
 # ---------------------------------------------------------------------------
 
 OUTPUT_FORMATS = ("table", "json", "yaml")
 
 
-def _apply_output(ctx: click.Context, param, value):
-    """``-o/--output`` callback: stash the chosen format on the context so the
+def _apply_format(ctx: click.Context, param, value):
+    """``-o/--format`` callback: stash the chosen format on the context so the
     command's renderer can dispatch on it."""
     ctx.ensure_object(dict)
     ctx.obj["output_format"] = value or "table"
     return value
 
 
-def output_option(fn):
-    """Decorator adding ``-o/--output {table,json,yaml}`` (default ``table``)."""
+def format_option(fn):
+    """Decorator adding ``-o/--format {table,json,yaml}`` (default ``table``)."""
     return click.option(
         "-o",
-        "--output",
-        "output",
+        "--format",
+        "fmt",
         type=click.Choice(OUTPUT_FORMATS),
         default="table",
         show_default=True,
         expose_value=False,
-        callback=_apply_output,
+        callback=_apply_format,
         help="Output format.",
     )(fn)
 
@@ -463,7 +463,7 @@ def output_format(ctx: click.Context) -> str:
 
 def serialize(payload, fmt: str) -> str:
     """Serialize a payload to a ``json`` or ``yaml`` string (the machine formats
-    of ``-o``). JSON is pretty-printed; both carry every field."""
+    of ``--format``). JSON is pretty-printed; both carry every field."""
     if fmt == "json":
         return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
     from ruamel.yaml import YAML
