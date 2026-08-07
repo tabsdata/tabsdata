@@ -24,15 +24,16 @@ from tabsdatak.cli._registry import (
 
 # The core command groups the open-source ``tdk`` CLI must always expose. Kept
 # in lockstep with what ``tabsdatak.cli.td.cli`` imports for its @cli_command
-# side effects: ``cron``/``role``/``stage`` are intentionally NOT here -- they
-# are gated off in this edition (see the TODO in ``cli.py``; ``role_group.py``
-# exists but is not imported, and there are no cron/stage modules yet). Add a
-# group here when it is wired into ``cli.py`` so this guards against a group
-# silently dropping out of the registry.
+# side effects: ``role``/``stage`` are intentionally NOT here -- they are gated
+# off in this edition (see the TODO in ``cli.py``; ``role_group.py`` exists but
+# is not imported, and there is no stage module yet). Add a group here when it is
+# wired into ``cli.py`` so this guards against a group silently dropping out of
+# the registry.
 BUILTIN_GROUPS = {
     "auth",
     "collection",
     "connection",
+    "cron",
     "fn",
     "fnrun",
     "group",
@@ -42,6 +43,7 @@ BUILTIN_GROUPS = {
     "project",
     "set",
     "settings",
+    "stream",
     "table",
     "trx",
     "unset",

@@ -38,6 +38,7 @@ def test_top_level_help_lists_expected_subcommands():
     for name in [
         "auth",
         "collection",
+        "cron",
         "fn",
         "fnrun",
         "group",
@@ -46,6 +47,7 @@ def test_top_level_help_lists_expected_subcommands():
         "project",
         "set",
         "settings",
+        "stream",
         "table",
         "trx",
         "unset",
@@ -71,6 +73,7 @@ def test_top_level_help_lists_expected_subcommands():
     [
         "auth",
         "collection",
+        "cron",
         "fn",
         "fnrun",
         "group",
@@ -79,6 +82,7 @@ def test_top_level_help_lists_expected_subcommands():
         "project",
         "set",
         "settings",
+        "stream",
         "table",
         "trx",
         "unset",

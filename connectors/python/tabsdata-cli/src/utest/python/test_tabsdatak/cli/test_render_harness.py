@@ -332,6 +332,22 @@ _WORKERS = [
     }
 ]
 
+# ``cron list`` / ``stream list``: trigger workers. json/yaml emit the raw rows
+# the listing returned (``[t.kwargs ...]``), which for the stand-in DTO is the
+# fixture dict itself.
+_TRIGGERS = [
+    {
+        "id": "WK_T_1",
+        "project": "proj-a",
+        "collection": {"name": "coll-a"},
+        "function": {"name": "fn-a"},
+        "worker_type": "CT",
+        "started_on_str": "2026-03-01",
+        "ended_on_str": "2026-03-02",
+        "status": "Running",
+    }
+]
+
 # ``table versions``: json/yaml emit ``[dv._data ...]``; the table reads nested
 # function/execution objects.
 _DATAVERSIONS = [
@@ -518,6 +534,20 @@ def _set_worker_list(c: MagicMock) -> None:
                     "transaction_id": "TID_1",
                     "function_version_patch_id": "FV_9",
                 },
+            )
+        ],
+    )
+
+
+def _set_trigger_list(c: MagicMock) -> None:
+    _wire_listing(
+        c,
+        "list_workers",
+        [
+            _DTO(
+                _TRIGGERS[0],
+                collection=_DTO({"name": "coll-a"}),
+                function=_DTO({"name": "fn-a"}),
             )
         ],
     )
@@ -822,6 +852,20 @@ CASES: tuple[RenderCase, ...] = (
             "Done",
             "FV_9",
         ),
+    ),
+    RenderCase(
+        "cron-list",
+        ["cron", "list"],
+        _set_trigger_list,
+        _TRIGGERS,
+        ("WK_T_1", "coll-a", "fn-a", "Running", "2026-03-01", "2026-03-02"),
+    ),
+    RenderCase(
+        "stream-list",
+        ["stream", "list"],
+        _set_trigger_list,
+        _TRIGGERS,
+        ("WK_T_1", "coll-a", "fn-a", "Running", "2026-03-01", "2026-03-02"),
     ),
     RenderCase(
         "table-versions",

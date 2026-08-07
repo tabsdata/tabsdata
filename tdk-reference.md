@@ -7,7 +7,7 @@ Proposed command surface after the intuitiveness pass:
 - **Execution split into entity subgroups** (`plan`, `transaction`, `fnrun`, `worker`).
 - **Consistent flags**: `--enabled/--disabled`, `-y/--yes` for destructive ops, `-o/--output {table,json,yaml}`.
 - **Pinned-aware defaults**: `--proj` → pinned project, `--col` → pinned collection.
-- `role`, `cron` and `stage` groups removed.
+- `role` and `stage` groups removed; `cron` is back alongside a matching `stream`.
 
 ---
 
@@ -29,6 +29,8 @@ Work
   collection  (col)      Manage collections
   group                  Manage user-groups within a project
   function    (fn)       Register, update and trigger functions
+  cron                   Cron-triggered functions
+  stream                 Stream-publisher functions
   table                  Inspect and download function output tables
 
 Execution
@@ -134,15 +136,40 @@ function get      --name NAME [--proj PROJECT] [--col COLLECTION] [--version V] 
                               #   --version: details of a specific version (default: current)
 function bundle   --fn-version FVID [--proj PROJECT] --file FILE
                               #   downloads a function version's bundle (a .tar.zst archive)
-function list                 [--proj PROJECT] [--col COLLECTION] [--cron] [--stream] [-o]
+function list                 [--proj PROJECT] [--col COLLECTION] [-o]
+                              #   cron-triggered / stream-publisher functions: see `tdk cron|stream list`
 function trigger  --name NAME [--proj PROJECT] [--col COLLECTION] [--plan-name N] [--detach]
 function enable   --name NAME [--proj PROJECT] [--col COLLECTION]
 function disable  --name NAME [--proj PROJECT] [--col COLLECTION]
+                              #   already in that state: reports it, changes nothing
 function patch    --name NAME [--proj PROJECT] [--col COLLECTION] --fn-version REF [--path PATH] [--description D]
                               [--dir-to-bundle DIR]
                               #   (--requirements / --local-pkg are temporarily disabled)
 function patches  --name NAME [--proj PROJECT] [--col COLLECTION] [-o]      # was: list-patches
 ```
+
+## `tdk cron` / `tdk stream`
+
+The two kinds of orchestrator-managed trigger: a function registered with a
+`CronTrigger` gets a cron trigger, a `@stream_publisher` gets a stream one. Each
+`list` is the worker listing narrowed to that trigger type; `enable` / `disable`
+are `tdk fn enable` / `tdk fn disable` restricted to functions that have the
+matching trigger — a function without one is refused, naming `tdk fn` instead —
+and, like them, do nothing when the function is already in that state.
+
+```
+cron   list                 [--proj PROJECT] [--coll COLLECTION] [--name FUNCTION] [--all-projects] [-o]
+cron   enable  --name NAME  [--proj PROJECT] [--coll COLLECTION]
+cron   disable --name NAME  [--proj PROJECT] [--coll COLLECTION]
+stream list                 [--proj PROJECT] [--coll COLLECTION] [--name FUNCTION] [--all-projects] [-o]
+stream enable  --name NAME  [--proj PROJECT] [--coll COLLECTION]
+stream disable --name NAME  [--proj PROJECT] [--coll COLLECTION]
+```
+
+On `list`, `--coll` and `--name` are filters; `--coll` defaults to the pinned
+collection and with none the listing spans the project. Like `collection list`
+it can also span projects — with `--all-projects`, or when no project is
+selected at all — and then carries a Project column.
 
 ## `tdk table`
 

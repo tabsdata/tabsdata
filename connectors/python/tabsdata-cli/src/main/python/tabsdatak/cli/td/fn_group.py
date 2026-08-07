@@ -866,7 +866,10 @@ def enable(
     name: str,
     coll: str,
 ):
-    """Enables a function"""
+    """Enables a function
+
+    Enabling an already-enabled function does nothing.
+    """
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be updated")
     coll = (
@@ -874,20 +877,7 @@ def enable(
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
-
-    click.echo(f"Enabling function '{name}' in collection '{coll}'")
-    click.echo("-" * 10)
-    try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.enable_function(
-            collection_name=coll,
-            function_name=name,
-            enabled=True,
-        )
-        click.echo("Function updated successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to enable function: {e}")
+    set_function_enabled(ctx, name, coll, True)
 
 
 @fn.command()
@@ -908,7 +898,10 @@ def disable(
     name: str,
     coll: str,
 ):
-    """Disables a function"""
+    """Disables a function
+
+    Disabling an already-disabled function does nothing.
+    """
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be updated")
     coll = (
@@ -916,19 +909,34 @@ def disable(
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
-    click.echo(f"Disabling function '{name}' in collection '{coll}'")
-    click.echo("-" * 10)
+    set_function_enabled(ctx, name, coll, False)
+
+
+def set_function_enabled(ctx: click.Context, name: str, coll: str, enabled: bool):
+    """Enable or disable a function, doing nothing if it is already in that
+    state. Shared with the ``tdk cron`` / ``tdk stream`` enable/disable, which
+    are this command restricted to a trigger kind."""
+    action = "enable" if enabled else "disable"
+    state = "enabled" if enabled else "disabled"
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        if server.get_function(coll, name).enabled == enabled:
+            click.echo(f"Function '{name}' in collection '{coll}' is already {state}")
+            return
+        click.echo(
+            f"{'Enabling' if enabled else 'Disabling'} function '{name}' in "
+            f"collection '{coll}'"
+        )
+        click.echo("-" * 10)
         server.enable_function(
             collection_name=coll,
             function_name=name,
-            enabled=False,
+            enabled=enabled,
         )
         click.echo("Function updated successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to disable function: {e}")
+        raise click.ClickException(f"Failed to {action} function: {e}")
 
 
 @fn.command()

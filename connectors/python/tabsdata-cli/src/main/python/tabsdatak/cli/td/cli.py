@@ -41,8 +41,8 @@ from tabsdatak.cli.cli_utils import (
 # module registers its top-level group, attached below via collect_cli_commands.
 # Only registration runs at import time -- every command's execution-time imports
 # (the server SDK, connection templates, ...) are deferred into the command body.
-# TODO: role, cron, and stage management are temporarily removed; reintroduce
-# their modules here (they self-register via @cli_command) in a later version.
+# TODO: role and stage management are temporarily removed; reintroduce their
+# modules here (they self-register via @cli_command) in a later version.
 from tabsdatak.cli.td import (  # noqa: F401
     auth_group,
     collection_group,
@@ -57,6 +57,7 @@ from tabsdatak.cli.td import (  # noqa: F401
     project_group,
     settings_group,
     table_group,
+    trigger_group,
     trx_group,
     user_group,
     worker_group,

@@ -47,6 +47,11 @@ def _client() -> MagicMock:
     # invoke, so provide it explicitly.
     client = MagicMock(spec=TabsdataServer)
     client.connection = MagicMock()
+    # `fn enable|disable` skips the call when the function is already in the
+    # requested state; ``None`` matches neither, so the toggle always goes
+    # through here. The already-in-state no-op is covered in
+    # test_enable_disable.py.
+    client.get_function.return_value = MagicMock(enabled=None)
     return client
 
 
@@ -159,6 +164,9 @@ CASES: tuple[MutCase, ...] = (
         {"collection_name": "coll1", "function_name": "f1", "enabled": False},
         "Function updated successfully",
     ),
+    # `cron`/`stream` enable/disable make the same call, but only for a function
+    # that has the matching trigger -- they need a wired listing for that
+    # precondition, so they live in test_trigger_group.py.
     MutCase(
         # -d/--detach so it doesn't monitor the (mock) execution in a poll loop.
         "fn-trigger",
