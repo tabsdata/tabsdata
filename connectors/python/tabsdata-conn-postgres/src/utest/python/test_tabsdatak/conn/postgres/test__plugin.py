@@ -13,6 +13,11 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from tabsdatak.conn.common.types import UserPassword
 
+from tabsdatak.conn.common.sql.constants import (
+    SQL_META_INITIAL_VALUES,
+    SQL_META_QUERY,
+)
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
@@ -283,7 +288,8 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
     class _FakeEngine:
         def read(self, read_cfg, work_dir_arg):
             captured["initial_values"] = read_cfg.initial_values
-            return []
+            # One slot per query, as ``SqlReadEngine.read`` guarantees.
+            return [[]]
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._engine import factory as _factory
@@ -297,3 +303,24 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
     )
     plugin.PostgresSrcPlugin().read_in(ctx, _bare_src_conn(), src)
     assert captured["initial_values"] == {"last_modified": "from-ctx"}
+
+
+def test_read_in_reports_query_and_binds_as_metadata(work_dir, monkeypatch):
+    class _FakeEngine:
+        def read(self, read_cfg, work_dir_arg):
+            return [[work_dir_arg / "slot0_chunk0.parquet"]]
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine import factory as _factory
+
+    monkeypatch.setattr(_factory, "get_read_engine", lambda *a, **kw: _FakeEngine())
+
+    src = PostgresSrc(
+        queries=["SELECT * FROM t WHERE ts > :last_modified"],
+        initial_values={"last_modified": "2026-01-01"},
+    )
+    [[table]] = plugin.PostgresSrcPlugin().read_in(CtxStub(work_dir), _bare_src_conn(), src)
+    assert table.metadata == {
+        SQL_META_QUERY: "SELECT * FROM t WHERE ts > :last_modified",
+        SQL_META_INITIAL_VALUES: '{"last_modified": "2026-01-01"}',
+    }

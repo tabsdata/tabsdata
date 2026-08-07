@@ -164,6 +164,30 @@ td.LogFormat()
 
 If no format is specified, it is inferred from the file extension.
 
+## SQL Source Metadata
+
+Every table published by a SQL source (`MySQLSrc`, `PostgresSrc`, `OracleSrc`,
+`Db2Src`, `MSSQLSrc`, `DatabricksSrc`) automatically carries two metadata
+columns — there is nothing to configure:
+
+| Column | Contents |
+|--------|----------|
+| `@td.sql.query` | Text of the query that produced the row |
+| `@td.sql.initial_values` | JSON serialization of the bind values the query ran with (`{}` when the query has no binds) |
+
+```python
+td.MySQLSrc(
+    queries=["SELECT * FROM city WHERE id > :wm"],
+    initial_values={"wm": 0},
+)
+# Published rows carry:
+#   @td.sql.query           "SELECT * FROM city WHERE id > :wm"
+#   @td.sql.initial_values  '{"wm": 0}'
+```
+
+With several queries, each output table records its own query; the bind values
+are the same for every query of a run.
+
 ## Triggers
 
 Control when functions execute:

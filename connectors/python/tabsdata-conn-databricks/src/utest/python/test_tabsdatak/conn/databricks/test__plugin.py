@@ -34,6 +34,10 @@ from tabsdatak.conn.databricks import _impl as impl
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _plugin as plugin
+from tabsdatak.conn.common.sql.constants import (
+    SQL_META_INITIAL_VALUES,
+    SQL_META_QUERY,
+)
 from tabsdatak.conn.databricks._explorer import DatabricksConnectionExplorer
 from tabsdatak.spi import TableFileInput
 from tabsdatak.conn.databricks.error import (
@@ -280,6 +284,30 @@ def test_src_plugin_returns_one_parquet_per_query(
     ]
     assert all(isinstance(out[i][0], TableFileInput) for i in (0, 1))
     assert all(isinstance(out[i][0].file, Path) for i in (0, 1))
+
+
+def test_src_plugin_reports_query_and_binds_as_metadata(
+    monkeypatch,
+    work_dir,
+):
+    def fake(_cfg, _dir):
+        return [Path("q0.parquet"), Path("q1.parquet")]
+
+    monkeypatch.setattr(impl, "read_all_queries", fake)
+
+    src = DatabricksSrc(
+        queries=["SELECT * FROM t WHERE id > {min_id}", "SELECT 2"],
+        initial_values={"min_id": 7},
+    )
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), src)
+    assert [row[0].metadata[SQL_META_QUERY] for row in out] == [
+        "SELECT * FROM t WHERE id > {min_id}",
+        "SELECT 2",
+    ]
+    assert [row[0].metadata[SQL_META_INITIAL_VALUES] for row in out] == [
+        '{"min_id": 7}',
+        '{"min_id": 7}',
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -534,7 +562,7 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
 
     def fake_read_all_queries(read_cfg, work_dir_arg):
         captured["initial_values"] = read_cfg.initial_values
-        return []
+        return [Path("q0.parquet")]
 
     monkeypatch.setattr(impl, "read_all_queries", fake_read_all_queries)
 

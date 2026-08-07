@@ -185,6 +185,8 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
         conn: DatabricksSrcConn,
         src: DatabricksSrc,
     ) -> list[list[TableFileInput]]:
+        from tabsdatak.conn.common.sql._metadata import to_sql_table_file_inputs
+
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks import _impl
 
@@ -225,10 +227,14 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
                 query_index=-1,
             )
 
-        # One parquet per query; SrcDef.table_mode is SINGLE.
-        # Wrap each adapter-returned path as a ``TableFileInput``
-        # (metadata defaults to ``None``).
-        return [[TableFileInput(file=Path(p))] for p in parquet_paths]
+        # One parquet per query; SrcDef.table_mode is SINGLE. Each
+        # adapter-returned path becomes a ``TableFileInput`` carrying the
+        # query and the bind values it ran with as metadata.
+        return to_sql_table_file_inputs(
+            [[Path(p)] for p in parquet_paths],
+            read_cfg.queries,
+            read_cfg.initial_values,
+        )
 
 
 class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):

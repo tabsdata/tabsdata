@@ -212,6 +212,12 @@ class Db2Src(Src):
 
     :categories: source
 
+    Every table this source publishes automatically carries two
+    metadata columns: `@td.sql.query`, the text of the query that
+    produced the row, and `@td.sql.initial_values`, the JSON
+    serialization of the bind values that query ran with (an empty JSON
+    object when it has no binds).
+
     Args:
         queries: SELECT statements; one output slot per query, in order.
         transactional: When `True` (default), run all queries inside

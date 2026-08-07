@@ -30,7 +30,6 @@ from tabsdatak.spi import (
     TableFileInput,
     TableFileSpec,
     TableMode,
-    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -135,6 +134,7 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrcConn, MSSQLSrc]):
         from tabsdatak.conn.common.sql._engine.initial_values import (
             resolve_initial_values,
         )
+        from tabsdatak.conn.common.sql._metadata import to_sql_table_file_inputs
         from tabsdatak.conn.mssql._impl import MSSQL_READ_DEFAULTS, MSSQLReadCfg
 
         cfg = _resolve_src_cfg(src.src_cfg)
@@ -155,7 +155,11 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrcConn, MSSQLSrc]):
         )
 
         try:
-            return to_table_file_inputs(engine.read(read_cfg, ctx.work_dir))
+            return to_sql_table_file_inputs(
+                engine.read(read_cfg, ctx.work_dir),
+                read_cfg.queries,
+                read_cfg.initial_values,
+            )
         except OperationalError as e:
             # Engine connect / handshake failures bubble up as
             # OperationalError both for the initial connect and
