@@ -68,6 +68,24 @@ INDEX_LINK_PATTERN: str = r">\s*(tabsdata[A-Za-z0-9._-]*)\s*<"
 PACKAGES_TD: list[str] = ["tabsdata[all]"]
 APT_GET_EXECUTABLE: str = "apt-get"
 
+LIBEXEC_FOLDER: str = os.path.join("libexec", "tabsdata")
+
+PRUNED_LIBEXEC_FILES: list[str] = [
+    "control-plane",
+    "etcd",
+    "kube-apiserver",
+    "kube-controller-manager",
+    "pod-runner",
+    "virtual-kubelet",
+]
+
+PRUNED_BIN_FILES: list[str] = [
+    "km",
+    "kmc",
+    "td_about",
+    "tdkserver",
+]
+
 STARTED: float = time.monotonic()
 
 
@@ -522,6 +540,33 @@ def install_packages(arguments: argparse.Namespace, workspace: dict[str, str]) -
     )
 
 
+def prune_one_file(folder: str, name: str) -> bool:
+    target = os.path.join(folder, name)
+    if not os.path.lexists(target):
+        trace(f"Skipping the prune of {os.path.abspath(target)}; it does not exist")
+        return False
+    os.remove(target)
+    trace(f"Pruned {os.path.abspath(target)}")
+    return True
+
+
+def prune_one_virtual_environment(virtual_environment: str) -> None:
+    groups = (
+        (os.path.join(virtual_environment, LIBEXEC_FOLDER), PRUNED_LIBEXEC_FILES),
+        (scripts_folder(virtual_environment), PRUNED_BIN_FILES),
+    )
+    for folder, names in groups:
+        pruned = [name for name in names if prune_one_file(folder, name)]
+        trace(
+            f"Pruned {len(pruned)} of {len(names)} file(s) from"
+            f" {os.path.abspath(folder)}"
+        )
+
+
+def prune_virtual_environment(workspace: dict[str, str]) -> None:
+    prune_one_virtual_environment(workspace["virtual_environment_td"])
+
+
 def verify_image(workspace: dict[str, str]) -> None:
     for folder in (
         workspace["uv_python_home"],
@@ -646,6 +691,7 @@ def main() -> None:
         workspace,
     )
     step("Installing packages", install_packages, arguments, workspace)
+    step("Pruning the virtual environments", prune_virtual_environment, workspace)
     step("Verifying the image", verify_image, workspace)
     step("Writing the image", write_image, arguments, workspace)
     step("Sending the image", send_image, arguments, workspace)

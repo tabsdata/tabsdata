@@ -85,6 +85,25 @@ ARCHIVE_COMPRESSION_LEVEL="3"
 ARCHIVE_COMPRESSION_THREADS="-1"
 ARCHIVE_LONG_DISTANCE_WINDOW_LOG="27"
 
+LIBEXEC_FOLDER="libexec/tabsdata"
+BIN_FOLDER="bin"
+
+PRUNED_LIBEXEC_FILES=(
+   "control-plane"
+   "etcd"
+   "kube-apiserver"
+   "kube-controller-manager"
+   "pod-runner"
+   "virtual-kubelet"
+)
+
+PRUNED_BIN_FILES=(
+   "km"
+   "kmc"
+   "td_about"
+   "tdkserver"
+)
+
 show_usage() {
    echo "Usage: $0 [options]"
    echo "  -p, --python VERSION           Python version                   (default: $PYTHON_VERSION)"
@@ -267,6 +286,42 @@ install_packages() {
    fi
 }
 
+prune_one_file() {
+   local folder="$1"
+   local name="$2"
+   local target="$folder/$name"
+   if [[ ! -e "$target" && ! -L "$target" ]]; then
+      trace "Skipping the prune of $target; it does not exist"
+      return 1
+   fi
+   rm -f "$target"
+   trace "Pruned $target"
+}
+
+prune_one_group() {
+   local folder="$1"
+   shift
+   local total="$#"
+   local pruned=0
+   local name
+   for name in "$@"; do
+      if prune_one_file "$folder" "$name"; then
+         pruned=$(( pruned + 1 ))
+      fi
+   done
+   trace "Pruned $pruned of $total file(s) from $folder"
+}
+
+prune_one_virtual_environment() {
+   local virtual_environment="$1"
+   prune_one_group "$virtual_environment/$LIBEXEC_FOLDER" "${PRUNED_LIBEXEC_FILES[@]}"
+   prune_one_group "$virtual_environment/$BIN_FOLDER" "${PRUNED_BIN_FILES[@]}"
+}
+
+prune_virtual_environment() {
+   prune_one_virtual_environment "$virtual_environment_td"
+}
+
 verify_image() {
    test -d "$UV_PYTHON_HOME"
    test -d "$virtual_environment_td"
@@ -359,6 +414,7 @@ main() {
    step "Creating the compressor environment" create_compressor_environment
    step "Creating the virtual environments"   create_virtual_environment
    step "Installing packages"                install_packages
+   step "Pruning the virtual environments"    prune_virtual_environment
    step "Verifying the image"                 verify_image
    step "Writing the image"                   write_image
    step "Sending the image"                   send_image
