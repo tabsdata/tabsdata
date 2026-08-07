@@ -52,7 +52,7 @@ spec:
       - name: certs
         mountPath: /tabsdata/certs
     - name: 0010-venvloader
-      image: python:3.12-slim
+      image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
       imagePullPolicy: IfNotPresent
       command: ["bash"]
       args:

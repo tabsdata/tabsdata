@@ -39,10 +39,6 @@ def run(args: argparse.Namespace) -> int:
         f"decorator={decorator}",
         flush=True,
     )
-    print(
-        " ---",
-        flush=True,
-    )
     report_system()
     print(
         "--- inspect-function (end) ---",

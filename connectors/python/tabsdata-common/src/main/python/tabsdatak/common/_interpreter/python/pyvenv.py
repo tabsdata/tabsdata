@@ -36,6 +36,7 @@ COMMAND_SCRIPTS: str = "scripts"
 
 VENV_TD: str = "td"
 VENV_AG: str = "ag"
+VENV_FN: str = "fn"
 
 
 def main() -> int:
@@ -201,11 +202,12 @@ def build_recipes(profile: EnvironmentProfile) -> tuple[VenvRecipe, ...]:
         + connector_recipes
     )
     server = VenvRecipe(name=VENV_TD, packages=server_recipes)
+    function = VenvRecipe(name=VENV_FN, packages=server_recipes)
     if profile.edition != TabsdataEdition.ENTERPRISE:
-        return (server,)
+        return server, function
     agent_recipes = profile.packages + connector_recipes
     agent = VenvRecipe(name=VENV_AG, packages=agent_recipes)
-    return server, agent
+    return server, function, agent
 
 
 def build_connector_recipes(

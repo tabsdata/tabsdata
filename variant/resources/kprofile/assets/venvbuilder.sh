@@ -73,6 +73,7 @@ TOOLS_BIN_HOME="$TOOLS_HOME/$TOOLS_BIN_FOLDER"
 TOOLS_KENVS_HOME="$TOOLS_HOME/$TOOLS_KENVS_FOLDER"
 
 VENV_TD="td"
+VENV_FN="fn"
 VENV_Z="z"
 
 UV_INSTALLER="https://astral.sh/uv/install.sh"
@@ -102,6 +103,12 @@ PRUNED_BIN_FILES=(
    "kmc"
    "td_about"
    "tdkserver"
+)
+
+PRUNED_BIN_FILES_FN=(
+   "${PRUNED_BIN_FILES[@]}"
+   "td_apiserver"
+   "td_dbmanager"
 )
 
 show_usage() {
@@ -221,10 +228,12 @@ file_size() {
 setup_workspace() {
    work="$(mktemp -d "${TMPDIR:-/tmp}/tdvenvs.XXXXXX")"
    output_image_td="$output/$(image_for_venv "$VENV_TD")"
+   output_image_fn="$output/$(image_for_venv "$VENV_FN")"
    UV_HOME="$output/$UV_FOLDER"
    UV_PYTHON_HOME="$UV_HOME/$UV_PYTHON_FOLDER"
    UV_KENVS_HOME="$UV_HOME/$UV_KENVS_FOLDER"
    virtual_environment_td="$UV_KENVS_HOME/$VENV_TD"
+   virtual_environment_fn="$UV_KENVS_HOME/$VENV_FN"
    virtual_environment_z="$TOOLS_KENVS_HOME/$VENV_Z"
    export UV_PYTHON_INSTALL_DIR="$UV_PYTHON_HOME"
    export UV_LINK_MODE="$UV_LINK_MODE_DEFAULT"
@@ -270,6 +279,9 @@ create_virtual_environment() {
    remove_virtual_environment "$virtual_environment_td"
    run uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_td"
    run uv pip install --python "$virtual_environment_td/bin/python" --upgrade pip
+   remove_virtual_environment "$virtual_environment_fn"
+   run uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_fn"
+   run uv pip install --python "$virtual_environment_fn/bin/python" --upgrade pip
 }
 
 has_requirements() {
@@ -281,8 +293,10 @@ has_requirements() {
 install_packages() {
    if has_requirements "$requirements_td"; then
       run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]==$version" -r "$requirements_td"
+      run uv pip install --python "$virtual_environment_fn/bin/python" "tabsdata[all]==$version" -r "$requirements_td"
    else
       run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]==$version"
+      run uv pip install --python "$virtual_environment_fn/bin/python" "tabsdata[all]==$version"
    fi
 }
 
@@ -314,17 +328,20 @@ prune_one_group() {
 
 prune_one_virtual_environment() {
    local virtual_environment="$1"
+   shift
    prune_one_group "$virtual_environment/$LIBEXEC_FOLDER" "${PRUNED_LIBEXEC_FILES[@]}"
-   prune_one_group "$virtual_environment/$BIN_FOLDER" "${PRUNED_BIN_FILES[@]}"
+   prune_one_group "$virtual_environment/$BIN_FOLDER" "$@"
 }
 
 prune_virtual_environment() {
-   prune_one_virtual_environment "$virtual_environment_td"
+   prune_one_virtual_environment "$virtual_environment_td" "${PRUNED_BIN_FILES[@]}"
+   prune_one_virtual_environment "$virtual_environment_fn" "${PRUNED_BIN_FILES_FN[@]}"
 }
 
 verify_image() {
    test -d "$UV_PYTHON_HOME"
    test -d "$virtual_environment_td"
+   test -d "$virtual_environment_fn"
 }
 
 write_compressor_script() {
@@ -367,6 +384,7 @@ write_image() {
    mkdir -p "$output"
    write_compressor_script
    write_one_image "$VENV_TD" "$output_image_td"
+   write_one_image "$VENV_FN" "$output_image_fn"
    rm -rf "$work"
 }
 
@@ -400,6 +418,7 @@ send_image() {
       return
    fi
    send_one_image "$output_image_td" "$VENV_TD"
+   send_one_image "$output_image_fn" "$VENV_FN"
 }
 
 main() {

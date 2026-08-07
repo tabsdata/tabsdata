@@ -172,10 +172,20 @@ pub const CONTAINER_PYENV_AG_ROOT: &str = concatcp!(
     "/",
     FOLDER_PYENV_AG
 );
+pub const CONTAINER_PYENV_FN_ROOT: &str = concatcp!(
+    CONTAINER_RUNTIMES_ROOT,
+    "/",
+    FOLDER_UV,
+    "/",
+    FOLDER_KENVS,
+    "/",
+    FOLDER_PYENV_FN
+);
 pub const FOLDER_IMAGES: &str = "images";
 pub const FOLDER_PYTHON: &str = "python";
 pub const FOLDER_PYENV_TD: &str = "td";
 pub const FOLDER_PYENV_AG: &str = "ag";
+pub const FOLDER_PYENV_FN: &str = "fn";
 pub const CONTAINER_PYENV_SCRIPTS_FOLDER: &str = "bin";
 pub const FOLDER_STAGING: &str = "staging";
 pub const FOLDER_PROFILE: &str = "profile";

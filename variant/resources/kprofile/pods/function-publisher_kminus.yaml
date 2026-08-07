@@ -1163,6 +1163,6 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: pyenv
           hostPath:
-            path: "${{system:tdk_pyenv_td_root}}"
+            path: "${{system:tdk_pyenv_fn_root}}"
         - name: shared
           emptyDir: {}

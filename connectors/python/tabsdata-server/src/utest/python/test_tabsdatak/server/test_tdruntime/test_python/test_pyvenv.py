@@ -10,6 +10,7 @@ import pytest
 
 from tabsdatak.common._interpreter.python.pyvenv import (
     VENV_AG,
+    VENV_FN,
     VENV_TD,
     build_connector_recipe,
     build_connector_recipes,
@@ -59,7 +60,7 @@ def make_profile(
     )
 
 
-def test_build_recipes_open_source_returns_server_only():
+def test_build_recipes_open_source_returns_server_and_function():
     main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None)
     toolkit = make_recipe(
         TABSDATA_TOOLKIT_PACKAGE, install=InstallRecipe.REGISTRY, location=None
@@ -68,20 +69,22 @@ def test_build_recipes_open_source_returns_server_only():
         (main, toolkit), edition=TabsdataEdition.OPEN_SOURCE
     )
     recipes = build_recipes(profile)
-    assert len(recipes) == 1
+    assert len(recipes) == 2
     assert recipes[0].name == VENV_TD
+    assert recipes[1].name == VENV_FN
 
 
-def test_build_recipes_enterprise_returns_server_and_agent():
+def test_build_recipes_enterprise_returns_server_function_and_agent():
     main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None)
     agent = make_recipe(
         TABSDATA_AGENT_PACKAGE, install=InstallRecipe.REGISTRY, location=None
     )
     profile = make_profile((main, agent), edition=TabsdataEdition.ENTERPRISE)
     recipes = build_recipes(profile)
-    assert len(recipes) == 2
+    assert len(recipes) == 3
     assert recipes[0].name == VENV_TD
-    assert recipes[1].name == VENV_AG
+    assert recipes[1].name == VENV_FN
+    assert recipes[2].name == VENV_AG
 
 
 def test_build_recipes_server_excludes_agent_package():
@@ -103,7 +106,7 @@ def test_build_recipes_agent_includes_agent_package():
     )
     profile = make_profile((main, agent), edition=TabsdataEdition.ENTERPRISE)
     recipes = build_recipes(profile)
-    agent_names = {package.name for package in recipes[1].packages}
+    agent_names = {package.name for package in recipes[2].packages}
     assert TABSDATA_AGENT_PACKAGE in agent_names
     assert TABSDATA_PACKAGE in agent_names
 

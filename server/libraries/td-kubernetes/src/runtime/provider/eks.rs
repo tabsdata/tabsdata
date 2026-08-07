@@ -15,10 +15,10 @@ use td_common::status::ExitStatus::NoAction;
 use td_common::settings::DEFAULT_INSTANCE;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_PYENV_AG_ROOT, CONTAINER_PYENV_SCRIPTS_FOLDER,
-    CONTAINER_PYENV_TD_ROOT, CONTAINER_RUNTIMES_ROOT, DATABASE_SSL_MODE_VERIFY_CA,
-    DATABASE_SSL_ROOT_CERT, FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach, KPROFILE_ASSETS_FAMILY,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_PYENV_AG_ROOT, CONTAINER_PYENV_FN_ROOT,
+    CONTAINER_PYENV_SCRIPTS_FOLDER, CONTAINER_PYENV_TD_ROOT, CONTAINER_RUNTIMES_ROOT,
+    DATABASE_SSL_MODE_VERIFY_CA, DATABASE_SSL_ROOT_CERT, FOLDER_REPOSITORY, FOLDER_STORAGE,
+    IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use td_python::tabsdata::tabsdata_version;
 
@@ -465,6 +465,7 @@ pub fn system_values_for(
         runtimes_root: Some(CONTAINER_RUNTIMES_ROOT.to_owned()),
         pyenv_td_root: Some(CONTAINER_PYENV_TD_ROOT.to_owned()),
         pyenv_ag_root: Some(CONTAINER_PYENV_AG_ROOT.to_owned()),
+        pyenv_fn_root: Some(CONTAINER_PYENV_FN_ROOT.to_owned()),
         pyenv_scripts_folder: Some(CONTAINER_PYENV_SCRIPTS_FOLDER.to_owned()),
         database_ssl_mode: Some(DATABASE_SSL_MODE_VERIFY_CA.to_owned()),
         database_ssl_root_cert: Some(DATABASE_SSL_ROOT_CERT.to_owned()),

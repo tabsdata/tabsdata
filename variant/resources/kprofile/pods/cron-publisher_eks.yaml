@@ -92,7 +92,7 @@ spec:
               - name: certs
                 mountPath: /tabsdata/certs
             - name: 0010-venvloader
-              image: python:3.12-slim
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
               imagePullPolicy: IfNotPresent
               command: ["bash"]
               args:
@@ -102,7 +102,7 @@ spec:
                 - --image
                 - tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst
                 - --venv
-                - td
+                - fn
                 - --storage-config
                 - $(CONTAINER_ROOT)/tabsdata/config-storage/apiserver.storage.yaml
               resources:
@@ -130,7 +130,7 @@ spec:
             - name: 1000-cron-publisher
               image: ubuntu:24.04
               imagePullPolicy: IfNotPresent
-              command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_cron_trigger"]
+              command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_cron_trigger"]
               args:
                 - --shared-dir
                 - $(CONTAINER_ROOT)/tabsdata/shared
@@ -181,7 +181,7 @@ spec:
                 - name: SSL_CERT_FILE
                   value: "/tabsdata/certs/ca-public.pem"
                 - name: TD_BEFORE_PATH
-                  value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+                  value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
                 - name: TD_AFTER_PATH
                   value: ""
               volumeMounts:

@@ -24,10 +24,10 @@ use tracing::{info, warn};
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DATABASE_NAME_POSTGRES,
     DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, ENV_UV_PYTHON_INSTALL_DIR, FOLDER_CLUSTER,
-    FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
-    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV, IndexReach,
-    KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
-    LogLevel, UvMode, VENVS_IMAGE, YAML_NULL,
+    FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_FN,
+    FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV,
+    IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    LIBEXEC_TABSDATA, LogLevel, UvMode, VENVS_IMAGE, YAML_NULL,
 };
 use td_python::tabsdata::tabsdata_version;
 
@@ -933,6 +933,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
     let kenvs = runtimes_folder.join(FOLDER_UV).join(FOLDER_KENVS);
     let pyenv_td_root = Some(kenvs.join(FOLDER_PYENV_TD).to_string_lossy().to_string());
     let pyenv_ag_root = Some(kenvs.join(FOLDER_PYENV_AG).to_string_lossy().to_string());
+    let pyenv_fn_root = Some(kenvs.join(FOLDER_PYENV_FN).to_string_lossy().to_string());
     let scripts_folder = get_python_scripts_folder()
         .map_err(|error| ProviderError::PythonScriptsFolderResolveFailed(error.to_string()))?;
     let Some(scripts_name) = scripts_folder.file_name().and_then(|name| name.to_str()) else {
@@ -965,6 +966,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         pyenv_base_root,
         pyenv_td_root,
         pyenv_ag_root,
+        pyenv_fn_root,
         pyenv_scripts_folder,
         pyenv_libexec_folder,
         exe_suffix,

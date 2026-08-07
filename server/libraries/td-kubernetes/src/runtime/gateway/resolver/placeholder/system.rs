@@ -45,6 +45,8 @@ pub enum SystemKey {
     PyenvTdRoot,
     #[strum(serialize = "tdk_pyenv_ag_root")]
     PyenvAgRoot,
+    #[strum(serialize = "tdk_pyenv_fn_root")]
+    PyenvFnRoot,
     #[strum(serialize = "tdk_pyenv_scripts_folder")]
     PyenvScriptsFolder,
     #[strum(serialize = "tdk_pyenv_libexec_folder")]
@@ -119,6 +121,7 @@ pub struct SystemValues {
     pub pyenv_base_root: Option<String>,
     pub pyenv_td_root: Option<String>,
     pub pyenv_ag_root: Option<String>,
+    pub pyenv_fn_root: Option<String>,
     pub pyenv_scripts_folder: Option<String>,
     pub pyenv_libexec_folder: Option<String>,
     pub exe_suffix: Option<String>,
@@ -156,6 +159,7 @@ impl SystemValues {
             SystemKey::PyenvBaseRoot => self.pyenv_base_root.as_deref(),
             SystemKey::PyenvTdRoot => self.pyenv_td_root.as_deref(),
             SystemKey::PyenvAgRoot => self.pyenv_ag_root.as_deref(),
+            SystemKey::PyenvFnRoot => self.pyenv_fn_root.as_deref(),
             SystemKey::PyenvScriptsFolder => self.pyenv_scripts_folder.as_deref(),
             SystemKey::PyenvLibexecFolder => self.pyenv_libexec_folder.as_deref(),
             SystemKey::ExeSuffix => self.exe_suffix.as_deref(),

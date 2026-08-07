@@ -69,7 +69,7 @@ spec:
           - name: certs
             mountPath: /tabsdata/certs
         - name: 0010-venvloader
-          image: python:3.12-slim
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
           imagePullPolicy: IfNotPresent
           command: ["bash"]
           args:
@@ -77,7 +77,7 @@ spec:
             - --output
             - ${{system:tdk_runtimes_root}}
             - --venv
-            - td
+            - fn
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config-storage/apiserver.storage.yaml
           resources:
@@ -110,7 +110,7 @@ spec:
         - name: 0020-inspect-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_inspect_function"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_inspect_function"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -155,7 +155,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
@@ -177,7 +177,7 @@ spec:
         - name: 0030-api-ready
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_apiready"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_apiready"]
           args:
             - --config-file
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.service.yaml
@@ -214,7 +214,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
@@ -230,7 +230,7 @@ spec:
         - name: 0040-begin-execution
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_begin_execution"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_begin_execution"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -275,7 +275,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
@@ -297,7 +297,7 @@ spec:
         - name: 0050-fetch-request
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_fetch_request"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_fetch_request"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -350,7 +350,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
@@ -372,7 +372,7 @@ spec:
         - name: 0060-localize-fn-bundle
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_localize_fn_bundle"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_localize_fn_bundle"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -429,7 +429,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           envFrom:
@@ -457,7 +457,7 @@ spec:
         - name: 0070-prep-localize-state
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_prep_localize_state"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_localize_state"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -516,7 +516,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
@@ -540,7 +540,7 @@ spec:
         - name: 0080-run-transporter-localize
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_transporter"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_transporter"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -589,7 +589,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           envFrom:
@@ -617,7 +617,7 @@ spec:
         - name: 0090-run-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_function"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_function"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -674,7 +674,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
@@ -696,7 +696,7 @@ spec:
         - name: 0100-run-destination-plugin
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_destination_plugin"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_destination_plugin"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -749,7 +749,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           envFrom:
@@ -777,7 +777,7 @@ spec:
         - name: 0110-prep-upload-state
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_prep_upload_state"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_upload_state"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -830,7 +830,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
@@ -854,7 +854,7 @@ spec:
         - name: 0120-run-transporter-state-upload
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_run_transporter"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_transporter"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -903,7 +903,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           envFrom:
@@ -932,7 +932,7 @@ spec:
         - name: 1000-report-completion
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_report_completion"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_report_completion"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -985,7 +985,7 @@ spec:
             - name: SSL_CERT_FILE
               value: "/tabsdata/certs/ca-public.pem"
             - name: TD_BEFORE_PATH
-              value: "${{system:tdk_pyenv_td_root}}/${{system:tdk_pyenv_scripts_folder}}"
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:

@@ -36,6 +36,7 @@ TOOLS_BIN_FOLDER: str = "bin"
 TOOLS_KENVS_FOLDER: str = "kenvs"
 
 VENV_TD: str = "td"
+VENV_FN: str = "fn"
 VENV_Z: str = "z"
 
 ZSTANDARD_PACKAGE: str = "zstandard"
@@ -66,6 +67,7 @@ CACHE_CLEAN_TIMEOUT: int = 120
 INDEX_LINK_PATTERN: str = r">\s*(tabsdata[A-Za-z0-9._-]*)\s*<"
 
 PACKAGES_TD: list[str] = ["tabsdata[all]"]
+PACKAGES_FN: list[str] = ["tabsdata[all]"]
 APT_GET_EXECUTABLE: str = "apt-get"
 
 LIBEXEC_FOLDER: str = os.path.join("libexec", "tabsdata")
@@ -84,6 +86,11 @@ PRUNED_BIN_FILES: list[str] = [
     "kmc",
     "td_about",
     "tdkserver",
+]
+
+PRUNED_BIN_FILES_FN: list[str] = PRUNED_BIN_FILES + [
+    "td_apiserver",
+    "td_dbmanager",
 ]
 
 STARTED: float = time.monotonic()
@@ -338,7 +345,15 @@ def setup_workspace(arguments: argparse.Namespace) -> dict[str, str]:
                 VENV_TD,
             ),
         ),
+        "output_image_fn": os.path.join(
+            output,
+            image_for_venv(
+                arguments.image,
+                VENV_FN,
+            ),
+        ),
         "virtual_environment_td": os.path.join(uv_kenvs_home, VENV_TD),
+        "virtual_environment_fn": os.path.join(uv_kenvs_home, VENV_FN),
         "virtual_environment_z": os.path.join(tools_kenvs_home, VENV_Z),
     }
     os.makedirs(tools_bin_home, exist_ok=True)
@@ -410,6 +425,7 @@ def indexed_packages(index_url: str) -> list[str]:
 def package_names(index_url: str) -> list[str]:
     names: set[str] = set()
     names.update(PACKAGES_TD)
+    names.update(PACKAGES_FN)
     declared = {name.split("[", 1)[0] for name in names}
     return sorted(declared.union(indexed_packages(index_url)))
 
@@ -497,6 +513,9 @@ def create_virtual_environment(
     create_one_virtual_environment(
         arguments, workspace, workspace["virtual_environment_td"]
     )
+    create_one_virtual_environment(
+        arguments, workspace, workspace["virtual_environment_fn"]
+    )
 
 
 def has_requirements(file: str) -> bool:
@@ -538,6 +557,12 @@ def install_packages(arguments: argparse.Namespace, workspace: dict[str, str]) -
         pinned(PACKAGES_TD, arguments.version),
         arguments.requirements_td,
     )
+    install_one_set_of_packages(
+        workspace,
+        workspace["virtual_environment_fn"],
+        pinned(PACKAGES_FN, arguments.version),
+        arguments.requirements_td,
+    )
 
 
 def prune_one_file(folder: str, name: str) -> bool:
@@ -550,10 +575,12 @@ def prune_one_file(folder: str, name: str) -> bool:
     return True
 
 
-def prune_one_virtual_environment(virtual_environment: str) -> None:
+def prune_one_virtual_environment(
+    virtual_environment: str, pruned_bin_files: list[str]
+) -> None:
     groups = (
         (os.path.join(virtual_environment, LIBEXEC_FOLDER), PRUNED_LIBEXEC_FILES),
-        (scripts_folder(virtual_environment), PRUNED_BIN_FILES),
+        (scripts_folder(virtual_environment), pruned_bin_files),
     )
     for folder, names in groups:
         pruned = [name for name in names if prune_one_file(folder, name)]
@@ -564,13 +591,17 @@ def prune_one_virtual_environment(virtual_environment: str) -> None:
 
 
 def prune_virtual_environment(workspace: dict[str, str]) -> None:
-    prune_one_virtual_environment(workspace["virtual_environment_td"])
+    prune_one_virtual_environment(workspace["virtual_environment_td"], PRUNED_BIN_FILES)
+    prune_one_virtual_environment(
+        workspace["virtual_environment_fn"], PRUNED_BIN_FILES_FN
+    )
 
 
 def verify_image(workspace: dict[str, str]) -> None:
     for folder in (
         workspace["uv_python_home"],
         workspace["virtual_environment_td"],
+        workspace["virtual_environment_fn"],
     ):
         if not os.path.isdir(folder):
             print(f"Expected folder is missing: {folder}", file=sys.stderr)
@@ -634,6 +665,7 @@ def write_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> Non
     with open(script, "w") as writer:
         writer.write(COMPRESS_SCRIPT)
     write_one_image(workspace, script, VENV_TD, workspace["output_image_td"])
+    write_one_image(workspace, script, VENV_FN, workspace["output_image_fn"])
     shutil.rmtree(workspace["work"], ignore_errors=True)
 
 
@@ -647,7 +679,10 @@ def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None
     if not arguments.storage_config:
         print(">> Skipping the image upload; no storage configuration given")
         return
-    for target, tag in ((workspace["output_image_td"], VENV_TD),):
+    for target, tag in (
+        (workspace["output_image_td"], VENV_TD),
+        (workspace["output_image_fn"], VENV_FN),
+    ):
         size = os.path.getsize(target)
         trace(f"Sending {target}: {human_size(size)} ({size} bytes)")
         response = shuttle_path(arguments.transporter_response, tag)
@@ -697,7 +732,10 @@ def main() -> None:
     step("Sending the image", send_image, arguments, workspace)
 
     hours = (time.monotonic() - start) / 3600
-    print(f">> Done! Image written to {workspace['output_image_td']}")
+    print(
+        f">> Done! Images written to {workspace['output_image_td']}"
+        f" and {workspace['output_image_fn']}"
+    )
     print(f">> Elapsed time: {hours:.4f} hours")
 
 

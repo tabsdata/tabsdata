@@ -55,6 +55,7 @@ run() {
 LOADER="$(cd "$(dirname "$0")" && pwd)/venvloader.py"
 
 PYTHON_BINARY="python3"
+UV_BINARY="uv"
 PIP_PACKAGES=("boto3" "pyyaml" "zstandard")
 
 show_usage() {
@@ -111,7 +112,11 @@ validate_arguments() {
 }
 
 install_prerequisites() {
-   run "$PYTHON_BINARY" -m pip install --quiet --disable-pip-version-check "${PIP_PACKAGES[@]}"
+   if command -v "$UV_BINARY" >/dev/null 2>&1; then
+      run "$UV_BINARY" pip install --system --quiet "${PIP_PACKAGES[@]}"
+   else
+      run "$PYTHON_BINARY" -m pip install --quiet --disable-pip-version-check "${PIP_PACKAGES[@]}"
+   fi
 }
 
 load_image() {

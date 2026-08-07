@@ -43,7 +43,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: 1000-venvloader
-        image: python:3.12-slim
+        image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
         imagePullPolicy: IfNotPresent
         command: ["bash"]
         args:
