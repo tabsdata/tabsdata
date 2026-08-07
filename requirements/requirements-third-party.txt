@@ -23,8 +23,8 @@ google-cloud-storage-control==1.10.0
 grpcio-tools==1.80.0
 humanize==4.15.0
 hvac==2.4.0
-ibm_db==3.2.8; platform_machine != "aarch64"
-ibm_db_sa==0.4.4; platform_machine != "aarch64"
+ibm_db==3.2.8; sys_platform == "darwin" or (platform_machine != "aarch64" and platform_machine != "ARM64")
+ibm_db_sa==0.4.4; sys_platform == "darwin" or (platform_machine != "aarch64" and platform_machine != "ARM64")
 ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
