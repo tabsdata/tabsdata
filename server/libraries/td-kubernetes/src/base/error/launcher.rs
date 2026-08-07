@@ -64,6 +64,12 @@ pub enum LauncherError {
     Kubernetes(#[from] KubernetesError) = 5004,
     #[error("Could not parse config '{config}' while preparing secret env injection: {cause}.")]
     SecretEnvInjectionConfigParseFailed { config: String, cause: String } = 5005,
+    #[error("Could not parse config '{config}' while sizing pod '{pod}': {cause}.")]
+    SizingConfigParseFailed {
+        config: String,
+        pod: String,
+        cause: String,
+    } = 5019,
     #[error(
         "Could not extract secret leaves from config '{config}' while preparing secret env injection: {cause}."
     )]

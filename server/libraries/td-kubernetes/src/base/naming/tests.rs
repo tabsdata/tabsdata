@@ -14,7 +14,7 @@ fn to_fn_pod_name_normalizes_logical_worker_id() {
 #[test]
 fn to_fn_pod_name_accepts_legacy_alnum_worker_id() {
     let name = to_fn_pod_name("tfr", "06ABCDEF0123456789ABCDEFGH").unwrap();
-    assert_eq!(name, "trf-06abcdef0123456789abcdefgh");
+    assert_eq!(name, "tfr-06abcdef0123456789abcdefgh");
 }
 
 #[test]

@@ -18,6 +18,7 @@ use crate::base::naming::name_from_kube_resource_name;
 use crate::kube::api::{LabelFilter, list_secrets};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::profile::Profile;
+use crate::runtime::instance::sizing::{component_label_of, inject_sizing};
 use crate::runtime::instance::tabsdata::{TABSDATA_FILE, TabsdataConfig};
 use crate::runtime::secrets::discovery::{SecretLeaf, extract_secret_leaves};
 use crate::runtime::secrets::source::to_secret_name;
@@ -38,6 +39,7 @@ pub fn inject_into_pod(
     pod: &mut Pod,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
+    let component = component_label_of(pod.metadata.labels.as_ref()).map(str::to_owned);
     let spec =
         pod.spec
             .as_mut()
@@ -45,6 +47,7 @@ pub fn inject_into_pod(
                 config: pod_template_key.to_owned(),
                 cause: "pod has no spec".to_owned(),
             })?;
+    inject_sizing(profile, pod_template_key, component.as_deref(), spec)?;
     inject_secret_envs(profile, pod_template_key, spec, available_secrets)
 }
 
@@ -54,6 +57,7 @@ pub fn inject_into_job(
     job: &mut Job,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
+    let component = component_label_of(job.metadata.labels.as_ref()).map(str::to_owned);
     let spec = job
         .spec
         .as_mut()
@@ -62,6 +66,7 @@ pub fn inject_into_job(
             config: pod_template_key.to_owned(),
             cause: "job has no spec.template.spec".to_owned(),
         })?;
+    inject_sizing(profile, pod_template_key, component.as_deref(), spec)?;
     inject_secret_envs(profile, pod_template_key, spec, available_secrets)
 }
 
@@ -71,6 +76,7 @@ pub fn inject_into_cronjob(
     cronjob: &mut CronJob,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
+    let component = component_label_of(cronjob.metadata.labels.as_ref()).map(str::to_owned);
     let spec = cronjob
         .spec
         .as_mut()
@@ -80,6 +86,7 @@ pub fn inject_into_cronjob(
             config: pod_template_key.to_owned(),
             cause: "cronjob has no spec.jobTemplate.spec.template.spec".to_owned(),
         })?;
+    inject_sizing(profile, pod_template_key, component.as_deref(), spec)?;
     inject_secret_envs(profile, pod_template_key, spec, available_secrets)
 }
 
@@ -89,6 +96,7 @@ pub fn inject_into_deployment(
     deployment: &mut Deployment,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
+    let component = component_label_of(deployment.metadata.labels.as_ref()).map(str::to_owned);
     let spec = deployment
         .spec
         .as_mut()
@@ -97,6 +105,7 @@ pub fn inject_into_deployment(
             config: pod_template_key.to_owned(),
             cause: "deployment has no spec.template.spec".to_owned(),
         })?;
+    inject_sizing(profile, pod_template_key, component.as_deref(), spec)?;
     inject_secret_envs(profile, pod_template_key, spec, available_secrets)
 }
 

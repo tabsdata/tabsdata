@@ -10,6 +10,7 @@ pub mod launcher;
 pub mod manifest;
 pub mod ports;
 pub mod profile;
+pub mod sizing;
 pub mod staging;
 pub mod tabsdata;
 pub mod tier;

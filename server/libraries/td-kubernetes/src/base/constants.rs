@@ -299,6 +299,10 @@ pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of")
 pub const PART_OF_TABSDATA: &str = "tabsdata";
 
 pub const POD_YAML_COMPONENT_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "component");
+
+pub const RESOURCE_CPU: &str = "cpu";
+pub const RESOURCE_MEMORY: &str = "memory";
+pub const RESOURCE_EPHEMERAL_STORAGE: &str = "ephemeral-storage";
 pub const POD_YAML_DECORATOR_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "decorator");
 pub const POD_YAML_WORKER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "worker");
 
