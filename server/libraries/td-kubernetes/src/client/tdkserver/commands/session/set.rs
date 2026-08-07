@@ -8,20 +8,20 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::NoAction;
 
 use crate::base::error::provider::ProviderError;
-use crate::client::session::pin::{PinContext, Pins};
+use crate::client::session::settings::{Settings, SettingsContext};
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::core::system::exit::{CommandResult, abort, abort_with};
 use crate::cwarn;
 use crate::runtime::provider::ClusterProvider;
 
 #[derive(Debug, Clone, Args)]
-pub struct PinArguments {
+pub struct SetArguments {
     #[arg(
         long,
         name = "instance",
         required = false,
         display_order = 10,
-        long_help = "Pin the instance name used when a command omits --instance."
+        long_help = "Set the instance name used when a command omits --instance."
     )]
     pub instance: Option<String>,
 
@@ -31,7 +31,7 @@ pub struct PinArguments {
         required = false,
         value_enum,
         display_order = 20,
-        long_help = "Pin the provider used when a command omits --provider."
+        long_help = "Set the provider used when a command omits --provider."
     )]
     pub provider: Option<ClusterProvider>,
 
@@ -41,7 +41,7 @@ pub struct PinArguments {
         required = false,
         value_parser = clap::value_parser!(PathBuf),
         display_order = 30,
-        long_help = "Pin the kubeconfig path used when a command omits --kubeconfig."
+        long_help = "Set the kubeconfig path used when a command omits --kubeconfig."
     )]
     pub kubeconfig: Option<PathBuf>,
 
@@ -50,7 +50,7 @@ pub struct PinArguments {
         name = "context",
         required = false,
         display_order = 40,
-        long_help = "Pin the kubeconfig context used when a command omits --context."
+        long_help = "Set the kubeconfig context used when a command omits --context."
     )]
     pub context: Option<String>,
 
@@ -59,7 +59,7 @@ pub struct PinArguments {
         name = "namespace",
         required = false,
         display_order = 50,
-        long_help = "Pin the namespace used when a command omits --namespace."
+        long_help = "Set the namespace used when a command omits --namespace."
     )]
     pub namespace: Option<String>,
 
@@ -70,7 +70,7 @@ pub struct PinArguments {
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 100,
-        long_help = "Pin the --save value used when a command omits --save."
+        long_help = "Set the --save value used when a command omits --save."
     )]
     pub save: Option<bool>,
 
@@ -81,7 +81,7 @@ pub struct PinArguments {
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
-        long_help = "Pin the --details value used when a command omits --details."
+        long_help = "Set the --details value used when a command omits --details."
     )]
     pub details: Option<bool>,
 
@@ -92,14 +92,14 @@ pub struct PinArguments {
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 120,
-        long_help = "Pin the autoconfirm value (accepting 'true'/'false') used as the \
+        long_help = "Set the autoconfirm value (accepting 'true'/'false') used as the \
                      default for --yes when a command omits it."
     )]
     pub autoconfirm: Option<bool>,
 }
 
-pub async fn command_pin(arguments: PinArguments, _globals: &GlobalArguments) -> CommandResult {
-    let PinArguments {
+pub async fn command_set(arguments: SetArguments, _globals: &GlobalArguments) -> CommandResult {
+    let SetArguments {
         instance,
         provider,
         kubeconfig,
@@ -119,7 +119,7 @@ pub async fn command_pin(arguments: PinArguments, _globals: &GlobalArguments) ->
         );
     }
 
-    let values = Pins {
+    let values = Settings {
         instance,
         provider,
         kubeconfig,
@@ -131,11 +131,11 @@ pub async fn command_pin(arguments: PinArguments, _globals: &GlobalArguments) ->
     };
 
     if values.is_empty() {
-        cwarn!("No values provided to pin.");
+        cwarn!("No values provided to set.");
         return abort(NoAction);
     }
 
-    PinContext::pin_values(values.clone())?;
-    values.report("Pinned tabsdata values:");
+    SettingsContext::set_values(values.clone())?;
+    values.report("Tabsdata session settings:");
     Ok(())
 }

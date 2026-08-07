@@ -55,8 +55,8 @@ fn next_steps_after_create(summary: &Summary) {
         );
     }
     warn!(
-        "  - Reduce typing on subsequent commands by pinning this instance with \
-         'tdkserver session pin ...' — pinned values become defaults for cluster / instance / \
+        "  - Reduce typing on subsequent commands by setting this instance with \
+         'tdkserver session set ...' — set values become defaults for cluster / instance / \
          namespace flags."
     );
     warn!(

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
     InstanceNameArguments, instance_label, resolved_instance,
@@ -19,8 +19,8 @@ pub async fn command_status(
     arguments: InstanceNameArguments,
     globals: &GlobalArguments,
 ) -> CommandResult {
-    let pins = PinContext::pins();
-    let instance = resolved_instance(arguments.instance, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(arguments.instance, &settings);
     let verbose = globals.verbose;
     let provider = provider_for_instance_any_state(instance.value, verbose).await?;
     if !provider.cluster_alive().await {

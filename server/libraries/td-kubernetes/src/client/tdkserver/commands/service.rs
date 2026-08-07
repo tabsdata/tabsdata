@@ -21,13 +21,13 @@ pub mod view;
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
 
-use crate::client::session::pin::{Pins, Resolved, resolve, resolve_flag};
+use crate::client::session::settings::{Resolved, Settings, resolve, resolve_flag};
 use crate::client::tdkserver::arguments::ClusterArguments;
-use crate::client::tdkserver::render::preview::PinnedMarkers;
+use crate::client::tdkserver::render::preview::SettingsMarkers;
 use crate::runtime::provider::summary::Summary;
 
 #[derive(Debug, Clone, Default)]
-pub struct ClusterPinned {
+pub struct ClusterSet {
     pub provider: bool,
     pub kubeconfig: bool,
     pub context: bool,
@@ -42,32 +42,32 @@ pub struct InstanceNameArguments {
         required = false,
         display_order = 10,
         long_help = "Registered instance name. \
-                     When omitted, the pinned default instance is used; \
-                     when no instance is pinned, the 'tabsdata' instance is used."
+                     When omitted, the set default instance is used; \
+                     when no instance is set, the 'tabsdata' instance is used."
     )]
     pub instance: Option<String>,
 }
 
-pub fn resolved_instance(user: Option<String>, pins: &Pins) -> Resolved<Option<String>> {
-    resolve(user, pins.instance.clone())
+pub fn resolved_instance(user: Option<String>, settings: &Settings) -> Resolved<Option<String>> {
+    resolve(user, settings.instance.clone())
 }
 
-pub fn resolved_details(user: Option<bool>, pins: &Pins) -> Resolved<bool> {
-    resolve_flag(user, pins.details, true)
+pub fn resolved_details(user: Option<bool>, settings: &Settings) -> Resolved<bool> {
+    resolve_flag(user, settings.details, true)
 }
 
-pub fn resolved_yes(user: Option<bool>, pins: &Pins) -> Resolved<bool> {
-    resolve_flag(user, pins.autoconfirm, false)
+pub fn resolved_yes(user: Option<bool>, settings: &Settings) -> Resolved<bool> {
+    resolve_flag(user, settings.autoconfirm, false)
 }
 
-pub fn resolved_save(user: Option<bool>, pins: &Pins) -> Resolved<bool> {
-    resolve_flag(user, pins.save, false)
+pub fn resolved_save(user: Option<bool>, settings: &Settings) -> Resolved<bool> {
+    resolve_flag(user, settings.save, false)
 }
 
-pub fn instance_markers(summary: &Summary, instance_pinned: bool) -> PinnedMarkers {
-    PinnedMarkers {
-        instance_name: instance_pinned && summary.instance_name.is_some(),
-        ..PinnedMarkers::default()
+pub fn instance_markers(summary: &Summary, instance_in_settings: bool) -> SettingsMarkers {
+    SettingsMarkers {
+        instance_name: instance_in_settings && summary.instance_name.is_some(),
+        ..SettingsMarkers::default()
     }
 }
 
@@ -77,12 +77,12 @@ pub fn instance_label(summary: &Summary) -> &str {
 
 pub fn resolved_cluster(
     cluster: ClusterArguments,
-    pins: &Pins,
-) -> (ClusterArguments, ClusterPinned) {
-    let provider = resolve(cluster.provider, pins.provider);
-    let kubeconfig = resolve(cluster.kubeconfig, pins.kubeconfig.clone());
-    let context = resolve(cluster.context, pins.context.clone());
-    let namespace = resolve(cluster.namespace, pins.namespace.clone());
+    settings: &Settings,
+) -> (ClusterArguments, ClusterSet) {
+    let provider = resolve(cluster.provider, settings.provider);
+    let kubeconfig = resolve(cluster.kubeconfig, settings.kubeconfig.clone());
+    let context = resolve(cluster.context, settings.context.clone());
+    let namespace = resolve(cluster.namespace, settings.namespace.clone());
     let resolved = ClusterArguments {
         provider: provider.value,
         context: context.value,
@@ -90,11 +90,11 @@ pub fn resolved_cluster(
         current: cluster.current,
         namespace: namespace.value,
     };
-    let pinned = ClusterPinned {
-        provider: provider.pinned,
-        kubeconfig: kubeconfig.pinned,
-        context: context.pinned,
-        namespace: namespace.pinned,
+    let set = ClusterSet {
+        provider: provider.in_settings,
+        kubeconfig: kubeconfig.in_settings,
+        context: context.in_settings,
+        namespace: namespace.in_settings,
     };
-    (resolved, pinned)
+    (resolved, set)
 }

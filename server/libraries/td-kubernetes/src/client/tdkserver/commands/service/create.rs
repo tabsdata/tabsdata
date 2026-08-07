@@ -12,7 +12,7 @@ use crate::client::registry::{
     InstanceSettings, InstanceState, instance_init_input_folder, instance_init_stage_folder,
     td_venv_activate_file,
 };
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::service::{
     instance_markers, resolved_details, resolved_instance, resolved_yes,
@@ -100,15 +100,15 @@ pub async fn command_create(
         yes,
     } = arguments;
 
-    let pins = PinContext::pins();
-    let instance = resolved_instance(instance, &pins);
-    let details = resolved_details(details, &pins);
-    let yes = resolved_yes(yes, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
+    let details = resolved_details(details, &settings);
+    let yes = resolved_yes(yes, &settings);
     let verbose = globals.verbose;
 
     create_instance(
         instance.value,
-        instance.pinned,
+        instance.in_settings,
         port,
         details.value,
         yes.value,
@@ -120,7 +120,7 @@ pub async fn command_create(
 
 pub async fn create_instance(
     instance: Option<String>,
-    instance_pinned: bool,
+    instance_in_settings: bool,
     port: u16,
     details: bool,
     yes: bool,
@@ -163,7 +163,7 @@ pub async fn create_instance(
     }
 
     if details {
-        let markers = instance_markers(&provider.summary(), instance_pinned);
+        let markers = instance_markers(&provider.summary(), instance_in_settings);
         preview::create_service(&provider.summary(), &markers);
         report_ports(&assigned);
     }

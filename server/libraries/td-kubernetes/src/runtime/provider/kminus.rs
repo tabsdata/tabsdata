@@ -36,7 +36,7 @@ use crate::base::reporter::Reporter;
 use crate::client::registry::{
     ClusterViews, InstanceSettings, init_stage_folder_in, instances_root,
 };
-use crate::client::session::pin::{KminusInputs, Session};
+use crate::client::session::settings::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
@@ -387,7 +387,7 @@ impl Provider for KminusProvider {
         })
     }
 
-    async fn ensure_pinnable_server(&self) -> CommandResult {
+    async fn ensure_settable_server(&self) -> CommandResult {
         if !self.folder.exists() {
             return Err(
                 ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),

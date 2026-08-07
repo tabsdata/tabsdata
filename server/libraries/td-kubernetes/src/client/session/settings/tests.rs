@@ -35,8 +35,8 @@ fn sample_kminus() -> Session {
 }
 
 #[test]
-fn tdkpin_path_ends_with_server_session_file() {
-    let path = tdkpin_path();
+fn tdksettings_path_ends_with_server_session_file() {
+    let path = tdksettings_path();
     assert_eq!(
         path.file_name().and_then(|name| name.to_str()),
         Some(SERVER_SESSION_FILE)
@@ -44,8 +44,8 @@ fn tdkpin_path_ends_with_server_session_file() {
 }
 
 #[test]
-fn tdkpin_path_lives_under_tabsdata_home_dir() {
-    let path = tdkpin_path();
+fn tdksettings_path_lives_under_tabsdata_home_dir() {
+    let path = tdksettings_path();
     let parent = path.parent().expect("path has parent");
     assert_eq!(
         parent.file_name().and_then(|name| name.to_str()),

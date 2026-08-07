@@ -21,12 +21,12 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use super::config::{ConfigCommands, command_config};
 use super::secret::{SecretCommands, command_secret};
 use super::server::{ServerCommands, command_server};
-use super::session::pin::{PinArguments, command_pin};
-use super::session::show::{ShowArguments, command_show};
-use super::session::unpin::{UnpinArguments, command_unpin};
+use super::session::set::{SetArguments, command_set};
+use super::session::settings::{SettingsArguments, command_settings};
+use super::session::unset::{UnpinArguments, command_unset};
 use super::session::{SessionCommands, command_session};
 use crate::cerror;
-use crate::client::session::pin::{PinContext, tdkpin_path};
+use crate::client::session::settings::{SettingsContext, tdksettings_path};
 use crate::core::system::exit::CommandResult;
 
 const TOOL_NAME: &str = "tdkserver";
@@ -51,12 +51,12 @@ enum ShellCommand {
     /// Manage the active tabsdata session
     #[command(subcommand)]
     Session(SessionCommands),
-    /// Pin default values used when commands omit them
-    Pin(PinArguments),
-    /// Unpin default values
-    Unpin(UnpinArguments),
-    /// Show the pinned default values
-    Show(ShowArguments),
+    /// Set default values used when commands omit them
+    Set(SetArguments),
+    /// Unset default values
+    Unset(UnpinArguments),
+    /// Show the set default values
+    Settings(SettingsArguments),
 }
 
 #[derive(Debug, Parser)]
@@ -144,14 +144,14 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 ShellCommand::Session(command) => {
                     let _ = command_session(command, globals).await;
                 }
-                ShellCommand::Pin(arguments) => {
-                    let _ = command_pin(arguments, globals).await;
+                ShellCommand::Set(arguments) => {
+                    let _ = command_set(arguments, globals).await;
                 }
-                ShellCommand::Unpin(arguments) => {
-                    let _ = command_unpin(arguments, globals).await;
+                ShellCommand::Unset(arguments) => {
+                    let _ = command_unset(arguments, globals).await;
                 }
-                ShellCommand::Show(arguments) => {
-                    let _ = command_show(arguments, globals).await;
+                ShellCommand::Settings(arguments) => {
+                    let _ = command_settings(arguments, globals).await;
                 }
             },
             Err(error) => {
@@ -163,13 +163,13 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
 }
 
 fn show_initial_active_context() {
-    if let Some(name) = PinContext::pinned_instance() {
+    if let Some(name) = SettingsContext::settings_instance() {
         info!(
-            "Pinned tabsdata instance: {name} (from {}).",
-            tdkpin_path().display()
+            "Instance of the tabsdata session settings: {name} (from {}).",
+            tdksettings_path().display()
         );
     } else {
-        info!("No tabsdata instance is pinned.");
+        info!("The tabsdata session settings hold no instance.");
     }
 }
 
@@ -333,7 +333,7 @@ impl ShellPrompt {
 impl Prompt for ShellPrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
         let tool = format!("{} ❯", self.tool_name).bold().green().to_string();
-        let label = match PinContext::pinned_instance() {
+        let label = match SettingsContext::settings_instance() {
             Some(name) => format!("[{name}]").truecolor(0xCC, 0xB2, 0x33).to_string(),
             None => "[no tabsdata instance]".dimmed().to_string(),
         };

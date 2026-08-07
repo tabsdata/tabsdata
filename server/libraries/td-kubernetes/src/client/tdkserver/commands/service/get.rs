@@ -14,7 +14,7 @@ use crate::base::error::cli::CliError;
 use crate::base::naming::name_from_kube_resource_name;
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::registry::instance_edit_input_folder;
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::resolved_instance;
 use crate::core::system::exit::CommandResult;
@@ -61,8 +61,8 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
     } = arguments;
     let values = with_secrets.unwrap_or(false);
 
-    let pins = PinContext::pins();
-    let instance = resolved_instance(instance, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
     let verbose = globals.verbose;
 
     let provider = provider_for_instance(instance.value, verbose, None).await?;

@@ -6,7 +6,7 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 use tracing::info;
 
-use crate::client::session::pin::{PinContext, PinSelection};
+use crate::client::session::settings::{SettingsContext, SettingsSelection};
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::common::confirm;
 use crate::core::system::exit::{CommandResult, abort};
@@ -39,7 +39,7 @@ pub struct UnpinArguments {
     pub autoconfirm: bool,
 }
 
-pub async fn command_unpin(arguments: UnpinArguments, _globals: &GlobalArguments) -> CommandResult {
+pub async fn command_unset(arguments: UnpinArguments, _globals: &GlobalArguments) -> CommandResult {
     let UnpinArguments {
         instance,
         provider,
@@ -51,7 +51,7 @@ pub async fn command_unpin(arguments: UnpinArguments, _globals: &GlobalArguments
         autoconfirm,
     } = arguments;
 
-    let selection = PinSelection {
+    let selection = SettingsSelection {
         instance,
         provider,
         kubeconfig,
@@ -63,19 +63,19 @@ pub async fn command_unpin(arguments: UnpinArguments, _globals: &GlobalArguments
     };
 
     let cleared = if selection.any() {
-        PinContext::unpin_values(&selection)?
+        SettingsContext::unset_values(&selection)?
     } else {
-        if !confirm(false, "Unpin all pinned tabsdata values?")? {
+        if !confirm(false, "Clear every tabsdata session setting?")? {
             info!("Operation cancelled.");
             return abort(Cancelled);
         }
-        PinContext::unpin_all()?
+        SettingsContext::unset_all()?
     };
 
     if cleared {
-        info!("Cleared the requested pinned tabsdata values.");
+        info!("Cleared the requested tabsdata session settings.");
     } else {
-        cwarn!("No matching pinned tabsdata values to clear.");
+        cwarn!("No matching tabsdata session settings to clear.");
     }
     Ok(())
 }

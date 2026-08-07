@@ -7,17 +7,20 @@ use tracing::info;
 use crate::client::tdkserver::render::report::helper::common::render_session_lines;
 use crate::runtime::provider::summary::Summary;
 
-pub fn pinned_server(summary: &Summary) {
+pub fn set_server(summary: &Summary) {
     if let Some(name) = &summary.instance_name {
         if let Some(path) = &summary.instance_path {
-            info!("Pinned tabsdata session '{name}' at {}.", path.display());
+            info!(
+                "Tabsdata session settings of '{name}' saved at {}.",
+                path.display()
+            );
         } else {
-            info!("Pinned tabsdata session '{name}'.");
+            info!("Tabsdata session settings of '{name}' saved.");
         }
     } else if let Some(namespace) = &summary.namespace {
-        info!("Pinned tabsdata session in namespace '{namespace}'.");
+        info!("Tabsdata session settings of namespace '{namespace}' saved.");
     } else {
-        info!("Pinned tabsdata session.");
+        info!("Tabsdata session settings saved.");
     }
     render_session_lines(summary);
 }

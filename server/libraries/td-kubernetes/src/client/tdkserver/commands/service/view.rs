@@ -10,7 +10,7 @@ use td_error::TdError;
 use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::error::cli::CliError;
 use crate::base::naming::name_from_kube_resource_name;
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::resolved_instance;
 use crate::client::tdkserver::render::report::helper::yaml::{ReportDocument, render_documents};
@@ -58,8 +58,8 @@ pub async fn command_view(arguments: ViewArguments, globals: &GlobalArguments) -
     } = arguments;
     let values = with_secrets.unwrap_or(false);
 
-    let pins = PinContext::pins();
-    let instance = resolved_instance(instance, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
     let verbose = globals.verbose;
 
     let provider = provider_for_instance(instance.value, verbose, None).await?;

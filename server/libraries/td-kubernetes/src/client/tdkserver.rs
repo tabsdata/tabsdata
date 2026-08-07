@@ -32,9 +32,9 @@ use crate::client::tdkserver::commands::service::stop::command_stop;
 use crate::client::tdkserver::commands::service::trash::command_trash;
 // use crate::client::tdkserver::commands::service::unregister::command_unregister;
 use crate::client::tdkserver::commands::service::view::command_view;
-use crate::client::tdkserver::commands::session::pin::command_pin;
-use crate::client::tdkserver::commands::session::show::command_show;
-use crate::client::tdkserver::commands::session::unpin::command_unpin;
+use crate::client::tdkserver::commands::session::set::command_set;
+use crate::client::tdkserver::commands::session::settings::command_settings;
+use crate::client::tdkserver::commands::session::unset::command_unset;
 // use crate::client::tdkserver::commands::session::command_session;
 use crate::client::tdkserver::commands::shell::command_shell;
 // use crate::client::tdkserver::commands::template::command_template;
@@ -83,9 +83,9 @@ impl TabsDataKubernetesClient {
             Some(Commands::View(arguments)) => command_view(arguments, &globals).await,
             Some(Commands::Trash(arguments)) => command_trash(arguments, &globals).await,
             Some(Commands::Shell) => command_shell(&globals).await,
-            Some(Commands::Pin(arguments)) => command_pin(arguments, &globals).await,
-            Some(Commands::Unpin(arguments)) => command_unpin(arguments, &globals).await,
-            Some(Commands::Show(arguments)) => command_show(arguments, &globals).await,
+            Some(Commands::Set(arguments)) => command_set(arguments, &globals).await,
+            Some(Commands::Unset(arguments)) => command_unset(arguments, &globals).await,
+            Some(Commands::Settings(arguments)) => command_settings(arguments, &globals).await,
             Some(Commands::List) => command_list(&globals).await,
             // Some(Commands::Template(command)) => command_template(command, &globals).await,
             // Some(Commands::Cluster(command)) => command_cluster(command, &globals).await,

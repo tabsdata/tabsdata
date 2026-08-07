@@ -5,7 +5,7 @@
 use td_common::settings::DEFAULT_INSTANCE;
 
 use crate::client::registry::{InstanceSettings, instance_folder};
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{InstanceNameArguments, resolved_instance};
 use crate::client::tdkserver::render::report;
@@ -16,8 +16,8 @@ pub async fn command_info(
     arguments: InstanceNameArguments,
     globals: &GlobalArguments,
 ) -> CommandResult {
-    let pins = PinContext::pins();
-    let instance = resolved_instance(arguments.instance, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(arguments.instance, &settings);
     let verbose = globals.verbose;
 
     let name = instance

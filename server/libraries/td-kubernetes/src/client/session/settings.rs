@@ -79,49 +79,53 @@ pub enum Session {
 #[derive(Debug, Clone)]
 pub struct Resolved<T> {
     pub value: T,
-    pub pinned: bool,
+    pub in_settings: bool,
 }
 
-pub fn resolve<T>(user: Option<T>, pinned: Option<T>) -> Resolved<Option<T>> {
+pub fn resolve<T>(user: Option<T>, in_settings: Option<T>) -> Resolved<Option<T>> {
     match user {
         Some(value) => Resolved {
             value: Some(value),
-            pinned: false,
+            in_settings: false,
         },
-        None => match pinned {
+        None => match in_settings {
             Some(value) => Resolved {
                 value: Some(value),
-                pinned: true,
+                in_settings: true,
             },
             None => Resolved {
                 value: None,
-                pinned: false,
+                in_settings: false,
             },
         },
     }
 }
 
-pub fn resolve_flag(user: Option<bool>, pinned: Option<bool>, fallback: bool) -> Resolved<bool> {
+pub fn resolve_flag(
+    user: Option<bool>,
+    in_settings: Option<bool>,
+    fallback: bool,
+) -> Resolved<bool> {
     match user {
         Some(value) => Resolved {
             value,
-            pinned: false,
+            in_settings: false,
         },
-        None => match pinned {
+        None => match in_settings {
             Some(value) => Resolved {
                 value,
-                pinned: true,
+                in_settings: true,
             },
             None => Resolved {
                 value: fallback,
-                pinned: false,
+                in_settings: false,
             },
         },
     }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Pins {
+pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instance: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,13 +145,13 @@ pub struct Pins {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PinContext {
-    #[serde(default, skip_serializing_if = "Pins::is_empty")]
-    pub pins: Pins,
+pub struct SettingsContext {
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    pub settings: Settings,
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct PinSelection {
+pub struct SettingsSelection {
     pub instance: bool,
     pub provider: bool,
     pub kubeconfig: bool,
@@ -158,7 +162,7 @@ pub struct PinSelection {
     pub autoconfirm: bool,
 }
 
-impl PinSelection {
+impl SettingsSelection {
     pub fn any(&self) -> bool {
         self.instance
             || self.provider
@@ -171,7 +175,7 @@ impl PinSelection {
     }
 }
 
-impl Pins {
+impl Settings {
     pub fn is_empty(&self) -> bool {
         self.instance.is_none()
             && self.provider.is_none()
@@ -211,7 +215,7 @@ impl Pins {
         }
     }
 
-    fn merge(&mut self, values: Pins) {
+    fn merge(&mut self, values: Settings) {
         if values.instance.is_some() {
             self.instance = values.instance;
         }
@@ -238,7 +242,7 @@ impl Pins {
         }
     }
 
-    fn clear(&mut self, selection: &PinSelection) -> bool {
+    fn clear(&mut self, selection: &SettingsSelection) -> bool {
         let mut cleared = false;
         if selection.instance && self.instance.take().is_some() {
             cleared = true;
@@ -268,16 +272,16 @@ impl Pins {
     }
 }
 
-pub fn tdkpin_path() -> PathBuf {
+pub fn tdksettings_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(TABSDATA_HOME_DIR)
         .join(SERVER_SESSION_FILE)
 }
 
-impl PinContext {
+impl SettingsContext {
     pub fn load() -> CommandResult<Self> {
-        let path = tdkpin_path();
+        let path = tdksettings_path();
         if !path.exists() {
             return Ok(Self::default());
         }
@@ -289,10 +293,10 @@ impl PinContext {
             }
         };
         match serde_json::from_str(&data) {
-            Ok(pin_context) => Ok(pin_context),
+            Ok(settings_context) => Ok(settings_context),
             Err(error) => {
                 cerror!(
-                    "Failed to parse '{}': {error}. Run 'tdkserver unpin' to clear the pinned tabsdata instance.",
+                    "Failed to parse '{}': {error}. Run 'tdkserver unset' to clear the tabsdata session settings.",
                     path.display()
                 );
                 abort(GeneralError)
@@ -301,7 +305,7 @@ impl PinContext {
     }
 
     pub fn read() -> Self {
-        let path = tdkpin_path();
+        let path = tdksettings_path();
         fs::read_to_string(&path)
             .ok()
             .and_then(|data| serde_json::from_str(&data).ok())
@@ -309,7 +313,7 @@ impl PinContext {
     }
 
     fn save(&self) -> CommandResult {
-        let path = tdkpin_path();
+        let path = tdksettings_path();
         if let Some(parent) = path.parent()
             && let Err(error) = fs::create_dir_all(parent)
         {
@@ -319,7 +323,7 @@ impl PinContext {
         let data = match serde_json::to_string_pretty(self) {
             Ok(data) => data,
             Err(error) => {
-                cerror!("Failed to serialize the tabsdata pin: {error}");
+                cerror!("Failed to serialize the tabsdata session settings: {error}");
                 return abort(GeneralError);
             }
         };
@@ -331,8 +335,8 @@ impl PinContext {
     }
 
     fn delete_if_empty(&self) -> CommandResult {
-        if self.pins.is_empty() {
-            let path = tdkpin_path();
+        if self.settings.is_empty() {
+            let path = tdksettings_path();
             if path.exists()
                 && let Err(error) = fs::remove_file(&path)
             {
@@ -344,39 +348,39 @@ impl PinContext {
         self.save()
     }
 
-    pub fn pin_values(values: Pins) -> CommandResult {
-        let mut pin = Self::load()?;
-        pin.pins.merge(values);
-        pin.save()
+    pub fn set_values(values: Settings) -> CommandResult {
+        let mut set = Self::load()?;
+        set.settings.merge(values);
+        set.save()
     }
 
-    pub fn unpin_values(selection: &PinSelection) -> CommandResult<bool> {
-        let mut pin = Self::load()?;
-        let cleared = pin.pins.clear(selection);
-        pin.delete_if_empty()?;
+    pub fn unset_values(selection: &SettingsSelection) -> CommandResult<bool> {
+        let mut set = Self::load()?;
+        let cleared = set.settings.clear(selection);
+        set.delete_if_empty()?;
         Ok(cleared)
     }
 
-    pub fn unpin_all() -> CommandResult<bool> {
-        let mut pin = Self::load()?;
-        let existed = !pin.pins.is_empty();
-        pin.pins = Pins::default();
-        pin.delete_if_empty()?;
+    pub fn unset_all() -> CommandResult<bool> {
+        let mut set = Self::load()?;
+        let existed = !set.settings.is_empty();
+        set.settings = Settings::default();
+        set.delete_if_empty()?;
         Ok(existed)
     }
 
-    pub fn pins() -> Pins {
-        Self::read().pins
+    pub fn settings() -> Settings {
+        Self::read().settings
     }
 
-    pub fn pin_instance(name: String) -> CommandResult {
-        let mut pin = Self::load()?;
-        pin.pins.instance = Some(name);
-        pin.save()
+    pub fn set_instance(name: String) -> CommandResult {
+        let mut set = Self::load()?;
+        set.settings.instance = Some(name);
+        set.save()
     }
 
-    pub fn pinned_instance() -> Option<String> {
-        Self::read().pins.instance
+    pub fn settings_instance() -> Option<String> {
+        Self::read().settings.instance
     }
 }
 

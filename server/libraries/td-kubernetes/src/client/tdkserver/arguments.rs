@@ -25,9 +25,9 @@ use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
 use crate::client::tdkserver::commands::service::trash::TrashArguments;
 use crate::client::tdkserver::commands::service::view::ViewArguments;
-use crate::client::tdkserver::commands::session::pin::PinArguments;
-use crate::client::tdkserver::commands::session::show::ShowArguments;
-use crate::client::tdkserver::commands::session::unpin::UnpinArguments;
+use crate::client::tdkserver::commands::session::set::SetArguments;
+use crate::client::tdkserver::commands::session::settings::SettingsArguments;
+use crate::client::tdkserver::commands::session::unset::UnpinArguments;
 // use crate::client::tdkserver::commands::session::SessionCommands;
 // use crate::client::tdkserver::commands::template::TemplateCommands;
 use crate::runtime::provider::ClusterProvider;
@@ -119,12 +119,12 @@ pub enum Commands {
         about = "View the configmaps of a tabsdata instance"
     )]
     View(ViewArguments),
-    #[command(about = "Pin default values used when commands omit them")]
-    Pin(PinArguments),
-    #[command(about = "Unpin default values")]
-    Unpin(UnpinArguments),
-    #[command(about = "Show the pinned default values")]
-    Show(ShowArguments),
+    #[command(about = "Set a session setting used when commands omit it")]
+    Set(SetArguments),
+    #[command(about = "Unset a session setting")]
+    Unset(UnpinArguments),
+    #[command(about = "Show the tabsdata session settings")]
+    Settings(SettingsArguments),
     #[command(about = "Open an interactive shell")]
     Shell,
     #[command(about = "List registered tabsdata instances")]

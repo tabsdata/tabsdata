@@ -20,7 +20,7 @@ use crate::client::registry::{
     ClusterViews, InstanceSettings, InstanceState, instance_folder, instance_init_input_folder,
     instance_kube_folder,
 };
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::service::{
     resolved_cluster, resolved_details, resolved_instance, resolved_save, resolved_yes,
@@ -111,17 +111,17 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         loglevel,
     } = arguments;
 
-    let pins = PinContext::pins();
-    let instance = resolved_instance(instance, &pins);
-    let (mut cluster, cluster_pinned) = resolved_cluster(cluster, &pins);
-    let save = resolved_save(save, &pins);
-    let details = resolved_details(details, &pins);
-    let yes = resolved_yes(yes, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
+    let (mut cluster, cluster_in_settings) = resolved_cluster(cluster, &settings);
+    let save = resolved_save(save, &settings);
+    let details = resolved_details(details, &settings);
+    let yes = resolved_yes(yes, &settings);
     let verbose = globals.verbose;
 
-    let instance_pinned = instance.pinned;
+    let instance_in_settings = instance.in_settings;
     let instance_defaulted = instance.value.is_none();
-    let provider_defaulted = cluster.provider.is_none() && !cluster_pinned.provider;
+    let provider_defaulted = cluster.provider.is_none() && !cluster_in_settings.provider;
     let instance = instance
         .value
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
@@ -151,10 +151,10 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     if details.value {
         preview::init_service(
             &instance,
-            instance_pinned,
+            instance_in_settings,
             instance_defaulted,
             provider.as_str(),
-            cluster_pinned.provider,
+            cluster_in_settings.provider,
             provider_defaulted,
             loglevel.map(|level| (level.as_str(), loglevel_defaulted)),
         );

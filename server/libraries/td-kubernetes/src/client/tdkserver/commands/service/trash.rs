@@ -15,7 +15,7 @@ use tracing::info;
 use crate::base::error::cli::CliError;
 use crate::base::reporter::InteractiveReporter;
 use crate::client::registry::{InstanceSettings, instance_folder, trash_root};
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
@@ -95,10 +95,10 @@ pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments)
         yes,
     } = arguments;
 
-    let pins = PinContext::pins();
-    let instance = resolved_instance(instance, &pins);
-    let details = resolved_details(details, &pins);
-    let yes = resolved_yes(yes, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
+    let details = resolved_details(details, &settings);
+    let yes = resolved_yes(yes, &settings);
     let verbose = globals.verbose;
 
     let name = instance

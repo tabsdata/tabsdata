@@ -28,7 +28,7 @@ use crate::base::constants::UvMode;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{ClusterViews, InstanceSettings, InstanceState};
-use crate::client::session::pin::Session;
+use crate::client::session::settings::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::runtime::instance::ports::{
     CHECK_ALL_PORTS_FILTER, CHECK_ONLY_PUBLISHED_PORTS_FILTER, kminus_api_port,
@@ -333,10 +333,10 @@ pub trait Provider: Send + Sync {
     fn cluster_descriptor(&self, settings: ClusterSettings) -> CommandResult<ClusterDescriptor>;
     fn refresh_cluster_views(&self, current: ClusterViews) -> CommandResult<ClusterViews>;
 
-    async fn ensure_pinnable_server(&self) -> CommandResult;
+    async fn ensure_settable_server(&self) -> CommandResult;
     async fn ensure_creatable_server(&self) -> CommandResult;
-    async fn ensure_pinnable_service(&self) -> CommandResult {
-        self.ensure_pinnable_server().await
+    async fn ensure_settable_service(&self) -> CommandResult {
+        self.ensure_settable_server().await
     }
     async fn ensure_creatable_service(&self) -> CommandResult {
         self.ensure_creatable_server().await

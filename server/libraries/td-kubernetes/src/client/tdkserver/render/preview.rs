@@ -7,7 +7,7 @@ use tracing::info;
 use crate::runtime::provider::summary::Summary;
 
 #[derive(Debug, Clone, Default)]
-pub struct PinnedMarkers {
+pub struct SettingsMarkers {
     pub provider: bool,
     pub instance_name: bool,
     pub kubeconfig_path: bool,
@@ -15,8 +15,8 @@ pub struct PinnedMarkers {
     pub namespace: bool,
 }
 
-pub fn pin_server(summary: &Summary) {
-    info!("About to pin tabsdata session:");
+pub fn set_server(summary: &Summary) {
+    info!("About to change the tabsdata session settings:");
     render_summary_lines(summary);
 }
 
@@ -72,21 +72,21 @@ pub fn restart_server(summary: &Summary) {
 
 pub fn init_service(
     instance: &str,
-    instance_pinned: bool,
+    instance_in_settings: bool,
     instance_defaulted: bool,
     provider: &str,
-    provider_pinned: bool,
+    provider_in_settings: bool,
     provider_defaulted: bool,
     loglevel: Option<(&str, bool)>,
 ) {
     info!("About to initialize tabsdata instance:");
     info!(
         "  - instance.....: {instance}{}",
-        origin_marker(instance_pinned, instance_defaulted)
+        origin_marker(instance_in_settings, instance_defaulted)
     );
     info!(
         "  - provider.....: {provider}{}",
-        origin_marker(provider_pinned, provider_defaulted)
+        origin_marker(provider_in_settings, provider_defaulted)
     );
     if let Some((loglevel, loglevel_defaulted)) = loglevel {
         info!(
@@ -96,9 +96,9 @@ pub fn init_service(
     }
 }
 
-fn origin_marker(pinned: bool, defaulted: bool) -> &'static str {
-    if pinned {
-        " (pinned)"
+fn origin_marker(in_settings: bool, defaulted: bool) -> &'static str {
+    if in_settings {
+        " (session)"
     } else if defaulted {
         " (default)"
     } else {
@@ -106,22 +106,22 @@ fn origin_marker(pinned: bool, defaulted: bool) -> &'static str {
     }
 }
 
-pub fn create_service(summary: &Summary, markers: &PinnedMarkers) {
+pub fn create_service(summary: &Summary, markers: &SettingsMarkers) {
     info!("About to create tabsdata instance:");
     render_marked_summary_lines(summary, markers);
 }
 
-pub fn start_service(summary: &Summary, markers: &PinnedMarkers) {
+pub fn start_service(summary: &Summary, markers: &SettingsMarkers) {
     info!("About to start tabsdata instance:");
     render_marked_summary_lines(summary, markers);
 }
 
-pub fn stop_service(summary: &Summary, markers: &PinnedMarkers) {
+pub fn stop_service(summary: &Summary, markers: &SettingsMarkers) {
     info!("About to stop tabsdata instance:");
     render_marked_summary_lines(summary, markers);
 }
 
-pub fn restart_service(summary: &Summary, markers: &PinnedMarkers) {
+pub fn restart_service(summary: &Summary, markers: &SettingsMarkers) {
     info!("About to restart tabsdata instance:");
     render_marked_summary_lines(summary, markers);
 }
@@ -166,20 +166,20 @@ pub(crate) fn render_summary_lines(summary: &Summary) {
     }
 }
 
-fn pinned_suffix(pinned: bool) -> &'static str {
-    if pinned { " (pinned)" } else { "" }
+fn settings_suffix(in_settings: bool) -> &'static str {
+    if in_settings { " (session)" } else { "" }
 }
 
-pub(crate) fn render_marked_summary_lines(summary: &Summary, markers: &PinnedMarkers) {
+pub(crate) fn render_marked_summary_lines(summary: &Summary, markers: &SettingsMarkers) {
     info!(
         "  - provider.....: {}{}",
         summary.provider.as_str(),
-        pinned_suffix(markers.provider)
+        settings_suffix(markers.provider)
     );
     if let Some(name) = &summary.instance_name {
         info!(
             "  - instance name: {name}{}",
-            pinned_suffix(markers.instance_name)
+            settings_suffix(markers.instance_name)
         );
     }
     if let Some(path) = &summary.instance_path {
@@ -189,13 +189,13 @@ pub(crate) fn render_marked_summary_lines(summary: &Summary, markers: &PinnedMar
         info!(
             "  - kubeconfig...: {}{}",
             kubeconfig.display(),
-            pinned_suffix(markers.kubeconfig_path)
+            settings_suffix(markers.kubeconfig_path)
         );
     }
     if let Some(context) = &summary.context {
         info!(
             "  - context......: {context}{}",
-            pinned_suffix(markers.context)
+            settings_suffix(markers.context)
         );
     }
     if let Some(cluster_url) = &summary.cluster_url {
@@ -207,7 +207,7 @@ pub(crate) fn render_marked_summary_lines(summary: &Summary, markers: &PinnedMar
     if let Some(namespace) = &summary.namespace {
         info!(
             "  - namespace....: {namespace}{}",
-            pinned_suffix(markers.namespace)
+            settings_suffix(markers.namespace)
         );
     }
     if let Some(loglevel) = summary.loglevel {

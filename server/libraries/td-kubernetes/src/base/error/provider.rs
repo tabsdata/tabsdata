@@ -138,7 +138,7 @@ pub enum ProviderError {
     ProviderArgumentRequired = 10,
     #[error(
         "No cluster specification supplied and no active context is set. \
-         Pass the required arguments, or run 'tdkserver session pin ...' first."
+         Pass the required arguments, or run 'tdkserver session set ...' first."
     )]
     NoClusterSpecification = 11,
     #[error("Could not read the current process's open-files limit: {0}.")]

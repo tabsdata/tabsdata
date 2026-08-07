@@ -7,7 +7,7 @@ use td_common::status::ExitStatus::Cancelled;
 
 use crate::base::constants::LogLevel;
 use crate::base::reporter::InteractiveReporter;
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
     instance_label, instance_markers, resolved_details, resolved_instance, resolved_yes,
@@ -76,10 +76,10 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
         yes,
     } = arguments;
 
-    let pins = PinContext::pins();
-    let instance = resolved_instance(instance, &pins);
-    let details = resolved_details(details, &pins);
-    let yes = resolved_yes(yes, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
+    let details = resolved_details(details, &settings);
+    let yes = resolved_yes(yes, &settings);
     let verbose = globals.verbose;
 
     let provider = provider_for_instance_mutating(instance.value, verbose, loglevel).await?;
@@ -94,7 +94,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     }
 
     if details.value {
-        let markers = instance_markers(&provider.summary(), instance.pinned);
+        let markers = instance_markers(&provider.summary(), instance.in_settings);
         preview::start_service(&provider.summary(), &markers);
     }
     if !confirm(yes.value, "Proceed with the start?")? {

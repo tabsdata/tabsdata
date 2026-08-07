@@ -26,7 +26,7 @@ use crate::base::reporter::Reporter;
 use crate::client::registry::{
     ClusterViews, InstanceSettings, init_stage_folder_in, instances_root,
 };
-use crate::client::session::pin::{DockerInputs, Session};
+use crate::client::session::settings::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandResult, abort_with};
@@ -293,7 +293,7 @@ impl Provider for DockerProvider {
         Ok(current)
     }
 
-    async fn ensure_pinnable_server(&self) -> CommandResult {
+    async fn ensure_settable_server(&self) -> CommandResult {
         let context = self.kube_context().await?;
         ensure_cluster_reachable(context.client()).await?;
         ensure_namespace_exists(&context).await?;

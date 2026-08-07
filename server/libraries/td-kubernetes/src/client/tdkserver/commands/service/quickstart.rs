@@ -18,7 +18,7 @@ use crate::base::constants::{KPROFILE_ASSETS_FAMILY, LogLevel, REQUIREMENTS_TD_A
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
 use crate::client::registry::{instance_folder, instance_init_input_folder};
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
 use crate::client::tdkserver::commands::service::init::{InitArguments, command_init};
@@ -196,8 +196,8 @@ pub async fn command_quickstart(
         }
     }
 
-    let pins = PinContext::pins();
-    let name = resolved_instance(instance.clone(), &pins)
+    let settings = SettingsContext::settings();
+    let name = resolved_instance(instance.clone(), &settings)
         .value
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
     let folder = instance_folder(&name)?;
@@ -292,7 +292,7 @@ async fn run_quickstart(
     )
     .await?;
 
-    let target_instance = resolved_instance(instance.clone(), &PinContext::pins())
+    let target_instance = resolved_instance(instance.clone(), &SettingsContext::settings())
         .value
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
     if let Some(source) = &requirements_td {
@@ -303,15 +303,15 @@ async fn run_quickstart(
         persist_requirements(&target_instance, REQUIREMENTS_AG_ASSET, source)?;
     }
 
-    let pins = PinContext::pins();
-    let resolved_instance_value = resolved_instance(instance.clone(), &pins);
-    let resolved_details_value = resolved_details(details, &pins);
-    let resolved_yes_value = resolved_yes(yes, &pins);
+    let settings = SettingsContext::settings();
+    let resolved_instance_value = resolved_instance(instance.clone(), &settings);
+    let resolved_details_value = resolved_details(details, &settings);
+    let resolved_yes_value = resolved_yes(yes, &settings);
     let resolved_verbose_value = globals.verbose;
 
     create_instance(
         resolved_instance_value.value,
-        resolved_instance_value.pinned,
+        resolved_instance_value.in_settings,
         port,
         resolved_details_value.value,
         resolved_yes_value.value,

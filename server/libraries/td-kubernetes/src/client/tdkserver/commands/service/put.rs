@@ -17,7 +17,7 @@ use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::registry::{
     InstanceSettings, instance_edit_input_folder, instance_edit_stage_folder,
 };
-use crate::client::session::pin::PinContext;
+use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::restart::restart_service;
 use crate::client::tdkserver::commands::service::{
@@ -94,10 +94,10 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
         yes,
     } = arguments;
 
-    let pins = PinContext::pins();
-    let instance = resolved_instance(instance, &pins);
-    let details = resolved_details(details, &pins);
-    let yes = resolved_yes(yes, &pins);
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
+    let details = resolved_details(details, &settings);
+    let yes = resolved_yes(yes, &settings);
     let apply = apply.unwrap_or(false);
     let verbose = globals.verbose;
 
