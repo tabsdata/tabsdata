@@ -482,8 +482,9 @@ run_task = [
         "__os__hydrate_py_tz_tableframe",
         "__os__hydrate_py_tabsdata",
         "__os__hydrate_py_connectors",
-        "__os__check_hydrate_py"
-    ] }
+        "__os__check_hydrate_py",
+        "__td__mark_hydrated_py"
+    ], condition = { env_not_set = ["TD_HYDRATED_PY"] } }
 ]
 
 [tasks.dehydrate]
@@ -515,7 +516,7 @@ run_task = [
     { name = [
         "__os__dehydrate_py_tabsdata",
         "__os__dehydrate_py_connectors"
-    ] }
+    ], condition = { env_not_set = ["TD_HYDRATED_PY"] } }
 ]
 
 [tasks.test]
@@ -2433,4 +2434,16 @@ run_task = [
     { name = [
         "__os__duck"
     ] }
+]
+
+[tasks.__td__mark_hydrated_py]
+plugin = "td-task-tracker"
+category = "11 - Development"
+private = true
+description = "Record that the python environment is hydrated for this run"
+script_runner = "@duckscript"
+script = [
+    '''
+    set_env TD_HYDRATED_PY true
+    '''
 ]
