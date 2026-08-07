@@ -345,6 +345,20 @@ script = [
     end
 
     cm_run_task __os__set_generation
+    cm_run_task __os__set_kube_uv_mode
+    ''']
+
+[tasks.__os__set_kube_uv_mode]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_KUBE_UV_MODE local
+    info "🐍 _____ Using kubernetes uv mode local: runtimes built from the local sources"
     ''']
 
 [tasks.__os__set_generation]

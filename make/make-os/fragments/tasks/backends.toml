@@ -26,6 +26,7 @@ script = [
     unset_env TD_TEST_INSTANCES_ARENA
 
     cm_run_task __os__set_generation
+    cm_run_task __os__set_kube_uv_mode
     ''']
 
 [tasks.__os__set_crypto]
