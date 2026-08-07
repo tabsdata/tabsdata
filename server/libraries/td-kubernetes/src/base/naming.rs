@@ -4,7 +4,7 @@
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use td_common::worker::WorkerName;
+use td_common::worker::{Decorator, WorkerName};
 
 use crate::base::constants::{KUBE_NAME_SEPARATOR, Scope, TABSDATA_NAME_PREFIX};
 use crate::base::error::naming::{NameSegment, NamingError};
@@ -14,6 +14,19 @@ pub fn worker_pod_stem(worker: &WorkerName) -> &'static str {
         WorkerName::Function => "function",
         WorkerName::StageTrigger => "stream",
         WorkerName::CronTrigger => "cron",
+    }
+}
+
+pub fn worker_name_prefix(worker: &WorkerName, decorator: Option<&Decorator>) -> &'static str {
+    match worker {
+        WorkerName::Function => match decorator {
+            Some(Decorator::Publisher) => "pub",
+            Some(Decorator::Transformer) => "trf",
+            Some(Decorator::Subscriber) => "sub",
+            None => "fun",
+        },
+        WorkerName::StageTrigger => "stm",
+        WorkerName::CronTrigger => "crn",
     }
 }
 
@@ -85,11 +98,10 @@ pub fn to_connection_object_name(connection_id: &str) -> Result<String, NamingEr
     Ok(assembled)
 }
 
-pub fn to_fn_pod_name(worker: &str, worker_id: &str) -> Result<String, NamingError> {
+pub fn to_fn_pod_name(prefix: &str, worker_id: &str) -> Result<String, NamingError> {
     let assembled = format!(
-        "{TABSDATA_NAME_PREFIX}{}{KUBE_NAME_SEPARATOR}{}{KUBE_NAME_SEPARATOR}{}",
-        Scope::Function.as_str(),
-        normalize_segment(NameSegment::Component, worker)?,
+        "{}{KUBE_NAME_SEPARATOR}{}",
+        normalize_segment(NameSegment::Component, prefix)?,
         normalize_segment(NameSegment::WorkerId, worker_id)?,
     );
     if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {

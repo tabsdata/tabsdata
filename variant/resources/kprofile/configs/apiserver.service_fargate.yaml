@@ -6,7 +6,7 @@ addresses:
 - 0.0.0.0:${{system:tdk_apiserver_public_port}}
 internal_addresses:
 - 0.0.0.0:${{system:tdk_apiserver_private_port}}
-advertised_internal_host: td-apiserver.${{system:tdk_namespace_name}}.svc.cluster.local
+advertised_internal_host: net-apiserver.${{system:tdk_namespace_name}}.svc.cluster.local
 password:
   algorithm: argon2id
   version: 19

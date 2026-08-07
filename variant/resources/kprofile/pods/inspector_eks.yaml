@@ -5,7 +5,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: td-inspector
+  name: ini-inspector
   namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata inspector init job"

@@ -5,7 +5,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: td-venvloader
+  name: ini-venvloader
   namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata venvloader init job"

@@ -180,7 +180,7 @@ spec:
               mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
-        - name: 0030-api-ready
+        - name: 0030-apiready
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_apiready"]
@@ -188,7 +188,7 @@ spec:
             - --config-file
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.service.yaml
             - --host
-            - td-apiserver.${{system:tdk_namespace_name}}.svc.cluster.local
+            - net-apiserver.${{system:tdk_namespace_name}}.svc.cluster.local
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --timeout
@@ -224,7 +224,7 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
-            - name: config-api-ready
+            - name: config-apiready
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
@@ -1072,7 +1072,7 @@ spec:
       volumes:
         - name: certs
           emptyDir: {}
-        - name: config-api-ready
+        - name: config-apiready
           projected:
             sources:
               - configMap:

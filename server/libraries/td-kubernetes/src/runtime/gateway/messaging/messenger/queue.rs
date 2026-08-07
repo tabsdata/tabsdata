@@ -16,7 +16,7 @@ use td_common::worker::{Decorator, MessageAction};
 use tracing::error;
 
 use crate::base::constants::{CONTAINER_ROOT_ENV, CONTAINER_SETTINGS_RELATIVE};
-use crate::base::naming::{to_fn_pod_name, worker_pod_stem};
+use crate::base::naming::{to_fn_pod_name, worker_name_prefix, worker_pod_stem};
 use crate::client::registry::InstanceSettings;
 use crate::kube::api::cronjob::{create_cronjob, delete_cronjob};
 use crate::kube::api::deployment::delete_deployment;
@@ -67,7 +67,7 @@ fn unexpected(id: &str, kind: &str, payload: &OrchestratorMessagePayload<Value>)
 
 struct PayloadRouting {
     template_key: String,
-    worker: String,
+    prefix: String,
     action: MessageAction,
 }
 
@@ -84,7 +84,7 @@ fn derive_routing(
                         worker_pod_stem(&start.worker),
                         start.decorator.as_ref()
                     ),
-                    worker: worker_pod_stem(&start.worker).to_owned(),
+                    prefix: worker_name_prefix(&start.worker, Some(&start.decorator)).to_owned(),
                     action: MessageAction::Start,
                 }),
                 FunctionRequest::Stop => Err(unsupported(id, "Stop")),
@@ -99,7 +99,7 @@ fn derive_routing(
                         worker_pod_stem(&start.worker),
                         Decorator::Publisher.as_ref()
                     ),
-                    worker: worker_pod_stem(&start.worker).to_owned(),
+                    prefix: worker_name_prefix(&start.worker, None).to_owned(),
                     action: MessageAction::Start,
                 }),
                 StageTriggerRequest::Stop(stop) => Ok(PayloadRouting {
@@ -108,7 +108,7 @@ fn derive_routing(
                         worker_pod_stem(&stop.worker),
                         Decorator::Publisher.as_ref()
                     ),
-                    worker: worker_pod_stem(&stop.worker).to_owned(),
+                    prefix: worker_name_prefix(&stop.worker, None).to_owned(),
                     action: MessageAction::Stop,
                 }),
                 StageTriggerRequest::Notify => Err(unsupported(id, "Notify")),
@@ -122,7 +122,7 @@ fn derive_routing(
                     worker_pod_stem(&start.worker),
                     Decorator::Publisher.as_ref()
                 ),
-                worker: worker_pod_stem(&start.worker).to_owned(),
+                prefix: worker_name_prefix(&start.worker, None).to_owned(),
                 action: MessageAction::Start,
             }),
             CronRequest::Stop(stop) => Ok(PayloadRouting {
@@ -131,7 +131,7 @@ fn derive_routing(
                     worker_pod_stem(&stop.worker),
                     Decorator::Publisher.as_ref()
                 ),
-                worker: worker_pod_stem(&stop.worker).to_owned(),
+                prefix: worker_name_prefix(&stop.worker, None).to_owned(),
                 action: MessageAction::Stop,
             }),
             CronRequest::Notify => Err(unsupported(id, "Notify")),
@@ -140,7 +140,7 @@ fn derive_routing(
             match request.action {
                 MessageAction::Start => Ok(PayloadRouting {
                     template_key: request.worker.clone(),
-                    worker: request.worker.clone(),
+                    prefix: request.worker.clone(),
                     action: MessageAction::Start,
                 }),
                 MessageAction::Stop => Err(unsupported(id, "Stop")),
@@ -214,11 +214,11 @@ fn kit_for_payload(
     }
 }
 
-fn derive_kube_name(id: &str, worker: &str) -> Result<String, QueueError> {
-    to_fn_pod_name(worker, id).map_err(|error| {
+fn derive_kube_name(id: &str, prefix: &str) -> Result<String, QueueError> {
+    to_fn_pod_name(prefix, id).map_err(|error| {
         error!(
             id = %id,
-            worker = %worker,
+            prefix = %prefix,
             error = %error,
             "Failed to derive kube name from worker and id."
         );
@@ -344,7 +344,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
         let routing = derive_routing(&id, &payload)?;
         let template = lookup_template(&self.templates, &id, &routing.template_key)?;
-        let name = derive_kube_name(&id, &routing.worker)?;
+        let name = derive_kube_name(&id, &routing.prefix)?;
         match routing.action {
             MessageAction::Start => {
                 let kit = kit_for_payload(&name, self.context.namespace(), &payload)?;
@@ -489,7 +489,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
     async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
         let routing = derive_routing(&message.id, &message.payload)?;
         let template = lookup_template(&self.templates, &message.id, &routing.template_key)?;
-        let name = derive_kube_name(&message.id, &routing.worker)?;
+        let name = derive_kube_name(&message.id, &routing.prefix)?;
         match template.kind {
             TemplateKind::Pod => {
                 delete_pod(&self.context, &name).await.map_err(|error| {

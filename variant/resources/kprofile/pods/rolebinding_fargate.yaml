@@ -5,7 +5,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: td-apiserver
+  name: aut-apiserver
   namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Grants the apiserver role to the apiserver service account"
@@ -19,9 +19,9 @@ metadata:
     tabsdata.com/tier: authorization
 subjects:
 - kind: ServiceAccount
-  name: td-apiserver
+  name: aut-apiserver
   namespace: ${{system:tdk_namespace_name}}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: td-apiserver
+  name: aut-apiserver

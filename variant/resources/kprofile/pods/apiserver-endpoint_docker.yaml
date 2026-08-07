@@ -5,7 +5,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: td-apiserver
+  name: net-apiserver
   namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata apiserver endpoint"

@@ -5,7 +5,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: td-database
+  name: srv-database
   namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata database service"

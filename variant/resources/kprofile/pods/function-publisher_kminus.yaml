@@ -105,7 +105,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0010-api-ready
+        - name: 0010-apiready
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_apiready${{system:tdk_exe_suffix}}"]
@@ -145,7 +145,7 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
-            - name: config-api-ready
+            - name: config-apiready
               mountPath: /tabsdata/config
               readOnly: true
             - name: pyenv
@@ -1034,7 +1034,7 @@ spec:
             - name: shared
               mountPath: /tabsdata/shared
       volumes:
-        - name: config-api-ready
+        - name: config-apiready
           projected:
             sources:
               - configMap:

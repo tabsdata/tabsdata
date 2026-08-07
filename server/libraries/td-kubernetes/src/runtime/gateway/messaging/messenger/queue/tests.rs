@@ -87,7 +87,7 @@ fn function_start_routes_with_decorator() {
         routing.template_key,
         format!("{}-{}", stem, Decorator::Publisher.as_ref())
     );
-    assert_eq!(routing.worker, stem);
+    assert_eq!(routing.prefix, "pub");
     assert!(matches!(routing.action, MessageAction::Start));
 }
 
@@ -138,7 +138,7 @@ fn stream_publisher_start_routes_by_worker_name() {
         routing.template_key,
         publisher_key(&WorkerName::StageTrigger)
     );
-    assert_eq!(routing.worker, stem);
+    assert_eq!(routing.prefix, "stm");
     assert!(matches!(routing.action, MessageAction::Start));
 }
 
@@ -158,7 +158,7 @@ fn stream_publisher_stop_routes_by_worker_name() {
         routing.template_key,
         publisher_key(&WorkerName::StageTrigger)
     );
-    assert_eq!(routing.worker, stem);
+    assert_eq!(routing.prefix, "stm");
     assert!(matches!(routing.action, MessageAction::Stop));
 }
 
@@ -200,7 +200,7 @@ fn cron_publisher_start_routes_by_worker_name() {
         routing.template_key,
         publisher_key(&WorkerName::CronTrigger)
     );
-    assert_eq!(routing.worker, stem);
+    assert_eq!(routing.prefix, "crn");
     assert!(matches!(routing.action, MessageAction::Start));
 }
 
@@ -220,7 +220,7 @@ fn cron_publisher_stop_routes_by_worker_name() {
         routing.template_key,
         publisher_key(&WorkerName::CronTrigger)
     );
-    assert_eq!(routing.worker, stem);
+    assert_eq!(routing.prefix, "crn");
     assert!(matches!(routing.action, MessageAction::Stop));
 }
 

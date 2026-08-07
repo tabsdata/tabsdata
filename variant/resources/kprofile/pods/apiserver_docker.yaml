@@ -5,7 +5,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: td-apiserver
+  name: srv-apiserver
   namespace: ${{system:tdk_namespace_name}}
   annotations:
     tabsdata.com/description: "Tabsdata apiserver worker"
@@ -40,7 +40,7 @@ spec:
         tabsdata.com/tier: regular
     spec:
       restartPolicy: Always
-      serviceAccountName: td-apiserver
+      serviceAccountName: aut-apiserver
       automountServiceAccountToken: true
       terminationGracePeriodSeconds: 60
       dnsPolicy: ClusterFirst
