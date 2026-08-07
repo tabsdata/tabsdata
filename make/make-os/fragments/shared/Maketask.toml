@@ -53,6 +53,8 @@ extend = [
 
     { path = "./make/make-os/fragments/tasks/license_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/license_py.toml", relative = "git" },
+    { path = "./make/make-km/fragments/tasks/license_rs.toml", relative = "git" },
+    { path = "./make/make-km/fragments/tasks/license_go.toml", relative = "git" },
 
     { path = "./make/make-os/fragments/tasks/audit_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/audit_py.toml", relative = "git" },

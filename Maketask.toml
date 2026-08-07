@@ -834,11 +834,11 @@ script = [
     array_push ${tests_folders} ${PROJECT_PY_TE_VARIANT_FOLDER}/src/utest/python
     array_push ${packages} te_variant
     array_push ${tests_folders} ${PROJECT_PY_TO_FOUNDATION_FOLDER}/src/utest/python
-    array_push ${packages} to_foundation
+    array_push ${packages} to-foundation
     array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/src/utest/python
-    array_push ${packages} ty_tableframe
+    array_push ${packages} ty-tableframe
     array_push ${tests_folders} ${PROJECT_PY_TZ_TABLEFRAME_FOLDER}/src/utest/python
-    array_push ${packages} tz_tableframe
+    array_push ${packages} tz-tableframe
     array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python
     array_push ${packages} tabsdata
 
@@ -971,9 +971,22 @@ script = [
             else
                 tabsdatak_subtree = normalize ${selected_tests_folder}/test_tabsdatak
                 tabsdatak_subtree_exists = is_path_exists ${tabsdatak_subtree}
+                pushed = set false
                 if ${tabsdatak_subtree_exists}
                     array_push ${generation_folders} ${tabsdatak_subtree}
+                    pushed = set true
                 else
+                    own_subtrees = glob_array ${selected_tests_folder}/test_*
+                    for own_subtree in ${own_subtrees}
+                        is_own_subtree = is_dir ${own_subtree}
+                        if ${is_own_subtree}
+                            array_push ${generation_folders} ${own_subtree}
+                            pushed = set true
+                        end
+                    end
+                    release ${own_subtrees}
+                end
+                if not ${pushed}
                     if is_empty ${packages_filter}
                         dropped_folders = concat ${dropped_folders} " " ${selected_tests_folder}
                     else
@@ -1287,11 +1300,11 @@ script = [
     array_push ${tests_folders} ${PROJECT_PY_TE_VARIANT_FOLDER}/src/itest/python
     array_push ${packages} te_variant
     array_push ${tests_folders} ${PROJECT_PY_TO_FOUNDATION_FOLDER}/src/itest/python
-    array_push ${packages} to_foundation
+    array_push ${packages} to-foundation
     array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/src/itest/python
-    array_push ${packages} ty_tableframe
+    array_push ${packages} ty-tableframe
     array_push ${tests_folders} ${PROJECT_PY_TZ_TABLEFRAME_FOLDER}/src/itest/python
-    array_push ${packages} tz_tableframe
+    array_push ${packages} tz-tableframe
     array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/itest/python
     array_push ${packages} tabsdata
 
@@ -1682,6 +1695,7 @@ script = [
     with_license = get_env TD_WITH_LICENSE
     if eq ${with_license} "true"
         cm_run_task license_rs
+        cm_run_task license_go
         cm_run_task license_py
     end
 
@@ -1695,7 +1709,20 @@ description = "Task 'license' for Rust projects"
 run_task = [
     { name = [
         "__os__license_check_rs",
-        "__os__license_report_rs"
+        "__os__license_report_rs",
+        "__km__license_check_rs",
+        "__km__license_report_rs"
+    ] }
+]
+
+[tasks.license_go]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+description = "Task 'license' for Go projects"
+run_task = [
+    { name = [
+        "__km__license_check_go",
+        "__km__license_report_go"
     ] }
 ]
 

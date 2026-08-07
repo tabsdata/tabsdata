@@ -32,11 +32,14 @@ logger = load("log").get_logger()
 sys.stdout.reconfigure(encoding="utf-8")
 
 LICENSES_RS_TXT = "./target/audit/licenses_rs.txt"
+LICENSES_RS_CSV = "./target/audit/licenses_rs.csv"
+LICENSES_KM_RS_CSV = "./target/audit/licenses_km_rs.csv"
 LICENSES_PY_TXT = "./target/audit/licenses_py.txt"
 LICENSES_PY_CSV = "./target/audit/licenses_py.csv"
 LICENSES_AG_PY_TXT = "./target/audit/licenses_ag_py.txt"
 LICENSES_AG_PY_CSV = "./target/audit/licenses_ag_py.csv"
 LICENSES_TS_TXT = "./target/audit/licenses_ts.txt"
+LICENSES_KM_GO_TXT = "./target/audit/licenses_km_go.txt"
 
 LICENSES_FILE = "./target/audit/licenses.txt"
 THIRD_PARTY_FILE = "./variant/assets/manifest/THIRD-PARTY"
@@ -49,9 +52,9 @@ def read_file(filepath):
     return ""
 
 
-def merge_files():
+def merge_reports(csv_files, heading):
     all_data = []
-    for csv_file in [LICENSES_PY_CSV, LICENSES_AG_PY_CSV]:
+    for csv_file in csv_files:
         if os.path.exists(csv_file):
             with open(csv_file, "r", encoding="utf-8") as csvf:
                 reader = csv.reader(csvf)
@@ -73,19 +76,33 @@ def merge_files():
 
     if unique_data:
         txt_headers = ["Name", "Version", "License"]
-        txt_content = (
-            "This project uses the following Python packages and versions (grouped by"
-            " license):\n\n"
-        )
+        txt_content = heading + "\n\n"
         txt_content += tabulate(unique_data, headers=txt_headers, tablefmt="fancy_grid")
         return txt_content + "\n"
 
     return ""
 
 
-content_rs = read_file(LICENSES_RS_TXT)
+def merge_files():
+    return merge_reports(
+        [LICENSES_PY_CSV, LICENSES_AG_PY_CSV],
+        "This project uses the following Python packages and versions (grouped by"
+        " license):",
+    )
+
+
+content_rs = merge_reports(
+    [LICENSES_RS_CSV, LICENSES_KM_RS_CSV],
+    "This project includes code from the following Rust crates and versions (grouped by"
+    " license):",
+)
+if not content_rs:
+    content_rs = read_file(LICENSES_RS_TXT)
 content_py = merge_files()
 content = f"{content_rs}\n\n{content_py}\n"
+if os.path.exists(LICENSES_KM_GO_TXT):
+    content_km_go = read_file(LICENSES_KM_GO_TXT)
+    content += f"\n{content_km_go}\n"
 if os.path.exists(LICENSES_TS_TXT):
     content_ts = read_file(LICENSES_TS_TXT)
     content += f"\n{content_ts}\n"

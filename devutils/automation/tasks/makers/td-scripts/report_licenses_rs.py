@@ -2,6 +2,7 @@
 # Copyright 2025 Tabsdata Inc.
 #
 
+import argparse
 import csv
 import importlib
 import importlib.util
@@ -33,7 +34,44 @@ logger = load("log").get_logger()
 sys.stdout.reconfigure(encoding="utf-8")
 
 TARGET_DIR = os.path.join(".", "target", "audit")
-TARGET_FILE = os.path.join(TARGET_DIR, "licenses_rs.txt")
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Lists the licenses of the rust crates a project depends on, and writes "
+            "them as a report in the audit folder of the project."
+        )
+    )
+    parser.add_argument(
+        "--project",
+        action="append",
+        required=False,
+        default=None,
+        help=(
+            "Folder to scan for Cargo.toml manifests. Can be repeated to aggregate "
+            "several independent cargo projects into a single report. Defaults to the "
+            "current folder."
+        ),
+    )
+    parser.add_argument(
+        "--name",
+        required=False,
+        default="",
+        help=(
+            "Suffix for the report file, so that independent projects do not overwrite "
+            "each other. With 'km', the report is 'licenses_km_rs.txt'."
+        ),
+    )
+    return parser.parse_args()
+
+
+arguments = parse_arguments()
+
+SUFFIX = f"_{arguments.name}" if arguments.name else ""
+TARGET_FILE = os.path.join(TARGET_DIR, f"licenses{SUFFIX}_rs.txt")
+TARGET_CSV = os.path.join(TARGET_DIR, f"licenses{SUFFIX}_rs.csv")
+PROJECTS = arguments.project or ["."]
 
 # fmt: off
 # noinspection DuplicatedCode
@@ -184,9 +222,17 @@ def ignored_dependency(dependency):
         "pyo3-stub-gen-derive",
     }
 
+    km_crates = {
+        "kcommon",
+        "km",
+        "kpr",
+        "pod-runner",
+    }
+
     return (
         dependency == "tabsdata"
         or "tabsdata" in dependency
+        or dependency in km_crates
         or dependency.startswith("ta-")
         or dependency.startswith("tc-")
         or dependency.startswith("td-")
@@ -207,12 +253,13 @@ if os.path.exists(TARGET_FILE):
     os.remove(TARGET_FILE)
 
 cargo_tomls = []
-skip = {".claude", "node_modules", "target", "tabsdata-ui", "venv"}
-for root, dirs, files in os.walk(".", topdown=True, followlinks=True):
-    dirs[:] = [d for d in dirs if d not in skip]
-    if "Cargo.toml" in files:
-        logger.debug(f"🍅 Found manifest at {root}")
-        cargo_tomls.append(os.path.join(root, "Cargo.toml"))
+skip = {".claude", "cache", "node_modules", "target", "tabsdata-ui", "venv"}
+for project in PROJECTS:
+    for root, dirs, files in os.walk(project, topdown=True, followlinks=True):
+        dirs[:] = [d for d in dirs if d not in skip]
+        if "Cargo.toml" in files:
+            logger.debug(f"🍅 Found manifest at {root}")
+            cargo_tomls.append(os.path.join(root, "Cargo.toml"))
 
 aggregated = {}
 for cargo_toml in cargo_tomls:
@@ -292,5 +339,9 @@ content += tabulate(data, headers=headers, tablefmt="fancy_grid")
 
 with open(TARGET_FILE, "w", encoding="utf-8") as f:
     f.write(content + "\n")
+
+with open(TARGET_CSV, "w", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerows(data)
 
 # logger.debug(content)

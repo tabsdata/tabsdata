@@ -98,8 +98,10 @@ CHECK_PY_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation
 CHECK_PY_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.syntax.cfg", normalize = true }
 CHECK_PY_BASELINE = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.mypy/baseline/baseline.json", normalize = true }
 CHECK_PY_CACHE = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.mypy/cache", normalize = true }
+CHECK_LICENSES_GO_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/check_licenses_go.py", normalize = true }
 PS_SUPERVISORS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/ps_supervisors.py", normalize = true }
 REPORT_LICENSES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses.py", normalize = true }
+REPORT_LICENSES_GO_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_go.py", normalize = true }
 REPORT_LICENSES_PY_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_py.py", normalize = true }
 REPORT_LICENSES_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_rs.py", normalize = true }
 REPORT_LICENSES_TS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_ts.py", normalize = true }
@@ -111,6 +113,7 @@ AUDIT_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/audit.toml", norm
 AUDIT_PY_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/audit-py.toml", normalize = true }
 CLIPPY_CONF_DIR = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo", normalize = true }
 DENY_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/deny.toml", normalize = true }
+LICENSES_GO_CFG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/licenses-go.cfg", normalize = true }
 PANTS_JSON = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/pants.json", normalize = true }
 
 SWAGGER_UI_OVERWRITE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/server/binaries/td-server/resources/swagger", normalize = true }
