@@ -30,6 +30,7 @@ from tabsdatak.conn.common.file import (
     _output as _output_module,
     _plugin,
 )
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
@@ -357,9 +358,15 @@ def test_run_read_in_end_to_end_against_real_binary(tmp_path: Path):
 
     assert len(out) == 1
     assert len(out[0]) >= 1
-    parquet = out[0][0]
-    assert isinstance(parquet, Path)
-    df = pl.read_parquet(parquet).select("id", "name").sort("id")
+    imported = out[0][0]
+    assert isinstance(imported.file, Path)
+    # The binary reports a local source as a plain path, and the temp dir
+    # it sits under may itself be a symlink.
+    assert (
+        Path(imported.metadata[FILE_META_PATH]).resolve()
+        == (src_dir / "users.parquet").resolve()
+    )
+    df = pl.read_parquet(imported.file).select("id", "name").sort("id")
     assert df.to_dicts() == [{"id": 1, "name": "x"}, {"id": 2, "name": "y"}]
 
 

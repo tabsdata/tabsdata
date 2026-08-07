@@ -14,6 +14,7 @@ from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._transporter.invoker import transporter1, transporter2
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.conn.common.file import _plugin
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
@@ -489,8 +490,15 @@ _RUN_ERRORS = _plugin.FilePluginErrors(
 )
 
 
-def _stub_report(targets: list[str]) -> transporter1.TransporterReport:
-    files = [{"to": t} for t in targets]
+def _stub_report(
+    targets: list[str],
+    sources: list[str] | None = None,
+) -> transporter1.TransporterReport:
+    """A transporter report over ``targets``. Every real report entry
+    pairs the imported file (``to``) with the location it was read from
+    (``from``), so the stub does too."""
+    froms = sources or [f"/srv/in{i}.csv" for i in range(len(targets))]
+    files = [{"from": f, "to": t} for f, t in zip(froms, targets)]
     return transporter1.TransporterReport(
         files=files,
         lastmod_info=None,
@@ -525,12 +533,12 @@ def test_run_read_in_per_slot_dir_and_parquet_collection(monkeypatch, tmp_path):
     # Two slot dirs created in the work dir
     assert (tmp_path / "slot0").is_dir()
     assert (tmp_path / "slot1").is_dir()
-    # One TableFileSpec per slot, each pointing at the synthesized parquet
+    # One TableFileInput per slot, each pointing at the synthesized parquet
     assert len(out) == 2
     assert len(out[0]) == 1
-    assert isinstance(out[0][0], Path)
-    assert str(out[0][0]).endswith("slot0/out.parquet")
-    assert str(out[1][0]).endswith("slot1/out.parquet")
+    assert isinstance(out[0][0].file, Path)
+    assert str(out[0][0].file).endswith("slot0/out.parquet")
+    assert str(out[1][0].file).endswith("slot1/out.parquet")
     # import_one called per path with that slot's target_dir
     assert [c["target_dir"].name for c in calls] == ["slot0", "slot1"]
 
@@ -655,7 +663,69 @@ def test_run_read_in_skips_report_entries_without_to_field(monkeypatch, tmp_path
         errors=_RUN_ERRORS,
     )
     assert len(out[0]) == 1
-    assert str(out[0][0]) == "/x/keep.parquet"
+    assert str(out[0][0].file) == "/x/keep.parquet"
+
+
+def test_run_read_in_reports_source_path_as_metadata(monkeypatch, tmp_path):
+    def fake_import_one(**kw):
+        slot = kw["target_dir"].name
+        return _stub_report(
+            [
+                str(kw["target_dir"] / "a.parquet"),
+                str(kw["target_dir"] / "b.parquet"),
+            ],
+            sources=[f"s3://bucket/{slot}/a.csv", f"s3://bucket/{slot}/b.csv"],
+        )
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["in/*.csv", "other/*.csv"],
+        file_format=SrcFileFormat.CSV,
+    )
+    out = _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    # Each file of a globbed slot reports the file it was read from.
+    assert [[f.metadata[FILE_META_PATH] for f in slot] for slot in out] == [
+        ["s3://bucket/slot0/a.csv", "s3://bucket/slot0/b.csv"],
+        ["s3://bucket/slot1/a.csv", "s3://bucket/slot1/b.csv"],
+    ]
+
+
+def test_run_read_in_metadata_key_present_when_report_omits_source(
+    monkeypatch,
+    tmp_path,
+):
+    def fake_import_one(**kw):
+        target = str(kw["target_dir"] / "out.parquet")
+        files = [{"to": target}]
+        return transporter1.TransporterReport(
+            files=files,
+            lastmod_info=None,
+            raw={"files": files, "lastmod_info": None},
+        )
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["a"],
+        file_format=SrcFileFormat.PARQUET,
+    )
+    out = _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    # The metadata never changes shape: the key stays, empty when the
+    # report carries no source for the file.
+    assert out[0][0].metadata == {FILE_META_PATH: ""}
 
 
 # --- run_read_in: lastmod cursor via ctx attrs ------------------------

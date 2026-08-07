@@ -164,6 +164,26 @@ td.LogFormat()
 
 If no format is specified, it is inferred from the file extension.
 
+## File Source Metadata
+
+Every table published by a file source (`LocalFileSrc`, `S3Src`, `GCSSrc`,
+`AzureBlobSrc`) automatically carries one metadata column — there is nothing to
+configure:
+
+| Column | Contents |
+|--------|----------|
+| `@td.file.path` | Location the row was read from: a local path for `LocalFileSrc`, the object URI for a cloud source |
+
+```python
+td.S3Src(paths=["in/*.csv"])
+# Rows read from in/a.csv carry:
+#   @td.file.path  "s3://bucket/in/a.csv"
+# Rows read from in/b.csv carry:
+#   @td.file.path  "s3://bucket/in/b.csv"
+```
+
+A path that globs several files reports the specific file each row came from.
+
 ## SQL Source Metadata
 
 Every table published by a SQL source (`MySQLSrc`, `PostgresSrc`, `OracleSrc`,

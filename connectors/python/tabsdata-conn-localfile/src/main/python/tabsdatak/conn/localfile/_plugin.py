@@ -30,7 +30,6 @@ from tabsdatak.spi import (
     TableFileInput,
     TableFileSpec,
     TableMode,
-    to_table_file_inputs,
 )
 
 # Conn helpers operate on both Src and Dest variants.
@@ -82,13 +81,11 @@ class LocalFileSrcPlugin(SrcPlugin[LocalFileSrcConn, LocalFileSrc]):
         conn: LocalFileSrcConn,
         src: LocalFileSrc,
     ) -> list[list[TableFileInput]]:
-        return to_table_file_inputs(
-            _file_plugin.import_files(
-                ctx=ctx,
-                cfg=_file_plugin.ReaderConf.from_src(conn, src),
-                build_location=build_location,
-                errors=ERRORS,
-            )
+        return _file_plugin.import_files(
+            ctx=ctx,
+            cfg=_file_plugin.ReaderConf.from_src(conn, src),
+            build_location=build_location,
+            errors=ERRORS,
         )
 
 

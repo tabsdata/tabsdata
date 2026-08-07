@@ -126,7 +126,9 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
             run_env=run_env,
             errors=errors,
         )
-        return [[Path(tmp_path / "ok.parquet")]]
+        # ``import_files`` returns the metadata-carrying inputs itself;
+        # the plugin hands them straight back.
+        return [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 

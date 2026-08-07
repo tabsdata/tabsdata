@@ -169,6 +169,11 @@ class S3Src(Src):
 
     :categories: source
 
+    Every table this source publishes automatically carries a
+    `@td.file.path` metadata column: the `s3://` object URI the row was read
+    from. A path that globs several files reports the specific file
+    each row came from.
+
     Args:
         paths: Source paths relative to the connection's `base_path`,
             one output slot per entry. Each path is relative (no

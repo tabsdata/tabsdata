@@ -19,6 +19,7 @@ from tabsdatak.common._transporter.invoker.transporter1 import (
     TransporterRunError,
 )
 from tabsdatak.conn.common.file import _input, _output
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     EXEC_PLAN_ID,
@@ -29,6 +30,7 @@ from tabsdatak.error import ApiException, ErrorCode
 from tabsdatak.spi import (
     DestContext,
     SrcPluginCtx,
+    TableFileInput,
     TableFileSpec,
 )
 
@@ -142,7 +144,12 @@ def import_files(
     build_location: LocationBuilder,
     errors: FilePluginErrors,
     run_env: RunEnvBuilder | None = None,
-) -> list[list[TableFileSpec]]:
+) -> list[list[TableFileInput]]:
+    """Import every path in ``cfg.paths``, one output slot per path.
+
+    Each imported file is reported with the location it was read from as
+    its `FILE_META_PATH` metadata.
+    """
     conn = cfg.conn
     handler = make_handler()
 
@@ -155,7 +162,7 @@ def import_files(
 
     total = len(cfg.paths)
     logger.info("file-reader: import_files starting (%d path(s))", total)
-    results: list[list[TableFileSpec]] = []
+    results: list[list[TableFileInput]] = []
     for slot_idx, entry in enumerate(cfg.paths):
         logger.info("file-reader: importing path %d/%d: %r", slot_idx + 1, total, entry)
         slot_dir = ctx.work_dir / f"slot{slot_idx}"
@@ -190,11 +197,16 @@ def import_files(
         if report.lastmod_info is not None:
             ctx.set_attr(lastmod_key, report.lastmod_info)
 
-        slot_files: list[TableFileSpec] = []
+        slot_files: list[TableFileInput] = []
         for f in report.files:
             target = f.get("to") if isinstance(f, dict) else None
             if target:
-                slot_files.append(Path(cast(str, target)))
+                slot_files.append(
+                    TableFileInput(
+                        file=Path(cast(str, target)),
+                        metadata={FILE_META_PATH: str(f.get("from", ""))},
+                    )
+                )
         logger.debug(
             "file-reader: path %d/%d produced %d file(s)",
             slot_idx + 1,
