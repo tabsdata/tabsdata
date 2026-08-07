@@ -10,8 +10,6 @@ builds its `Src` / `Dest` on the same path and format specs.
   connectors read and write: `AUTO`, `CSV`, `JSON`, `AVRO`,
   `PARQUET` (plus `LOG` on the source side). `AUTO` lets the
   transporter infer the format from the file extension.
-* `FileInfo` -- per-row provenance enrichment opt-in for a source
-  (`FILENAME` / `FULLPATH`).
 * `SrcPathsSpec` / `DestPathsSpec` -- the validated `paths` list
   a `Src` / `Dest` takes (one slot per entry).
 * `SrcFormatCfgSpec` / `DestFormatCfgSpec` -- the per-format
@@ -28,28 +26,12 @@ fails validation.
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Annotated, Any, Literal, TypeAlias
 
 from tabsdatak.common._fileformat.taxonomy import DestFileFormat, SrcFileFormat
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _validation
-
-# --- Format enums ---------------------------------------------------
-
-
-class FileInfo(Enum):
-    """Per-row provenance column added by a file source.
-
-    `FILENAME` adds the source file's basename; `FULLPATH` adds its
-    full path. Leave the source's `file_info` field `None` to add
-    nothing.
-    """
-
-    FILENAME = "FILENAME"
-    FULLPATH = "FULLPATH"
-
 
 # --- Path / format-cfg type aliases ---------------------------------
 

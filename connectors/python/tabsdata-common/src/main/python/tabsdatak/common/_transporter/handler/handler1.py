@@ -481,7 +481,6 @@ class TransporterHandler1(TransporterHandler):
         format_cfg: dict | None = None,
         initial_lastmod: str | None = None,
         lastmod_info: str | None = None,
-        file_info: str | None = None,
     ) -> transporter1.V1ImportFormat:
         resolved = transporter1.resolve_auto_src_format(file_format, list(paths))
         format = transporter1.src_format_to_transporter(
@@ -495,7 +494,6 @@ class TransporterHandler1(TransporterHandler):
             ),
             initial_lastmod=initial_lastmod,
             lastmod_info=lastmod_info,
-            file_info=file_info,
         )
 
     def wildcard_request(

@@ -181,7 +181,6 @@ class TransporterHandler2(TransporterHandler):
         format_cfg: dict | None = None,
         initial_lastmod: str | None = None,
         lastmod_info: str | None = None,
-        file_info: str | None = None,
     ) -> transporter2.FindCopyRequest:
         resolved = transporter2.resolve_auto_src_format(file_format, list(paths))
         format = transporter2.src_format_to_transporter(

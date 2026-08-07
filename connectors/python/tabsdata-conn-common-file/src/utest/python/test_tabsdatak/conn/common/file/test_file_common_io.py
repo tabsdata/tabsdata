@@ -150,21 +150,18 @@ def test_v1_import_format_minimal():
     )
     assert env.initial_lastmod is None
     assert env.lastmod_info is None
-    assert env.file_info is None
 
 
-def test_v1_import_format_with_file_info_and_watermarks():
+def test_v1_import_format_with_watermarks():
     env = transporter1.V1ImportFormat(
         source=transporter1.TransporterLocalFile("file:///in/users.csv"),
         format=transporter1.TransporterParquetFormat(),
         target=transporter1.TransporterLocalFile("file:///tmp/work/"),
         initial_lastmod="2026-01-01T00:00:00.000000+00:00",
         lastmod_info="abc",
-        file_info="FILENAME",
     )
     assert env.initial_lastmod == "2026-01-01T00:00:00.000000+00:00"
     assert env.lastmod_info == "abc"
-    assert env.file_info == "FILENAME"
 
 
 def test_v1_import_format_repr():
@@ -201,7 +198,6 @@ def test_dump_v1_import_emits_expected_tags(tmp_path):
         format=transporter1.TransporterCSVFormat({"separator": 59}),
         target=transporter1.TransporterLocalFile("file:///tmp/work/"),
         initial_lastmod="2026-01-01T00:00:00+00:00",
-        file_info="FULLPATH",
     )
     transporter1.dump_request_yaml(env, out, dumper_cls=transporter1.INPUT_DUMPER)
     text = out.read_text()

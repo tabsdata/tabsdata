@@ -12,7 +12,6 @@ from tabsdatak.conn.gcs.error import GCSValidateException
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
-    FileInfo,
     SrcFileFormat,
 )
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
@@ -28,7 +27,6 @@ def test_gcs_src_full_round_trip():
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";", "has_header": True}},
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        file_info=FileInfo.FULLPATH,
         src_cfg={"tabsdata.file.chunkSize": 1024},
     )
     loaded = GCSSrc.from_json(src.to_json())
@@ -39,7 +37,6 @@ def test_gcs_src_full_round_trip():
         SrcFileFormat.CSV: {"separator": ";", "has_header": True}
     }
     assert loaded.initial_last_modified == datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert loaded.file_info is FileInfo.FULLPATH
     assert loaded.src_cfg == {"tabsdata.file.chunkSize": 1024}
 
 

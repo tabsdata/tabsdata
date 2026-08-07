@@ -56,7 +56,6 @@ from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
     DestFormatCfgSpec,
     DestPathsSpec,
-    FileInfo,
     SrcFileFormat,
     SrcFormatCfgSpec,
     SrcPathsSpec,
@@ -183,9 +182,6 @@ class AzureBlobSrc(Src):
             ingestion. The first run imports only files modified at or
             after this timestamp; the cutoff then advances each run so
             only newer files are re-imported.
-        file_info: Optional per-row provenance column -- `FILENAME`
-            adds the file's basename, `FULLPATH` its full path;
-            `None` (the default) adds nothing.
         src_cfg: Optional connector config; supports the key
             `tabsdata.file.chunkSize`.
     """
@@ -194,7 +190,6 @@ class AzureBlobSrc(Src):
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
     initial_last_modified: datetime | None = None
-    file_info: FileInfo | None = None
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:

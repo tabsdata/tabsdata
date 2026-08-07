@@ -164,15 +164,6 @@ td.LogFormat()
 
 If no format is specified, it is inferred from the file extension.
 
-## File Info
-
-Control whether file metadata columns are added when reading from file sources:
-```python
-file_info=td.FileInfo.NAME   # Add column with source file name
-file_info=td.FileInfo.URI    # Add column with full source URI
-file_info=None               # No file info columns (default)
-```
-
 ## Triggers
 
 Control when functions execute:

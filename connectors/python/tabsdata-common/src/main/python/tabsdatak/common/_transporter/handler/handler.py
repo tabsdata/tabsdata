@@ -98,7 +98,6 @@ class TransporterHandler(ABC):
         format_cfg: dict | None = None,
         initial_lastmod: str | None = None,
         lastmod_info: str | None = None,
-        file_info: str | None = None,
     ) -> Any:
         raise NotImplementedError(
             f"{type(self).__name__} does not build connector requests."

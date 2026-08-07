@@ -17,7 +17,6 @@ from tabsdatak.conn.common.file import _plugin
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
-    FileInfo,
     SrcFileFormat,
 )
 from tabsdatak.spi import DestContext
@@ -196,15 +195,6 @@ def test_dest_format_csv_carries_options():
     assert "separator" in out.options
 
 
-# --- _plugin.file_info_to_str -------------------------------------------
-
-
-def test_file_info_to_str():
-    assert _plugin.file_info_to_str(None) is None
-    assert _plugin.file_info_to_str(FileInfo.FILENAME) == "FILENAME"
-    assert _plugin.file_info_to_str(FileInfo.FULLPATH) == "FULLPATH"
-
-
 # --- _plugin.initial_lastmod_to_iso -------------------------------------
 
 
@@ -333,15 +323,14 @@ _STUB_ERRORS = _plugin.FilePluginErrors(
 class _StubSrc:
     """Duck-typed stand-in for any connector's Src dataclass --
     ReaderConf.from_src only reads ``.paths``, ``.format``,
-    ``.format_cfg``, ``.initial_last_modified`` and ``.file_info``
-    (``conn`` is now passed in separately by the plugin)."""
+    ``.format_cfg`` and ``.initial_last_modified`` (``conn`` is now
+    passed in separately by the plugin)."""
 
     def __init__(self):
         self.paths = ["a.csv", "b.csv"]
         self.format = SrcFileFormat.CSV
         self.format_cfg = {SrcFileFormat.CSV: {"separator": ","}}
         self.initial_last_modified = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        self.file_info = FileInfo.FILENAME
 
 
 def test_reader_conf_from_src_translates_fields():
@@ -352,7 +341,6 @@ def test_reader_conf_from_src_translates_fields():
     assert rc.file_format is SrcFileFormat.CSV
     assert rc.format_cfg == {SrcFileFormat.CSV: {"separator": ","}}
     assert rc.initial_lastmod == "2026-01-01T00:00:00.000000+00:00"
-    assert rc.file_info == "FILENAME"
 
 
 def test_reader_conf_from_src_handles_none_format_cfg():

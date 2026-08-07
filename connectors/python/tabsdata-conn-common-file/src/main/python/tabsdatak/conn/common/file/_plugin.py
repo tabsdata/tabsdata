@@ -24,7 +24,6 @@ from tabsdatak.conn.common.file.typing_ import (
     EXEC_PLAN_ID,
     EXEC_PLAN_TS,
     TRX_ID,
-    FileInfo,
 )
 from tabsdatak.error import ApiException, ErrorCode
 from tabsdatak.spi import (
@@ -36,10 +35,6 @@ from tabsdatak.spi import (
 logger = logging.getLogger(__name__)
 
 # --- Format / value helpers ----------------------------------------
-
-
-def file_info_to_str(file_info: FileInfo | None) -> str | None:
-    return file_info.value if file_info is not None else None
 
 
 def initial_lastmod_to_iso(value: datetime | None) -> str | None:
@@ -77,7 +72,6 @@ class ReaderConf:
     file_format: SrcFileFormat
     format_cfg: dict | None = None
     initial_lastmod: str | None = None
-    file_info: str | None = None
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
@@ -87,7 +81,6 @@ class ReaderConf:
             file_format=src.format,
             format_cfg=src.format_cfg,
             initial_lastmod=initial_lastmod_to_iso(src.initial_last_modified),
-            file_info=file_info_to_str(src.file_info),
         )
 
 
@@ -182,7 +175,6 @@ def import_files(
                 format_cfg=cfg.format_cfg,
                 initial_lastmod=cfg.initial_lastmod,
                 lastmod_info=prior_lastmod,
-                file_info=cfg.file_info,
                 env=env,
             )
         except TransporterBinaryNotFoundError as e:

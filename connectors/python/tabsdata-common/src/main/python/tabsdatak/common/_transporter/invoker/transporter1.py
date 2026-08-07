@@ -173,7 +173,6 @@ class V1ImportFormat:
     target: TransporterLocation
     initial_lastmod: str | None = None
     lastmod_info: str | None = None
-    file_info: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,7 +257,7 @@ def _csv_to_dict(fmt: TransporterCSVFormat) -> dict:
 
 
 def _v1_import_to_dict(env: V1ImportFormat) -> dict:
-    d: dict[str, Any] = {
+    return {
         "source": {
             "location": env.source,
             "initial_lastmod": env.initial_lastmod,
@@ -268,9 +267,6 @@ def _v1_import_to_dict(env: V1ImportFormat) -> dict:
         "target": {"location": env.target},
         "parallelism": 1,
     }
-    if env.file_info is not None:
-        d["file_info"] = env.file_info
-    return d
 
 
 def _v1_copy_to_dict(env: V1CopyFormat) -> dict:
