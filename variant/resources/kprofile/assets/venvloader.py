@@ -5,13 +5,16 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import shutil
+import subprocess
 import sys
 import tarfile
 import time
 import urllib.parse
 from pathlib import Path
+from typing import IO, Iterator
 
 import boto3
 import botocore.exceptions
@@ -52,6 +55,9 @@ ENV_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
 
 ENV_UV_MODE = "TD_KUBE_UV_MODE"
 UV_MODE_LOCAL = "local"
+
+TAR_EXECUTABLE = "tar"
+COPY_BLOCK_SIZE = 1 << 22
 
 STARTED = time.monotonic()
 
@@ -176,16 +182,19 @@ def image_uri(uri: str, subfolder: str, name: str) -> str:
     return f"{prefix}{name}"
 
 
-def fetch_file(source: str, target: Path) -> None:
+@contextlib.contextmanager
+def open_file(source: str) -> Iterator[IO[bytes]]:
     parsed = urllib.parse.urlparse(source)
     origin = Path(urllib.parse.unquote(parsed.path))
     if not origin.is_file():
         die("Downloading the image", f"Image not found: {origin}")
-    trace(f"Copying {origin}")
-    shutil.copyfile(origin, target)
+    trace(f"Reading {origin}")
+    with open(origin, "rb") as reader:
+        yield reader
 
 
-def fetch_s3(source: str, target: Path, options: dict[str, str]) -> None:
+@contextlib.contextmanager
+def open_s3(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
     parsed = urllib.parse.urlparse(source)
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
@@ -201,19 +210,26 @@ def fetch_s3(source: str, target: Path, options: dict[str, str]) -> None:
     )
     trace(f"Downloading {source}")
     try:
-        client.download_file(bucket, key, str(target))
+        body = client.get_object(Bucket=bucket, Key=key)["Body"]
     except botocore.exceptions.ClientError as error:
         die("Downloading the image", f"{source}: {error}")
     except botocore.exceptions.BotoCoreError as error:
         die("Downloading the image", f"{source}: {error}")
+    try:
+        yield body
+    finally:
+        body.close()
 
 
-def fetch_image(source: str, target: Path, options: dict[str, str]) -> None:
+@contextlib.contextmanager
+def open_image(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
     scheme = urllib.parse.urlparse(source).scheme or SCHEME_FILE
     if scheme == SCHEME_FILE:
-        fetch_file(source, target)
+        with open_file(source) as stream:
+            yield stream
     elif scheme == SCHEME_S3:
-        fetch_s3(source, target, options)
+        with open_s3(source, options) as stream:
+            yield stream
     else:
         die("Downloading the image", f"Unsupported storage scheme: {scheme}")
 
@@ -225,13 +241,46 @@ def clear_uv_home(uv_home: Path) -> None:
     uv_home.mkdir(parents=True, exist_ok=True)
 
 
-def extract_image(image: Path, uv_home: Path) -> None:
-    trace(f"Extracting into {uv_home}")
-    with open(image, "rb") as reader:
+def extract_with_tar(stream: IO[bytes], uv_home: Path) -> int:
+    process = subprocess.Popen(
+        [TAR_EXECUTABLE, "-xf", "-", "-C", str(uv_home)],
+        stdin=subprocess.PIPE,
+    )
+    copied = 0
+    try:
+        while True:
+            block = stream.read(COPY_BLOCK_SIZE)
+            if not block:
+                break
+            process.stdin.write(block)
+            copied += len(block)
+    finally:
+        process.stdin.close()
+        status = process.wait()
+    if status != 0:
+        die("Extracting the image", f"{TAR_EXECUTABLE} exited with status {status}")
+    return copied
+
+
+def extract_with_tarfile(stream: IO[bytes], uv_home: Path) -> None:
+    with tarfile.open(fileobj=stream, mode="r|") as archive:
+        archive.extractall(path=uv_home, filter=None)
+
+
+def extract_image(source: str, options: dict[str, str], uv_home: Path) -> None:
+    use_tar = shutil.which(TAR_EXECUTABLE) is not None
+    with open_image(source, options) as body:
         decompressor = zstandard.ZstdDecompressor()
-        with decompressor.stream_reader(reader) as stream:
-            with tarfile.open(fileobj=stream, mode="r|") as archive:
-                archive.extractall(path=uv_home, filter="tar")
+        with decompressor.stream_reader(body) as stream:
+            trace(
+                f"Extracting into {uv_home}"
+                f" ({'system tar' if use_tar else 'python tarfile'})"
+            )
+            if use_tar:
+                size = extract_with_tar(stream, uv_home)
+                trace(f"Unpacked {human_size(size)} ({size} bytes) of archive content")
+            else:
+                extract_with_tarfile(stream, uv_home)
 
 
 def main() -> int:
@@ -247,13 +296,8 @@ def main() -> int:
     source = image_uri(uri, arguments.subfolder, name)
 
     output.mkdir(parents=True, exist_ok=True)
-    image = output / name
-    fetch_image(source, image, options)
-    size = image.stat().st_size
-    trace(f"Downloaded {name}: {human_size(size)} ({size} bytes)")
     clear_uv_home(uv_home)
-    extract_image(image, uv_home)
-    image.unlink(missing_ok=True)
+    extract_image(source, options, uv_home)
 
     trace(f"Done! Virtual environments available at {uv_home}")
     return 0

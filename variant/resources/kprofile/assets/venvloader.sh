@@ -56,6 +56,7 @@ LOADER="$(cd "$(dirname "$0")" && pwd)/venvloader.py"
 
 PYTHON_BINARY="python3"
 UV_BINARY="uv"
+TAR_BINARY="tar"
 PIP_PACKAGES=("boto3" "pyyaml" "zstandard")
 
 show_usage() {
@@ -116,6 +117,11 @@ install_prerequisites() {
       run "$UV_BINARY" pip install --system --quiet "${PIP_PACKAGES[@]}"
    else
       run "$PYTHON_BINARY" -m pip install --quiet --disable-pip-version-check "${PIP_PACKAGES[@]}"
+   fi
+   if command -v "$TAR_BINARY" >/dev/null 2>&1; then
+      trace "Unpacking with $TAR_BINARY"
+   else
+      trace "The $TAR_BINARY binary is not present; unpacking with python tarfile"
    fi
 }
 
