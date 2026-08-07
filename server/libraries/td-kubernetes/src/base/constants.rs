@@ -109,7 +109,7 @@ impl UvMode {
     pub fn index_strategy(self) -> String {
         match self {
             Self::Local => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
-            Self::Devpi => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
+            Self::Devpi => UV_INDEX_STRATEGY_BEST_MATCH.to_owned(),
             Self::Pypi => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
             Self::Unset => match environment_index(ENV_UV_INDEX_STRATEGY) {
                 Some(strategy) => strategy,

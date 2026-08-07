@@ -89,7 +89,7 @@ fn named_modes_ignore_the_index_environment_variables() {
             UvMode::Devpi,
             PYPI_INDEX_URL,
             DEVPI_INDEX_URL_HOST,
-            UV_INDEX_STRATEGY_FIRST_INDEX,
+            UV_INDEX_STRATEGY_BEST_MATCH,
         ),
         (
             UvMode::Pypi,
@@ -264,9 +264,6 @@ fn devpi_serves_tabsdata_and_pypi_serves_the_rest() {
             UvMode::Devpi.extra_index_url(IndexReach::Cluster),
             DEVPI_INDEX_URL_CLUSTER
         );
-        assert_eq!(
-            UvMode::Devpi.index_strategy(),
-            UV_INDEX_STRATEGY_FIRST_INDEX
-        );
+        assert_eq!(UvMode::Devpi.index_strategy(), UV_INDEX_STRATEGY_BEST_MATCH);
     });
 }
