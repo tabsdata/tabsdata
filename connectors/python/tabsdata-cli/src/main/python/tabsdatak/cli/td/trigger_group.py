@@ -7,9 +7,10 @@ trigger.
 
 A function registered with a ``CronTrigger`` gets a ``CT`` trigger worker and a
 ``@stream_publisher`` gets an ``ST`` one, so a group's ``list`` is the worker
-listing narrowed to that worker type, and its ``enable`` / ``disable`` are
-``tdk fn enable`` / ``tdk fn disable`` restricted to functions that have such a
-trigger. The trigger worker is what both read: it is created when the function is
+listing narrowed to that worker type, ``plans`` is the execution-plan listing
+narrowed to the trigger type of the same name, and its ``enable`` / ``disable``
+are ``tdk fn enable`` / ``tdk fn disable`` restricted to functions that have such
+a trigger. The trigger worker is what both read: it is created when the function is
 registered and outlives a disable (the function's own ``workers`` map does not --
 it empties out while the function is disabled, so it cannot tell a disabled cron
 function from a plain one).
@@ -39,7 +40,12 @@ from tabsdatak.cli.cli_utils import (
     take,
     verify_login_or_prompt,
 )
-from tabsdatak.cli.td.execution_utils import obtain_list_worker_filters
+from tabsdatak.cli.td.execution_utils import (
+    obtain_execution_list,
+    obtain_list_exec_filters,
+    obtain_list_worker_filters,
+    plans_table,
+)
 from tabsdatak.cli.td.fn_group import set_function_enabled
 
 if TYPE_CHECKING:
@@ -47,10 +53,14 @@ if TYPE_CHECKING:
 
 
 class _Kind(NamedTuple):
-    """What differs between the two trigger kinds: the worker type they are
-    listed by, and how they are named in output."""
+    """What differs between the two trigger kinds: the code they are listed by,
+    and how they are named in output.
 
-    worker_type: str
+    ``WorkerType`` and ``TriggerType`` share the ``CT``/``ST`` codes, so the one
+    value selects both the trigger worker and the plans that trigger started.
+    """
+
+    code: str
     title: str
     plural: str
     # Fill the "No <trigger> found for function ... use 'tdk fn <action>' to
@@ -61,7 +71,7 @@ class _Kind(NamedTuple):
 
 
 CRON = _Kind(
-    worker_type="CT",
+    code="CT",
     title="Cron triggers",
     plural="cron triggers",
     trigger="cron trigger",
@@ -69,7 +79,7 @@ CRON = _Kind(
 )
 
 STREAM = _Kind(
-    worker_type="ST",
+    code="ST",
     title="Stream publishers",
     plural="stream publishers",
     trigger="stream-publisher trigger",
@@ -138,6 +148,19 @@ def list_crons(ctx: click.Context, all_projects: bool, name: str, coll: str):
     _list_triggers(ctx, CRON, all_projects, name, coll)
 
 
+@cron.command("plans")
+@proj_option
+@all_projects_option
+@_name_option("Only list the plans triggered for this function.")
+@_coll_option("Only list the plans of functions in this collection.")
+@format_option
+@max_result_option
+@click.pass_context
+def list_cron_plans(ctx: click.Context, all_projects: bool, name: str, coll: str):
+    """List the execution plans the cron triggers started, newest first"""
+    _list_plans(ctx, CRON, all_projects, name, coll)
+
+
 @stream.command("enable")
 @proj_option
 @_name_option("Name of the stream-publisher function to enable.")
@@ -179,9 +202,22 @@ def list_streams(ctx: click.Context, all_projects: bool, name: str, coll: str):
     _list_triggers(ctx, STREAM, all_projects, name, coll)
 
 
+@stream.command("plans")
+@proj_option
+@all_projects_option
+@_name_option("Only list the plans triggered for this function.")
+@_coll_option("Only list the plans of functions in this collection.")
+@format_option
+@max_result_option
+@click.pass_context
+def list_stream_plans(ctx: click.Context, all_projects: bool, name: str, coll: str):
+    """List the execution plans the stream publishers started, newest first"""
+    _list_plans(ctx, STREAM, all_projects, name, coll)
+
+
 def _triggers_of(server: "TabsdataServer", kind: _Kind, coll: str, name: str):
     request_filter = obtain_list_worker_filters(
-        fn=name, collection=coll, worker_type=kind.worker_type
+        fn=name, collection=coll, worker_type=kind.code
     )
     return server.list_workers_generator(filter=request_filter)
 
@@ -209,6 +245,45 @@ def _enable_function(
             f"'{coll}'. Use 'tdk fn {action}' to {action} {kind.other}."
         )
     set_function_enabled(ctx, name, coll, enabled)
+
+
+def _list_plans(
+    ctx: click.Context,
+    kind: _Kind,
+    all_projects: bool,
+    name: str,
+    coll: str,
+):
+    verify_login_or_prompt(ctx)
+    coll = coll or get_currently_pinned_object(ctx, "collection")
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        resolve_all_projects(ctx, all_projects)
+        request_filter = obtain_list_exec_filters(fn=name, collection=coll)
+        request_filter.append(f"trigger_type:eq:{kind.code}")
+        # Already newest-first and capped by --max-result.
+        plans, truncated = obtain_execution_list(
+            ctx, server, request_filter, last=False
+        )
+
+        def _table():
+            click.echo()
+            title = f"Plans of the {kind.plural}"
+            make_console().print(plans_table(plans, title=title))
+            click.echo(f"Number of plans: {len(plans)}")
+            click.echo()
+
+        # The listing already returned each row; ``_data`` would re-fetch them
+        # one by one, and ``kwargs`` alone drops the id the row was built from.
+        render(
+            ctx,
+            data=lambda: [{"id": plan.id, **plan.kwargs} for plan in plans],
+            table=_table,
+        )
+        echo_more_results(ctx, truncated)
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to list plans of the {kind.plural}: {e}")
 
 
 def _list_triggers(

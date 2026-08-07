@@ -152,24 +152,33 @@ function patches  --name NAME [--proj PROJECT] [--col COLLECTION] [-o]      # wa
 
 The two kinds of orchestrator-managed trigger: a function registered with a
 `CronTrigger` gets a cron trigger, a `@stream_publisher` gets a stream one. Each
-`list` is the worker listing narrowed to that trigger type; `enable` / `disable`
-are `tdk fn enable` / `tdk fn disable` restricted to functions that have the
-matching trigger — a function without one is refused, naming `tdk fn` instead —
-and, like them, do nothing when the function is already in that state.
+`list` is the worker listing narrowed to that trigger type and `plans` the plan
+listing narrowed to it; `enable` / `disable` are `tdk fn enable` / `tdk fn
+disable` restricted to functions that have the matching trigger — a function
+without one is refused, naming `tdk fn` instead — and, like them, do nothing when
+the function is already in that state.
 
 ```
 cron   list                 [--proj PROJECT] [--coll COLLECTION] [--name FUNCTION] [--all-projects] [-o]
+cron   plans                [--proj PROJECT] [--coll COLLECTION] [--name FUNCTION] [--all-projects] [-o]
 cron   enable  --name NAME  [--proj PROJECT] [--coll COLLECTION]
 cron   disable --name NAME  [--proj PROJECT] [--coll COLLECTION]
 stream list                 [--proj PROJECT] [--coll COLLECTION] [--name FUNCTION] [--all-projects] [-o]
+stream plans                [--proj PROJECT] [--coll COLLECTION] [--name FUNCTION] [--all-projects] [-o]
 stream enable  --name NAME  [--proj PROJECT] [--coll COLLECTION]
 stream disable --name NAME  [--proj PROJECT] [--coll COLLECTION]
 ```
 
-On `list`, `--coll` and `--name` are filters; `--coll` defaults to the pinned
-collection and with none the listing spans the project. Like `collection list`
-it can also span projects — with `--all-projects`, or when no project is
-selected at all — and then carries a Project column.
+`plans` is the other side of `list`: the execution plans the triggers actually
+started, newest first, capped by `--max-result` like every listing. It is the
+plan listing narrowed to the matching trigger type (`CT`/`ST`), so unlike the
+`tdk plan` family it honors the pinned project rather than always spanning.
+
+On both listings, `--coll` and `--name` are filters; `--coll` defaults to the
+pinned collection and with none the listing spans the project. Like
+`collection list` they can also span projects — with `--all-projects`, or when no
+project is selected at all — and `list` then carries a Project column (`plans`
+always shows one).
 
 ## `tdk table`
 

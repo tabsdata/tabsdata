@@ -236,8 +236,8 @@ def _truncate(text: str, width: int = 20) -> str:
     return text if len(text) <= width else text[:width] + "..."
 
 
-def plans_table(executions) -> Table:
-    table = Table(title="Plans")
+def plans_table(executions, title: str = "Plans") -> Table:
+    table = Table(title=title)
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Name")
     table.add_column("Project")

@@ -2,13 +2,14 @@
 #  Copyright 2026 Tabsdata Inc.
 #
 
-"""``tdk cron`` / ``tdk stream``: every command in both groups reads the trigger
-worker listing, so what separates them is the ``worker_type`` filter they send --
-``CT`` for cron triggers, ``ST`` for stream publishers.
+"""``tdk cron`` / ``tdk stream``: one ``CT``/``ST`` code separates the two groups,
+and every command sends it as a filter -- ``list`` and ``enable``/``disable`` on
+the trigger-worker listing, ``plans`` as the ``trigger_type`` of the execution
+plans the trigger started.
 
-``list`` narrows the listing by it (the rendered output contract lives in the
-render harness); ``enable`` / ``disable`` require it to be non-empty before
-touching the function, which is the precondition pinned here.
+The rendered output contract lives in the render harness; what is pinned here is
+the filters each command sends, and the precondition ``enable``/``disable`` check
+before touching the function.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ def _client() -> MagicMock:
     client.connection = MagicMock()
     client.connection.project = "proj-a"
     client.list_workers_generator.side_effect = lambda *a, **k: iter([])
+    client.list_executions_generator.side_effect = lambda *a, **k: iter([])
     # Neither enabled nor disabled, so enable/disable never short-circuits as a
     # no-op here (that path is covered in test_enable_disable.py).
     client.get_function.return_value = MagicMock(enabled=None)
@@ -46,6 +48,10 @@ def _invoke(argv, *, client, tmp_path):
 
 def _sent_filter(client) -> list[str]:
     return client.list_workers_generator.call_args.kwargs["filter"]
+
+
+def _sent_plan_filter(client) -> list[str]:
+    return client.list_executions_generator.call_args.kwargs["filter"]
 
 
 def _with_trigger(client) -> MagicMock:
@@ -166,5 +172,71 @@ def test_enable_surfaces_sdk_failure_as_a_clean_error(group, tmp_path):
     result = _invoke(
         [group, "enable", "-n", "f1", "-c", "coll1"], client=client, tmp_path=tmp_path
     )
+    assert result.exit_code != 0
+    assert "boom-xyz" in result.output
+
+
+# --- plans: the execution plans the trigger started -------------------------
+
+
+@pytest.mark.parametrize(
+    "group,trigger_type",
+    [("cron", "trigger_type:eq:CT"), ("stream", "trigger_type:eq:ST")],
+)
+def test_plans_filters_by_its_trigger_type(group, trigger_type, tmp_path):
+    client = _client()
+    result = _invoke([group, "plans"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert _sent_plan_filter(client) == [trigger_type]
+
+
+@pytest.mark.parametrize("group", ["cron", "stream"])
+def test_plans_are_ordered_newest_first(group, tmp_path):
+    client = _client()
+    result = _invoke([group, "plans"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert client.list_executions_generator.call_args.kwargs["order_by"] == (
+        "triggered_on-"
+    )
+
+
+@pytest.mark.parametrize("group", ["cron", "stream"])
+def test_plans_narrow_by_collection_and_function(group, tmp_path):
+    client = _client()
+    result = _invoke(
+        [group, "plans", "--coll", "coll-a", "--name", "fn-a"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    sent = _sent_plan_filter(client)
+    assert "function:eq:fn-a" in sent
+    assert "collection:eq:coll-a" in sent
+
+
+@pytest.mark.parametrize("group", ["cron", "stream"])
+def test_plans_default_to_the_pinned_collection(group, tmp_path):
+    (tmp_path / "options.json").write_text('{"pins": {"collection": "coll-p"}}')
+    client = _client()
+    result = _invoke([group, "plans"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "collection:eq:coll-p" in _sent_plan_filter(client)
+
+
+@pytest.mark.parametrize("group", ["cron", "stream"])
+def test_plans_span_projects_with_all_projects(group, tmp_path):
+    client = _client()
+    result = _invoke(
+        [group, "plans", "--all-projects"], client=client, tmp_path=tmp_path
+    )
+    assert result.exit_code == 0, result.output
+    assert client.connection.project is None
+
+
+@pytest.mark.parametrize("group", ["cron", "stream"])
+def test_plans_surface_sdk_failure_as_a_clean_error(group, tmp_path):
+    client = _client()
+    client.list_executions_generator.side_effect = RuntimeError("boom-xyz")
+    result = _invoke([group, "plans"], client=client, tmp_path=tmp_path)
     assert result.exit_code != 0
     assert "boom-xyz" in result.output

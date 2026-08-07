@@ -868,6 +868,20 @@ CASES: tuple[RenderCase, ...] = (
         ("WK_T_1", "coll-a", "fn-a", "Running", "2026-03-01", "2026-03-02"),
     ),
     RenderCase(
+        "cron-plans",
+        ["cron", "plans"],
+        _set_plan_list,
+        _EXECUTIONS,
+        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "admin", "Done"),
+    ),
+    RenderCase(
+        "stream-plans",
+        ["stream", "plans"],
+        _set_plan_list,
+        _EXECUTIONS,
+        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "admin", "Done"),
+    ),
+    RenderCase(
         "table-versions",
         ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
         _set_table_versions,
