@@ -211,7 +211,13 @@ class IdentityScale(Scale):
 
     @property
     def bins(self) -> int:
-        """The number of bins, derived from the (min, max) range."""
+        """The number of bins, derived from the (min, max) range.
+
+        Examples:
+            .. code-block:: python
+
+                IdentityScale(1, 5).bins  # 4
+        """
         return self.max_val - self.min_val
 
     @model_validator(mode="after")
