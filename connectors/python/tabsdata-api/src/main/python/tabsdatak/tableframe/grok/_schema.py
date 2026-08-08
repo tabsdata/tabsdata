@@ -16,35 +16,63 @@ from tabsdatak.tableframe.grok.error import GrokErrorCode
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 
 ColumnDataType: TypeAlias = DataType | DataTypeClass
+"""The data type a `ColumnDefinition` gives a captured column.
+
+:categories: string, projection
+
+Either a data type from `tabsdatak.tableframe.datatypes` used as a type
+(`Int64`) or an instance of one where the type is parameterized
+(`Datetime("us")`).
+
+Examples:
+    .. code-block:: python
+
+        ColumnDefinition("year", Int64)
+        ColumnDefinition("seen_at", Datetime("us"))
+"""
 
 
 @_api.dataclass(GrokErrorCode.GROK_1, config=_ARBITRARY)
 class ColumnDefinition:
-    """A single column definition in a :class:`TableFrame`.
+    """The column one Grok capture produces: its name and data type.
 
-    :categories: tableframe
+    :categories: string, projection
+
+    One of these per capture makes up the `schema` passed to
+    `TableFrame.grok`, keyed by capture name. The captured text is parsed
+    into `dtype`; a row that does not match leaves the column null.
 
     Args:
-        name: The name of the column, or `None` when no name is given.
-        dtype: The data type of the column, given either as a type (`td.Int64`)
-            or as an instance (`td.Datetime("us")`). This determines how values
-            in the column are interpreted, validated and serialized.
+        name: Name of the column to add. `None` (the default) keeps the
+            capture's own name, and any other value renames it.
+        dtype: Data type the captured text is parsed into, from
+            `tabsdatak.tableframe.datatypes` -- a type (`Int64`) or an
+            instance where it is parameterized (`Datetime("us")`).
+            Defaults to `String`, which keeps the text as captured.
 
     Examples:
-        Create a column with a name and a type:
+        .. code-block:: python
+
+            tf.grok(
+                "logs",
+                r"%{WORD:user}-%{INT:year}",
+                {
+                    "user": ColumnDefinition("user", String),
+                    "year": ColumnDefinition("year", Int64),
+                },
+            )
+
+        A `name` that differs from the capture renames the column it
+        produces -- here the `user` capture lands in a column called
+        `who`:
 
         .. code-block:: python
 
-            ColumnDefinition(name="customer_id", dtype=td.Int64)
-
-        Use columns to define a TableFrame schema:
-
-        .. code-block:: python
-
-            schema = [
-                ColumnDefinition(name="customer_id", dtype=td.Int64),
-                ColumnDefinition(name="signup_date", dtype=td.Datetime),
-            ]
+            tf.grok(
+                "logs",
+                r"%{WORD:user}-.*",
+                {"user": ColumnDefinition("who", String)},
+            )
     """
 
     name: str | None = None

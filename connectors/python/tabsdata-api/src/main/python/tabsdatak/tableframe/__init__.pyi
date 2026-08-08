@@ -31,6 +31,7 @@ from tabsdatak.tableframe._typing import (
 )
 from tabsdatak.tableframe.datatypes import DataType
 from tabsdatak.tableframe.expr import Expr
+from tabsdatak.tableframe.grok import ColumnDefinition
 from tabsdatak.tableframe.group_by import LazyGroupBy
 from tabsdatak.tableframe.schema import Schema
 
@@ -759,4 +760,65 @@ class TableFrame(EngineFrame):
 
                 tf.unnest("s")
                 tf.unnest("s", "t")
+        """
+
+    # MANUAL CHANGE POST GEN: `grok` is inherited from `EngineFrame` rather
+    # than emitted into the generated wrapper, so the generator does not see
+    # it; declared here so it is typed and documented like the rest.
+    def grok(
+        self,
+        expr: str | Expr,
+        pattern: str,
+        schema: Mapping[str, ColumnDefinition],
+    ) -> TableFrame:
+        """Parse unstructured text into columns with a Grok pattern.
+
+        :categories: string, projection
+
+        Matches `pattern` against a string column and appends one column
+        per named capture, keeping every existing column. A row whose text
+        does not match gets null in each new column, so a bad line never
+        fails the read. `ColumnDefinition` (from
+        `tabsdatak.tableframe.grok`) names each new column and gives its
+        data type.
+
+        Args:
+            expr: Name of the string column to parse, or an expression
+                resolving to one.
+            pattern: Grok pattern whose named captures (`%{WORD:user}`)
+                become the new columns.
+            schema: Mapping of capture name to the `ColumnDefinition`
+                describing the column it produces. A definition whose
+                `name` differs from the capture renames the output column;
+                its `dtype` is what the captured text is parsed into.
+
+        Returns:
+            A new `TableFrame` with one column added per capture.
+
+        Examples:
+            .. code-block:: python
+
+                tf.grok(
+                    "logs",
+                    r"%{WORD:user}-%{WORD:action}-%{INT:year}",
+                    {
+                        "user": ColumnDefinition("user", String),
+                        "action": ColumnDefinition("action", String),
+                        "year": ColumnDefinition("year", Int64),
+                    },
+                )
+
+            A definition can rename the capture, and the source column may
+            be given as an expression:
+
+            .. code-block:: python
+
+                tf.grok(
+                    col("logs"),
+                    r"%{WORD:user}-.*",
+                    {"user": ColumnDefinition("who", String)},
+                )
+
+            When a pattern repeats a capture name, the extra columns are
+            disambiguated with a numeric suffix (`field`, `field[1]`).
         """

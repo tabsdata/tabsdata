@@ -414,62 +414,12 @@ class EngineFrame(BaseFrame):
         pattern: str,
         schema: dict[str, ColumnDefinition],
     ) -> Self:
-        """
-        :categories: string
+        """Parse text into columns with a Grok pattern.
 
-
-        Parse log text into structured fields using a Grok pattern.
-
-        Applies a Grok pattern to the given column or expression and directly appends
-        **one new column per named capture** in the pattern to the output TableFrame.
-        Rows that do not match the pattern will contain `null` values for the
-        extracted columns.
-
-        Parameters:
-            expr (str | Expr): Column name or expression that resolves to a single
-                string column containing log lines.
-            pattern (str): Grok pattern with named captures (e.g., `%{WORD:user}`).
-            schema (dict[str, ColumnDefinition]): A mapping where each capture name
-                is associated with its corresponding column definition, specifying
-                both the column name and its data type.
-
-        Returns:
-            TableFrame: A new TableFrame with one column per Grok capture added.
-
-        Example:
-
-            >>> from tabsdatak.tableframe import TableFrame, datatypes as td
-            >>> from tabsdatak.tableframe.grok import ColumnDefinition
-            >>>
-            >>> tf = TableFrame.from_dict({"logs": [
-            ...     "alice-login-2023",
-            ...     "bob-logout-2024",
-            ... ]})
-            >>>
-            >>> # Capture 3 fields: user, action, year
-            >>> log_pattern = r"%{WORD:user}-%{WORD:action}-%{INT:year}"
-            >>> log_schema = {
-            ...     "user": ColumnDefinition("user", td.String),
-            ...     "action": ColumnDefinition("action", td.String),
-            ...     "year": ColumnDefinition("year", td.Int64),
-            ... }
-            >>> out = tf.grok("logs", log_pattern, log_schema)
-            >>> out.to_polars_df()
-            ┌──────────────────┬───────┬────────┬──────┐
-            │ logs             ┆ user  ┆ action ┆ year │
-            │ ---              ┆ ---   ┆ ---    ┆ ---  │
-            │ str              ┆ str   ┆ str    ┆ i64  │
-            ╞══════════════════╪═══════╪════════╪══════╡
-            │ alice-login-2023 ┆ alice ┆ login  ┆ 2023 │
-            │ bob-logout-2024  ┆ bob   ┆ logout ┆ 2024 │
-            └──────────────────┴───────┴────────┴──────┘
-
-        Notes:
-            - The function automatically expands the Grok captures into separate
-              columns.
-            - Non-matching rows will show `null` for the extracted columns.
-            - If a pattern defines duplicate capture names, numeric suffixes like
-              `field`, `field[1]` will be used to disambiguate them.
+        Appends one column per named capture in the pattern; a row whose
+        text does not match gets null in each of them. The schema maps
+        each capture name to the ColumnDefinition for the column it
+        produces. Documented on the stub, like the rest of the API.
         """
 
         import polars as pl
