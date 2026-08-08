@@ -17,7 +17,7 @@ jwt:
   access_token_expiration: 3600
 request_timeout: 60
 check_frequency: 60
-stuck_requested_timeout: 120
+stuck_requested_timeout: 1800
 max_functions_per_tick: 50
 tick_timeout: 10
 orchestrator: kubernetes

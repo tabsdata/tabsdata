@@ -52,7 +52,9 @@ impl<'de> Deserialize<'de> for SchedulerCheckFrequency {
 /// How long a run may sit in `Requested` before the scheduler auto-recovers
 /// it. Serdes as whole seconds; `<= 0` falls back to the default (the sweep
 /// cannot be disabled — dispatch relies on it to replace runs whose pod was
-/// never created).
+/// never created). The cutoff must comfortably exceed worst-case pod startup
+/// under a deep dispatch queue: a shorter value declares still-queued pods
+/// dead and re-dispatches, duplicating their work.
 #[derive(Debug, Clone, Copy)]
 pub struct StuckRequestedTimeout(pub Duration);
 
@@ -63,7 +65,7 @@ impl Default for StuckRequestedTimeout {
 }
 
 impl StuckRequestedTimeout {
-    pub const DEFAULT: Duration = Duration::from_secs(120);
+    pub const DEFAULT: Duration = Duration::from_secs(30 * 60);
 
     pub fn from_secs(secs: i64) -> Self {
         u64::try_from(secs)
