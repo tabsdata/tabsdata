@@ -239,7 +239,7 @@ envelope is:
 Methods are inherited (zero per-class boilerplate):
 
 ```python
-obj._to_dict()   obj.to_json()
+obj.to_dict()   obj.to_json()
 Cls.from_dict(d)   Cls.from_json(s)
 ```
 

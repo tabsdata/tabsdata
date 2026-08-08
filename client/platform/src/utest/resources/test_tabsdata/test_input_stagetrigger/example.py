@@ -16,8 +16,8 @@ class MyStageTrigger(StageTrigger):
     def run(self, ctx: StageTriggerContext) -> StageTriggerStatus:
         pass
 
-    def _to_dict(self) -> dict:
-        return super()._to_dict()
+    def to_dict(self) -> dict:
+        return super().to_dict()
 
 
 class MyStageTriggerPlugin(SourcePlugin):

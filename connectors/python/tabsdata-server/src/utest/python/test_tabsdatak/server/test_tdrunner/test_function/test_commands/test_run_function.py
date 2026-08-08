@@ -324,7 +324,7 @@ def multi_publisher(
     frames = []
     for slot in (in_a, in_b):
         if slot:
-            frames.extend(f.to_polars_lf() for f in slot if f is not None)
+            frames.extend(f._to_polars_lf() for f in slot if f is not None)
     if not frames:
         return None
     combined = pl.concat(frames, how="vertical_relaxed")
@@ -381,11 +381,11 @@ def multi_transformer(
 
     frames = []
     if a is not None:
-        frames.append(a.to_polars_lf())
+        frames.append(a._to_polars_lf())
     if b:
-        frames.extend(f.to_polars_lf() for f in b if f is not None)
+        frames.extend(f._to_polars_lf() for f in b if f is not None)
     if c is not None:
-        frames.append(c.to_polars_lf())
+        frames.append(c._to_polars_lf())
     if not frames:
         return None
     combined = pl.concat(frames, how="vertical_relaxed")

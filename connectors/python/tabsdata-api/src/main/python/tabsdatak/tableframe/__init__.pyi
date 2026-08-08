@@ -965,9 +965,9 @@ class TableFrame(EngineFrame):
 
                 tf.filter(col("a") > 1)._to_polars_df()
 
-                    Keep the system columns to inspect the row provenance:
+            Keep the system columns to inspect the row provenance:
 
-                    .. code-block:: python
+            .. code-block:: python
 
                 tf._to_polars_df(drop_system_columns=False)
         """

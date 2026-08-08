@@ -321,7 +321,7 @@ class EngineFrame(BaseFrame):
 
     def _to_pandas(self, drop_system_columns=True):
         return (
-            self._strip(drop_system_columns).collect(no_optimization=True)._to_pandas()
+            self._strip(drop_system_columns).collect(no_optimization=True).to_pandas()
         )
 
     def _to_dict(self, drop_system_columns=True):
@@ -329,7 +329,7 @@ class EngineFrame(BaseFrame):
             self
             ._strip(drop_system_columns)
             .collect(no_optimization=True)
-            ._to_dict(as_series=False)
+            .to_dict(as_series=False)
         )
 
     def extract_one(

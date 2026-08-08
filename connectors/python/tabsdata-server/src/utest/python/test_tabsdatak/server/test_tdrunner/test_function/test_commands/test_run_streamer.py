@@ -60,7 +60,7 @@ def _write_function_def(bundle_dir: Path, info) -> None:
     from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME
 
     bundle_dir.mkdir(parents=True, exist_ok=True)
-    (bundle_dir / BUNDLE_MANIFEST_FILENAME).write_text(json.dumps(info._to_dict()))
+    (bundle_dir / BUNDLE_MANIFEST_FILENAME).write_text(json.dumps(info.to_dict()))
 
 
 # --- _load_function_def -----------------------------------------------
