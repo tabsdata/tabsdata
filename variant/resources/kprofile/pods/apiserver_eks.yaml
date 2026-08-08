@@ -40,10 +40,6 @@ spec:
         tabsdata.com/tier: regular
     spec:
       restartPolicy: Always
-      tolerations:
-        - key: CriticalAddonsOnly
-          operator: Exists
-          effect: NoSchedule
       serviceAccountName: aut-apiserver
       automountServiceAccountToken: true
       terminationGracePeriodSeconds: 60

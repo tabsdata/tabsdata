@@ -41,10 +41,6 @@ spec:
     spec:
       restartPolicy: Always
       nodeName: tdknode
-      tolerations:
-        - key: virtual-kubelet.io/provider
-          operator: Exists
-          effect: NoSchedule
       serviceAccountName: default
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60

@@ -34,10 +34,6 @@ spec:
         tabsdata.com/tier: init
     spec:
       restartPolicy: Never
-      tolerations:
-        - key: CriticalAddonsOnly
-          operator: Exists
-          effect: NoSchedule
       serviceAccountName: default
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60

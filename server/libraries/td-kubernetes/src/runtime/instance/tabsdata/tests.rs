@@ -83,13 +83,35 @@ fn shipped_configs_parse() {
         );
         let yaml = std::fs::read_to_string(&path).expect(&path);
         let config = TabsdataConfig::parse(&yaml).expect(&path);
+
         assert!(
-            config.pods.components.contains_key(&Component::Ephemeral),
-            "{provider} is missing the ephemeral component"
+            !config.pods.function.resources.is_empty(),
+            "{provider} function has no resources"
         );
         assert!(
-            config.component("apiserver").is_some(),
+            !config.pods.service.defaults.resources.is_empty(),
+            "{provider} service has no default resources"
+        );
+        assert!(
+            !config
+                .component("apiserver", Some("regular"))
+                .resources
+                .is_empty(),
             "{provider} apiserver"
+        );
+        assert!(
+            !config
+                .component("function-publisher", Some("ephemeral"))
+                .resources
+                .is_empty(),
+            "{provider} function fallback"
+        );
+        assert!(
+            !config
+                .component("venvloader", Some("init"))
+                .resources
+                .is_empty(),
+            "{provider} service fallback"
         );
     }
 }

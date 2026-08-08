@@ -9,16 +9,28 @@ pods:
     # alone, so these are defaults rather than overrides.
     envs: {}
 
-  # Sizing and placement, per component. The values below are the shipped
-  # defaults; editing one changes every container of that component.
+  # Sizing and placement. These values are what tabsdata applies: the pod
+  # descriptors carry none of their own, so what is written here is what the
+  # cluster receives.
   #
-  # `ephemeral` covers everything triggered from the apiserver -- publishers,
-  # transformers, subscribers, crons and streams -- plus the setup and init
-  # pods. Any component not named here falls into it.
+  # `service` covers the pods that run alongside the instance. Its own resources
+  # and placement apply to every service pod; the named entries below override
+  # them for one component each.
   #
-  # `selectors` and `tolerations` are empty by default, which leaves scheduling
-  # to the cluster. Fill them in to steer a component onto particular nodes.
-  components:
+  # `function` covers the pods created per execution: publishers, transformers,
+  # subscribers, crons and streams.
+  #
+  # `selectors` chooses which nodes a pod may land on; `tolerations` lets it onto
+  # nodes that are otherwise reserved. A tolerations list replaces what tabsdata
+  # would apply, so it must be complete.
+  service:
+    resources:
+      cpu: "1"
+      memory: 2Gi
+      disk: 8Gi
+    placement:
+      selectors: {}
+      tolerations: []
     apiserver:
       resources:
         cpu: "4"
@@ -27,11 +39,12 @@ pods:
       placement:
         selectors: {}
         tolerations: []
-    ephemeral:
-      resources:
-        cpu: "4"
-        memory: 16Gi
-        disk: 16Gi
-      placement:
-        selectors: {}
-        tolerations: []
+
+  function:
+    resources:
+      cpu: "4"
+      memory: 16Gi
+      disk: 16Gi
+    placement:
+      selectors: {}
+      tolerations: []

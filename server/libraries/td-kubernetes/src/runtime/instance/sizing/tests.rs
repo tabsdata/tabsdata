@@ -8,7 +8,7 @@ use k8s_openapi::api::core::v1::{Container, PodSpec, ResourceRequirements};
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 
 use super::*;
-use crate::runtime::instance::tabsdata::{Component, TolerationConfig};
+use crate::runtime::instance::tabsdata::{TabsdataConfig, TolerationConfig};
 
 fn container(name: &str, cpu: &str) -> Container {
     Container {
@@ -135,10 +135,55 @@ fn placement_sets_selectors_and_tolerations() {
 }
 
 #[test]
-fn unknown_components_are_ephemeral() {
-    assert_eq!(Component::of("apiserver"), Component::Apiserver);
-    assert_eq!(Component::of("aiagent"), Component::Aiagent);
-    assert_eq!(Component::of("function-publisher"), Component::Ephemeral);
-    assert_eq!(Component::of("venvloader"), Component::Ephemeral);
-    assert_eq!(Component::of(""), Component::Ephemeral);
+fn named_components_take_their_own_entry() {
+    let mut config = TabsdataConfig::default();
+    config.pods.service.apiserver.resources.cpu = Some("8".to_owned());
+    config.pods.service.defaults.resources.cpu = Some("1".to_owned());
+    config.pods.function.resources.cpu = Some("4".to_owned());
+
+    assert_eq!(
+        config.component("apiserver", Some("regular")).resources.cpu,
+        Some("8".to_owned())
+    );
+}
+
+#[test]
+fn ephemeral_tier_falls_back_to_function() {
+    let mut config = TabsdataConfig::default();
+    config.pods.service.defaults.resources.cpu = Some("1".to_owned());
+    config.pods.function.resources.cpu = Some("4".to_owned());
+
+    assert_eq!(
+        config
+            .component("function-publisher", Some("ephemeral"))
+            .resources
+            .cpu,
+        Some("4".to_owned())
+    );
+    assert_eq!(
+        config
+            .component("cron-publisher", Some("ephemeral"))
+            .resources
+            .cpu,
+        Some("4".to_owned())
+    );
+}
+
+#[test]
+fn every_other_tier_falls_back_to_service_defaults() {
+    let mut config = TabsdataConfig::default();
+    config.pods.service.defaults.resources.cpu = Some("1".to_owned());
+    config.pods.function.resources.cpu = Some("4".to_owned());
+
+    for (component, tier) in [
+        ("venvloader", Some("init")),
+        ("pymanager", Some("setup")),
+        ("", None),
+    ] {
+        assert_eq!(
+            config.component(component, tier).resources.cpu,
+            Some("1".to_owned()),
+            "{component}"
+        );
+    }
 }

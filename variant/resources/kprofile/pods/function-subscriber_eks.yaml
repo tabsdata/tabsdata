@@ -39,10 +39,6 @@ spec:
         tabsdata.com/worker: function
     spec:
       restartPolicy: Never
-      tolerations:
-        - key: workload
-          value: batch
-          effect: NoSchedule
       serviceAccountName: default
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60

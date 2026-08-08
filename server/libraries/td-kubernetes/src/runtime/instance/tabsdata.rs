@@ -10,6 +10,8 @@ use strum::{AsRefStr, EnumString};
 
 pub const TABSDATA_FILE: &str = "tabsdata.yaml";
 
+const TIER_EPHEMERAL: &str = "ephemeral";
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TabsdataConfig {
@@ -20,7 +22,8 @@ pub struct TabsdataConfig {
 #[serde(default)]
 pub struct PodsConfig {
     pub global: GlobalPodConfig,
-    pub components: BTreeMap<Component, ComponentConfig>,
+    pub service: ServiceConfig,
+    pub function: ComponentConfig,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -29,10 +32,19 @@ pub struct GlobalPodConfig {
     pub envs: BTreeMap<String, EnvValue>,
 }
 
-#[derive(
-    Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, EnumString, AsRefStr,
-)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ServiceConfig {
+    #[serde(flatten)]
+    pub defaults: ComponentConfig,
+    pub database: ComponentConfig,
+    pub apiserver: ComponentConfig,
+    pub aiagent: ComponentConfig,
+    pub aiembeddings: ComponentConfig,
+    pub aimetadata: ComponentConfig,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, AsRefStr)]
 #[strum(serialize_all = "lowercase")]
 pub enum Component {
     Database,
@@ -40,7 +52,6 @@ pub enum Component {
     Aiagent,
     Aiembeddings,
     Aimetadata,
-    Ephemeral,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -48,6 +59,7 @@ pub enum Component {
 pub struct ComponentConfig {
     pub resources: ResourcesConfig,
     pub placement: PlacementConfig,
+    pub priority: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -105,9 +117,15 @@ impl EnvValue {
     }
 }
 
-impl Component {
-    pub fn of(component_label: &str) -> Self {
-        Self::from_str(component_label).unwrap_or(Self::Ephemeral)
+impl ServiceConfig {
+    fn of(&self, component: Component) -> &ComponentConfig {
+        match component {
+            Component::Database => &self.database,
+            Component::Apiserver => &self.apiserver,
+            Component::Aiagent => &self.aiagent,
+            Component::Aiembeddings => &self.aiembeddings,
+            Component::Aimetadata => &self.aimetadata,
+        }
     }
 }
 
@@ -116,8 +134,12 @@ impl TabsdataConfig {
         serde_yaml::from_str(yaml)
     }
 
-    pub fn component(&self, component_label: &str) -> Option<&ComponentConfig> {
-        self.pods.components.get(&Component::of(component_label))
+    pub fn component(&self, component_label: &str, tier: Option<&str>) -> &ComponentConfig {
+        match Component::from_str(component_label) {
+            Ok(component) => self.pods.service.of(component),
+            Err(_) if tier == Some(TIER_EPHEMERAL) => &self.pods.function,
+            Err(_) => &self.pods.service.defaults,
+        }
     }
 }
 

@@ -8,7 +8,7 @@ use k8s_openapi::api::core::v1::{PodSpec, ResourceRequirements, Toleration};
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 
 use crate::base::constants::{
-    POD_YAML_COMPONENT_LABEL, RESOURCE_CPU, RESOURCE_EPHEMERAL_STORAGE, RESOURCE_MEMORY,
+    POD_YAML_COMPONENT_LABEL, RESOURCE_CPU, RESOURCE_EPHEMERAL_STORAGE, RESOURCE_MEMORY, TIER_LABEL,
 };
 use crate::base::error::launcher::LauncherError;
 use crate::runtime::instance::profile::Profile;
@@ -19,7 +19,7 @@ use crate::runtime::instance::tabsdata::{
 pub fn inject_sizing(
     profile: &Profile,
     pod_template_key: &str,
-    component_label: Option<&str>,
+    placement: &PodPlacement,
     spec: &mut PodSpec,
 ) -> Result<(), LauncherError> {
     let Some(config_yaml) = profile.configs.get(TABSDATA_FILE) else {
@@ -32,20 +32,38 @@ pub fn inject_sizing(
             cause: error.to_string(),
         }
     })?;
-    let Some(component) = config.component(component_label.unwrap_or_default()) else {
-        return Ok(());
-    };
+    let component = config.component(
+        placement.component.as_deref().unwrap_or_default(),
+        placement.tier.as_deref(),
+    );
     apply_component(component, spec);
     Ok(())
 }
 
-pub fn component_label_of(labels: Option<&BTreeMap<String, String>>) -> Option<&str> {
-    labels?.get(POD_YAML_COMPONENT_LABEL).map(String::as_str)
+#[derive(Debug, Default)]
+pub struct PodPlacement {
+    pub component: Option<String>,
+    pub tier: Option<String>,
+}
+
+impl PodPlacement {
+    pub fn of(labels: Option<&BTreeMap<String, String>>) -> Self {
+        let Some(labels) = labels else {
+            return Self::default();
+        };
+        Self {
+            component: labels.get(POD_YAML_COMPONENT_LABEL).cloned(),
+            tier: labels.get(TIER_LABEL).cloned(),
+        }
+    }
 }
 
 fn apply_component(component: &ComponentConfig, spec: &mut PodSpec) {
     apply_resources(&component.resources, spec);
     apply_placement(&component.placement, spec);
+    if let Some(priority) = &component.priority {
+        spec.priority_class_name = Some(priority.clone());
+    }
 }
 
 fn apply_resources(resources: &ResourcesConfig, spec: &mut PodSpec) {
