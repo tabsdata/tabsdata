@@ -185,6 +185,7 @@ pub fn run() {
                 Arc::new(SchedulerConfig {
                     check_frequency: config.check_frequency,
                     stuck_requested_timeout: config.stuck_requested_timeout,
+                    max_functions_per_tick: config.max_functions_per_tick,
                 }),
             );
             let function_request_server = FunctionRequester::new(&scheduler_context).await;

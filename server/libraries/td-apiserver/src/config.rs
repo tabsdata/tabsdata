@@ -17,7 +17,9 @@ use td_bridge::Orchestrator;
 use td_common::jwt::JwtConfig;
 use td_database::config::DatabaseComponents;
 use td_error::{TdError, td_error};
-use td_execution::{SchedulerCheckFrequency, StuckRequestedTimeout, TransactionBy};
+use td_execution::{
+    MaxFunctionsPerTick, SchedulerCheckFrequency, StuckRequestedTimeout, TransactionBy,
+};
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
 };
@@ -76,6 +78,8 @@ pub struct Config {
     pub check_frequency: SchedulerCheckFrequency,
     #[serde(default)]
     pub stuck_requested_timeout: StuckRequestedTimeout,
+    #[serde(default)]
+    pub max_functions_per_tick: MaxFunctionsPerTick,
     pub ssl_folder: PathBuf,
     #[serde(default)]
     pub database: DatabaseComponents,
@@ -178,6 +182,7 @@ impl Default for Config {
             request_timeout: 60,
             check_frequency: SchedulerCheckFrequency::default(),
             stuck_requested_timeout: StuckRequestedTimeout::default(),
+            max_functions_per_tick: MaxFunctionsPerTick::default(),
             ssl_folder: PathBuf::default(),
             database: DatabaseComponents::default(),
             storage: Some(StorageConfig::default()),
@@ -262,6 +267,10 @@ pub struct Params {
     /// before the scheduler auto-recovers it; `<= 0` falls back to the
     /// default (the sweep cannot be disabled)
     stuck_requested_timeout: Option<i64>,
+    #[clap(long)]
+    /// Maximum function runs dispatched per scheduler tick; `<= 0` falls
+    /// back to the default
+    max_functions_per_tick: Option<i64>,
     #[clap(long, value_parser = parse_transaction_by)]
     /// Transaction by
     transaction_by: Option<TransactionBy>,
@@ -332,6 +341,10 @@ impl Params {
                 .stuck_requested_timeout
                 .map(StuckRequestedTimeout::from_secs)
                 .unwrap_or(config.stuck_requested_timeout),
+            max_functions_per_tick: self
+                .max_functions_per_tick
+                .map(MaxFunctionsPerTick::from_count)
+                .unwrap_or(config.max_functions_per_tick),
             ssl_folder: self
                 .ssl_folder
                 .clone()
@@ -562,6 +575,7 @@ storage:
             request_timeout: Some(120),
             check_frequency: None,
             stuck_requested_timeout: None,
+            max_functions_per_tick: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,
@@ -622,6 +636,7 @@ storage:
             request_timeout: None,
             check_frequency: None,
             stuck_requested_timeout: None,
+            max_functions_per_tick: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,
@@ -667,6 +682,7 @@ storage:
             request_timeout: None,
             check_frequency: None,
             stuck_requested_timeout: None,
+            max_functions_per_tick: None,
             transaction_by: None,
             etc: None,
             msg: None,

@@ -31,7 +31,7 @@ async fn load_lfr_to_execute(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db).lfr().to_execute(&h.at).await?;
+    let rows = (&db).lfr().to_execute(&h.at, 50).await?;
     record("lfr::to_execute", &db, profile, t, rows.len(), seeded);
     Ok(())
 }
@@ -151,7 +151,7 @@ async fn load_pfr_to_dispatch(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db).pfr().to_dispatch().await?;
+    let rows = (&db).pfr().to_dispatch(50).await?;
     record("pfr::to_dispatch", &db, profile, t, rows.len(), seeded);
     Ok(())
 }

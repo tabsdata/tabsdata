@@ -119,7 +119,11 @@ async fn time_chain_queries(
     let at = AtTime::now();
     let exec_params = ListQueryParams::<Execution>::try_from(&ListParams::default())?;
 
-    let _ = timed!(out, "lfr::to_execute", (db).lfr().to_execute(&h.at).await?);
+    let _ = timed!(
+        out,
+        "lfr::to_execute",
+        (db).lfr().to_execute(&h.at, 50).await?
+    );
     let _ = timed!(out, "lfr::to_commit", (db).lfr().to_commit(&h.execs).await?);
     let _ = timed!(
         out,
@@ -143,7 +147,7 @@ async fn time_chain_queries(
         "lfr::downstream_one_hop",
         (db).lfr().downstream_one_hop(&h.producer_lfrs, &[]).await?
     );
-    let _ = timed!(out, "pfr::to_dispatch", (db).pfr().to_dispatch().await?);
+    let _ = timed!(out, "pfr::to_dispatch", (db).pfr().to_dispatch(50).await?);
     let _ = timed!(
         out,
         "pfr::dispatched_before",
@@ -753,7 +757,7 @@ async fn chain_plans_use_fenced_pointer_probe(db: TdPool) -> Result<(), TdError>
     analyze(&db, "after chain seed").await;
 
     let mut conn = db.acquire_for_read().await.unwrap();
-    for (name, sql) in &td_queries::chain_plan_sql(&h.at, &h.execs[0]) {
+    for (name, sql) in &td_queries::chain_plan_sql(&h.at, &h.execs[0], 50) {
         let plan = conn.explain(sql).await.expect("explain").join("\n");
         assert!(
             plan.contains("logical_table_data_version_pointers___logical_table_data_versio"),

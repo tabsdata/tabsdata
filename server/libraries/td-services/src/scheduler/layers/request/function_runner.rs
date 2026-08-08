@@ -14,6 +14,7 @@ use td_common::jwt::JwtConfig;
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
+use td_execution::SchedulerConfig;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunToExecute};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
@@ -29,9 +30,22 @@ use td_queries::{ChunkedQueries, LfrEntry, PfrEntry};
 use td_storage::Storage;
 use td_tower::extractors::{MutRef, Ref};
 use td_tower::post_commit::PostCommitActions;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
-/// LFR-rooted readiness fetch for the no-pre-mint dispatch path.
+/// `true` when a readiness fetch returned exactly `max_functions_per_tick`
+/// rows — the backlog may hold more, so the tick re-notifies the scheduler
+/// (post-commit) instead of leaving the remainder to the failover timer.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DispatchSaturated(pub bool);
+
+/// Seeds the tick's saturation flag; the capped readiness fetches raise it.
+#[instrument(name = "scheduler.dispatch_saturated_flag", skip_all, level = "debug")]
+pub async fn dispatch_saturated_flag() -> Result<DispatchSaturated, TdError> {
+    Ok(DispatchSaturated::default())
+}
+
+/// LFR-rooted readiness fetch for the no-pre-mint dispatch path. Oldest
+/// first, capped at `max_functions_per_tick`.
 #[instrument(
     name = "scheduler.fetch_lfr_to_dispatch",
     skip_all,
@@ -41,8 +55,11 @@ use tracing::{debug, instrument, warn};
 pub async fn fetch_lfr_to_dispatch(
     mut conn: MutRef<DomainConnection<Apiserver>>,
     at: Ref<AtTime>,
+    config: Ref<SchedulerConfig>,
+    mut saturated: MutRef<DispatchSaturated>,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
-    let result = conn.lfr().to_execute(&at).await?;
+    let limit = config.max_functions_per_tick.0;
+    let result = conn.lfr().to_execute(&at, limit).await?;
     if result.is_empty() {
         debug!("scheduler.dispatch_tick: 0 LFRs ready");
     } else {
@@ -52,13 +69,22 @@ pub async fn fetch_lfr_to_dispatch(
             result.len()
         );
     }
+    if result.len() as u64 >= limit {
+        info!(
+            limit,
+            "scheduler.dispatch_tick: LFR readiness fetch returned a full batch; \
+             the backlog continues on the next tick"
+        );
+        saturated.0 = true;
+    }
     Ok(result)
 }
 
 /// Replay-side readiness fetch: PFRs in `Requested` status with no
 /// `WorkerDB` row yet — what the replay endpoint left behind for the
 /// scheduler to pick up. Returns the PFRs directly; the next layer
-/// resolves LFRs + output PTDVs to assemble `MintedDispatch`.
+/// resolves LFRs + output PTDVs to assemble `MintedDispatch`. Oldest
+/// first, capped at `max_functions_per_tick`.
 #[instrument(
     name = "scheduler.fetch_pfrs_to_dispatch",
     skip_all,
@@ -67,8 +93,11 @@ pub async fn fetch_lfr_to_dispatch(
 )]
 pub async fn fetch_pfrs_to_dispatch(
     mut conn: MutRef<DomainConnection<Apiserver>>,
+    config: Ref<SchedulerConfig>,
+    mut saturated: MutRef<DispatchSaturated>,
 ) -> Result<Vec<PhysicalFunctionRunDB>, TdError> {
-    let result = conn.pfr().to_dispatch().await?;
+    let limit = config.max_functions_per_tick.0;
+    let result = conn.pfr().to_dispatch(limit).await?;
     if result.is_empty() {
         debug!("scheduler.dispatch_tick: 0 replay PFRs ready");
     } else {
@@ -77,6 +106,14 @@ pub async fn fetch_pfrs_to_dispatch(
             "scheduler.dispatch_tick: {} replay PFR(s) ready",
             result.len()
         );
+    }
+    if result.len() as u64 >= limit {
+        info!(
+            limit,
+            "scheduler.dispatch_tick: replay readiness fetch returned a full batch; \
+             the backlog continues on the next tick"
+        );
+        saturated.0 = true;
     }
     Ok(result)
 }

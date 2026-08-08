@@ -12,10 +12,11 @@ use crate::scheduler::layers::request::{
     create_locked_cron_trigger_workers_stop_request,
     create_locked_function_runner_workers_start_request,
     create_locked_stage_trigger_workers_start_request,
-    create_locked_stage_trigger_workers_stop_request, dispatch_at_time, enrich_minted_dispatch,
-    fail_stale_abandoned_attempts, fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch,
-    fetch_stale_dispatched_runs, lfr_ids_from_minted_dispatch, materialize_replay_dispatch,
-    pfr_ids_from_dispatched_workers, stop_worker_update, stuck_lfrs_from_stale,
+    create_locked_stage_trigger_workers_stop_request, dispatch_at_time, dispatch_saturated_flag,
+    enrich_minted_dispatch, fail_stale_abandoned_attempts, fetch_lfr_to_dispatch,
+    fetch_pfrs_to_dispatch, fetch_stale_dispatched_runs, lfr_ids_from_minted_dispatch,
+    materialize_replay_dispatch, notify_scheduler_if_saturated, pfr_ids_from_dispatched_workers,
+    stop_worker_update, stuck_lfrs_from_stale,
 };
 use ta_services::factory::service_factory;
 use td_bridge::BridgeProviderHandle;
@@ -56,6 +57,9 @@ fn service() {
         // temporal point so the dispatch is consistent even if operator
         // events arrive mid-tick.
         from_fn(dispatch_at_time),
+        // Seed the saturation flag; the capped function-runner readiness
+        // fetches raise it when they return a full batch.
+        from_fn(dispatch_saturated_flag),
         // Runs first so recovered LFRs re-dispatch in this same tick.
         auto_recover_stuck_function_runners(),
         // Request function runners that need to be started — initial
@@ -74,6 +78,9 @@ fn service() {
         stop_stage_trigger_runners(),
         // Request stage trigger runners that need to be started
         request_stage_trigger_runners(),
+        // A capped tick re-notifies the scheduler (post-commit) so the
+        // remaining backlog drains without waiting for the failover timer.
+        from_fn(notify_scheduler_if_saturated),
         from_fn(notify_dispatcher),
     )
 }
@@ -284,7 +291,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
     use td_error::TdError;
-    use td_execution::StuckRequestedTimeout;
+    use td_execution::{MaxFunctionsPerTick, StuckRequestedTimeout};
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionRequest;
@@ -317,6 +324,7 @@ mod tests {
             .await
             .assert_service::<(), ()>(&[
                 type_of_val(&dispatch_at_time),
+                type_of_val(&dispatch_saturated_flag),
                 // Auto-recover sweep
                 type_of_val(&fetch_stale_dispatched_runs),
                 type_of_val(&fail_stale_abandoned_attempts),
@@ -426,6 +434,7 @@ mod tests {
                 type_of_val(
                     &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
                 ),
+                type_of_val(&notify_scheduler_if_saturated),
                 type_of_val(&notify_dispatcher),
             ]);
         Ok(())
@@ -1548,6 +1557,134 @@ mod tests {
         assert_eq!(
             context.bridge.message_queue().locked_messages().await.len(),
             2
+        );
+        Ok(())
+    }
+
+    /// With `max_functions_per_tick` = 1, a tick dispatches only the oldest
+    /// ready run and re-notifies the scheduler post-commit; the backlog
+    /// drains across back-to-back ticks and the re-notify stops once a tick
+    /// comes in under the cap.
+    #[td_test::test(db)]
+    async fn test_dispatch_cap_oldest_first_and_self_notify(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&CollectionName::try_from("c_cap")?, &UserId::admin())
+            .await?;
+        let mut executions = Vec::new();
+        for (name, table) in [("function_1", "table_1"), ("function_2", "table_2")] {
+            let create = FunctionRegister::builder()
+                .try_name(name)?
+                .try_description("d")?
+                .bundle_id(BundleId::default())
+                .try_snippet("s")?
+                .decorator(Decorator::Publisher)
+                .dependencies(vec![])
+                .triggers(None)
+                .tables(vec![TableNameDto::try_from(table)?])
+                .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+                .reuse_frozen_tables(false)
+                .build()?;
+            db.scoped(p.id)
+                .seed()
+                .function(&collection, &create)
+                .await?;
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str(name)?)
+                        .build()?,
+                    ExecutionRequest::builder().name(None).build()?,
+                )
+                .in_project(p.id);
+            let execution = ExecuteFunctionService::with_defaults(db.clone())
+                .service()
+                .raw_oneshot(request)
+                .await?;
+            executions.push(execution);
+        }
+
+        let mut context = kubernetes_scheduler_context(&db);
+        context.scheduler_config = Arc::new(SchedulerConfig {
+            max_functions_per_tick: MaxFunctionsPerTick(1),
+            ..SchedulerConfig::default()
+        });
+        // Drain any notify permit stored by the execute calls above.
+        let _ = tokio::time::timeout(
+            Duration::from_millis(10),
+            context.scheduler_notify.notified_scheduler(),
+        )
+        .await;
+
+        // Tick 1: only the oldest ready run dispatches; the full batch
+        // stores a scheduler re-notify.
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+        assert_eq!(
+            context.bridge.message_queue().locked_messages().await.len(),
+            1
+        );
+        let pfrs_oldest: Vec<PhysicalFunctionRunDB> = db
+            .live()
+            .fetch_all::<PhysicalFunctionRunDB>(&(&executions[0].manual_trigger))
+            .await?;
+        assert_eq!(pfrs_oldest.len(), 1);
+        let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
+            .live()
+            .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
+            .await?;
+        assert!(pfrs_newest.is_empty());
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            context.scheduler_notify.notified_scheduler(),
+        )
+        .await
+        .expect("capped tick must re-notify the scheduler");
+
+        // Tick 2: the remaining run dispatches — still a full batch, so
+        // the re-notify fires again.
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+        assert_eq!(
+            context.bridge.message_queue().locked_messages().await.len(),
+            2
+        );
+        let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
+            .live()
+            .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
+            .await?;
+        assert_eq!(pfrs_newest.len(), 1);
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            context.scheduler_notify.notified_scheduler(),
+        )
+        .await
+        .expect("second full-batch tick must re-notify the scheduler");
+
+        // Tick 3: nothing ready — under the cap, no re-notify.
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+        assert_eq!(
+            context.bridge.message_queue().locked_messages().await.len(),
+            2
+        );
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(100),
+                context.scheduler_notify.notified_scheduler(),
+            )
+            .await
+            .is_err(),
+            "an under-cap tick must not re-notify the scheduler"
         );
         Ok(())
     }

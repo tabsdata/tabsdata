@@ -20,11 +20,11 @@ pub use cron_trigger::{
     create_locked_cron_trigger_workers_stop_request,
 };
 pub use function_runner::{
-    create_locked_function_runner_workers_start_request, enrich_minted_dispatch,
-    fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch, lfr_ids_from_minted_dispatch,
-    materialize_replay_dispatch, pfr_ids_from_dispatched_workers,
+    create_locked_function_runner_workers_start_request, dispatch_saturated_flag,
+    enrich_minted_dispatch, fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch,
+    lfr_ids_from_minted_dispatch, materialize_replay_dispatch, pfr_ids_from_dispatched_workers,
 };
-pub use notify::notify_scheduler;
+pub use notify::{notify_scheduler, notify_scheduler_if_saturated};
 pub use recover::{
     fail_stale_abandoned_attempts, fetch_stale_dispatched_runs, stuck_lfrs_from_stale,
 };

@@ -18,4 +18,5 @@ jwt:
 request_timeout: 60
 check_frequency: 60
 stuck_requested_timeout: 120
+max_functions_per_tick: 50
 orchestrator: kubernetes

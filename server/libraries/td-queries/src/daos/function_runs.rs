@@ -72,7 +72,7 @@ query_handle! {
 /// LFR pointer event log. Reach via [`LfrEntry::lfr`]:
 ///
 /// ```ignore
-/// conn.lfr().to_execute(&at).await?;
+/// conn.lfr().to_execute(&at, limit).await?;
 /// conn.lfr().to_commit(&execution_ids).await?;
 /// conn.lfr().for_dispatch(&fr_ids).await?;
 /// conn.lfr().pointers().at(&at).concrete(&lfr_id).await?;
@@ -85,7 +85,7 @@ pub struct Lfr<E> {
 /// Reach via [`PfrEntry::pfr`]:
 ///
 /// ```ignore
-/// conn.pfr().to_dispatch().await?;
+/// conn.pfr().to_dispatch(limit).await?;
 /// conn.pfr().in_flight_for(&exec_id, &fn_id).await?;
 /// ```
 pub struct Pfr<E> {
@@ -104,9 +104,14 @@ where
     /// LFR-rooted readiness: Pending / ReScheduled LFRs whose inputs are all
     /// bound to terminal-success producers. The dispatch tick mints FR + TDVs
     /// for each via the shared mint primitive (patch resolution happens at
-    /// mint time, not here).
-    pub async fn to_execute(self, at: &AtTime) -> Result<Vec<LogicalFunctionRunDB>, SqlError> {
-        let result: Vec<LogicalFunctionRunDB> = fetch_lfrs_to_execute_query(at)
+    /// mint time, not here). Oldest-triggered first, at most `limit` rows —
+    /// a fetch returning exactly `limit` means there may be more ready.
+    pub async fn to_execute(
+        self,
+        at: &AtTime,
+        limit: u64,
+    ) -> Result<Vec<LogicalFunctionRunDB>, SqlError> {
+        let result: Vec<LogicalFunctionRunDB> = fetch_lfrs_to_execute_query(at, limit)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -259,9 +264,10 @@ where
     /// yet. The initial dispatch path mints PFR + WorkerDB in one tx
     /// (so initial PFRs never match this filter); the replay endpoint
     /// mints just the PFR and lets the next dispatch tick wrap it —
-    /// that's the only producer today.
-    pub async fn to_dispatch(self) -> Result<Vec<PhysicalFunctionRunDB>, SqlError> {
-        let result: Vec<PhysicalFunctionRunDB> = fetch_pfrs_to_dispatch_query()
+    /// that's the only producer today. Oldest-triggered first, at most
+    /// `limit` rows.
+    pub async fn to_dispatch(self, limit: u64) -> Result<Vec<PhysicalFunctionRunDB>, SqlError> {
+        let result: Vec<PhysicalFunctionRunDB> = fetch_pfrs_to_dispatch_query(limit)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -567,7 +573,7 @@ pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> sea_qu
 /// LFR-rooted readiness: returns Pending/ReScheduled LFRs whose inputs are
 /// all bound to terminal-success producers. Patch-agnostic — patch
 /// resolution happens at mint time, not in the readiness predicate.
-pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime) -> sea_query::SelectStatement {
+pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> sea_query::SelectStatement {
     let mut pending_req = build_chain(ChainParams { at_bound: Some(at) });
     pending_req
         .column((
@@ -615,20 +621,25 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime) -> sea_query::SelectState
                 LogicalFunctionRunDBIden::Table,
                 LogicalFunctionRunDBIden::TriggeredOn,
             ),
-            Order::Desc,
+            Order::Asc,
         )
+        .limit(limit)
         .take()
 }
 
 /// The three chain statements (readiness / blocked / commit), for plan
 /// inspection in the load suite.
 #[cfg(all(postgres, feature = "td-test"))]
-pub fn chain_plan_sql(at: &AtTime, execution_id: &ExecutionId) -> [(&'static str, String); 3] {
+pub fn chain_plan_sql(
+    at: &AtTime,
+    execution_id: &ExecutionId,
+    limit: u64,
+) -> [(&'static str, String); 3] {
     use sea_query::PostgresQueryBuilder;
     [
         (
             "lfrs_to_execute",
-            fetch_lfrs_to_execute_query(at).to_string(PostgresQueryBuilder),
+            fetch_lfrs_to_execute_query(at, limit).to_string(PostgresQueryBuilder),
         ),
         (
             "blocked_ids",
@@ -927,7 +938,7 @@ pub(crate) fn fetch_functions_with_bundle_base_path_query(
 /// Replay-side dispatch readiness. `physical_function_runs` rows whose
 /// status is `Requested` and that are not yet wrapped in a worker
 /// message. The `LEFT JOIN … IS NULL` is the no-WorkerDB predicate.
-fn fetch_pfrs_to_dispatch_query() -> sea_query::SelectStatement {
+fn fetch_pfrs_to_dispatch_query(limit: u64) -> sea_query::SelectStatement {
     let mut stmt = Query::select();
     for col in <PhysicalFunctionRunDB as ta_objects::Dao>::columns() {
         stmt.column((PhysicalFunctionRunDBIden::Table, col));
@@ -955,7 +966,8 @@ fn fetch_pfrs_to_dispatch_query() -> sea_query::SelectStatement {
                 PhysicalFunctionRunDBIden::TriggeredOn,
             ),
             Order::Asc,
-        );
+        )
+        .limit(limit);
     stmt.take()
 }
 
@@ -1263,7 +1275,7 @@ mod tests {
 
     #[test]
     fn test_fetch_lfrs_to_execute_query_sql_logical_chain() {
-        let sql = fetch_lfrs_to_execute_query(&AtTime::now()).to_string(SqliteQueryBuilder);
+        let sql = fetch_lfrs_to_execute_query(&AtTime::now(), 50).to_string(SqliteQueryBuilder);
         assert!(
             sql.contains(r#"FROM "logical_function_runs""#),
             "outer scans logical_function_runs: {sql}"
@@ -1296,11 +1308,15 @@ mod tests {
             sql.contains(r#""set_on" <="#),
             "must bound the latest-pointer subquery by `at`: {sql}"
         );
+        assert!(
+            sql.contains(r#"ORDER BY "logical_function_runs"."triggered_on" ASC LIMIT 50"#),
+            "must dispatch oldest-triggered first, capped: {sql}"
+        );
     }
 
     #[test]
     fn test_to_dispatch_query_sql() {
-        let sql = fetch_pfrs_to_dispatch_query().to_string(SqliteQueryBuilder);
+        let sql = fetch_pfrs_to_dispatch_query(50).to_string(SqliteQueryBuilder);
         assert!(
             sql.contains(r#"FROM "physical_function_runs""#),
             "scans physical_function_runs: {sql}"
@@ -1316,6 +1332,10 @@ mod tests {
         assert!(
             sql.contains(r#""status" = 'RR'"#),
             "filters on Requested: {sql}"
+        );
+        assert!(
+            sql.contains(r#"ORDER BY "physical_function_runs"."triggered_on" ASC LIMIT 50"#),
+            "must dispatch oldest-triggered first, capped: {sql}"
         );
     }
 
