@@ -1711,7 +1711,11 @@ run_task = [
         "__os__license_check_rs",
         "__os__license_report_rs",
         "__km__license_check_rs",
-        "__km__license_report_rs"
+        "__km__license_report_rs",
+        "__td__mark_licensed_rs"
+    ], condition = { env_not_set = ["TD_RS_LICENSED"] } },
+    { name = [
+        "__td__report_skipped_license_rs"
     ] }
 ]
 
@@ -1722,7 +1726,11 @@ description = "Task 'license' for Go projects"
 run_task = [
     { name = [
         "__km__license_check_go",
-        "__km__license_report_go"
+        "__km__license_report_go",
+        "__td__mark_licensed_go"
+    ], condition = { env_not_set = ["TD_GO_LICENSED"] } },
+    { name = [
+        "__td__report_skipped_license_go"
     ] }
 ]
 
@@ -1733,7 +1741,11 @@ description = "Task 'license' for Python projects"
 run_task = [
     { name = [
         "__os__license_check_py",
-        "__os__license_report_py"
+        "__os__license_report_py",
+        "__td__mark_licensed_py"
+    ], condition = { env_not_set = ["TD_PY_LICENSED"] } },
+    { name = [
+        "__td__report_skipped_license_py"
     ] }
 ]
 
@@ -2549,5 +2561,92 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     warn "🪣 Python packages already settled in this run. Skipping uninstall: unnecessary."
+    '''
+]
+
+[tasks.__td__mark_licensed_rs]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+description = "Record that the Rust licenses are generated for this run"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_RS_LICENSED true
+    info "🛖 Rust licenses generated. Further generations are unnecessary in this run."
+    '''
+]
+
+[tasks.__td__report_skipped_license_rs]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+description = "Report that a Rust licenses generation was skipped as unnecessary"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "🪣 Rust licenses already generated in this run. Skipping generation: unnecessary."
+    '''
+]
+
+[tasks.__td__mark_licensed_go]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+description = "Record that the Go licenses are generated for this run"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_GO_LICENSED true
+    info "🛖 Go licenses generated. Further generations are unnecessary in this run."
+    '''
+]
+
+[tasks.__td__report_skipped_license_go]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+description = "Report that a Go licenses generation was skipped as unnecessary"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "🪣 Go licenses already generated in this run. Skipping generation: unnecessary."
+    '''
+]
+
+[tasks.__td__mark_licensed_py]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+description = "Record that the Python licenses are generated for this run"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_PY_LICENSED true
+    info "🛖 Python licenses generated. Further generations are unnecessary in this run."
+    '''
+]
+
+[tasks.__td__report_skipped_license_py]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+description = "Report that a Python licenses generation was skipped as unnecessary"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "🪣 Python licenses already generated in this run. Skipping generation: unnecessary."
     '''
 ]
