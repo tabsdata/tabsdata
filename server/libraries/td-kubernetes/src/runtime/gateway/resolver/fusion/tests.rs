@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::base::constants::{REQUIREMENTS_TD_ASSET, TABSDATA_REQUIREMENTS_LOCK_ASSET};
+use crate::runtime::instance::manifest::Manifest;
 
 fn configs(entries: &[(&str, &str)]) -> RenderedConfigmap {
     entries
@@ -302,4 +303,34 @@ fn compare_family_still_rejects_an_unknown_extra_asset() {
         error,
         ResolverError::InitializationExtraFile { .. }
     ));
+}
+
+#[test]
+fn stage_assets_files_stages_the_foreign_asset_absent_from_the_kprofile() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let init = temp.path().join("init");
+    let stage = temp.path().join("stage");
+    write_family(
+        &init,
+        "assets",
+        &[
+            ("venvloader.sh", "canonical"),
+            (TABSDATA_REQUIREMENTS_LOCK_ASSET, "polars==1.0.0"),
+        ],
+    );
+    let profile = Profile {
+        pods: configs(&[]),
+        assets: configs(&[("venvloader.sh", "canonical")]),
+        configs: configs(&[]),
+        manifest: Manifest::initial_install("0.0.0", chrono::Utc::now(), Vec::new()),
+    };
+    stage_assets_files(&profile, &init, &stage).expect("staging failed");
+
+    let staged = stage.join("assets").join(TABSDATA_REQUIREMENTS_LOCK_ASSET);
+    assert!(staged.is_file(), "the foreign asset was not staged");
+    assert_eq!(
+        std::fs::read_to_string(&staged).expect("read"),
+        "polars==1.0.0"
+    );
+    assert!(stage.join("assets").join("venvloader.sh").is_file());
 }

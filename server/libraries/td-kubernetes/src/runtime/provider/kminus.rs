@@ -26,8 +26,8 @@ use crate::base::constants::{
     DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, ENV_UV_PYTHON_INSTALL_DIR, FOLDER_CLUSTER,
     FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_FN,
     FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV,
-    IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
-    LIBEXEC_TABSDATA, LogLevel, UvMode, VENVS_IMAGE, YAML_NULL,
+    FOREIGN_ASSETS, IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, UvMode, VENVS_IMAGE, YAML_NULL,
 };
 use td_python::tabsdata::tabsdata_version;
 
@@ -63,7 +63,7 @@ use crate::runtime::instance::ports::{
 };
 use crate::runtime::instance::profile::{
     Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
-    resolve_kprofile_path,
+    resolve_foreign_path, resolve_kprofile_path,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
@@ -663,6 +663,20 @@ impl KminusProvider {
                     )
                 })?;
             }
+        }
+        let assets_path = staging_profile.join(KPROFILE_ASSETS_FAMILY.folder);
+        for foreign in FOREIGN_ASSETS {
+            let source = resolve_foreign_path(*foreign, false)?;
+            let content = fs::read_to_string(&source).map_err(|error| {
+                ProviderError::StagingReadFailed(source.display().to_string(), error.to_string())
+            })?;
+            let file_path = assets_path.join(foreign.asset());
+            fs::write(&file_path, content.as_bytes()).map_err(|error| {
+                ProviderError::StagingWriteFailed(
+                    file_path.display().to_string(),
+                    error.to_string(),
+                )
+            })?;
         }
         let manifest_path = staging_profile.join(MANIFEST_FILE);
         fs::write(&manifest_path, rendered.manifest.as_bytes()).map_err(|error| {

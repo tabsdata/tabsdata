@@ -265,6 +265,16 @@ fn stage_assets_files(profile: &Profile, init: &Path, stage: &Path) -> Result<()
         }
         write_staged(&stage_assets.join(file), content)?;
     }
+    for foreign in FOREIGN_ASSETS {
+        let init_file = init_assets.join(foreign.asset());
+        let init_content = fs::read_to_string(&init_file).map_err(|cause| {
+            ResolverError::InitializationReadFailed {
+                path: init_file.display().to_string(),
+                cause: cause.to_string(),
+            }
+        })?;
+        write_staged(&stage_assets.join(foreign.asset()), &init_content)?;
+    }
     Ok(())
 }
 
