@@ -186,6 +186,7 @@ pub fn run() {
                     check_frequency: config.check_frequency,
                     stuck_requested_timeout: config.stuck_requested_timeout,
                     max_functions_per_tick: config.max_functions_per_tick,
+                    tick_timeout: config.tick_timeout,
                 }),
             );
             let function_request_server = FunctionRequester::new(&scheduler_context).await;

@@ -4,7 +4,8 @@
 
 pub use execution::{ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan};
 pub use scheduler_config::{
-    MaxFunctionsPerTick, SchedulerCheckFrequency, SchedulerConfig, StuckRequestedTimeout,
+    MaxFunctionsPerTick, SchedulerCheckFrequency, SchedulerConfig, SchedulerTickTimeout,
+    StuckRequestedTimeout,
 };
 pub use scheduler_notify::SchedulerNotify;
 pub use te_execution::{EXECUTION_GRAPH_OPTIONS, transaction::TransactionBy};

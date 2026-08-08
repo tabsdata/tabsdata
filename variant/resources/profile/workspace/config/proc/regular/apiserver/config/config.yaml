@@ -21,6 +21,7 @@ request_timeout: 60
 check_frequency: 60
 stuck_requested_timeout: 120
 max_functions_per_tick: 50
+tick_timeout: 10
 orchestrator: supervisor
 # The server td_dbmanager boots on this entry's port; ${embedded} = the
 # generated credentials persisted next to the data dir.

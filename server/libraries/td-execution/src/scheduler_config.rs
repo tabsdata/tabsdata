@@ -10,6 +10,7 @@ pub struct SchedulerConfig {
     pub check_frequency: SchedulerCheckFrequency,
     pub stuck_requested_timeout: StuckRequestedTimeout,
     pub max_functions_per_tick: MaxFunctionsPerTick,
+    pub tick_timeout: SchedulerTickTimeout,
 }
 
 /// Failover polling interval for the scheduler loops. Serdes as whole
@@ -86,6 +87,44 @@ impl<'de> Deserialize<'de> for StuckRequestedTimeout {
     }
 }
 
+/// Budget for one scheduler tick (the request or dispatch service call). On
+/// expiry the tick is cancelled and rolled back — external side effects are
+/// post-commit, so a cancelled tick leaves nothing behind and the next tick
+/// retries. Serdes as whole seconds; `<= 0` falls back to the default.
+#[derive(Debug, Clone, Copy)]
+pub struct SchedulerTickTimeout(pub Duration);
+
+impl Default for SchedulerTickTimeout {
+    fn default() -> Self {
+        Self(Self::DEFAULT)
+    }
+}
+
+impl SchedulerTickTimeout {
+    pub const DEFAULT: Duration = Duration::from_secs(10);
+
+    pub fn from_secs(secs: i64) -> Self {
+        u64::try_from(secs)
+            .ok()
+            .filter(|s| *s > 0)
+            .map(Duration::from_secs)
+            .map(Self)
+            .unwrap_or_default()
+    }
+}
+
+impl Serialize for SchedulerTickTimeout {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (self.0.as_secs() as i64).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SchedulerTickTimeout {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::from_secs(i64::deserialize(deserializer)?))
+    }
+}
+
 /// Upper bound on function runs dispatched per scheduler tick — bounds both
 /// the tick transaction's size and the post-commit worker-message burst. A
 /// tick that hits the cap re-notifies the scheduler, so the backlog drains in
@@ -141,6 +180,22 @@ mod tests {
         assert_eq!(
             SchedulerCheckFrequency::from_secs(-1).0,
             SchedulerCheckFrequency::DEFAULT
+        );
+    }
+
+    #[test]
+    fn test_scheduler_tick_timeout_from_secs() {
+        assert_eq!(
+            SchedulerTickTimeout::from_secs(30).0,
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            SchedulerTickTimeout::from_secs(0).0,
+            SchedulerTickTimeout::DEFAULT
+        );
+        assert_eq!(
+            SchedulerTickTimeout::from_secs(-1).0,
+            SchedulerTickTimeout::DEFAULT
         );
     }
 

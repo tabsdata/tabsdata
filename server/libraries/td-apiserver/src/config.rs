@@ -18,7 +18,8 @@ use td_common::jwt::JwtConfig;
 use td_database::config::DatabaseComponents;
 use td_error::{TdError, td_error};
 use td_execution::{
-    MaxFunctionsPerTick, SchedulerCheckFrequency, StuckRequestedTimeout, TransactionBy,
+    MaxFunctionsPerTick, SchedulerCheckFrequency, SchedulerTickTimeout, StuckRequestedTimeout,
+    TransactionBy,
 };
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
@@ -80,6 +81,8 @@ pub struct Config {
     pub stuck_requested_timeout: StuckRequestedTimeout,
     #[serde(default)]
     pub max_functions_per_tick: MaxFunctionsPerTick,
+    #[serde(default)]
+    pub tick_timeout: SchedulerTickTimeout,
     pub ssl_folder: PathBuf,
     #[serde(default)]
     pub database: DatabaseComponents,
@@ -183,6 +186,7 @@ impl Default for Config {
             check_frequency: SchedulerCheckFrequency::default(),
             stuck_requested_timeout: StuckRequestedTimeout::default(),
             max_functions_per_tick: MaxFunctionsPerTick::default(),
+            tick_timeout: SchedulerTickTimeout::default(),
             ssl_folder: PathBuf::default(),
             database: DatabaseComponents::default(),
             storage: Some(StorageConfig::default()),
@@ -271,6 +275,10 @@ pub struct Params {
     /// Maximum function runs dispatched per scheduler tick; `<= 0` falls
     /// back to the default
     max_functions_per_tick: Option<i64>,
+    #[clap(long)]
+    /// Seconds a scheduler tick may run before it is cancelled and retried;
+    /// `<= 0` falls back to the default
+    tick_timeout: Option<i64>,
     #[clap(long, value_parser = parse_transaction_by)]
     /// Transaction by
     transaction_by: Option<TransactionBy>,
@@ -345,6 +353,10 @@ impl Params {
                 .max_functions_per_tick
                 .map(MaxFunctionsPerTick::from_count)
                 .unwrap_or(config.max_functions_per_tick),
+            tick_timeout: self
+                .tick_timeout
+                .map(SchedulerTickTimeout::from_secs)
+                .unwrap_or(config.tick_timeout),
             ssl_folder: self
                 .ssl_folder
                 .clone()
@@ -576,6 +588,7 @@ storage:
             check_frequency: None,
             stuck_requested_timeout: None,
             max_functions_per_tick: None,
+            tick_timeout: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,
@@ -637,6 +650,7 @@ storage:
             check_frequency: None,
             stuck_requested_timeout: None,
             max_functions_per_tick: None,
+            tick_timeout: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,
@@ -683,6 +697,7 @@ storage:
             check_frequency: None,
             stuck_requested_timeout: None,
             max_functions_per_tick: None,
+            tick_timeout: None,
             transaction_by: None,
             etc: None,
             msg: None,
