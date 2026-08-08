@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 Tabsdata Connector Common (File) Python Package
 
 Warning: this is not a standalone package. It is an `extra` of the Tabsdata package.

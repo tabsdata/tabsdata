@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 configs/apiserver.storage.yaml:
   storage.mounts:
     help: >

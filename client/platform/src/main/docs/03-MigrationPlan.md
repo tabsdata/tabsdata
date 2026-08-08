@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # T2 Function Runner Migration Plan
 
 **Source (read-only — never modified):**

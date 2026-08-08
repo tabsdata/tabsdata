@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # LLM authoring guide — `tabsdatak`
 
 This doc is written for **an LLM generating user code with

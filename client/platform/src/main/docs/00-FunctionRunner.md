@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # T2 - Function Runner
 
 Function runners perform multiple tasks when running a publisher, subscriber,

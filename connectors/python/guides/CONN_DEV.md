@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # Connector cheat sheet
 
 One-page reference for authoring a `tabsdata-conn-<name>` package.

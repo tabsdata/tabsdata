@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # Agent guide — tabsdatak connectors
 
 Read this before authoring code that uses the `tabsdatak.api` surface.

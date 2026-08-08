@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # td-queries
 
 Type-safe, composable query abstractions for the Tabsdata database layer.

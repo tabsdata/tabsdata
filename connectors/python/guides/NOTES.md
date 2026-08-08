@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # Connections come from the collection
 
 There is no by-name `connectionRef` resolution any more. A flow

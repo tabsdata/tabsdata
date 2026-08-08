@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # T2 - Publisher as Init Containers
 
 The publisher tasks from `00-FunctionRunner.md` run as a chain of init

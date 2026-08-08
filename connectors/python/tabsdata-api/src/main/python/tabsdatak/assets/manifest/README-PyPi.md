@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 Tabsdata API Python Package
 
 Warning: this is not a standalone package. It is an `extra` of the Tabsdata package.

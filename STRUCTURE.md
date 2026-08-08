@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # tabsdata Package Structure
 
 ## User-facing API

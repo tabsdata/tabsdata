@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # Command Basics
 
 All Tabsdata commands used directly from pod YAMLs must conform to the following 

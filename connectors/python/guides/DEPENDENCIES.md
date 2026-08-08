@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # Package dependency conventions
 
 The tabsdata Python packages follow a strict layering. A package may

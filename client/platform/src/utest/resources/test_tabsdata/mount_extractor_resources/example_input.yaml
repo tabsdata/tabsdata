@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 addresses:
  - 127.0.0.1:2457
 jwt_secret: secret

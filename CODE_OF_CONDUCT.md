@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 ![TabsData](/assets/images/tabsdata.png)
 
 # Contributor Covenant Code of Conduct

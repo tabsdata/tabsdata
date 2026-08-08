@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # tabsdata-api
 
 > **Backward-compatibility policy.** This package is **shared** across

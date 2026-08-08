@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # tabsdata-conn-common
 
 > **Backward-compatibility policy.** This package is **shared** by

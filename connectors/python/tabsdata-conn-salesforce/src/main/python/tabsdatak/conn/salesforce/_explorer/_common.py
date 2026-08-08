@@ -2,11 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-#
-# Copyright (c) 2026 TabsData, Inc.
-#
-
-
 from simple_salesforce import Salesforce
 
 import tabsdatak._api as _api

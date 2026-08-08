@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # `tdk` CLI — proposed reference
 
 Proposed command surface after the intuitiveness pass:

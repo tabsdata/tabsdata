@@ -2,10 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-#
-# Copyright (c) 2026 TabsData, Inc.
-#
-
 """Salesforce Reports metadata explorer."""
 
 import fnmatch

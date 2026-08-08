@@ -1,3 +1,7 @@
+<!--
+Copyright 2026 Tabsdata Inc.
+-->
+
 # tabsdatak connectors
 
 A set of Python packages under `connectors/python/tabsdata-*` in

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#  Copyright 2026. Tabsdata Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 """
 tdx-apidocgen — Generate structured JSON API information using Griffe.
