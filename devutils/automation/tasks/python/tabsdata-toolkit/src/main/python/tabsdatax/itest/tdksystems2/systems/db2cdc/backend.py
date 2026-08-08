@@ -357,6 +357,76 @@ class Db2Cdc(Db2):
             raise TdxError("db2cdc domain has no SYS_CONTAINER back-reference")
         return container, self._schema(meta.get("DB", ""))
 
+    # ---- domain teardown -------------------------------------------------
+
+    def destroy_domain(self, domain_meta: dict[str, str]) -> None:
+        """Deregister this domain's tables from ASN capture, then drop its schema.
+
+        The inherited teardown only drops the schema, which is not enough here:
+        a registration lives in the SHARED ``ASN`` schema, not in the domain's,
+        so dropping the domain leaves its ``ASN.IBMSNAP_REGISTER`` /
+        ``IBMSNAP_PRUNCNTL`` rows, ``ASN.LM_TD_T__<T>`` triggers and
+        ``ASN.TD_T__<T>`` CD tables behind — still ``STATE='A'``, pointing at a
+        schema that no longer exists.
+
+        That is not merely untidy. A CD table is named ``ASN.TD_T__<TABLE>``
+        with NO domain qualifier, so the orphans collide with the NEXT db2cdc
+        domain carrying the same model, whose create then fails before it starts:
+
+            ASN1705E The change data "table", "ASN.TD_T__DEPARTMENTS"
+                     already exists in the server.
+
+        Deregistering first is what keeps the system reusable. It has to happen
+        BEFORE the schema goes: :meth:`deregister_table` sends CAPSTOP for
+        ``schema.table`` and clears the source table's ``DATA CAPTURE`` flag,
+        neither of which is possible once the table is gone.
+
+        Best-effort per table — a teardown must not strand the schema because
+        one registration was already half-removed.
+        """
+        try:
+            container, schema = self._container_and_schema(domain_meta)
+        except TdxError:
+            # An older descriptor with no back-reference: nothing to deregister,
+            # and the schema drop below does not need the container.
+            super().destroy_domain(domain_meta)
+            return
+
+        tables = self._registered_tables(container, schema)
+        if tables:
+            print(f">>> CDC: deregistering {len(tables)} table(s) from ASN capture …")
+            for table in tables:
+                try:
+                    self.deregister_table(domain_meta, table)
+                except TdxError as exc:  # noqa: PERF203 -- per-table isolation
+                    print(
+                        f"    WARNING: {schema}.{table} not fully "
+                        f"deregistered: {exc}"
+                    )
+        super().destroy_domain(domain_meta)
+
+    def _registered_tables(self, container: str, schema: str) -> list[str]:
+        """The tables ASN still holds a registration for under `schema`.
+
+        Driven off ``ASN.IBMSNAP_REGISTER`` rather than off ``syscat.tables``,
+        because it is the REGISTRATION that blocks the next create and it can
+        outlive its source table — a table dropped by hand leaves a row here,
+        and that row still owns the CD table name.
+        """
+        out = self._run(
+            container,
+            f"db2 connect to {_XP_DB} >/dev/null 2>&1\n"
+            f'db2 -x "select source_table from {_ASN}.ibmsnap_register '
+            f"where source_owner = '{schema}'\"\n"
+            f"db2 terminate >/dev/null 2>&1\n",
+            ignore_failure=True,
+        )
+        return [
+            line.strip()
+            for line in out.splitlines()
+            if line.strip() and not line.strip().startswith("DB2")
+        ]
+
     # ---- model registration ---------------------------------------------
 
     def after_install_schema(self, meta: dict[str, str], model: str) -> None:
