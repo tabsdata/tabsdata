@@ -9,8 +9,8 @@ The plugin delegates the heavy lifting to ``_impl``; here we
 fault-inject into the impl to verify the plugin maps every
 expected exception class to the right DATABRICKS_* error code.
 
-End-to-end coverage against a real Databricks workspace lives in
-``src/itest/python/testi_tabsdatak/conn/databricks``.
+End-to-end coverage against a real Databricks workspace lives in the
+Databricks integration suite.
 """
 
 from __future__ import annotations

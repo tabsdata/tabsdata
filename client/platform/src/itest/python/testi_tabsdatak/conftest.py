@@ -8,6 +8,9 @@ import logging
 import os
 import sys
 
+import pytest
+from xdist.workermanage import WorkerController
+
 from testi_tabsdatak.bootest import check_assets, enrich_sys_path
 
 logger = logging.getLogger(__name__)
@@ -42,3 +45,23 @@ def pytest_addoption(parser):
 def pytest_generate_tests(metafunc):
     if "size" in metafunc.fixturenames:
         metafunc.parametrize("size", [metafunc.config.getoption("performance_size")])
+
+
+def clean_python_virtual_environments(): ...
+
+
+def setup_temp_folder(config: pytest.Config) -> None:
+    from tabsdatak.common._temps import tabsdata_temp_folder
+
+    if getattr(config.option, "basetemp", None):
+        return
+    config.option.basetemp = tabsdata_temp_folder()
+
+
+def setup_temp_folder_node(node: WorkerController) -> None:
+    from tabsdatak.common._temps import tabsdata_temp_folder
+
+    if not getattr(node.config.option, "basetemp", None):
+        base_temp = tabsdata_temp_folder()
+        worker_temp = os.path.join(base_temp, f"pyw_{node.workerinput['workerid']}")
+        node.config.option.basetemp = worker_temp

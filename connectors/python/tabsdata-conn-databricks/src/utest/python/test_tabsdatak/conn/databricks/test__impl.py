@@ -5,8 +5,8 @@
 """Unit tests for the Databricks impl -- the pure-Python helpers
 that don't need the SDK / SQL connector libraries at module level.
 
-End-to-end coverage against a real Databricks workspace lives in
-``src/itest/python/testi_tabsdatak/conn/databricks``.
+End-to-end coverage against a real Databricks workspace lives in the
+Databricks integration suite.
 """
 
 from __future__ import annotations
