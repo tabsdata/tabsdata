@@ -89,6 +89,7 @@
 //! scalar list element; a list of maps whose entries' first key differs; a list
 //! of maps with a duplicated first key/value.
 
+pub(crate) mod derived;
 pub mod fusion;
 mod kind;
 mod placeholder;

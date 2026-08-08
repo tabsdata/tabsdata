@@ -57,23 +57,78 @@ pub fn resolved_schema(
     schema_of(component_entry(components, component)?, component)
 }
 
-/// The identity a component's serving connection logs in as: the entry's
-/// explicit `username` (else the schema-named owner role) and its resolved
-/// password — required, so a missing one is a config error at resolution, not
-/// a failed login later.
+/// [`resolved_schema`] for a component identified by key alone, for callers
+/// reading a config whose components are not linked into their binary. The
+/// static default is only reachable on backends carrying no database name.
+pub fn resolved_schema_of(
+    components: &DatabaseComponents,
+    key: &str,
+    default_schema: &str,
+) -> Result<String, DbError> {
+    let entry = components
+        .get(key)
+        .ok_or_else(|| DbError::MissingComponentEntry(key.to_owned()))?;
+    entry.schema(key, default_schema)
+}
+
+/// The role a component's serving connection logs in as: the entry's explicit
+/// `username`, else the owner role its schema is named after.
+fn username_of(username: Option<&str>, schema: &str) -> Result<String, DbError> {
+    match username {
+        Some(EMBEDDED_CREDENTIAL) => Err(DbError::EmbeddedUsernameNotAllowed),
+        Some(username) => Ok(username.to_owned()),
+        None => Ok(schema.to_owned()),
+    }
+}
+
+/// [`username_of`], resolving the component's entry and schema from the map.
+pub fn resolved_username(
+    components: &DatabaseComponents,
+    component: &dyn SchemaComponent,
+) -> Result<String, DbError> {
+    let entry = component_entry(components, component)?;
+    let schema = schema_of(entry, component)?;
+    username_of(entry_username(&entry.conn), &schema)
+}
+
+/// [`resolved_username`] for a component identified by key alone — see
+/// [`resolved_schema_of`].
+pub fn resolved_username_of(
+    components: &DatabaseComponents,
+    key: &str,
+    default_schema: &str,
+) -> Result<String, DbError> {
+    let entry = components
+        .get(key)
+        .ok_or_else(|| DbError::MissingComponentEntry(key.to_owned()))?;
+    let schema = resolved_schema_of(components, key, default_schema)?;
+    username_of(entry_username(&entry.conn), &schema)
+}
+
+/// The identity a component's serving connection logs in as: its
+/// [`username_of`] and its resolved password — required, so a missing one is a
+/// config error at resolution, not a failed login later.
 fn serving_credentials(
     username: Option<&str>,
     password: Option<&str>,
     schema: &str,
 ) -> Result<(String, String), DbError> {
-    let username = match username {
-        Some(EMBEDDED_CREDENTIAL) => return Err(DbError::EmbeddedUsernameNotAllowed),
-        Some(username) => username.to_owned(),
-        None => schema.to_owned(),
-    };
+    let username = username_of(username, schema)?;
     let password = resolve_password(password, EmbeddedPassword::Owner { schema })?
         .ok_or(DbError::MissingCredentials)?;
     Ok((username, password))
+}
+
+/// The entry's configured username, from the backends that authenticate.
+fn entry_username(conn: &BackendConfig) -> Option<&str> {
+    match conn {
+        #[cfg(sqlite)]
+        BackendConfig::Sqlite(_) => None,
+        #[cfg(postgres)]
+        BackendConfig::Postgres(c) => c.username.as_deref(),
+        #[cfg(mysql)]
+        BackendConfig::MySql(c) => c.username.as_deref(),
+    }
 }
 
 /// The entry's configured password, from the backends that authenticate.

@@ -15,6 +15,7 @@ const DOCUMENT_RENDERER: &str = "tdk_yaml";
 
 pub(crate) struct ReportDocument<'a> {
     pub title: &'a str,
+    pub subtitle: Option<&'a str>,
     pub content: &'a str,
 }
 
@@ -25,6 +26,7 @@ pub(crate) fn render_documents(documents: &[ReportDocument]) -> CommandResult {
             .iter()
             .map(|document| json!({
                 "title": document.title,
+                "subtitle": document.subtitle,
                 "content": document.content,
             }))
             .collect::<Vec<_>>()

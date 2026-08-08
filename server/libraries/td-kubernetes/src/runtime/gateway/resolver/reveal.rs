@@ -19,7 +19,8 @@ pub fn reveal(
     template: &str,
     configmap: &str,
     schema: &Schema,
-    values: bool,
+    with_secrets: bool,
+    with_protected: bool,
     secret_values: &HashMap<String, String>,
 ) -> Result<String, ResolverError> {
     let template_value: Value = parse(template)?;
@@ -33,7 +34,8 @@ pub fn reveal(
         &mut path,
         &placeholders,
         schema,
-        values,
+        with_secrets,
+        with_protected,
         secret_values,
     )?;
 
@@ -168,7 +170,8 @@ fn transform_node(
     path: &mut Vec<String>,
     placeholders: &HashMap<String, TemplateEntry>,
     schema: &Schema,
-    values: bool,
+    with_secrets: bool,
+    with_protected: bool,
     secret_values: &HashMap<String, String>,
 ) -> Result<(), ResolverError> {
     match node {
@@ -177,7 +180,15 @@ fn transform_node(
             for key in keys {
                 path.push(mapping_key(&key));
                 if let Some(child) = map.get_mut(&key) {
-                    transform_node(child, path, placeholders, schema, values, secret_values)?;
+                    transform_node(
+                        child,
+                        path,
+                        placeholders,
+                        schema,
+                        with_secrets,
+                        with_protected,
+                        secret_values,
+                    )?;
                 }
                 path.pop();
             }
@@ -187,12 +198,28 @@ fn transform_node(
             for (index, item) in items.iter_mut().enumerate() {
                 let segment = sequence_segment(item, index);
                 path.push(segment);
-                transform_node(item, path, placeholders, schema, values, secret_values)?;
+                transform_node(
+                    item,
+                    path,
+                    placeholders,
+                    schema,
+                    with_secrets,
+                    with_protected,
+                    secret_values,
+                )?;
                 path.pop();
             }
             Ok(())
         }
-        scalar => transform_scalar(scalar, path, placeholders, schema, values, secret_values),
+        scalar => transform_scalar(
+            scalar,
+            path,
+            placeholders,
+            schema,
+            with_secrets,
+            with_protected,
+            secret_values,
+        ),
     }
 }
 
@@ -201,7 +228,8 @@ fn transform_scalar(
     path: &[String],
     placeholders: &HashMap<String, TemplateEntry>,
     schema: &Schema,
-    values: bool,
+    with_secrets: bool,
+    with_protected: bool,
     secret_values: &HashMap<String, String>,
 ) -> Result<(), ResolverError> {
     let kind = classify(path, placeholders, schema);
@@ -211,7 +239,7 @@ fn transform_scalar(
 
     if kind.is_editable() {
         if matches!(kind, PlaceholderKind::Secret | PlaceholderKind::SecretAuto) {
-            if values {
+            if with_secrets {
                 let key = encode_secret_key(SECRET_CONSUMER, path).map_err(|cause| {
                     ResolverError::SecretKeyEncodingFailed {
                         path: path.join(PATH_SEPARATOR),
@@ -229,7 +257,9 @@ fn transform_scalar(
         return Ok(());
     }
 
-    *node = Value::String(fixed_token(path, placeholders));
+    if !with_protected {
+        *node = Value::String(fixed_token(path, placeholders));
+    }
     Ok(())
 }
 

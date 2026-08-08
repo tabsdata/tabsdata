@@ -125,8 +125,8 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
             HashMap::new()
         };
 
-        let rendered =
-            reveal(template, &configmap, &schema, values, &secret_values).map_err(TdError::from)?;
+        let rendered = reveal(template, &configmap, &schema, values, false, &secret_values)
+            .map_err(TdError::from)?;
 
         let target = configs_folder.join(&file);
         fs::write(&target, rendered).map_err(|error| {

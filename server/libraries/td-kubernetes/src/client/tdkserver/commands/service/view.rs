@@ -18,6 +18,7 @@ use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::kube::api::secret::get_secret;
 use crate::kube::api::{LabelFilter, get_configmaps};
+use crate::runtime::gateway::resolver::derived::amend;
 use crate::runtime::gateway::resolver::reveal::reveal;
 use crate::runtime::gateway::resolver::schema::Schema;
 use crate::runtime::instance::profile::load_profile;
@@ -49,14 +50,29 @@ pub struct ViewArguments {
                      unresolved. Defaults to 'false'."
     )]
     pub with_secrets: Option<bool>,
+
+    #[arg(
+        long,
+        name = "with-protected",
+        required = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 80,
+        long_help = "Show protected values resolved. Protected values are derived by the system \
+                     and cannot be edited, and are shown as their placeholder unless this flag \
+                     is given. Defaults to 'false'."
+    )]
+    pub with_protected: Option<bool>,
 }
 
 pub async fn command_view(arguments: ViewArguments, globals: &GlobalArguments) -> CommandResult {
     let ViewArguments {
         instance,
         with_secrets,
+        with_protected,
     } = arguments;
-    let values = with_secrets.unwrap_or(false);
+    let with_secrets = with_secrets.unwrap_or(false);
+    let with_protected = with_protected.unwrap_or(false);
 
     let settings = SettingsContext::settings();
     let instance = resolved_instance(instance, &settings);
@@ -73,7 +89,7 @@ pub async fn command_view(arguments: ViewArguments, globals: &GlobalArguments) -
         .await
         .map_err(TdError::from)?;
 
-    let mut documents: Vec<(String, String)> = Vec::new();
+    let mut documents: Vec<(String, String, String)> = Vec::new();
     for (configmap_name, entries) in configmaps {
         let Ok(file) = name_from_kube_resource_name(
             &configmap_name,
@@ -98,15 +114,27 @@ pub async fn command_view(arguments: ViewArguments, globals: &GlobalArguments) -
         };
 
         let schema = parse_schema(&file, &profile.configs)?;
-        let secret_values = if values {
+        let secret_values = if with_secrets {
             read_secret_values(&context, &file).await?
         } else {
             HashMap::new()
         };
 
-        let rendered =
-            reveal(template, &configmap, &schema, values, &secret_values).map_err(TdError::from)?;
-        documents.push((file, rendered));
+        let rendered = reveal(
+            template,
+            &configmap,
+            &schema,
+            with_secrets,
+            with_protected,
+            &secret_values,
+        )
+        .map_err(TdError::from)?;
+        let rendered = if with_protected {
+            amend(&file, &rendered).map_err(TdError::from)?
+        } else {
+            rendered
+        };
+        documents.push((file, configmap_name, rendered));
     }
 
     if documents.is_empty() {
@@ -117,7 +145,11 @@ pub async fn command_view(arguments: ViewArguments, globals: &GlobalArguments) -
     documents.sort_by(|left, right| left.0.cmp(&right.0));
     let report: Vec<ReportDocument> = documents
         .iter()
-        .map(|(title, content)| ReportDocument { title, content })
+        .map(|(title, subtitle, content)| ReportDocument {
+            title,
+            subtitle: Some(subtitle),
+            content,
+        })
         .collect();
     render_documents(&report)
 }

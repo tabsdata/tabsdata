@@ -11,6 +11,7 @@ fn reveal_default(template: &str, configmap: &str) -> String {
         configmap,
         &Schema::default(),
         false,
+        false,
         &HashMap::new(),
     )
     .expect("reveal")
@@ -42,6 +43,59 @@ fn embedded_system_value_restores_full_template_text() {
 }
 
 #[test]
+fn non_editable_system_value_with_protected_shows_stored_value() {
+    let template = "port: ${{system:tdk_apiserver_public_port}}\n";
+    let configmap = "port: 2457\n";
+    let rendered = reveal(
+        template,
+        configmap,
+        &Schema::default(),
+        false,
+        true,
+        &HashMap::new(),
+    )
+    .expect("reveal");
+    assert!(rendered.contains("port: 2457"));
+    assert!(!rendered.contains("${{system:tdk_apiserver_public_port}}"));
+}
+
+#[test]
+fn embedded_system_value_with_protected_shows_stored_value() {
+    let template = "address: 0.0.0.0:${{system:tdk_apiserver_public_port}}\n";
+    let configmap = "address: 0.0.0.0:2457\n";
+    let rendered = reveal(
+        template,
+        configmap,
+        &Schema::default(),
+        false,
+        true,
+        &HashMap::new(),
+    )
+    .expect("reveal");
+    assert!(rendered.contains("address: 0.0.0.0:2457"));
+}
+
+#[test]
+fn protected_does_not_reveal_secrets() {
+    let template = "password: ${{secret}}\n";
+    let configmap = "password: ${{secret}}\n";
+    let mut secret_values = HashMap::new();
+    let key = encode_secret_key(SECRET_CONSUMER, &["password".to_owned()]).expect("key");
+    secret_values.insert(key, "topsecret".to_owned());
+    let rendered = reveal(
+        template,
+        configmap,
+        &Schema::default(),
+        false,
+        true,
+        &secret_values,
+    )
+    .expect("reveal");
+    assert!(rendered.contains("password: ${{secret}}"));
+    assert!(!rendered.contains("topsecret"));
+}
+
+#[test]
 fn secret_without_values_shows_token() {
     let template = "password: ${{secret}}\n";
     let configmap = "password: ${{secret}}\n";
@@ -61,6 +115,7 @@ fn secret_with_values_shows_resolved_secret() {
         configmap,
         &Schema::default(),
         true,
+        false,
         &secret_values,
     )
     .expect("reveal");
@@ -76,6 +131,7 @@ fn secret_with_values_but_missing_entry_falls_back_to_token() {
         configmap,
         &Schema::default(),
         true,
+        false,
         &HashMap::new(),
     )
     .expect("reveal");
@@ -88,7 +144,8 @@ fn schema_secret_leaf_is_shown_as_token_without_values() {
     let schema = Schema::parse("x.yamls", schema_text).expect("schema");
     let template = "options:\n  token: baked-in-value\n";
     let configmap = "options:\n  token: baked-in-value\n";
-    let rendered = reveal(template, configmap, &schema, false, &HashMap::new()).expect("reveal");
+    let rendered =
+        reveal(template, configmap, &schema, false, false, &HashMap::new()).expect("reveal");
     assert!(rendered.contains("token: ${{secret}}"));
 }
 
