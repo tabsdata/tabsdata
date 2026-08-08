@@ -225,6 +225,7 @@ console_scripts: list[str] = [
     "td_dbready = tabsdatak.server._tdserver.workers.dbready:main",
     "td_resource = tabsdatak.common._resources.reader:main",
     "td_pyvenv = tabsdatak.common._interpreter.python.pyvenv:main",
+    "tdk_check = tabsdatak.server._tdserver.render.check:main",
     "tdk_table = tabsdatak.server._tdserver.render.table:main",
     "tdk_yaml = tabsdatak.server._tdserver.render.yaml:main",
 ]

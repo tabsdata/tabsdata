@@ -23,6 +23,7 @@ use crate::client::tdkserver::commands::service::init::InitArguments;
 use crate::client::tdkserver::commands::service::put::PutArguments;
 use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments;
 // use crate::client::tdkserver::commands::service::register::RegisterArguments;
+use crate::client::tdkserver::commands::service::check::CheckArguments;
 use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
@@ -177,6 +178,11 @@ pub enum Commands {
     // Register(RegisterArguments),
     // #[command(about = "Unregister a tabsdata instance")]
     // Unregister(InstanceNameArguments),
+    #[command(
+        name = "check-cfg",
+        about = "Check the values still to be provided in the configs of a tabsdata instance"
+    )]
+    Check(CheckArguments),
     #[command(
         name = "get-cfg",
         about = "Download the configmaps of a tabsdata instance for editing"

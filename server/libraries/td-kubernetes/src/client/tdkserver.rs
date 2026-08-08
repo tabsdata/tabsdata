@@ -35,6 +35,7 @@ use crate::client::tdkserver::commands::service::status::command_status;
 use crate::client::tdkserver::commands::service::stop::command_stop;
 use crate::client::tdkserver::commands::service::trash::command_trash;
 // use crate::client::tdkserver::commands::service::unregister::command_unregister;
+use crate::client::tdkserver::commands::service::check::command_check;
 use crate::client::tdkserver::commands::service::view::command_view;
 use crate::client::tdkserver::commands::session::set::command_set;
 use crate::client::tdkserver::commands::session::settings::command_settings;
@@ -83,6 +84,7 @@ impl TabsDataKubernetesClient {
             // Some(Commands::Unregister(arguments)) => {
             //     command_unregister(arguments, &globals).await
             // }
+            Some(Commands::Check(arguments)) => command_check(arguments, &globals).await,
             Some(Commands::Get(arguments)) => command_get(arguments, &globals).await,
             Some(Commands::Put(arguments)) => command_put(arguments, &globals).await,
             Some(Commands::View(arguments)) => command_view(arguments, &globals).await,

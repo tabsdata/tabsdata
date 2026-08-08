@@ -22,6 +22,7 @@ use super::about::command_about;
 use super::banner::command_banner;
 use super::help::{ShellHelpArguments, command_shell_help};
 use super::service::InstanceNameArguments;
+use super::service::check::{CheckArguments, command_check};
 use super::service::create::{CreateArguments, command_create};
 use super::service::get::{GetArguments, command_get};
 use super::service::info::{InfoCommands, command_info};
@@ -79,6 +80,11 @@ enum ShellCommand {
     Inspect(InstanceNameArguments),
     #[command(about = "Trash a local kminus tabsdata instance")]
     Trash(TrashArguments),
+    #[command(
+        name = "check-cfg",
+        about = "Check the values still to be provided in the configs of a tabsdata instance"
+    )]
+    Check(CheckArguments),
     #[command(
         name = "get-cfg",
         about = "Download the configmaps of a tabsdata instance for editing"
@@ -222,6 +228,9 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 }
                 ShellCommand::Trash(arguments) => {
                     let _ = command_trash(arguments, globals).await;
+                }
+                ShellCommand::Check(arguments) => {
+                    let _ = command_check(arguments, globals).await;
                 }
                 ShellCommand::Get(arguments) => {
                     let _ = command_get(arguments, globals).await;

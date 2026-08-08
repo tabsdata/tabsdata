@@ -91,11 +91,11 @@
 
 pub(crate) mod derived;
 pub mod fusion;
-mod kind;
+pub(crate) mod kind;
 mod placeholder;
 pub(crate) mod reveal;
 pub(crate) mod schema;
-mod walker;
+pub(crate) mod walker;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
