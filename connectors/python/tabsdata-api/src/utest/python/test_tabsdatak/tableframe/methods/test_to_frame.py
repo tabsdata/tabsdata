@@ -26,17 +26,17 @@ def test_to_frame_returns_a_tableframe():
 
 def test_to_frame_returns_an_empty_frame_with_the_schema_columns():
     frame = _schema().to_frame()
-    assert frame.to_polars_lf().collect_schema().names() == ["a", "b"]
+    assert frame._to_polars_lf().collect_schema().names() == ["a", "b"]
 
 
 def test_to_frame_preserves_the_schema_types():
-    schema = _schema().to_frame().to_polars_lf().collect_schema()
+    schema = _schema().to_frame()._to_polars_lf().collect_schema()
     assert schema["a"] == pl.Int64
     assert schema["b"] == pl.String
 
 
 def test_to_frame_has_no_rows():
-    assert _schema().to_frame().to_polars_df().height == 0
+    assert _schema().to_frame()._to_polars_df().height == 0
 
 
 def test_to_frame_takes_no_eager_argument():

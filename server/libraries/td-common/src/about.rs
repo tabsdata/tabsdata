@@ -4,11 +4,11 @@
 
 use chrono::FixedOffset;
 use colored::Colorize;
-use unicode_width::UnicodeWidthStr;
 use std::env;
 use std::process::Command;
 #[cfg(not(windows))]
 use supports_color;
+use unicode_width::UnicodeWidthStr;
 
 pub fn tdabout(version: &str) {
     // Setting env vars is not thread-safe; use with care.

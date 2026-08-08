@@ -88,7 +88,7 @@ def test_operation_returns_a_tableframe():
     frame = tableframe_of(pl.LazyFrame({"a": [1, 2, 3]}))
     out = frame.filter(pl.col("a") > 1)
     assert isinstance(out, TableFrame)
-    assert out.to_polars_df().shape == (2, 1)
+    assert out._to_polars_df().shape == (2, 1)
     assert "$td.id" in polars_of(out, pl.LazyFrame).collect_schema().names()
 
 

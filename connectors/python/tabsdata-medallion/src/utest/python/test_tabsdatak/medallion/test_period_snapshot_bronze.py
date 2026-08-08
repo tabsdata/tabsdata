@@ -74,9 +74,9 @@ def user_cols(tf: TableFrame) -> list[str]:
 
 def to_rows(tf: TableFrame) -> list[dict]:
     """Return rows as list-of-dicts with system columns stripped."""
-    pdf = tf.to_pandas()
+    pdf = tf._to_pandas()
     keep = [c for c in pdf.columns if not c.startswith("$td.")]
-    return pdf[keep].to_dict(orient="records")
+    return pdf[keep]._to_dict(orient="records")
 
 
 def call(new: list[TableFrame]) -> TableFrame:
@@ -363,7 +363,7 @@ def test_missing_period_column_raises():
         # The error may surface lazily — touch the output to force
         # collection.
         out = build_period_snapshot_bronze(new=[bad], pk=PK)
-        out.to_pandas()
+        out._to_pandas()
 
 
 @pytest.mark.parametrize(

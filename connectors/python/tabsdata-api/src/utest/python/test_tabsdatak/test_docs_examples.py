@@ -232,9 +232,9 @@ def _namespace() -> dict:
 def _materialize(value, names: dict) -> None:
     """Force the lazy work, so an example is checked against data."""
     if isinstance(value, TableFrame):
-        value.to_polars_df()
+        value._to_polars_df()
     elif type(value).__name__ == "Expr":
-        names["tf"].select(value.alias("probe")).to_polars_df()
+        names["tf"].select(value.alias("probe"))._to_polars_df()
 
 
 @pytest.mark.parametrize(

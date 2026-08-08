@@ -313,25 +313,23 @@ class EngineFrame(BaseFrame):
 
         return cls._assemble(pl.LazyFrame(schema=schema), CreationMode.TAB)
 
-    # Materialization surface. Exits the wrapper into a plain polars / pandas / dict;
-    # drop_system_columns (default True) removes the internal `$td.` columns.
-    def to_polars_lf(self, drop_system_columns=True):
+    def _to_polars_lf(self, drop_system_columns=True):
         return self._strip(drop_system_columns)
 
-    def to_polars_df(self, drop_system_columns=True):
+    def _to_polars_df(self, drop_system_columns=True):
         return self._strip(drop_system_columns).collect(no_optimization=True)
 
-    def to_pandas(self, drop_system_columns=True):
+    def _to_pandas(self, drop_system_columns=True):
         return (
-            self._strip(drop_system_columns).collect(no_optimization=True).to_pandas()
+            self._strip(drop_system_columns).collect(no_optimization=True)._to_pandas()
         )
 
-    def to_dict(self, drop_system_columns=True):
+    def _to_dict(self, drop_system_columns=True):
         return (
             self
             ._strip(drop_system_columns)
             .collect(no_optimization=True)
-            .to_dict(as_series=False)
+            ._to_dict(as_series=False)
         )
 
     def extract_one(

@@ -659,7 +659,7 @@ def _prompt_spec(cls: type, prefix: str, prompt: PromptFn) -> dict:
             # ("secret:<value>"), which `dehydrate` harvests out at upsert
             # time; with no value, the dehydrated marker (":secret:") is
             # written and the value is resolved at run time.
-            out[name] = f"{ref._PREFIX}{value}" if value else ref().to_dict()
+            out[name] = f"{ref._PREFIX}{value}" if value else ref()._to_dict()
         else:
             members = _members(fi.annotation)
             value = prompt(
@@ -777,5 +777,5 @@ def dehydrate_document(document: Any) -> tuple[dict, list[dict]]:
     validate(document)
     conn_cls = resolve_class(document["type"])
     model = conn_cls.from_dict(document)
-    dehydrated, secrets = dehydrate(document, model.to_dict())
+    dehydrated, secrets = dehydrate(document, model._to_dict())
     return dehydrated, [{"key": kv.key, "value": kv.value} for kv in secrets]

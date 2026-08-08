@@ -150,9 +150,9 @@ def test_read_in_chunked_advances_offset_then_returns_none(tmp_path):
     (r3,) = _read(ctx, src)
     (r4,) = _read(ctx, src)
 
-    assert r1.to_dict(as_series=False) == {"b": [10, 20]}
-    assert r2.to_dict(as_series=False) == {"b": [30, 40]}
-    assert r3.to_dict(as_series=False) == {"b": [50]}
+    assert r1._to_dict(as_series=False) == {"b": [10, 20]}
+    assert r2._to_dict(as_series=False) == {"b": [30, 40]}
+    assert r3._to_dict(as_series=False) == {"b": [50]}
     assert r4 is None
 
 
@@ -164,11 +164,11 @@ def test_read_in_returns_one_slot_per_data_independently(tmp_path):
 
     first = _read(ctx, src)
     assert first[0].equals(full)
-    assert first[1].to_dict(as_series=False) == {"b": [7]}
+    assert first[1]._to_dict(as_series=False) == {"b": [7]}
 
     second = _read(ctx, src)
     assert second[0].equals(full)
-    assert second[1].to_dict(as_series=False) == {"b": [8]}
+    assert second[1]._to_dict(as_series=False) == {"b": [8]}
 
     third = _read(ctx, src)
     assert third[0].equals(full)

@@ -924,7 +924,7 @@ class TableFrame(EngineFrame):
                 TableFrame.empty()
         """
 
-    def to_polars_lf(self, drop_system_columns=True):
+    def _to_polars_lf(self, drop_system_columns=True):
         """Return the underlying polars `LazyFrame`, unevaluated.
 
         :categories: conversion
@@ -943,10 +943,10 @@ class TableFrame(EngineFrame):
         Examples:
             .. code-block:: python
 
-                tf.to_polars_lf()
+                tf._to_polars_lf()
         """
 
-    def to_polars_df(self, drop_system_columns=True):
+    def _to_polars_df(self, drop_system_columns=True):
         """Evaluate this `TableFrame` into a polars `DataFrame`.
 
         :categories: conversion
@@ -963,16 +963,16 @@ class TableFrame(EngineFrame):
         Examples:
             .. code-block:: python
 
-                tf.filter(col("a") > 1).to_polars_df()
+                tf.filter(col("a") > 1)._to_polars_df()
 
-            Keep the system columns to inspect the row provenance:
+                    Keep the system columns to inspect the row provenance:
 
-            .. code-block:: python
+                    .. code-block:: python
 
-                tf.to_polars_df(drop_system_columns=False)
+                tf._to_polars_df(drop_system_columns=False)
         """
 
-    def to_pandas(self, drop_system_columns=True):
+    def _to_pandas(self, drop_system_columns=True):
         """Evaluate this `TableFrame` into a pandas `DataFrame`.
 
         :categories: conversion
@@ -989,10 +989,10 @@ class TableFrame(EngineFrame):
         Examples:
             .. code-block:: python
 
-                tf.to_pandas()
+                tf._to_pandas()
         """
 
-    def to_dict(self, drop_system_columns=True):
+    def _to_dict(self, drop_system_columns=True):
         """Evaluate this `TableFrame` into a `{column: values}` dict.
 
         :categories: conversion
@@ -1010,7 +1010,7 @@ class TableFrame(EngineFrame):
         Examples:
             .. code-block:: python
 
-                tf.to_dict()  # {"id": [1, 2, 3], "g": ["x", "y", "x"], ...}
+                tf._to_dict()  # {"id": [1, 2, 3], "g": ["x", "y", "x"], ...}
         """
 
     def extract_one(

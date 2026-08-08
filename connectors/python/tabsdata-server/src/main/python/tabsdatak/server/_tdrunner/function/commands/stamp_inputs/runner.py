@@ -62,7 +62,7 @@ def _stamp_file(
         lf = add_connector_columns(lf, metadata)
         stamped = TableFrame._build(
             lf, CreationMode.RAW, idx=idx, version=version
-        ).to_polars_lf(drop_system_columns=False)
+        )._to_polars_lf(drop_system_columns=False)
     except Exception as exc:
         raise StampInputsErrorCode.SI_4.exception(
             cause=exc, path=src_path, detail=str(exc)

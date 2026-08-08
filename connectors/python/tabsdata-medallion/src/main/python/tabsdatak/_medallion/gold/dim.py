@@ -10,7 +10,7 @@ from tabsdatak.tableframe.functions import col, concat
 
 def _is_empty(tf: TableFrame) -> bool:
     """Return True when ``tf`` has no rows (gen-2 has no ``is_empty``)."""
-    return tf.first().to_polars_df().is_empty()
+    return tf.first()._to_polars_df().is_empty()
 
 
 def _natural_key(tf: TableFrame) -> list[str]:
@@ -21,7 +21,7 @@ def _natural_key(tf: TableFrame) -> list[str]:
     is sufficient. ``.item()`` can't be used on a List dtype (it aggregates
     via ``.min()``), so extract through pandas.
     """
-    return list(tf.select(col("$m.pk")).to_pandas()["$m.pk"].iloc[0])
+    return list(tf.select(col("$m.pk"))._to_pandas()["$m.pk"].iloc[0])
 
 
 def _surrogate_key(cols: list[str]) -> pl.Expr:

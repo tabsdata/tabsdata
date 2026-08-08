@@ -114,7 +114,7 @@ def build_cdc_bronze(
     ])
 
     # Filter CDC: drop anything same-or-older than the bootstrap.
-    seed_max_ts = seed.select(col("$m.source_ts").max()).to_polars_df().item()
+    seed_max_ts = seed.select(col("$m.source_ts").max())._to_polars_df().item()
     filtered_stream = stream.filter(col("$m.source_ts") > seed_max_ts)
 
     return concat([erase, seed, filtered_stream], how="diagonal_relaxed")

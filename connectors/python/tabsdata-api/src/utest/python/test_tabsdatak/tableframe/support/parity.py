@@ -39,7 +39,7 @@ def equals_lazyframe_tableframe(
         raise ValueError("Expected a tabsdata TableFrame as the second argument.")
     polars_result = normalize_lazyframe_column(polars_result, sort, rounded, column)
     tableframe_result = normalize_lazyframe_column(
-        tableframe_result.to_polars_lf(), sort, rounded, column
+        tableframe_result._to_polars_lf(), sort, rounded, column
     )
     return polars_result.collect().equals(tableframe_result.collect())
 

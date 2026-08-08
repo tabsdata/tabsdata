@@ -146,9 +146,9 @@ def user_cols(tf: TableFrame) -> list[str]:
 
 
 def to_rows(tf: TableFrame) -> list[dict]:
-    pdf = tf.to_pandas()
+    pdf = tf._to_pandas()
     keep = [c for c in pdf.columns if not c.startswith("$td.")]
-    return pdf[keep].to_dict(orient="records")
+    return pdf[keep]._to_dict(orient="records")
 
 
 # ── _drop_pk ─────────────────────────────────────────────────────────────────

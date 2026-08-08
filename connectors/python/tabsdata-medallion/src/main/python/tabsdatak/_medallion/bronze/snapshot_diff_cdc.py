@@ -56,7 +56,7 @@ def build_snapshot_diff_cdc_bronze(
     last_schema = head.schema
     all_dtypes = {**pk_schema, **{c: last_schema[c] for c in value_cols}}
 
-    if prev is None or prev.first().to_polars_df().is_empty() or len(new) == 0:
+    if prev is None or prev.first()._to_polars_df().is_empty() or len(new) == 0:
         logger.debug(
             "No prior snapshot or no new data; treating as initial onboarding or "
             "refresh"

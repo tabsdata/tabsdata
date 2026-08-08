@@ -21,7 +21,6 @@ import os
 import re
 import sys
 from contextlib import contextmanager
-from importlib.metadata import PackageNotFoundError, version
 from itertools import islice
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence

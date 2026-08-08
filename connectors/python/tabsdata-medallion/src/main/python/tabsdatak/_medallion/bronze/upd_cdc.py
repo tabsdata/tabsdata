@@ -123,7 +123,7 @@ def build_upd_cdc_bronze(
         upd = _to_utc_datetime(
             concat(upd_commits, how="diagonal_relaxed"), updated_ts_col
         )
-        seed_max_ts = full.select(col(updated_ts_col).max()).to_polars_df().item()
+        seed_max_ts = full.select(col(updated_ts_col).max())._to_polars_df().item()
         upd_after = upd.filter(col(updated_ts_col) > seed_max_ts)
 
         seen = (

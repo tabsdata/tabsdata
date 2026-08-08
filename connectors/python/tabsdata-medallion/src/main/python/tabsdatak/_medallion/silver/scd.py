@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def _is_empty(tf: TableFrame) -> bool:
     """Return True when ``tf`` has no rows (gen-2 has no ``is_empty``)."""
-    return tf.first().to_polars_df().is_empty()
+    return tf.first()._to_polars_df().is_empty()
 
 
 def build_scd2_silver(
@@ -94,7 +94,7 @@ def build_scd2_silver(
     # the first row. ``.item()`` can't be used here — its
     # implementation aggregates via ``.min()``, which polars rejects
     # for List dtypes — so we go through pandas to extract the cell.
-    pk_cols = list(incoming.select(col("$m.pk")).to_pandas()["$m.pk"].iloc[0])
+    pk_cols = list(incoming.select(col("$m.pk"))._to_pandas()["$m.pk"].iloc[0])
 
     # T sentinels signal a state reset. Drop ops at-or-before the
     # latest T's source_ts; re-fold from ops after. ALL prior valid
@@ -103,7 +103,7 @@ def build_scd2_silver(
     t_rows = incoming.filter(col("$m.op") == OP_TOMBSTONE)
     has_erase = not _is_empty(t_rows)
     if has_erase:
-        cutoff = t_rows.select(col("$m.source_ts").max()).to_polars_df().item()
+        cutoff = t_rows.select(col("$m.source_ts").max())._to_polars_df().item()
         ops = incoming.filter(
             (col("$m.op") != OP_TOMBSTONE) & (col("$m.source_ts") >= cutoff)
         )
@@ -252,13 +252,13 @@ def build_scd1_silver(
         return scd1_head
 
     incoming = incoming.sort("$m.source_ts", maintain_order=True)
-    pk_cols = list(incoming.select(col("$m.pk")).to_pandas()["$m.pk"].iloc[0])
+    pk_cols = list(incoming.select(col("$m.pk"))._to_pandas()["$m.pk"].iloc[0])
 
     # T sentinels reset prior state.
     t_rows = incoming.filter(col("$m.op") == OP_TOMBSTONE)
     has_erase = not _is_empty(t_rows)
     if has_erase:
-        cutoff = t_rows.select(col("$m.source_ts").max()).to_polars_df().item()
+        cutoff = t_rows.select(col("$m.source_ts").max())._to_polars_df().item()
         ops = incoming.filter(
             (col("$m.op") != OP_TOMBSTONE) & (col("$m.source_ts") >= cutoff)
         )

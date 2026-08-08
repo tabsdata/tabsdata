@@ -62,13 +62,13 @@ def build_append_only_silver(
     # can't be used here — its implementation aggregates via
     # ``.min()``, which polars rejects for List dtypes — so we go
     # through pandas to extract the cell value.
-    pk_cols = list(raw.select(col("$m.pk")).to_pandas()["$m.pk"].iloc[0])
+    pk_cols = list(raw.select(col("$m.pk"))._to_pandas()["$m.pk"].iloc[0])
 
     cleaned = raw.drop(["$m.op", "$m.bronze_ts"])
 
     deduped = cleaned.unique(subset=pk_cols)
 
-    if silver_head is None or silver_head.first().to_polars_df().is_empty():
+    if silver_head is None or silver_head.first()._to_polars_df().is_empty():
         return deduped
 
     # Project silver_head to PK cols only so the join doesn't drag the
