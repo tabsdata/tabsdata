@@ -9,6 +9,9 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.silver.scd import (
+    build_scd1_silver_cleanse,
+    build_scd2_silver_cleanse,
+)
 from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
@@ -16,9 +19,6 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
     MEDALLION_SYSTEM_COLUMN_VALID_FROM,
     MEDALLION_SYSTEM_COLUMN_VALID_TO,
-)
-    build_scd1_silver_cleanse,
-    build_scd2_silver_cleanse,
 )
 
 pytestmark = pytest.mark.medallion

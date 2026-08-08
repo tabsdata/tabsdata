@@ -9,6 +9,12 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.bronze.cdc import (
+    OP_DELETE,
+    OP_INSERT,
+    OP_TOMBSTONE,
+    OP_UPDATE,
+    build_cdc_bronze,
+)
 from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
@@ -18,12 +24,6 @@ from tabsdatak._medallion.constants import (
 from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_META_OP,
     CDC_META_TS,
-)
-    OP_DELETE,
-    OP_INSERT,
-    OP_TOMBSTONE,
-    OP_UPDATE,
-    build_cdc_bronze,
 )
 
 pytestmark = pytest.mark.medallion

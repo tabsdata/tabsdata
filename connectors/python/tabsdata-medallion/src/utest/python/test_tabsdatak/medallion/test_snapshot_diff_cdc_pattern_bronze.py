@@ -10,17 +10,17 @@ import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col
 from tabsdatak._medallion.bronze.snapshot_diff_cdc import (
-from tabsdatak._medallion.constants import (
-    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
-    MEDALLION_SYSTEM_COLUMN_OP,
-    MEDALLION_SYSTEM_COLUMN_PK,
-    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
-)
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,
     OP_UPDATE,
     build_snapshot_diff_cdc_bronze,
+)
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
 )
 
 pytestmark = pytest.mark.medallion

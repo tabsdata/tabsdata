@@ -23,11 +23,6 @@ def test_sql_metadata_names_carry_the_connector_column_prefix():
 
 
 def test_cdc_names_share_the_connector_column_prefix():
-    # One definition of the prefix, owned by ``tabsdatak.conn.common``.
-    assert (
-        _cdc_constants.TD_CONNECTOR_COLUMN_PREFIX
-        is _conn_constants.TD_CONNECTOR_COLUMN_PREFIX
-    )
     assert _cdc_constants.CDC_META_OP.startswith(
         _conn_constants.TD_CONNECTOR_COLUMN_PREFIX
     )

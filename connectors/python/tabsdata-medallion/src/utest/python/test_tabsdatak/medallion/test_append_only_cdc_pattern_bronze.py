@@ -10,14 +10,14 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.bronze.append_only_cdc import (
+    OP_INSERT,
+    build_append_only_cdc_bronze,
+)
 from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
     MEDALLION_SYSTEM_COLUMN_PK,
     MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
-)
-    OP_INSERT,
-    build_append_only_cdc_bronze,
 )
 
 pytestmark = pytest.mark.medallion
