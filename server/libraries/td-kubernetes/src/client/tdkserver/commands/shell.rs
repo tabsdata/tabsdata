@@ -66,6 +66,10 @@ struct ShellInput {
     command: ShellCommand,
 }
 
+pub fn shell_grammar() -> clap::Command {
+    ShellInput::command()
+}
+
 pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
     show_quick_reference();
     show_initial_active_context();

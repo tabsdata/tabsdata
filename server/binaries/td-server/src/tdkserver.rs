@@ -13,6 +13,7 @@ use td_common::logging::{CONSOLE_PROFILE, LogFormat, LoggingOptions};
 use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_kubernetes::client::tdkserver;
+use td_kubernetes::client::tdkserver::full_help::handle_full_help;
 use td_kubernetes::client::tdkserver::widgets::show_banner;
 use te_system::license::{
     ACCEPT_TERMS_ARGUMENT, ACCEPT_TERMS_N, ACCEPT_TERMS_NO, ACCEPT_TERMS_Y, ACCEPT_TERMS_YES,
@@ -110,6 +111,9 @@ fn check_polars() {
 #[tokio::main]
 #[attach(signal = "tdkserver")]
 async fn main() {
+    // Runs before the license banner and the polars check so that
+    // '--help --full --format json' writes a parseable document and nothing else.
+    handle_full_help();
     let previous_rust_log = env::var_os(RUST_LOG);
     unsafe {
         env::set_var(RUST_LOG, RUST_LOG_DIRECTIVES);

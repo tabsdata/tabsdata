@@ -20,6 +20,7 @@ use crate::client::tdkserver::commands::service::info::InfoCommands;
 use crate::client::tdkserver::commands::service::init::InitArguments;
 use crate::client::tdkserver::commands::service::put::PutArguments;
 use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments;
+use crate::client::tdkserver::full_help::{FULL_ARGUMENT, FULL_LONG_HELP};
 // use crate::client::tdkserver::commands::service::register::RegisterArguments;
 use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
@@ -52,6 +53,16 @@ static PROVIDER_LONG_HELP: LazyLock<String> = LazyLock::new(|| {
 pub struct Arguments {
     #[command(flatten)]
     pub globals: GlobalArguments,
+
+    #[arg(
+        long,
+        name = FULL_ARGUMENT,
+        required = false,
+        default_value_t = false,
+        display_order = 150,
+        long_help = FULL_LONG_HELP
+    )]
+    pub full: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -170,7 +181,11 @@ pub enum Commands {
     Unset(UnpinArguments),
     #[command(about = "Show the tabsdata session settings")]
     Settings(SettingsArguments),
-    #[command(about = "Open an interactive shell")]
+    #[command(
+        about = "Open an interactive shell",
+        long_about = "Open an interactive shell. The commands listed under it are entered at the \
+                      shell prompt, not on the tdkserver command line."
+    )]
     Shell,
     #[command(about = "List registered tabsdata instances")]
     List,

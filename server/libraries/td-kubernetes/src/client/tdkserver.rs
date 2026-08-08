@@ -5,6 +5,7 @@
 pub mod arguments;
 pub mod commands;
 pub mod common;
+pub mod full_help;
 pub mod render;
 pub mod widgets;
 
