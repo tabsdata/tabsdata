@@ -321,7 +321,53 @@ def about():
     tdabout()
 
 
-def _show_manifest(resource: str, title: str, dedent: bool = False):
+MANIFEST_COLUMN_WIDTH = 80
+
+MANIFEST_RULE_CHARACTERS = "═─"
+
+MANIFEST_ROW_SEPARATORS = {
+    "╒": "╤",
+    "╞": "╪",
+    "├": "┼",
+    "╘": "╧",
+}
+
+
+def _narrow_manifest(content: str, width: int = MANIFEST_COLUMN_WIDTH) -> str:
+    narrowed = []
+    widths = None
+    for line in content.split("\n"):
+        if line.startswith("╒"):
+            widths = [len(segment) for segment in line[1:-1].split("╤")]
+        if widths is None or widths[-1] <= width:
+            narrowed.append(line)
+            continue
+        narrowed.extend(_narrow_manifest_line(line, widths, width))
+    return "\n".join(narrowed)
+
+
+def _narrow_manifest_line(line: str, widths: list[int], width: int) -> list[str]:
+    capped = widths[:-1] + [width]
+    separator = MANIFEST_ROW_SEPARATORS.get(line[:1])
+    if separator:
+        rule = line[1] if line[1] in MANIFEST_RULE_CHARACTERS else "─"
+        return [line[0] + separator.join(rule * size for size in capped) + line[-1]]
+    if not line.startswith("│"):
+        return [line]
+    cells = line[1:-1].split("│")
+    if len(cells) != len(widths):
+        return [line]
+    wrapped = [
+        textwrap.wrap(cells[-1].strip(), width - 2, break_long_words=False) or [""]
+    ]
+    rows = []
+    for index, piece in enumerate(wrapped[0]):
+        head = cells[:-1] if index == 0 else [" " * size for size in widths[:-1]]
+        rows.append("│" + "│".join(head) + f"│ {piece.ljust(width - 2)} │")
+    return rows
+
+
+def _show_manifest(resource: str, title: str, dedent: bool = False, wide: bool = False):
     from tabsdatak.common._resources.reader import td_resource
 
     path = td_resource(f"assets/manifest/{resource}")
@@ -329,6 +375,8 @@ def _show_manifest(resource: str, title: str, dedent: bool = False):
         content = f.read()
     if dedent:
         content = textwrap.dedent(content).strip()
+    if not wide:
+        content = _narrow_manifest(content)
     console.print()
     console.print(f"{UNDERLINE}{title}{NO_UNDERLINE}")
     console.print()
@@ -344,9 +392,15 @@ def info():
 
 
 @info.command(name="third-party")
-def third_party():
+@click.option(
+    "--wide",
+    is_flag=True,
+    default=False,
+    help="Show the license column at its full width, instead of wrapping it.",
+)
+def third_party(wide: bool):
     """Show the third-party dependencies of tabsdata."""
-    _show_manifest("THIRD-PARTY", "Third Party Dependencies")
+    _show_manifest("THIRD-PARTY", "Third Party Dependencies", wide=wide)
 
 
 @info.command(name="license")
