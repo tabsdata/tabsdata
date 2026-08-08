@@ -81,6 +81,7 @@ tdx-json = "tabsdatax.render.json:main"
 tdx-table = "tabsdatax.render.table:main"
 tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"
 tdx-bundle = "tabsdatax.support.bundle:main"
+tdx-copyright = "tabsdatax.support.copyrights:main"
 tdx-harvester-monitor = "tabsdatax.pytesting.plugins.harvester.client:main"
 
 [project.urls]
