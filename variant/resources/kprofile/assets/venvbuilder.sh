@@ -115,6 +115,7 @@ show_usage() {
    echo "Usage: $0 [options]"
    echo "  -p, --python VERSION           Python version                   (default: $PYTHON_VERSION)"
    echo "      --requirements-td FILE     Complementary packages for td    (default: none)"
+   echo "      --constraint FILE          Constraint file pinning the versions of every install    (default: none)"
    echo "  -o, --output FOLDER            Output folder                    (mandatory)"
    echo "      --version VERSION          Tabsdata version to install      (mandatory)"
    echo "      --image NAME               Image file name; the venv name is appended to the stem, yielding one image per virtual environment    (default: $IMAGE_NAME$IMAGE_SUFFIX)"
@@ -122,9 +123,16 @@ show_usage() {
    echo "  -h, --help                     Show this help"
 }
 
+constrained() {
+   if [[ -n "$constraint" ]]; then
+      echo "--constraint $constraint"
+   fi
+}
+
 parse_arguments() {
    python_version="$PYTHON_VERSION"
    requirements_td=""
+   constraint=""
    output=""
    image="$IMAGE_NAME$IMAGE_SUFFIX"
    version=""
@@ -135,6 +143,7 @@ parse_arguments() {
       case "$1" in
          -p|--python)         python_version="$2";  shift 2 ;;
          --requirements-td)   requirements_td="$2"; shift 2 ;;
+         --constraint)        constraint="$2";      shift 2 ;;
          -o|--output)         output="$2";          shift 2 ;;
          --image)             image="$2";           shift 2 ;;
          --version)           version="$2";         shift 2 ;;
@@ -164,6 +173,10 @@ validate_arguments() {
       exit 2
    fi
 
+   if [[ -n "$constraint" && ! -f "$constraint" ]]; then
+      echo "Constraint file not found: $constraint" >&2
+      exit 1
+   fi
    if [[ -n "$requirements_td" && ! -f "$requirements_td" ]]; then
       echo "Requirements file for td not found: $requirements_td" >&2
       exit 1
@@ -272,16 +285,16 @@ remove_virtual_environment() {
 create_compressor_environment() {
    remove_virtual_environment "$virtual_environment_z"
    run uv venv --python-preference only-managed --python "$python_version" "$virtual_environment_z"
-   run uv pip install --python "$virtual_environment_z/bin/python" "$ZSTANDARD_PACKAGE"
+   run uv pip install --python "$virtual_environment_z/bin/python" $(constrained) "$ZSTANDARD_PACKAGE"
 }
 
 create_virtual_environment() {
    remove_virtual_environment "$virtual_environment_td"
    run uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_td"
-   run uv pip install --python "$virtual_environment_td/bin/python" --upgrade pip
+   run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) --upgrade pip
    remove_virtual_environment "$virtual_environment_fn"
    run uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_fn"
-   run uv pip install --python "$virtual_environment_fn/bin/python" --upgrade pip
+   run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) --upgrade pip
 }
 
 has_requirements() {
@@ -292,11 +305,11 @@ has_requirements() {
 
 install_packages() {
    if has_requirements "$requirements_td"; then
-      run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]==$version" -r "$requirements_td"
-      run uv pip install --python "$virtual_environment_fn/bin/python" "tabsdata[all]==$version" -r "$requirements_td"
+      run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "tabsdata[all]==$version" -r "$requirements_td"
+      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "tabsdata[all]==$version" -r "$requirements_td"
    else
-      run uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]==$version"
-      run uv pip install --python "$virtual_environment_fn/bin/python" "tabsdata[all]==$version"
+      run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "tabsdata[all]==$version"
+      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "tabsdata[all]==$version"
    fi
 }
 

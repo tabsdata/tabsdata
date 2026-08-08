@@ -13,7 +13,8 @@ use std::path::Path;
 use serde_yaml::Value;
 
 use crate::base::constants::{
-    CUSTOMIZABLE_ASSETS, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    CUSTOMIZABLE_ASSETS, FOREIGN_ASSETS, ForeignAsset, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
@@ -49,6 +50,7 @@ pub fn merge(
         KPROFILE_CONFIGS_FAMILY.folder,
         &profile.configs,
         false,
+        &[],
         &[],
     )?;
     let input_configs = input.join(KPROFILE_CONFIGS_FAMILY.folder);
@@ -131,19 +133,28 @@ pub fn fuse(
     stage: &Path,
 ) -> Result<FusedSecrets, ResolverError> {
     wipe_stage(stage)?;
-    compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true, &[])?;
+    compare_family(
+        init,
+        KPROFILE_PODS_FAMILY.folder,
+        &profile.pods,
+        true,
+        &[],
+        &[],
+    )?;
     compare_family(
         init,
         KPROFILE_ASSETS_FAMILY.folder,
         &profile.assets,
         true,
         CUSTOMIZABLE_ASSETS,
+        FOREIGN_ASSETS,
     )?;
     compare_family(
         init,
         KPROFILE_CONFIGS_FAMILY.folder,
         &profile.configs,
         false,
+        &[],
         &[],
     )?;
     stage_pods_files(profile, stage)?;
@@ -287,23 +298,30 @@ fn compare_family(
     canonical: &RenderedConfigmap,
     strict_content: bool,
     customizable: &[&str],
+    foreign: &[ForeignAsset],
 ) -> Result<(), ResolverError> {
     let family_folder = init.join(family);
     let present = read_flat_family(&family_folder, family)?;
 
     for file in &present {
-        if !canonical.contains_key(file) {
+        if !canonical.contains_key(file)
+            && !foreign.iter().any(|entry| entry.asset() == file.as_str())
+        {
             return Err(ResolverError::InitializationExtraFile {
                 family: family.to_owned(),
                 file: file.clone(),
             });
         }
     }
-    for file in canonical.keys() {
+    for file in canonical
+        .keys()
+        .map(String::as_str)
+        .chain(foreign.iter().map(|entry| entry.asset()))
+    {
         if !present.contains(file) {
             return Err(ResolverError::InitializationMissingFile {
                 family: family.to_owned(),
-                file: file.clone(),
+                file: file.to_owned(),
             });
         }
     }

@@ -49,6 +49,8 @@ spec:
         - ${{system:tdk_runtimes_root}}
         - --requirements-td
         - $(CONTAINER_ROOT)/tabsdata/assets/requirements-td.txt
+        - --constraint
+        - $(CONTAINER_ROOT)/tabsdata/assets/tabsdata-requirements.txt
         - --version
         - ${{system:tdk_tabsdata_version}}
         - --storage-config
@@ -104,6 +106,8 @@ spec:
               name: td-app-venvbuilder-asset-venvbuilder.sh
           - configMap:
               name: td-app-requirements-td-asset-requirements-td.txt
+          - configMap:
+              name: td-app-tabsdata-requirements-asset-tabsdata-requirements.txt
       - name: config
         projected:
           sources:

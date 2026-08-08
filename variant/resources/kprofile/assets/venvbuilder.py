@@ -208,6 +208,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Complementary packages for td (default: none)",
     )
     parser.add_argument(
+        "--constraint",
+        dest="constraint",
+        default="",
+        help="Constraint file pinning the versions of every install (default: none)",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         dest="output",
@@ -274,6 +280,13 @@ def validate_arguments(arguments: argparse.Namespace) -> None:
     if arguments.requirements_td and not os.path.isfile(arguments.requirements_td):
         print(
             f"Requirements file for td not found: {arguments.requirements_td}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if arguments.constraint and not os.path.isfile(arguments.constraint):
+        print(
+            f"Constraint file not found: {arguments.constraint}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -475,6 +488,7 @@ def create_compressor_environment(
         "install",
         "--python",
         venv_python(virtual_environment_z),
+        *constrained(arguments),
         ZSTANDARD_PACKAGE,
     ])
 
@@ -502,6 +516,7 @@ def create_one_virtual_environment(
         "install",
         "--python",
         venv_python(virtual_environment),
+        *constrained(arguments),
         "--upgrade",
         "pip",
     ])
@@ -518,6 +533,12 @@ def create_virtual_environment(
     )
 
 
+def constrained(arguments: argparse.Namespace) -> list[str]:
+    if not arguments.constraint:
+        return []
+    return ["--constraint", arguments.constraint]
+
+
 def has_requirements(file: str) -> bool:
     if not file or not os.path.isfile(file):
         return False
@@ -532,6 +553,7 @@ def pinned(packages: list[str], version: str) -> list[str]:
 
 
 def install_one_set_of_packages(
+    arguments: argparse.Namespace,
     workspace: dict[str, str],
     virtual_environment: str,
     packages: list[str],
@@ -543,6 +565,7 @@ def install_one_set_of_packages(
         "install",
         "--python",
         venv_python(virtual_environment),
+        *constrained(arguments),
         *packages,
     ]
     if has_requirements(requirements):
@@ -552,12 +575,14 @@ def install_one_set_of_packages(
 
 def install_packages(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
     install_one_set_of_packages(
+        arguments,
         workspace,
         workspace["virtual_environment_td"],
         pinned(PACKAGES_TD, arguments.version),
         arguments.requirements_td,
     )
     install_one_set_of_packages(
+        arguments,
         workspace,
         workspace["virtual_environment_fn"],
         pinned(PACKAGES_FN, arguments.version),

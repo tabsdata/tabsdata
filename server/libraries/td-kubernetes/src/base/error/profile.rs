@@ -24,6 +24,8 @@ pub enum ProfileError {
     UnknownFamily(String) = 6,
     #[error("Resolved profiles path '{0}' does not exist or is not a directory.")]
     KprofilesPathInvalid(String) = 1000,
+    #[error("Resolved path '{1}' of foreign asset '{0}' does not exist or is not a file.")]
+    ForeignAssetPathInvalid(String, String) = 1001,
     #[error("Could not locate the '{0}' binary: {1}.")]
     ResourceBinaryNotFound(String, String) = 5000,
     #[error("Could not run '{0}': {1}.")]

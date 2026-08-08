@@ -239,8 +239,44 @@ pub const KPROFILE_ASSETS_FAMILY: Family = Family {
 
 pub const REQUIREMENTS_TD_ASSET: &str = "requirements-td.txt";
 pub const REQUIREMENTS_AG_ASSET: &str = "requirements-ag.txt";
+pub const TABSDATA_REQUIREMENTS_LOCK_ASSET: &str = "tabsdata-requirements.txt";
 
-pub const CUSTOMIZABLE_ASSETS: &[&str] = &[REQUIREMENTS_TD_ASSET, REQUIREMENTS_AG_ASSET];
+pub const RESOURCE_TABSDATA_REQUIREMENTS_LOCK: &str =
+    concatcp!("resources/lock/", TABSDATA_REQUIREMENTS_LOCK_ASSET);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForeignAssetOrigin {
+    TabsdataResource(&'static str),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForeignAsset {
+    TabsdataRequirementLock,
+}
+
+impl ForeignAsset {
+    pub const fn asset(self) -> &'static str {
+        match self {
+            Self::TabsdataRequirementLock => TABSDATA_REQUIREMENTS_LOCK_ASSET,
+        }
+    }
+
+    pub const fn origin(self) -> ForeignAssetOrigin {
+        match self {
+            Self::TabsdataRequirementLock => {
+                ForeignAssetOrigin::TabsdataResource(RESOURCE_TABSDATA_REQUIREMENTS_LOCK)
+            }
+        }
+    }
+}
+
+pub const FOREIGN_ASSETS: &[ForeignAsset] = &[ForeignAsset::TabsdataRequirementLock];
+
+pub const CUSTOMIZABLE_ASSETS: &[&str] = &[
+    REQUIREMENTS_TD_ASSET,
+    REQUIREMENTS_AG_ASSET,
+    TABSDATA_REQUIREMENTS_LOCK_ASSET,
+];
 
 pub const SERVICE_TYPE_LOAD_BALANCER: &str = "LoadBalancer";
 

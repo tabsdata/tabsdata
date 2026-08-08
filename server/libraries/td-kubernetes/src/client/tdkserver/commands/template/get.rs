@@ -11,15 +11,24 @@ use td_common::status::ExitStatus::GeneralError;
 use td_error::TdError;
 
 use crate::base::constants::{
-    FOLDER_IMAGES, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    FOLDER_IMAGES, FOREIGN_ASSETS, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::cli::CliError;
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::core::system::exit::{CommandResult, abort_with};
 use crate::core::system::file::copy_tree;
-use crate::runtime::instance::profile::{RenderedConfigmap, load_profile, resolve_kprofile_path};
+use crate::runtime::instance::profile::{
+    RenderedConfigmap, load_profile, resolve_foreign_path, resolve_kprofile_path,
+};
 use crate::runtime::provider::ClusterProvider;
+
+const DISCOURAGED_NOTICE: &str = "\
+# Editing this file is highly discouraged. It pins the versions tabsdata was built\n\
+# and tested against, and changing them can break the instance in ways that are hard\n\
+# to diagnose. Edit it only when a member of the tabsdata team suggests the change to\n\
+# address a specific issue or bug.\n";
 
 static PROVIDER_LONG_HELP: LazyLock<String> = LazyLock::new(|| {
     format!(
@@ -94,6 +103,7 @@ pub fn get_templates(
         write_family(folder, KPROFILE_PODS_FAMILY.folder, profile.pods)?;
         write_family(folder, KPROFILE_ASSETS_FAMILY.folder, profile.assets)?;
         write_family(folder, KPROFILE_CONFIGS_FAMILY.folder, profile.configs)?;
+        write_foreign_assets(folder, verbose)?;
         copy_images(folder, verbose)
     };
     if let Err(error) = initialize() {
@@ -128,6 +138,41 @@ fn write_family(folder: &Path, family: &str, files: RenderedConfigmap) -> Comman
     Ok(())
 }
 
+fn write_foreign_assets(folder: &Path, verbose: bool) -> CommandResult {
+    let assets_folder = folder.join(KPROFILE_ASSETS_FAMILY.folder);
+    for foreign in FOREIGN_ASSETS {
+        let source = resolve_foreign_path(*foreign, verbose)?;
+        let content = std::fs::read_to_string(&source).map_err(|error| {
+            TdError::from(CliError::FileReadFailed {
+                file: source.display().to_string(),
+                cause: error.to_string(),
+            })
+        })?;
+        let file = assets_folder.join(foreign.asset());
+        std::fs::write(&file, discouraged(&content)).map_err(|error| {
+            TdError::from(CliError::FileWriteFailed {
+                file: file.display().to_string(),
+                cause: error.to_string(),
+            })
+        })?;
+    }
+    Ok(())
+}
+
+fn discouraged(content: &str) -> String {
+    let mut lines = content.lines();
+    let mut header = String::new();
+    for line in lines.by_ref() {
+        header.push_str(line);
+        header.push('\n');
+        if line.trim().is_empty() {
+            break;
+        }
+    }
+    let body: String = lines.map(|line| format!("{line}\n")).collect();
+    format!("{header}{DISCOURAGED_NOTICE}\n{body}")
+}
+
 fn copy_images(folder: &Path, verbose: bool) -> CommandResult {
     let images_source = resolve_kprofile_path(verbose)?.join(FOLDER_IMAGES);
     if !images_source.is_dir() {
@@ -142,3 +187,6 @@ fn copy_images(folder: &Path, verbose: bool) -> CommandResult {
         .into()
     })
 }
+
+#[cfg(test)]
+mod tests;

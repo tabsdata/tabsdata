@@ -13,8 +13,8 @@ use td_python::tabsdata::tabsdata_version;
 use tracing::debug;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, Family, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
+    CONFIGMAP_FAMILY_LABEL, Family, ForeignAsset, ForeignAssetOrigin, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
 };
 use crate::base::error::profile::ProfileError;
 use crate::core::system::file::is_hidden_or_system;
@@ -68,14 +68,14 @@ fn normalize_schema_name(parsed: ParsedFileName) -> ParsedFileName {
     }
 }
 
-pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf, ProfileError> {
+fn resolve_resource_path(resource: &str, verbose: bool) -> Result<PathBuf, ProfileError> {
     let resolver = resolve_python_binary(PROGRAM_TD_RESOURCE).map_err(|error| {
         ProfileError::ResourceBinaryNotFound(PROGRAM_TD_RESOURCE.to_owned(), error.to_string())
     })?;
     let resolver_display = resolver.display().to_string();
-    let command_label = format!("{resolver_display} {RESOURCE_KPROFILE}");
+    let command_label = format!("{resolver_display} {resource}");
     let mut command = SystemCommand::new(&resolver);
-    command.arg(RESOURCE_KPROFILE);
+    command.arg(resource);
     apply_detached_flags(&mut command);
     let output = subprocess::run(&mut command, PROGRAM_TD_RESOURCE, verbose).map_err(|error| {
         ProfileError::ResourceBinaryFailed(command_label.clone(), error.to_string())
@@ -90,9 +90,26 @@ pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf, ProfileError> {
     }
     let stdout = String::from_utf8(output.stdout)
         .map_err(|_| ProfileError::ResourceBinaryNonUtf8Output(resolver_display.clone()))?;
-    let path = PathBuf::from(stdout.trim());
+    Ok(PathBuf::from(stdout.trim()))
+}
+
+pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf, ProfileError> {
+    let path = resolve_resource_path(RESOURCE_KPROFILE, verbose)?;
     if !path.is_dir() {
         return Err(ProfileError::KprofilesPathInvalid(
+            path.display().to_string(),
+        ));
+    }
+    Ok(path)
+}
+
+pub fn resolve_foreign_path(foreign: ForeignAsset, verbose: bool) -> Result<PathBuf, ProfileError> {
+    let path = match foreign.origin() {
+        ForeignAssetOrigin::TabsdataResource(resource) => resolve_resource_path(resource, verbose)?,
+    };
+    if !path.is_file() {
+        return Err(ProfileError::ForeignAssetPathInvalid(
+            foreign.asset().to_owned(),
             path.display().to_string(),
         ));
     }
