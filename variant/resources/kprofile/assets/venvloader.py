@@ -41,6 +41,7 @@ IMAGE_SUFFIX = ".tar.zst"
 VENV_TD = "td"
 
 UV_FOLDER = ".uv"
+KENVS_FOLDER = "kenvs"
 
 CLEAR_ATTEMPTS = 8
 CLEAR_DELAY = 1
@@ -111,8 +112,13 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--venv",
-        default=VENV_TD,
-        help=f"Virtual environment to load (default: {VENV_TD})",
+        action="append",
+        dest="venvs",
+        metavar="VENV",
+        help=(
+            "Virtual environment to load; repeat to load several into the same"
+            f" uv home (default: {VENV_TD})"
+        ),
     )
     return parser.parse_args()
 
@@ -237,17 +243,18 @@ def open_image(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
         die("Downloading the image", f"Unsupported storage scheme: {scheme}")
 
 
-def clear_uv_home(uv_home: Path) -> None:
-    if uv_home.exists():
-        trace(f"Clearing {uv_home}")
+def clear_venv(uv_home: Path, venv: str) -> None:
+    target = uv_home / KENVS_FOLDER / venv
+    if target.exists():
+        trace(f"Clearing {target}")
         for attempt in range(CLEAR_ATTEMPTS):
             try:
-                shutil.rmtree(uv_home)
+                shutil.rmtree(target)
                 break
             except OSError as error:
                 if attempt == CLEAR_ATTEMPTS - 1:
                     raise
-                trace(f"Clearing {uv_home} failed ({error}); retrying...")
+                trace(f"Clearing {target} failed ({error}); retrying...")
                 time.sleep(CLEAR_DELAY)
     uv_home.mkdir(parents=True, exist_ok=True)
 
@@ -303,12 +310,13 @@ def main() -> int:
     uv_home = output / UV_FOLDER
 
     uri, options = load_mount(Path(arguments.storage_config), arguments.mount)
-    name = image_for_venv(arguments.image, arguments.venv)
-    source = image_uri(uri, arguments.subfolder, name)
+    venvs = arguments.venvs or [VENV_TD]
 
     output.mkdir(parents=True, exist_ok=True)
-    clear_uv_home(uv_home)
-    extract_image(source, options, uv_home)
+    for venv in venvs:
+        clear_venv(uv_home, venv)
+        name = image_for_venv(arguments.image, venv)
+        extract_image(image_uri(uri, arguments.subfolder, name), options, uv_home)
 
     trace(f"Done! Virtual environments available at {uv_home}")
     return 0

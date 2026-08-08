@@ -18,7 +18,7 @@ metadata:
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
     tabsdata.com/tier: init
-    tabsdata.com/sequence: "10"
+    tabsdata.com/sequence: "20"
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 1800

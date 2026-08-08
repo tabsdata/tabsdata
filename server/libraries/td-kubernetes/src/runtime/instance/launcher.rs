@@ -126,8 +126,7 @@ async fn create_non_ephemeral_workload(
     let server_pods = apply_server_phase(context, cluster_provider, system, profile, multi).await?;
     wait_server_phase(context, &server_pods, multi).await?;
     apply_endpoint_phase(context, system, profile, multi).await?;
-    let init_jobs = apply_init_phase(context, cluster_provider, system, profile, multi).await?;
-    wait_init_phase(context, &init_jobs, multi).await?;
+    run_init_phase(context, cluster_provider, system, profile, multi).await?;
     let regular_pods = apply_regular_phase(
         context,
         cluster_provider,
@@ -264,13 +263,12 @@ pub async fn apply_endpoint_phase(
     Ok(())
 }
 
-pub async fn apply_init_phase(
+async fn apply_init_phase(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
     system: &SystemValues,
     profile: &Profile,
-    multi: &MultiProgress,
-) -> CommandResult<Vec<String>> {
+) -> CommandResult<Vec<(i64, Vec<(String, Job)>)>> {
     let available_secrets = list_available_secrets(context).await?;
     let mut prepared: Vec<(i64, String, Job)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
@@ -293,13 +291,24 @@ pub async fn apply_init_phase(
             .into());
         }
     }
-    let prepared: Vec<(String, Job)> = prepared
-        .into_iter()
-        .map(|(_, key, job)| (key, job))
-        .collect();
-    let phase = phase_spinner_in(multi, &format!("Applying {} init job(s)", prepared.len()));
+    let mut groups: Vec<(i64, Vec<(String, Job)>)> = Vec::new();
+    for (sequence, key, job) in prepared {
+        match groups.last_mut() {
+            Some((current, batch)) if *current == sequence => batch.push((key, job)),
+            _ => groups.push((sequence, vec![(key, job)])),
+        }
+    }
+    Ok(groups)
+}
+
+async fn apply_init_group(
+    context: &KubeContext,
+    group: Vec<(String, Job)>,
+    multi: &MultiProgress,
+) -> CommandResult<Vec<String>> {
+    let phase = phase_spinner_in(multi, &format!("Applying {} init job(s)", group.len()));
     let mut applied: Vec<String> = Vec::new();
-    for (key, job) in prepared {
+    for (key, job) in group {
         let bar = phase.add_resource(&key);
         let created = match job_api::create_job(context, &job, Vec::new(), Vec::new(), None).await {
             Ok(created) => {
@@ -318,6 +327,21 @@ pub async fn apply_init_phase(
         applied.push(name);
     }
     Ok(applied)
+}
+
+pub async fn run_init_phase(
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
+    system: &SystemValues,
+    profile: &Profile,
+    multi: &MultiProgress,
+) -> CommandResult {
+    let groups = apply_init_phase(context, cluster_provider, system, profile).await?;
+    for (_, group) in groups {
+        let applied = apply_init_group(context, group, multi).await?;
+        wait_init_phase(context, &applied, multi).await?;
+    }
+    Ok(())
 }
 
 pub async fn wait_init_phase(

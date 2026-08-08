@@ -13,7 +13,6 @@ pub mod summary;
 use std::future::Future;
 
 use async_trait::async_trait;
-use clap_derive::ValueEnum;
 use indicatif::MultiProgress;
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
@@ -76,18 +75,30 @@ const PREFERRED_DOCKER: &[&str] = &[ClusterProvider::Docker.as_str()];
 const PREFERRED_EKS: &[&str] = &[ClusterProvider::Eks.as_str()];
 const PREFERRED_FARGATE: &[&str] = &[ClusterProvider::Fargate.as_str()];
 
+const SUPPORTED_PROVIDERS: &[ClusterProvider] = &[ClusterProvider::Kminus, ClusterProvider::Eks];
+
 const AXES: &[Axis] = &[Axis {
     name: PROVIDER_AXIS_NAME,
     known: PROVIDER_VALUES,
 }];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ClusterProvider {
     Kminus,
     Docker,
     Eks,
     Fargate,
+}
+
+impl clap::ValueEnum for ClusterProvider {
+    fn value_variants<'a>() -> &'a [Self] {
+        SUPPORTED_PROVIDERS
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(clap::builder::PossibleValue::new(self.as_str()))
+    }
 }
 
 #[allow(dead_code)]
@@ -102,9 +113,7 @@ impl ClusterProvider {
     }
 
     pub fn supported(self) -> bool {
-        match self {
-            Self::Kminus | Self::Docker | Self::Eks | Self::Fargate => true,
-        }
+        SUPPORTED_PROVIDERS.contains(&self)
     }
 
     pub const fn description(self) -> &'static str {
@@ -117,10 +126,7 @@ impl ClusterProvider {
     }
 
     pub fn supported_providers() -> impl Iterator<Item = Self> {
-        <Self as clap::ValueEnum>::value_variants()
-            .iter()
-            .copied()
-            .filter(|provider| provider.supported())
+        SUPPORTED_PROVIDERS.iter().copied()
     }
 
     pub fn supported_descriptions() -> String {

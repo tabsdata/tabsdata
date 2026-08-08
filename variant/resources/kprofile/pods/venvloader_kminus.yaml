@@ -18,7 +18,7 @@ metadata:
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
     tabsdata.com/tier: init
-    tabsdata.com/sequence: "20"
+    tabsdata.com/sequence: "10"
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 1800
@@ -53,6 +53,8 @@ spec:
         - ${{system:tdk_runtimes_root}}
         - --venv
         - td
+        - --venv
+        - fn
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         env:
