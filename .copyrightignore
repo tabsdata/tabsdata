@@ -1,0 +1,13 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# tdx-gtableframe prepends the header to everything it emits, so the templates
+# themselves must stay bare or the generated modules get it twice.
+*/generate/templates/*.py.tmpl
+
+# Rendered from DEPENDENCIES.d2 by the d2 toolchain.
+connectors/python/guides/DEPENDENCIES.svg
+
+# Fixture read back verbatim by the path-to-code tests.
+*/test_path_to_code/*/1.txt
