@@ -134,6 +134,7 @@ SrcCfgKey: TypeAlias = Literal[
     "postgres.logging_level",
     "tabsdata.sql.sql.readEngine",
     "tabsdata.sql.chunkSize",
+    "tabsdata.src_metadata.drop",
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
@@ -221,7 +222,8 @@ class PostgresSrc(Src):
     metadata columns: `@td.sql.query`, the text of the query that
     produced the row, and `@td.sql.initial_values`, the JSON
     serialization of the bind values that query ran with (an empty JSON
-    object when it has no binds).
+    object when it has no binds). Setting the `src_cfg` key
+    `tabsdata.src_metadata.drop` to `True` leaves them off.
 
     Args:
         queries: SELECT statements; one output slot per query, in order.
@@ -239,7 +241,7 @@ class PostgresSrc(Src):
             Persist the next value with `ctx.set_attr(bind_name, v)`.
         src_cfg: Optional config mapping over the allowed keys only
             (`postgres.logging_level`, `tabsdata.sql.sql.readEngine`,
-            `tabsdata.sql.chunkSize`).
+            `tabsdata.sql.chunkSize`, `tabsdata.src_metadata.drop`).
 
     Examples:
         Publish multiple Postgres tables, one output slot per query in order:

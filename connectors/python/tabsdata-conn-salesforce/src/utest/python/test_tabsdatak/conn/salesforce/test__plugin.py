@@ -325,6 +325,19 @@ def test_src_plugin_metadata_cutoff_empty_without_initial_last_modified(
     }
 
 
+def test_src_plugin_drops_metadata_when_src_cfg_asks(monkeypatch, work_dir):
+    fake = _FakeSF()
+    fake.records_by_query = [[{"attributes": {}, "Id": "001"}]]
+    _patch_login(monkeypatch, fake)
+    src = SalesforceSrc(
+        queries=["SELECT Id FROM Account"],
+        src_cfg={"tabsdata.src_metadata.drop": True},
+    )
+    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+
+    assert out[0][0].metadata is None
+
+
 # ---------------------------------------------------------------------------
 # _SalesforceReportSrcPlugin -- mock the metadata + restful surface
 # ---------------------------------------------------------------------------
@@ -425,6 +438,22 @@ def test_report_plugin_metadata_cutoff_empty_without_initial_last_modified(
     }
 
 
+def test_report_plugin_drops_metadata_when_src_cfg_asks(monkeypatch, work_dir):
+    fake = _FakeSF()
+    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
+    _patch_login(monkeypatch, fake)
+    _patch_report_run(monkeypatch, work_dir / "0.parquet")
+
+    src = SalesforceReportSrc(
+        reports=["00O000000000001"],
+        find_report_by="id",
+        src_cfg={"tabsdata.src_metadata.drop": True},
+    )
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+
+    assert out[0][0].metadata is None
+
+
 # ---------------------------------------------------------------------------
 # SrcDef wiring
 # ---------------------------------------------------------------------------
@@ -469,11 +498,18 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
     import logging as _logging
     cfg = plugin._resolve_src_cfg(None)
     assert cfg.logging_level == _logging.ERROR
+    assert cfg.drop_metadata is False
 
 
 def test_resolve_src_cfg_applies_overrides():
-    cfg = plugin._resolve_src_cfg({"salesforce.logging_level": 20})
+    cfg = plugin._resolve_src_cfg(
+        {
+            "salesforce.logging_level": 20,
+            "tabsdata.src_metadata.drop": True,
+        }
+    )
     assert cfg.logging_level == 20
+    assert cfg.drop_metadata is True
 
 
 def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):

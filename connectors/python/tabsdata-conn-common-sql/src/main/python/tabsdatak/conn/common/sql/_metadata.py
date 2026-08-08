@@ -50,10 +50,12 @@ def to_sql_table_file_inputs(
     files: list[list[TableFileSpec]],
     queries: list[str],
     initial_values: Mapping[str, Any] | None,
+    drop_metadata: bool = False,
 ) -> list[list[TableFileInput]]:
     """:func:`tabsdatak.spi.to_table_file_inputs` for SQL reads: every
     file of slot ``i`` carries the :func:`sql_metadata` of
-    ``queries[i]``.
+    ``queries[i]``, or no metadata at all when ``drop_metadata`` is set
+    (the source's ``tabsdata.src_metadata.drop`` config key).
 
     ``files`` and ``queries`` are positionally aligned -- one slot per
     query -- so a length mismatch means the read broke its contract and
@@ -61,6 +63,6 @@ def to_sql_table_file_inputs(
     """
     inputs: list[list[TableFileInput]] = []
     for query, slot in zip(queries, files, strict=True):
-        metadata = sql_metadata(query, initial_values)
+        metadata = None if drop_metadata else sql_metadata(query, initial_values)
         inputs.append([TableFileInput(file=file, metadata=metadata) for file in slot])
     return inputs

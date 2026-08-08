@@ -88,6 +88,7 @@ SrcCfgKey: TypeAlias = Literal[
     "mssql.logging_level",
     "tabsdata.sql.sql.readEngine",
     "tabsdata.sql.chunkSize",
+    "tabsdata.src_metadata.drop",
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
@@ -174,7 +175,8 @@ class MSSQLSrc(Src):
     metadata columns: `@td.sql.query`, the text of the query that
     produced the row, and `@td.sql.initial_values`, the JSON
     serialization of the bind values that query ran with (an empty JSON
-    object when it has no binds).
+    object when it has no binds). Setting the `src_cfg` key
+    `tabsdata.src_metadata.drop` to `True` leaves them off.
 
     Args:
         queries: SELECT statements, one output slot per entry.
@@ -188,8 +190,8 @@ class MSSQLSrc(Src):
             plugin reads `ctx.get_attr(bind_name)` and the function
             persists new values with `ctx.set_attr(bind_name, ...)`.
         src_cfg: Optional connector config; supported keys are
-            `mssql.logging_level`, `tabsdata.sql.sql.readEngine` and
-            `tabsdata.sql.chunkSize`.
+            `mssql.logging_level`, `tabsdata.sql.sql.readEngine`,
+            `tabsdata.sql.chunkSize` and `tabsdata.src_metadata.drop`.
 
     Examples:
         Publish multiple SQL Server tables, one output slot per query in

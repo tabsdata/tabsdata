@@ -50,10 +50,12 @@ logger = logging.getLogger(__name__)
 # ``dest_cfg``; their ``SrcCfgKey`` / ``DestCfgKey`` annotation means
 # a typo or rename gets flagged against the schema's Literal.
 _KEY_SRC_LOGGING_LEVEL: SrcCfgKey = "databricks.logging_level"
+_KEY_SRC_DROP_METADATA: SrcCfgKey = "tabsdata.src_metadata.drop"
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "databricks.logging_level"
 
 _SRC_CFGS_DEFAULTS: dict[SrcCfgKey, Any] = {
     _KEY_SRC_LOGGING_LEVEL: logging.ERROR,
+    _KEY_SRC_DROP_METADATA: False,
 }
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
@@ -89,6 +91,7 @@ def _resolve_initial_values(ctx: SrcPluginCtx, src: DatabricksSrc) -> dict | Non
 @dataclass(frozen=True)
 class _ReaderCfg:
     logging_level: int
+    drop_metadata: bool
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,7 @@ def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
 
     return _ReaderCfg(
         logging_level=int(_get(_KEY_SRC_LOGGING_LEVEL)),
+        drop_metadata=bool(_get(_KEY_SRC_DROP_METADATA)),
     )
 
 
@@ -234,6 +238,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
             [[Path(p)] for p in parquet_paths],
             read_cfg.queries,
             read_cfg.initial_values,
+            drop_metadata=cfg.drop_metadata,
         )
 
 

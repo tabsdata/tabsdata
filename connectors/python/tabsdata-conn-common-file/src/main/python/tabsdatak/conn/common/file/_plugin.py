@@ -18,6 +18,7 @@ from tabsdatak.common._transporter.invoker.transporter1 import (
     TransporterReportError,
     TransporterRunError,
 )
+from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
 from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
@@ -74,6 +75,7 @@ class ReaderConf:
     file_format: SrcFileFormat
     format_cfg: dict | None = None
     initial_lastmod: str | None = None
+    drop_metadata: bool = False
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
@@ -83,6 +85,7 @@ class ReaderConf:
             file_format=src.format,
             format_cfg=src.format_cfg,
             initial_lastmod=initial_lastmod_to_iso(src.initial_last_modified),
+            drop_metadata=bool((src.src_cfg or {}).get(SRC_META_DROP_KEY, False)),
         )
 
 
@@ -148,7 +151,9 @@ def import_files(
     """Import every path in ``cfg.paths``, one output slot per path.
 
     Each imported file is reported with the location it was read from as
-    its `FILE_META_PATH` metadata.
+    its `FILE_META_PATH` metadata, or with no metadata at all when
+    ``cfg.drop_metadata`` is set (the source's
+    ``tabsdata.src_metadata.drop`` config key).
     """
     conn = cfg.conn
     handler = make_handler()
@@ -201,10 +206,15 @@ def import_files(
         for f in report.files:
             target = f.get("to") if isinstance(f, dict) else None
             if target:
+                metadata = (
+                    None
+                    if cfg.drop_metadata
+                    else {FILE_META_PATH: str(f.get("from", ""))}
+                )
                 slot_files.append(
                     TableFileInput(
                         file=Path(cast(str, target)),
-                        metadata={FILE_META_PATH: str(f.get("from", ""))},
+                        metadata=metadata,
                     )
                 )
         logger.debug(

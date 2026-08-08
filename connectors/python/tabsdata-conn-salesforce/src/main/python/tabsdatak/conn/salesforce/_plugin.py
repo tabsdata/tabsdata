@@ -34,15 +34,18 @@ logger = logging.getLogger(__name__)
 
 # --- src_cfg keys ---------------------------------------------------
 _KEY_SRC_LOGGING_LEVEL: SrcCfgKey = "salesforce.logging_level"
+_KEY_SRC_DROP_METADATA: SrcCfgKey = "tabsdata.src_metadata.drop"
 
 _SRC_CFGS_DEFAULTS: dict[SrcCfgKey, Any] = {
     _KEY_SRC_LOGGING_LEVEL: logging.ERROR,
+    _KEY_SRC_DROP_METADATA: False,
 }
 
 
 @dataclass(frozen=True)
 class _ReaderCfg:
     logging_level: int
+    drop_metadata: bool
 
 
 def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
@@ -59,6 +62,7 @@ def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
 
     return _ReaderCfg(
         logging_level=int(_get(_KEY_SRC_LOGGING_LEVEL)),
+        drop_metadata=bool(_get(_KEY_SRC_DROP_METADATA)),
     )
 
 
@@ -88,7 +92,12 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceSrc]):
         api_version = src.api_version
         sf = _reader.login(conn, api_version=api_version)
         try:
-            return _reader.read_soql_src(sf, src, ctx.work_dir)
+            return _reader.read_soql_src(
+                sf,
+                src,
+                ctx.work_dir,
+                drop_metadata=cfg.drop_metadata,
+            )
         finally:
             logger.info("salesforce: read_in finished (%d quer(ies))", len(src.queries))
 
@@ -112,7 +121,12 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSr
 
         sf = _reader.login(conn)
         try:
-            return _reader.read_report_src(sf, src, ctx.work_dir)
+            return _reader.read_report_src(
+                sf,
+                src,
+                ctx.work_dir,
+                drop_metadata=cfg.drop_metadata,
+            )
         finally:
             logger.info("salesforce: read_in finished (%d report(s))", len(src.reports))
 

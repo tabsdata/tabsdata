@@ -107,7 +107,10 @@ SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 
 
 # --- DatabricksSrc.src_cfg keys -------------------------------------
-SrcCfgKey: TypeAlias = Literal["databricks.logging_level",]
+SrcCfgKey: TypeAlias = Literal[
+    "databricks.logging_level",
+    "tabsdata.src_metadata.drop",
+]
 
 SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -266,7 +269,8 @@ class DatabricksSrc(Src):
     metadata columns: `@td.sql.query`, the text of the query that
     produced the row, and `@td.sql.initial_values`, the JSON
     serialization of the bind values that query ran with (an empty JSON
-    object when it has no binds).
+    object when it has no binds). Setting the `src_cfg` key
+    `tabsdata.src_metadata.drop` to `True` leaves them off.
 
     Args:
         queries: SQL statements, one output slot per entry, run through
@@ -277,8 +281,9 @@ class DatabricksSrc(Src):
             which the plugin reads `ctx.get_attr(bind_name)` and the
             function persists new values with
             `ctx.set_attr(bind_name, ...)`.
-        src_cfg: Optional connector config; the only supported key is
-            `databricks.logging_level`.
+        src_cfg: Optional connector config; supported keys are
+            `databricks.logging_level` and
+            `tabsdata.src_metadata.drop`.
     """
 
     # devguide-ref: source bind-value seeding & ctx scratch state

@@ -15,3 +15,11 @@ alongside the data it reads.
 Every metadata entry a source plugin attaches to a file it produces is
 named with this prefix, so the metadata columns added to the published
 table never collide with a column of the source data itself."""
+
+SRC_META_DROP_KEY: str = "tabsdata.src_metadata.drop"
+"""`src_cfg` key (`"tabsdata.src_metadata.drop"`) every source that
+reports metadata accepts.
+
+Set it to `True` and `read_in` returns its files with no metadata at
+all, so the published table carries only the source's own columns.
+Defaults to `False`."""

@@ -167,8 +167,7 @@ If no format is specified, it is inferred from the file extension.
 ## File Source Metadata
 
 Every table published by a file source (`LocalFileSrc`, `S3Src`, `GCSSrc`,
-`AzureBlobSrc`) automatically carries one metadata column — there is nothing to
-configure:
+`AzureBlobSrc`) automatically carries one metadata column:
 
 | Column | Contents |
 |--------|----------|
@@ -188,7 +187,7 @@ A path that globs several files reports the specific file each row came from.
 
 Every table published by a SQL source (`MySQLSrc`, `PostgresSrc`, `OracleSrc`,
 `Db2Src`, `MSSQLSrc`, `DatabricksSrc`) automatically carries two metadata
-columns — there is nothing to configure:
+columns:
 
 | Column | Contents |
 |--------|----------|
@@ -211,7 +210,7 @@ are the same for every query of a run.
 ## Salesforce Source Metadata
 
 Every table published by a Salesforce source automatically carries two metadata
-columns — there is nothing to configure:
+columns:
 
 | Source | Column | Contents |
 |--------|--------|----------|
@@ -245,6 +244,21 @@ td.KafkaStreamSrc(topic="users", data_format="avro", schema=AVRO_SCHEMA)
 A stream source stages parquet rather than reporting per-file metadata, so the
 column is written into the data itself — the same way the CDC sources write
 their `@td.cdc.meta.*` columns.
+
+## Dropping Source Metadata
+
+Every source above that reports metadata accepts the `src_cfg` key
+`tabsdata.src_metadata.drop`; set it to `True` and the published table carries
+the source's own columns alone:
+
+```python
+td.S3Src(paths=["in/*.csv"], src_cfg={"tabsdata.src_metadata.drop": True})
+td.MySQLSrc(queries=["SELECT * FROM city"],
+            src_cfg={"tabsdata.src_metadata.drop": True})
+```
+
+It covers the file, SQL and Salesforce sources. The Kafka and CDC columns are
+written into the staged data itself, so the key does not affect them.
 
 ## Triggers
 

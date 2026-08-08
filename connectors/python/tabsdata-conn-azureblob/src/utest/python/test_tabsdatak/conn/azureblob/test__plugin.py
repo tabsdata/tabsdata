@@ -217,3 +217,12 @@ def test_azureblob_cardinality_uses_paths_length():
     assert plugin.AZURE_BLOB_SRC.cardinality(src) == 3
     dest = AzureBlobDest(paths=["a", "b"])
     assert plugin.AZURE_BLOB_DEST.cardinality(dest) == 2
+
+
+def test_reader_conf_carries_the_drop_metadata_src_cfg_key():
+    src = AzureBlobSrc(
+        paths=["a/b.parquet"],
+        src_cfg={"tabsdata.src_metadata.drop": True},
+    )
+    rc = _file_plugin.ReaderConf.from_src(object(), src)
+    assert rc.drop_metadata is True

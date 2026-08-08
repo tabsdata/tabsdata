@@ -125,11 +125,14 @@ def read_soql_src(
     sf: Any,
     src: SalesforceSrc,
     work_dir: Path,
+    drop_metadata: bool = False,
 ) -> list[list[TableFileInput]]:
     """Execute every SOQL query in ``src`` against the open Salesforce
     client ``sf`` and return one ``TableMode.SINGLE``-shaped output per
     query (each inner list has exactly one parquet file), each carrying
-    the query it ran and the last-modified cutoff as metadata.
+    the query it ran and the last-modified cutoff as metadata --
+    or no metadata at all when ``drop_metadata`` is set (the source's
+    ``tabsdata.src_metadata.drop`` config key).
 
     Updates ``src.initial_last_modified`` is *not* attempted -- offset
     state lives in the framework's initial-values surface, which the
@@ -153,6 +156,7 @@ def read_soql_src(
                 include_deleted=src.include_deleted,
                 initial_last_modified=initial_last_modified,
                 work_dir=work_dir,
+                drop_metadata=drop_metadata,
             )
         )
     return outputs
@@ -166,6 +170,7 @@ def _run_one_soql(
     include_deleted: bool,
     initial_last_modified: datetime | None,
     work_dir: Path,
+    drop_metadata: bool,
 ) -> list[TableFileInput]:
     import polars as pl
 
@@ -218,17 +223,17 @@ def _run_one_soql(
             pl.scan_csv(csv_path, raise_if_empty=True).sink_parquet(parquet_path)
         except pl.exceptions.NoDataError:
             pl.DataFrame().write_parquet(parquet_path)
-    return [
-        TableFileInput(
-            file=parquet_path,
-            metadata={
-                SALESFORCE_META_SOQL: query,
-                SALESFORCE_META_LAST_MODIFIED: _last_modified_metadata(
-                    initial_last_modified
-                ),
-            },
-        )
-    ]
+    metadata = (
+        None
+        if drop_metadata
+        else {
+            SALESFORCE_META_SOQL: query,
+            SALESFORCE_META_LAST_MODIFIED: _last_modified_metadata(
+                initial_last_modified
+            ),
+        }
+    )
+    return [TableFileInput(file=parquet_path, metadata=metadata)]
 
 
 def _format_sf_datetime(dt: datetime) -> str:
@@ -253,10 +258,13 @@ def read_report_src(
     sf: Any,
     src: SalesforceReportSrc,
     work_dir: Path,
+    drop_metadata: bool = False,
 ) -> list[list[TableFileInput]]:
     """Run every Salesforce report in ``src`` and return per-report
     parquet outputs, each carrying the resolved report id and the
-    last-modified cutoff as metadata."""
+    last-modified cutoff as metadata -- or no metadata at all when
+    ``drop_metadata`` is set (the source's
+    ``tabsdata.src_metadata.drop`` config key)."""
     outputs: list[list[TableFileInput]] = []
     for i, report in enumerate(src.reports):
         outputs.append(
@@ -266,6 +274,7 @@ def read_report_src(
                 report=report,
                 src=src,
                 work_dir=work_dir,
+                drop_metadata=drop_metadata,
             )
         )
     return outputs
@@ -278,6 +287,7 @@ def _run_one_report(
     report: str,
     src: SalesforceReportSrc,
     work_dir: Path,
+    drop_metadata: bool,
 ) -> list[TableFileInput]:
     from tabsdatak.conn.salesforce.error import SalesforceRuntimeException
 
@@ -347,17 +357,17 @@ def _run_one_report(
             cause=e,
             report_index=index,
         )
-    return [
-        TableFileInput(
-            file=parquet_path,
-            metadata={
-                SALESFORCE_META_REPORT_ID: report_id,
-                SALESFORCE_META_LAST_MODIFIED: _last_modified_metadata(
-                    src.initial_last_modified
-                ),
-            },
-        )
-    ]
+    metadata = (
+        None
+        if drop_metadata
+        else {
+            SALESFORCE_META_REPORT_ID: report_id,
+            SALESFORCE_META_LAST_MODIFIED: _last_modified_metadata(
+                src.initial_last_modified
+            ),
+        }
+    )
+    return [TableFileInput(file=parquet_path, metadata=metadata)]
 
 
 def _resolve_report_id(

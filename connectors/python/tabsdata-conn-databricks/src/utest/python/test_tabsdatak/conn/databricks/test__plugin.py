@@ -188,6 +188,12 @@ def test_resolve_src_cfg_logs_unknown_keys(caplog):
     assert any("Unknown src_cfg key" in rec.getMessage() for rec in caplog.records)
 
 
+def test_resolve_src_cfg_reads_drop_metadata():
+    assert plugin._resolve_src_cfg(None).drop_metadata is False
+    cfg = plugin._resolve_src_cfg({"tabsdata.src_metadata.drop": True})
+    assert cfg.drop_metadata is True
+
+
 def test_resolve_dest_cfg_defaults_when_none():
     import logging as _logging
 
@@ -308,6 +314,19 @@ def test_src_plugin_reports_query_and_binds_as_metadata(
         '{"min_id": 7}',
         '{"min_id": 7}',
     ]
+
+
+def test_src_plugin_drops_metadata_when_src_cfg_asks(monkeypatch, work_dir):
+    monkeypatch.setattr(
+        impl, "read_all_queries", lambda _cfg, _dir: [Path("q0.parquet")]
+    )
+
+    src = DatabricksSrc(
+        queries=["SELECT 1"],
+        src_cfg={"tabsdata.src_metadata.drop": True},
+    )
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), src)
+    assert out[0][0].metadata is None
 
 
 # ---------------------------------------------------------------------------

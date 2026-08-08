@@ -12,6 +12,7 @@ import pytest
 from tabsdatak.common._error import CommonInitException
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._transporter.invoker import transporter1, transporter2
+from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.conn.common.file import _plugin
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
@@ -324,14 +325,15 @@ _STUB_ERRORS = _plugin.FilePluginErrors(
 class _StubSrc:
     """Duck-typed stand-in for any connector's Src dataclass --
     ReaderConf.from_src only reads ``.paths``, ``.format``,
-    ``.format_cfg`` and ``.initial_last_modified`` (``conn`` is now
-    passed in separately by the plugin)."""
+    ``.format_cfg``, ``.initial_last_modified`` and ``.src_cfg``
+    (``conn`` is now passed in separately by the plugin)."""
 
     def __init__(self):
         self.paths = ["a.csv", "b.csv"]
         self.format = SrcFileFormat.CSV
         self.format_cfg = {SrcFileFormat.CSV: {"separator": ","}}
         self.initial_last_modified = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        self.src_cfg = None
 
 
 def test_reader_conf_from_src_translates_fields():
@@ -342,6 +344,13 @@ def test_reader_conf_from_src_translates_fields():
     assert rc.file_format is SrcFileFormat.CSV
     assert rc.format_cfg == {SrcFileFormat.CSV: {"separator": ","}}
     assert rc.initial_lastmod == "2026-01-01T00:00:00.000000+00:00"
+    assert rc.drop_metadata is False
+
+
+def test_reader_conf_from_src_reads_the_drop_metadata_key():
+    src = _StubSrc()
+    src.src_cfg = {SRC_META_DROP_KEY: True}
+    assert _plugin.ReaderConf.from_src(object(), src).drop_metadata is True
 
 
 def test_reader_conf_from_src_handles_none_format_cfg():
@@ -726,6 +735,30 @@ def test_run_read_in_metadata_key_present_when_report_omits_source(
     # The metadata never changes shape: the key stays, empty when the
     # report carries no source for the file.
     assert out[0][0].metadata == {FILE_META_PATH: ""}
+
+
+def test_run_read_in_drops_metadata_when_configured(monkeypatch, tmp_path):
+    def fake_import_one(**kw):
+        return _stub_report(
+            [str(kw["target_dir"] / "a.parquet")],
+            sources=["s3://bucket/in/a.csv"],
+        )
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["in/*.csv"],
+        file_format=SrcFileFormat.CSV,
+        drop_metadata=True,
+    )
+    out = _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert out[0][0].metadata is None
 
 
 # --- run_read_in: lastmod cursor via ctx attrs ------------------------

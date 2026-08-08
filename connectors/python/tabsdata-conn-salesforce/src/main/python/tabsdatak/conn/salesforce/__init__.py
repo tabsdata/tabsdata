@@ -148,7 +148,10 @@ FilterSpec: TypeAlias = list[tuple[str, OperatorSpec, str]]
 
 
 # --- SalesforceSrc / SalesforceReportSrc.src_cfg keys ---------------
-SrcCfgKey: TypeAlias = Literal["salesforce.logging_level",]
+SrcCfgKey: TypeAlias = Literal[
+    "salesforce.logging_level",
+    "tabsdata.src_metadata.drop",
+]
 
 SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -212,6 +215,8 @@ class SalesforceSrc(Src):
     the row as it was sent to Salesforce (any `$lastModified` token
     already substituted), and `@td.salesforce.last_modified`, the
     `initial_last_modified` cutoff it ran with (empty when unset).
+    Setting the `src_cfg` key `tabsdata.src_metadata.drop` to `True`
+    leaves them off.
 
     Args:
         queries: SOQL query list; today exactly one entry (one output
@@ -222,8 +227,9 @@ class SalesforceSrc(Src):
             `$lastModified` token in the SOQL string.
         api_version: Optional API-version override, e.g. `"60.0"`
             (`<major>.<minor>`, 1-3 digit major, 1-2 digit minor).
-        src_cfg: Optional connector config over the single key
-            `salesforce.logging_level`.
+        src_cfg: Optional connector config over the keys
+            `salesforce.logging_level` and
+            `tabsdata.src_metadata.drop`.
 
     Examples:
         Publish an SObject query, including deleted rows (queryAll):
@@ -262,7 +268,9 @@ class SalesforceReportSrc(Src):
     metadata columns: `@td.salesforce.reportId`, the resolved report
     id that produced the row (even when `reports` named the report by
     name), and `@td.salesforce.last_modified`, the source's
-    `initial_last_modified` cutoff (empty when unset).
+    `initial_last_modified` cutoff (empty when unset). Setting the
+    `src_cfg` key `tabsdata.src_metadata.drop` to `True` leaves them
+    off.
 
     Args:
         reports: Report ids or names, one output slot per entry
@@ -287,8 +295,9 @@ class SalesforceReportSrc(Src):
             (and vice versa).
         initial_last_modified: Cutoff datetime; requires
             `last_modified_column`.
-        src_cfg: Optional connector config over the single key
-            `salesforce.logging_level`.
+        src_cfg: Optional connector config over the keys
+            `salesforce.logging_level` and
+            `tabsdata.src_metadata.drop`.
 
     Examples:
         Publish a Tabular report by id, filtered server-side before

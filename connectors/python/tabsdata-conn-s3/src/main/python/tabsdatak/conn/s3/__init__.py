@@ -78,7 +78,10 @@ CredentialsSpec: TypeAlias = AwsAccessSecretKey
 
 
 # --- S3Src.src_cfg keys ---------------------------------------------
-SrcCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
+SrcCfgKey: TypeAlias = Literal[
+    "tabsdata.file.chunkSize",
+    "tabsdata.src_metadata.drop",
+]
 
 SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -172,7 +175,8 @@ class S3Src(Src):
     Every table this source publishes automatically carries a
     `@td.file.path` metadata column: the `s3://` object URI the row was read
     from. A path that globs several files reports the specific file
-    each row came from.
+    each row came from. Setting the `src_cfg` key
+    `tabsdata.src_metadata.drop` to `True` leaves the column off.
 
     Args:
         paths: Source paths relative to the connection's `base_path`,
@@ -190,8 +194,9 @@ class S3Src(Src):
             ingestion. The first run imports only files modified at or
             after this timestamp; the cutoff then advances each run so
             only newer files are re-imported.
-        src_cfg: Optional connector config; supports the key
-            `tabsdata.file.chunkSize`.
+        src_cfg: Optional connector config; supported keys are
+            `tabsdata.file.chunkSize` and
+            `tabsdata.src_metadata.drop`.
     """
 
     paths: SrcPathsSpec

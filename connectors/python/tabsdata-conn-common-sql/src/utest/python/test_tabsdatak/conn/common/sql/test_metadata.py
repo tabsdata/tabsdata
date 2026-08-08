@@ -113,6 +113,32 @@ def test_initial_values_are_shared_by_every_slot():
     assert serialized == {'{"id": 7}'}
 
 
+def test_drop_metadata_leaves_every_file_without_metadata():
+    files = [
+        [Path("slot0_chunk0.parquet"), Path("slot0_chunk1.parquet")],
+        [Path("slot1_chunk0.parquet")],
+    ]
+    inputs = to_sql_table_file_inputs(
+        files,
+        ["SELECT 1", "SELECT 2"],
+        {"id": 7},
+        drop_metadata=True,
+    )
+
+    assert [[i.file for i in slot] for slot in inputs] == files
+    assert all(i.metadata is None for slot in inputs for i in slot)
+
+
+def test_drop_metadata_still_enforces_the_slot_query_pairing():
+    with pytest.raises(ValueError):
+        to_sql_table_file_inputs(
+            [[Path("a.parquet")]],
+            ["SELECT 1", "SELECT 2"],
+            None,
+            drop_metadata=True,
+        )
+
+
 def test_empty_slot_yields_no_inputs():
     inputs = to_sql_table_file_inputs([[]], ["SELECT 1"], None)
     assert inputs == [[]]

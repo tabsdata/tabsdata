@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 _KEY_SRC_LOGGING_LEVEL: SrcCfgKey = "postgres.logging_level"
 _KEY_SRC_READ_ENGINE: SrcCfgKey = "tabsdata.sql.sql.readEngine"
 _KEY_SRC_CHUNK_SIZE: SrcCfgKey = "tabsdata.sql.chunkSize"
+_KEY_SRC_DROP_METADATA: SrcCfgKey = "tabsdata.src_metadata.drop"
 
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "postgres.logging_level"
 _KEY_DEST_WRITE_ENGINE: DestCfgKey = "tabsdata.sql.sql.writeEngine"
@@ -48,6 +49,7 @@ _SRC_CFGS_DEFAULTS: dict[SrcCfgKey, Any] = {
     _KEY_SRC_LOGGING_LEVEL: logging.ERROR,
     _KEY_SRC_READ_ENGINE: None,
     _KEY_SRC_CHUNK_SIZE: None,
+    _KEY_SRC_DROP_METADATA: False,
 }
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
@@ -62,6 +64,7 @@ class _ReaderCfg:
     logging_level: int
     read_engine: str | None
     chunk_size: int | None
+    drop_metadata: bool
 
 
 @dataclass(frozen=True)
@@ -88,6 +91,7 @@ def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
         logging_level=int(_get(_KEY_SRC_LOGGING_LEVEL)),
         read_engine=_get(_KEY_SRC_READ_ENGINE),
         chunk_size=int(raw_chunk) if raw_chunk is not None else None,
+        drop_metadata=bool(_get(_KEY_SRC_DROP_METADATA)),
     )
 
 
@@ -162,6 +166,7 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrcConn, PostgresSrc]):
                 engine.read(read_cfg, ctx.work_dir),
                 read_cfg.queries,
                 read_cfg.initial_values,
+                drop_metadata=cfg.drop_metadata,
             )
         except OperationalError as e:
             # Engine connect / handshake failures bubble up as

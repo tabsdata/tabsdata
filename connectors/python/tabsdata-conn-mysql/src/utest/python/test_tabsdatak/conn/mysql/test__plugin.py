@@ -228,6 +228,7 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
     assert cfg.logging_level == _logging.ERROR
     assert cfg.read_engine is None
     assert cfg.chunk_size is None
+    assert cfg.drop_metadata is False
 
 
 def test_resolve_src_cfg_applies_overrides():
@@ -236,11 +237,13 @@ def test_resolve_src_cfg_applies_overrides():
             "mysql.logging_level": 20,
             "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
             "tabsdata.sql.chunkSize": 500,
+            "tabsdata.src_metadata.drop": True,
         }
     )
     assert cfg.logging_level == 20
     assert cfg.read_engine == "polarsSqlAlchemyRead"
     assert cfg.chunk_size == 500
+    assert cfg.drop_metadata is True
 
 
 def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
@@ -319,3 +322,21 @@ def test_read_in_reports_query_and_binds_as_metadata(work_dir, monkeypatch):
         SQL_META_QUERY: "SELECT * FROM t WHERE ts > :last_modified",
         SQL_META_INITIAL_VALUES: '{"last_modified": "2026-01-01"}',
     }
+
+
+def test_read_in_drops_metadata_when_src_cfg_asks(work_dir, monkeypatch):
+    class _FakeEngine:
+        def read(self, read_cfg, work_dir_arg):
+            return [[work_dir_arg / "slot0_chunk0.parquet"]]
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine import factory as _factory
+
+    monkeypatch.setattr(_factory, "get_read_engine", lambda *a, **kw: _FakeEngine())
+
+    src = MySQLSrc(
+        queries=["SELECT * FROM t"],
+        src_cfg={"tabsdata.src_metadata.drop": True},
+    )
+    out = plugin.MySQLSrcPlugin().read_in(CtxStub(work_dir), _bare_src_conn(), src)
+    assert out[0][0].metadata is None
