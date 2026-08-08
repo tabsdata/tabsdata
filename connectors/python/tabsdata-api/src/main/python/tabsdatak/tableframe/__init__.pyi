@@ -822,3 +822,300 @@ class TableFrame(EngineFrame):
             When a pattern repeats a capture name, the extra columns are
             disambiguated with a numeric suffix (`field`, `field[1]`).
         """
+
+    @classmethod
+    def from_polars(cls, data=None, schema=None) -> TableFrame:
+        """Build a `TableFrame` from a polars frame.
+
+        :categories: generation
+
+        Takes a polars `DataFrame` or `LazyFrame`; any other input type
+        raises. The system columns are seeded on top of the given data.
+
+        Args:
+            data: The polars `DataFrame` or `LazyFrame` to wrap. `None`
+                yields an empty frame.
+            schema: Optional `{column: data type}` mapping to cast the data
+                to; the data keeps its own types when omitted.
+
+        Returns:
+            A new `TableFrame` over the given data.
+
+        Examples:
+            .. code-block:: python
+
+                TableFrame.from_polars(pl.DataFrame({"a": [1, 2, 3]}))
+                TableFrame.from_polars(pl.LazyFrame({"a": [1, 2, 3]}))
+        """
+
+    @classmethod
+    def from_pandas(cls, data=None, schema=None) -> TableFrame:
+        """Build a `TableFrame` from a pandas `DataFrame`.
+
+        :categories: generation
+
+        Args:
+            data: The pandas `DataFrame` to convert. `None` yields an
+                empty frame.
+            schema: Optional `{column: data type}` mapping to cast the data
+                to; the types pandas inferred are kept when omitted.
+
+        Returns:
+            A new `TableFrame` over the given data.
+
+        Examples:
+            .. code-block:: python
+
+                TableFrame.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+        """
+
+    @classmethod
+    def from_dict(cls, data=None, schema=None) -> TableFrame:
+        """Build a `TableFrame` from a `{column: values}` dict.
+
+        :categories: generation
+
+        Every value list must have the same length -- one entry per row.
+
+        Args:
+            data: Mapping of column name to the column's values. `None`
+                yields an empty frame.
+            schema: Optional `{column: data type}` mapping to cast the
+                columns to; types are inferred from the values when omitted.
+
+        Returns:
+            A new `TableFrame` over the given data.
+
+        Examples:
+            .. code-block:: python
+
+                TableFrame.from_dict({"g": ["x", "y"], "v": [1, 2]})
+
+            Pin the column types instead of having them inferred:
+
+            .. code-block:: python
+
+                TableFrame.from_dict({"v": [1, 2]}, schema={"v": Float64})
+        """
+
+    @classmethod
+    def empty(cls, schema=None) -> TableFrame:
+        """Build a `TableFrame` with no rows.
+
+        :categories: generation
+
+        Args:
+            schema: Optional `{column: data type}` mapping giving the frame
+                its columns. Without it the frame has no columns either.
+
+        Returns:
+            A new, empty `TableFrame`.
+
+        Examples:
+            .. code-block:: python
+
+                TableFrame.empty(schema={"id": Int64, "name": String})
+
+            With no schema the result has neither rows nor columns -- useful
+            as the starting point of a `concat`:
+
+            .. code-block:: python
+
+                TableFrame.empty()
+        """
+
+    def to_polars_lf(self, drop_system_columns=True):
+        """Return the underlying polars `LazyFrame`, unevaluated.
+
+        :categories: conversion
+
+        This leaves the `TableFrame` API: the result is a plain polars
+        frame that no longer carries the system columns or the lazy
+        bookkeeping around them.
+
+        Args:
+            drop_system_columns: Remove the internal `$td.*` columns
+                (the default). Pass `False` to keep them.
+
+        Returns:
+            The polars `LazyFrame` behind this `TableFrame`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.to_polars_lf()
+        """
+
+    def to_polars_df(self, drop_system_columns=True):
+        """Evaluate this `TableFrame` into a polars `DataFrame`.
+
+        :categories: conversion
+
+        Runs the query and materializes every row in memory.
+
+        Args:
+            drop_system_columns: Remove the internal `$td.*` columns
+                (the default). Pass `False` to keep them.
+
+        Returns:
+            A polars `DataFrame` holding the result.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") > 1).to_polars_df()
+
+            Keep the system columns to inspect the row provenance:
+
+            .. code-block:: python
+
+                tf.to_polars_df(drop_system_columns=False)
+        """
+
+    def to_pandas(self, drop_system_columns=True):
+        """Evaluate this `TableFrame` into a pandas `DataFrame`.
+
+        :categories: conversion
+
+        Runs the query and materializes every row in memory.
+
+        Args:
+            drop_system_columns: Remove the internal `$td.*` columns
+                (the default). Pass `False` to keep them.
+
+        Returns:
+            A pandas `DataFrame` holding the result.
+
+        Examples:
+            .. code-block:: python
+
+                tf.to_pandas()
+        """
+
+    def to_dict(self, drop_system_columns=True):
+        """Evaluate this `TableFrame` into a `{column: values}` dict.
+
+        :categories: conversion
+
+        Runs the query and returns one list of values per column, in column
+        order.
+
+        Args:
+            drop_system_columns: Remove the internal `$td.*` columns
+                (the default). Pass `False` to keep them.
+
+        Returns:
+            A dict mapping each column name to the list of its values.
+
+        Examples:
+            .. code-block:: python
+
+                tf.to_dict()  # {"id": [1, 2, 3], "g": ["x", "y", "x"], ...}
+        """
+
+    def extract_one(
+        self, with_connector_columns: bool = False, fail_if_empty: bool = False
+    ) -> dict[str, DataType | None] | None:
+        """Return the only row as a column-to-value dictionary.
+
+        :categories: conversion
+
+        Internal columns are always dropped; connector columns are kept only
+        when with_connector_columns is set. Fails if the TableFrame has more
+        than one row. Returns None when the TableFrame is empty, unless
+        fail_if_empty is set, in which case it fails.
+
+        Args:
+            with_connector_columns: Keep the connector columns a source
+                attached to the row instead of dropping them.
+            fail_if_empty: Raise instead of returning `None` when there is
+                no row to extract.
+
+        Returns:
+            The row as `{column: value}`, or `None` when the frame is
+            empty.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("id") == 1).extract_one()
+
+            Reading a single aggregate out of a frame is the common use:
+
+            .. code-block:: python
+
+                tf.select(col("v").sum().alias("total")).extract_one()
+        """
+
+    def max_for(
+        self, *cols: str, fail_if_empty: bool = False
+    ) -> dict[str, DataType | None] | None:
+        """Return the given columns of the row that ranks highest by them.
+
+        :categories: conversion
+
+        Each column is compared in its own natural order (numbers
+        numerically, dates chronologically, strings alphabetically). The
+        columns are ordered comparison keys: the first is primary, each
+        subsequent one breaks ties on the previous. Returns None when the
+        TableFrame is empty, unless fail_if_empty is set, in which case it
+        fails.
+
+        Args:
+            cols: Columns to rank by, in priority order; the same columns
+                are the ones returned.
+            fail_if_empty: Raise instead of returning `None` when the frame
+                has no rows.
+
+        Returns:
+            The named columns of the top-ranking row as `{column: value}`,
+            or `None` when the frame is empty.
+
+        Examples:
+            .. code-block:: python
+
+                tf.max_for("v")
+
+            With several keys the later ones break ties on the earlier:
+
+            .. code-block:: python
+
+                tf.max_for("g", "v")
+        """
+
+    def min_for(
+        self, *cols: str, fail_if_empty: bool = False
+    ) -> dict[str, DataType | None] | None:
+        """Return the given columns of the row that ranks lowest by them.
+
+        :categories: conversion
+
+        Each column is compared in its own natural order (numbers
+        numerically, dates chronologically, strings alphabetically). The
+        columns are ordered comparison keys: the first is primary, each
+        subsequent one breaks ties on the previous. Returns None when the
+        TableFrame is empty, unless fail_if_empty is set, in which case it
+        fails.
+
+        Args:
+            cols: Columns to rank by, in priority order; the same columns
+                are the ones returned.
+            fail_if_empty: Raise instead of returning `None` when the frame
+                has no rows.
+
+        Returns:
+            The named columns of the bottom-ranking row as
+            `{column: value}`, or `None` when the frame is empty.
+
+        Examples:
+            .. code-block:: python
+
+                tf.min_for("v")
+
+            A cursor over an incremental read is the common use -- the
+            lowest unprocessed key:
+
+            .. code-block:: python
+
+                tf.filter(col("processed").not_()).min_for("id")
+        """

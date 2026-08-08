@@ -162,6 +162,7 @@
     "numeric": "Numeric",
     "logic": "Logic",
     "string": "String",
+    "conversion": "Conversion",
     "date": "Date",
     "dq-action": "Data Quality Action",
     "dq-classifier": "Classifiers",
@@ -172,7 +173,7 @@
     "connectors": ["Connectors", ["source", "destination", "credentials"]],
     "spi": ["SPI", ["spi"]],
     "errors": ["Errors", ["error"]],
-    "tableframe": ["Tableframe", ["tableframe", "attributes", "description", "aggregation", "generation", "projection", "union", "filters", "join", "sorting", "manipulation", "type-casting", "numeric", "logic", "string", "date"]],
+    "tableframe": ["Tableframe", ["tableframe", "attributes", "description", "aggregation", "generation", "projection", "union", "filters", "join", "sorting", "manipulation", "type-casting", "numeric", "logic", "string", "date", "conversion"]],
     "dataquality": ["Data Quality", ["dq-action", "dq-classifier", "dq-operator"]]
   },
   "intersphinx": {
