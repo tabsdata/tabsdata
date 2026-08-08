@@ -42,6 +42,9 @@ VENV_TD = "td"
 
 UV_FOLDER = ".uv"
 
+CLEAR_ATTEMPTS = 8
+CLEAR_DELAY = 1
+
 SCHEME_FILE = "file"
 SCHEME_S3 = "s3"
 
@@ -237,7 +240,15 @@ def open_image(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
 def clear_uv_home(uv_home: Path) -> None:
     if uv_home.exists():
         trace(f"Clearing {uv_home}")
-        shutil.rmtree(uv_home)
+        for attempt in range(CLEAR_ATTEMPTS):
+            try:
+                shutil.rmtree(uv_home)
+                break
+            except OSError as error:
+                if attempt == CLEAR_ATTEMPTS - 1:
+                    raise
+                trace(f"Clearing {uv_home} failed ({error}); retrying...")
+                time.sleep(CLEAR_DELAY)
     uv_home.mkdir(parents=True, exist_ok=True)
 
 
