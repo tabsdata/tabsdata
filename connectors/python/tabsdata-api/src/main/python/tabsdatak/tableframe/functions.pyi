@@ -80,6 +80,17 @@ def concat(items: TableFramesSpec, *, how: ConcatMethod = "vertical") -> TableFr
     Returns:
         The combined `TableFrame`, or `None` when there is nothing to
         concatenate.
+
+    Examples:
+        .. code-block:: python
+
+            concat([tf, other])
+
+        `diagonal` unions the columns of frames whose schemas differ, filling the gaps with null:
+
+        .. code-block:: python
+
+            concat([tf, other], how="diagonal")
     """
     # devguide-ref: concat schema alignment
 

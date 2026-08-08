@@ -58,6 +58,12 @@ class TableFrame(EngineFrame):
     `TableFrame.from_polars` / `from_pandas` / `from_dict` / `empty`.
     Reference columns with `col` and constants with `lit` (both from
     `tabsdatak.tableframe.functions`).
+
+    Examples:
+        .. code-block:: python
+
+            tf = TableFrame.from_dict({"g": ["x", "y", "x"], "v": [1, 2, 3]})
+            tf.filter(col("v") > 1).group_by("g").agg(col("v").sum().alias("total"))
     """
     # devguide-ref: lazy evaluation
     @property
@@ -68,6 +74,11 @@ class TableFrame(EngineFrame):
         filtered to user columns only.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.columns  # ["a", "b", ...]
         """
 
     @property
@@ -78,6 +89,11 @@ class TableFrame(EngineFrame):
         filtered to user columns only.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.dtypes  # [Int64, String, ...]
         """
 
     @property
@@ -88,6 +104,11 @@ class TableFrame(EngineFrame):
         filtered to user columns only.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema["a"]  # the data type of column "a"
         """
 
     @property
@@ -98,6 +119,11 @@ class TableFrame(EngineFrame):
         filtered to user columns only.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.width
         """
 
     def __getitem__(self, item: Any) -> TableFrame:
@@ -154,6 +180,17 @@ class TableFrame(EngineFrame):
         The remaining boolean flags each toggle one query-plan optimization
         (predicate/projection pushdown, common-subplan elimination, ...);
         leave them at their defaults unless diagnosing the plan.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") > 2).explain()
+
+            The tree rendering is easier to read for a deep plan:
+
+            .. code-block:: python
+
+                tf.explain(format="tree")
         """
 
     def show_graph(
@@ -194,6 +231,17 @@ class TableFrame(EngineFrame):
 
         The remaining boolean flags toggle individual query-plan
         optimizations; leave them at their defaults unless diagnosing the plan.
+
+        Examples:
+            .. code-block:: python
+
+                tf.show_graph()  # opens the rendered plan; needs Graphviz
+
+            Skip the viewer and take the DOT source instead:
+
+            .. code-block:: python
+
+                tf.show_graph(show=False, raw_output=True)
         """
 
     def inspect(self, fmt: str = "{}") -> TableFrame:
@@ -206,6 +254,11 @@ class TableFrame(EngineFrame):
 
         Args:
             fmt: Format string applied to the printed frame.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") > 1).inspect().select("a", "b")
         """
 
     def sort(
@@ -273,6 +326,17 @@ class TableFrame(EngineFrame):
         Args:
             n: Number of all-null rows to produce. `0` (default) yields a
                 zero-row frame; a positive `n` yields `n` rows of nulls.
+
+        Examples:
+            .. code-block:: python
+
+                tf.clear()
+
+            A positive `n` keeps the schema and yields that many all-null rows:
+
+            .. code-block:: python
+
+                tf.clear(3)
         """
 
     def filter(
@@ -468,6 +532,17 @@ class TableFrame(EngineFrame):
             offset: Zero-based index of the first row to keep.
             length: Number of rows to keep; `None` keeps all rows from
                 `offset` to the end.
+
+        Examples:
+            .. code-block:: python
+
+                tf.slice(1, 2)  # two rows, starting at the second
+
+            Omit the length to take everything from `offset` on:
+
+            .. code-block:: python
+
+                tf.slice(2)
         """
 
     def limit(self, n: int = 5) -> TableFrame:
@@ -477,6 +552,11 @@ class TableFrame(EngineFrame):
 
         Args:
             n: Number of rows to keep.
+
+        Examples:
+            .. code-block:: python
+
+                tf.limit(3)
         """
 
     def head(self, n: int = 5) -> TableFrame:
@@ -486,6 +566,11 @@ class TableFrame(EngineFrame):
 
         Args:
             n: Number of rows to keep.
+
+        Examples:
+            .. code-block:: python
+
+                tf.head(3)
         """
 
     def tail(self, n: int = 5) -> TableFrame:
@@ -495,18 +580,33 @@ class TableFrame(EngineFrame):
 
         Args:
             n: Number of rows to keep.
+
+        Examples:
+            .. code-block:: python
+
+                tf.tail(3)
         """
 
     def last(self) -> TableFrame:
         """Return the last row as a one-row `TableFrame`.
 
         :categories: filters
+
+        Examples:
+            .. code-block:: python
+
+                tf.sort("id").last()
         """
 
     def first(self) -> TableFrame:
         """Return the first row as a one-row `TableFrame`.
 
         :categories: filters
+
+        Examples:
+            .. code-block:: python
+
+                tf.sort("id").first()
         """
 
     def fill_null(
@@ -550,6 +650,11 @@ class TableFrame(EngineFrame):
 
         Args:
             value: Value (or expression) to substitute for `NaN`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.fill_nan(0.0)
         """
 
     def unique(
@@ -593,6 +698,17 @@ class TableFrame(EngineFrame):
         Args:
             subset: Column(s) to check for `NaN`; when omitted, all columns
                 are considered.
+
+        Examples:
+            .. code-block:: python
+
+                tf.drop_nans("v")
+
+            Omit the subset to drop a row when any float column holds NaN:
+
+            .. code-block:: python
+
+                tf.drop_nans()
         """
 
     def drop_nulls(
@@ -606,6 +722,17 @@ class TableFrame(EngineFrame):
         Args:
             subset: Column(s) to check for nulls; when omitted, all columns
                 are considered.
+
+        Examples:
+            .. code-block:: python
+
+                tf.drop_nulls("v")
+
+            Omit the subset to drop a row when any column is null:
+
+            .. code-block:: python
+
+                tf.drop_nulls()
         """
 
     def unnest(

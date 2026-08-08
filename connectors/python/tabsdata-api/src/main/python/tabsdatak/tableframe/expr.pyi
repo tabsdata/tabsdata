@@ -57,6 +57,12 @@ class Expr:
     Operators are element-wise; reducers (`sum`, `mean`, `min` ...)
     collapse a group. Date/time and string helpers live under `dt` and
     `str`.
+
+    Examples:
+        .. code-block:: python
+
+            tf.with_columns((col("a") * 2).alias("doubled"))
+            tf.group_by("g").agg(col("a").sum().alias("total"))
     """
     # devguide-ref: expression composition and lazy evaluation; polars-equivalence
     @property
@@ -64,6 +70,11 @@ class Expr:
         """Namespace of date and time operations for temporal columns.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.year().alias("year"))
         """
 
     @property
@@ -71,132 +82,248 @@ class Expr:
         """Namespace of string operations for string columns.
 
         :categories: string
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("name").str.to_uppercase().alias("upper"))
         """
 
     def __abs__(self) -> Expr:
         """Absolute value of each element; see `abs`.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(abs(col("v")).alias("size"))
         """
 
     def __add__(self, other: IntoExpr) -> Expr:
         """Element-wise addition; for strings, concatenation.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns((col("a") + 1).alias("next"))
+
+            String columns concatenate instead of adding:
+
+            .. code-block:: python
+
+                tf.select((col("name") + "!").alias("shout"))
         """
 
     def __radd__(self, other: IntoExpr) -> Expr:
         """Reflected addition (`other` on the left).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((100 + col("a")).alias("offset"))
         """
 
     def __and__(self, other: IntoExprColumn | int | bool) -> Expr:
         """Element-wise bitwise/logical `and` (integer or boolean).
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("flag") & (col("a") > 2))
         """
 
     def __rand__(self, other: IntoExprColumn | int | bool) -> Expr:
         """Reflected `and` (`other` on the left).
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(True & col("flag"))
         """
 
     def __eq__(self, other: IntoExpr) -> Expr:
         """Element-wise equality; see `eq`.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("g") == "x")
         """
 
     def __floordiv__(self, other: IntoExpr) -> Expr:
         """Element-wise floor division.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((col("a") // 2).alias("halved"))
         """
 
     def __rfloordiv__(self, other: IntoExpr) -> Expr:
         """Reflected floor division (`other` on the left).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((100 // col("a")).alias("share"))
         """
 
     def __ge__(self, other: IntoExpr) -> Expr:
         """Element-wise greater-than-or-equal comparison.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") >= 2)
         """
 
     def __gt__(self, other: IntoExpr) -> Expr:
         """Element-wise greater-than comparison.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") > 2)
         """
 
     def __invert__(self) -> Expr:
         """Logical negation of a boolean expression; see `not_`.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(~col("flag"))
         """
 
     def __le__(self, other: IntoExpr) -> Expr:
         """Element-wise less-than-or-equal comparison.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") <= 2)
         """
 
     def __lt__(self, other: IntoExpr) -> Expr:
         """Element-wise less-than comparison.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") < 2)
         """
 
     def __mod__(self, other: IntoExpr) -> Expr:
         """Element-wise modulo (remainder).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") % 2 == 0)  # even values only
         """
 
     def __rmod__(self, other: IntoExpr) -> Expr:
         """Reflected modulo (`other` on the left).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((10 % col("a")).alias("rem"))
         """
 
     def __mul__(self, other: IntoExpr) -> Expr:
         """Element-wise multiplication.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns((col("a") * 2).alias("doubled"))
         """
 
     def __rmul__(self, other: IntoExpr) -> Expr:
         """Reflected multiplication (`other` on the left).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((2 * col("a")).alias("doubled"))
         """
 
     def __ne__(self, other: IntoExpr) -> Expr:
         """Element-wise inequality; see `ne`.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("g") != "x")
         """
 
     def __neg__(self) -> Expr:
         """Unary negation of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((-col("a")).alias("negated"))
         """
 
     def __or__(self, other: IntoExprColumn | int | bool) -> Expr:
         """Element-wise bitwise/logical `or` (integer or boolean).
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("flag") | (col("a") > 3))
         """
 
     def __ror__(self, other: IntoExprColumn | int | bool) -> Expr:
         """Reflected `or` (`other` on the left).
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(False | col("flag"))
         """
 
     def __pos__(self) -> Expr:
@@ -207,78 +334,143 @@ class Expr:
         does NOT double.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((+col("a")).alias("same"))
         """
 
     def __pow__(self, exponent: IntoExprColumn | int | float) -> Expr:
         """Raise each element to the power of `exponent`.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((col("a") ** 2).alias("squared"))
         """
 
     def __rpow__(self, base: IntoExprColumn | int | float) -> Expr:
         """Reflected exponentiation (this expression is the exponent).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((2 ** col("a")).alias("powers_of_two"))
         """
 
     def __sub__(self, other: IntoExpr) -> Expr:
         """Element-wise subtraction.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns((col("b") - col("a")).alias("gap"))
         """
 
     def __rsub__(self, other: IntoExpr) -> Expr:
         """Reflected subtraction (`other` on the left).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((100 - col("a")).alias("remaining"))
         """
 
     def __truediv__(self, other: IntoExpr) -> Expr:
         """Element-wise true (floating-point) division.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((col("b") / col("a")).alias("ratio"))
         """
 
     def __rtruediv__(self, other: IntoExpr) -> Expr:
         """Reflected true division (`other` on the left).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((1 / col("a")).alias("inverse"))
         """
 
     def __xor__(self, other: IntoExprColumn | int | bool) -> Expr:
         """Element-wise bitwise/logical `xor` (integer or boolean).
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((col("flag") ^ True).alias("toggled"))
         """
 
     def __rxor__(self, other: IntoExprColumn | int | bool) -> Expr:
         """Reflected `xor` (`other` on the left).
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.select((True ^ col("flag")).alias("toggled"))
         """
 
     def sqrt(self) -> Expr:
         """Square root of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").sqrt().alias("root"))
         """
 
     def cbrt(self) -> Expr:
         """Cube root of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").cbrt().alias("root"))
         """
 
     def log10(self) -> Expr:
         """Base-10 logarithm of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").log10().alias("magnitude"))
         """
 
     def exp(self) -> Expr:
         """Exponential (`e` raised to each element).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").exp().alias("growth"))
         """
 
     def alias(self, name: Any) -> Expr:
@@ -290,60 +482,116 @@ class Expr:
             name: New column name. Must be a valid identifier (letters,
                 digits, underscores; starting with a letter or
                 underscore) up to 100 characters.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").alias("identifier"))
+
+            An expression keeps no name of its own, so alias every computed column:
+
+            .. code-block:: python
+
+                tf.with_columns((col("a") * 2).alias("doubled"))
         """
 
     def not_(self) -> Expr:
         """Logical negation of a boolean expression.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("flag").not_())
         """
 
     def is_null(self) -> Expr:
         """Return whether each element is null.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("v").is_null())
         """
 
     def is_not_null(self) -> Expr:
         """Return whether each element is not null.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("v").is_not_null())
         """
 
     def is_finite(self) -> Expr:
         """Return whether each floating-point element is finite.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("v").is_finite())
         """
 
     def is_infinite(self) -> Expr:
         """Return whether each floating-point element is infinite.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("v").is_infinite())
         """
 
     def is_nan(self) -> Expr:
         """Return whether each floating-point element is NaN.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("v").is_nan())
         """
 
     def is_not_nan(self) -> Expr:
         """Return whether each floating-point element is not NaN.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("v").is_not_nan())
         """
 
     def count(self) -> Expr:
         """Count the non-null elements in the group; see `len`.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("v").count().alias("filled"))
         """
 
     def len(self) -> Expr:
         """Count all rows in the group, including nulls; see `count`.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("v").len().alias("rows"))
         """
 
     def slice(self, offset: int | Expr, length: int | Expr | None = None) -> Expr:
@@ -354,18 +602,39 @@ class Expr:
         Args:
             offset: Start index; a negative value counts from the end.
             length: Number of values to take; all remaining if omitted.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").slice(1, 2))
+
+            A negative offset counts from the end:
+
+            .. code-block:: python
+
+                tf.select(col("a").slice(-2))  # the last two values
         """
 
     def floor(self) -> Expr:
         """Round each element down to the nearest integer.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").floor().alias("floor"))
         """
 
     def ceil(self) -> Expr:
         """Round each element up to the nearest integer.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").ceil().alias("ceil"))
         """
 
     def round(self, decimals: int = 0, mode: RoundMode = "half_to_even") -> Expr:
@@ -377,6 +646,11 @@ class Expr:
             decimals: Number of decimal places to keep; non-negative.
             mode: Tie-breaking rule, one of `half_to_even`,
                 `half_away_from_zero` or `to_zero`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").round(2).alias("rounded"))
         """
 
     def round_sig_figs(self, digits: int) -> Expr:
@@ -386,6 +660,11 @@ class Expr:
 
         Args:
             digits: Number of significant figures to keep; positive.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").round_sig_figs(2).alias("approx"))
         """
 
     def cast(
@@ -406,6 +685,17 @@ class Expr:
                 target; if `False`, set them to null instead.
             wrap_numerical: If `True`, wrap on numeric overflow rather
                 than raising.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").cast(Float64))
+
+            With `strict=False` an unconvertible value becomes null instead of raising:
+
+            .. code-block:: python
+
+                tf.select(col("name").cast(Int64, strict=False))
         """
         # devguide-ref: cast strictness and numeric overflow
 
@@ -428,6 +718,17 @@ class Expr:
                 `zero` or `one`.
             limit: Maximum consecutive nulls to fill with `forward` or
                 `backward`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("v").fill_null(0.0))
+
+            A strategy fills from the neighbouring rows instead of a constant:
+
+            .. code-block:: python
+
+                tf.sort("id").with_columns(col("v").fill_null(strategy="forward"))
         """
 
     def fill_nan(self, value: int | float | Expr | None) -> Expr:
@@ -439,42 +740,77 @@ class Expr:
 
         Args:
             value: Value or expression to substitute for NaN.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("v").fill_nan(0.0))
         """
 
     def max(self) -> Expr:
         """Return the maximum element in the group.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").max().alias("largest"))
         """
 
     def min(self) -> Expr:
         """Return the minimum element in the group.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").min().alias("smallest"))
         """
 
     def sum(self) -> Expr:
         """Return the sum of the elements in the group.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").sum().alias("total"))
         """
 
     def mean(self) -> Expr:
         """Return the mean of the elements in the group.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").mean().alias("average"))
         """
 
     def median(self) -> Expr:
         """Return the median of the elements in the group.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").median().alias("middle"))
         """
 
     def n_unique(self) -> Expr:
         """Count the distinct elements in the group.
 
         :categories: aggregation
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").n_unique().alias("distinct"))
         """
 
     def first(self, *, ignore_nulls: bool = False) -> Expr:
@@ -484,6 +820,11 @@ class Expr:
 
         Args:
             ignore_nulls: If `True`, return the first non-null element.
+
+        Examples:
+            .. code-block:: python
+
+                tf.sort("id").group_by("g").agg(col("a").first().alias("earliest"))
         """
 
     def last(self, *, ignore_nulls: bool = False) -> Expr:
@@ -493,12 +834,22 @@ class Expr:
 
         Args:
             ignore_nulls: If `True`, return the last non-null element.
+
+        Examples:
+            .. code-block:: python
+
+                tf.sort("id").group_by("g").agg(col("a").last().alias("latest"))
         """
 
     def is_unique(self) -> Expr:
         """Return whether each element occurs only once in the column.
 
         :categories: logic
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("g").is_unique())
         """
 
     def filter(
@@ -515,6 +866,13 @@ class Expr:
             predicates: Boolean expressions to apply.
             constraints: `column=value` keyword filters, combined with
                 `predicates` using logical `and`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(
+                    col("a").filter(col("a") > 1).sum().alias("big_total"),
+                )
         """
         # devguide-ref: filtering within group aggregations
 
@@ -525,6 +883,11 @@ class Expr:
 
         Args:
             others: Expressions to combine with logical/bitwise `and`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("flag").and_(col("a") > 2))
         """
 
     def or_(self, *others: Any) -> Expr:
@@ -534,6 +897,11 @@ class Expr:
 
         Args:
             others: Expressions to combine with logical/bitwise `or`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("flag").or_(col("a") > 3))
         """
 
     def eq(self, other: Any) -> Expr:
@@ -545,6 +913,11 @@ class Expr:
             other: Value or expression to compare against. A null on
                 either side yields null; use `eq_missing` to treat two
                 nulls as equal.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("g").eq("x"))
         """
 
     def eq_missing(self, other: Any) -> Expr:
@@ -554,6 +927,12 @@ class Expr:
 
         Args:
             other: Value or expression to compare against.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").eq(None).alias("eq"))  # null everywhere
+                tf.select(col("v").eq_missing(None).alias("eq_missing"))  # True on nulls
         """
 
     def ge(self, other: Any) -> Expr:
@@ -563,6 +942,11 @@ class Expr:
 
         Args:
             other: Value or expression to compare against.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a").ge(2))
         """
 
     def gt(self, other: Any) -> Expr:
@@ -572,6 +956,11 @@ class Expr:
 
         Args:
             other: Value or expression to compare against.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a").gt(2))
         """
 
     def le(self, other: Any) -> Expr:
@@ -581,6 +970,11 @@ class Expr:
 
         Args:
             other: Value or expression to compare against.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a").le(2))
         """
 
     def lt(self, other: Any) -> Expr:
@@ -590,6 +984,11 @@ class Expr:
 
         Args:
             other: Value or expression to compare against.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a").lt(2))
         """
 
     def ne(self, other: Any) -> Expr:
@@ -601,6 +1000,11 @@ class Expr:
             other: Value or expression to compare against. A null on
                 either side yields null; use `ne_missing` to treat two
                 nulls as equal.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("g").ne("x"))
         """
 
     def ne_missing(self, other: Any) -> Expr:
@@ -610,6 +1014,11 @@ class Expr:
 
         Args:
             other: Value or expression to compare against.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").ne_missing(None).alias("filled"))
         """
 
     def add(self, other: Any) -> Expr:
@@ -619,6 +1028,11 @@ class Expr:
 
         Args:
             other: Value or expression to add or concatenate.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("a").add(1).alias("next"))
         """
 
     def floordiv(self, other: Any) -> Expr:
@@ -628,6 +1042,11 @@ class Expr:
 
         Args:
             other: Value or expression to divide by.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").floordiv(2).alias("halved"))
         """
 
     def mod(self, other: Any) -> Expr:
@@ -637,6 +1056,11 @@ class Expr:
 
         Args:
             other: Value or expression to divide by.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").mod(2).alias("parity"))
         """
 
     def mul(self, other: Any) -> Expr:
@@ -646,6 +1070,11 @@ class Expr:
 
         Args:
             other: Value or expression to multiply by.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("a").mul(10).alias("scaled"))
         """
 
     def sub(self, other: Any) -> Expr:
@@ -655,12 +1084,22 @@ class Expr:
 
         Args:
             other: Value or expression to subtract.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("b").sub(col("a")).alias("gap"))
         """
 
     def neg(self) -> Expr:
         """Unary negation of each element. Same as unary `-`.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").neg().alias("negated"))
         """
 
     def truediv(self, other: Any) -> Expr:
@@ -670,6 +1109,11 @@ class Expr:
 
         Args:
             other: Value or expression to divide by.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("b").truediv(col("a")).alias("ratio"))
         """
 
     def pow(self, exponent: IntoExprColumn | int | float) -> Expr:
@@ -679,6 +1123,11 @@ class Expr:
 
         Args:
             exponent: Value or expression to use as the exponent.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").pow(2).alias("squared"))
         """
 
     def xor(self, other: Any) -> Expr:
@@ -688,6 +1137,11 @@ class Expr:
 
         Args:
             other: Value or expression to combine with `xor`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("flag").xor(True).alias("toggled"))
         """
 
     def is_in(
@@ -701,6 +1155,11 @@ class Expr:
             other: Collection or expression of allowed values.
             nulls_equal: If `True`, a null element matches a null in
                 `other`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("g").is_in(["x", "y"]))
         """
 
     def is_between(
@@ -718,6 +1177,17 @@ class Expr:
             upper_bound: Upper bound value or expression.
             closed: Which ends are inclusive: `both` (default),
                 `left`, `right` or `none`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a").is_between(2, 4))
+
+            Both bounds are inclusive by default; `closed` narrows them:
+
+            .. code-block:: python
+
+                tf.filter(col("a").is_between(2, 4, closed="left"))
         """
 
     def hash(
@@ -736,6 +1206,11 @@ class Expr:
             seed_1: Optional additional seed.
             seed_2: Optional additional seed.
             seed_3: Optional additional seed.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").hash().alias("fingerprint"))
         """
 
     def reinterpret(
@@ -752,12 +1227,22 @@ class Expr:
             signed: If `True` reinterpret as signed, if `False` as
                 unsigned.
             dtype: Explicit target integer type; overrides `signed`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("a").reinterpret(signed=False).alias("bits"))
         """
 
     def abs(self) -> Expr:
         """Absolute value of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").abs().alias("size"))
         """
 
     def rank(
@@ -776,6 +1261,17 @@ class Expr:
                 `max`, `dense`, `ordinal` or `random`.
             descending: If `True`, rank from largest to smallest.
             seed: Random seed, used only when `method` is `random`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("a").rank().alias("position"))
+
+            `method` decides how ties are resolved, and `descending` ranks the largest value first:
+
+            .. code-block:: python
+
+                tf.with_columns(col("a").rank("dense", descending=True).alias("place"))
         """
 
     def diff(
@@ -791,6 +1287,11 @@ class Expr:
         Args:
             n: Rows to look back; negative looks forward.
             null_behavior: How to handle nulls: `ignore` or `drop`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.sort("id").with_columns(col("a").diff().alias("change"))
         """
 
     def clip(
@@ -809,102 +1310,193 @@ class Expr:
         Args:
             lower_bound: Minimum allowed value; `None` for no lower bound.
             upper_bound: Maximum allowed value; `None` for no upper bound.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("a").clip(2, 3).alias("clipped"))
+
+            One bound may be omitted to clamp on a single side:
+
+            .. code-block:: python
+
+                tf.with_columns(col("a").clip(lower_bound=2).alias("at_least_two"))
         """
 
     def sign(self) -> Expr:
         """Return the sign of each element (-1, 0 or 1).
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").sign().alias("sign"))
         """
 
     def sin(self) -> Expr:
         """Sine of each element, in radians.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").sin().alias("sin"))
         """
 
     def cos(self) -> Expr:
         """Cosine of each element, in radians.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").cos().alias("cos"))
         """
 
     def tan(self) -> Expr:
         """Tangent of each element, in radians.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").tan().alias("tan"))
         """
 
     def cot(self) -> Expr:
         """Cotangent of each element, in radians.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").cot().alias("cot"))
         """
 
     def arcsin(self) -> Expr:
         """Inverse sine of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").arcsin().alias("arcsin"))
         """
 
     def arccos(self) -> Expr:
         """Inverse cosine of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").arccos().alias("arccos"))
         """
 
     def arctan(self) -> Expr:
         """Inverse tangent of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").arctan().alias("arctan"))
         """
 
     def sinh(self) -> Expr:
         """Hyperbolic sine of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").sinh().alias("sinh"))
         """
 
     def cosh(self) -> Expr:
         """Hyperbolic cosine of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").cosh().alias("cosh"))
         """
 
     def tanh(self) -> Expr:
         """Hyperbolic tangent of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").tanh().alias("tanh"))
         """
 
     def arcsinh(self) -> Expr:
         """Inverse hyperbolic sine of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").arcsinh().alias("arcsinh"))
         """
 
     def arccosh(self) -> Expr:
         """Inverse hyperbolic cosine of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").arccosh().alias("arccosh"))
         """
 
     def arctanh(self) -> Expr:
         """Inverse hyperbolic tangent of each element.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").arctanh().alias("arctanh"))
         """
 
     def degrees(self) -> Expr:
         """Convert each element from radians to degrees.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").degrees().alias("degrees"))
         """
 
     def radians(self) -> Expr:
         """Convert each element from degrees to radians.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").radians().alias("radians"))
         """
 
     def log(self, base: float | IntoExpr = 2.718281828459045) -> Expr:
@@ -914,12 +1506,28 @@ class Expr:
 
         Args:
             base: Logarithm base; defaults to `e` (natural logarithm).
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").log().alias("ln"))
+
+            Pass a base for a logarithm other than the natural one:
+
+            .. code-block:: python
+
+                tf.select(col("v").log(2).alias("log2"))
         """
 
     def log1p(self) -> Expr:
         """Natural logarithm of `1 + element`.
 
         :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").log1p().alias("log1p"))
         """
 
     # MANUAL CHANGE POST GEN: shrink_dtype is a deprecated (since 1.5.0)

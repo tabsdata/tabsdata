@@ -44,6 +44,11 @@ class ExprStringNameSpace:
     """String methods, accessed via `Expr.str`.
 
     :categories: string
+
+    Examples:
+        .. code-block:: python
+
+            tf.with_columns(col("name").str.to_uppercase().alias("upper"))
     """
     # devguide-ref: regex vs literal string matching
     def to_date(
@@ -66,6 +71,17 @@ class ExprStringNameSpace:
             exact: If `True`, the whole string must match; if `False`,
                 match a date found anywhere in it.
             cache: Cache parsing of repeated strings.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("day").str.to_date("%Y-%m-%d").alias("date"))
+
+            Omit the format to have it inferred, and pass `strict=False` to null out the strings that do not parse:
+
+            .. code-block:: python
+
+                tf.select(col("day").str.to_date(strict=False).alias("date"))
         """
 
     def to_datetime(
@@ -94,6 +110,11 @@ class ExprStringNameSpace:
             cache: Cache parsing of repeated strings.
             ambiguous: Policy for ambiguous local times: `earliest`,
                 `latest`, `raise` or `null`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("when").str.to_datetime("%Y-%m-%d %H:%M:%S"))
         """
 
     def to_time(
@@ -109,36 +130,66 @@ class ExprStringNameSpace:
             strict: If `True`, raise on an unparseable string; if
                 `False`, set it to null.
             cache: Cache parsing of repeated strings.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("clock").str.to_time("%H:%M:%S").alias("time"))
         """
 
     def len_bytes(self) -> Expr:
         """Number of bytes in each string (not characters).
 
         :categories: string
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("name").str.len_bytes().alias("bytes"))
         """
 
     def len_chars(self) -> Expr:
         """Number of characters in each string (not bytes).
 
         :categories: string
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("name").str.len_chars().alias("chars"))
         """
 
     def to_uppercase(self) -> Expr:
         """Convert each string to uppercase.
 
         :categories: string
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("name").str.to_uppercase().alias("upper"))
         """
 
     def to_lowercase(self) -> Expr:
         """Convert each string to lowercase.
 
         :categories: string
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("name").str.to_lowercase().alias("lower"))
         """
 
     def to_titlecase(self) -> Expr:
         """Title-case each string, capitalizing the first letter of a word.
 
         :categories: string
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("name").str.to_titlecase().alias("title"))
         """
 
     def strip_chars(self, characters: IntoExpr = None) -> Expr:
@@ -149,6 +200,17 @@ class ExprStringNameSpace:
         Args:
             characters: Set of characters to remove, in any order;
                 whitespace when omitted.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("name").str.strip_chars().alias("trimmed"))
+
+            Pass the characters to remove to strip something other than whitespace:
+
+            .. code-block:: python
+
+                tf.select(col("email").str.strip_chars(".moc").alias("stripped"))
         """
 
     def strip_chars_start(self, characters: IntoExpr = None) -> Expr:
@@ -159,6 +221,11 @@ class ExprStringNameSpace:
         Args:
             characters: Set of characters to remove, in any order;
                 whitespace when omitted.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("name").str.strip_chars_start().alias("lstripped"))
         """
 
     def strip_chars_end(self, characters: IntoExpr = None) -> Expr:
@@ -169,6 +236,11 @@ class ExprStringNameSpace:
         Args:
             characters: Set of characters to remove, in any order;
                 whitespace when omitted.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("name").str.strip_chars_end().alias("rstripped"))
         """
 
     def strip_prefix(self, prefix: IntoExpr) -> Expr:
@@ -178,6 +250,11 @@ class ExprStringNameSpace:
 
         Args:
             prefix: Exact prefix to remove.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").str.strip_prefix("ada").alias("rest"))
         """
 
     def strip_suffix(self, suffix: IntoExpr) -> Expr:
@@ -187,6 +264,11 @@ class ExprStringNameSpace:
 
         Args:
             suffix: Exact suffix to remove.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").str.strip_suffix(".com").alias("rest"))
         """
 
     def pad_start(self, length: int | IntoExprColumn, fill_char: str = " ") -> Expr:
@@ -199,6 +281,11 @@ class ExprStringNameSpace:
         Args:
             length: Target length.
             fill_char: Single character used for padding.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("qty").str.pad_start(6, "-").alias("padded"))
         """
 
     def pad_end(self, length: int | IntoExprColumn, fill_char: str = " ") -> Expr:
@@ -211,6 +298,11 @@ class ExprStringNameSpace:
         Args:
             length: Target length.
             fill_char: Single character used for padding.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("qty").str.pad_end(6, "-").alias("padded"))
         """
 
     def zfill(self, length: int | IntoExprColumn) -> Expr:
@@ -223,6 +315,11 @@ class ExprStringNameSpace:
 
         Args:
             length: Target length.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("qty").str.zfill(5).alias("padded"))  # "42" -> "00042"
         """
 
     def contains(
@@ -237,6 +334,17 @@ class ExprStringNameSpace:
                 `True`.
             literal: Treat `pattern` as a literal string, not a regex.
             strict: If `True`, raise on an invalid regex.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("email").str.contains("@example"))
+
+            The pattern is a regular expression unless `literal` is set:
+
+            .. code-block:: python
+
+                tf.filter(col("email").str.contains(".com", literal=True))
         """
 
     def find(
@@ -251,6 +359,11 @@ class ExprStringNameSpace:
                 `True`.
             literal: Treat `pattern` as a literal string, not a regex.
             strict: If `True`, raise on an invalid regex.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").str.find("@").alias("at"))
         """
 
     def ends_with(self, suffix: str | Expr) -> Expr:
@@ -260,6 +373,11 @@ class ExprStringNameSpace:
 
         Args:
             suffix: Literal suffix to test for.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("email").str.ends_with(".com"))
         """
 
     def starts_with(self, prefix: str | Expr) -> Expr:
@@ -269,6 +387,11 @@ class ExprStringNameSpace:
 
         Args:
             prefix: Literal prefix to test for.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("email").str.starts_with("ada"))
         """
 
     def extract(self, pattern: IntoExprColumn, group_index: int = 1) -> Expr:
@@ -298,6 +421,13 @@ class ExprStringNameSpace:
             pattern: Regular expression, or a literal when `literal` is
                 `True`.
             literal: Treat `pattern` as a literal string, not a regex.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(
+                    col("email").str.count_matches(".", literal=True).alias("dots"),
+                )
         """
 
     def replace(
@@ -318,6 +448,17 @@ class ExprStringNameSpace:
             value: Replacement string; may reference capture groups.
             literal: Treat `pattern` as a literal string, not a regex.
             n: Number of matches to replace, counted from the left.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("email").str.replace("example", "acme"))
+
+            Only the first match is replaced; use `replace_all` for every match:
+
+            .. code-block:: python
+
+                tf.select(col("email").str.replace(r"[aeiou]", "*").alias("masked"))
         """
 
     def replace_all(
@@ -332,12 +473,22 @@ class ExprStringNameSpace:
                 `True`.
             value: Replacement string; may reference capture groups.
             literal: Treat `pattern` as a literal string, not a regex.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").str.replace_all(r"[aeiou]", "*"))
         """
 
     def reverse(self) -> Expr:
         """Reverse the characters of each string.
 
         :categories: string
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("name").str.reverse().alias("reversed"))
         """
 
     def slice(
@@ -351,6 +502,17 @@ class ExprStringNameSpace:
             offset: Start index; a negative value counts from the end.
             length: Number of characters; to the end of the string when
                 omitted.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").str.slice(0, 3).alias("prefix"))
+
+            A negative offset counts from the end of the string:
+
+            .. code-block:: python
+
+                tf.select(col("email").str.slice(-3).alias("tld"))
         """
 
     def head(self, n: int | IntoExprColumn) -> Expr:
@@ -361,6 +523,11 @@ class ExprStringNameSpace:
         Args:
             n: Number of leading characters; a negative value drops that
                 many from the end.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").str.head(3).alias("first_three"))
         """
 
     def tail(self, n: int | IntoExprColumn) -> Expr:
@@ -371,6 +538,11 @@ class ExprStringNameSpace:
         Args:
             n: Number of trailing characters; a negative value drops that
                 many from the start.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("email").str.tail(3).alias("last_three"))
         """
 
     def to_integer(
@@ -394,6 +566,17 @@ class ExprStringNameSpace:
                 `Int32`, `UInt16`), not a raw polars one.
             strict: If `True`, raise on an unparseable string; if
                 `False`, set it to null.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("qty").str.to_integer().alias("count"))
+
+            Parse in another base, or widen the result type:
+
+            .. code-block:: python
+
+                tf.select(col("qty").str.to_integer(base=16, dtype=Int32))
         """
 
     def contains_any(
@@ -406,6 +589,11 @@ class ExprStringNameSpace:
         Args:
             patterns: Collection of substrings to search for.
             ascii_case_insensitive: Match ASCII letters case-insensitively.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("email").str.contains_any(["example", "navy"]))
         """
 
     def replace_many(
@@ -431,5 +619,5 @@ class ExprStringNameSpace:
         Examples:
             .. code-block:: python
 
-                col("s").str.replace_many({"id": "ID", "n": "N"})
+                col("email").str.replace_many({"example": "acme", ".com": ".io"})
         """

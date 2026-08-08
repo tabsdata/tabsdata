@@ -38,6 +38,12 @@ class Schema:
     Returned by `TableFrame.schema`. Iterates in column order and supports
     mapping access (`schema["col"]`, `"col" in schema`, `len(schema)`)
     plus the query helpers below.
+
+    Examples:
+        .. code-block:: python
+
+            tf.schema["a"]
+            tf.schema.names()
     """
     def clear(*args, **kwargs):
         """Remove all entries, leaving an empty schema."""
@@ -49,13 +55,37 @@ class Schema:
         """Build a schema from the given names, all with the same data type."""
 
     def get(self, key, default=None, /):
-        """Return the data type for `key`, or `default` if absent."""
+        """Return the data type for `key`, or `default` if absent.
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.get("a")
+
+            A default keeps the lookup total when the column may be absent:
+
+            .. code-block:: python
+
+                tf.schema.get("missing", String)
+        """
 
     def items(*args, **kwargs):
-        """Return the `(name, data type)` pairs, in column order."""
+        """Return the `(name, data type)` pairs, in column order.
+
+        Examples:
+            .. code-block:: python
+
+                [(name, dtype) for name, dtype in tf.schema.items()]
+        """
 
     def keys(*args, **kwargs):
-        """Return the column names, in column order."""
+        """Return the column names, in column order.
+
+        Examples:
+            .. code-block:: python
+
+                list(tf.schema.keys())
+        """
 
     def move_to_end(self, /, key, last=True):
         """Move column `key` to the end (or the start when `last` is False)."""
@@ -73,7 +103,13 @@ class Schema:
         """Update this schema in place from another mapping of columns."""
 
     def values(*args, **kwargs):
-        """Return the data types, in column order."""
+        """Return the data types, in column order.
+
+        Examples:
+            .. code-block:: python
+
+                list(tf.schema.values())
+        """
 
     def __lt__(self, value, /):
         """Ordering comparison against another mapping."""
@@ -94,57 +130,123 @@ class Schema:
         """Return a new schema merging `value` with this one (self wins)."""
 
     def __getitem__(self, key, /):
-        """Return the data type of the column named `key`."""
+        """Return the data type of the column named `key`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema["a"]
+        """
 
     def __iter__(self, /):
-        """Iterate over the column names, in column order."""
+        """Iterate over the column names, in column order.
+
+        Examples:
+            .. code-block:: python
+
+                [name for name in tf.schema]
+        """
 
     def __len__(self, /):
-        """Return the number of columns."""
+        """Return the number of columns.
+
+        Examples:
+            .. code-block:: python
+
+                len(tf.schema)
+        """
 
     def __contains__(self, key, /):
-        """Return whether a column named `key` is present."""
+        """Return whether a column named `key` is present.
+
+        Examples:
+            .. code-block:: python
+
+                "a" in tf.schema
+        """
 
     def __eq__(self, other: object) -> bool:
-        """Return whether two schemas share the same columns, types and order."""
+        """Return whether two schemas share the same columns, types and order.
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema == other.schema
+        """
 
     def __ne__(self, other: object) -> bool:
-        """Return whether two schemas differ in columns, types or order."""
+        """Return whether two schemas differ in columns, types or order.
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema != other.schema
+        """
 
     def names(self) -> list[str]:
         """Return the column names, in column order.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.names()
         """
 
     def dtypes(self) -> list[DataType]:
         """Return the column data types, in column order.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.dtypes()
         """
 
     def to_arrow(self, *, compat_level: None = None) -> Any:
         """Return this schema as a PyArrow schema.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.to_arrow()
         """
 
     def to_frame(self) -> TableFrame:
         """Return an empty `TableFrame` having exactly this schema.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.to_frame()
         """
 
     def len(self) -> int:
         """Return the number of columns.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.len()
         """
 
     def to_python(self) -> dict[str, type]:
         """Return a dict mapping each column name to its Python type.
 
         :categories: attributes
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.to_python()["a"]  # <class 'int'>
         """
 
     def contains_dtype(self, dtype: DataType, *, recursive: bool) -> bool:
@@ -156,4 +258,15 @@ class Schema:
             dtype: Data type to look for.
             recursive: Also match the type nested inside `List` / `Struct`
                 / `Array` columns.
+
+        Examples:
+            .. code-block:: python
+
+                tf.schema.contains_dtype(String, recursive=False)
+
+            `recursive=True` also looks inside `List` / `Struct` / `Array` columns:
+
+            .. code-block:: python
+
+                tf.schema.contains_dtype(String, recursive=True)
         """

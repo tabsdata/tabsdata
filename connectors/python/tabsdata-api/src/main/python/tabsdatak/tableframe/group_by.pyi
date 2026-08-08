@@ -27,6 +27,11 @@ class LazyGroupBy:
     `n_unique`) reduce EVERY column and can fail on a table's hidden system
     columns; prefer `agg(col(...).<reduction>())`. `count` and `len` are
     always safe.
+
+    Examples:
+        .. code-block:: python
+
+            tf.group_by("g").agg(col("a").mean().alias("average"))
     """
     # devguide-ref: group_by/agg
     def __init__(self, lgb, parent, by) -> None:
@@ -64,6 +69,17 @@ class LazyGroupBy:
 
         Args:
             name: Name for the count column (default `"len"`).
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").len()
+
+            Name the output column to keep it distinct from the data:
+
+            .. code-block:: python
+
+                tf.group_by("g").len("rows")
         """
 
     def count(self) -> TableFrame:
@@ -73,6 +89,11 @@ class LazyGroupBy:
 
         Yields one count column per non-key column. Safe on any
         `TableFrame` (it counts values, not reduces them).
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").count()
         """
 
     def max(self) -> TableFrame:
@@ -82,6 +103,11 @@ class LazyGroupBy:
 
         Reduces EVERY column; may fail on a table's hidden system columns
         through storage. Prefer `agg(col(...).max())`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").max().alias("largest"))
         """
 
     def mean(self) -> TableFrame:
@@ -91,6 +117,11 @@ class LazyGroupBy:
 
         Reduces EVERY column; may fail on a table's hidden system columns
         through storage. Prefer `agg(col(...).mean())`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").mean().alias("average"))
         """
 
     def median(self) -> TableFrame:
@@ -100,6 +131,11 @@ class LazyGroupBy:
 
         Reduces EVERY column; may fail on a table's hidden system columns
         through storage. Prefer `agg(col(...).median())`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").median().alias("middle"))
         """
 
     def min(self) -> TableFrame:
@@ -109,6 +145,11 @@ class LazyGroupBy:
 
         Reduces EVERY column; may fail on a table's hidden system columns
         through storage. Prefer `agg(col(...).min())`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").min().alias("smallest"))
         """
 
     def n_unique(self) -> TableFrame:
@@ -118,6 +159,11 @@ class LazyGroupBy:
 
         Reduces EVERY column; may fail on a table's hidden system columns
         through storage. Prefer `agg(col(...).n_unique())`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").n_unique().alias("distinct"))
         """
 
     def sum(self) -> TableFrame:
@@ -127,4 +173,9 @@ class LazyGroupBy:
 
         Reduces EVERY column; may fail on a table's hidden system columns
         through storage. Prefer `agg(col(...).sum())`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("g").agg(col("a").sum().alias("total"))
         """

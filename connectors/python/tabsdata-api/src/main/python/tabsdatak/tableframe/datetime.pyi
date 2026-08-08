@@ -44,6 +44,11 @@ class ExprDateTimeNameSpace:
     """Date and time methods, accessed via `Expr.dt`.
 
     :categories: date
+
+    Examples:
+        .. code-block:: python
+
+            tf.with_columns(col("ts").dt.year().alias("year"))
     """
     def add_business_days(
         self,
@@ -64,6 +69,18 @@ class ExprDateTimeNameSpace:
             holidays: Dates to skip in addition to non-business weekdays.
             roll: How to handle a non-business start date: `raise`,
                 `forward` or `backward`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("d").dt.add_business_days(3).alias("due"))
+
+            A start date that is not a business day raises unless `roll`
+            says which way to move it first:
+
+            .. code-block:: python
+
+                tf.with_columns(col("d").dt.add_business_days(3, roll="forward"))
         """
 
     def truncate(self, every: str | Expr) -> Expr:
@@ -109,6 +126,11 @@ class ExprDateTimeNameSpace:
             microsecond: New microsecond.
             ambiguous: Policy for ambiguous local times: `earliest`,
                 `latest`, `raise` or `null`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.replace(day=1).alias("first_of_month"))
         """
 
     def combine(self, time: Expr, time_unit: TimeUnit = "us") -> Expr:
@@ -119,6 +141,11 @@ class ExprDateTimeNameSpace:
         Args:
             time: Time or expression to attach to each date.
             time_unit: Resolution of the result: `ns`, `us` or `ms`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.combine(time(9, 0)).alias("opening"))
         """
 
     def to_string(self, format: str | None = None) -> Expr:
@@ -129,6 +156,11 @@ class ExprDateTimeNameSpace:
         Args:
             format: chrono-style format string (e.g. `%Y-%m-%d`);
                 defaults to ISO 8601 when omitted.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.to_string("%Y-%m-%d").alias("day"))
         """
 
     def strftime(self, format: str) -> Expr:
@@ -138,102 +170,187 @@ class ExprDateTimeNameSpace:
 
         Args:
             format: chrono-style format string, e.g. `%Y-%m-%d %H:%M:%S`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.strftime("%H:%M").alias("clock"))
         """
 
     def millennium(self) -> Expr:
         """Extract the millennium of each date.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.millennium().alias("millennium"))
         """
 
     def century(self) -> Expr:
         """Extract the century of each date.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.century().alias("century"))
         """
 
     def year(self) -> Expr:
         """Extract the year of each date.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by(col("d").dt.year().alias("year")).len()
         """
 
     def is_leap_year(self) -> Expr:
         """Return whether each year is a leap year.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("d").dt.is_leap_year())
         """
 
     def iso_year(self) -> Expr:
         """Extract the ISO 8601 year of each date.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.iso_year().alias("iso_year"))
         """
 
     def quarter(self) -> Expr:
         """Extract the quarter of each date (1 to 4).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by(col("d").dt.quarter().alias("quarter")).len()
         """
 
     def month(self) -> Expr:
         """Extract the month of each date (1 to 12).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.month().alias("month"))
         """
 
     def week(self) -> Expr:
         """Extract the ISO 8601 week number of each date (1 to 53).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.week().alias("week"))
         """
 
     def weekday(self) -> Expr:
         """Extract the ISO weekday (1 for Monday to 7 for Sunday).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("d").dt.weekday() <= 5)  # weekdays only
         """
 
     def day(self) -> Expr:
         """Extract the day of the month (1 to 31).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.day().alias("day"))
         """
 
     def ordinal_day(self) -> Expr:
         """Extract the day of the year (1 to 366).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.ordinal_day().alias("day_of_year"))
         """
 
     def time(self) -> Expr:
         """Extract the time component of each datetime.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.time().alias("time"))
         """
 
     def date(self) -> Expr:
         """Extract the date component of each datetime.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.date().alias("date"))
         """
 
     def datetime(self) -> Expr:
         """Extract the datetime value.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.datetime().alias("moment"))
         """
 
     def hour(self) -> Expr:
         """Extract the hour of each datetime (0 to 23).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("ts").dt.hour() >= 12)  # afternoon rows
         """
 
     def minute(self) -> Expr:
         """Extract the minute of each datetime (0 to 59).
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.minute().alias("minute"))
         """
 
     def second(self, *, fractional: bool = False) -> Expr:
@@ -243,24 +360,50 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the sub-second fraction.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.second().alias("second"))
+
+            `fractional=True` folds the sub-second part into the result:
+
+            .. code-block:: python
+
+                tf.select(col("ts").dt.second(fractional=True).alias("second"))
         """
 
     def millisecond(self) -> Expr:
         """Extract the millisecond of each datetime.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.millisecond().alias("ms"))
         """
 
     def microsecond(self) -> Expr:
         """Extract the microsecond of each datetime.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.microsecond().alias("us"))
         """
 
     def nanosecond(self) -> Expr:
         """Extract the nanosecond of each datetime.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.nanosecond().alias("ns"))
         """
 
     def epoch(self, time_unit: EpochTimeUnit = "us") -> Expr:
@@ -270,6 +413,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             time_unit: Output unit: `ns`, `us`, `ms`, `s` or `d`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.epoch("s").alias("unix_seconds"))
         """
 
     def timestamp(self, time_unit: TimeUnit = "us") -> Expr:
@@ -279,6 +427,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             time_unit: Output unit: `ns`, `us` or `ms`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.timestamp("ms").alias("stamp"))
         """
 
     def with_time_unit(self, time_unit: TimeUnit) -> Expr:
@@ -288,6 +441,17 @@ class ExprDateTimeNameSpace:
 
         Args:
             time_unit: New unit: `ns`, `us` or `ms`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.with_time_unit("ms"))
+
+            This relabels the unit and therefore reinterprets the stored numbers; use `cast_time_unit` to keep the same instant:
+
+            .. code-block:: python
+
+                tf.select(col("ts").dt.cast_time_unit("ms"))
         """
 
     def cast_time_unit(self, time_unit: TimeUnit) -> Expr:
@@ -297,6 +461,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             time_unit: Target unit: `ns`, `us` or `ms`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("ts").dt.cast_time_unit("ms"))
         """
 
     def convert_time_zone(self, time_zone: str) -> Expr:
@@ -306,6 +475,15 @@ class ExprDateTimeNameSpace:
 
         Args:
             time_zone: Target IANA time zone, e.g. `America/New_York`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(
+                    col("ts")
+                    .dt.replace_time_zone("UTC")
+                    .dt.convert_time_zone("Europe/Madrid")
+                )
         """
 
     def replace_time_zone(
@@ -326,6 +504,11 @@ class ExprDateTimeNameSpace:
                 `latest`, `raise` or `null`.
             non_existent: Policy for non-existent local times: `raise`
                 or `null`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns(col("ts").dt.replace_time_zone("UTC"))
         """
         # devguide-ref: time-zone and DST handling
 
@@ -336,6 +519,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the fractional remainder.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_days().alias("days"))
         """
 
     def total_hours(self, *, fractional: bool = False) -> Expr:
@@ -345,6 +533,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the fractional remainder.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_hours().alias("hours"))
         """
 
     def total_minutes(self, *, fractional: bool = False) -> Expr:
@@ -354,6 +547,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the fractional remainder.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_minutes().alias("minutes"))
         """
 
     def total_seconds(self, *, fractional: bool = False) -> Expr:
@@ -363,6 +561,17 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the fractional remainder.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_seconds().alias("seconds"))
+
+            `fractional=True` keeps the remainder instead of truncating:
+
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_seconds(fractional=True))
         """
 
     def total_milliseconds(self, *, fractional: bool = False) -> Expr:
@@ -372,6 +581,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the fractional remainder.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_milliseconds().alias("ms"))
         """
 
     def total_microseconds(self, *, fractional: bool = False) -> Expr:
@@ -381,6 +595,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the fractional remainder.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_microseconds().alias("us"))
         """
 
     def total_nanoseconds(self, *, fractional: bool = False) -> Expr:
@@ -390,6 +609,11 @@ class ExprDateTimeNameSpace:
 
         Args:
             fractional: If `True`, include the fractional remainder.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("dur").dt.total_nanoseconds().alias("ns"))
         """
 
     def offset_by(self, by: str | Expr) -> Expr:
@@ -411,22 +635,50 @@ class ExprDateTimeNameSpace:
         """Return the first day of the month for each date.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.month_start().alias("first_day"))
         """
 
     def month_end(self) -> Expr:
         """Return the last day of the month for each date.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("d").dt.month_end().alias("last_day"))
         """
 
     def base_utc_offset(self) -> Expr:
         """Return the base UTC offset, excluding daylight saving.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(
+                    col("ts")
+                    .dt.replace_time_zone("Europe/Madrid")
+                    .dt.base_utc_offset()
+                )
         """
 
     def dst_offset(self) -> Expr:
         """Return the additional daylight-saving offset.
 
         :categories: date
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(
+                    col("ts")
+                    .dt.replace_time_zone("Europe/Madrid")
+                    .dt.dst_offset()
+                )
         """
