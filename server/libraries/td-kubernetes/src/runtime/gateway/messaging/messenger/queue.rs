@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Pod, PodSpec};
 use serde_yaml::Value;
 use td_bridge::messaging::{
     CronRequest, FunctionRequest, OrchestratorMessage, OrchestratorMessagePayload,
@@ -35,6 +35,7 @@ use crate::runtime::gateway::messaging::messenger::template::{
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, WorkerSettings};
 use crate::runtime::instance::ports::apply_ports;
+use crate::runtime::instance::sizing::{PodPlacement, apply_sizing};
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::docker::system_values_for as docker_system_values_for;
 use crate::runtime::provider::fargate::system_values_for as fargate_system_values_for;
@@ -238,6 +239,48 @@ impl KubernetesOrchestratorMessageQueue {
         Self { context, templates }
     }
 
+    fn apply_sizing_to_pod(&self, pod: &mut Pod) -> Result<(), QueueError> {
+        let placement = PodPlacement::of(pod.metadata.labels.as_ref());
+        let Some(spec) = pod.spec.as_mut() else {
+            return Ok(());
+        };
+        self.apply_sizing(&placement, spec)
+    }
+
+    fn apply_sizing_to_job(&self, job: &mut Job) -> Result<(), QueueError> {
+        let placement = PodPlacement::of(job.metadata.labels.as_ref());
+        let Some(spec) = job
+            .spec
+            .as_mut()
+            .and_then(|job_spec| job_spec.template.spec.as_mut())
+        else {
+            return Ok(());
+        };
+        self.apply_sizing(&placement, spec)
+    }
+
+    fn apply_sizing_to_cronjob(&self, cronjob: &mut CronJob) -> Result<(), QueueError> {
+        let placement = PodPlacement::of(cronjob.metadata.labels.as_ref());
+        let Some(spec) = cronjob
+            .spec
+            .as_mut()
+            .and_then(|cronjob_spec| cronjob_spec.job_template.spec.as_mut())
+            .and_then(|job_spec| job_spec.template.spec.as_mut())
+        else {
+            return Ok(());
+        };
+        self.apply_sizing(&placement, spec)
+    }
+
+    fn apply_sizing(&self, placement: &PodPlacement, spec: &mut PodSpec) -> Result<(), QueueError> {
+        let Some(sizing) = self.templates.sizing() else {
+            return Ok(());
+        };
+        apply_sizing(sizing, placement, spec).map_err(|error| QueueError::BackendError {
+            cause: error.to_string(),
+        })
+    }
+
     fn system_values(&self) -> Result<SystemValues, QueueError> {
         let container_root =
             std::env::var(CONTAINER_ROOT_ENV).map_err(|error| QueueError::BackendError {
@@ -361,6 +404,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                     );
                                 }
                                 inject_labels_into_pod(&mut pod, &kit.labels);
+                                self.apply_sizing_to_pod(&mut pod)?;
                                 (
                                     vec![kit.main_configmap],
                                     vec![kit.main_secret],
@@ -387,6 +431,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                     );
                                 }
                                 inject_labels_into_job(&mut job, &kit.labels);
+                                self.apply_sizing_to_job(&mut job)?;
                                 (
                                     vec![kit.main_configmap],
                                     vec![kit.main_secret],
@@ -417,6 +462,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                     );
                                 }
                                 inject_labels_into_cronjob(&mut cronjob, &kit.labels);
+                                self.apply_sizing_to_cronjob(&mut cronjob)?;
                                 (
                                     vec![kit.main_configmap],
                                     vec![kit.main_secret],
@@ -435,7 +481,8 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                     | TemplateKind::Service
                     | TemplateKind::ServiceAccount
                     | TemplateKind::Role
-                    | TemplateKind::RoleBinding => {
+                    | TemplateKind::RoleBinding
+                    | TemplateKind::PodDisruptionBudget => {
                         return Err(unexpected_kind(&id, "authorization or service"));
                     }
                 }
@@ -472,7 +519,8 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 TemplateKind::Service
                 | TemplateKind::ServiceAccount
                 | TemplateKind::Role
-                | TemplateKind::RoleBinding => {
+                | TemplateKind::RoleBinding
+                | TemplateKind::PodDisruptionBudget => {
                     return Err(unexpected_kind(&id, "authorization or service"));
                 }
             },
@@ -522,7 +570,8 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
             TemplateKind::Service
             | TemplateKind::ServiceAccount
             | TemplateKind::Role
-            | TemplateKind::RoleBinding => {
+            | TemplateKind::RoleBinding
+            | TemplateKind::PodDisruptionBudget => {
                 return Err(unexpected_kind(&message.id, "authorization or service"));
             }
         }

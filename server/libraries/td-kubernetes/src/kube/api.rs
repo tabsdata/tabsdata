@@ -31,6 +31,7 @@ pub mod companions;
 pub mod configmap;
 pub mod cronjob;
 pub mod deployment;
+pub mod disruption;
 pub mod helpers;
 pub mod job;
 pub mod namespace;

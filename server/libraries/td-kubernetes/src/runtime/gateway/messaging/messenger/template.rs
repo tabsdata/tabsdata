@@ -8,12 +8,13 @@ use serde_yaml::Value;
 use tracing::{info, warn};
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
-    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
+    CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
 };
 use crate::base::error::kubernetes::{KubeMessagingError, KubernetesError};
 use crate::kube::api::{LabelFilter, get_configmaps};
 use crate::kube::context::KubeContext;
+use crate::runtime::instance::tabsdata::TABSDATA_FILE;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TemplateKind {
@@ -25,6 +26,7 @@ pub enum TemplateKind {
     ServiceAccount,
     Role,
     RoleBinding,
+    PodDisruptionBudget,
 }
 
 impl TemplateKind {
@@ -38,6 +40,7 @@ impl TemplateKind {
             "ServiceAccount" => Some(Self::ServiceAccount),
             "Role" => Some(Self::Role),
             "RoleBinding" => Some(Self::RoleBinding),
+            "PodDisruptionBudget" => Some(Self::PodDisruptionBudget),
             _ => None,
         }
     }
@@ -45,7 +48,11 @@ impl TemplateKind {
     pub fn is_workload(&self) -> bool {
         match self {
             Self::Pod | Self::Deployment | Self::Job | Self::CronJob => true,
-            Self::Service | Self::ServiceAccount | Self::Role | Self::RoleBinding => false,
+            Self::Service
+            | Self::ServiceAccount
+            | Self::Role
+            | Self::RoleBinding
+            | Self::PodDisruptionBudget => false,
         }
     }
 }
@@ -60,6 +67,7 @@ pub struct PodTemplate {
 #[derive(Debug, Clone, Default)]
 pub struct PodTemplateIndex {
     map: HashMap<String, PodTemplate>,
+    sizing: Option<String>,
 }
 
 impl PodTemplateIndex {
@@ -85,7 +93,12 @@ impl PodTemplateIndex {
                 map.insert(template.component.clone(), template);
             }
         }
-        Ok(Self { map })
+        let sizing = load_sizing(context).await?;
+        Ok(Self { map, sizing })
+    }
+
+    pub fn sizing(&self) -> Option<&str> {
+        self.sizing.as_deref()
     }
 
     pub fn lookup(&self, component: &str) -> Result<&PodTemplate, KubeMessagingError> {
@@ -106,6 +119,22 @@ impl PodTemplateIndex {
             }
         }
     }
+}
+
+async fn load_sizing(context: &KubeContext) -> Result<Option<String>, KubernetesError> {
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
+    let configmaps = get_configmaps(context, Some(filter)).await?;
+    for (_, entries) in configmaps {
+        for (key, value) in entries {
+            if key != TABSDATA_FILE {
+                continue;
+            }
+            if let Ok(text) = String::from_utf8(value) {
+                return Ok(Some(text));
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn parse_template(manifest: &str) -> Result<Option<PodTemplate>, KubernetesError> {

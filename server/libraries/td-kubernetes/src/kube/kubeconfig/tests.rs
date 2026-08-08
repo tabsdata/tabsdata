@@ -186,3 +186,33 @@ fn resolve_cluster_url_returns_none_for_missing_file() {
     let path = PathBuf::from("/nonexistent/path/to/kubeconfig");
     assert_eq!(resolve_cluster_url(Some(&path), Some("dev")), None);
 }
+
+#[test]
+fn a_bare_cluster_name_is_kept_as_is() {
+    assert_eq!(cluster_name_of("tabsdata-dev"), "tabsdata-dev");
+    assert_eq!(
+        cluster_name_of("tabsdata-eks-dev.eu-west-1.eksctl.io"),
+        "tabsdata-eks-dev.eu-west-1.eksctl.io"
+    );
+}
+
+#[test]
+fn an_arn_yields_only_the_cluster_name() {
+    assert_eq!(
+        cluster_name_of("arn:aws:eks:eu-west-1:395882564602:cluster/tabsdata-eks-dev"),
+        "tabsdata-eks-dev"
+    );
+}
+
+#[test]
+fn the_resolved_name_never_carries_a_path_separator() {
+    for cluster in [
+        "tabsdata-dev",
+        "arn:aws:eks:eu-west-1:395882564602:cluster/tabsdata-eks-dev",
+        "arn:aws:eks:eu-west-1:1:cluster/",
+    ] {
+        let resolved = cluster_name_of(cluster);
+        assert!(!resolved.contains('/'), "{cluster} -> {resolved}");
+        assert!(!resolved.is_empty(), "{cluster}");
+    }
+}

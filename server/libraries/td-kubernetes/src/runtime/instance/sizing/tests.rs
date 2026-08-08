@@ -187,3 +187,39 @@ fn every_other_tier_falls_back_to_service_defaults() {
         );
     }
 }
+
+#[test]
+fn a_function_pod_gets_its_resources_and_toleration_from_the_config() {
+    let config = r#"
+pods:
+  service:
+    resources: { cpu: "1", memory: 2Gi, disk: 8Gi }
+  function:
+    priority: tabsdata-function
+    resources: { cpu: "4", memory: 16Gi, disk: 16Gi }
+    placement:
+      selectors: {}
+      tolerations:
+        - key: workload
+          value: batch
+          effect: NoSchedule
+"#;
+    let mut pod = spec();
+    let placement = PodPlacement {
+        component: Some("function-publisher".to_owned()),
+        tier: Some("ephemeral".to_owned()),
+    };
+    apply_sizing(config, &placement, &mut pod).expect("apply");
+
+    assert_eq!(
+        requested(&pod.containers[0], RESOURCE_CPU).as_deref(),
+        Some("4")
+    );
+    let tolerations = pod.tolerations.as_ref().expect("tolerations");
+    assert_eq!(tolerations[0].key.as_deref(), Some("workload"));
+    assert_eq!(tolerations[0].value.as_deref(), Some("batch"));
+    assert_eq!(
+        pod.priority_class_name.as_deref(),
+        Some("tabsdata-function")
+    );
+}

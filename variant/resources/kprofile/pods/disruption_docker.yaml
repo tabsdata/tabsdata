@@ -1,0 +1,26 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aut-services
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Protects the long running tabsdata pods from voluntary eviction"
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: apiserver
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: authorization
+spec:
+  minAvailable: 100%
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tabsdata
+      app.kubernetes.io/part-of: tabsdata
+      tabsdata.com/tier: regular

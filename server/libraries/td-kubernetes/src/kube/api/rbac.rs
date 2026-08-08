@@ -3,6 +3,7 @@
 //
 
 use k8s_openapi::api::core::v1::ServiceAccount;
+use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
 use kube::api::{DeleteParams, ListParams, PostParams};
 use kube::core::NamespaceResourceScope;
@@ -150,10 +151,11 @@ pub async fn upsert_role_binding(
 }
 
 pub async fn delete_authorizations(context: &KubeContext) -> Result<bool, KubernetesError> {
+    let budgets = delete_all::<PodDisruptionBudget>(context).await?;
     let bindings = delete_all::<RoleBinding>(context).await?;
     let roles = delete_all::<Role>(context).await?;
     let accounts = delete_all::<ServiceAccount>(context).await?;
-    Ok(bindings || roles || accounts)
+    Ok(budgets || bindings || roles || accounts)
 }
 
 pub async fn list_roles(

@@ -239,10 +239,6 @@ def mounts() -> list[str]:
     return found
 
 
-def environment() -> list[str]:
-    return [f"{name} = {os.environ[name]}" for name in sorted(os.environ)]
-
-
 def report_system() -> None:
     lines: list[str] = []
     failures: list[str] = []
@@ -301,9 +297,6 @@ def report_system() -> None:
         record("raid", raid_status)
         record("disk_usage", disk_usage)
         record("mounts", mounts)
-
-        section("environment")
-        record("environment", environment)
 
         if failures:
             section("gathering errors")

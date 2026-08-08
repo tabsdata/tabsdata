@@ -48,7 +48,15 @@ pub fn resolve_cluster_name(kubefile: Option<&Path>, context: Option<&str>) -> O
         .iter()
         .find(|named| named.name == context_name)
         .and_then(|named| named.context.as_ref())
-        .map(|context| context.cluster.clone())
+        .map(|context| cluster_name_of(&context.cluster))
+}
+
+fn cluster_name_of(cluster: &str) -> String {
+    cluster
+        .rsplit(['/', ':'])
+        .find(|segment| !segment.is_empty())
+        .unwrap_or(cluster)
+        .to_owned()
 }
 
 pub fn resolve_namespace(kubefile: Option<&Path>, context: Option<&str>) -> Option<String> {

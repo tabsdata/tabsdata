@@ -25,13 +25,21 @@ pub fn inject_sizing(
     let Some(config_yaml) = profile.configs.get(TABSDATA_FILE) else {
         return Ok(());
     };
-    let config = TabsdataConfig::parse(config_yaml).map_err(|error| {
+    apply_sizing(config_yaml, placement, spec).map_err(|cause| {
         LauncherError::SizingConfigParseFailed {
             config: TABSDATA_FILE.to_owned(),
             pod: pod_template_key.to_owned(),
-            cause: error.to_string(),
+            cause: cause.to_string(),
         }
-    })?;
+    })
+}
+
+pub fn apply_sizing(
+    config_yaml: &str,
+    placement: &PodPlacement,
+    spec: &mut PodSpec,
+) -> Result<(), serde_yaml::Error> {
+    let config = TabsdataConfig::parse(config_yaml)?;
     let component = config.component(
         placement.component.as_deref().unwrap_or_default(),
         placement.tier.as_deref(),

@@ -8,6 +8,7 @@ use indicatif::MultiProgress;
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{Pod, Service, ServiceAccount};
+use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
@@ -23,8 +24,8 @@ use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
 use crate::kube::api::deployment::is_deployment_available;
 use crate::kube::api::{
-    cronjob as cronjob_api, deployment as deployment_api, job as job_api, pod as pod_api,
-    rbac as rbac_api, service as service_api,
+    cronjob as cronjob_api, deployment as deployment_api, disruption as disruption_api,
+    job as job_api, pod as pod_api, rbac as rbac_api, service as service_api,
 };
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::template::TemplateKind;
@@ -181,7 +182,8 @@ pub async fn apply_authorization_phase(
         TemplateKind::ServiceAccount => 0,
         TemplateKind::Role => 1,
         TemplateKind::RoleBinding => 2,
-        _ => 3,
+        TemplateKind::PodDisruptionBudget => 3,
+        _ => 4,
     });
     for (key, yaml, kind) in ordered {
         let bar = phase.add_resource(key);
@@ -204,6 +206,18 @@ pub async fn apply_authorization_phase(
                     deserialize_pod_entry::<RoleBinding>(key, yaml, Tier::Authorization, system)
                         .await?;
                 rbac_api::upsert_role_binding(context, &binding)
+                    .await
+                    .map(|_| ())
+            }
+            TemplateKind::PodDisruptionBudget => {
+                let budget = deserialize_pod_entry::<PodDisruptionBudget>(
+                    key,
+                    yaml,
+                    Tier::Authorization,
+                    system,
+                )
+                .await?;
+                disruption_api::upsert_disruption_budget(context, &budget)
                     .await
                     .map(|_| ())
             }
@@ -871,7 +885,8 @@ pub async fn wait_regular_phase(
                 TemplateKind::Service
                 | TemplateKind::ServiceAccount
                 | TemplateKind::Role
-                | TemplateKind::RoleBinding => {
+                | TemplateKind::RoleBinding
+                | TemplateKind::PodDisruptionBudget => {
                     bar.finish_with_message(format!("{name} (unexpected)"));
                     Err(LauncherError::UnawaitableWorkloadKind {
                         name: name.clone(),

@@ -14,6 +14,7 @@ pub mod cluster;
 pub mod configmap;
 pub mod cronjob;
 pub mod deployment;
+mod disruption;
 pub mod job;
 pub mod kubeconfig;
 pub mod messaging;
@@ -34,6 +35,7 @@ pub use cluster::KubeClusterError;
 pub use configmap::KubeConfigMapError;
 pub use cronjob::KubeCronJobError;
 pub use deployment::KubeDeploymentError;
+pub use disruption::KubeDisruptionError;
 pub use job::KubeJobError;
 pub use kubeconfig::KubeconfigError;
 pub use messaging::KubeMessagingError;
@@ -56,6 +58,8 @@ pub enum KubernetesError {
     CronJob(#[from] KubeCronJobError),
     #[error(transparent)]
     Deployment(#[from] KubeDeploymentError),
+    #[error(transparent)]
+    Disruption(#[from] KubeDisruptionError),
     #[error(transparent)]
     Job(#[from] KubeJobError),
     #[error(transparent)]
@@ -86,6 +90,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::ConfigMap(inner) => TdError::new(inner),
             KubernetesError::CronJob(inner) => TdError::new(inner),
             KubernetesError::Deployment(inner) => TdError::new(inner),
+            KubernetesError::Disruption(inner) => TdError::new(inner),
             KubernetesError::Job(inner) => TdError::new(inner),
             KubernetesError::Kubeconfig(inner) => TdError::new(inner),
             KubernetesError::Messaging(inner) => TdError::new(inner),

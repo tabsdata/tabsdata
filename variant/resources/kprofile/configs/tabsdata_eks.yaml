@@ -25,17 +25,18 @@ pods:
   # would apply, so it must be complete.
   service:
     priority: tabsdata-service
+    # dbmanager / pymanager / inspector / venvloader
     resources:
-      cpu: "1"
-      memory: 2Gi
-      disk: 8Gi
+      cpu: "2"
+      memory: 1Gi
+      disk: 16Gi
     placement:
       selectors: {}
       tolerations: []
     apiserver:
       resources:
         cpu: "2"
-        memory: 6Gi
+        memory: 4Gi
         disk: 16Gi
       placement:
         selectors: {}
@@ -44,9 +45,9 @@ pods:
   function:
     priority: tabsdata-function
     resources:
-      cpu: "4"
+      cpu: "1"
       memory: 16Gi
-      disk: 16Gi
+      disk: 64Gi
     placement:
       selectors: {}
       tolerations:
