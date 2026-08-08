@@ -1430,13 +1430,14 @@ mod tests {
         Ok(())
     }
 
-    /// A failing function-run dispatch is skipped without aborting the tick;
-    /// its PFR stays `Requested` with no WorkerDB and is re-dispatched
-    /// through the replay-side readiness — which runs right after the
-    /// initial pipeline, so the retry already lands in the same tick (under
-    /// a fresh worker id).
+    /// Worker-message puts run post-commit, so a failing put neither aborts
+    /// the tick nor loses the run: its rows are already committed (PFR
+    /// `Dispatched`, WorkerDB `Locked`) — there is just no pod, so no
+    /// callback ever arrives and the stuck-dispatched sweep re-dispatches
+    /// the run under a fresh worker id. A failing put must not stop the
+    /// remaining puts either.
     #[td_test::test(db)]
-    async fn test_function_dispatch_isolation_and_retry_kubernetes(
+    async fn test_function_dispatch_put_failure_recovered_by_sweep_kubernetes(
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -1448,6 +1449,7 @@ mod tests {
                 &UserId::admin(),
             )
             .await?;
+        let mut executions = Vec::new();
         for (name, table) in [("function_1", "table_1"), ("function_2", "table_2")] {
             let create = FunctionRegister::builder()
                 .try_name(name)?
@@ -1474,29 +1476,38 @@ mod tests {
                     ExecutionRequest::builder().name(None).build()?,
                 )
                 .in_project(p.id);
-            ExecuteFunctionService::with_defaults(db.clone())
+            let execution = ExecuteFunctionService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(request)
                 .await?;
+            executions.push(execution);
         }
 
-        // The first put fails; the tick still succeeds, the other run
-        // dispatches, and the failed run is retried by the replay-side
-        // pipeline within the same tick.
+        // The first put fails post-commit: the tick still succeeds, the
+        // other run's put goes through, and BOTH runs' rows are committed.
         let context = kubernetes_scheduler_context_with_queue(&db, FailPutQueue::failing_first(1));
         RequestService::build(&context)
             .service()
             .oneshot(())
             .await?;
         let created = context.bridge.message_queue().locked_messages().await;
-        assert_eq!(created.len(), 2);
-        for message in created.iter() {
-            let worker_id = WorkerId::try_from(message.id.as_str())?;
-            let worker: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker_id).await?;
-            assert_eq!(worker.status, WorkerStatus::Requested);
+        assert_eq!(created.len(), 1);
+        for execution in &executions {
+            let pfrs: Vec<PhysicalFunctionRunDB> = db
+                .live()
+                .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
+                .await?;
+            assert_eq!(pfrs.len(), 1);
+            assert_eq!(pfrs[0].status, PhysicalFunctionRunStatus::Dispatched);
+            let worker: WorkerDB = db
+                .live()
+                .fetch_one::<WorkerDB>(&Some(pfrs[0].id.clone()))
+                .await?;
+            assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
         }
 
-        // Nothing left for the next tick: both runs are Dispatched.
+        // The run with the lost put is NOT re-picked by the readiness
+        // queries (its WorkerDB exists): a normal tick dispatches nothing.
         let context = kubernetes_scheduler_context(&db);
         RequestService::build(&context)
             .service()
@@ -1509,6 +1520,34 @@ mod tests {
                 .locked_messages()
                 .await
                 .is_empty()
+        );
+
+        // The stuck-dispatched sweep is the recovery path: it fails the
+        // pod-less attempts and re-dispatches fresh ones.
+        let context = stuck_timeout_context(&db, StuckRequestedTimeout(Duration::ZERO));
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+        for execution in &executions {
+            let pfrs: Vec<PhysicalFunctionRunDB> = db
+                .live()
+                .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
+                .await?;
+            assert_eq!(pfrs.len(), 2);
+            let failed = pfrs
+                .iter()
+                .filter(|pfr| pfr.status == PhysicalFunctionRunStatus::Failed)
+                .count();
+            let dispatched = pfrs
+                .iter()
+                .filter(|pfr| pfr.status == PhysicalFunctionRunStatus::Dispatched)
+                .count();
+            assert_eq!((failed, dispatched), (1, 1));
+        }
+        assert_eq!(
+            context.bridge.message_queue().locked_messages().await.len(),
+            2
         );
         Ok(())
     }

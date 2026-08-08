@@ -28,6 +28,7 @@ use td_objects::types::basic::{
 use td_queries::{ChunkedQueries, LfrEntry, PfrEntry};
 use td_storage::Storage;
 use td_tower::extractors::{MutRef, Ref};
+use td_tower::post_commit::PostCommitActions;
 use tracing::{debug, instrument, warn};
 
 /// LFR-rooted readiness fetch for the no-pre-mint dispatch path.
@@ -221,6 +222,7 @@ pub async fn create_locked_function_runner_workers_start_request(
     at: Ref<AtTime>,
     jwt: Ref<JwtConfig>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunToExecute>>,
+    mut post_commit: MutRef<PostCommitActions>,
 ) -> Result<Vec<WorkerDB>, TdError> {
     // Supervisor resolves the message eagerly at the dispatch tick; the
     // kubernetes path defers resolution to the resolve endpoint (the pod
@@ -329,16 +331,34 @@ pub async fn create_locked_function_runner_workers_start_request(
                 worker_config: None,
             };
 
-            // Add it to the queue
-            bridge
-                .message_queue()
-                .put(message.id.to_string(), payload)
-                .await?;
-            Ok::<WorkerDB, TdError>(message)
+            Ok::<(WorkerDB, OrchestratorMessagePayload<serde_yaml::Value>), TdError>((
+                message, payload,
+            ))
         }
         .await;
         match result {
-            Ok(message) => results.push(message),
+            Ok((message, payload)) => {
+                // The queue put is an external side effect (in kubernetes it
+                // creates the pod): defer it until the transaction commits, so
+                // a rolled-back tick never leaves a pod behind whose worker
+                // row does not exist. If the put itself fails, the run sits in
+                // `Dispatched` with no callback and the stuck-dispatched sweep
+                // re-dispatches it.
+                let bridge = (*bridge).clone();
+                let id = message.id.to_string();
+                post_commit.push(move || {
+                    Box::pin(async move {
+                        if let Err(e) = bridge.message_queue().put(id.clone(), payload).await {
+                            warn!(
+                                worker_id = %id,
+                                "request: worker message put failed after commit; \
+                                 the stuck-dispatched sweep will re-dispatch the run: {e:#?}"
+                            );
+                        }
+                    })
+                });
+                results.push(message);
+            }
             Err(e) => warn!(
                 pfr_id = %f.id,
                 reason = ?e,

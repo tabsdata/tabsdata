@@ -25,11 +25,24 @@ use td_objects::types::basic::{
 };
 use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
+use td_tower::post_commit::PostCommitActions;
 use tracing::{debug, error, instrument, warn};
 
+/// Wakes the dispatcher only after the tick's transaction commits: the
+/// worker-message puts are post-commit actions registered before this one, so
+/// by the time the dispatcher runs, the messages exist and their rows are
+/// visible on other connections.
 #[instrument(name = "scheduler.notify_dispatcher", skip_all, level = "debug")]
-pub async fn notify_dispatcher(notify: Ref<SchedulerNotify>) -> Result<(), TdError> {
-    notify.notify_dispatcher();
+pub async fn notify_dispatcher(
+    notify: Ref<SchedulerNotify>,
+    mut post_commit: MutRef<PostCommitActions>,
+) -> Result<(), TdError> {
+    let notify = (*notify).clone();
+    post_commit.push(move || {
+        Box::pin(async move {
+            notify.notify_dispatcher();
+        })
+    });
     Ok(())
 }
 
