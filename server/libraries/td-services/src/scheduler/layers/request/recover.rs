@@ -48,10 +48,7 @@ pub async fn fetch_stale_dispatched_runs(
     at: Ref<AtTime>,
     config: Ref<SchedulerConfig>,
 ) -> Result<StaleDispatchedRuns, TdError> {
-    let Some(timeout) = config.stuck_requested_timeout.0 else {
-        return Ok(StaleDispatchedRuns::empty());
-    };
-
+    let timeout = config.stuck_requested_timeout.0;
     let cutoff: DateTime<Utc> = ***at - chrono::Duration::seconds(timeout.as_secs() as i64);
     let stale: Vec<PhysicalFunctionRunDB> = conn
         .pfr()

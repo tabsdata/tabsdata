@@ -882,8 +882,10 @@ mod tests {
             1
         );
 
-        let context_off = stuck_timeout_context(&db, StuckRequestedTimeout(None));
-        RequestService::build(&context_off)
+        // A freshly-dispatched run is well within the default timeout — the
+        // sweep must not touch it.
+        let context_fresh = stuck_timeout_context(&db, StuckRequestedTimeout::default());
+        RequestService::build(&context_fresh)
             .service()
             .oneshot(())
             .await?;
@@ -893,7 +895,7 @@ mod tests {
             .await?;
         assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
         assert!(
-            context_off
+            context_fresh
                 .bridge
                 .message_queue()
                 .locked_messages()
@@ -901,7 +903,7 @@ mod tests {
                 .is_empty()
         );
 
-        let context_2 = stuck_timeout_context(&db, StuckRequestedTimeout(Some(Duration::ZERO)));
+        let context_2 = stuck_timeout_context(&db, StuckRequestedTimeout(Duration::ZERO));
         RequestService::build(&context_2)
             .service()
             .oneshot(())
@@ -1046,7 +1048,7 @@ mod tests {
         assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
         assert!(pfr.dispatched_on.is_some());
 
-        let context_2 = stuck_timeout_context(&db, StuckRequestedTimeout(Some(Duration::ZERO)));
+        let context_2 = stuck_timeout_context(&db, StuckRequestedTimeout(Duration::ZERO));
         RequestService::build(&context_2)
             .service()
             .oneshot(())

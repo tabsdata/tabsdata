@@ -259,7 +259,8 @@ pub struct Params {
     check_frequency: Option<i64>,
     #[clap(long)]
     /// Seconds a dispatched function run may go without a worker callback
-    /// before the scheduler auto-recovers it; `<= 0` disables the sweep
+    /// before the scheduler auto-recovers it; `<= 0` falls back to the
+    /// default (the sweep cannot be disabled)
     stuck_requested_timeout: Option<i64>,
     #[clap(long, value_parser = parse_transaction_by)]
     /// Transaction by
