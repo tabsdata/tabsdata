@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -13,6 +14,7 @@ use clap_derive::{Args, Subcommand};
 // use crate::client::tdkserver::commands::instance::InstanceCommands;
 // use crate::client::tdkserver::commands::secret::SecretCommands;
 // use crate::client::tdkserver::commands::server::ServerCommands;
+use crate::client::tdkserver::commands::help::HelpArguments;
 use crate::client::tdkserver::commands::service::InstanceNameArguments;
 use crate::client::tdkserver::commands::service::create::CreateArguments;
 use crate::client::tdkserver::commands::service::get::GetArguments;
@@ -20,7 +22,6 @@ use crate::client::tdkserver::commands::service::info::InfoCommands;
 use crate::client::tdkserver::commands::service::init::InitArguments;
 use crate::client::tdkserver::commands::service::put::PutArguments;
 use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments;
-use crate::client::tdkserver::full_help::{FULL_ARGUMENT, FULL_LONG_HELP};
 // use crate::client::tdkserver::commands::service::register::RegisterArguments;
 use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
@@ -48,31 +49,28 @@ static PROVIDER_LONG_HELP: LazyLock<String> = LazyLock::new(|| {
     name = "Tabsdata Client for Tabsdata Server on Kubernetes",
     version = "2.0.0",
     about = "Client for the tabsdata server on kubernetes",
-    long_about = "Manage tabsdata instances on kubernetes clusters."
+    long_about = "Manage tabsdata instances on kubernetes clusters.",
+    disable_help_subcommand = true
 )]
 pub struct Arguments {
     #[command(flatten)]
     pub globals: GlobalArguments,
 
-    #[arg(
-        long,
-        name = FULL_ARGUMENT,
-        required = false,
-        default_value_t = false,
-        display_order = 150,
-        long_help = FULL_LONG_HELP
-    )]
-    pub full: bool,
-
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
 
-const AUXILIARY_COMMANDS: [&str; 2] = ["about", "info"];
+const AUXILIARY_COMMANDS: [&str; 4] = ["help", "banner", "about", "info"];
 
 const GLOBAL_ARGUMENTS: [&str; 2] = ["verbose", "keep-progress"];
 
 const HELP_ARGUMENT: &str = "help";
+
+const HELP_COMMAND: &str = "help";
+
+const HELP_FLAGS: [&str; 2] = ["--help", "-h"];
+
+const FULL_FLAG: &str = "--full";
 
 pub fn parse_arguments() -> Arguments {
     let mut command = Arguments::command();
@@ -87,8 +85,23 @@ pub fn parse_arguments() -> Arguments {
         }
         *subcommand = hidden.mut_arg(HELP_ARGUMENT, |argument| argument);
     }
-    let matches = command.get_matches();
+    let matches = command.get_matches_from(help_command_form(env::args()));
     Arguments::from_arg_matches(&matches).unwrap_or_else(|error| error.exit())
+}
+
+fn help_command_form(arguments: impl Iterator<Item = String>) -> Vec<String> {
+    let mut arguments: Vec<String> = arguments.collect();
+    if !arguments.iter().any(|argument| argument == FULL_FLAG) {
+        return arguments;
+    }
+    let Some(position) = arguments
+        .iter()
+        .position(|argument| HELP_FLAGS.contains(&argument.as_str()))
+    else {
+        return arguments;
+    };
+    arguments[position] = HELP_COMMAND.to_owned();
+    arguments
 }
 
 #[derive(Debug, Clone, Args)]
@@ -130,6 +143,10 @@ pub struct GlobalArguments {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    #[command(about = "Show the commands of tabsdata on kubernetes")]
+    Help(HelpArguments),
+    #[command(about = "Show Tabsdata banner")]
+    Banner,
     #[command(about = "Show build metadata and system information")]
     About,
     #[command(
@@ -181,14 +198,14 @@ pub enum Commands {
     Unset(UnpinArguments),
     #[command(about = "Show the tabsdata session settings")]
     Settings(SettingsArguments),
+    #[command(about = "List registered tabsdata instances")]
+    List,
     #[command(
         about = "Open an interactive shell",
         long_about = "Open an interactive shell. The commands listed under it are entered at the \
                       shell prompt, not on the tdkserver command line."
     )]
     Shell,
-    #[command(about = "List registered tabsdata instances")]
-    List,
     // #[command(subcommand, about = "Manage tabsdata templates")]
     // Template(TemplateCommands),
     // #[command(subcommand, about = "Manage tabsdata clusters")]
@@ -305,3 +322,6 @@ impl InstanceArguments {
         Self { name }
     }
 }
+
+#[cfg(test)]
+mod tests;

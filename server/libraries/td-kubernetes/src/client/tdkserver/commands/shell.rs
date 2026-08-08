@@ -18,13 +18,27 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::GlobalArguments;
 
-use super::config::{ConfigCommands, command_config};
-use super::secret::{SecretCommands, command_secret};
-use super::server::{ServerCommands, command_server};
+use super::about::command_about;
+use super::banner::command_banner;
+use super::help::{ShellHelpArguments, command_shell_help};
+use super::service::InstanceNameArguments;
+use super::service::create::{CreateArguments, command_create};
+use super::service::get::{GetArguments, command_get};
+use super::service::info::{InfoCommands, command_info};
+use super::service::init::{InitArguments, command_init};
+use super::service::inspect::command_inspect;
+use super::service::list::command_list;
+use super::service::put::{PutArguments, command_put};
+use super::service::quickstart::{QuickstartArguments, command_quickstart};
+use super::service::restart::{RestartArguments, command_restart};
+use super::service::start::{StartArguments, command_start};
+use super::service::status::command_status;
+use super::service::stop::{StopArguments, command_stop};
+use super::service::trash::{TrashArguments, command_trash};
+use super::service::view::{ViewArguments, command_view};
 use super::session::set::{SetArguments, command_set};
 use super::session::settings::{SettingsArguments, command_settings};
 use super::session::unset::{UnpinArguments, command_unset};
-use super::session::{SessionCommands, command_session};
 use crate::cerror;
 use crate::client::session::settings::{SettingsContext, tdksettings_path};
 use crate::core::system::exit::CommandResult;
@@ -35,32 +49,67 @@ const HISTORY_CAPACITY: usize = 10_000;
 
 #[derive(Debug, Clone, Subcommand)]
 enum ShellCommand {
-    /// Exit the shell
-    Exit,
-    /// Exit the shell
-    Quit,
-    /// Manage tabsdata configs
-    #[command(subcommand)]
-    Config(ConfigCommands),
-    /// Manage tabsdata secrets
-    #[command(subcommand)]
-    Secret(SecretCommands),
-    /// Manage tabsdata servers
-    #[command(subcommand)]
-    Server(ServerCommands),
-    /// Manage the active tabsdata session
-    #[command(subcommand)]
-    Session(SessionCommands),
-    /// Set default values used when commands omit them
+    #[command(about = "Show the commands of this shell, or of the tdkserver command line")]
+    Help(ShellHelpArguments),
+    #[command(about = "Show Tabsdata banner")]
+    Banner,
+    #[command(about = "Show build metadata and system information")]
+    About,
+    #[command(
+        subcommand,
+        about = "Show the license, third-party dependencies and release notes of tabsdata",
+        arg_required_else_help = true
+    )]
+    Info(InfoCommands),
+    #[command(about = "Initialize, create and start a tabsdata instance in one step")]
+    Quickstart(QuickstartArguments),
+    #[command(about = "Produce an editable input config folder for a tabsdata instance")]
+    Init(InitArguments),
+    #[command(about = "Create a tabsdata instance")]
+    Create(CreateArguments),
+    #[command(about = "Start a tabsdata instance")]
+    Start(StartArguments),
+    #[command(about = "Stop a tabsdata instance")]
+    Stop(StopArguments),
+    #[command(about = "Restart a tabsdata instance")]
+    Restart(RestartArguments),
+    #[command(about = "Show the running workloads of a tabsdata instance")]
+    Status(InstanceNameArguments),
+    #[command(about = "Show the configuration and state of a tabsdata instance")]
+    Inspect(InstanceNameArguments),
+    #[command(about = "Trash a local kminus tabsdata instance")]
+    Trash(TrashArguments),
+    #[command(
+        name = "get-cfg",
+        about = "Download the configmaps of a tabsdata instance for editing"
+    )]
+    Get(GetArguments),
+    #[command(
+        name = "put-cfg",
+        about = "Replace the configmaps of a tabsdata instance from edited files"
+    )]
+    Put(PutArguments),
+    #[command(
+        name = "view-cfg",
+        about = "View the configmaps of a tabsdata instance"
+    )]
+    View(ViewArguments),
+    #[command(about = "Set a session setting used when commands omit it")]
     Set(SetArguments),
-    /// Unset default values
+    #[command(about = "Unset a session setting")]
     Unset(UnpinArguments),
-    /// Show the set default values
+    #[command(about = "Show the tabsdata session settings")]
     Settings(SettingsArguments),
+    #[command(about = "List registered tabsdata instances")]
+    List,
+    #[command(about = "Exit the shell")]
+    Exit,
+    #[command(about = "Exit the shell")]
+    Quit,
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "", multicall = true)]
+#[command(name = "", multicall = true, disable_help_subcommand = true)]
 struct ShellInput {
     #[command(subcommand)]
     command: ShellCommand,
@@ -135,18 +184,53 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
 
         match ShellInput::try_parse_from(tokens) {
             Ok(input) => match input.command {
-                ShellCommand::Exit | ShellCommand::Quit => break,
-                ShellCommand::Config(command) => {
-                    let _ = command_config(command, globals).await;
+                ShellCommand::Help(arguments) => {
+                    let _ = command_shell_help(arguments, globals).await;
                 }
-                ShellCommand::Secret(command) => {
-                    let _ = command_secret(command, globals).await;
+                ShellCommand::Banner => {
+                    let _ = command_banner(globals).await;
                 }
-                ShellCommand::Server(command) => {
-                    let _ = command_server(command, globals).await;
+                ShellCommand::About => {
+                    let _ = command_about(globals).await;
                 }
-                ShellCommand::Session(command) => {
-                    let _ = command_session(command, globals).await;
+                ShellCommand::Info(command) => {
+                    let _ = command_info(command, globals).await;
+                }
+                ShellCommand::Quickstart(arguments) => {
+                    let _ = command_quickstart(arguments, globals).await;
+                }
+                ShellCommand::Init(arguments) => {
+                    let _ = command_init(arguments, globals).await;
+                }
+                ShellCommand::Create(arguments) => {
+                    let _ = command_create(arguments, globals).await;
+                }
+                ShellCommand::Start(arguments) => {
+                    let _ = command_start(arguments, globals).await;
+                }
+                ShellCommand::Stop(arguments) => {
+                    let _ = command_stop(arguments, globals).await;
+                }
+                ShellCommand::Restart(arguments) => {
+                    let _ = command_restart(arguments, globals).await;
+                }
+                ShellCommand::Status(arguments) => {
+                    let _ = command_status(arguments, globals).await;
+                }
+                ShellCommand::Inspect(arguments) => {
+                    let _ = command_inspect(arguments, globals).await;
+                }
+                ShellCommand::Trash(arguments) => {
+                    let _ = command_trash(arguments, globals).await;
+                }
+                ShellCommand::Get(arguments) => {
+                    let _ = command_get(arguments, globals).await;
+                }
+                ShellCommand::Put(arguments) => {
+                    let _ = command_put(arguments, globals).await;
+                }
+                ShellCommand::View(arguments) => {
+                    let _ = command_view(arguments, globals).await;
                 }
                 ShellCommand::Set(arguments) => {
                     let _ = command_set(arguments, globals).await;
@@ -157,6 +241,10 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 ShellCommand::Settings(arguments) => {
                     let _ = command_settings(arguments, globals).await;
                 }
+                ShellCommand::List => {
+                    let _ = command_list(globals).await;
+                }
+                ShellCommand::Exit | ShellCommand::Quit => break,
             },
             Err(error) => {
                 let _ = error.print();
@@ -227,21 +315,31 @@ fn run_shell_escape(command: &str) {
     }
 }
 
+/// Entered at the shell prompt but parsed before the command grammar, so they
+/// never reach clap and would otherwise go unlisted by any help.
+pub const SPECIAL_COMMANDS: [(&str, &str); 6] = [
+    ("!<command>", "Run a system shell command"),
+    ("!cd <path>", "Change working directory"),
+    ("!set VAR=val", "Set an environment variable"),
+    ("!unset VAR", "Remove an environment variable"),
+    (":?", "Show the quick reference"),
+    (
+        ":help / :exit / :quit",
+        "Built-in commands (also :h / :e / :q)",
+    ),
+];
+
 fn show_quick_reference() {
     let title = format!("Tabsdata Kubernetes Shell v{}", env!("CARGO_PKG_VERSION"));
-    let entries: &[(&str, &str)] = &[
+    let entries: Vec<(&str, &str)> = [
         ("help", "Show available commands"),
+        ("help --cli", "Show the tdkserver command line help"),
         ("exit / quit", "Leave the shell (also Ctrl+D)"),
-        ("!<command>", "Run a system shell command"),
-        ("!cd <path>", "Change working directory"),
-        ("!set VAR=val", "Set an environment variable"),
-        ("!unset VAR", "Remove an environment variable"),
-        (":?", "Show this quick reference"),
-        (
-            ":help / :exit / :quit",
-            "Built-in commands (also :h / :e / :q)",
-        ),
-    ];
+    ]
+    .into_iter()
+    .chain(SPECIAL_COMMANDS)
+    .collect();
+    let entries = entries.as_slice();
 
     let key_width = entries
         .iter()

@@ -13,7 +13,6 @@ use td_common::logging::{CONSOLE_PROFILE, LogFormat, LoggingOptions};
 use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_kubernetes::client::tdkserver;
-use td_kubernetes::client::tdkserver::full_help::handle_full_help;
 use td_kubernetes::client::tdkserver::widgets::show_banner;
 use te_system::license::{
     ACCEPT_TERMS_ARGUMENT, ACCEPT_TERMS_N, ACCEPT_TERMS_NO, ACCEPT_TERMS_Y, ACCEPT_TERMS_YES,
@@ -23,6 +22,10 @@ use tm_workspace::workspace_root;
 use tracing::Level;
 
 const ACK: &str = ".ack";
+
+const HELP_COMMAND: &str = "help";
+const HELP_FLAGS: [&str; 2] = ["--help", "-h"];
+const FULL_FLAG: &str = "--full";
 
 const RUST_LOG: &str = "RUST_LOG";
 const RUST_LOG_DIRECTIVES: &str = "info,kube_client::client::tls=error,td_common::os=error";
@@ -44,6 +47,13 @@ fn parse_accept_terms_value(value: &str) -> Option<bool> {
             exit(1);
         }
     }
+}
+
+fn full_help_requested() -> bool {
+    let mut arguments = env::args().skip(1).skip_while(|argument| {
+        argument != HELP_COMMAND && !HELP_FLAGS.contains(&argument.as_str())
+    });
+    arguments.next().is_some() && arguments.any(|argument| argument == FULL_FLAG)
 }
 
 fn extract_accept_terms() -> Option<bool> {
@@ -111,9 +121,7 @@ fn check_polars() {
 #[tokio::main]
 #[attach(signal = "tdkserver")]
 async fn main() {
-    // Runs before the license banner and the polars check so that
-    // '--help --full --format json' writes a parseable document and nothing else.
-    handle_full_help();
+    let full_help = full_help_requested();
     let previous_rust_log = env::var_os(RUST_LOG);
     unsafe {
         env::set_var(RUST_LOG, RUST_LOG_DIRECTIVES);
@@ -131,10 +139,12 @@ async fn main() {
             None => env::remove_var(RUST_LOG),
         }
     }
-    let accept_terms = extract_accept_terms();
-    let previously_acknowledged = check_banner(accept_terms).unwrap_or(false);
-    if !previously_acknowledged {
-        check_polars();
+    if !full_help {
+        let accept_terms = extract_accept_terms();
+        let previously_acknowledged = check_banner(accept_terms).unwrap_or(false);
+        if !previously_acknowledged {
+            check_polars();
+        }
     }
     // Setting env vars is not thread-safe; use with care.
     unsafe {

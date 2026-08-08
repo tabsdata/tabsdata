@@ -2,8 +2,11 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+pub mod about;
+pub mod banner;
 pub mod cluster;
 pub mod config;
+pub mod help;
 pub mod instance;
 pub mod secret;
 pub mod server;

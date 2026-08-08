@@ -5,22 +5,21 @@
 pub mod arguments;
 pub mod commands;
 pub mod common;
-pub mod full_help;
 pub mod render;
 pub mod widgets;
 
-use clap::CommandFactory;
-
 use crate::cerror;
-use td_build::version::TABSDATA_VERSION;
 
-use crate::client::tdkserver::arguments::{Arguments, Commands, GlobalArguments, parse_arguments};
+use crate::client::tdkserver::arguments::{Commands, GlobalArguments, parse_arguments};
 use crate::client::tdkserver::widgets::set_keep_progress;
 // use crate::client::tdkserver::commands::cluster::command_cluster;
 // use crate::client::tdkserver::commands::config::command_config;
 // use crate::client::tdkserver::commands::instance::command_instance;
 // use crate::client::tdkserver::commands::secret::command_secret;
 // use crate::client::tdkserver::commands::server::command_server;
+use crate::client::tdkserver::commands::about::command_about;
+use crate::client::tdkserver::commands::banner::command_banner;
+use crate::client::tdkserver::commands::help::{HelpArguments, command_help};
 use crate::client::tdkserver::commands::service::create::command_create;
 use crate::client::tdkserver::commands::service::get::command_get;
 use crate::client::tdkserver::commands::service::info::command_info;
@@ -67,15 +66,10 @@ impl TabsDataKubernetesClient {
 
     async fn dispatch(&self, command: Option<Commands>, globals: GlobalArguments) -> CommandResult {
         match command {
-            None => {
-                Arguments::command().print_help().ok();
-                println!();
-                Ok(())
-            }
-            Some(Commands::About) => {
-                td_common::about::tdabout(TABSDATA_VERSION);
-                Ok(())
-            }
+            None => command_help(HelpArguments::summary(), &globals).await,
+            Some(Commands::Help(arguments)) => command_help(arguments, &globals).await,
+            Some(Commands::Banner) => command_banner(&globals).await,
+            Some(Commands::About) => command_about(&globals).await,
             Some(Commands::Info(arguments)) => command_info(arguments, &globals).await,
             Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,
             Some(Commands::Init(arguments)) => command_init(arguments, &globals).await,
@@ -93,11 +87,11 @@ impl TabsDataKubernetesClient {
             Some(Commands::Put(arguments)) => command_put(arguments, &globals).await,
             Some(Commands::View(arguments)) => command_view(arguments, &globals).await,
             Some(Commands::Trash(arguments)) => command_trash(arguments, &globals).await,
-            Some(Commands::Shell) => command_shell(&globals).await,
             Some(Commands::Set(arguments)) => command_set(arguments, &globals).await,
             Some(Commands::Unset(arguments)) => command_unset(arguments, &globals).await,
             Some(Commands::Settings(arguments)) => command_settings(arguments, &globals).await,
             Some(Commands::List) => command_list(&globals).await,
+            Some(Commands::Shell) => command_shell(&globals).await,
             // Some(Commands::Template(command)) => command_template(command, &globals).await,
             // Some(Commands::Cluster(command)) => command_cluster(command, &globals).await,
             // Some(Commands::Instance(command)) => command_instance(command, &globals).await,
