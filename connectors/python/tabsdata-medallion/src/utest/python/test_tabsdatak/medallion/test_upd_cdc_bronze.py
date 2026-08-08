@@ -10,6 +10,12 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.bronze.upd_cdc import (
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,
@@ -21,10 +27,10 @@ pytestmark = pytest.mark.medallion
 
 # ── Metadata column names ────────────────────────────────────────────────────
 # Output metadata columns produced by build_upd_cdc_bronze.
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 
 # Composite primary key used in these tests.
 PK = [
@@ -80,20 +86,20 @@ def make_prior_bronze(rows: list[tuple]) -> TableFrame:
     """Build a prior-bronze TableFrame.
 
     rows is a list of (tenant_id, entity_id, op) tuples. The function only
-    reads pk_cols + $m.op from prior_bronze, so the minimal shape covers
+    reads pk_cols + @td.medallion.op from prior_bronze, so the minimal shape covers
     every path. T sentinels carry null PK values — use (None, None, OP_TOMBSTONE).
     """
     return TableFrame.from_dict(
         {
             "tenant_id": [r[0] for r in rows],
             "entity_id": [r[1] for r in rows],
-            "$m.op": [r[2] for r in rows],
+            MEDALLION_SYSTEM_COLUMN_OP: [r[2] for r in rows],
         }
     ).cast(
         {
             "tenant_id": td_dtypes.String,
             "entity_id": td_dtypes.Int64,
-            "$m.op": td_dtypes.String,
+            MEDALLION_SYSTEM_COLUMN_OP: td_dtypes.String,
         }
     )
 
@@ -122,7 +128,7 @@ def call(full_commits, upd_commits, prior_bronze) -> TableFrame:
 
 
 def _assert_utc_aware(ts, label: str) -> None:
-    """$m.* timestamps must be tz-aware with zero UTC offset.
+    """@td.medallion.* timestamps must be tz-aware with zero UTC offset.
 
     A regression to naive timestamps trips ``tzinfo is None``; a regression
     to a non-UTC offset trips the offset comparison.
@@ -212,7 +218,7 @@ def test_backfill_ignores_prior_bronze():
 
 
 def test_backfill_pk_meta_column():
-    """Backfill: $m.pk lists the composite PK on every row."""
+    """Backfill: @td.medallion.pk lists the composite PK on every row."""
     full = make_upd_batch([("t1", 1, "alice", TS_PAST, False)])
     out = call(full_commits=[full], upd_commits=[], prior_bronze=None)
 
@@ -222,7 +228,7 @@ def test_backfill_pk_meta_column():
 
 
 def test_backfill_timestamps_utc_aware():
-    """Backfill: $m.source_ts and $m.bronze_ts are UTC-aware on every row."""
+    """Backfill: @td.medallion.source_ts and @td.medallion.bronze_ts are UTC-aware on every row."""
     full = make_upd_batch([("t1", 1, "alice", TS_PAST, False)])
     out = call(full_commits=[full], upd_commits=[], prior_bronze=None)
 
@@ -470,7 +476,7 @@ def test_incremental_no_prior_bronze_diagonal_concat():
 
 
 def test_incremental_no_prior_bronze_pk_meta_column():
-    """No prior_bronze: $m.pk on every row."""
+    """No prior_bronze: @td.medallion.pk on every row."""
     upd = make_upd_batch([("t1", 1, "alice", TS_PAST, False)])
     out = call(full_commits=[], upd_commits=[upd], prior_bronze=None)
 
@@ -480,7 +486,7 @@ def test_incremental_no_prior_bronze_pk_meta_column():
 
 
 def test_incremental_no_prior_bronze_timestamps_utc_aware():
-    """No prior_bronze: $m.source_ts and $m.bronze_ts are UTC-aware."""
+    """No prior_bronze: @td.medallion.source_ts and @td.medallion.bronze_ts are UTC-aware."""
     upd = make_upd_batch([("t1", 1, "alice", TS_PAST, False)])
     out = call(full_commits=[], upd_commits=[upd], prior_bronze=None)
 
@@ -600,7 +606,7 @@ def test_incremental_seen_helper_col_dropped():
 
 
 def test_incremental_source_ts_mirrors_updated_ts_col():
-    """prior_bronze present: $m.source_ts mirrors the per-row updated_ts_col value."""
+    """prior_bronze present: @td.medallion.source_ts mirrors the per-row updated_ts_col value."""
     prior_bronze = make_prior_bronze([("t1", 1, OP_INSERT)])
     upd = make_upd_batch(
         [
@@ -611,15 +617,15 @@ def test_incremental_source_ts_mirrors_updated_ts_col():
     out = call(full_commits=[], upd_commits=[upd], prior_bronze=prior_bronze)
 
     by_entity = {int(r["entity_id"]): r for r in to_rows(out)}
-    _assert_utc_aware(by_entity[1][M_SOURCE_TS], "entity 1 $m.source_ts")
-    _assert_utc_aware(by_entity[99][M_SOURCE_TS], "entity 99 $m.source_ts")
+    _assert_utc_aware(by_entity[1][M_SOURCE_TS], "entity 1 @td.medallion.source_ts")
+    _assert_utc_aware(by_entity[99][M_SOURCE_TS], "entity 99 @td.medallion.source_ts")
     # Per-row mirror: source_ts == the row's updated_at, not run_ts.
     assert by_entity[1][M_SOURCE_TS] == TS_PAST
     assert by_entity[99][M_SOURCE_TS] == TS_FUTURE
 
 
 def test_incremental_pk_meta_column_with_prior_bronze():
-    """prior_bronze present: $m.pk on every output row."""
+    """prior_bronze present: @td.medallion.pk on every output row."""
     prior_bronze = make_prior_bronze([("t1", 1, OP_INSERT)])
     upd = make_upd_batch([("t1", 1, "alice", TS_MID, False)])
     out = call(full_commits=[], upd_commits=[upd], prior_bronze=prior_bronze)
@@ -630,7 +636,7 @@ def test_incremental_pk_meta_column_with_prior_bronze():
 
 
 def test_incremental_bronze_ts_utc_aware_with_prior_bronze():
-    """prior_bronze present: $m.bronze_ts is UTC-aware (run_ts stamp)."""
+    """prior_bronze present: @td.medallion.bronze_ts is UTC-aware (run_ts stamp)."""
     prior_bronze = make_prior_bronze([("t1", 1, OP_INSERT)])
     upd = make_upd_batch([("t1", 1, "alice", TS_MID, False)])
     out = call(full_commits=[], upd_commits=[upd], prior_bronze=prior_bronze)

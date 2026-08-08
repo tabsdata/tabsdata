@@ -15,16 +15,25 @@ from tabsdatak._medallion.gold.dim import (
     build_type2_dim,
 )
 from tabsdatak._medallion.gold.fact import build_fact
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_DATE_SK,
+    MEDALLION_SYSTEM_COLUMN_ENTITY_SK,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+    MEDALLION_SYSTEM_COLUMN_VALID_FROM,
+    MEDALLION_SYSTEM_COLUMN_VALID_TO,
+    MEDALLION_SYSTEM_COLUMN_VERSION_SK,
+)
 
 pytestmark = pytest.mark.medallion
 
 # ── Gold row-shape columns ───────────────────────────────────────────────────
-M_PK = "$m.pk"
-M_SOURCE_TS = "$m.source_ts"
-VALID_FROM = "$m.valid_from"
-VALID_TO = "$m.valid_to"
-ENTITY_SK = "$m.entity_sk"
-VERSION_SK = "$m.version_sk"
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+VALID_FROM = MEDALLION_SYSTEM_COLUMN_VALID_FROM
+VALID_TO = MEDALLION_SYSTEM_COLUMN_VALID_TO
+ENTITY_SK = MEDALLION_SYSTEM_COLUMN_ENTITY_SK
+VERSION_SK = MEDALLION_SYSTEM_COLUMN_VERSION_SK
 
 # Composite natural key used in these tests.
 PK_COLS = ["tenant_id", "entity_id"]
@@ -110,7 +119,7 @@ def make_current_silver(rows: list[tuple]) -> TableFrame:
 
 def make_history(rows: list[tuple]) -> TableFrame:
     """Build a prior `dim_<entity>_history` frame (gold Type 2 output shape:
-    no $m.pk; carries $m.version_sk + $m.valid_from / $m.valid_to).
+    no @td.medallion.pk; carries @td.medallion.version_sk + @td.medallion.valid_from / @td.medallion.valid_to).
 
     rows: (tenant_id, entity_id, city, valid_from, valid_to, version_sk).
     """
@@ -155,7 +164,7 @@ def to_rows(tf: TableFrame) -> list[dict]:
 
 
 def test_drop_pk_present():
-    """`$m.pk` is dropped when present."""
+    """`@td.medallion.pk` is dropped when present."""
     tf = make_valid_silver([("t1", 1, "NYC", TS_1)])
     out = _drop_pk(tf)
     assert M_PK not in user_cols(out)
@@ -165,7 +174,7 @@ def test_drop_pk_present():
 
 
 def test_drop_pk_absent_is_noop():
-    """When `$m.pk` is absent, the frame is returned unchanged (guard branch)."""
+    """When `@td.medallion.pk` is absent, the frame is returned unchanged (guard branch)."""
     tf = make_valid_silver([("t1", 1, "NYC", TS_1)]).drop([M_PK])
     out = _drop_pk(tf)
     assert sorted(user_cols(out)) == sorted(user_cols(tf))
@@ -214,7 +223,7 @@ def test_type1_entity_sk_distinct_for_different_keys():
 
 def test_type1_reference_data_shape():
     """Reference data (SCD1 `_current_silver`) has no valid_from/valid_to —
-    build_type1_dim still works (only touches $m.pk + adds entity_sk)."""
+    build_type1_dim still works (only touches @td.medallion.pk + adds entity_sk)."""
     current = make_current_silver([("US", "United States"), ("CA", "Canada")])
     out = build_type1_dim(current)
 
@@ -230,7 +239,7 @@ def test_type1_reference_data_shape():
 
 def test_type2_first_fire_no_history():
     """history=None, no expired → output is the current-valid rows shaped into
-    history (version_sk added, $m.pk dropped, valid_to stays null)."""
+    history (version_sk added, @td.medallion.pk dropped, valid_to stays null)."""
     valid = make_valid_silver([("t1", 1, "NYC", TS_1), ("t1", 2, "LA", TS_1)])
     out = build_type2_dim(history_head=None, expired_new=[], valid_head=valid)
 
@@ -348,7 +357,7 @@ def test_type2_multiple_expired_commits_concatenated():
 
 # ── build_fact ───────────────────────────────────────────────────────────────
 
-DATE_SK = "$m.date_sk"
+DATE_SK = MEDALLION_SYSTEM_COLUMN_DATE_SK
 
 # Timestamps spread across the year so version intervals are unambiguous.
 JAN = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -398,7 +407,7 @@ def make_dim_version_history(rows: list[tuple], key: str = "customer_id") -> Tab
 
 
 def test_fact_pins_version_by_event_ts():
-    """Each event links to the dim version active at its $m.source_ts. Exercises
+    """Each event links to the dim version active at its @td.medallion.source_ts. Exercises
     both range-filter branches: the closed version (valid_to set) and the open
     version (valid_to null)."""
     events = make_event_silver([
@@ -414,14 +423,14 @@ def test_fact_pins_version_by_event_ts():
     cols = user_cols(out)
     assert "customer_version_sk" in cols
     assert DATE_SK in cols
-    assert M_PK not in cols              # $m.pk dropped
+    assert M_PK not in cols              # @td.medallion.pk dropped
     assert "amount" in cols             # measure rides through
     assert M_SOURCE_TS in cols          # event time kept
 
     by_order = {r["order_id"]: r for r in to_rows(out)}
     assert by_order[1]["customer_version_sk"] == 111
     assert by_order[2]["customer_version_sk"] == 222
-    # date_sk = YYYYMMDD from $m.source_ts.
+    # date_sk = YYYYMMDD from @td.medallion.source_ts.
     assert by_order[1][DATE_SK] == 20240215
     assert by_order[2][DATE_SK] == 20240820
 

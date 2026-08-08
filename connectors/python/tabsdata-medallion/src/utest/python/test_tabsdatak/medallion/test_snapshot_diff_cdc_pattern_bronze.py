@@ -10,6 +10,12 @@ import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col
 from tabsdatak._medallion.bronze.snapshot_diff_cdc import (
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,
@@ -21,10 +27,10 @@ pytestmark = pytest.mark.medallion
 
 # ── Metadata column names ────────────────────────────────────────────────────
 # Output metadata columns produced by build_snapshot_diff_cdc_bronze.
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 
 # Composite primary key used in these tests.
 PK = [
@@ -341,11 +347,11 @@ def test_incremental_null_to_null_not_an_update():
     assert len(to_rows(out)) == 0
 
 
-# ── $m.pk + timestamp meta columns ──────────────────────────────────────────
+# ── @td.medallion.pk + timestamp meta columns ──────────────────────────────────────────
 
 
 def test_pk_meta_column_on_bootstrap():
-    """$m.pk column lists the composite PK on every bootstrap row."""
+    """@td.medallion.pk column lists the composite PK on every bootstrap row."""
     head = make_snapshot([("t1", 1, "name-0", "active", 100.0)])
     out = call(prev=None, head=head, new=make_new_nonempty())
 
@@ -356,7 +362,7 @@ def test_pk_meta_column_on_bootstrap():
 
 
 def test_pk_meta_column_on_incremental():
-    """$m.pk column lists the composite PK on every incremental row (I/U/D)."""
+    """@td.medallion.pk column lists the composite PK on every incremental row (I/U/D)."""
     prev = make_snapshot(
         [
             ("t1", 1, "name-0", "active", 100.0),  # → D
@@ -395,7 +401,7 @@ def _assert_utc_aware(ts, label: str) -> None:
 
 
 def test_timestamp_meta_columns_present_on_bootstrap():
-    """$m.source_ts and $m.bronze_ts present and UTC-aware on bootstrap rows."""
+    """@td.medallion.source_ts and @td.medallion.bronze_ts present and UTC-aware on bootstrap rows."""
     head = make_snapshot([("t1", 1, "name-0", "active", 100.0)])
     out = call(prev=None, head=head, new=make_new_nonempty())
 
@@ -409,7 +415,7 @@ def test_timestamp_meta_columns_present_on_bootstrap():
 
 
 def test_timestamp_meta_columns_present_on_incremental():
-    """$m.source_ts and $m.bronze_ts present and UTC-aware on incremental rows."""
+    """@td.medallion.source_ts and @td.medallion.bronze_ts present and UTC-aware on incremental rows."""
     prev = make_snapshot([("t1", 1, "name-0", "active", 100.0)])
     head = make_snapshot([("t1", 2, "name-1", "active", 200.0)])
     out = call(prev=prev, head=head, new=make_new_nonempty())

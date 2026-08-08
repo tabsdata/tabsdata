@@ -8,6 +8,12 @@ from datetime import datetime, timezone
 import polars as pl
 
 from tabsdatak._medallion.bronze.cdc import OP_INSERT
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 
@@ -51,25 +57,26 @@ def build_append_only_cdc_bronze(
             f"column; got dtype {ts_dtype!r}"
         )
 
-    # Normalize $m.source_ts to UTC based on the input's time_zone:
+    # Normalize @td.medallion.source_ts to UTC based on the input's time_zone:
     #  - None (naive)         → ``dt.replace_time_zone("UTC")`` attaches UTC,
     #                           wall-clock preserved.
     #  - "UTC"                → no-op.
     #  - Any other tz-aware   → ``dt.convert_time_zone("UTC")`` preserves the
     #                           instant, wall-clock changes to UTC.
-    # Use the renamed name "$m.source_ts" inside with_columns — the rename
+    # Use the renamed name MEDALLION_SYSTEM_COLUMN_SOURCE_TS inside with_columns — the
+    # rename
     # has already executed by the time these expressions evaluate.
     ts_tz = ts_dtype.time_zone
     if ts_tz is None:
-        ts_expr = col("$m.source_ts").dt.replace_time_zone("UTC")
+        ts_expr = col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).dt.replace_time_zone("UTC")
     elif str(ts_tz) == "UTC":
-        ts_expr = col("$m.source_ts")
+        ts_expr = col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS)
     else:
-        ts_expr = col("$m.source_ts").dt.convert_time_zone("UTC")
+        ts_expr = col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).dt.convert_time_zone("UTC")
 
-    return raw.rename({event_ts_col: "$m.source_ts"}).with_columns([
-        lit(OP_INSERT).alias("$m.op"),
+    return raw.rename({event_ts_col: MEDALLION_SYSTEM_COLUMN_SOURCE_TS}).with_columns([
+        lit(OP_INSERT).alias(MEDALLION_SYSTEM_COLUMN_OP),
         ts_expr,
-        lit(datetime.now(tz=timezone.utc)).alias("$m.bronze_ts"),
-        lit(pk_cols).alias("$m.pk"),
+        lit(datetime.now(tz=timezone.utc)).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+        lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
     ])

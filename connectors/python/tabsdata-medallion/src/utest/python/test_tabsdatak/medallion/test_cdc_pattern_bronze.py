@@ -9,6 +9,16 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.bronze.cdc import (
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
+from tabsdatak.conn.common.sql.cdc.constants import (
+    CDC_META_OP,
+    CDC_META_TS,
+)
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,
@@ -20,15 +30,15 @@ pytestmark = pytest.mark.medallion
 
 # ── Metadata column names ────────────────────────────────────────────────────
 # Output metadata columns produced by build_cdc_bronze.
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 
 # Input cdc metadata columns (what the upstream CDC trigger emits, before
-# build_cdc_bronze renames them into the $m.* namespace).
-IN_OP = "@td..cdc.meta.op"
-IN_SOURCE_TS = "@td..cdc.meta.ts"
+# build_cdc_bronze renames them into the @td.medallion.* namespace).
+IN_OP = CDC_META_OP
+IN_SOURCE_TS = CDC_META_TS
 
 # Composite primary key used in these tests.
 PK = [
@@ -41,7 +51,7 @@ EXPECTED_PK_COLS = ["tenant_id", "entity_id"]
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 # Timestamps well before / after ``datetime.now(tz=timezone.utc)`` so the
-# bootstrap filter (stream.$m.source_change_ts > bootstrap_ts) is
+# bootstrap filter (stream.@td.medallion.source_change_ts > bootstrap_ts) is
 # deterministic. UTC-aware on both sides — ``build_cdc_bronze`` now stamps
 # all timestamps with ``tzinfo=UTC``, and Polars refuses to compare
 # tz-aware against tz-naive datetimes.
@@ -58,8 +68,8 @@ def make_cdc(
 ) -> TableFrame:
     """Build a synthetic cdc commit-table.
 
-    Uses the raw upstream column names (`@td..cdc.meta.*`) — the helper renames
-    them into the `$m.*` namespace internally.
+    Uses the raw upstream column names (`@td.cdc.meta.*`) — the helper renames
+    them into the `@td.medallion.*` namespace internally.
     """
     data = {
         "tenant_id": tenants,
@@ -131,7 +141,7 @@ def call(full_commits, cdc_commits) -> TableFrame:
 def test_pure_incremental_returns_stream_with_bronze_ts():
     """Branch: cdc has rows, no full_commits → return stream directly.
 
-    The cdc columns pass through as-is; a $m.bronze_ts column is appended.
+    The cdc columns pass through as-is; a @td.medallion.bronze_ts column is appended.
     """
     cdc = make_cdc(
         tenants=["t1", "t2"],
@@ -321,7 +331,7 @@ def test_full_snapshot_columns_flow_through_to_seed():
 
 
 def test_pk_meta_column_present_on_every_row():
-    """`$m.pk` should appear on every row across all branches with the
+    """`@td.medallion.pk` should appear on every row across all branches with the
     composite-key column names from the `pk` arg passed to the helper."""
     full = make_full(tenants=["a"], entities=[1])
     cdc = make_cdc(
@@ -346,41 +356,41 @@ def test_pk_meta_column_present_on_every_row():
 
 
 def test_pk_meta_column_on_empty_fallback():
-    """Even on the empty fallback (no cdc, no full), the $m.pk column must be
+    """Even on the empty fallback (no cdc, no full), the @td.medallion.pk column must be
     declared on the schema so downstream consumers can rely on it."""
     out = call(full_commits=[], cdc_commits=[])
     assert M_PK in user_cols(out)
 
 
 def test_cdc_data_payload_columns_flow_through():
-    """All @td..cdc.data.* (and other) cdc columns flow through to the output."""
+    """All @td.cdc.data.* (and other) cdc columns flow through to the output."""
     cdc = make_cdc(
         tenants=["t1"],
         entities=[1],
         ops=[OP_UPDATE],
         source_ts=[TS_FUTURE],
         extra={
-            "@td..cdc.data.amount": [42.5],
-            "@td..cdc.data.note": ["hello"],
+            "@td.cdc.data.amount": [42.5],
+            "@td.cdc.data.note": ["hello"],
         },
     )
     out = call(full_commits=[], cdc_commits=[cdc])
 
     cols = user_cols(out)
-    assert "@td..cdc.data.amount" in cols
-    assert "@td..cdc.data.note" in cols
+    assert "@td.cdc.data.amount" in cols
+    assert "@td.cdc.data.note" in cols
 
     rows = to_rows(out)
-    assert rows[0]["@td..cdc.data.amount"] == 42.5
-    assert rows[0]["@td..cdc.data.note"] == "hello"
+    assert rows[0]["@td.cdc.data.amount"] == 42.5
+    assert rows[0]["@td.cdc.data.note"] == "hello"
 
 
 def test_cdc_data_col_new_prefix_is_stripped():
-    """Columns named `@td..cdc.data.col.new.<name>` are renamed to plain `<name>`.
+    """Columns named `@td.cdc.data.col.new.<name>` are renamed to plain `<name>`.
 
     These are the post-image payload columns the publisher emits for each
     tracked source column; downstream consumers expect them as bare names.
-    Other `@td..cdc.data.*` columns (without the `.col.new.` infix) are
+    Other `@td.cdc.data.*` columns (without the `.col.new.` infix) are
     preserved as-is.
     """
     cdc = make_cdc(
@@ -389,11 +399,11 @@ def test_cdc_data_col_new_prefix_is_stripped():
         ops=[OP_UPDATE],
         source_ts=[TS_FUTURE],
         extra={
-            "@td..cdc.data.col.new.amount": [42.5],
-            "@td..cdc.data.col.new.status": ["active"],
-            # A sibling @td..cdc.data.* column without the .col.new. infix —
+            "@td.cdc.data.col.new.amount": [42.5],
+            "@td.cdc.data.col.new.status": ["active"],
+            # A sibling @td.cdc.data.* column without the .col.new. infix —
             # must NOT be renamed (negative control).
-            "@td..cdc.data.other": ["preserved"],
+            "@td.cdc.data.other": ["preserved"],
         },
     )
     out = call(full_commits=[], cdc_commits=[cdc])
@@ -403,22 +413,22 @@ def test_cdc_data_col_new_prefix_is_stripped():
     assert "amount" in cols
     assert "status" in cols
     # And the prefixed forms are gone.
-    assert "@td..cdc.data.col.new.amount" not in cols
-    assert "@td..cdc.data.col.new.status" not in cols
-    # Sibling @td..cdc.data.* column without the prefix is untouched.
-    assert "@td..cdc.data.other" in cols
+    assert "@td.cdc.data.col.new.amount" not in cols
+    assert "@td.cdc.data.col.new.status" not in cols
+    # Sibling @td.cdc.data.* column without the prefix is untouched.
+    assert "@td.cdc.data.other" in cols
 
     rows = to_rows(out)
     assert rows[0]["amount"] == 42.5
     assert rows[0]["status"] == "active"
-    assert rows[0]["@td..cdc.data.other"] == "preserved"
+    assert rows[0]["@td.cdc.data.other"] == "preserved"
 
 
 def test_cdc_data_col_old_prefix_is_dropped():
-    """Columns named `@td..cdc.data.col.old.<name>` are pre-image payloads and
+    """Columns named `@td.cdc.data.col.old.<name>` are pre-image payloads and
     must be dropped — bronze is post-image only.
 
-    Mixed with `.col.new.*` (renamed) and a sibling `@td..cdc.data.*` column
+    Mixed with `.col.new.*` (renamed) and a sibling `@td.cdc.data.*` column
     (preserved) to verify the three behaviors don't interfere.
     """
     cdc = make_cdc(
@@ -427,27 +437,27 @@ def test_cdc_data_col_old_prefix_is_dropped():
         ops=[OP_UPDATE],
         source_ts=[TS_FUTURE],
         extra={
-            "@td..cdc.data.col.old.amount": [10.0],
-            "@td..cdc.data.col.old.status": ["inactive"],
-            "@td..cdc.data.col.new.amount": [42.5],
-            "@td..cdc.data.col.new.status": ["active"],
-            "@td..cdc.data.other": ["preserved"],
+            "@td.cdc.data.col.old.amount": [10.0],
+            "@td.cdc.data.col.old.status": ["inactive"],
+            "@td.cdc.data.col.new.amount": [42.5],
+            "@td.cdc.data.col.new.status": ["active"],
+            "@td.cdc.data.other": ["preserved"],
         },
     )
     out = call(full_commits=[], cdc_commits=[cdc])
 
     cols = user_cols(out)
     # Pre-image columns are gone.
-    assert "@td..cdc.data.col.old.amount" not in cols
-    assert "@td..cdc.data.col.old.status" not in cols
+    assert "@td.cdc.data.col.old.amount" not in cols
+    assert "@td.cdc.data.col.old.status" not in cols
     # Post-image columns landed as bare names.
     assert "amount" in cols
     assert "status" in cols
-    # Sibling @td..cdc.data.* column is untouched.
-    assert "@td..cdc.data.other" in cols
+    # Sibling @td.cdc.data.* column is untouched.
+    assert "@td.cdc.data.other" in cols
 
     rows = to_rows(out)
     # The retained `amount` / `status` values are the post-image ones.
     assert rows[0]["amount"] == 42.5
     assert rows[0]["status"] == "active"
-    assert rows[0]["@td..cdc.data.other"] == "preserved"
+    assert rows[0]["@td.cdc.data.other"] == "preserved"

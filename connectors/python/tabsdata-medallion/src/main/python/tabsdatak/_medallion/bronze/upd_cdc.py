@@ -14,6 +14,12 @@ from tabsdatak._medallion.bronze.cdc import (
     OP_TOMBSTONE,
     OP_UPDATE,
 )
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 
@@ -72,15 +78,16 @@ def build_upd_cdc_bronze(
                 [{"tenant_id": td.String}, {"entity_id": td.Int64}]
         updated_ts_col: Name of the source-side timestamp column that
             marks when the row was last mutated. Mirrored into
-            ``$m.source_ts`` on every emitted bronze row.
+            ``@td.medallion.source_ts`` on every emitted bronze row.
         is_delete_col: Name of the source-side boolean soft-delete
             column. True → emit ``D``; False → emit ``I`` or ``U``
             depending on whether bronze has seen the PK before.
 
     Returns:
         A TableFrame of synthetic CDC events stamped with the bronze
-        metadata columns ``$m.op`` / ``$m.source_ts`` / ``$m.bronze_ts``
-        / ``$m.pk``.
+        metadata columns ``@td.medallion.op`` / ``@td.medallion.source_ts`` /
+        ``@td.medallion.bronze_ts``
+        / ``@td.medallion.pk``.
     """
     pk_schema: dict[str, type] = {
         name: dtype for entry in pk for name, dtype in entry.items()
@@ -98,17 +105,17 @@ def build_upd_cdc_bronze(
 
         erase = TableFrame.from_dict({
             **{c: [None] for c in pk_cols},
-            "$m.op": [OP_TOMBSTONE],
-            "$m.source_ts": [run_ts],
-            "$m.bronze_ts": [run_ts],
-            "$m.pk": [pk_cols],
+            MEDALLION_SYSTEM_COLUMN_OP: [OP_TOMBSTONE],
+            MEDALLION_SYSTEM_COLUMN_SOURCE_TS: [run_ts],
+            MEDALLION_SYSTEM_COLUMN_BRONZE_TS: [run_ts],
+            MEDALLION_SYSTEM_COLUMN_PK: [pk_cols],
         }).with_columns([col(name).cast(dtype) for name, dtype in pk_schema.items()])
 
         seed = survivors.with_columns([
-            lit(OP_INSERT).alias("$m.op"),
-            lit(run_ts).alias("$m.source_ts"),
-            lit(run_ts).alias("$m.bronze_ts"),
-            lit(pk_cols).alias("$m.pk"),
+            lit(OP_INSERT).alias(MEDALLION_SYSTEM_COLUMN_OP),
+            lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_SOURCE_TS),
+            lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+            lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
         ])
 
         if not upd_commits:
@@ -143,10 +150,10 @@ def build_upd_cdc_bronze(
                 .when(pl.col("_seen").is_null())
                 .then(pl.lit(OP_INSERT))
                 .otherwise(pl.lit(OP_UPDATE))
-                .alias("$m.op"),
-                col(updated_ts_col).alias("$m.source_ts"),
-                lit(run_ts).alias("$m.bronze_ts"),
-                lit(pk_cols).alias("$m.pk"),
+                .alias(MEDALLION_SYSTEM_COLUMN_OP),
+                col(updated_ts_col).alias(MEDALLION_SYSTEM_COLUMN_SOURCE_TS),
+                lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+                lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
             ])
             .drop("_seen")
         )
@@ -169,10 +176,10 @@ def build_upd_cdc_bronze(
         # soft-deleted rows outright (bronze has no prior state for them
         # to delete) and emit the survivors as I events stamped at run_ts.
         return upd.filter(~col(is_delete_col).cast(td_dtypes.Boolean)).with_columns([
-            lit(OP_INSERT).alias("$m.op"),
-            lit(run_ts).alias("$m.source_ts"),
-            lit(run_ts).alias("$m.bronze_ts"),
-            lit(pk_cols).alias("$m.pk"),
+            lit(OP_INSERT).alias(MEDALLION_SYSTEM_COLUMN_OP),
+            lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_SOURCE_TS),
+            lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+            lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
         ])
 
     # Classify each upd row in priority order: is_delete_col=True → D
@@ -184,7 +191,7 @@ def build_upd_cdc_bronze(
     # left-join below.
     seen = (
         prior_bronze
-        .filter(col("$m.op") != OP_TOMBSTONE)
+        .filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
         .select(pk_cols)
         .unique(subset=pk_cols)
         .with_columns(lit(True).alias("_seen"))
@@ -204,10 +211,10 @@ def build_upd_cdc_bronze(
             .when(pl.col("_seen").is_null())
             .then(pl.lit(OP_INSERT))
             .otherwise(pl.lit(OP_UPDATE))
-            .alias("$m.op"),
-            col(updated_ts_col).alias("$m.source_ts"),
-            lit(run_ts).alias("$m.bronze_ts"),
-            lit(pk_cols).alias("$m.pk"),
+            .alias(MEDALLION_SYSTEM_COLUMN_OP),
+            col(updated_ts_col).alias(MEDALLION_SYSTEM_COLUMN_SOURCE_TS),
+            lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+            lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
         ])
         .drop("_seen")
     )

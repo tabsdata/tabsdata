@@ -10,16 +10,23 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.bronze.period_snapshot import build_period_snapshot_bronze
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PERIOD,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 
 pytestmark = pytest.mark.medallion
 
 # ── Metadata column names ────────────────────────────────────────────────────
 # Output metadata columns produced by build_period_snapshot_bronze.
-M_PERIOD = "$m.period"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
-M_OP = "$m.op"
+M_PERIOD = MEDALLION_SYSTEM_COLUMN_PERIOD
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
 
 # Composite primary key used in these tests.
 PK = [
@@ -29,7 +36,7 @@ PK = [
 EXPECTED_PK_COLS = ["tenant_id", "entity_id"]
 
 # UTC-aware period stamps — what the periodic publisher emits when it
-# stamps `$m.period` with a tz-aware datetime (Pattern 5).
+# stamps `@td.medallion.period` with a tz-aware datetime (Pattern 5).
 PERIOD_A = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 PERIOD_B = datetime(2024, 1, 2, 0, 0, 0, tzinfo=timezone.utc)
 
@@ -44,7 +51,7 @@ PERIOD_B_DATE = date(2024, 1, 2)
 
 
 def make_period_batch(rows: list[tuple], period) -> TableFrame:
-    """Build a period-snapshot batch with `$m.period` stamped on every row.
+    """Build a period-snapshot batch with `@td.medallion.period` stamped on every row.
 
     rows is a list of (tenant_id, entity_id, payload) tuples. The same
     period stamp is applied to every row in the batch — mirroring the
@@ -118,7 +125,7 @@ def test_single_batch_passes_through():
 
 
 def test_source_ts_mirrors_period():
-    """`$m.source_ts` is populated from the input's `$m.period` column,
+    """`@td.medallion.source_ts` is populated from the input's `@td.medallion.period` column,
     byte-for-byte per row."""
     new = [
         make_period_batch(
@@ -139,7 +146,7 @@ def test_source_ts_mirrors_period():
 
 
 def test_period_column_preserved_on_output():
-    """The original `$m.period` column stays on every output row — the
+    """The original `@td.medallion.period` column stays on every output row — the
     mirror is a copy, not a rename. Downstream consumers can still read
     the original period stamp."""
     new = [make_period_batch([("t1", 1, "p")], period=PERIOD_A)]
@@ -148,7 +155,7 @@ def test_period_column_preserved_on_output():
     cols = user_cols(out)
     assert (
         M_PERIOD in cols
-    ), f"`$m.period` should be preserved on output, got cols {cols!r}"
+    ), f"`@td.medallion.period` should be preserved on output, got cols {cols!r}"
 
     rows = to_rows(out)
     assert rows[0][M_PERIOD].to_pydatetime() == PERIOD_A
@@ -207,7 +214,7 @@ def test_multiple_batches_diagonally_concatenated():
 
 def test_different_periods_across_batches_carry_through():
     """When `new` contains batches stamped with DIFFERENT periods, each
-    row's `$m.source_ts` matches its own batch's period — the helper
+    row's `@td.medallion.source_ts` matches its own batch's period — the helper
     mirrors per-row, not per-batch."""
     a = make_period_batch([("t1", 1, "from-a")], period=PERIOD_A)
     b = make_period_batch([("t1", 2, "from-b")], period=PERIOD_B)
@@ -220,7 +227,7 @@ def test_different_periods_across_batches_carry_through():
 
 
 def test_pk_meta_column_lists_composite_keys():
-    """`$m.pk` is populated on every row with the composite-key column
+    """`@td.medallion.pk` is populated on every row with the composite-key column
     names from the `pk` arg."""
     new = [
         make_period_batch(
@@ -242,7 +249,7 @@ def test_pk_meta_column_lists_composite_keys():
 
 
 def test_single_pk_in_pk_meta_column():
-    """`$m.pk` for a single-key PK is a one-element list (not a scalar)."""
+    """`@td.medallion.pk` for a single-key PK is a one-element list (not a scalar)."""
     single_pk = [{"entity_id": td_dtypes.Int64}]
     batch = TableFrame.from_dict(
         {
@@ -260,7 +267,7 @@ def test_single_pk_in_pk_meta_column():
 
 
 def test_bronze_ts_present_and_utc_aware():
-    """`$m.bronze_ts` is stamped on every row, UTC-aware (from
+    """`@td.medallion.bronze_ts` is stamped on every row, UTC-aware (from
     `datetime.now(tz=timezone.utc)` inside the helper)."""
     new = [
         make_period_batch(
@@ -280,38 +287,38 @@ def test_bronze_ts_present_and_utc_aware():
 
 
 def test_no_op_column_added():
-    """Period-snapshot bronze does NOT stamp `$m.op` — every row is a
+    """Period-snapshot bronze does NOT stamp `@td.medallion.op` — every row is a
     snapshot, not an I/U/D event. This is the distinguishing feature
     vs. the CDC / snapshot-diff / append-only bronze flavors."""
     new = [make_period_batch([("t1", 1, "p")], period=PERIOD_A)]
     out = call(new)
 
     assert M_OP not in user_cols(out), (
-        f"`$m.op` should not be present in period-snapshot bronze; "
+        f"`@td.medallion.op` should not be present in period-snapshot bronze; "
         f"got cols {user_cols(out)!r}"
     )
 
 
 def test_datetime_period_dtype_preserved_in_source_ts():
-    """A Datetime `$m.period` (tz-aware) propagates the same dtype into
-    `$m.source_ts`. The helper mirrors the column — no cast."""
+    """A Datetime `@td.medallion.period` (tz-aware) propagates the same dtype into
+    `@td.medallion.source_ts`. The helper mirrors the column — no cast."""
     new = [make_period_batch([("t1", 1, "p")], period=PERIOD_A)]
     out = call(new)
 
     period_dtype = out.schema[M_PERIOD]
     source_ts_dtype = out.schema[M_SOURCE_TS]
     assert period_dtype == source_ts_dtype, (
-        f"`$m.source_ts` dtype {source_ts_dtype!r} should mirror "
-        f"`$m.period` dtype {period_dtype!r}"
+        f"`@td.medallion.source_ts` dtype {source_ts_dtype!r} should mirror "
+        f"`@td.medallion.period` dtype {period_dtype!r}"
     )
     assert isinstance(
         source_ts_dtype, pl.Datetime
-    ), f"`$m.source_ts` should be Datetime, got {source_ts_dtype!r}"
+    ), f"`@td.medallion.source_ts` should be Datetime, got {source_ts_dtype!r}"
 
 
 def test_date_period_dtype_preserved_in_source_ts():
-    """A Date `$m.period` (as the test_trf.py publisher uses) propagates
-    the Date dtype into `$m.source_ts`. Documents that the helper does
+    """A Date `@td.medallion.period` (as the test_trf.py publisher uses) propagates
+    the Date dtype into `@td.medallion.source_ts`. Documents that the helper does
     NOT coerce a Date to a Datetime — the publisher's choice rides
     through."""
     batch = TableFrame.from_dict(
@@ -335,13 +342,13 @@ def test_date_period_dtype_preserved_in_source_ts():
     source_ts_dtype = out.schema[M_SOURCE_TS]
     assert period_dtype == source_ts_dtype
     assert source_ts_dtype == pl.Date, (
-        f"`$m.source_ts` should be Date when `$m.period` is Date, "
+        f"`@td.medallion.source_ts` should be Date when `@td.medallion.period` is Date, "
         f"got {source_ts_dtype!r}"
     )
 
 
 def test_missing_period_column_raises():
-    """If the input doesn't carry `$m.period`, the helper fails. The
+    """If the input doesn't carry `@td.medallion.period`, the helper fails. The
     column is a hard precondition — the periodic publisher is expected
     to stamp it on every row."""
     bad = TableFrame.from_dict(
@@ -349,7 +356,7 @@ def test_missing_period_column_raises():
             "tenant_id": ["t1"],
             "entity_id": [1],
             "payload": ["p"],
-            # NB: no $m.period column.
+            # NB: no @td.medallion.period column.
         }
     ).cast(
         {

@@ -403,13 +403,13 @@ mod tests {
 
     #[test]
     fn test_stringify_nested_columns_makes_csv_writable() {
-        // A List(String) column like the medallion `$m.pk` metadata, which CSV
+        // A List(String) column like the `@td.medallion.pk` metadata, which CSV
         // cannot serialize natively. Second row is a null list.
         let mut pk = ListChunked::from_iter([
             Some(Series::new("".into(), &["tenant_id", "entity_id"])),
             None,
         ]);
-        pk.rename("$m.pk".into());
+        pk.rename("@td.medallion.pk".into());
         let df = DataFrame::new(vec![
             StringChunked::new("tenant".into(), &["t1", "t2"]).into_column(),
             pk.into_column(),
@@ -427,9 +427,12 @@ mod tests {
 
         // After stringifying, the list column is String and CSV writing works.
         let mut flat = stringify_nested_columns(df).unwrap();
-        assert_eq!(flat.column("$m.pk").unwrap().dtype(), &DataType::String);
+        assert_eq!(
+            flat.column("@td.medallion.pk").unwrap().dtype(),
+            &DataType::String
+        );
         let rendered: Vec<Option<String>> = flat
-            .column("$m.pk")
+            .column("@td.medallion.pk")
             .unwrap()
             .as_series()
             .unwrap()

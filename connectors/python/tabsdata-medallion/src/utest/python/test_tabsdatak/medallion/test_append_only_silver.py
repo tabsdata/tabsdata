@@ -10,16 +10,23 @@ import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, lit
 from tabsdatak._medallion.silver.append_only import build_append_only_silver
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_SILVER_TS,
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 
 pytestmark = pytest.mark.medallion
 
 # ── Bronze input metadata columns (build_append_only_cdc_bronze output) ─────
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 # ── Silver output metadata column ────────────────────────────────────────────
-M_SILVER_TS = "$m.silver_ts"
+M_SILVER_TS = MEDALLION_SYSTEM_COLUMN_SILVER_TS
 
 # Composite primary key used in these tests.
 PK = [
@@ -43,8 +50,8 @@ def make_bronze_batch(rows: list[tuple]) -> TableFrame:
     `build_append_only_cdc_bronze` emits).
 
     rows is a list of (tenant_id, entity_id, payload, source_ts) tuples.
-    Stamps all bronze metadata: `$m.op` = "I", `$m.bronze_ts` =
-    BRONZE_TS, `$m.pk` = ["tenant_id", "entity_id"].
+    Stamps all bronze metadata: `@td.medallion.op` = "I", `@td.medallion.bronze_ts` =
+    BRONZE_TS, `@td.medallion.pk` = ["tenant_id", "entity_id"].
     """
     assert rows, "make_bronze_batch needs at least one row"
     n = len(rows)
@@ -73,8 +80,8 @@ def make_silver_head(rows: list[tuple]) -> TableFrame:
     state the helper anti-joins against.
 
     rows is a list of (tenant_id, entity_id, payload, source_ts)
-    tuples. Silver carries `$m.source_ts` but not `$m.op`, `$m.bronze_ts`,
-    or `$m.pk` (those are dropped during the bronze → silver step).
+    tuples. Silver carries `@td.medallion.source_ts` but not `@td.medallion.op`, `@td.medallion.bronze_ts`,
+    or `@td.medallion.pk` (those are dropped during the bronze → silver step).
     """
     assert rows, "make_silver_head needs at least one row"
     return TableFrame.from_dict(
@@ -242,26 +249,26 @@ def test_composite_pk_dedup_requires_all_pk_cols_to_match():
 
 
 def test_bronze_metadata_columns_dropped_from_output():
-    """`$m.op` and `$m.bronze_ts` are dropped; `$m.source_ts` and
-    `$m.pk` are preserved on the output. The helper does NOT stamp
-    `$m.silver_ts`."""
+    """`@td.medallion.op` and `@td.medallion.bronze_ts` are dropped; `@td.medallion.source_ts` and
+    `@td.medallion.pk` are preserved on the output. The helper does NOT stamp
+    `@td.medallion.silver_ts`."""
     bronze = [make_bronze_batch([("t1", 1, "v", TS_A)])]
     out = call(bronze, silver_head=None)
 
     cols = user_cols(out)
-    assert M_OP not in cols, f"`$m.op` should be dropped; got {cols!r}"
-    assert M_BRONZE_TS not in cols, f"`$m.bronze_ts` should be dropped; got {cols!r}"
+    assert M_OP not in cols, f"`@td.medallion.op` should be dropped; got {cols!r}"
+    assert M_BRONZE_TS not in cols, f"`@td.medallion.bronze_ts` should be dropped; got {cols!r}"
     assert M_SOURCE_TS in cols, (
-        f"`$m.source_ts` should be preserved; got {cols!r}"
+        f"`@td.medallion.source_ts` should be preserved; got {cols!r}"
     )
-    assert M_PK in cols, f"`$m.pk` should be preserved; got {cols!r}"
+    assert M_PK in cols, f"`@td.medallion.pk` should be preserved; got {cols!r}"
     assert M_SILVER_TS not in cols, (
-        f"`$m.silver_ts` should NOT be added by the helper; got {cols!r}"
+        f"`@td.medallion.silver_ts` should NOT be added by the helper; got {cols!r}"
     )
 
 
 def test_source_ts_value_preserved_on_output():
-    """`$m.source_ts` flows through with its UTC-aware value intact."""
+    """`@td.medallion.source_ts` flows through with its UTC-aware value intact."""
     bronze = [
         make_bronze_batch(
             [
@@ -326,7 +333,7 @@ def test_multiple_bronze_commits_diagonally_concatenated():
 
 
 def test_single_pk_dedup_works():
-    """A bronze frame whose `$m.pk` stamps a one-element key list
+    """A bronze frame whose `@td.medallion.pk` stamps a one-element key list
     drives a single-column dedup."""
     bronze = [
         TableFrame.from_dict(

@@ -16,14 +16,20 @@ from tabsdatak._medallion.bronze.cdc import (
     OP_UPDATE,
 )
 from tabsdatak._medallion.silver.scd import build_scd1_silver
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 
 pytestmark = pytest.mark.medallion
 
 # ── Bronze metadata columns ──────────────────────────────────────────────────
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 
 # Composite PK used in these tests.
 PK = [
@@ -281,7 +287,7 @@ def test_prior_row_overwritten_by_u():
     rows = to_rows(out)
     assert len(rows) == 1
     assert rows[0]["name"] == "Alice@v1"
-    # The new row's $m.source_ts should be TS_1 (from the new bronze),
+    # The new row's @td.medallion.source_ts should be TS_1 (from the new bronze),
     # not TS_PRIOR.
     assert rows[0][M_SOURCE_TS].to_pydatetime() == TS_1
 
@@ -388,7 +394,7 @@ def test_latest_t_takes_precedence():
 
 
 def test_bronze_metadata_rides_through():
-    """`$m.op` / `$m.bronze_ts` / `$m.pk` / `$m.source_ts` survive on
+    """`@td.medallion.op` / `@td.medallion.bronze_ts` / `@td.medallion.pk` / `@td.medallion.source_ts` survive on
     output — stage-2 cleansing drops them."""
     bronze = [make_bronze_batch([("t1", 1, "Alice", OP_INSERT, TS_1)])]
     out = call(bronze, scd1_head=None)

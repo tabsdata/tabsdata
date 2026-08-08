@@ -400,8 +400,7 @@ class Db2Cdc(Db2):
                     self.deregister_table(domain_meta, table)
                 except TdxError as exc:  # noqa: PERF203 -- per-table isolation
                     print(
-                        f"    WARNING: {schema}.{table} not fully "
-                        f"deregistered: {exc}"
+                        f"    WARNING: {schema}.{table} not fully deregistered: {exc}"
                     )
         super().destroy_domain(domain_meta)
 

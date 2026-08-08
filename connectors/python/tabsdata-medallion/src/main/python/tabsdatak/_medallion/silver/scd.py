@@ -8,6 +8,14 @@ from datetime import timezone
 import polars as pl
 
 from tabsdatak._medallion.bronze.cdc import OP_DELETE, OP_TOMBSTONE
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+    MEDALLION_SYSTEM_COLUMN_VALID_FROM,
+    MEDALLION_SYSTEM_COLUMN_VALID_TO,
+)
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 
@@ -31,8 +39,8 @@ def build_scd2_silver(
     tables:
 
       _valid_raw   — one row per currently-active PK
-                     (``$m.valid_to = None`` on every row).
-      _expired_raw — closed versions, with ``$m.valid_to`` set to the
+                     (``@td.medallion.valid_to = None`` on every row).
+      _expired_raw — closed versions, with ``@td.medallion.valid_to`` set to the
                      source_ts at which they were superseded.
 
     The helper is called by a stage-1 silver transformer that writes
@@ -40,7 +48,7 @@ def build_scd2_silver(
     state) and ``_expired_raw`` in APPEND mode (only newly-closed
     rows).
 
-    The PK column list is read from the bronze rows' ``$m.pk`` column
+    The PK column list is read from the bronze rows' ``@td.medallion.pk`` column
     (stamped by the bronze helpers) — no ``pk`` arg needed.
 
     T-sentinel behavior:
@@ -48,17 +56,18 @@ def build_scd2_silver(
         state. Ops at-or-before the latest T's source_ts are dropped;
         ops after are re-folded into the new ``_valid_raw``.
       - ALL prior-valid rows are moved into ``_expired_raw`` with
-        ``$m.valid_to = T.source_ts``. Nothing disappears — the T
+        ``@td.medallion.valid_to = T.source_ts``. Nothing disappears — the T
         is recorded as the closing event for every active row.
 
-    Bronze metadata (``$m.op`` / ``$m.bronze_ts`` / ``$m.pk`` /
-    ``$m.source_ts``) rides through to BOTH outputs unchanged. The
+    Bronze metadata (``@td.medallion.op`` / ``@td.medallion.bronze_ts`` /
+    ``@td.medallion.pk`` /
+    ``@td.medallion.source_ts``) rides through to BOTH outputs unchanged. The
     stage-2 cleansing transformer is responsible for dropping it.
 
     Args:
         bronze: bronze CDC commits landed since the last silver fire
             (typically read via ``<bronze>@NEW``). Must carry the
-            ``$m.pk`` column the bronze helper stamps.
+            ``@td.medallion.pk`` column the bronze helper stamps.
         valid_head: latest committed ``_valid_raw`` state. None on
             the first-ever silver fire.
         expired_head: latest committed ``_expired_raw`` state. None on the first-ever
@@ -88,50 +97,67 @@ def build_scd2_silver(
             )
         return valid_head, expired_head
 
-    incoming = incoming.sort("$m.source_ts", maintain_order=True)
+    incoming = incoming.sort(MEDALLION_SYSTEM_COLUMN_SOURCE_TS, maintain_order=True)
 
-    # PK column names ride on every bronze row in `$m.pk`. Read from
+    # PK column names ride on every bronze row in `@td.medallion.pk`. Read from
     # the first row. ``.item()`` can't be used here — its
     # implementation aggregates via ``.min()``, which polars rejects
     # for List dtypes — so we go through pandas to extract the cell.
-    pk_cols = list(incoming.select(col("$m.pk"))._to_pandas()["$m.pk"].iloc[0])
+    pk_cols = list(
+        incoming
+        .select(col(MEDALLION_SYSTEM_COLUMN_PK))
+        ._to_pandas()[MEDALLION_SYSTEM_COLUMN_PK]
+        .iloc[0]
+    )
 
     # T sentinels signal a state reset. Drop ops at-or-before the
     # latest T's source_ts; re-fold from ops after. ALL prior valid
     # rows are closed at the T's source_ts and moved to expired_raw
     # via the bridge logic below (no rows disappear).
-    t_rows = incoming.filter(col("$m.op") == OP_TOMBSTONE)
+    t_rows = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) == OP_TOMBSTONE)
     has_erase = not _is_empty(t_rows)
     if has_erase:
-        cutoff = t_rows.select(col("$m.source_ts").max())._to_polars_df().item()
+        cutoff = (
+            t_rows
+            .select(col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).max())
+            ._to_polars_df()
+            .item()
+        )
         ops = incoming.filter(
-            (col("$m.op") != OP_TOMBSTONE) & (col("$m.source_ts") >= cutoff)
+            (col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
+            & (col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS) >= cutoff)
         )
         t_close_ts = cutoff
     else:
-        ops = incoming.filter(col("$m.op") != OP_TOMBSTONE)
+        ops = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
         t_close_ts = None
     prior_valid: TableFrame | None = valid_head
 
     # Per-PK shift: for each op, look up the source_ts of the NEXT op
-    # in this PK's history. That source_ts becomes the row's $m.valid_to.
+    # in this PK's history. That source_ts becomes the row's @td.medallion.valid_to.
     # Tabsdata's sort(by, *more_by) wraps `by` and prepends — pass the
     # columns positionally so each becomes its own sort key rather
     # than a single list-literal expression.
-    ops_sorted = ops.sort(*pk_cols, "$m.source_ts")
+    ops_sorted = ops.sort(*pk_cols, MEDALLION_SYSTEM_COLUMN_SOURCE_TS)
     enriched = ops_sorted.with_columns([
-        pl.col("$m.source_ts").shift(-1).over(pk_cols).alias("_next_ts")
+        pl
+        .col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS)
+        .shift(-1)
+        .over(pk_cols)
+        .alias("_next_ts")
     ])
 
     # New EXPIRED from intra-batch transitions: every I/U row whose
     # next op exists (U or D) was closed within this batch.
     intra_batch_expired = (
         enriched
-        .filter(col("$m.op") != OP_DELETE)
+        .filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_DELETE)
         .filter(col("_next_ts").is_not_null())
         .with_columns([
-            col("$m.source_ts").alias("$m.valid_from"),
-            col("_next_ts").alias("$m.valid_to"),
+            col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias(
+                MEDALLION_SYSTEM_COLUMN_VALID_FROM
+            ),
+            col("_next_ts").alias(MEDALLION_SYSTEM_COLUMN_VALID_TO),
         ])
         .drop("_next_ts")
     )
@@ -142,12 +168,14 @@ def build_scd2_silver(
     # captured the close in intra_batch_expired.
     new_valid = (
         enriched
-        .filter(col("$m.op") != OP_DELETE)
+        .filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_DELETE)
         .filter(col("_next_ts").is_null())
         .with_columns([
-            col("$m.source_ts").alias("$m.valid_from"),
+            col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias(
+                MEDALLION_SYSTEM_COLUMN_VALID_FROM
+            ),
             pl.lit(None, dtype=pl.Datetime(time_zone=timezone.utc)).alias(
-                "$m.valid_to"
+                MEDALLION_SYSTEM_COLUMN_VALID_TO
             ),
         ])
         .drop("_next_ts")
@@ -156,9 +184,9 @@ def build_scd2_silver(
     # Bridge into prior valid state. Two cases:
     #   - T fired: ALL prior valid rows close at the T's source_ts.
     #     No rows carry forward — every row in prior_valid moves to
-    #     expired_raw with $m.valid_to = T.source_ts.
+    #     expired_raw with @td.medallion.valid_to = T.source_ts.
     #   - Normal: only PKs whose first batch op exists close their
-    #     prior valid row, stamwped with $m.valid_to = that first batch
+    #     prior valid row, stamwped with @td.medallion.valid_to = that first batch
     #     op's source_ts. PKs untouched in this batch carry through.
     if prior_valid is None or _is_empty(prior_valid):
         logger.debug("No prior valid state; skipping bridge logic")
@@ -168,19 +196,21 @@ def build_scd2_silver(
         logger.debug(
             "T sentinel detected; closing ALL prior valid rows at %s", t_close_ts
         )
-        bridge_expired = prior_valid.with_columns(lit(t_close_ts).alias("$m.valid_to"))
+        bridge_expired = prior_valid.with_columns(
+            lit(t_close_ts).alias(MEDALLION_SYSTEM_COLUMN_VALID_TO)
+        )
         prior_carried = None
     else:
         first_op_per_pk = ops_sorted.unique(subset=pk_cols, keep="first").select([
             *pk_cols,
-            col("$m.source_ts").alias("_close_ts"),
+            col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias("_close_ts"),
         ])
         prior_joined = prior_valid.join(first_op_per_pk, on=pk_cols, how="left")
-        # Touched → move to expired with the new $m.valid_to.
+        # Touched → move to expired with the new @td.medallion.valid_to.
         bridge_expired = (
             prior_joined
             .filter(col("_close_ts").is_not_null())
-            .with_columns(col("_close_ts").alias("$m.valid_to"))
+            .with_columns(col("_close_ts").alias(MEDALLION_SYSTEM_COLUMN_VALID_TO))
             .drop("_close_ts")
         )
         # Untouched → still valid; carry through.
@@ -220,16 +250,17 @@ def build_scd1_silver(
     ``_scd1_raw`` in REPLACE mode — the helper emits the full new
     state each fire.
 
-    The PK column list is read from the bronze rows' ``$m.pk`` column.
+    The PK column list is read from the bronze rows' ``@td.medallion.pk`` column.
 
-    Bronze metadata (``$m.op`` / ``$m.bronze_ts`` / ``$m.pk`` /
-    ``$m.source_ts``) rides through unchanged. The stage-2 cleansing
+    Bronze metadata (``@td.medallion.op`` / ``@td.medallion.bronze_ts`` /
+    ``@td.medallion.pk`` /
+    ``@td.medallion.source_ts``) rides through unchanged. The stage-2 cleansing
     transformer is responsible for dropping it.
 
     Args:
         bronze: bronze CDC commits landed since the last silver fire
             (typically read via ``<bronze>@NEW``). Must carry the
-            ``$m.pk`` column the bronze helper stamps.
+            ``@td.medallion.pk`` column the bronze helper stamps.
         scd1_head: latest committed ``_scd1_raw`` state. None on the
             first-ever silver fire.
 
@@ -251,27 +282,38 @@ def build_scd1_silver(
             )
         return scd1_head
 
-    incoming = incoming.sort("$m.source_ts", maintain_order=True)
-    pk_cols = list(incoming.select(col("$m.pk"))._to_pandas()["$m.pk"].iloc[0])
+    incoming = incoming.sort(MEDALLION_SYSTEM_COLUMN_SOURCE_TS, maintain_order=True)
+    pk_cols = list(
+        incoming
+        .select(col(MEDALLION_SYSTEM_COLUMN_PK))
+        ._to_pandas()[MEDALLION_SYSTEM_COLUMN_PK]
+        .iloc[0]
+    )
 
     # T sentinels reset prior state.
-    t_rows = incoming.filter(col("$m.op") == OP_TOMBSTONE)
+    t_rows = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) == OP_TOMBSTONE)
     has_erase = not _is_empty(t_rows)
     if has_erase:
-        cutoff = t_rows.select(col("$m.source_ts").max())._to_polars_df().item()
+        cutoff = (
+            t_rows
+            .select(col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).max())
+            ._to_polars_df()
+            .item()
+        )
         ops = incoming.filter(
-            (col("$m.op") != OP_TOMBSTONE) & (col("$m.source_ts") >= cutoff)
+            (col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
+            & (col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS) >= cutoff)
         )
         prior: TableFrame | None = None
     else:
-        ops = incoming.filter(col("$m.op") != OP_TOMBSTONE)
+        ops = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
         prior = scd1_head
 
     # SCD1: only the LAST op per PK in this batch matters. I→U→D
     # collapses to "deleted"; I→D→I collapses to "inserted".
     latest = ops.unique(subset=pk_cols, keep="last")
 
-    upserts = latest.filter(col("$m.op") != OP_DELETE)
+    upserts = latest.filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_DELETE)
     affected_pks = latest.select(pk_cols)
 
     if prior is None or _is_empty(prior):
@@ -284,10 +326,11 @@ def build_scd1_silver(
 def _strip_bronze_metadata(tf: TableFrame) -> TableFrame:
     """
     Drop bronze-only metadata that silver shouldn't carry forward:
-    ``$m.op``, ``$m.bronze_ts``, and any ``@td..cdc.meta.*`` columns
-    inherited from the upstream CDC trigger (e.g. ``@td..cdc.meta.txid``,
-    ``@td..cdc.meta.lsn``). The CDC bronze helper renames the two
-    meaningful ones (``.op`` / ``.ts``) into the ``$m.*`` namespace
+    ``@td.medallion.op``, ``@td.medallion.bronze_ts``, and any ``@td.cdc.meta.*``
+    columns
+    inherited from the upstream CDC trigger (e.g. ``@td.cdc.meta.txid``,
+    ``@td.cdc.meta.lsn``). The CDC bronze helper renames the two
+    meaningful ones (``.op`` / ``.ts``) into the ``@td.medallion.*`` namespace
     but passes the rest through verbatim — silver strips them here.
 
     Args:
@@ -295,10 +338,16 @@ def _strip_bronze_metadata(tf: TableFrame) -> TableFrame:
     Returns:
         TableFrame with the bronze metadata columns dropped.
     """
-    cdc_meta_cols = [c for c in tf.columns if c.startswith("@td..cdc")]
-    # Periodic-snapshot bronze carries no $m.op, so drop only what's present.
+    cdc_meta_cols = [c for c in tf.columns if c.startswith("@td.cdc")]
+    # Periodic-snapshot bronze carries no @td.medallion.op, so drop only what's present.
     drop_cols = [
-        c for c in ("$m.op", "$m.bronze_ts", *cdc_meta_cols) if c in tf.columns
+        c
+        for c in (
+            MEDALLION_SYSTEM_COLUMN_OP,
+            MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+            *cdc_meta_cols,
+        )
+        if c in tf.columns
     ]
     return tf.drop(drop_cols)
 
@@ -311,8 +360,8 @@ def build_scd2_silver_cleanse(
     SCD2 silver cleansing — pure projection: drops bronze metadata
     from both ``_scd2_valid_raw`` and ``_scd2_expired_raw`` inputs.
 
-    Strips ``$m.op``, ``$m.bronze_ts``, and any leftover
-    ``@td..cdc.*`` columns the upstream CDC trigger carried into
+    Strips ``@td.medallion.op``, ``@td.medallion.bronze_ts``, and any leftover
+    ``@td.cdc.*`` columns the upstream CDC trigger carried into
     bronze. Per-source cleansing (casts, renames, projections) is the
     caller's responsibility on top of the helper's output.
 
@@ -335,8 +384,8 @@ def build_scd1_silver_cleanse(
     SCD1 silver cleansing — pure projection: drops bronze metadata
     from the ``_scd1_raw`` input.
 
-    Strips ``$m.op``, ``$m.bronze_ts``, and any leftover
-    ``@td..cdc.meta.*`` columns the upstream CDC trigger carried into
+    Strips ``@td.medallion.op``, ``@td.medallion.bronze_ts``, and any leftover
+    ``@td.cdc.meta.*`` columns the upstream CDC trigger carried into
     bronze. Per-source cleansing (casts, renames, projections) is the
     caller's responsibility on top of the helper's output.
 

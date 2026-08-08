@@ -13,6 +13,12 @@ from tabsdatak._medallion.bronze.cdc import (
     OP_TOMBSTONE,
     OP_UPDATE,
 )
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 
@@ -64,26 +70,26 @@ def build_snapshot_diff_cdc_bronze(
         # Initial onboarding (no prev) OR refresh trigger (no new arrivals).
         erase = TableFrame.from_dict({
             **{c: [None] for c in pk_cols + value_cols},
-            "$m.op": [OP_TOMBSTONE],
-            "$m.source_ts": [run_ts],
-            "$m.bronze_ts": [run_ts],
-            "$m.pk": [pk_cols],
+            MEDALLION_SYSTEM_COLUMN_OP: [OP_TOMBSTONE],
+            MEDALLION_SYSTEM_COLUMN_SOURCE_TS: [run_ts],
+            MEDALLION_SYSTEM_COLUMN_BRONZE_TS: [run_ts],
+            MEDALLION_SYSTEM_COLUMN_PK: [pk_cols],
         }).with_columns([col(name).cast(dt) for name, dt in all_dtypes.items()])
 
         seed = head.select(pk_cols + value_cols).with_columns([
-            lit(OP_INSERT).alias("$m.op"),
-            lit(run_ts).alias("$m.source_ts"),
-            lit(run_ts).alias("$m.bronze_ts"),
-            lit(pk_cols).alias("$m.pk"),
+            lit(OP_INSERT).alias(MEDALLION_SYSTEM_COLUMN_OP),
+            lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_SOURCE_TS),
+            lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+            lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
         ])
         return concat([erase, seed], how="diagonal_relaxed")
 
     # Incremental: diff prev vs. head → synthetic I/U/D.
     inserts = head.join(prev, on=pk_cols, how="anti").with_columns(
-        lit(OP_INSERT).alias("$m.op")
+        lit(OP_INSERT).alias(MEDALLION_SYSTEM_COLUMN_OP)
     )
     deletes = prev.join(head, on=pk_cols, how="anti").with_columns(
-        lit(OP_DELETE).alias("$m.op")
+        lit(OP_DELETE).alias(MEDALLION_SYSTEM_COLUMN_OP)
     )
 
     joined = head.join(prev, on=pk_cols, how="inner", suffix="_prev")
@@ -99,11 +105,11 @@ def build_snapshot_diff_cdc_bronze(
         joined
         .filter(diff_expr)
         .drop(prev_cols)
-        .with_columns(lit(OP_UPDATE).alias("$m.op"))
+        .with_columns(lit(OP_UPDATE).alias(MEDALLION_SYSTEM_COLUMN_OP))
     )
 
     return concat([inserts, updates, deletes], how="diagonal_relaxed").with_columns([
-        lit(run_ts).alias("$m.source_ts"),
-        lit(run_ts).alias("$m.bronze_ts"),
-        lit(pk_cols).alias("$m.pk"),
+        lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_SOURCE_TS),
+        lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+        lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
     ])

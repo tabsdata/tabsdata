@@ -16,18 +16,26 @@ from tabsdatak._medallion.bronze.cdc import (
     OP_UPDATE,
 )
 from tabsdatak._medallion.silver.scd import build_scd2_silver
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+    MEDALLION_SYSTEM_COLUMN_VALID_FROM,
+    MEDALLION_SYSTEM_COLUMN_VALID_TO,
+)
 
 pytestmark = pytest.mark.medallion
 
 # ── Bronze metadata columns ──────────────────────────────────────────────────
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 
 # ── SCD2 row-shape columns ───────────────────────────────────────────────────
-VALID_FROM = "$m.valid_from"
-VALID_TO = "$m.valid_to"
+VALID_FROM = MEDALLION_SYSTEM_COLUMN_VALID_FROM
+VALID_TO = MEDALLION_SYSTEM_COLUMN_VALID_TO
 
 # Composite PK used in these tests.
 PK = [
@@ -52,7 +60,7 @@ def make_bronze_batch(rows: list[tuple]) -> TableFrame:
     """Build a bronze CDC-shaped TableFrame.
 
     rows is a list of (tenant_id, entity_id, name, op, source_ts) tuples.
-    Stamps the rest of the bronze metadata: $m.bronze_ts and $m.pk.
+    Stamps the rest of the bronze metadata: @td.medallion.bronze_ts and @td.medallion.pk.
     """
     assert rows, "make_bronze_batch needs at least one row"
     n = len(rows)
@@ -456,7 +464,7 @@ def test_bridge_uses_first_op_source_ts_when_multiple_ops_on_same_pk():
 
 def test_t_sentinel_closes_all_prior_valid_into_expired():
     """T sentinel → all prior_valid rows move into expired_raw with
-    $m.valid_to = T.source_ts. Post-T ops re-seed valid_raw from
+    @td.medallion.valid_to = T.source_ts. Post-T ops re-seed valid_raw from
     scratch. Nothing disappears."""
     prior = make_valid_head(
         [
@@ -537,7 +545,7 @@ def test_latest_t_takes_precedence():
 
 
 def test_bronze_metadata_rides_through_to_both_outputs():
-    """`$m.op` / `$m.bronze_ts` / `$m.pk` / `$m.source_ts` survive on
+    """`@td.medallion.op` / `@td.medallion.bronze_ts` / `@td.medallion.pk` / `@td.medallion.source_ts` survive on
     both new_valid and new_expired — stage-2 cleansing will drop them."""
     bronze = [
         make_bronze_batch(
@@ -551,14 +559,14 @@ def test_bronze_metadata_rides_through_to_both_outputs():
 
     for tf, label in [(new_valid, "new_valid"), (new_expired, "new_expired")]:
         cols = user_cols(tf)
-        assert M_OP in cols, f"{label}: `$m.op` missing — {cols!r}"
-        assert M_BRONZE_TS in cols, f"{label}: `$m.bronze_ts` missing — {cols!r}"
-        assert M_PK in cols, f"{label}: `$m.pk` missing — {cols!r}"
-        assert M_SOURCE_TS in cols, f"{label}: `$m.source_ts` missing — {cols!r}"
+        assert M_OP in cols, f"{label}: `@td.medallion.op` missing — {cols!r}"
+        assert M_BRONZE_TS in cols, f"{label}: `@td.medallion.bronze_ts` missing — {cols!r}"
+        assert M_PK in cols, f"{label}: `@td.medallion.pk` missing — {cols!r}"
+        assert M_SOURCE_TS in cols, f"{label}: `@td.medallion.source_ts` missing — {cols!r}"
 
 
 def test_valid_from_set_from_source_ts_on_new_valid():
-    """`valid_from` on new_valid = the row's own `$m.source_ts`."""
+    """`valid_from` on new_valid = the row's own `@td.medallion.source_ts`."""
     bronze = [
         make_bronze_batch(
             [

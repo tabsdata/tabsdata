@@ -5,6 +5,12 @@
 import logging
 from datetime import datetime, timezone
 
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_PERIOD,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 
@@ -43,12 +49,14 @@ def build_period_snapshot_bronze(
 
     run_ts = datetime.now(tz=timezone.utc)
     return raw.with_columns([
-        # The periodic publisher stamps "$m.period" on every row with the
+        # The periodic publisher stamps MEDALLION_SYSTEM_COLUMN_PERIOD on every row with
+        # the
         # period the snapshot belongs to (see Pattern 5). Mirror that into
-        # "$m.source_ts" so downstream consumers can use the same column
+        # MEDALLION_SYSTEM_COLUMN_SOURCE_TS so downstream consumers can use the same
+        # column
         # name conventions as the CDC / snapshot-diff / append-only bronze
-        # flavors. Original "$m.period" stays on the row.
-        col("$m.period").alias("$m.source_ts"),
-        lit(run_ts).alias("$m.bronze_ts"),
-        lit(pk_cols).alias("$m.pk"),
+        # flavors. Original MEDALLION_SYSTEM_COLUMN_PERIOD stays on the row.
+        col(MEDALLION_SYSTEM_COLUMN_PERIOD).alias(MEDALLION_SYSTEM_COLUMN_SOURCE_TS),
+        lit(run_ts).alias(MEDALLION_SYSTEM_COLUMN_BRONZE_TS),
+        lit(pk_cols).alias(MEDALLION_SYSTEM_COLUMN_PK),
     ])

@@ -4,6 +4,13 @@
 
 import polars as pl
 
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_ENTITY_SK,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_VALID_FROM,
+    MEDALLION_SYSTEM_COLUMN_VALID_TO,
+    MEDALLION_SYSTEM_COLUMN_VERSION_SK,
+)
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat
 
@@ -14,14 +21,19 @@ def _is_empty(tf: TableFrame) -> bool:
 
 
 def _natural_key(tf: TableFrame) -> list[str]:
-    """Natural-key column names, read off the silver rows' ``$m.pk``.
+    """Natural-key column names, read off the silver rows' ``@td.medallion.pk``.
 
-    ``$m.pk`` is a List[String] stamped by the bronze helper and preserved
+    ``@td.medallion.pk`` is a List[String] stamped by the bronze helper and preserved
     through silver. All rows in a fire share the same value, so the first row
     is sufficient. ``.item()`` can't be used on a List dtype (it aggregates
     via ``.min()``), so extract through pandas.
     """
-    return list(tf.select(col("$m.pk"))._to_pandas()["$m.pk"].iloc[0])
+    return list(
+        tf
+        .select(col(MEDALLION_SYSTEM_COLUMN_PK))
+        ._to_pandas()[MEDALLION_SYSTEM_COLUMN_PK]
+        .iloc[0]
+    )
 
 
 def _surrogate_key(cols: list[str]) -> pl.Expr:
@@ -29,19 +41,24 @@ def _surrogate_key(cols: list[str]) -> pl.Expr:
 
     Hashing a struct (rather than a concatenated string) means there is no
     separator that distinct key tuples could collide on, and non-string
-    dtypes (e.g. a datetime ``$m.valid_from``) are handled without casts.
+    dtypes (e.g. a datetime ``@td.medallion.valid_from``) are handled without casts.
     """
     return pl.struct(cols).hash()
 
 
 def _drop_pk(tf: TableFrame) -> TableFrame:
-    """Drop the ``$m.pk`` column from a gold row.
+    """Drop the ``@td.medallion.pk`` column from a gold row.
 
-    Only ``$m.pk`` is dropped — the surrogate keys (``$m.entity_sk`` /
-    ``$m.version_sk``), source time, and SCD2 effective-dating
-    (``$m.valid_from`` / ``$m.valid_to``) stay on the gold row.
+    Only ``@td.medallion.pk`` is dropped — the surrogate keys
+    (``@td.medallion.entity_sk`` /
+    ``@td.medallion.version_sk``), source time, and SCD2 effective-dating
+    (``@td.medallion.valid_from`` / ``@td.medallion.valid_to``) stay on the gold row.
     """
-    return tf.drop(["$m.pk"]) if "$m.pk" in tf.columns else tf
+    return (
+        tf.drop([MEDALLION_SYSTEM_COLUMN_PK])
+        if MEDALLION_SYSTEM_COLUMN_PK in tf.columns
+        else tf
+    )
 
 
 def build_type1_dim(silver_head: TableFrame | None) -> TableFrame | None:
@@ -50,34 +67,41 @@ def build_type1_dim(silver_head: TableFrame | None) -> TableFrame | None:
 
     Used for both Entity / Hierarchy (``_valid_silver@HEAD``) and Reference
     data (``_current_silver@HEAD``). Adds ``entity_sk = hash(<natural_key>)``
-    and drops the ``$m.*`` bookkeeping. No history — a Type 1 dimension holds
+    and drops the ``@td.medallion.*`` bookkeeping. No history — a Type 1 dimension holds
     exactly one row per natural key, reflecting the latest state. The caller
     points this at the right silver table via its ``@HEAD`` input.
 
     Args:
         silver_head: the current-state silver table (``_valid_silver`` for
             Entity / Hierarchy, ``_current_silver`` for Reference). Carries
-            ``$m.pk`` so the natural key can be derived. None when the upstream
+            ``@td.medallion.pk`` so the natural key can be derived. None when the
+            upstream
             silver table has never committed (first fire) — returns None.
 
     Returns:
-        ``dim_<entity>`` with ``$m.entity_sk`` added and ``$m.pk`` dropped, or
+        ``dim_<entity>`` with ``@td.medallion.entity_sk`` added and ``@td.medallion.pk``
+        dropped, or
         None when ``silver_head`` is None.
     """
     if silver_head is None:
         return None
     nk = _natural_key(silver_head)
-    out = silver_head.with_columns(_surrogate_key(nk).alias("$m.entity_sk"))
+    out = silver_head.with_columns(
+        _surrogate_key(nk).alias(MEDALLION_SYSTEM_COLUMN_ENTITY_SK)
+    )
     return _drop_pk(out)
 
 
 def _to_history_rows(silver: TableFrame) -> TableFrame:
     """Shape a silver SCD2 frame (valid or expired) into the gold history
-    schema: add ``$m.version_sk`` and drop ``$m.pk``. The ``$m.valid_from`` /
-    ``$m.valid_to`` effective-dating columns ride through unchanged."""
+    schema: add ``@td.medallion.version_sk`` and drop ``@td.medallion.pk``. The
+    ``@td.medallion.valid_from`` /
+    ``@td.medallion.valid_to`` effective-dating columns ride through unchanged."""
     nk = _natural_key(silver)
     shaped = silver.with_columns(
-        _surrogate_key([*nk, "$m.valid_from"]).alias("$m.version_sk")
+        _surrogate_key([*nk, MEDALLION_SYSTEM_COLUMN_VALID_FROM]).alias(
+            MEDALLION_SYSTEM_COLUMN_VERSION_SK
+        )
     )
     return _drop_pk(shaped)
 
@@ -121,7 +145,9 @@ def build_type2_dim(
     # 1. prior-expired: keep only already-closed rows from the history table.
     #    The old open rows are superseded by branches 2 + 3 below.
     if history_head is not None and not _is_empty(history_head):
-        branches.append(history_head.filter(col("$m.valid_to").is_not_null()))
+        branches.append(
+            history_head.filter(col(MEDALLION_SYSTEM_COLUMN_VALID_TO).is_not_null())
+        )
 
     # 2. newly-expired: versions that closed this cycle.
     frames = [frame for frame in (expired_new or []) if frame is not None]

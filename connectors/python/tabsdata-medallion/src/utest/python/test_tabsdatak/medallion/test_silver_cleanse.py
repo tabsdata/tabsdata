@@ -9,6 +9,14 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.silver.scd import (
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+    MEDALLION_SYSTEM_COLUMN_VALID_FROM,
+    MEDALLION_SYSTEM_COLUMN_VALID_TO,
+)
     build_scd1_silver_cleanse,
     build_scd2_silver_cleanse,
 )
@@ -16,14 +24,14 @@ from tabsdatak._medallion.silver.scd import (
 pytestmark = pytest.mark.medallion
 
 # ── Bronze-metadata columns that the cleanse helpers strip ───────────────────
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 
 # SCD2 row-shape columns the helpers preserve.
-VALID_FROM = "$m.valid_from"
-VALID_TO = "$m.valid_to"
+VALID_FROM = MEDALLION_SYSTEM_COLUMN_VALID_FROM
+VALID_TO = MEDALLION_SYSTEM_COLUMN_VALID_TO
 
 PK_COLS = ["tenant_id", "entity_id"]
 
@@ -125,7 +133,7 @@ def to_rows(tf: TableFrame) -> list[dict]:
 
 
 def test_scd2_cleanse_drops_bronze_metadata_from_both_outputs():
-    """The three bronze-only columns ($m.op, $m.bronze_ts, $m.pk) are
+    """The three bronze-only columns (@td.medallion.op, @td.medallion.bronze_ts, @td.medallion.pk) are
     dropped from BOTH the valid and expired outputs."""
     valid = make_scd2_valid_raw([("t1", 1, "Alice", TS_2)])
     expired = make_scd2_expired_raw([("t1", 1, "Alice@v0", TS_1, TS_2)])
@@ -134,13 +142,13 @@ def test_scd2_cleanse_drops_bronze_metadata_from_both_outputs():
 
     for tf, label in [(out_valid, "valid"), (out_expired, "expired")]:
         cols = user_cols(tf)
-        assert M_OP not in cols, f"{label}: `$m.op` should be dropped — {cols!r}"
-        assert M_BRONZE_TS not in cols, f"{label}: `$m.bronze_ts` should be dropped — {cols!r}"
-        assert M_PK in cols, f"{label}: `$m.pk` should be preserved — {cols!r}"
+        assert M_OP not in cols, f"{label}: `@td.medallion.op` should be dropped — {cols!r}"
+        assert M_BRONZE_TS not in cols, f"{label}: `@td.medallion.bronze_ts` should be dropped — {cols!r}"
+        assert M_PK in cols, f"{label}: `@td.medallion.pk` should be preserved — {cols!r}"
 
 
 def test_scd2_cleanse_preserves_source_ts_and_valid_columns():
-    """`$m.source_ts`, `$m.valid_from`, `$m.valid_to` are kept on both
+    """`@td.medallion.source_ts`, `@td.medallion.valid_from`, `@td.medallion.valid_to` are kept on both
     outputs — they're silver-relevant, not bronze metadata."""
     valid = make_scd2_valid_raw([("t1", 1, "Alice", TS_2)])
     expired = make_scd2_expired_raw([("t1", 1, "Alice@v0", TS_1, TS_2)])
@@ -149,9 +157,9 @@ def test_scd2_cleanse_preserves_source_ts_and_valid_columns():
 
     for tf, label in [(out_valid, "valid"), (out_expired, "expired")]:
         cols = user_cols(tf)
-        assert M_SOURCE_TS in cols, f"{label}: `$m.source_ts` should be preserved"
-        assert VALID_FROM in cols, f"{label}: `$m.valid_from` should be preserved"
-        assert VALID_TO in cols, f"{label}: `$m.valid_to` should be preserved"
+        assert M_SOURCE_TS in cols, f"{label}: `@td.medallion.source_ts` should be preserved"
+        assert VALID_FROM in cols, f"{label}: `@td.medallion.valid_from` should be preserved"
+        assert VALID_TO in cols, f"{label}: `@td.medallion.valid_to` should be preserved"
 
 
 def test_scd2_cleanse_preserves_pk_and_value_columns():
@@ -205,7 +213,7 @@ def test_scd2_cleanse_outputs_are_schema_aligned():
 
 
 def test_scd1_cleanse_drops_bronze_op_and_bronze_ts():
-    """`$m.op` and `$m.bronze_ts` are dropped; `$m.pk` is preserved."""
+    """`@td.medallion.op` and `@td.medallion.bronze_ts` are dropped; `@td.medallion.pk` is preserved."""
     scd1 = make_scd1_raw([("t1", 1, "Alice", TS_1)])
 
     out = build_scd1_silver_cleanse([scd1])
@@ -217,7 +225,7 @@ def test_scd1_cleanse_drops_bronze_op_and_bronze_ts():
 
 
 def test_scd1_cleanse_preserves_source_ts():
-    """`$m.source_ts` is silver-relevant and stays on the output."""
+    """`@td.medallion.source_ts` is silver-relevant and stays on the output."""
     scd1 = make_scd1_raw([("t1", 1, "Alice", TS_1)])
 
     out = build_scd1_silver_cleanse([scd1])

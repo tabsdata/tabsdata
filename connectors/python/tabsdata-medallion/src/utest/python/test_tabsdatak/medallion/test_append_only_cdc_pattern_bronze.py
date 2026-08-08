@@ -10,6 +10,12 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak._medallion.bronze.append_only_cdc import (
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
     OP_INSERT,
     build_append_only_cdc_bronze,
 )
@@ -18,10 +24,10 @@ pytestmark = pytest.mark.medallion
 
 # ── Metadata column names ────────────────────────────────────────────────────
 # Output metadata columns produced by build_append_only_cdc_bronze.
-M_OP = "$m.op"
-M_SOURCE_TS = "$m.source_ts"
-M_BRONZE_TS = "$m.bronze_ts"
-M_PK = "$m.pk"
+M_OP = MEDALLION_SYSTEM_COLUMN_OP
+M_SOURCE_TS = MEDALLION_SYSTEM_COLUMN_SOURCE_TS
+M_BRONZE_TS = MEDALLION_SYSTEM_COLUMN_BRONZE_TS
+M_PK = MEDALLION_SYSTEM_COLUMN_PK
 
 # Composite primary key used in these tests.
 PK = [
@@ -31,7 +37,7 @@ PK = [
 EXPECTED_PK_COLS = ["tenant_id", "entity_id"]
 
 # The upstream column carrying the event time; build_append_only_cdc_bronze
-# renames this column to "$m.source_ts" on its way through.
+# renames this column to MEDALLION_SYSTEM_COLUMN_SOURCE_TS on its way through.
 EVENT_TS_COL = "event_ts"
 
 # UTC-aware sample timestamps — input event_ts column is expected to be
@@ -55,7 +61,7 @@ def make_event_batch(rows: list[tuple]) -> TableFrame:
     Schema:
       tenant_id  VARCHAR    PK part 1
       entity_id  BIGINT     PK part 2
-      event_ts   TIMESTAMP  source event time (renamed to $m.source_ts by the helper)
+      event_ts   TIMESTAMP  source event time (renamed to @td.medallion.source_ts by the helper)
       payload    VARCHAR    arbitrary payload column — flows through unchanged
     """
     assert rows, "make_event_batch needs at least one row"
@@ -163,7 +169,7 @@ def test_single_batch_every_row_becomes_insert():
 
 
 def test_event_ts_column_renamed_to_source_ts():
-    """The upstream event_ts column is renamed to `$m.source_ts`; the
+    """The upstream event_ts column is renamed to `@td.medallion.source_ts`; the
     original column name is gone from the output."""
     new = [make_event_batch([("t1", 1, TS_A, "hello")])]
     out = call(new)
@@ -245,7 +251,7 @@ def test_multiple_batches_diagonally_concatenated():
 
 
 def test_pk_meta_column_lists_composite_keys():
-    """`$m.pk` is populated on every row with the composite-key column names
+    """`@td.medallion.pk` is populated on every row with the composite-key column names
     from the `pk` arg."""
     new = [
         make_event_batch(
@@ -266,7 +272,7 @@ def test_pk_meta_column_lists_composite_keys():
 
 
 def test_bronze_ts_present_and_utc_aware():
-    """`$m.bronze_ts` is stamped on every row, UTC-aware (from
+    """`@td.medallion.bronze_ts` is stamped on every row, UTC-aware (from
     `datetime.now(tz=timezone.utc)` inside the helper)."""
     new = [
         make_event_batch(
@@ -285,7 +291,7 @@ def test_bronze_ts_present_and_utc_aware():
 
 
 def test_source_ts_preserves_utc_awareness_through_rename():
-    """The renamed `$m.source_ts` preserves UTC awareness from the upstream
+    """The renamed `@td.medallion.source_ts` preserves UTC awareness from the upstream
     event_ts column — the rename is a metadata-only op."""
     new = [make_event_batch([("t1", 1, TS_A, "p")])]
     out = call(new)

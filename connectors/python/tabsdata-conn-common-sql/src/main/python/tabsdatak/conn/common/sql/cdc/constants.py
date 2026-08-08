@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from enum import Enum
 
-from tabsdatak.conn.common.constants import TD_CONNECTOR_COLUMN_PREFIX
-
 
 class CdcOperation(str, Enum):
     """The change operation carried by an emitted CDC row.
@@ -52,70 +50,28 @@ TD_CDC_SCH_INFIX = "sch"
 DOT = "."
 COMMA = ","
 
-# `TD_CONNECTOR_COLUMN_PREFIX` already carries its trailing dot, so it
-# is concatenated as a literal prefix rather than passed to `DOT.join`.
-CDC_META_PREFIX = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_META_INFIX,
-])
+CDC_META_PREFIX = "@td.cdc.meta"
 
-CDC_META_OP = CDC_META_PREFIX + DOT + TD_CDC_OP_INFIX
-CDC_META_TX = CDC_META_PREFIX + DOT + TD_CDC_TX_INFIX
-CDC_META_SQ = CDC_META_PREFIX + DOT + TD_CDC_SQ_INFIX
-CDC_META_TS = CDC_META_PREFIX + DOT + TD_CDC_TS_INFIX
-CDC_META_SEG = CDC_META_PREFIX + DOT + TD_CDC_SEG_INFIX
-CDC_META_ORD = CDC_META_PREFIX + DOT + TD_CDC_ORD_INFIX
-CDC_META_FMT = CDC_META_PREFIX + DOT + TD_CDC_FMT_INFIX
-CDC_META_FLAT = CDC_META_PREFIX + DOT + TD_CDC_FLAT_INFIX
-CDC_META_SCH = CDC_META_PREFIX + DOT + TD_CDC_SCH_INFIX
+CDC_META_OP = "@td.cdc.meta.op"
+CDC_META_TX = "@td.cdc.meta.tx"
+CDC_META_SQ = "@td.cdc.meta.sq"
+CDC_META_TS = "@td.cdc.meta.ts"
+CDC_META_SEG = "@td.cdc.meta.seg"
+CDC_META_ORD = "@td.cdc.meta.ord"
+CDC_META_FMT = "@td.cdc.meta.fmt"
+CDC_META_FLAT = "@td.cdc.meta.flat"
+CDC_META_SCH = "@td.cdc.meta.sch"
 
-CDC_DATA_COL_PREFIX = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_DATA_INFIX,
-    TD_CDC_COL_INFIX,
-])
+CDC_DATA_COL_PREFIX = "@td.cdc.data.col"
 
-CDC_DATA_COL_OLD_PREFIX = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_DATA_INFIX,
-    TD_CDC_COL_INFIX,
-    TD_CDC_OLD_INFIX,
-])
+CDC_DATA_COL_OLD_PREFIX = "@td.cdc.data.col.old"
+CDC_DATA_COL_NEW_PREFIX = "@td.cdc.data.col.new"
 
-CDC_DATA_COL_NEW_PREFIX = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_DATA_INFIX,
-    TD_CDC_COL_INFIX,
-    TD_CDC_NEW_INFIX,
-])
+CDC_DATA_ROW_OLD = "@td.cdc.data.row.old"
+CDC_DATA_ROW_NEW = "@td.cdc.data.row.new"
 
-CDC_DATA_ROW_OLD = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_DATA_INFIX,
-    TD_CDC_ROW_INFIX,
-    TD_CDC_OLD_INFIX,
-])
-
-CDC_DATA_ROW_NEW = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_DATA_INFIX,
-    TD_CDC_ROW_INFIX,
-    TD_CDC_NEW_INFIX,
-])
-
-CDC_DATA_MAP_OLD = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_DATA_INFIX,
-    TD_CDC_MAP_INFIX,
-    TD_CDC_OLD_INFIX,
-])
-
-CDC_DATA_MAP_NEW = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
-    TD_CDC_INFIX,
-    TD_CDC_DATA_INFIX,
-    TD_CDC_MAP_INFIX,
-    TD_CDC_NEW_INFIX,
-])
+CDC_DATA_MAP_OLD = "@td.cdc.data.map.old"
+CDC_DATA_MAP_NEW = "@td.cdc.data.map.new"
 
 DEFAULT_BUFFER_MAX_ROWS = 10_000
 DEFAULT_BUFFER_MAX_BYTES = None
