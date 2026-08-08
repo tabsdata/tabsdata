@@ -14,7 +14,7 @@ pytestmark = pytest.mark.salesforce
 
 def test_salesforce_metadata_names():
     assert _constants.SALESFORCE_META_SOQL == "@td.salesforce.soql"
-    assert _constants.SALESFORCE_META_REPORT_ID == "@td.salesforce.reportId"
+    assert _constants.SALESFORCE_META_REPORT_ID == "@td.salesforce.report_id"
     assert _constants.SALESFORCE_META_LAST_MODIFIED == "@td.salesforce.last_modified"
 
 

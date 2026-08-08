@@ -201,8 +201,8 @@ def test_postgres_src_accepts_known_src_cfg_keys():
         queries=["SELECT 1"],
         src_cfg={
             "postgres.logging_level": 20,
-            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
-            "tabsdata.sql.chunkSize": 100,
+            "tabsdata.sql.read_engine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunk_size": 100,
         },
     )
     loaded = PostgresSrc.from_json(src.to_json())
@@ -223,8 +223,8 @@ def test_postgres_dest_accepts_known_dest_cfg_keys():
         tables=["analytics.users"],
         dest_cfg={
             "postgres.logging_level": 20,
-            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
-            "tabsdata.sql.chunkSize": 100,
+            "tabsdata.sql.write_engine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunk_size": 100,
         },
     )
     loaded = PostgresDest.from_json(dest.to_json())

@@ -43,13 +43,13 @@ logger = logging.getLogger(__name__)
 # ``dest_cfg``; their ``SrcCfgKey`` / ``DestCfgKey`` annotation means a
 # typo or rename gets flagged against the schema's Literal.
 _KEY_SRC_LOGGING_LEVEL: SrcCfgKey = "mysql.logging_level"
-_KEY_SRC_READ_ENGINE: SrcCfgKey = "tabsdata.sql.sql.readEngine"
-_KEY_SRC_CHUNK_SIZE: SrcCfgKey = "tabsdata.sql.chunkSize"
+_KEY_SRC_READ_ENGINE: SrcCfgKey = "tabsdata.sql.read_engine"
+_KEY_SRC_CHUNK_SIZE: SrcCfgKey = "tabsdata.sql.chunk_size"
 _KEY_SRC_DROP_METADATA: SrcCfgKey = "tabsdata.src_metadata.drop"
 
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "mysql.logging_level"
-_KEY_DEST_WRITE_ENGINE: DestCfgKey = "tabsdata.sql.sql.writeEngine"
-_KEY_DEST_CHUNK_SIZE: DestCfgKey = "tabsdata.sql.chunkSize"
+_KEY_DEST_WRITE_ENGINE: DestCfgKey = "tabsdata.sql.write_engine"
+_KEY_DEST_CHUNK_SIZE: DestCfgKey = "tabsdata.sql.chunk_size"
 
 # Defaults for every ``SrcCfgKey`` / ``DestCfgKey``. ``_resolve_*``
 # reads from cfg and falls back to these. ``None`` for engine /

@@ -86,8 +86,8 @@ IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 # --- MSSQLSrc.src_cfg keys ------------------------------------------
 SrcCfgKey: TypeAlias = Literal[
     "mssql.logging_level",
-    "tabsdata.sql.sql.readEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.read_engine",
+    "tabsdata.sql.chunk_size",
     "tabsdata.src_metadata.drop",
 ]
 
@@ -99,8 +99,8 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- MSSQLDest.dest_cfg keys ----------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "mssql.logging_level",
-    "tabsdata.sql.sql.writeEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.write_engine",
+    "tabsdata.sql.chunk_size",
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
@@ -190,8 +190,8 @@ class MSSQLSrc(Src):
             plugin reads `ctx.get_attr(bind_name)` and the function
             persists new values with `ctx.set_attr(bind_name, ...)`.
         src_cfg: Optional connector config; supported keys are
-            `mssql.logging_level`, `tabsdata.sql.sql.readEngine`,
-            `tabsdata.sql.chunkSize` and `tabsdata.src_metadata.drop`.
+            `mssql.logging_level`, `tabsdata.sql.read_engine`,
+            `tabsdata.sql.chunk_size` and `tabsdata.src_metadata.drop`.
 
     Examples:
         Publish multiple SQL Server tables, one output slot per query in
@@ -278,8 +278,8 @@ class MSSQLDest(Dest):
         transactional: When `True` (the default), wrap every table
             write in one transactional session.
         dest_cfg: Optional connector config; supported keys are
-            `mssql.logging_level`, `tabsdata.sql.sql.writeEngine`
-            and `tabsdata.sql.chunkSize`.
+            `mssql.logging_level`, `tabsdata.sql.write_engine`
+            and `tabsdata.sql.chunk_size`.
 
     Note:
         Column types are picked only when the target table is created (with

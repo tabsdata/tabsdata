@@ -265,7 +265,7 @@ class SalesforceReportSrc(Src):
     :categories: source
 
     Every table this source publishes automatically carries two
-    metadata columns: `@td.salesforce.reportId`, the resolved report
+    metadata columns: `@td.salesforce.report_id`, the resolved report
     id that produced the row (even when `reports` named the report by
     name), and `@td.salesforce.last_modified`, the source's
     `initial_last_modified` cutoff (empty when unset). Setting the

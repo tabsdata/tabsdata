@@ -225,8 +225,8 @@ def test_mssql_src_accepts_known_src_cfg_keys():
         queries=["SELECT 1"],
         src_cfg={
             "mssql.logging_level": 20,
-            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
-            "tabsdata.sql.chunkSize": 100,
+            "tabsdata.sql.read_engine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunk_size": 100,
         },
     )
     loaded = MSSQLSrc.from_json(src.to_json())
@@ -247,8 +247,8 @@ def test_mssql_dest_accepts_known_dest_cfg_keys():
         tables=["dbo.users"],
         dest_cfg={
             "mssql.logging_level": 20,
-            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
-            "tabsdata.sql.chunkSize": 100,
+            "tabsdata.sql.write_engine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunk_size": 100,
         },
     )
     loaded = MSSQLDest.from_json(dest.to_json())

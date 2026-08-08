@@ -30,6 +30,17 @@ def test_write_keys_carry_the_sql_prefix():
     assert const.WRITE_CHUNK_SIZE_KEY.startswith(_config.TABSDATA_CFG_PREFIX)
 
 
+def test_cfg_keys_are_snake_case_under_a_single_sql_segment():
+    # The keys are the user-facing src_cfg / dest_cfg spelling:
+    # snake_case throughout, one ``sql.`` segment.
+    assert const.READ_ENGINE_KEY == "tabsdata.sql.read_engine"
+    assert const.WRITE_ENGINE_KEY == "tabsdata.sql.write_engine"
+    assert const.AVAIL_READ_ENGINES_KEY == "tabsdata.sql.engine.avail_read_engines"
+    assert const.AVAIL_WRITE_ENGINES_KEY == "tabsdata.sql.engine.avail_write_engines"
+    assert const.READ_CHUNK_SIZE_KEY == "tabsdata.sql.chunk_size"
+    assert const.WRITE_CHUNK_SIZE_KEY == "tabsdata.sql.chunk_size"
+
+
 def test_engine_names_are_distinct():
     # Each engine name is a wire-format identifier; collisions
     # would route a read-engine pick to a write-engine class (or

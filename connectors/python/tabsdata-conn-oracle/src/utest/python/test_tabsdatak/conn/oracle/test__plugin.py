@@ -237,8 +237,8 @@ def test_resolve_src_cfg_applies_overrides():
     cfg = plugin._resolve_src_cfg(
         {
             "oracle.logging_level": 20,
-            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
-            "tabsdata.sql.chunkSize": 500,
+            "tabsdata.sql.read_engine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunk_size": 500,
             "tabsdata.src_metadata.drop": True,
         }
     )
@@ -258,8 +258,8 @@ def test_resolve_dest_cfg_applies_overrides():
     cfg = plugin._resolve_dest_cfg(
         {
             "oracle.logging_level": 20,
-            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
-            "tabsdata.sql.chunkSize": 500,
+            "tabsdata.sql.write_engine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunk_size": 500,
         }
     )
     assert cfg.logging_level == 20

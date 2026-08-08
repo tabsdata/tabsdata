@@ -37,13 +37,13 @@ logger = logging.getLogger(__name__)
 
 # --- src_cfg / dest_cfg keys ----------------------------------------
 _KEY_SRC_LOGGING_LEVEL: SrcCfgKey = "oracle.logging_level"
-_KEY_SRC_READ_ENGINE: SrcCfgKey = "tabsdata.sql.sql.readEngine"
-_KEY_SRC_CHUNK_SIZE: SrcCfgKey = "tabsdata.sql.chunkSize"
+_KEY_SRC_READ_ENGINE: SrcCfgKey = "tabsdata.sql.read_engine"
+_KEY_SRC_CHUNK_SIZE: SrcCfgKey = "tabsdata.sql.chunk_size"
 _KEY_SRC_DROP_METADATA: SrcCfgKey = "tabsdata.src_metadata.drop"
 
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "oracle.logging_level"
-_KEY_DEST_WRITE_ENGINE: DestCfgKey = "tabsdata.sql.sql.writeEngine"
-_KEY_DEST_CHUNK_SIZE: DestCfgKey = "tabsdata.sql.chunkSize"
+_KEY_DEST_WRITE_ENGINE: DestCfgKey = "tabsdata.sql.write_engine"
+_KEY_DEST_CHUNK_SIZE: DestCfgKey = "tabsdata.sql.chunk_size"
 
 _SRC_CFGS_DEFAULTS: dict[SrcCfgKey, Any] = {
     _KEY_SRC_LOGGING_LEVEL: logging.ERROR,

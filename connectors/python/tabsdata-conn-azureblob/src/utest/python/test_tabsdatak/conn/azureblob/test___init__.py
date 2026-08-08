@@ -27,7 +27,7 @@ def test_azureblob_src_full_round_trip():
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";", "has_header": True}},
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        src_cfg={"tabsdata.file.chunkSize": 1024},
+        src_cfg={"tabsdata.file.chunk_size": 1024},
     )
     loaded = AzureBlobSrc.from_json(src.to_json())
     assert loaded == src
@@ -37,7 +37,7 @@ def test_azureblob_src_full_round_trip():
         SrcFileFormat.CSV: {"separator": ";", "has_header": True}
     }
     assert loaded.initial_last_modified == datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert loaded.src_cfg == {"tabsdata.file.chunkSize": 1024}
+    assert loaded.src_cfg == {"tabsdata.file.chunk_size": 1024}
 
 
 def test_azureblob_dest_full_round_trip():
@@ -45,7 +45,7 @@ def test_azureblob_dest_full_round_trip():
         paths=["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"include_header": True, "separator": ","}},
-        dest_cfg={"tabsdata.file.chunkSize": 2048},
+        dest_cfg={"tabsdata.file.chunk_size": 2048},
     )
     loaded = AzureBlobDest.from_json(dest.to_json())
     assert loaded == dest
@@ -54,7 +54,7 @@ def test_azureblob_dest_full_round_trip():
     assert loaded.format_cfg == {
         DestFileFormat.CSV: {"include_header": True, "separator": ","}
     }
-    assert loaded.dest_cfg == {"tabsdata.file.chunkSize": 2048}
+    assert loaded.dest_cfg == {"tabsdata.file.chunk_size": 2048}
 
 
 # ---------------------------------------------------------------------------

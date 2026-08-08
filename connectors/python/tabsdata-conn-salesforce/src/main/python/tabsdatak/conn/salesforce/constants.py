@@ -16,8 +16,8 @@ SALESFORCE_META_SOQL: str = SALESFORCE_META_PREFIX + "soql"
 it was sent to Salesforce -- any `$lastModified` token already substituted
 with the value reported in `SALESFORCE_META_LAST_MODIFIED`."""
 
-SALESFORCE_META_REPORT_ID: str = SALESFORCE_META_PREFIX + "reportId"
-"""Metadata column (`"@td.salesforce.reportId"`) added to every table
+SALESFORCE_META_REPORT_ID: str = SALESFORCE_META_PREFIX + "report_id"
+"""Metadata column (`"@td.salesforce.report_id"`) added to every table
 `SalesforceReportSrc` publishes, holding the Salesforce id of the report
 that produced the row -- the resolved id even when the source named the
 report by name."""

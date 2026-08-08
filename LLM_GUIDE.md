@@ -216,13 +216,13 @@ columns:
 |--------|--------|----------|
 | `SalesforceSrc` | `@td.salesforce.soql` | The SOQL as sent to Salesforce (any `$lastModified` token already substituted) |
 | `SalesforceSrc` | `@td.salesforce.last_modified` | The `initial_last_modified` cutoff it ran with (empty when unset) |
-| `SalesforceReportSrc` | `@td.salesforce.reportId` | Resolved report id, even when the report was named by name |
+| `SalesforceReportSrc` | `@td.salesforce.report_id` | Resolved report id, even when the report was named by name |
 | `SalesforceReportSrc` | `@td.salesforce.last_modified` | The `initial_last_modified` cutoff (empty when unset) |
 
 ```python
 td.SalesforceReportSrc(reports=["Quarterly Pipeline"], find_report_by="name")
 # Published rows carry:
-#   @td.salesforce.reportId       "00O000000000001"
+#   @td.salesforce.report_id      "00O000000000001"
 #   @td.salesforce.last_modified  ""
 ```
 

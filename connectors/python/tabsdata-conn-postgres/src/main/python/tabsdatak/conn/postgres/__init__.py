@@ -132,8 +132,8 @@ rows; `"replace"` truncates before insert."""
 # --- PostgresSrc.src_cfg keys ---------------------------------------
 SrcCfgKey: TypeAlias = Literal[
     "postgres.logging_level",
-    "tabsdata.sql.sql.readEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.read_engine",
+    "tabsdata.sql.chunk_size",
     "tabsdata.src_metadata.drop",
 ]
 
@@ -145,8 +145,8 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- PostgresDest.dest_cfg keys -------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "postgres.logging_level",
-    "tabsdata.sql.sql.writeEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.write_engine",
+    "tabsdata.sql.chunk_size",
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
@@ -240,8 +240,8 @@ class PostgresSrc(Src):
             falls back to this value when the ctx store has no entry.
             Persist the next value with `ctx.set_attr(bind_name, v)`.
         src_cfg: Optional config mapping over the allowed keys only
-            (`postgres.logging_level`, `tabsdata.sql.sql.readEngine`,
-            `tabsdata.sql.chunkSize`, `tabsdata.src_metadata.drop`).
+            (`postgres.logging_level`, `tabsdata.sql.read_engine`,
+            `tabsdata.sql.chunk_size`, `tabsdata.src_metadata.drop`).
 
     Examples:
         Publish multiple Postgres tables, one output slot per query in order:
@@ -323,7 +323,7 @@ class PostgresDest(Dest):
             in one transactional session.
         dest_cfg: Optional config mapping over the allowed keys only
             (`postgres.logging_level`,
-            `tabsdata.sql.sql.writeEngine`, `tabsdata.sql.chunkSize`).
+            `tabsdata.sql.write_engine`, `tabsdata.sql.chunk_size`).
 
     Note:
         Column types are picked only when the target table is created (with

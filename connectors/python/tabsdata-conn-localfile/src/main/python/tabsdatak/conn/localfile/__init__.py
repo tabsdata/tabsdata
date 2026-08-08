@@ -65,7 +65,7 @@ from tabsdatak.spi import Conn
 
 # --- LocalFileSrc.src_cfg keys --------------------------------------
 SrcCfgKey: TypeAlias = Literal[
-    "tabsdata.file.chunkSize",
+    "tabsdata.file.chunk_size",
     "tabsdata.src_metadata.drop",
 ]
 
@@ -75,7 +75,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 
 
 # --- LocalFileDest.dest_cfg keys ------------------------------------
-DestCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
+DestCfgKey: TypeAlias = Literal["tabsdata.file.chunk_size"]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -159,7 +159,7 @@ class LocalFileSrc(Src):
             after this timestamp; the cutoff then advances each run so
             only newer files are re-imported.
         src_cfg: Optional connector config; supported keys are
-            `tabsdata.file.chunkSize` and
+            `tabsdata.file.chunk_size` and
             `tabsdata.src_metadata.drop`.
 
     Examples:
@@ -236,7 +236,7 @@ class LocalFileDest(Dest):
         format_cfg: Optional per-format writer options (dest-side keys
             only), keyed by the `DestFileFormat`.
         dest_cfg: Optional connector config; supports the key
-            `tabsdata.file.chunkSize`.
+            `tabsdata.file.chunk_size`.
 
     Note:
         A timestamp carrying a timezone is written to `CSV` and `JSON` as

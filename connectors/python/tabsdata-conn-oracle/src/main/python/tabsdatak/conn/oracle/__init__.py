@@ -105,8 +105,8 @@ rows; `"replace"` truncates before insert."""
 # --- OracleSrc.src_cfg keys -----------------------------------------
 SrcCfgKey: TypeAlias = Literal[
     "oracle.logging_level",
-    "tabsdata.sql.sql.readEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.read_engine",
+    "tabsdata.sql.chunk_size",
     "tabsdata.src_metadata.drop",
 ]
 
@@ -118,8 +118,8 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- OracleDest.dest_cfg keys ---------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "oracle.logging_level",
-    "tabsdata.sql.sql.writeEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.write_engine",
+    "tabsdata.sql.chunk_size",
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
@@ -212,8 +212,8 @@ class OracleSrc(Src):
             falls back to this value when the ctx store has no entry.
             Persist the next value with `ctx.set_attr(bind_name, v)`.
         src_cfg: Optional config mapping over the allowed keys only
-            (`oracle.logging_level`, `tabsdata.sql.sql.readEngine`,
-            `tabsdata.sql.chunkSize`, `tabsdata.src_metadata.drop`).
+            (`oracle.logging_level`, `tabsdata.sql.read_engine`,
+            `tabsdata.sql.chunk_size`, `tabsdata.src_metadata.drop`).
 
     Examples:
         Publish multiple Oracle tables, one output slot per query in order:
@@ -296,8 +296,8 @@ class OracleDest(Dest):
         transactional: When `True` (default), wrap every table write
             in one transactional session.
         dest_cfg: Optional config mapping over the allowed keys only
-            (`oracle.logging_level`, `tabsdata.sql.sql.writeEngine`,
-            `tabsdata.sql.chunkSize`).
+            (`oracle.logging_level`, `tabsdata.sql.write_engine`,
+            `tabsdata.sql.chunk_size`).
 
     Note:
         Column types are picked only when the target table is created (with

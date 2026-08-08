@@ -225,8 +225,8 @@ rows; `"replace"` truncates before insert."""
 # plus list/dict compositions).
 SrcCfgKey: TypeAlias = Literal[
     "mysql.logging_level",
-    "tabsdata.sql.sql.readEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.read_engine",
+    "tabsdata.sql.chunk_size",
     "tabsdata.src_metadata.drop",
 ]
 
@@ -238,8 +238,8 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- MySQLDest.dest_cfg keys ----------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "mysql.logging_level",
-    "tabsdata.sql.sql.writeEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.write_engine",
+    "tabsdata.sql.chunk_size",
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
@@ -333,8 +333,8 @@ class MySQLSrc(Src):
             falls back to this value when the ctx store has no entry.
             Persist the next value with `ctx.set_attr(bind_name, v)`.
         src_cfg: Optional config mapping over the allowed keys only
-            (`mysql.logging_level`, `tabsdata.sql.sql.readEngine`,
-            `tabsdata.sql.chunkSize`, `tabsdata.src_metadata.drop`).
+            (`mysql.logging_level`, `tabsdata.sql.read_engine`,
+            `tabsdata.sql.chunk_size`, `tabsdata.src_metadata.drop`).
 
     Examples:
         Publish multiple MySQL tables, one output slot per query in order:
@@ -412,8 +412,8 @@ class MySQLDest(Dest):
         transactional: When `True` (default), wrap every table write
             in one transactional session.
         dest_cfg: Optional config mapping over the allowed keys only
-            (`mysql.logging_level`, `tabsdata.sql.sql.writeEngine`,
-            `tabsdata.sql.chunkSize`).
+            (`mysql.logging_level`, `tabsdata.sql.write_engine`,
+            `tabsdata.sql.chunk_size`).
 
     Note:
         Column types are picked only when the target table is created (with

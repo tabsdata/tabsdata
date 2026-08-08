@@ -129,8 +129,8 @@ rows; `"replace"` truncates before insert."""
 # --- Db2Src.src_cfg keys --------------------------------------------
 SrcCfgKey: TypeAlias = Literal[
     "db2.logging_level",
-    "tabsdata.sql.sql.readEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.read_engine",
+    "tabsdata.sql.chunk_size",
     "tabsdata.src_metadata.drop",
 ]
 
@@ -142,8 +142,8 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- Db2Dest.dest_cfg keys ------------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "db2.logging_level",
-    "tabsdata.sql.sql.writeEngine",
-    "tabsdata.sql.chunkSize",
+    "tabsdata.sql.write_engine",
+    "tabsdata.sql.chunk_size",
 ]
 
 DestCfgSpec: TypeAlias = Annotated[
@@ -235,8 +235,8 @@ class Db2Src(Src):
             falls back to this value when the ctx store has no entry.
             Persist the next value with `ctx.set_attr(bind_name, v)`.
         src_cfg: Optional config mapping over the allowed keys only
-            (`db2.logging_level`, `tabsdata.sql.sql.readEngine`,
-            `tabsdata.sql.chunkSize`, `tabsdata.src_metadata.drop`).
+            (`db2.logging_level`, `tabsdata.sql.read_engine`,
+            `tabsdata.sql.chunk_size`, `tabsdata.src_metadata.drop`).
 
     Examples:
         Publish multiple Db2 tables, one output slot per query in order:
@@ -319,8 +319,8 @@ class Db2Dest(Dest):
         transactional: When `True` (default), wrap every table write
             in one transactional session.
         dest_cfg: Optional config mapping over the allowed keys only
-            (`db2.logging_level`, `tabsdata.sql.sql.writeEngine`,
-            `tabsdata.sql.chunkSize`).
+            (`db2.logging_level`, `tabsdata.sql.write_engine`,
+            `tabsdata.sql.chunk_size`).
 
     Note:
         Column types are picked only when the target table is created (with
