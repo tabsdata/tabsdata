@@ -160,8 +160,20 @@ def _check_regex(pattern: str, fn_name: str, error_code: DataQualityErrorCode) -
 class Scale(ABC, _api.JsonSerde):
     """Abstract base class for the scales used by `ScaleCategorizer`.
 
+    :categories: dq-classifier
+
     A scale defines how a numeric range is divided into bins. Concrete
     scales differ only in how the bin edges are spaced.
+
+    Examples:
+        A scale maps a value to a bin for `ScaleCategorizer`:
+
+        .. code-block:: python
+
+            ScaleCategorizer(
+                ["amount"],
+                scale=LinearScale(0.0, 100.0, bins=10),
+            )
     """
 
     __kind__ = "dqScale"
@@ -181,6 +193,14 @@ class IdentityScale(Scale):
             span is the bin count).
         use_bin_zero: If `False`, the minimum value belongs to the first
             bin; if `True`, `min_val` gets its own bin 0.
+
+    Examples:
+        One bin per whole value in the range -- here a bin for each score from
+        1 to 5:
+
+        .. code-block:: python
+
+            ScaleCategorizer(["score"], scale=IdentityScale(1, 5))
     """
 
     __kind__ = "dqIdentityScale"
@@ -220,6 +240,13 @@ class LinearScale(Scale):
             1 to 100 (default 100).
         use_bin_zero: If `False`, the minimum value belongs to the first
             bin; if `True`, `min_val` gets its own bin 0.
+
+    Examples:
+        Ten equally wide bins between 0 and 100:
+
+        .. code-block:: python
+
+            ScaleCategorizer(["amount"], scale=LinearScale(0.0, 100.0, bins=10))
     """
 
     __kind__ = "dqLinearScale"
@@ -261,6 +288,17 @@ class MonomialScale(Scale):
         bins: Number of bins; a whole number from 1 to 100 (default 100).
         use_bin_zero: If `False`, the minimum value belongs to the first
             bin; if `True`, `min_val` gets its own bin 0.
+
+    Examples:
+        Bins whose width grows with a power of the value, so small values are
+        resolved more finely:
+
+        .. code-block:: python
+
+            ScaleCategorizer(
+                ["amount"],
+                scale=MonomialScale(0.0, 100.0, power=2.0, bins=10),
+            )
     """
 
     __kind__ = "dqMonomialScale"
@@ -304,6 +342,16 @@ class LogarithmicScale(Scale):
         bins: Number of bins; a whole number from 1 to 100 (default 100).
         use_bin_zero: If `False`, the minimum value belongs to the first
             bin; if `True`, `min_val` gets its own bin 0.
+
+    Examples:
+        Bins that widen logarithmically -- useful for long-tailed values:
+
+        .. code-block:: python
+
+            ScaleCategorizer(
+                ["amount"],
+                scale=LogarithmicScale(1.0, 1000.0, base=10.0, bins=3),
+            )
     """
 
     __kind__ = "dqLogarithmicScale"
@@ -347,6 +395,16 @@ class ExponentialScale(Scale):
         bins: Number of bins; a whole number from 1 to 100 (default 100).
         use_bin_zero: If `False`, the minimum value belongs to the first
             bin; if `True`, `min_val` gets its own bin 0.
+
+    Examples:
+        Bins that narrow as values grow, the mirror of `LogarithmicScale`:
+
+        .. code-block:: python
+
+            ScaleCategorizer(
+                ["amount"],
+                scale=ExponentialScale(0.0, 100.0, base=2.0, bins=8),
+            )
     """
 
     __kind__ = "dqExponentialScale"
@@ -382,6 +440,8 @@ class ExponentialScale(Scale):
 class Classifier(ABC, _api.JsonSerde):
     """Abstract base class for all data quality classifiers.
 
+    :categories: dq-classifier
+
     A classifier evaluates one or more columns and writes a per-row verdict
     into a new column. Collect classifiers in a `DataQuality` action
     (`classifiers=[...]`) alongside the operators that act on their
@@ -390,20 +450,17 @@ class Classifier(ABC, _api.JsonSerde):
     Concrete classifiers share these construction fields (a few fix
     `on_wrong_type` / `on_wrong_value` and do not expose them):
 
-    Args:
-        column_names: Columns to classify, as a list. Each entry is a
-            source column name, or a `(source, destination)` tuple naming
-            the verdict column (`destination` `None` auto-generates it).
-            `None` applies the classifier to every column; always pass a
-            list, single values are not coerced.
-        on_missing_column: `"ignore"` or `"fail"` when a named column
-            is absent.
-        on_wrong_type: `"ignore"` or `"fail"` when a column's type is
-            not supported by the classifier.
-        on_wrong_value: `"ignore"` or `"fail"` when a comparison value
-            is incompatible with the column's type.
-        tags: Optional list of tags; an operator can target only the
-            classifiers carrying a matching tag.
+    Examples:
+        Classifiers are the labelling half of a check; pass concrete ones to
+        `DataQuality(classifiers=[...])`:
+
+        .. code-block:: python
+
+            DataQuality(
+                table="checked",
+                classifiers=[IsNotNull(["customer_id"]), IsPositive(["amount"])],
+                operators=[Enrich()],
+            )
     """
 
     # devguide-ref: how classifiers/operators compose into a DataQuality check
@@ -419,9 +476,19 @@ class Classifier(ABC, _api.JsonSerde):
 class BoolClassifier(Classifier, ABC):
     """Abstract base class for classifiers with a boolean verdict.
 
+    :categories: dq-classifier
+
     Each row is labelled `True` or `False` (or a reserved sentinel for
     null / nan). Boolean verdicts are consumed by the `AllOk` and
     `AnyFailed` criteria used in `Filter` / `Select` / `Fail`.
+
+    Examples:
+        Every boolean classifier labels each row `True` or `False`, one verdict
+        column per classified column:
+
+        .. code-block:: python
+
+            IsPositive(["amount"])
     """
 
     @classmethod
@@ -433,7 +500,17 @@ class BoolClassifier(Classifier, ABC):
 class Categorizer(Classifier, ABC):
     """Abstract base class for classifiers that assign each value to a bin.
 
+    :categories: dq-classifier
+
     Bin verdicts are consumed by the `InBins` and `NotInBins` criteria.
+
+    Examples:
+        A categorizer labels each row with a bin number instead of a boolean;
+        `ScaleCategorizer` is the concrete one:
+
+        .. code-block:: python
+
+            ScaleCategorizer(["amount"], scale=LinearScale(0.0, 100.0, bins=4))
     """
 
 
@@ -443,6 +520,36 @@ class IsTrue(BoolClassifier):
     to boolean columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_true`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsTrue(["is_active"])
+
+        Name the verdict column with a `(column, verdict_column)` tuple:
+
+        .. code-block:: python
+
+            IsTrue([("is_active", "active_ok")])
     """
 
     __kind__ = "dqIsTrue"
@@ -465,6 +572,30 @@ class IsFalse(BoolClassifier):
     to boolean columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_false`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsFalse(["is_deleted"])
     """
 
     __kind__ = "dqIsFalse"
@@ -487,6 +618,35 @@ class IsNull(BoolClassifier):
     columns of any type.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_null`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
+            column type, so there is no wrong type to report.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNull(["shipped_at"])
+
+        With no columns given it classifies every column of the table:
+
+        .. code-block:: python
+
+            IsNull()
     """
 
     __kind__ = "dqIsNull"
@@ -509,6 +669,36 @@ class IsNotNull(BoolClassifier):
     to columns of any type.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_not_null`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
+            column type, so there is no wrong type to report.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNotNull(["customer_id"])
+
+        `on_missing_column` turns a typo in a column name into a failed check
+        rather than a silently skipped one:
+
+        .. code-block:: python
+
+            IsNotNull(["customer_id"], on_missing_column="fail")
     """
 
     __kind__ = "dqIsNotNull"
@@ -531,6 +721,30 @@ class IsNan(BoolClassifier):
     number). Applies to floating-point columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_nan`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNan(["ratio"])
     """
 
     __kind__ = "dqIsNan"
@@ -553,6 +767,30 @@ class IsNotNan(BoolClassifier):
     Applies to floating-point columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_not_nan`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNotNan(["ratio"])
     """
 
     __kind__ = "dqIsNotNan"
@@ -575,6 +813,30 @@ class IsNullOrNan(BoolClassifier):
     Applies to floating-point columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_null_or_nan`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNullOrNan(["ratio"])
     """
 
     __kind__ = "dqIsNullOrNan"
@@ -597,6 +859,36 @@ class IsNotNullNorNan(BoolClassifier):
     `NaN`. Applies to floating-point columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_not_null_nor_nan`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNotNullNorNan(["ratio"])
+
+        Tag it to scope an operator to this classifier alone:
+
+        .. code-block:: python
+
+            IsNotNullNorNan(["ratio"], tags=["required"])
     """
 
     __kind__ = "dqIsNotNullNorNan"
@@ -619,6 +911,30 @@ class IsZero(BoolClassifier):
     Applies to numeric columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_zero`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsZero(["balance"])
     """
 
     __kind__ = "dqIsZero"
@@ -641,6 +957,30 @@ class IsNotZero(BoolClassifier):
     Applies to numeric columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_not_zero`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNotZero(["divisor"])
     """
 
     __kind__ = "dqIsNotZero"
@@ -663,6 +1003,30 @@ class IsPositive(BoolClassifier):
     Applies to signed numeric columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_positive`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsPositive(["amount"])
     """
 
     __kind__ = "dqIsPositive"
@@ -685,6 +1049,30 @@ class IsPositiveOrZero(BoolClassifier):
     zero. Applies to signed numeric columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_positive_or_zero`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsPositiveOrZero(["balance"])
     """
 
     __kind__ = "dqIsPositiveOrZero"
@@ -707,6 +1095,30 @@ class IsNegative(BoolClassifier):
     Applies to signed numeric columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_negative`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNegative(["adjustment"])
     """
 
     __kind__ = "dqIsNegative"
@@ -729,6 +1141,30 @@ class IsNegativeOrZero(BoolClassifier):
     zero. Applies to signed numeric columns.
 
     :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_negative_or_zero`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNegativeOrZero(["adjustment"])
     """
 
     __kind__ = "dqIsNegativeOrZero"
@@ -747,7 +1183,44 @@ class IsNegativeOrZero(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_135)
 class BetweenClassifier(BoolClassifier, ABC):
-    """A boolean classifier that checks if a value is within a specified range."""
+    """A boolean classifier that checks if a value is within a specified range.
+
+    :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix.
+        min_val: Lower bound; `None` leaves the low side unbounded.
+        max_val: Upper bound; `None` leaves the high side unbounded. When both
+            are given they must be the same type and `min_val` must not exceed
+            `max_val`.
+        closed_on: Which bounds are inclusive: `"none"`, `"lower"`, `"upper"`
+            or `"both"` (the default).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        on_wrong_value: What to do when a value cannot be evaluated against
+            this classifier: `"ignore"` (the default) yields a null verdict,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+
+    Examples:
+        The concrete range classifiers are `IsBetween` and `IsNotBetween`:
+
+        .. code-block:: python
+
+            IsBetween(["amount"], min_val=0.0, max_val=100.0)
+            IsNotBetween(["amount"], min_val=0.0, max_val=100.0)
+    """
 
     __kind__ = "dqBetweenClassifier"
 
@@ -783,12 +1256,30 @@ class IsBetween(BetweenClassifier):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_between`).
         min_val: Lower bound; `None` leaves the low side unbounded.
         max_val: Upper bound; `None` leaves the high side unbounded. When
             both are given they must be the same type and `min_val` must
             not exceed `max_val`.
         closed_on: Which bounds are inclusive: `"none"`, `"lower"`,
             `"upper"` or `"both"` (default `"both"`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        on_wrong_value: What to do when a value cannot be evaluated against
+            this classifier: `"ignore"` (the default) yields a null verdict,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
 
     Examples:
         .. code-block:: python
@@ -807,12 +1298,47 @@ class IsNotBetween(BetweenClassifier):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_not_between`).
         min_val: Lower bound; `None` leaves the low side unbounded.
         max_val: Upper bound; `None` leaves the high side unbounded. When
             both are given they must be the same type and `min_val` must
             not exceed `max_val`.
         closed_on: Which bounds are inclusive: `"none"`, `"lower"`,
             `"upper"` or `"both"` (default `"both"`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        on_wrong_value: What to do when a value cannot be evaluated against
+            this classifier: `"ignore"` (the default) yields a null verdict,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+
+    Examples:
+        .. code-block:: python
+
+            IsNotBetween(["amount"], min_val=0.0, max_val=100.0)
+
+        `closed_on` decides whether the bounds themselves count as inside the
+        range:
+
+        .. code-block:: python
+
+            IsNotBetween(
+                ["amount"],
+                min_val=0.0,
+                max_val=100.0,
+                closed_on="none",
+            )
     """
 
     __kind__ = "dqIsNotBetween"
@@ -820,7 +1346,40 @@ class IsNotBetween(BetweenClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_142)
 class InClassifier(BoolClassifier, ABC):
-    """A boolean classifier that checks if a value is in a specified set of values."""
+    """A boolean classifier that checks if a value is in a specified set of values.
+
+    :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix.
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_value: What to do when a value cannot be evaluated against
+            this classifier: `"ignore"` (the default) yields a null verdict,
+            `"fail"` aborts the check.
+        values: Values to test membership against; a non-empty collection,
+            deduplicated into a frozenset. `None` may be included to test for
+            null membership.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
+            column type, so there is no wrong type to report.
+
+    Examples:
+        The concrete membership classifiers are `IsIn` and `IsNotIn`:
+
+        .. code-block:: python
+
+            IsIn(["status"], values={"new", "open"})
+            IsNotIn(["status"], values={"void"})
+    """
 
     __kind__ = "dqInClassifier"
 
@@ -845,9 +1404,26 @@ class IsIn(InClassifier):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_in`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_value: What to do when a value cannot be evaluated against
+            this classifier: `"ignore"` (the default) yields a null verdict,
+            `"fail"` aborts the check.
         values: Values to test membership against; a non-empty collection
             (at least one). Include `None` to match nulls; duplicates are
             removed.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
+            column type, so there is no wrong type to report.
 
     Examples:
         .. code-block:: python
@@ -866,9 +1442,37 @@ class IsNotIn(InClassifier):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_is_not_in`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_value: What to do when a value cannot be evaluated against
+            this classifier: `"ignore"` (the default) yields a null verdict,
+            `"fail"` aborts the check.
         values: Values to test membership against; a non-empty collection
             (at least one). Include `None` to match nulls; duplicates are
             removed.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
+            column type, so there is no wrong type to report.
+
+    Examples:
+        .. code-block:: python
+
+            IsNotIn(["status"], values={"void", "test"})
+
+        `None` in `values` tests for null membership:
+
+        .. code-block:: python
+
+            IsNotIn(["status"], values={None})
     """
 
     __kind__ = "dqIsNotIn"
@@ -876,7 +1480,38 @@ class IsNotIn(InClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_144)
 class MatchClassifier(BoolClassifier, ABC):
-    """A boolean classifier that checks if a value matches a regex pattern."""
+    """A boolean classifier that checks if a value matches a regex pattern.
+
+    :categories: dq-classifier
+
+    Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix.
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        pattern: Regular expression matched against each value.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        The concrete pattern classifiers are `Matches` and `DoesNotMatch`:
+
+        .. code-block:: python
+
+            Matches(["email"], pattern=r".+@.+")
+            DoesNotMatch(["email"], pattern=r"^tmp-")
+    """
 
     __kind__ = "dqMatchClassifier"
 
@@ -906,7 +1541,24 @@ class Matches(MatchClassifier):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_matches`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
         pattern: Regular expression to match; must be a valid regex.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
 
     Examples:
         .. code-block:: python
@@ -925,7 +1577,29 @@ class DoesNotMatch(MatchClassifier):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_does_not_match`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
         pattern: Regular expression to test against; must be a valid regex.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
+
+    Examples:
+        .. code-block:: python
+
+            DoesNotMatch(["email"], pattern=r"^tmp-")
     """
 
     __kind__ = "dqDoesNotMatch"
@@ -939,10 +1613,27 @@ class HasLength(BoolClassifier):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_has_length`).
         min_len: Minimum length, inclusive; a non-negative whole number
             (default 0).
         max_len: Maximum length, inclusive; a non-negative whole number.
             Must be the same type as `min_len` and not less than it.
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
+        on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
+            compare against, so there is no wrong value to report.
 
     Examples:
         .. code-block:: python
@@ -986,8 +1677,26 @@ class ScaleCategorizer(Categorizer):
     :categories: dq-classifier
 
     Args:
+        column_names: Columns to classify. Each entry is a column name, or a
+            `(column, verdict_column)` tuple naming the column the verdict
+            lands in; the two forms can be mixed. `None` (the default)
+            classifies every user column, skipping the types this classifier
+            does not support (see `on_wrong_type`). A verdict column that is
+            not named explicitly is the source column plus this classifier's
+            suffix (a column `amount` lands in `amount_category`).
+        on_missing_column: What to do when a named column is not in the table:
+            `"ignore"` (the default) leaves it out, `"fail"` aborts the check.
+        on_wrong_type: What to do when a column's data type is not one this
+            classifier supports: `"ignore"` (the default) leaves it out,
+            `"fail"` aborts the check.
+        on_wrong_value: What to do when a value cannot be evaluated against
+            this classifier: `"ignore"` (the default) yields a null verdict,
+            `"fail"` aborts the check.
         scale: The `Scale` (e.g. `LinearScale`, `LogarithmicScale`)
             that maps values to bins.
+        tags: Optional labels for this classifier. An operator given the same
+            tag applies only to the classifiers carrying it; untagged operators
+            apply to all of them.
 
     Examples:
         .. code-block:: python

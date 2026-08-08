@@ -37,7 +37,23 @@
     "tabsdatak.conn.stream.stage"
   ],
   "private": false,
-  "inherited": [],
+  "inherited": [
+    "AllOk",
+    "AnyFailed",
+    "DoesNotMatch",
+    "Enrich",
+    "Fail",
+    "Filter",
+    "InBins",
+    "IsBetween",
+    "IsIn",
+    "IsNotBetween",
+    "IsNotIn",
+    "Matches",
+    "NotInBins",
+    "Select",
+    "Summary"
+  ],
   "list_tags": ["categories"],
   "re_exports": {
     "tabsdatak.tableframe.grok._schema.ColumnDataType": "tabsdatak.tableframe.grok.ColumnDataType",

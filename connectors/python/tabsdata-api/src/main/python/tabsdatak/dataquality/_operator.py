@@ -36,11 +36,25 @@ from tabsdatak.dataquality._typing import (
 class Operator(ABC, _api.JsonSerde):
     """Abstract base class for all data quality operators.
 
+    :categories: dq-operator
+
     An operator acts on the verdicts produced by a `DataQuality` action's
     classifiers: append them (`Enrich`), summarize them (`Summary`),
     filter or select rows by a `Criteria` (`Filter` / `Select`), or
     abort the transaction (`Fail`). Collect operators in
     `DataQuality(operators=[...])`.
+
+    Examples:
+        Operators are the acting half of a check; pass concrete ones to
+        `DataQuality(operators=[...])`:
+
+        .. code-block:: python
+
+            DataQuality(
+                table="checked",
+                classifiers=[IsNotNull(["customer_id"])],
+                operators=[Enrich(), Summary()],
+            )
     """
 
     # devguide-ref: how classifiers/operators compose into a DataQuality check
@@ -51,9 +65,20 @@ class Operator(ABC, _api.JsonSerde):
 class Criteria(ABC, _api.JsonSerde):
     """Selects rows for a `Filter`, `Select` or `Fail` operator.
 
+    :categories: dq-operator
+
     A criteria turns classifier verdicts into a per-row selection: boolean
     criteria (`AllOk` / `AnyFailed`) read boolean classifiers; category
     criteria (`InBins` / `NotInBins`) read a categorizer's bins.
+
+    Examples:
+        A criteria turns verdicts into a row selection for `Filter`, `Select`
+        or `Fail`:
+
+        .. code-block:: python
+
+            Filter(AnyFailed())
+            Select(InBins(column_name="amount_bin", bins={0}), to_table="low")
     """
 
     __kind__ = "dqCriteria"
@@ -62,8 +87,18 @@ class Criteria(ABC, _api.JsonSerde):
 class Threshold(ABC, _api.JsonSerde):
     """Abstract base class for the thresholds used by the `Fail` operator.
 
+    :categories: dq-operator
+
     A threshold sets how many selected rows trigger the failure: an absolute
     count (`RowCountThreshold`) or a percentage (`PercentThreshold`).
+
+    Examples:
+        A threshold says how many selected rows make `Fail` abort:
+
+        .. code-block:: python
+
+            Fail(AnyFailed(), RowCountThreshold(1))
+            Fail(AnyFailed(), PercentThreshold(5))
     """
 
     __kind__ = "dqThreshold"
@@ -78,11 +113,21 @@ class Threshold(ABC, _api.JsonSerde):
 class BoolCriteria(Criteria, ABC):
     """Abstract base for criteria over boolean classifier verdicts.
 
+    :categories: dq-operator
+
     Args:
         none_is_ok: Treat a null verdict as passing (default `False`).
         nan_is_ok: Treat a `NaN` verdict as passing (default `False`).
         tags: Optional list of tags; only classifiers carrying a matching
             tag are considered.
+
+    Examples:
+        The concrete boolean criteria are `AllOk` and `AnyFailed`:
+
+        .. code-block:: python
+
+            Filter(AnyFailed())
+            Select(AllOk(), to_table="clean")
     """
 
     __kind__ = "dqBoolCriteria"
@@ -98,6 +143,24 @@ class AllOk(BoolCriteria):
     passes (`True`). Use with `Filter`, `Select` or `Fail`.
 
     :categories: dq-operator
+
+    Args:
+        none_is_ok: Treat a null verdict as passing (default `False`).
+        nan_is_ok: Treat a `NaN` verdict as passing (default `False`).
+        tags: Optional tags; only the classifiers carrying a matching tag are
+            considered.
+
+    Examples:
+        .. code-block:: python
+
+            Select(AllOk(), to_table="clean")
+
+        By default a null or `NaN` verdict counts as a failure; the
+        `none_is_ok` / `nan_is_ok` flags let them pass:
+
+        .. code-block:: python
+
+            AllOk(none_is_ok=True, nan_is_ok=True)
     """
 
     __kind__ = "dqAllOk"
@@ -110,6 +173,23 @@ class AnyFailed(BoolCriteria):
     `Fail`.
 
     :categories: dq-operator
+
+    Args:
+        none_is_ok: Treat a null verdict as passing (default `False`).
+        nan_is_ok: Treat a `NaN` verdict as passing (default `False`).
+        tags: Optional tags; only the classifiers carrying a matching tag are
+            considered.
+
+    Examples:
+        .. code-block:: python
+
+            Filter(AnyFailed())
+
+        Scope it to the classifiers carrying a tag:
+
+        .. code-block:: python
+
+            AnyFailed(tags=["required"])
     """
 
     __kind__ = "dqAnyFailed"
@@ -119,12 +199,22 @@ class AnyFailed(BoolCriteria):
 class CategoryCriteria(Criteria, ABC):
     """Abstract base for criteria over a categorizer's bin assignments.
 
+    :categories: dq-operator
+
     Args:
         column_name: Name of the column holding the bin index produced by a
             `ScaleCategorizer`.
         bins: Bins to match; a non-empty set of bin indices (0 to 100) and/
             or the special bins `"none"`, `"nan"`, `"underflow"` and
             `"overflow"`.
+
+    Examples:
+        The concrete category criteria are `InBins` and `NotInBins`:
+
+        .. code-block:: python
+
+            InBins(column_name="amount_bin", bins={0, 1})
+            NotInBins(column_name="amount_bin", bins={"overflow"})
     """
 
     __kind__ = "dqCategoryCriteria"
@@ -139,6 +229,12 @@ class InBins(CategoryCriteria):
     bins. Use with `Filter`, `Select` or `Fail`.
 
     :categories: dq-operator
+
+    Args:
+        column_name: Name of the column holding the bin index a
+            `ScaleCategorizer` produced.
+        bins: Bins to match; a non-empty set of bin indices (0 to 100) and/or
+            the special bins `"none"`, `"nan"`, `"underflow"` and `"overflow"`.
 
     Examples:
         .. code-block:: python
@@ -155,6 +251,26 @@ class NotInBins(CategoryCriteria):
     bins. Use with `Filter`, `Select` or `Fail`.
 
     :categories: dq-operator
+
+    Args:
+        column_name: Name of the column holding the bin index a
+            `ScaleCategorizer` produced.
+        bins: Bins to match; a non-empty set of bin indices (0 to 100) and/or
+            the special bins `"none"`, `"nan"`, `"underflow"` and `"overflow"`.
+
+    Examples:
+        .. code-block:: python
+
+            Filter(NotInBins(column_name="amount_bin", bins={0, 1, 2}))
+
+        The special bins catch the values that fell outside the scale:
+
+        .. code-block:: python
+
+            NotInBins(
+                column_name="amount_bin",
+                bins={"none", "nan", "underflow", "overflow"},
+            )
     """
 
     __kind__ = "dqNotInBins"
@@ -174,6 +290,13 @@ class RowCountThreshold(Threshold):
     Args:
         row_count: Row count that, when reached, triggers the failure; a
             non-negative whole number.
+
+    Examples:
+        Fail as soon as one row is selected:
+
+        .. code-block:: python
+
+            Fail(AnyFailed(), RowCountThreshold(1))
     """
 
     __kind__ = "dqRowCountThreshold"
@@ -190,6 +313,13 @@ class PercentThreshold(Threshold):
     Args:
         percent: Percentage of rows (0 to 100) that, when reached, triggers
             the failure.
+
+    Examples:
+        Fail when a twentieth of the table is selected:
+
+        .. code-block:: python
+
+            Fail(AnyFailed(), PercentThreshold(5))
     """
 
     __kind__ = "dqPercentThreshold"
@@ -204,8 +334,24 @@ class PercentThreshold(Threshold):
 
 @_api.dataclass(DataQualityErrorCode.DQC_1)
 class TagOperator(Operator, ABC):
-    """
-    An operator that is scoped to classifiers by tag.
+    """An operator that is scoped to classifiers by tag.
+
+    :categories: dq-operator
+
+    Args:
+        tags: Optional tags; only the classifiers carrying a matching tag are
+            applied.
+
+    Examples:
+        A tagged operator applies only to the classifiers carrying that tag:
+
+        .. code-block:: python
+
+            DataQuality(
+                table="checked",
+                classifiers=[IsNotNull(["customer_id"], tags=["required"])],
+                operators=[Summary(tags=["required"])],
+            )
     """
 
     __kind__ = "dqTagOperator"
@@ -221,10 +367,22 @@ class Enrich(TagOperator):
     :categories: dq-operator
 
     Args:
-        to_table: Table to write the enriched rows to; a valid table name.
-            If `None` (default), the target table is enriched in place.
         tags: Optional list of tags; only classifiers carrying a matching
             tag are applied.
+        to_table: Table to write the enriched rows to; a valid table name.
+            If `None` (default), the target table is enriched in place.
+
+    Examples:
+        .. code-block:: python
+
+            Enrich()
+
+        Write the enriched rows to another table instead of adding the verdict
+        columns in place:
+
+        .. code-block:: python
+
+            Enrich(to_table="checked_enriched")
     """
 
     __kind__ = "dqEnrich"
@@ -240,11 +398,23 @@ class Summary(TagOperator):
     :categories: dq-operator
 
     Args:
+        tags: Optional list of tags; only classifiers carrying a matching
+            tag are included.
         table: Table to write the report to; a valid table name. If
             `None` (default), a table named `<target>_dq_summary` is
             used.
-        tags: Optional list of tags; only classifiers carrying a matching
-            tag are included.
+
+    Examples:
+        .. code-block:: python
+
+            Summary()
+
+        Name the report table, and restrict it to the classifiers carrying a
+        tag:
+
+        .. code-block:: python
+
+            Summary(table="orders_quality", tags=["required"])
     """
 
     __kind__ = "dqSummary"
@@ -254,7 +424,22 @@ class Summary(TagOperator):
 
 @_api.dataclass(DataQualityErrorCode.DQC_20)
 class CriteriaOperator(Operator, ABC):
-    """An operator that uses a criteria to select records."""
+    """An operator that uses a criteria to select records.
+
+    :categories: dq-operator
+
+    Args:
+        criteria: Selects the rows this operator acts on.
+
+    Examples:
+        The operators driven by a criteria are `Filter`, `Select` and `Fail`:
+
+        .. code-block:: python
+
+            Filter(AnyFailed())
+            Select(AnyFailed(), to_table="rejected")
+            Fail(AnyFailed(), PercentThreshold(1))
+    """
 
     __kind__ = "dqCriteriaOperator"
 
@@ -272,6 +457,19 @@ class Fail(CriteriaOperator):
         criteria: Selects the rows counted against the threshold.
         threshold: The `RowCountThreshold` or `PercentThreshold` that,
             when reached, fails the transaction.
+
+    Examples:
+        Abort the transaction on the first failing row:
+
+        .. code-block:: python
+
+            Fail(AnyFailed(), RowCountThreshold(1))
+
+        Tolerate a little bad data instead, and fail only past a percentage:
+
+        .. code-block:: python
+
+            Fail(AnyFailed(), PercentThreshold(5))
     """
 
     __kind__ = "dqFail"
@@ -292,6 +490,24 @@ class Filter(CriteriaOperator):
             name. If `None` (default), they are discarded.
         include_quality_columns: Verdict columns to carry into `to_table`:
             `"none"`, `"criteria"` or `"all"` (default `"none"`).
+
+    Examples:
+        Drop every row a classifier failed:
+
+        .. code-block:: python
+
+            Filter(AnyFailed())
+
+        Keep them instead, in a table of their own, together with the verdict
+        columns that explain the removal:
+
+        .. code-block:: python
+
+            Filter(
+                AnyFailed(),
+                to_table="rejected",
+                include_quality_columns="criteria",
+            )
     """
 
     __kind__ = "dqFilter"
@@ -313,6 +529,13 @@ class Select(CriteriaOperator):
             name (required).
         include_quality_columns: Verdict columns to carry into `to_table`:
             `"none"`, `"criteria"` or `"all"` (default `"none"`).
+
+    Examples:
+        Copy the failing rows out for review, leaving the table untouched:
+
+        .. code-block:: python
+
+            Select(AnyFailed(), to_table="to_review")
     """
 
     __kind__ = "dqSelect"
