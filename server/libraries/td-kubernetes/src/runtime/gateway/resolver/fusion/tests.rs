@@ -182,7 +182,7 @@ fn seed_vault_takes_existing_generated_values_by_category() {
     let template = "\
 database_server:
   username: ${{secretAuto:postgres_system_user}}
-  password: ${{secretAuto:postgres_password}}
+  password: ${{secretAuto:postgres_system_password}}
   host: ${{literal:host}}
 ";
     let configs = configs(&[("dbmanager.database.yaml", template)]);
@@ -201,7 +201,7 @@ database_server:
 
     let vault = vault.borrow();
     assert_eq!(
-        vault.get("postgres_password").map(String::as_str),
+        vault.get("postgres_system_password").map(String::as_str),
         Some("stored-password")
     );
     assert!(!vault.contains_key("postgres_system_user"));
@@ -209,7 +209,7 @@ database_server:
 
 #[test]
 fn seed_vault_keeps_first_seen_value_per_category() {
-    let template = "password: ${{secretAuto:postgres_password}}\n";
+    let template = "password: ${{secretAuto:postgres_system_password}}\n";
     let configs = configs(&[
         ("a.yaml", template),
         ("b.yaml", template),
@@ -229,7 +229,10 @@ fn seed_vault_keeps_first_seen_value_per_category() {
     seed_vault_from_server_secrets(&vault, &configs, &server_secrets);
 
     assert_eq!(
-        vault.borrow().get("postgres_password").map(String::as_str),
+        vault
+            .borrow()
+            .get("postgres_system_password")
+            .map(String::as_str),
         Some("value-a")
     );
 }

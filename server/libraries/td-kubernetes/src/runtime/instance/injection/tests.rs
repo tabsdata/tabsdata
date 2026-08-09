@@ -93,7 +93,7 @@ fn worker_with_no_matching_configs_yields_no_env() {
 fn mounted_config_injects_secret_keys() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_password}}\njwt:\n  secret: ${{secret:jwt_signing_key}}\n",
+        "database:\n  password: ${{secret:postgres_system_password}}\njwt:\n  secret: ${{secret:jwt_signing_key}}\n",
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
@@ -108,7 +108,7 @@ fn mounted_config_injects_secret_keys() {
 fn secret_auto_placeholders_are_injected() {
     let profile = build_profile(&[(
         "dbmanager.database.yaml",
-        "database_server:\n  password: ${{secretAuto:postgres_password}}\n",
+        "database_server:\n  password: ${{secretAuto:postgres_system_password}}\n",
     )]);
     let mut spec = build_pod_spec_mounting(&["dbcreate"], &["dbmanager.database.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
@@ -125,11 +125,11 @@ fn server_secrets_stay_out_of_pods_not_mounting_the_file() {
     let profile = build_profile(&[
         (
             "apiserver.database.yaml",
-            "database:\n  apiserver:\n    password: ${{secretAuto:postgres_password}}\n",
+            "database:\n  apiserver:\n    password: ${{secretAuto:postgres_system_password}}\n",
         ),
         (
             "dbmanager.database.yaml",
-            "database_server:\n  password: ${{secretAuto:postgres_password}}\n",
+            "database_server:\n  password: ${{secretAuto:postgres_system_password}}\n",
         ),
     ]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.database.yaml"]);
@@ -149,7 +149,7 @@ fn server_secrets_stay_out_of_pods_not_mounting_the_file() {
 fn mounted_config_targets_all_containers() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_password}}\n",
+        "database:\n  password: ${{secret:postgres_system_password}}\n",
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver", "sidecar"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
@@ -164,7 +164,7 @@ fn only_mounted_configs_are_injected() {
     let profile = build_profile(&[
         (
             "apiserver.yaml",
-            "database:\n  password: ${{secret:postgres_password}}\n",
+            "database:\n  password: ${{secret:postgres_system_password}}\n",
         ),
         ("apiserver.log.yaml", "audit:\n  token: ${{secret}}\n"),
         ("tabsdata.yaml", "ignored:\n  secret: ${{secret}}\n"),
@@ -189,7 +189,7 @@ fn only_mounted_configs_are_injected() {
 fn missing_secret_in_cluster_is_a_hard_failure() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_password}}\n",
+        "database:\n  password: ${{secret:postgres_system_password}}\n",
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
@@ -214,7 +214,7 @@ fn config_without_placeholders_does_not_require_secret() {
 fn already_present_env_var_is_not_duplicated() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_password}}\n",
+        "database:\n  password: ${{secret:postgres_system_password}}\n",
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     if let Some(container) = spec.containers.first_mut() {

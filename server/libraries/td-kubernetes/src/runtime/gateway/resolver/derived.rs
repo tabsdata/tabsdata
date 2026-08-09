@@ -4,12 +4,14 @@
 
 use serde_yaml::{Mapping, Value};
 use td_database::components::{resolved_schema_of, resolved_username_of};
-use td_database::config::DatabaseComponents;
+use td_database::config::{BackendConfig, DatabaseComponents};
 
 use crate::base::error::gateway::ResolverError;
 
 const PATH_SEPARATOR: &str = ".";
 const APISERVER_DATABASE_CONFIG: &str = "apiserver.database.yaml";
+pub const DBMANAGER_DATABASE_CONFIG: &str = "dbmanager.database.yaml";
+const SERVER_SECTION: &str = "database_server";
 const DATABASE_SECTION: &str = "database";
 const BACKEND_PROPERTY: &str = "postgres";
 const DATABASE_PROPERTY: &str = "database";
@@ -64,7 +66,7 @@ pub fn derived_properties(file: &str) -> &'static [DerivedProperty] {
         .unwrap_or_default()
 }
 
-pub fn amend(file: &str, rendered: &str) -> Result<String, ResolverError> {
+pub fn amend(file: &str, rendered: &str, server: Option<&str>) -> Result<String, ResolverError> {
     let properties = derived_properties(file);
     if properties.is_empty() {
         return Ok(rendered.to_owned());
@@ -77,9 +79,10 @@ pub fn amend(file: &str, rendered: &str) -> Result<String, ResolverError> {
         return Ok(rendered.to_owned());
     }
 
+    let database = server.and_then(server_database);
     for property in properties {
         for component in components_in(&value, property.section) {
-            if let Some(text) = resolve(property, &value, &component) {
+            if let Some(text) = resolve(property, &value, &component, database.as_deref()) {
                 insert(&mut value, property, &component, &text);
             }
         }
@@ -99,14 +102,36 @@ fn components_in(value: &Value, section: &str) -> Vec<String> {
         .collect()
 }
 
-fn resolve(property: &DerivedProperty, value: &Value, component: &str) -> Option<String> {
+fn server_database(server: &str) -> Option<String> {
+    let value: Value = serde_yaml::from_str(server).ok()?;
+    node_at(&value, SERVER_SECTION)?
+        .get(BACKEND_PROPERTY)?
+        .get(DATABASE_PROPERTY)?
+        .as_str()
+        .map(str::to_owned)
+}
+
+fn resolve(
+    property: &DerivedProperty,
+    value: &Value,
+    component: &str,
+    database: Option<&str>,
+) -> Option<String> {
     let anchor = node_at(value, &anchor_of(property.section, component))?;
     let holder = holder(anchor, property)?;
     if holder.get(property.property).is_some() {
         return None;
     }
-    let components: DatabaseComponents =
+    let mut components: DatabaseComponents =
         serde_yaml::from_value(node_at(value, property.section)?.clone()).ok()?;
+    if let Some(database) = database {
+        for entry in components.values_mut() {
+            let BackendConfig::Postgres(target) = &mut entry.conn;
+            if target.database.is_none() {
+                target.database = Some(database.to_owned());
+            }
+        }
+    }
     let default = default_schema(component);
     match property.rule {
         DerivedRule::ComponentSchema => resolved_schema_of(&components, component, &default).ok(),

@@ -10,7 +10,7 @@ fn secret_auto_collects_generated_value_and_retains_token() {
     let config = "\
 database_server:
   username: ${{secretAuto:postgres_system_user}}
-  password: ${{secretAuto:postgres_password}}
+  password: ${{secretAuto:postgres_system_password}}
 ";
     let system = SystemValues::default();
     let auto = HashMap::new();
@@ -55,13 +55,13 @@ fn secret_auto_same_category_shares_one_value_across_configs() {
     let first = "\
 database:
   apiserver:
-    password: ${{secretAuto:postgres_password}}
+    password: ${{secretAuto:postgres_system_password}}
   aiagent:
-    password: ${{secretAuto:postgres_password}}
+    password: ${{secretAuto:postgres_system_password}}
 ";
     let second = "\
 database_server:
-  password: ${{secretAuto:postgres_password}}
+  password: ${{secretAuto:postgres_system_password}}
 ";
     let system = SystemValues::default();
     let auto = HashMap::new();
@@ -100,7 +100,7 @@ database_server:
     assert_eq!(
         values.len(),
         1,
-        "all postgres_password occurrences must share one value: {values:?}"
+        "all postgres_system_password occurrences must share one value: {values:?}"
     );
     assert!(!values.iter().next().expect("value").is_empty());
 }
@@ -154,9 +154,9 @@ fn literal_same_category_reuses_value_across_configs() {
 
 #[test]
 fn literal_and_secret_of_same_category_do_not_share_stores() {
-    let literal_template = "plain:\n  name: ${{literal:postgres_password}}\n";
+    let literal_template = "plain:\n  name: ${{literal:postgres_system_password}}\n";
     let literal_init = "plain:\n  name: from-literal\n";
-    let secret_template = "guarded:\n  password: ${{secretAuto:postgres_password}}\n";
+    let secret_template = "guarded:\n  password: ${{secretAuto:postgres_system_password}}\n";
     let system = SystemValues::default();
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
@@ -203,11 +203,13 @@ fn literal_and_secret_of_same_category_do_not_share_stores() {
 fn secret_auto_prefers_caller_provided_auto_value() {
     let config = "\
 database_server:
-  password: ${{secretAuto:postgres_password}}
+  password: ${{secretAuto:postgres_system_password}}
 ";
     let system = SystemValues::default();
-    let auto: HashMap<String, String> =
-        HashMap::from([("postgres_password".to_owned(), "from-auto".to_owned())]);
+    let auto: HashMap<String, String> = HashMap::from([(
+        "postgres_system_password".to_owned(),
+        "from-auto".to_owned(),
+    )]);
     let outcome = resolve_config_file(
         "config.yaml",
         config,

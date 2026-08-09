@@ -6,7 +6,7 @@ pub mod status;
 
 use std::path::Path;
 
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::base::constants::DEFAULT_LOG_LEVEL;
 #[cfg(feature = "enterprise")]
@@ -20,6 +20,7 @@ use crate::client::tdkserver::render::report::helper::common::{
 use crate::client::tdkserver::render::report::helper::table::{
     ReportColumn, ReportTable, STATUS_COLOR_SCHEME, render_tables,
 };
+use crate::client::tdkserver::widgets::show_hint;
 use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::ports::{AssignedPort, apiserver_public_port, database_port};
 use crate::runtime::provider::ClusterProvider;
@@ -254,7 +255,7 @@ pub fn restarted_service(summary: &Summary) {
     render_session_lines(summary);
 }
 
-pub fn initialized_service(settings: &InstanceSettings) {
+pub fn initialized_service(settings: &InstanceSettings, with_hint: bool) {
     info!("Initialized tabsdata instance '{}'.", settings.name);
     info!("  - state........: {}", settings.state.as_str());
     info!("  - version......: {}", version_cell(settings));
@@ -280,9 +281,15 @@ pub fn initialized_service(settings: &InstanceSettings) {
         loglevel: None,
     };
     render_summary_lines(&summary);
-    warn!(
-        "Inspect and edit the config in the instance's init folder, then run \
-         'tdkserver create --instance {}' to create the instance.",
-        settings.name
-    );
+    if with_hint {
+        show_hint(
+            &format!(
+                "Inspect and edit the config in the instance's init folder, then run \
+                 'tdkserver create --instance {}' to create the instance.",
+                settings.name
+            ),
+            80,
+            true,
+        );
+    }
 }

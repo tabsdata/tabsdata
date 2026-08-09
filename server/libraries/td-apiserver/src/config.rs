@@ -15,7 +15,8 @@ use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_bridge::Orchestrator;
 use td_common::jwt::JwtConfig;
-use td_database::config::DatabaseComponents;
+use td_database::components::propagate_server_target;
+use td_database::config::{ComponentConfig, DatabaseComponents};
 use td_error::{TdError, td_error};
 use td_execution::{
     MaxFunctionsPerTick, SchedulerCheckFrequency, SchedulerTickTimeout, StuckRequestedTimeout,
@@ -86,6 +87,11 @@ pub struct Config {
     pub ssl_folder: PathBuf,
     #[serde(default)]
     pub database: DatabaseComponents,
+    /// The `database_server:` entry, mounted from the dbmanager config. It owns
+    /// where the database is; the components under `database:` carry only what
+    /// is theirs (their password, schema and pool).
+    #[serde(default)]
+    pub database_server: Option<ComponentConfig>,
     #[serde(default)]
     pub storage: Option<StorageConfig>,
     /// Root directory served by `GET /api/v1/resources/{*path}`. A request for
@@ -189,6 +195,7 @@ impl Default for Config {
             tick_timeout: SchedulerTickTimeout::default(),
             ssl_folder: PathBuf::default(),
             database: DatabaseComponents::default(),
+            database_server: None,
             storage: Some(StorageConfig::default()),
             resources_folder: None,
             transaction_by: TransactionBy::default(),
@@ -361,7 +368,14 @@ impl Params {
                 .ssl_folder
                 .clone()
                 .unwrap_or_else(|| config.ssl_folder.clone()),
-            database: config.database,
+            database: {
+                let mut components = config.database;
+                if let Some(server) = &config.database_server {
+                    propagate_server_target(&mut components, server);
+                }
+                components
+            },
+            database_server: config.database_server,
             storage: resolved_storage,
             resources_folder: self.resources_folder.clone().or(config.resources_folder),
             transaction_by: self
@@ -453,6 +467,81 @@ database:
         assert_eq!(pg.log.log_statements, LevelFilter::Off);
         assert_eq!(entry.pool.max_connections, 25);
         assert_eq!(entry.pool.min_connections, 1);
+    }
+
+    #[test]
+    fn the_server_entry_supplies_the_target_of_every_component() {
+        // The two files a pod mounts: the components carry only what is theirs,
+        // the server entry says where the database is.
+        let apiserver_yaml = r#"
+database:
+  apiserver:
+    postgres:
+      password: apiserver_secret
+  aiagent:
+    postgres:
+      password: aiagent_secret
+"#;
+        let dbmanager_yaml = r#"
+database_server:
+  postgres:
+    host: rds.example.com
+    port: 5433
+    database: tabsdata
+    username: admin
+    password: admin_secret
+    ssl_mode: verify-ca
+"#;
+        let built = config::Config::builder()
+            .add_source(config::Config::try_from(&Config::default()).unwrap())
+            .add_source(config::File::from_str(
+                apiserver_yaml,
+                config::FileFormat::Yaml,
+            ))
+            .add_source(config::File::from_str(
+                dbmanager_yaml,
+                config::FileFormat::Yaml,
+            ))
+            .build()
+            .unwrap();
+        let config: Config = built.try_deserialize().unwrap();
+
+        let mut components = config.database.clone();
+        propagate_server_target(&mut components, config.database_server.as_ref().unwrap());
+
+        for component in ["apiserver", "aiagent"] {
+            let pg = components.get(component).unwrap().conn.postgres().unwrap();
+            assert_eq!(pg.host, "rds.example.com", "host for {component}");
+            assert_eq!(pg.port, 5433, "port for {component}");
+            assert_eq!(
+                pg.database.as_deref(),
+                Some("tabsdata"),
+                "db for {component}"
+            );
+        }
+        // Credentials stay per component: only the location travels.
+        assert_eq!(
+            components
+                .get("apiserver")
+                .unwrap()
+                .conn
+                .postgres()
+                .unwrap()
+                .password
+                .as_deref(),
+            Some("apiserver_secret")
+        );
+        assert_eq!(
+            components
+                .get("aiagent")
+                .unwrap()
+                .conn
+                .postgres()
+                .unwrap()
+                .password
+                .as_deref(),
+            Some("aiagent_secret")
+        );
     }
 
     #[test]

@@ -5,12 +5,7 @@
 database:
   apiserver:
     postgres:
-      host: ${{system:tdk_database_host}}
-      port: ${{system:tdk_database_port}}
-      database: ${{system:tdk_database_name}}
-      password: ${{secretAuto:postgres_password}}
-      ssl_mode: ${{system:tdk_database_ssl_mode}}
-      ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}
+      password: ${{secret:postgres_apiserver_password}}
     pool:
       min_connections: 5
       max_connections: 50

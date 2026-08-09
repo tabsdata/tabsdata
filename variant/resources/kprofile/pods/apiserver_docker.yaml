@@ -117,6 +117,8 @@ spec:
           args:
             - --config-file
             - /tabsdata/config/apiserver.database.yaml
+            - --config-file
+            - /tabsdata/config/dbmanager.database.yaml
             - --log-config-py
             - /tabsdata/config/tabsdata.log.py.yaml
             - --log-config-rs
@@ -208,6 +210,8 @@ spec:
             - --config-file
             - /tabsdata/config/apiserver.database.yaml
             - --config-file
+            - /tabsdata/config/dbmanager.database.yaml
+            - --config-file
             - /tabsdata/config/apiserver.storage.yaml
             - --log-config
             - /tabsdata/config/apiserver.log.yaml
@@ -289,6 +293,8 @@ spec:
                   name: td-app-apiserver-config-apiserver.service.yaml
               - configMap:
                   name: td-app-apiserver-config-apiserver.database.yaml
+              - configMap:
+                  name: td-app-dbmanager-config-dbmanager.database.yaml
               - configMap:
                   name: td-app-apiserver-config-apiserver.storage.yaml
               - configMap:

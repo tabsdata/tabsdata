@@ -9,9 +9,12 @@ use td_common::jwt::{
     JwtConfig, SERVICE_TOKEN_EXP_SECS, TokenClaims, encode_token, service_token_jti,
 };
 
+#[cfg(feature = "enterprise")]
+use crate::base::constants::SECRET_GENERATOR_POSTGRES_AIAGENT_PASSWORD;
 use crate::base::constants::{
     SECRET_GENERATOR_APISERVER_SERVICE_TOKEN, SECRET_GENERATOR_JWT_SIGNING_KEY,
-    SECRET_GENERATOR_POSTGRES_PASSWORD, SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
+    SECRET_GENERATOR_POSTGRES_APISERVER_PASSWORD, SECRET_GENERATOR_POSTGRES_SYSTEM_PASSWORD,
+    SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
 };
 use crate::base::error::kubernetes::KubernetesError;
 use crate::base::error::secret::SecretError;
@@ -24,7 +27,10 @@ const EMBEDDED_POSTGRES_DEFAULT_USER: &str = "postgres";
 pub enum Generator {
     JwtSigningKey,
     PostgresSystemUser,
-    PostgresPassword,
+    PostgresSystemPassword,
+    PostgresApiserverPassword,
+    #[cfg(feature = "enterprise")]
+    PostgresAiagentPassword,
     APIServerServiceToken,
 }
 
@@ -33,7 +39,12 @@ impl Generator {
         match name {
             SECRET_GENERATOR_JWT_SIGNING_KEY => Some(Generator::JwtSigningKey),
             SECRET_GENERATOR_POSTGRES_SYSTEM_USER => Some(Generator::PostgresSystemUser),
-            SECRET_GENERATOR_POSTGRES_PASSWORD => Some(Generator::PostgresPassword),
+            SECRET_GENERATOR_POSTGRES_SYSTEM_PASSWORD => Some(Generator::PostgresSystemPassword),
+            SECRET_GENERATOR_POSTGRES_APISERVER_PASSWORD => {
+                Some(Generator::PostgresApiserverPassword)
+            }
+            #[cfg(feature = "enterprise")]
+            SECRET_GENERATOR_POSTGRES_AIAGENT_PASSWORD => Some(Generator::PostgresAiagentPassword),
             SECRET_GENERATOR_APISERVER_SERVICE_TOKEN => Some(Generator::APIServerServiceToken),
             _ => None,
         }
@@ -43,7 +54,10 @@ impl Generator {
         &[
             SECRET_GENERATOR_JWT_SIGNING_KEY,
             SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
-            SECRET_GENERATOR_POSTGRES_PASSWORD,
+            SECRET_GENERATOR_POSTGRES_SYSTEM_PASSWORD,
+            SECRET_GENERATOR_POSTGRES_APISERVER_PASSWORD,
+            #[cfg(feature = "enterprise")]
+            SECRET_GENERATOR_POSTGRES_AIAGENT_PASSWORD,
             SECRET_GENERATOR_APISERVER_SERVICE_TOKEN,
         ]
     }
@@ -52,7 +66,10 @@ impl Generator {
         match self {
             Generator::JwtSigningKey => SECRET_GENERATOR_JWT_SIGNING_KEY,
             Generator::PostgresSystemUser => SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
-            Generator::PostgresPassword => SECRET_GENERATOR_POSTGRES_PASSWORD,
+            Generator::PostgresSystemPassword => SECRET_GENERATOR_POSTGRES_SYSTEM_PASSWORD,
+            Generator::PostgresApiserverPassword => SECRET_GENERATOR_POSTGRES_APISERVER_PASSWORD,
+            #[cfg(feature = "enterprise")]
+            Generator::PostgresAiagentPassword => SECRET_GENERATOR_POSTGRES_AIAGENT_PASSWORD,
             Generator::APIServerServiceToken => SECRET_GENERATOR_APISERVER_SERVICE_TOKEN,
         }
     }
@@ -72,7 +89,11 @@ impl Generator {
         match self {
             Generator::JwtSigningKey => Ok(td_common::id::id().to_string()),
             Generator::PostgresSystemUser => Ok(EMBEDDED_POSTGRES_DEFAULT_USER.to_owned()),
-            Generator::PostgresPassword => Ok(td_common::random::password()),
+            Generator::PostgresSystemPassword | Generator::PostgresApiserverPassword => {
+                Ok(td_common::random::password())
+            }
+            #[cfg(feature = "enterprise")]
+            Generator::PostgresAiagentPassword => Ok(td_common::random::password()),
             Generator::APIServerServiceToken => sign_service_token(resolved),
         }
     }

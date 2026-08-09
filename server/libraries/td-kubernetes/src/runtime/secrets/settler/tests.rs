@@ -131,7 +131,7 @@ fn seed(pairs: &[(Generator, &str)]) -> BTreeMap<Generator, String> {
 fn self_contained_generators_are_produced() {
     let needs_fill = [
         ("USER", Generator::PostgresSystemUser),
-        ("PASSWORD", Generator::PostgresPassword),
+        ("PASSWORD", Generator::PostgresSystemPassword),
     ];
     let filled = resolve_generated_values(&needs_fill, &mut BTreeMap::new()).expect("resolve");
     let filled: BTreeMap<&str, String> = filled.into_iter().collect();
@@ -313,7 +313,7 @@ fn second_run_reuses_first_runs_values() {
 
     let needs_fill = [
         ("SIGNING_KEY", Generator::JwtSigningKey),
-        ("PASSWORD", Generator::PostgresPassword),
+        ("PASSWORD", Generator::PostgresSystemPassword),
         ("AGENT_TOKEN", Generator::APIServerServiceToken),
     ];
     let first =
@@ -321,7 +321,10 @@ fn second_run_reuses_first_runs_values() {
 
     let mut reseed = seed(&[
         (Generator::JwtSigningKey, first.get("SIGNING_KEY").unwrap()),
-        (Generator::PostgresPassword, first.get("PASSWORD").unwrap()),
+        (
+            Generator::PostgresSystemPassword,
+            first.get("PASSWORD").unwrap(),
+        ),
     ]);
     let second = filled_map(resolve_generated_values(&needs_fill, &mut reseed).expect("second"));
 
@@ -352,12 +355,15 @@ fn partial_fill_only_missing_derived_key() {
 fn sequential_fills_share_freshly_generated_values() {
     let mut resolved = BTreeMap::new();
     let first = filled_map(
-        resolve_generated_values(&[("PASSWORD", Generator::PostgresPassword)], &mut resolved)
-            .expect("first"),
+        resolve_generated_values(
+            &[("PASSWORD", Generator::PostgresSystemPassword)],
+            &mut resolved,
+        )
+        .expect("first"),
     );
     let second = filled_map(
         resolve_generated_values(
-            &[("OTHER_PASSWORD", Generator::PostgresPassword)],
+            &[("OTHER_PASSWORD", Generator::PostgresSystemPassword)],
             &mut resolved,
         )
         .expect("second"),
@@ -387,10 +393,24 @@ fn empty_needs_fill_yields_empty() {
 #[test]
 fn merge_treats_distinct_nonempty_values_as_divergent_only() {
     let mut existing = BTreeMap::new();
-    merge_existing_value(&mut existing, Generator::PostgresPassword, "p1".to_owned()).unwrap();
-    merge_existing_value(&mut existing, Generator::PostgresPassword, "p1".to_owned()).unwrap();
-    let error = merge_existing_value(&mut existing, Generator::PostgresPassword, "p2".to_owned())
-        .expect_err("divergent");
+    merge_existing_value(
+        &mut existing,
+        Generator::PostgresSystemPassword,
+        "p1".to_owned(),
+    )
+    .unwrap();
+    merge_existing_value(
+        &mut existing,
+        Generator::PostgresSystemPassword,
+        "p1".to_owned(),
+    )
+    .unwrap();
+    let error = merge_existing_value(
+        &mut existing,
+        Generator::PostgresSystemPassword,
+        "p2".to_owned(),
+    )
+    .expect_err("divergent");
     assert!(matches!(error, SecretError::GeneratorValueDivergent { .. }));
     merge_existing_value(
         &mut existing,
@@ -435,12 +455,12 @@ fn declared(pairs: &[(&str, &str, Generator)]) -> Vec<(String, Vec<SecretLeaf>)>
 #[test]
 fn invalidated_generators_include_declared_but_missing() {
     let leaves = declared(&[
-        ("a", "PASSWORD", Generator::PostgresPassword),
+        ("a", "PASSWORD", Generator::PostgresSystemPassword),
         ("b", "KEY", Generator::JwtSigningKey),
     ]);
     let existing = seed(&[(Generator::JwtSigningKey, "key")]);
     let invalidated = invalidated_generators(&leaves, &existing);
-    assert!(invalidated.contains(&Generator::PostgresPassword));
+    assert!(invalidated.contains(&Generator::PostgresSystemPassword));
     assert!(!invalidated.contains(&Generator::JwtSigningKey));
 }
 

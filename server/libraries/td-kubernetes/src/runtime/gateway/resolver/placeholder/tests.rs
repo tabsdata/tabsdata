@@ -238,7 +238,11 @@ fn secret_auto_generates_known_generator_value() {
 #[test]
 fn secret_auto_reuses_memoized_value_for_same_category() {
     let resolver = resolver_for("secretAuto", "a.b").expect("resolver");
-    let bar = placeholder("secretAuto", Some("postgres_password"), Rule::Mandatory);
+    let bar = placeholder(
+        "secretAuto",
+        Some("postgres_system_password"),
+        Rule::Mandatory,
+    );
     let path = path();
     let system = SystemValues::default();
     let vault = RefCell::new(HashMap::new());

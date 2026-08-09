@@ -102,6 +102,14 @@ pub struct InitArguments {
 }
 
 pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -> CommandResult {
+    init_instance(arguments, globals, true).await
+}
+
+pub async fn init_instance(
+    arguments: InitArguments,
+    globals: &GlobalArguments,
+    with_hint: bool,
+) -> CommandResult {
     let InitArguments {
         instance,
         cluster,
@@ -260,7 +268,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     }
     step.done("Wrote tabsdata instance settings");
 
-    report::component::service::initialized_service(&settings);
+    report::component::service::initialized_service(&settings, with_hint);
 
     Ok(())
 }

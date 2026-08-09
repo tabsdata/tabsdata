@@ -18,7 +18,7 @@ use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::kube::api::secret::get_secret;
 use crate::kube::api::{LabelFilter, get_configmaps};
-use crate::runtime::gateway::resolver::derived::amend;
+use crate::runtime::gateway::resolver::derived::{DBMANAGER_DATABASE_CONFIG, amend};
 use crate::runtime::gateway::resolver::reveal::reveal;
 use crate::runtime::gateway::resolver::schema::Schema;
 use crate::runtime::instance::profile::load_profile;
@@ -129,12 +129,17 @@ pub async fn command_view(arguments: ViewArguments, globals: &GlobalArguments) -
             &secret_values,
         )
         .map_err(TdError::from)?;
-        let rendered = if with_protected {
-            amend(&file, &rendered).map_err(TdError::from)?
-        } else {
-            rendered
-        };
         documents.push((file, configmap_name, rendered));
+    }
+
+    if with_protected {
+        let server = documents
+            .iter()
+            .find(|(file, _, _)| file == DBMANAGER_DATABASE_CONFIG)
+            .map(|(_, _, rendered)| rendered.clone());
+        for (file, _, rendered) in &mut documents {
+            *rendered = amend(file, rendered, server.as_deref()).map_err(TdError::from)?;
+        }
     }
 
     if documents.is_empty() {

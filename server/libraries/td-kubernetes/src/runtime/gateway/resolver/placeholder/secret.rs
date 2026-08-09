@@ -133,12 +133,20 @@ impl ConcreteResolver for SecretResolver {
                 })
             }
             None if self.auto => self.generate(context, key)?,
-            None => match self.memoized(context) {
-                Some(value) => Some(SecretEntry {
-                    key,
-                    value,
-                    category,
-                }),
+            None => match self.memoized(context).or_else(|| {
+                context
+                    .auto_value
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned)
+            }) {
+                Some(value) => {
+                    self.remember(context, &value);
+                    Some(SecretEntry {
+                        key,
+                        value,
+                        category,
+                    })
+                }
                 None if context.placeholder.rule == Rule::Optional => Some(SecretEntry {
                     key,
                     value: String::new(),

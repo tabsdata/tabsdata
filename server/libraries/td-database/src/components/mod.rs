@@ -33,6 +33,34 @@ use crate::pool::TdPool;
 use crate::server::{EmbeddedPassword, resolve_password, server_connectable};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Copies the connection target of the `database_server:` entry onto every
+/// component. The server entry says where the database is; a component says
+/// only what is its own (its password, schema, app role and pool), so the
+/// address is authored once and cannot drift between the two files.
+///
+/// Only the location travels: credentials stay per component, since the server
+/// entry logs in as the privileged admin and a component as its own owner role.
+#[cfg(postgres)]
+pub fn propagate_server_target(components: &mut DatabaseComponents, server: &ComponentConfig) {
+    let Some(source) = server.conn.postgres() else {
+        return;
+    };
+    for entry in components.values_mut() {
+        let BackendConfig::Postgres(target) = &mut entry.conn;
+        target.host = source.host.clone();
+        target.port = source.port;
+        target.socket = source.socket.clone();
+        target.database = source.database.clone();
+        target.ssl_mode = source.ssl_mode;
+        target.ssl_root_cert = source.ssl_root_cert.clone();
+        target.ssl_root_cert_pem = source.ssl_root_cert_pem.clone();
+        target.ssl_client_cert = source.ssl_client_cert.clone();
+        target.ssl_client_cert_pem = source.ssl_client_cert_pem.clone();
+        target.ssl_client_key = source.ssl_client_key.clone();
+        target.ssl_client_key_pem = source.ssl_client_key_pem.clone();
+    }
+}
+
 /// The config entry for a component; every registered component must have one.
 pub(crate) fn component_entry<'a>(
     components: &'a DatabaseComponents,

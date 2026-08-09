@@ -316,10 +316,10 @@ fn named_placeholder_jwt_signing_key_picks_jwt_signing_key_generator() {
 }
 
 #[test]
-fn named_placeholder_postgres_password_picks_postgres_password_generator() {
-    let leaves = leaves_of(r#"password: ${{secretAuto:postgres_password}}"#);
+fn named_placeholder_picks_its_generator() {
+    let leaves = leaves_of(r#"password: ${{secretAuto:postgres_system_password}}"#);
     assert_eq!(leaves.len(), 1);
-    assert_eq!(leaves[0].generator, Some(Generator::PostgresPassword));
+    assert_eq!(leaves[0].generator, Some(Generator::PostgresSystemPassword));
 }
 
 #[test]
@@ -336,7 +336,7 @@ fn mixed_placeholders_keep_their_kinds() {
             external: ${{secret}}
             jwt: ${{secretAuto:jwt_signing_key}}
             username: ${{secretAuto:postgres_system_user}}
-            password: ${{secretAuto:postgres_password}}
+            password: ${{secretAuto:postgres_system_password}}
         "#,
     );
     assert_eq!(leaves.len(), 4);
@@ -355,7 +355,7 @@ fn mixed_placeholders_keep_their_kinds() {
     );
     assert_eq!(
         by_path.get("password").copied(),
-        Some(Some(Generator::PostgresPassword))
+        Some(Some(Generator::PostgresSystemPassword))
     );
 }
 
@@ -385,7 +385,7 @@ fn unknown_auto_generator_name_is_rejected() {
             assert_eq!(name, "nope");
             assert!(supported.contains("jwt_signing_key"));
             assert!(supported.contains("postgres_system_user"));
-            assert!(supported.contains("postgres_password"));
+            assert!(supported.contains("postgres_system_password"));
         }
         other => panic!("unexpected variant: {other:?}"),
     }

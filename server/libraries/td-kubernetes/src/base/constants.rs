@@ -292,6 +292,7 @@ pub const INPUT_FOLDER: &str = "input";
 pub const STAGE_FOLDER: &str = "stage";
 pub const TRASH_FOLDER: &str = "trash";
 pub const SETTINGS_FILE: &str = ".settings.json";
+pub const VAULT_FILE: &str = ".vault.json";
 pub const CLUSTER_FOLDER: &str = "cluster";
 pub const KUBE_FOLDER: &str = "kube";
 pub const CLUSTER_CONFIG_FOLDER: &str = "config";
@@ -327,7 +328,10 @@ pub const SECRET_FAMILY_CONFIG: &str = "secret-config";
 
 pub const SECRET_GENERATOR_JWT_SIGNING_KEY: &str = "jwt_signing_key";
 pub const SECRET_GENERATOR_POSTGRES_SYSTEM_USER: &str = "postgres_system_user";
-pub const SECRET_GENERATOR_POSTGRES_PASSWORD: &str = "postgres_password";
+pub const SECRET_GENERATOR_POSTGRES_SYSTEM_PASSWORD: &str = "postgres_system_password";
+pub const SECRET_GENERATOR_POSTGRES_APISERVER_PASSWORD: &str = "postgres_apiserver_password";
+#[cfg(feature = "enterprise")]
+pub const SECRET_GENERATOR_POSTGRES_AIAGENT_PASSWORD: &str = "postgres_aiagent_password";
 pub const SECRET_GENERATOR_APISERVER_SERVICE_TOKEN: &str = "apiserver_service_token";
 
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");

@@ -8,7 +8,7 @@ database_server:
     port: ${{literal:tdk_database_port}}
     database: ${{literal:tdk_database_name}}
     username: ${{secret:postgres_system_user}}
-    password: ${{secret:postgres_password}}
+    password: ${{secret:postgres_system_password}}
     ssl_mode: ${{system:tdk_database_ssl_mode}}
     ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}
   pool:

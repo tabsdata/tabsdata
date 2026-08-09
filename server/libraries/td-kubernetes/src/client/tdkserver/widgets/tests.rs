@@ -50,32 +50,33 @@ fn spinner_finish_marks_bar_as_finished() {
 
 #[test]
 fn show_box_does_not_panic_on_short_text() {
-    let outcome = std::panic::catch_unwind(|| show_box("hello", 80));
+    let outcome = std::panic::catch_unwind(|| show_box("hello", 80, true));
     assert!(outcome.is_ok(), "show_box panicked on short text");
 }
 
 #[test]
 fn show_box_does_not_panic_on_multiline_text() {
-    let outcome = std::panic::catch_unwind(|| show_box("first line\nsecond line\nthird line", 80));
+    let outcome =
+        std::panic::catch_unwind(|| show_box("first line\nsecond line\nthird line", 80, true));
     assert!(outcome.is_ok(), "show_box panicked on multiline text");
 }
 
 #[test]
 fn show_box_does_not_panic_on_unicode_text() {
-    let outcome = std::panic::catch_unwind(|| show_box("café — instância — λ", 80));
+    let outcome = std::panic::catch_unwind(|| show_box("café — instância — λ", 80, true));
     assert!(outcome.is_ok(), "show_box panicked on unicode text");
 }
 
 #[test]
 fn show_box_does_not_panic_on_long_single_line() {
     let text: String = "lorem ipsum dolor sit amet ".repeat(20);
-    let outcome = std::panic::catch_unwind(|| show_box(&text, 80));
+    let outcome = std::panic::catch_unwind(|| show_box(&text, 80, true));
     assert!(outcome.is_ok(), "show_box panicked on long single line");
 }
 
 #[test]
 fn show_box_does_not_panic_on_zero_min_width() {
-    let outcome = std::panic::catch_unwind(|| show_box("hello", 0));
+    let outcome = std::panic::catch_unwind(|| show_box("hello", 0, true));
     assert!(outcome.is_ok(), "show_box panicked on zero min width");
 }
 

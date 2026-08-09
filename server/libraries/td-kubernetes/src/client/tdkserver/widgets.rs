@@ -17,29 +17,72 @@ const BANNER: &str = include_str!(concat!(
     "/variant/assets/manifest/BANNER"
 ));
 
-pub fn show_box(text: &str, min: usize) {
+const BOX_FRAME: usize = 4;
+const BORDER_GREEN: (u8, u8, u8) = (130, 195, 105);
+const BODY_GREEN: (u8, u8, u8) = (194, 255, 38);
+const BORDER_ORANGE: (u8, u8, u8) = (215, 95, 0);
+const BODY_ORANGE: (u8, u8, u8) = (255, 175, 95);
+const BORDER_YELLOW: (u8, u8, u8) = (215, 175, 0);
+const BODY_YELLOW: (u8, u8, u8) = (255, 215, 95);
+
+pub fn show_box(text: &str, min: usize, spaced: bool) {
+    show_colored_box(text, min, BORDER_GREEN, BODY_GREEN, true, false, spaced)
+}
+
+pub fn show_notice(text: &str, min: usize, spaced: bool) {
+    show_colored_box(text, min, BORDER_ORANGE, BODY_ORANGE, false, false, spaced)
+}
+
+pub fn show_hint(text: &str, min: usize, spaced: bool) {
+    show_colored_box(text, min, BORDER_YELLOW, BODY_YELLOW, false, true, spaced)
+}
+
+fn show_colored_box(
+    text: &str,
+    min: usize,
+    border: (u8, u8, u8),
+    body: (u8, u8, u8),
+    centered: bool,
+    keep_lines: bool,
+    spaced: bool,
+) {
     #[cfg(not(windows))]
     let use_colors = supports_color::on(supports_color::Stream::Stdout).is_some();
     #[cfg(windows)]
     let use_colors = false;
 
-    let width = terminal_size()
-        .map(|(Width(width), _)| width as usize - 6)
-        .unwrap_or(50)
+    let total = terminal_size()
+        .map(|(Width(width), _)| width as usize)
+        .unwrap_or(min)
         .min(min);
-    let trimmed_text: String = text
-        .lines()
-        .map(|line| line.trim())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let width = total.saturating_sub(BOX_FRAME);
     let wrap_options = Options::new(width)
         .break_words(false)
         .word_splitter(textwrap::WordSplitter::NoHyphenation)
         .word_separator(WordSeparator::AsciiSpace);
-    let wrapped_text = fill(trimmed_text.trim(), wrap_options);
+    let wrapped_text = if keep_lines {
+        text.trim_end()
+            .lines()
+            .map(|line| fill(line, wrap_options.clone()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        let trimmed_text: String = text
+            .lines()
+            .map(|line| line.trim())
+            .collect::<Vec<_>>()
+            .join("\n");
+        fill(trimmed_text.trim(), wrap_options)
+    };
+    let width = wrapped_text
+        .lines()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(width);
     let top_border = if use_colors {
         format!("╭{}╮", "─".repeat(width + 2))
-            .blue()
+            .truecolor(border.0, border.1, border.2)
             .bold()
             .to_string()
     } else {
@@ -47,31 +90,39 @@ pub fn show_box(text: &str, min: usize) {
     };
     let bottom_border = if use_colors {
         format!("╰{}╯", "─".repeat(width + 2))
-            .blue()
+            .truecolor(border.0, border.1, border.2)
             .bold()
             .to_string()
     } else {
         format!("╰{}╯", "─".repeat(width + 2))
     };
-    println!("\n{top_border}");
+    if spaced {
+        println!();
+    }
+    println!("{top_border}");
     for line in wrapped_text.lines() {
-        let padded_line = format!("{line:^width$}");
+        let padded_line = if centered {
+            format!("{line:^width$}")
+        } else {
+            format!("{line:<width$}")
+        };
         if use_colors {
+            let edge = "│".truecolor(border.0, border.1, border.2).bold();
             println!(
                 "{} {} {}",
-                "│".blue().bold(),
-                padded_line.truecolor(194, 255, 38).bold(),
-                "│".blue().bold()
+                edge,
+                padded_line.truecolor(body.0, body.1, body.2),
+                edge
             );
         } else {
             println!("│ {padded_line} │");
         }
     }
-    println!("{bottom_border}");
+    println!("{bottom_border}\n");
 }
 
 pub fn show_banner() {
-    show_box(BANNER, 80);
+    show_colored_box(BANNER, 80, BORDER_GREEN, BODY_GREEN, true, false, false)
 }
 
 pub struct Spinner {

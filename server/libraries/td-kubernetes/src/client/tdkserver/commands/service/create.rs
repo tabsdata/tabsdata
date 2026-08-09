@@ -3,14 +3,15 @@
 //
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 
 use crate::base::constants::SECRET_FAMILY_CONFIG;
 use crate::base::reporter::{InteractiveReporter, Reporter};
 #[cfg(feature = "enterprise")]
 use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{
-    InstanceSettings, InstanceState, instance_init_input_folder, instance_init_stage_folder,
-    td_venv_activate_file,
+    InstanceSettings, InstanceState, fn_venv_activate_file, instance_init_input_folder,
+    instance_init_stage_folder, td_venv_activate_file, venvs_root,
 };
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{GlobalArguments, InstanceArguments};
@@ -20,6 +21,8 @@ use crate::client::tdkserver::commands::service::{
 use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::preview;
 use crate::client::tdkserver::render::report::helper::common::activation_command;
+use crate::client::tdkserver::widgets::show_hint;
+use crate::client::vault::InstanceVault;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::secret::upsert_secret;
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
@@ -40,7 +43,6 @@ use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
 use tracing::info;
-use tracing::warn;
 
 #[derive(Debug, Clone, Args)]
 pub struct CreateArguments {
@@ -179,7 +181,10 @@ pub async fn create_instance(
     settings.save()?;
 
     let mut system = provider.system_values()?;
-    let auto: HashMap<String, String> = HashMap::new();
+    let auto: HashMap<String, String> = InstanceVault::load(&settings.name)?
+        .secrets
+        .into_iter()
+        .collect();
 
     apply_ports(&mut system, &assigned);
 
@@ -211,27 +216,52 @@ pub async fn create_instance(
     settings.state = InstanceState::Created;
     settings.save()?;
 
-    if provider.cluster_provider().hosts_runtimes()? {
-        report_venv_activation(&settings.name)?;
-    }
+    // if provider.cluster_provider().hosts_runtimes()? {
+    //     report_venv_activation(&settings.name)?;
+    // }
 
     Ok(())
 }
 
+#[allow(dead_code)]
 fn report_venv_activation(name: &str) -> CommandResult {
-    let mut message = String::from("To activate the created environments:");
+    let root = venvs_root(name)?;
+    let mut message = format!(
+        "To activate the created environments:\n  cd {}\n",
+        root.display()
+    );
 
     let td_activate = td_venv_activate_file(name)?;
-    message.push_str(&format!("\n  td: {}", activation_command(&td_activate)));
+    message.push_str(&format!(
+        "\n  td: {}",
+        activation_command(&relative_to(&td_activate, &root))
+    ));
 
     #[cfg(feature = "enterprise")]
     {
         let ag_activate = ag_venv_activate_file(name)?;
-        message.push_str(&format!("\n  ai: {}", activation_command(&ag_activate)));
+        message.push_str(&format!(
+            "\n  ai: {}",
+            activation_command(&relative_to(&ag_activate, &root))
+        ));
     }
 
-    warn!("{message}");
+    let fn_activate = fn_venv_activate_file(name)?;
+    message.push_str(&format!(
+        "\n  fn: {}",
+        activation_command(&relative_to(&fn_activate, &root))
+    ));
+
+    show_hint(&message, 80, true);
     Ok(())
+}
+
+#[allow(dead_code)]
+fn relative_to(activate: &Path, root: &Path) -> PathBuf {
+    match activate.strip_prefix(root) {
+        Ok(relative) => Path::new(".").join(relative),
+        Err(_) => activate.to_path_buf(),
+    }
 }
 
 async fn store_secrets(

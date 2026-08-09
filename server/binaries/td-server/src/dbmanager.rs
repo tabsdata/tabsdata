@@ -27,7 +27,7 @@ use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
 use td_process::pathenv::extend_path;
 use te_database as dbm;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -116,9 +116,6 @@ async fn create(
     components: &DatabaseComponents,
     server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
-    if let Some(server) = server {
-        warn_target_divergence(components, server);
-    }
     with_server(server, async |admin| {
         info!("Creating database");
         dbm::provision_all(components, admin).await?;
@@ -204,26 +201,6 @@ async fn with_server(
     result
 }
 
-/// A component pointing at a different server than the entry is legitimate
-/// (e.g. a pooler), but usually a typo'd port — flag it.
-fn warn_target_divergence(components: &DatabaseComponents, server: &ComponentConfig) {
-    let Some(server_pg) = server.conn.postgres() else {
-        return;
-    };
-    for (key, entry) in components {
-        let Some(pg) = entry.conn.postgres() else {
-            continue;
-        };
-        if pg.host != server_pg.host || pg.port != server_pg.port {
-            warn!(
-                "component '{key}' targets {}:{}, but `database_server:` is {}:{}; \
-                 provisioning runs on the latter",
-                pg.host, pg.port, server_pg.host, server_pg.port
-            );
-        }
-    }
-}
-
 async fn wait_for_shutdown() {
     #[cfg(unix)]
     {
@@ -254,7 +231,11 @@ fn run() {
                 error!("No command given; see --help for the command groups");
                 return ExitStatus::GeneralError;
             };
-            let components = &config.database;
+            let mut resolved = config.database.clone();
+            if let Some(server) = config.database_server.as_ref() {
+                dbm::propagate_server_target(&mut resolved, server);
+            }
+            let components = &resolved;
             let server = config.database_server.as_ref();
             // Each group validates only the section it reads.
             if matches!(command, Command::Db(_))
