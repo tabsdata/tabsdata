@@ -155,4 +155,4 @@ For registering and updating functions in Tabsdata server use the following opti
 for Tabsdata server to use the correct Python packages, `--local-pkg <TABSDATA_REPO_ROOT_PATH>`.
 
 For more detail on how to use Tabsdata server please refer to
-[Tabsdata User Guide](https://docs.tabsdata.com/latest/api_ref/index.html).
+[Tabsdata User Guide](https://docs.tabsdata.com/api/).
