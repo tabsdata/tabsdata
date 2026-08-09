@@ -4,7 +4,7 @@
 
 use serde_yaml::{Mapping, Value};
 use td_database::components::{resolved_schema_of, resolved_username_of};
-use td_database::config::{BackendConfig, DatabaseComponents};
+use td_database::config::DatabaseComponents;
 
 use crate::base::error::gateway::ResolverError;
 
@@ -126,7 +126,9 @@ fn resolve(
         serde_yaml::from_value(node_at(value, property.section)?.clone()).ok()?;
     if let Some(database) = database {
         for entry in components.values_mut() {
-            let BackendConfig::Postgres(target) = &mut entry.conn;
+            let Some(target) = entry.conn.postgres_mut() else {
+                continue;
+            };
             if target.database.is_none() {
                 target.database = Some(database.to_owned());
             }

@@ -46,7 +46,9 @@ pub fn propagate_server_target(components: &mut DatabaseComponents, server: &Com
         return;
     };
     for entry in components.values_mut() {
-        let BackendConfig::Postgres(target) = &mut entry.conn;
+        let Some(target) = entry.conn.postgres_mut() else {
+            continue;
+        };
         target.host = source.host.clone();
         target.port = source.port;
         target.socket = source.socket.clone();

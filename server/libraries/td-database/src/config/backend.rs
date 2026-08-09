@@ -55,6 +55,16 @@ impl BackendConfig {
         }
     }
 
+    /// The postgres options when this backend is PostgreSQL, for modification.
+    #[cfg(postgres)]
+    pub fn postgres_mut(&mut self) -> Option<&mut PostgresConfig> {
+        match self {
+            Self::Postgres(c) => Some(c),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        }
+    }
+
     /// The configured database name, on the backends that have one.
     pub fn database(&self) -> Option<&str> {
         match self {
