@@ -204,6 +204,27 @@ pub async fn delete_secret(context: &KubeContext, name: &str) -> Result<(), Kube
     }
 }
 
+pub async fn delete_secrets(context: &KubeContext) -> Result<bool, KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = tabsdata_selector(None);
+    let parameters = ListParams::default().labels(&selector.to_string());
+    let present = api
+        .list(&parameters)
+        .await
+        .map_err(|error| KubeSecretError::ListFailed {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+            cause: error.to_string(),
+        })?
+        .items;
+    for secret in &present {
+        if let Some(name) = &secret.metadata.name {
+            delete_secret(context, name).await?;
+        }
+    }
+    Ok(!present.is_empty())
+}
+
 pub async fn get_secret(
     context: &KubeContext,
     name: &str,

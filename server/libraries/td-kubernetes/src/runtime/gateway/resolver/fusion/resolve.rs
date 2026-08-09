@@ -17,39 +17,44 @@ use crate::runtime::gateway::resolver::walker::{
     contains_placeholder, parse_bare_placeholder, placeholder_occurrences, splice_placeholders,
 };
 
-const CONFIG_LABEL: &str = "<config>";
+const REDACTED_VALUE: &str = "<hidden>";
 
+#[derive(Debug)]
 pub(super) struct ResolveOutcome {
     pub rendered: String,
     pub secrets: Vec<SecretEntry>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn resolve_config_file(
+    file: &str,
     template: &str,
     init: &str,
     system: &SystemValues,
     auto: &HashMap<String, String>,
     vault: &RefCell<HashMap<String, String>>,
     literals: &RefCell<HashMap<String, LiteralOrigin>>,
+    values: &RefCell<HashMap<String, String>>,
 ) -> Result<ResolveOutcome, ResolverError> {
     let template_value: Value =
         serde_yaml::from_str(template).map_err(|cause| ResolverError::ParseFailed {
-            path: CONFIG_LABEL.to_owned(),
+            path: file.to_owned(),
             cause: cause.to_string(),
         })?;
     let init_value: Value =
         serde_yaml::from_str(init).map_err(|cause| ResolverError::ParseFailed {
-            path: CONFIG_LABEL.to_owned(),
+            path: file.to_owned(),
             cause: cause.to_string(),
         })?;
 
     let mut session = ResolveSession {
+        file,
         system,
         auto,
         vault,
         literals,
         secrets: Vec::new(),
-        values: HashMap::new(),
+        values,
     };
     let mut path: Vec<String> = Vec::new();
     let rendered_value = session.resolve_node(&template_value, &init_value, &mut path)?;
@@ -58,7 +63,7 @@ pub(super) fn resolve_config_file(
         String::new()
     } else {
         serde_yaml::to_string(&rendered_value).map_err(|cause| ResolverError::ParseFailed {
-            path: CONFIG_LABEL.to_owned(),
+            path: file.to_owned(),
             cause: cause.to_string(),
         })?
     };
@@ -69,15 +74,20 @@ pub(super) fn resolve_config_file(
 }
 
 struct ResolveSession<'a> {
+    file: &'a str,
     system: &'a SystemValues,
     auto: &'a HashMap<String, String>,
     vault: &'a RefCell<HashMap<String, String>>,
     literals: &'a RefCell<HashMap<String, LiteralOrigin>>,
     secrets: Vec<SecretEntry>,
-    values: HashMap<String, String>,
+    values: &'a RefCell<HashMap<String, String>>,
 }
 
 impl ResolveSession<'_> {
+    fn displayed(&self, path: &[String]) -> String {
+        format!("{}:{}", self.file, path.join(PATH_SEPARATOR))
+    }
+
     fn resolve_node(
         &mut self,
         template: &Value,
@@ -135,7 +145,7 @@ impl ResolveSession<'_> {
         init_items: &[Value],
         path: &mut Vec<String>,
     ) -> Result<Value, ResolverError> {
-        let displayed_path = path.join(PATH_SEPARATOR);
+        let displayed_path = self.displayed(path);
         let first_template =
             template_items
                 .first()
@@ -204,7 +214,7 @@ impl ResolveSession<'_> {
         init: &Value,
         path: &[String],
     ) -> Result<Value, ResolverError> {
-        let displayed_path = path.join(PATH_SEPARATOR);
+        let displayed_path = self.displayed(path);
         let resolver = resolver_for(&placeholder.kind, &displayed_path)?;
         let kind = resolver.kind();
         let init_text = scalar_text(init, &displayed_path)?;
@@ -227,6 +237,7 @@ impl ResolveSession<'_> {
                 let context = self.context(placeholder, init_text, path);
                 let resolution = resolver.resolve(&context)?;
                 if let Some(secret) = resolution.secret {
+                    self.record_value_as(placeholder, &displayed_path, &secret.value, true)?;
                     self.secrets.push(secret);
                 }
                 Ok(Value::String(resolution.rendered))
@@ -240,7 +251,7 @@ impl ResolveSession<'_> {
         init: &Value,
         path: &[String],
     ) -> Result<Value, ResolverError> {
-        let displayed_path = path.join(PATH_SEPARATOR);
+        let displayed_path = self.displayed(path);
         for placeholder in placeholder_occurrences(template_text) {
             let resolver = resolver_for(&placeholder.kind, &displayed_path)?;
             if resolver.kind().behavior() != Substitution::Fixed {
@@ -291,6 +302,7 @@ impl ResolveSession<'_> {
             .and_then(|category| self.auto.get(category))
             .map(String::as_str);
         ResolveContext {
+            file: self.file,
             path,
             occurrence: 0,
             placeholder,
@@ -338,17 +350,37 @@ impl ResolveSession<'_> {
         path: &str,
         rendered: &str,
     ) -> Result<(), ResolverError> {
-        let identity = placeholder_identity(placeholder);
-        match self.values.get(&identity) {
+        self.record_value_as(placeholder, path, rendered, false)
+    }
+
+    fn record_value_as(
+        &mut self,
+        placeholder: &Placeholder,
+        path: &str,
+        rendered: &str,
+        redact: bool,
+    ) -> Result<(), ResolverError> {
+        let Some(identity) = qualified_identity(placeholder) else {
+            return Ok(());
+        };
+        let mut values = self.values.borrow_mut();
+        let shown = |value: &str| {
+            if redact {
+                REDACTED_VALUE.to_owned()
+            } else {
+                value.to_owned()
+            }
+        };
+        match values.get(&identity) {
             Some(existing) if existing == rendered => Ok(()),
             Some(existing) => Err(ResolverError::DivergingPlaceholderValue {
                 identity,
                 path: path.to_owned(),
-                first: existing.clone(),
-                second: rendered.to_owned(),
+                first: shown(existing),
+                second: shown(rendered),
             }),
             None => {
-                self.values.insert(identity, rendered.to_owned());
+                values.insert(identity, rendered.to_owned());
                 Ok(())
             }
         }
@@ -356,7 +388,7 @@ impl ResolveSession<'_> {
 
     fn structure_mismatch(&self, path: &[String]) -> ResolverError {
         ResolverError::StructureMismatch {
-            path: path.join(PATH_SEPARATOR),
+            path: self.displayed(path),
         }
     }
 
@@ -452,11 +484,12 @@ fn node_contains_placeholder(node: &Value) -> bool {
     }
 }
 
-fn placeholder_identity(placeholder: &Placeholder) -> String {
-    match &placeholder.category {
-        Some(category) => format!("{}:{}", placeholder.kind, category),
-        None => placeholder.kind.clone(),
-    }
+fn qualified_identity(placeholder: &Placeholder) -> Option<String> {
+    placeholder
+        .category
+        .as_deref()
+        .filter(|category| !category.is_empty())
+        .map(|category| format!("{}:{}", placeholder.kind, category))
 }
 
 fn scalar_text<'a>(value: &'a Value, path: &str) -> Result<Option<Cow<'a, str>>, ResolverError> {

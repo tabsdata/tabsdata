@@ -126,6 +126,14 @@ pub fn restart_service(summary: &Summary, markers: &SettingsMarkers) {
     render_marked_summary_lines(summary, markers);
 }
 
+pub fn delete_service(summary: &Summary, markers: &SettingsMarkers, trash: bool) {
+    info!("About to delete tabsdata instance:");
+    render_marked_summary_lines(summary, markers);
+    if trash {
+        info!("  - trash........: the instance folder will be trashed once deleted");
+    }
+}
+
 pub fn trash_service(instance: &str, source: &str, trash: &str) {
     info!("About to trash tabsdata instance:");
     info!("  - instance name..: {instance}");

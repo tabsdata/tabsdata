@@ -10,8 +10,8 @@ use std::time::Duration;
 use td_common::status::ExitStatus;
 
 use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
-use crate::cerror;
 use crate::core::system::exit::{CommandResult, abort};
+use crate::{cerror, cwarn};
 
 pub const PROMPT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -134,6 +134,43 @@ fn prompt_yes_no_with_timeout(message: &str, timeout: Duration) -> Confirmation 
             Ok(LineOutcome::Closed) => return Confirmation::No,
             Err(mpsc::RecvTimeoutError::Timeout) => return Confirmation::TimedOut,
             Err(mpsc::RecvTimeoutError::Disconnected) => return Confirmation::No,
+        }
+    }
+}
+
+pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
+    if skip {
+        return Ok(true);
+    }
+    let receiver = stdin_lines().lock().unwrap();
+    let started = std::time::Instant::now();
+    loop {
+        print!("Type the instance name '{name}' to confirm: ");
+        io::stdout().flush().ok();
+        let Some(remaining) = PROMPT_TIMEOUT.checked_sub(started.elapsed()) else {
+            cerror!(
+                "No response received within {} seconds; the operation was cancelled.",
+                PROMPT_TIMEOUT.as_secs()
+            );
+            return abort(ExitStatus::Aborted);
+        };
+        match receiver.recv_timeout(remaining) {
+            Ok(LineOutcome::Line(line)) => {
+                let answer = line.trim();
+                if answer == name {
+                    return Ok(true);
+                }
+                cwarn!("'{answer}' is not '{name}'.");
+            }
+            Ok(LineOutcome::Closed) => return Ok(false),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                cerror!(
+                    "No response received within {} seconds; the operation was cancelled.",
+                    PROMPT_TIMEOUT.as_secs()
+                );
+                return abort(ExitStatus::Aborted);
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(false),
         }
     }
 }

@@ -4,6 +4,7 @@
 
 pub mod check;
 pub mod create;
+pub mod delete;
 pub mod get;
 pub mod info;
 pub mod init;

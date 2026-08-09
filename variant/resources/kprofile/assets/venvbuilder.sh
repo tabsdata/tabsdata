@@ -256,6 +256,13 @@ setup_workspace() {
    echo ">> Using uv link mode $UV_LINK_MODE"
 }
 
+report_indexes() {
+   local variable
+   for variable in UV_DEFAULT_INDEX UV_EXTRA_INDEX_URL UV_INDEX_STRATEGY; do
+      printf ">> %-18s = %s\n" "$variable" "${!variable:-<unset>}"
+   done
+}
+
 install_prerequisites() {
    export DEBIAN_FRONTEND=noninteractive
    run apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update
@@ -440,6 +447,7 @@ main() {
    parse_arguments "$@"
    validate_arguments
    setup_workspace
+   step "Reporting the package indexes"      report_indexes
    step "Installing prerequisites"           install_prerequisites
    step "Installing uv"                      install_uv
    step "Installing Python"                  install_python

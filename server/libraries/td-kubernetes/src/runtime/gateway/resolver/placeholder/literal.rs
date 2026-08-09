@@ -5,7 +5,7 @@
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, LiteralOrigin, PATH_SEPARATOR, Resolution, ResolveContext, Rule,
+    ConcreteResolver, LiteralOrigin, Resolution, ResolveContext, Rule,
 };
 
 pub(crate) struct LiteralResolver {
@@ -34,7 +34,7 @@ impl LiteralResolver {
                         String::new()
                     }
                     None => {
-                        let path = context.path.join(PATH_SEPARATOR);
+                        let path = context.displayed();
                         return Err(ResolverError::MissingRequiredValue {
                             path,
                             kind: self.kind().as_str().to_owned(),
@@ -67,7 +67,7 @@ impl LiteralResolver {
                 category.to_owned(),
                 LiteralOrigin {
                     value: value.to_owned(),
-                    path: context.path.join(PATH_SEPARATOR),
+                    path: context.displayed(),
                 },
             );
         }

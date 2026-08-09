@@ -8,7 +8,7 @@ use std::env;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, Rule, SecretEntry,
+    ConcreteResolver, Resolution, ResolveContext, Rule, SecretEntry,
 };
 use crate::runtime::secrets::generator::Generator;
 use crate::runtime::secrets::walker::encode_secret_key;
@@ -27,10 +27,32 @@ impl SecretResolver {
     fn secret_key(&self, context: &ResolveContext) -> Result<String, ResolverError> {
         encode_secret_key(CONSUMER_LABEL, context.path).map_err(|cause| {
             ResolverError::SecretKeyEncodingFailed {
-                path: context.path.join(PATH_SEPARATOR),
+                path: context.displayed(),
                 cause: cause.to_string(),
             }
         })
+    }
+
+    fn memoized(&self, context: &ResolveContext) -> Option<String> {
+        let category = context.placeholder.category.as_deref()?;
+        if category.is_empty() {
+            return None;
+        }
+        context.vault.borrow().get(category).cloned()
+    }
+
+    fn remember(&self, context: &ResolveContext, value: &str) {
+        let Some(category) = context.placeholder.category.as_deref() else {
+            return;
+        };
+        if category.is_empty() {
+            return;
+        }
+        context
+            .vault
+            .borrow_mut()
+            .entry(category.to_owned())
+            .or_insert_with(|| value.to_owned());
     }
 
     fn generate(
@@ -49,7 +71,7 @@ impl SecretResolver {
             }
             let value = generator.generate(&BTreeMap::new()).map_err(|cause| {
                 ResolverError::GeneratorFailed {
-                    path: context.path.join(PATH_SEPARATOR),
+                    path: context.displayed(),
                     generator: category.to_owned(),
                     cause: cause.to_string(),
                 }
@@ -60,13 +82,13 @@ impl SecretResolver {
 
         let category = context.placeholder.category.as_deref().ok_or_else(|| {
             ResolverError::MissingPlaceholderCategory {
-                path: context.path.join(PATH_SEPARATOR),
+                path: context.displayed(),
                 kind: self.kind().as_str().to_owned(),
             }
         })?;
         let generator =
             Generator::from_name(category).ok_or_else(|| ResolverError::UnknownGenerator {
-                path: context.path.join(PATH_SEPARATOR),
+                path: context.displayed(),
                 generator: category.to_owned(),
                 supported: Generator::supported().join(", "),
             })?;
@@ -102,24 +124,34 @@ impl ConcreteResolver for SecretResolver {
             .filter(|value| !value.is_empty() && *value != token);
         let category = context.placeholder.category.clone();
         let secret = match provided {
-            Some(value) => Some(SecretEntry {
-                key,
-                value: value.to_owned(),
-                category,
-            }),
-            None if self.auto => self.generate(context, key)?,
-            None if context.placeholder.rule == Rule::Optional => Some(SecretEntry {
-                key,
-                value: String::new(),
-                category,
-            }),
-            None => {
-                return Err(ResolverError::MissingRequiredValue {
-                    path: context.path.join(PATH_SEPARATOR),
-                    kind: self.kind().as_str().to_owned(),
-                    category: context.placeholder.category.clone().unwrap_or_default(),
-                });
+            Some(value) => {
+                self.remember(context, value);
+                Some(SecretEntry {
+                    key,
+                    value: value.to_owned(),
+                    category,
+                })
             }
+            None if self.auto => self.generate(context, key)?,
+            None => match self.memoized(context) {
+                Some(value) => Some(SecretEntry {
+                    key,
+                    value,
+                    category,
+                }),
+                None if context.placeholder.rule == Rule::Optional => Some(SecretEntry {
+                    key,
+                    value: String::new(),
+                    category,
+                }),
+                None => {
+                    return Err(ResolverError::MissingRequiredValue {
+                        path: context.displayed(),
+                        kind: self.kind().as_str().to_owned(),
+                        category: context.placeholder.category.clone().unwrap_or_default(),
+                    });
+                }
+            },
         };
         Ok(Resolution {
             rendered: context.placeholder.token(),

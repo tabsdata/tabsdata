@@ -16,7 +16,7 @@ use std::env;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, Rule,
+    ConcreteResolver, Resolution, ResolveContext, Rule,
 };
 
 pub(crate) struct EnvResolver;
@@ -29,7 +29,7 @@ impl EnvResolver {
     fn variable(&self, context: &ResolveContext) -> Result<String, ResolverError> {
         context.placeholder.category.clone().ok_or_else(|| {
             ResolverError::MissingPlaceholderCategory {
-                path: context.path.join(PATH_SEPARATOR),
+                path: context.displayed(),
                 kind: self.kind().as_str().to_owned(),
             }
         })

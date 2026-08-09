@@ -203,6 +203,27 @@ pub async fn delete_configmap(context: &KubeContext, name: &str) -> Result<(), K
     }
 }
 
+pub async fn delete_configmaps(context: &KubeContext) -> Result<bool, KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = tabsdata_selector(None);
+    let parameters = ListParams::default().labels(&selector.to_string());
+    let present = api
+        .list(&parameters)
+        .await
+        .map_err(|error| KubeConfigMapError::ListFailed {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+            cause: error.to_string(),
+        })?
+        .items;
+    for configmap in &present {
+        if let Some(name) = &configmap.metadata.name {
+            delete_configmap(context, name).await?;
+        }
+    }
+    Ok(!present.is_empty())
+}
+
 pub async fn get_configmap(
     context: &KubeContext,
     name: &str,

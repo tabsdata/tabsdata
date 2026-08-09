@@ -57,7 +57,15 @@ SYSCONFIG_PATH_SCRIPTS: str = "scripts"
 PYTHON_EXECUTABLE: str = "python"
 UV_EXECUTABLE: str = "uv"
 
+ENV_UV_DEFAULT_INDEX: str = "UV_DEFAULT_INDEX"
 ENV_UV_EXTRA_INDEX_URL: str = "UV_EXTRA_INDEX_URL"
+ENV_UV_INDEX_STRATEGY: str = "UV_INDEX_STRATEGY"
+ENV_UV_INDEX: tuple[str, ...] = (
+    ENV_UV_DEFAULT_INDEX,
+    ENV_UV_EXTRA_INDEX_URL,
+    ENV_UV_INDEX_STRATEGY,
+)
+UNSET_INDEX: str = "<unset>"
 ENV_UV_LINK_MODE: str = "UV_LINK_MODE"
 UV_LINK_MODE_COPY: str = "copy"
 
@@ -378,6 +386,13 @@ def setup_workspace(arguments: argparse.Namespace) -> dict[str, str]:
     print(f">> Using uv home {uv_home}")
     print(f">> Using uv link mode {os.environ[ENV_UV_LINK_MODE]}")
     return workspace
+
+
+def report_indexes() -> None:
+    width = max(len(variable) for variable in ENV_UV_INDEX)
+    for variable in ENV_UV_INDEX:
+        value = os.environ.get(variable, "").strip()
+        print(f">> {variable:<{width}} = {value if value else UNSET_INDEX}")
 
 
 def install_prerequisites() -> None:
@@ -734,6 +749,7 @@ def main() -> None:
     arguments = parse_arguments()
     validate_arguments(arguments)
     workspace = setup_workspace(arguments)
+    step("Reporting the package indexes", report_indexes)
     step("Installing prerequisites", install_prerequisites)
     step("Installing uv", install_uv, workspace)
     step("Cleaning the cache", clean_cache, workspace)

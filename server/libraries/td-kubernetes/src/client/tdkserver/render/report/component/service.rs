@@ -210,6 +210,17 @@ pub fn started_service(summary: &Summary) {
     }
 }
 
+pub fn deleted_service(summary: &Summary) {
+    if let Some(name) = &summary.instance_name {
+        info!("Deleted tabsdata instance '{name}'. Its configuration is kept for a new create.");
+    } else if let Some(namespace) = &summary.namespace {
+        info!("Deleted tabsdata instance in namespace '{namespace}'.");
+    } else {
+        info!("Deleted tabsdata instance.");
+    }
+    render_session_lines(summary);
+}
+
 pub fn stopped_service(summary: &Summary) {
     if let Some(name) = &summary.instance_name {
         if let Some(path) = &summary.instance_path {

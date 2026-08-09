@@ -4,7 +4,10 @@
 
 mod resolve;
 
-use crate::runtime::gateway::resolver::walker::LiteralOrigin;
+use crate::runtime::gateway::resolver::kind::PlaceholderKind;
+use crate::runtime::gateway::resolver::walker::{
+    LiteralOrigin, PATH_SEPARATOR, parse_bare_placeholder,
+};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -57,7 +60,9 @@ pub fn merge(
     let empty_auto: HashMap<String, String> = HashMap::new();
     let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     let literals: RefCell<HashMap<String, LiteralOrigin>> = RefCell::new(HashMap::new());
+    let values: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     seed_vault_from_server_secrets(&vault, &profile.configs, server_secrets);
+    seed_literals_from_input(&literals, &vault, &profile.configs, &input_configs);
     let mut merged = Vec::new();
     for (file, template) in &profile.configs {
         if file.ends_with(SCHEMA_EXTENSION) {
@@ -76,12 +81,14 @@ pub fn merge(
         };
         let template = bake_schema_secrets(file, template, &profile.configs)?;
         let outcome = resolve_config_file(
+            file,
             &template,
             &prefilled,
             system,
             &empty_auto,
             &vault,
             &literals,
+            &values,
         )?;
         merged.push(MergedConfig {
             file: file.clone(),
@@ -90,6 +97,124 @@ pub fn merge(
         });
     }
     Ok(merged)
+}
+
+fn seed_literals_from_input(
+    literals: &RefCell<HashMap<String, LiteralOrigin>>,
+    vault: &RefCell<HashMap<String, String>>,
+    configs: &RenderedConfigmap,
+    input_configs: &Path,
+) {
+    let mut literals = literals.borrow_mut();
+    let mut vault = vault.borrow_mut();
+    for (file, template) in configs {
+        if file.ends_with(SCHEMA_EXTENSION) {
+            continue;
+        }
+        let Ok(input_content) = fs::read_to_string(input_configs.join(file)) else {
+            continue;
+        };
+        let Ok(template_value) = serde_yaml::from_str::<Value>(template) else {
+            continue;
+        };
+        let Ok(input_value) = serde_yaml::from_str::<Value>(&input_content) else {
+            continue;
+        };
+        let mut path: Vec<String> = Vec::new();
+        harvest_supplied(
+            &template_value,
+            &input_value,
+            &mut path,
+            &mut literals,
+            &mut vault,
+        );
+    }
+}
+
+fn harvest_supplied(
+    template: &Value,
+    init: &Value,
+    path: &mut Vec<String>,
+    literals: &mut HashMap<String, LiteralOrigin>,
+    vault: &mut HashMap<String, String>,
+) {
+    match template {
+        Value::String(text) => {
+            let Some(placeholder) = parse_bare_placeholder(text) else {
+                return;
+            };
+            let Ok(kind) = placeholder.kind.parse::<PlaceholderKind>() else {
+                return;
+            };
+            let shared = matches!(
+                kind,
+                PlaceholderKind::Literal | PlaceholderKind::LiteralAuto | PlaceholderKind::Secret
+            );
+            if !shared {
+                return;
+            }
+            let Some(category) = placeholder.category.filter(|category| !category.is_empty())
+            else {
+                return;
+            };
+            let Some(value) = scalar_text(init) else {
+                return;
+            };
+            if value.is_empty() || value == *text {
+                return;
+            }
+            match kind {
+                PlaceholderKind::Secret => {
+                    vault.entry(category).or_insert(value);
+                }
+                _ => {
+                    literals.entry(category).or_insert_with(|| LiteralOrigin {
+                        value,
+                        path: path.join(PATH_SEPARATOR),
+                    });
+                }
+            }
+        }
+        Value::Mapping(map) => {
+            let Value::Mapping(init_map) = init else {
+                return;
+            };
+            for (key, child) in map {
+                let Some(segment) = key.as_str() else {
+                    continue;
+                };
+                let Some(init_child) = init_map.get(key) else {
+                    continue;
+                };
+                path.push(segment.to_owned());
+                harvest_supplied(child, init_child, path, literals, vault);
+                path.pop();
+            }
+        }
+        Value::Sequence(items) => {
+            let Value::Sequence(init_items) = init else {
+                return;
+            };
+            for (index, item) in items.iter().enumerate() {
+                let Some(init_item) = init_items.get(index) else {
+                    continue;
+                };
+                path.push(index.to_string());
+                harvest_supplied(item, init_item, path, literals, vault);
+                path.pop();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn scalar_text(node: &Value) -> Option<String> {
+    match node {
+        Value::String(text) => Some(text.clone()),
+        Value::Number(number) => Some(number.to_string()),
+        Value::Bool(boolean) => Some(boolean.to_string()),
+        _ => None,
+    }
 }
 
 fn seed_vault_from_server_secrets(
@@ -186,6 +311,8 @@ fn resolve_configs_files(
     create_folder(&stage_configs)?;
     let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     let literals: RefCell<HashMap<String, LiteralOrigin>> = RefCell::new(HashMap::new());
+    let values: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    seed_literals_from_input(&literals, &vault, &profile.configs, &init_configs);
     let mut by_file = Vec::new();
     for (file, template) in &profile.configs {
         if file.ends_with(SCHEMA_EXTENSION) {
@@ -199,8 +326,16 @@ fn resolve_configs_files(
             }
         })?;
         let template = bake_schema_secrets(file, template, &profile.configs)?;
-        let outcome =
-            resolve_config_file(&template, &init_content, system, auto, &vault, &literals)?;
+        let outcome = resolve_config_file(
+            file,
+            &template,
+            &init_content,
+            system,
+            auto,
+            &vault,
+            &literals,
+            &values,
+        )?;
         write_staged(&stage_configs.join(file), &outcome.rendered)?;
         by_file.push((file.clone(), outcome.secrets));
     }

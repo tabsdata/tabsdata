@@ -21,6 +21,7 @@ use crate::client::tdkserver::commands::about::command_about;
 use crate::client::tdkserver::commands::banner::command_banner;
 use crate::client::tdkserver::commands::help::{HelpArguments, command_help};
 use crate::client::tdkserver::commands::service::create::command_create;
+use crate::client::tdkserver::commands::service::delete::command_delete;
 use crate::client::tdkserver::commands::service::get::command_get;
 use crate::client::tdkserver::commands::service::info::command_info;
 use crate::client::tdkserver::commands::service::init::command_init;
@@ -75,6 +76,7 @@ impl TabsDataKubernetesClient {
             Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,
             Some(Commands::Init(arguments)) => command_init(arguments, &globals).await,
             Some(Commands::Create(arguments)) => command_create(arguments, &globals).await,
+            Some(Commands::Delete(arguments)) => command_delete(arguments, &globals).await,
             Some(Commands::Start(arguments)) => command_start(arguments, &globals).await,
             Some(Commands::Stop(arguments)) => command_stop(arguments, &globals).await,
             Some(Commands::Restart(arguments)) => command_restart(arguments, &globals).await,

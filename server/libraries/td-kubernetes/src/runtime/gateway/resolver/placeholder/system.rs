@@ -17,9 +17,7 @@ use crate::base::constants::IndexReach;
 use crate::base::constants::UvMode;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
-use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext,
-};
+use crate::runtime::gateway::resolver::walker::{ConcreteResolver, Resolution, ResolveContext};
 
 static PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\$\{sys:(\w+)}").expect("The system-value placeholder pattern is invalid.")
@@ -239,7 +237,7 @@ impl SystemResolver {
     }
 
     fn lookup_value(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
-        let path = context.path.join(PATH_SEPARATOR);
+        let path = context.displayed();
         let category = context.placeholder.category.as_deref().ok_or_else(|| {
             ResolverError::MissingPlaceholderCategory {
                 path: path.clone(),

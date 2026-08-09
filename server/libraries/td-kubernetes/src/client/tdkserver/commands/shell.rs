@@ -24,6 +24,7 @@ use super::help::{ShellHelpArguments, command_shell_help};
 use super::service::InstanceNameArguments;
 use super::service::check::{CheckArguments, command_check};
 use super::service::create::{CreateArguments, command_create};
+use super::service::delete::{DeleteArguments, command_delete};
 use super::service::get::{GetArguments, command_get};
 use super::service::info::{InfoCommands, command_info};
 use super::service::init::{InitArguments, command_init};
@@ -68,6 +69,8 @@ enum ShellCommand {
     Init(InitArguments),
     #[command(about = "Create a tabsdata instance")]
     Create(CreateArguments),
+    #[command(about = "Delete the resources of a tabsdata instance")]
+    Delete(DeleteArguments),
     #[command(about = "Start a tabsdata instance")]
     Start(StartArguments),
     #[command(about = "Stop a tabsdata instance")]
@@ -210,6 +213,9 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 }
                 ShellCommand::Create(arguments) => {
                     let _ = command_create(arguments, globals).await;
+                }
+                ShellCommand::Delete(arguments) => {
+                    let _ = command_delete(arguments, globals).await;
                 }
                 ShellCommand::Start(arguments) => {
                     let _ = command_start(arguments, globals).await;

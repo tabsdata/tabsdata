@@ -133,3 +133,61 @@ fn only_yaml_templates_are_considered() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].category, "openai-key");
 }
+
+fn templates(entries: &[(&str, &str)]) -> BTreeMap<String, String> {
+    entries
+        .iter()
+        .map(|(name, content)| ((*name).to_owned(), (*content).to_owned()))
+        .collect()
+}
+
+#[test]
+fn a_category_supplied_in_one_file_is_settled_for_every_file() {
+    let template = "host: ${{literal:tdk_database_host}}\n";
+    let settled = settled_categories(
+        &templates(&[
+            ("apiserver.database.yaml", template),
+            ("dbmanager.database.yaml", template),
+        ]),
+        &sources(&[
+            ("apiserver.database.yaml", template),
+            ("dbmanager.database.yaml", "host: dimax\n"),
+        ]),
+    );
+    assert!(settled.contains("tdk_database_host"));
+}
+
+#[test]
+fn a_category_supplied_nowhere_is_not_settled() {
+    let template = "host: ${{literal:tdk_database_host}}\n";
+    let settled = settled_categories(
+        &templates(&[("apiserver.database.yaml", template)]),
+        &sources(&[("apiserver.database.yaml", template)]),
+    );
+    assert!(settled.is_empty());
+}
+
+#[test]
+fn a_supplied_secret_category_is_settled_too() {
+    let template = "username: ${{secret:postgres_system_user}}\n";
+    let settled = settled_categories(
+        &templates(&[
+            ("apiserver.database.yaml", template),
+            ("dbmanager.database.yaml", template),
+        ]),
+        &sources(&[
+            ("apiserver.database.yaml", template),
+            ("dbmanager.database.yaml", "username: dbadmin\n"),
+        ]),
+    );
+    assert!(settled.contains("postgres_system_user"));
+}
+
+#[test]
+fn a_file_without_a_template_is_ignored() {
+    let settled = settled_categories(
+        &templates(&[]),
+        &sources(&[("unknown.yaml", "host: dimax\n")]),
+    );
+    assert!(settled.is_empty());
+}

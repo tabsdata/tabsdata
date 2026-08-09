@@ -27,6 +27,7 @@ fn context<'a>(
     system: &'a SystemValues,
 ) -> ResolveContext<'a> {
     ResolveContext {
+        file: "config.yaml",
         path,
         occurrence: 0,
         placeholder,

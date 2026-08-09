@@ -102,6 +102,7 @@ pub enum Phase {
 }
 
 pub struct ResolveContext<'a> {
+    pub file: &'a str,
     pub path: &'a [String],
     pub occurrence: usize,
     pub placeholder: &'a Placeholder,
@@ -110,6 +111,12 @@ pub struct ResolveContext<'a> {
     pub vault: &'a RefCell<HashMap<String, String>>,
     pub literals: &'a RefCell<HashMap<String, LiteralOrigin>>,
     pub system: &'a super::SystemValues,
+}
+
+impl ResolveContext<'_> {
+    pub fn displayed(&self) -> String {
+        format!("{}:{}", self.file, self.path.join(PATH_SEPARATOR))
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -87,6 +87,8 @@ pub async fn command_check(arguments: CheckArguments, globals: &GlobalArguments)
     let provider = provider_for_instance_any_state(instance.value, globals.verbose).await?;
     let name = provider.summary().instance_name.unwrap_or_default();
 
+    let profile = load_profile(provider.cluster_provider(), globals.verbose)?;
+
     let (stage, folder) = if edit {
         ("edit", instance_edit_input_folder(&name)?)
     } else {
@@ -101,9 +103,13 @@ pub async fn command_check(arguments: CheckArguments, globals: &GlobalArguments)
         return Ok(());
     }
 
-    let pending = collect_entries(placeholders_in_folder(&configs)?);
+    let sources = placeholders_in_folder(&configs)?;
+    let settled = settled_categories(&profile.configs, &sources);
+    let pending: Vec<CheckEntry> = collect_entries(sources)
+        .into_iter()
+        .filter(|entry| !settled.contains(&entry.category))
+        .collect();
     let provided = if all {
-        let profile = load_profile(provider.cluster_provider(), globals.verbose)?;
         let expected = collect_entries(placeholders_in_templates(&profile.configs));
         remaining(expected, &pending)
     } else {
@@ -157,6 +163,29 @@ fn remaining(expected: Vec<CheckEntry>, pending: &[CheckEntry]) -> Vec<CheckEntr
                 .any(|other| other.category == entry.category && other.kind == entry.kind)
         })
         .collect()
+}
+
+fn settled_categories(
+    templates: &BTreeMap<String, String>,
+    sources: &[(String, String)],
+) -> BTreeSet<String> {
+    let mut settled = BTreeSet::new();
+    for (file, content) in sources {
+        let Some(template) = templates.get(file) else {
+            continue;
+        };
+        let expected = collect_entries(vec![(file.clone(), template.clone())]);
+        let outstanding = collect_entries(vec![(file.clone(), content.clone())]);
+        for entry in expected {
+            if !outstanding
+                .iter()
+                .any(|other| other.category == entry.category && other.kind == entry.kind)
+            {
+                settled.insert(entry.category);
+            }
+        }
+    }
+    settled
 }
 
 fn placeholders_in_folder(configs: &Path) -> CommandResult<Vec<(String, String)>> {

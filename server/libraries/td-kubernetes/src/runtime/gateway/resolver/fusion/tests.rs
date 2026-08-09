@@ -334,3 +334,296 @@ fn stage_assets_files_stages_the_foreign_asset_absent_from_the_kprofile() {
     );
     assert!(stage.join("assets").join("venvloader.sh").is_file());
 }
+
+fn seeded(
+    name: &str,
+    templates: &[(&str, &str)],
+    inputs: &[(&str, &str)],
+) -> (HashMap<String, LiteralOrigin>, HashMap<String, String>) {
+    let folder = std::env::temp_dir().join(format!("tdk_seed_{name}"));
+    let _ = std::fs::remove_dir_all(&folder);
+    std::fs::create_dir_all(&folder).expect("folder");
+    for (file, content) in inputs {
+        std::fs::write(folder.join(file), content).expect("write input");
+    }
+    let literals: RefCell<HashMap<String, LiteralOrigin>> = RefCell::new(HashMap::new());
+    let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    seed_literals_from_input(&literals, &vault, &configs(templates), &folder);
+    let _ = std::fs::remove_dir_all(&folder);
+    (literals.into_inner(), vault.into_inner())
+}
+
+const LITERAL_HOST: &str =
+    "database:\n  apiserver:\n    postgres:\n      host: ${{literal:tdk_database_host}}\n";
+const SECRET_USER: &str =
+    "database_server:\n  postgres:\n    username: ${{secret:postgres_system_user}}\n";
+
+#[test]
+fn a_literal_supplied_in_a_later_file_reaches_an_earlier_one() {
+    let (literals, _) = seeded(
+        "literal_later",
+        &[
+            ("apiserver.database.yaml", LITERAL_HOST),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+            ),
+        ],
+        &[
+            ("apiserver.database.yaml", LITERAL_HOST),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    host: dimax\n",
+            ),
+        ],
+    );
+    assert_eq!(
+        literals.get("tdk_database_host").map(|o| o.value.as_str()),
+        Some("dimax")
+    );
+}
+
+#[test]
+fn a_literal_supplied_in_an_earlier_file_reaches_a_later_one() {
+    let (literals, _) = seeded(
+        "literal_earlier",
+        &[
+            ("apiserver.database.yaml", LITERAL_HOST),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+            ),
+        ],
+        &[
+            (
+                "apiserver.database.yaml",
+                "database:\n  apiserver:\n    postgres:\n      host: earlyhost\n",
+            ),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+            ),
+        ],
+    );
+    assert_eq!(
+        literals.get("tdk_database_host").map(|o| o.value.as_str()),
+        Some("earlyhost")
+    );
+}
+
+#[test]
+fn a_secret_supplied_in_a_later_file_reaches_an_earlier_one() {
+    let (_, vault) = seeded(
+        "secret_later",
+        &[
+            (
+                "apiserver.database.yaml",
+                "database:\n  apiserver:\n    postgres:\n      username: ${{secret:postgres_system_user}}\n",
+            ),
+            ("dbmanager.database.yaml", SECRET_USER),
+        ],
+        &[
+            (
+                "apiserver.database.yaml",
+                "database:\n  apiserver:\n    postgres:\n      username: ${{secret:postgres_system_user}}\n",
+            ),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    username: dbadmin\n",
+            ),
+        ],
+    );
+    assert_eq!(
+        vault.get("postgres_system_user").map(String::as_str),
+        Some("dbadmin")
+    );
+}
+
+#[test]
+fn the_first_file_in_order_wins_when_two_supply_the_same_category() {
+    let (literals, _) = seeded(
+        "literal_conflict",
+        &[
+            ("apiserver.database.yaml", LITERAL_HOST),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+            ),
+        ],
+        &[
+            (
+                "apiserver.database.yaml",
+                "database:\n  apiserver:\n    postgres:\n      host: first\n",
+            ),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    host: second\n",
+            ),
+        ],
+    );
+    assert_eq!(
+        literals.get("tdk_database_host").map(|o| o.value.as_str()),
+        Some("first")
+    );
+}
+
+#[test]
+fn an_unsupplied_token_is_not_seeded() {
+    let (literals, vault) = seeded(
+        "nothing_supplied",
+        &[
+            ("apiserver.database.yaml", LITERAL_HOST),
+            ("dbmanager.database.yaml", SECRET_USER),
+        ],
+        &[
+            ("apiserver.database.yaml", LITERAL_HOST),
+            ("dbmanager.database.yaml", SECRET_USER),
+        ],
+    );
+    assert!(literals.is_empty());
+    assert!(vault.is_empty());
+}
+
+#[test]
+fn an_empty_value_is_not_seeded() {
+    let (literals, _) = seeded(
+        "empty_value",
+        &[("apiserver.database.yaml", LITERAL_HOST)],
+        &[(
+            "apiserver.database.yaml",
+            "database:\n  apiserver:\n    postgres:\n      host: \"\"\n",
+        )],
+    );
+    assert!(literals.is_empty());
+}
+
+#[test]
+fn non_string_scalars_are_seeded_as_text() {
+    let (literals, _) = seeded(
+        "numeric_value",
+        &[(
+            "apiserver.database.yaml",
+            "database:\n  apiserver:\n    postgres:\n      port: ${{literal:tdk_database_port}}\n",
+        )],
+        &[(
+            "apiserver.database.yaml",
+            "database:\n  apiserver:\n    postgres:\n      port: 5432\n",
+        )],
+    );
+    assert_eq!(
+        literals.get("tdk_database_port").map(|o| o.value.as_str()),
+        Some("5432")
+    );
+}
+
+#[test]
+fn generated_secrets_are_not_seeded_from_input() {
+    let (_, vault) = seeded(
+        "auto_secret",
+        &[(
+            "apiserver.service.yaml",
+            "jwt:\n  secret: ${{secretAuto:jwt_signing_key}}\n",
+        )],
+        &[("apiserver.service.yaml", "jwt:\n  secret: leaked\n")],
+    );
+    assert!(
+        vault.is_empty(),
+        "a generated secret owns its value; the input must not seed it"
+    );
+}
+
+#[test]
+fn system_placeholders_are_not_seeded() {
+    let (literals, vault) = seeded(
+        "system_placeholder",
+        &[(
+            "apiserver.database.yaml",
+            "database:\n  apiserver:\n    postgres:\n      host: ${{system:tdk_database_host}}\n",
+        )],
+        &[(
+            "apiserver.database.yaml",
+            "database:\n  apiserver:\n    postgres:\n      host: 127.0.0.1\n",
+        )],
+    );
+    assert!(literals.is_empty());
+    assert!(vault.is_empty());
+}
+
+#[test]
+fn a_value_inside_a_sequence_is_seeded() {
+    let (literals, _) = seeded(
+        "sequence_value",
+        &[(
+            "apiserver.service.yaml",
+            "addresses:\n  - ${{literal:tdk_bind_address}}\n",
+        )],
+        &[("apiserver.service.yaml", "addresses:\n  - 0.0.0.0:2457\n")],
+    );
+    assert_eq!(
+        literals.get("tdk_bind_address").map(|o| o.value.as_str()),
+        Some("0.0.0.0:2457")
+    );
+}
+
+#[test]
+fn literals_and_secrets_are_seeded_into_their_own_stores() {
+    let (literals, vault) = seeded(
+        "both_kinds",
+        &[(
+            "dbmanager.database.yaml",
+            "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n    username: ${{secret:postgres_system_user}}\n",
+        )],
+        &[(
+            "dbmanager.database.yaml",
+            "database_server:\n  postgres:\n    host: dimax\n    username: dbadmin\n",
+        )],
+    );
+    assert_eq!(
+        literals.get("tdk_database_host").map(|o| o.value.as_str()),
+        Some("dimax")
+    );
+    assert_eq!(
+        vault.get("postgres_system_user").map(String::as_str),
+        Some("dbadmin")
+    );
+    assert!(!vault.contains_key("tdk_database_host"));
+    assert!(!literals.contains_key("postgres_system_user"));
+}
+
+#[test]
+fn a_missing_input_file_is_skipped_without_failing() {
+    let (literals, _) = seeded(
+        "missing_input",
+        &[
+            ("apiserver.database.yaml", LITERAL_HOST),
+            (
+                "dbmanager.database.yaml",
+                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+            ),
+        ],
+        &[(
+            "dbmanager.database.yaml",
+            "database_server:\n  postgres:\n    host: dimax\n",
+        )],
+    );
+    assert_eq!(
+        literals.get("tdk_database_host").map(|o| o.value.as_str()),
+        Some("dimax")
+    );
+}
+
+#[test]
+fn schema_files_are_not_seeded() {
+    let (literals, _) = seeded(
+        "schema_skipped",
+        &[(
+            "apiserver.storage.yamls",
+            "directives:\n  - at: ${{literal:tdk_ignored}}\n",
+        )],
+        &[(
+            "apiserver.storage.yamls",
+            "directives:\n  - at: something\n",
+        )],
+    );
+    assert!(literals.is_empty());
+}

@@ -158,6 +158,7 @@ impl walker::PlaceholderVisitor for MaterializeVisitor<'_> {
         let displayed_path = path.join(walker::PATH_SEPARATOR);
         let resolver = placeholder::resolver_for(&placeholder.kind, &displayed_path)?;
         let context = walker::ResolveContext {
+            file: CONFIG_LABEL,
             path,
             occurrence,
             placeholder,

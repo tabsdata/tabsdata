@@ -15,10 +15,12 @@ database_server:
     let system = SystemValues::default();
     let auto = HashMap::new();
     let outcome = resolve_config_file(
+        "config.yaml",
         config,
         config,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -65,10 +67,29 @@ database_server:
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
     let literals = RefCell::new(HashMap::new());
-    let first_outcome =
-        resolve_config_file(first, first, &system, &auto, &vault, &literals).expect("first");
-    let second_outcome =
-        resolve_config_file(second, second, &system, &auto, &vault, &literals).expect("second");
+    let values = RefCell::new(HashMap::new());
+    let first_outcome = resolve_config_file(
+        "config.yaml",
+        first,
+        first,
+        &system,
+        &auto,
+        &vault,
+        &literals,
+        &values,
+    )
+    .expect("first");
+    let second_outcome = resolve_config_file(
+        "config.yaml",
+        second,
+        second,
+        &system,
+        &auto,
+        &vault,
+        &literals,
+        &values,
+    )
+    .expect("second");
 
     let values: std::collections::BTreeSet<_> = first_outcome
         .secrets
@@ -94,23 +115,28 @@ fn literal_same_category_reuses_value_across_configs() {
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
     let literals = RefCell::new(HashMap::new());
+    let values = RefCell::new(HashMap::new());
 
     let first = resolve_config_file(
+        "config.yaml",
         first_template,
         first_init,
         &system,
         &auto,
         &vault,
         &literals,
+        &values,
     )
     .expect("first");
     let second = resolve_config_file(
+        "config.yaml",
         second_template,
         second_init,
         &system,
         &auto,
         &vault,
         &literals,
+        &values,
     )
     .expect("second");
 
@@ -135,23 +161,28 @@ fn literal_and_secret_of_same_category_do_not_share_stores() {
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
     let literals = RefCell::new(HashMap::new());
+    let values = RefCell::new(HashMap::new());
 
     let literal_outcome = resolve_config_file(
+        "config.yaml",
         literal_template,
         literal_init,
         &system,
         &auto,
         &vault,
         &literals,
+        &values,
     )
     .expect("literal");
     let secret_outcome = resolve_config_file(
+        "config.yaml",
         secret_template,
         secret_template,
         &system,
         &auto,
         &vault,
         &literals,
+        &values,
     )
     .expect("secret");
 
@@ -178,10 +209,12 @@ database_server:
     let auto: HashMap<String, String> =
         HashMap::from([("postgres_password".to_owned(), "from-auto".to_owned())]);
     let outcome = resolve_config_file(
+        "config.yaml",
         config,
         config,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -201,10 +234,12 @@ database:
     let system = SystemValues::default();
     let auto = HashMap::new();
     let outcome = resolve_config_file(
+        "config.yaml",
         config,
         config,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -232,10 +267,12 @@ storage:
     let system = SystemValues::default();
     let auto = HashMap::new();
     let outcome = resolve_config_file(
+        "config.yaml",
         template,
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -267,10 +304,12 @@ envFrom:
     let auto = HashMap::new();
 
     let outcome = resolve_config_file(
+        "config.yaml",
         config,
         config,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -292,10 +331,12 @@ fn resolve(template: &str, init: &str) -> ResolveOutcome {
     let system = SystemValues::default();
     let auto = HashMap::new();
     resolve_config_file(
+        "config.yaml",
         template,
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -306,10 +347,12 @@ fn resolve_error(template: &str, init: &str) -> ResolverError {
     let system = SystemValues::default();
     let auto = HashMap::new();
     match resolve_config_file(
+        "config.yaml",
         template,
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     ) {
@@ -397,10 +440,12 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
     };
     let auto = HashMap::new();
     let outcome = resolve_config_file(
+        "config.yaml",
         template,
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -419,10 +464,12 @@ fn venv_archive_name_splices_cluster_and_namespace() {
     };
     let auto = HashMap::new();
     let outcome = resolve_config_file(
+        "config.yaml",
         template,
         template,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -444,10 +491,12 @@ fn non_editable_placeholder_modified_in_init_errors() {
     };
     let auto = HashMap::new();
     let error = match resolve_config_file(
+        "config.yaml",
         template,
         init,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     ) {
@@ -597,10 +646,12 @@ fn system_null_renders_as_a_yaml_null() {
     };
     let auto = HashMap::new();
     let outcome = resolve_config_file(
+        "config.yaml",
         template,
         template,
         &system,
         &auto,
+        &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
     )
@@ -622,13 +673,280 @@ fn tabsdata_version_splices_into_a_pinned_requirement() {
     };
     let auto = HashMap::new();
     let outcome = resolve_config_file(
+        "config.yaml",
         template,
         template,
         &system,
         &auto,
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
     )
     .expect("resolve version");
     assert!(outcome.rendered.contains("tabsdata[all]==2.0.0"));
+}
+fn resolve_pair(
+    first: (&str, &str, &str),
+    second: (&str, &str, &str),
+) -> (ResolveOutcome, ResolveOutcome) {
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let vault = RefCell::new(HashMap::new());
+    let literals = RefCell::new(HashMap::new());
+    let values = RefCell::new(HashMap::new());
+    let first_outcome = resolve_config_file(
+        first.0, first.1, first.2, &system, &auto, &vault, &literals, &values,
+    )
+    .expect("first file");
+    let second_outcome = resolve_config_file(
+        second.0, second.1, second.2, &system, &auto, &vault, &literals, &values,
+    )
+    .expect("second file");
+    (first_outcome, second_outcome)
+}
+
+#[test]
+fn a_supplied_secret_settles_the_same_category_in_another_file() {
+    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
+    let supplied = "server:\n  username: dbadmin\n";
+    let (first, second) = resolve_pair(
+        ("dbmanager.database.yaml", template, supplied),
+        ("apiserver.database.yaml", template, template),
+    );
+    assert_eq!(first.secrets[0].value, "dbadmin");
+    assert_eq!(
+        second.secrets[0].value, "dbadmin",
+        "the second file must reuse the value supplied by the first"
+    );
+}
+
+#[test]
+fn a_supplied_literal_settles_the_same_category_in_another_file() {
+    let template = "server:\n  host: ${{literal:tdk_database_host}}\n";
+    let supplied = "server:\n  host: dimax\n";
+    let (first, second) = resolve_pair(
+        ("dbmanager.database.yaml", template, supplied),
+        ("apiserver.database.yaml", template, template),
+    );
+    assert!(first.rendered.contains("host: dimax"));
+    assert!(
+        second.rendered.contains("host: dimax"),
+        "the second file must reuse the literal supplied by the first"
+    );
+}
+
+#[test]
+fn a_mandatory_secret_missing_everywhere_still_fails() {
+    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let error = resolve_config_file(
+        "apiserver.database.yaml",
+        template,
+        template,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+    )
+    .expect_err("must fail");
+    assert!(matches!(error, ResolverError::MissingRequiredValue { .. }));
+}
+
+#[test]
+fn an_error_names_the_offending_file() {
+    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let error = resolve_config_file(
+        "apiserver.database.yaml",
+        template,
+        template,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+    )
+    .expect_err("must fail");
+    let message = error.to_string();
+    assert!(
+        message.contains("apiserver.database.yaml:server.username"),
+        "the error must name the file and the node, got: {message}"
+    );
+}
+
+#[test]
+fn an_optional_secret_stays_empty_when_no_file_supplies_it() {
+    let template = "agent:\n  key: ${{secret:openai-key?}}\n";
+    let (first, second) = resolve_pair(
+        ("aiagent.yaml", template, template),
+        ("other.yaml", template, template),
+    );
+    assert_eq!(first.secrets[0].value, "");
+    assert_eq!(second.secrets[0].value, "");
+}
+
+#[test]
+fn an_optional_secret_supplied_once_settles_the_other_file() {
+    let template = "agent:\n  key: ${{secret:openai-key?}}\n";
+    let (first, second) = resolve_pair(
+        ("aiagent.yaml", template, "agent:\n  key: sk-real\n"),
+        ("other.yaml", template, template),
+    );
+    assert_eq!(first.secrets[0].value, "sk-real");
+    assert_eq!(
+        second.secrets[0].value, "sk-real",
+        "an optional secret supplied once must settle the rest"
+    );
+}
+
+#[test]
+fn two_files_giving_the_same_value_is_accepted() {
+    let template = "server:\n  host: ${{literal:tdk_database_host}}\n";
+    let supplied = "server:\n  host: dimax\n";
+    let (first, second) = resolve_pair(
+        ("dbmanager.database.yaml", template, supplied),
+        ("apiserver.database.yaml", template, supplied),
+    );
+    assert!(first.rendered.contains("host: dimax"));
+    assert!(second.rendered.contains("host: dimax"));
+}
+
+#[test]
+fn diverging_values_across_files_error() {
+    let template = "server:\n  host: ${{literal:tdk_database_host}}\n";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let vault = RefCell::new(HashMap::new());
+    let literals = RefCell::new(HashMap::new());
+    let values = RefCell::new(HashMap::new());
+    resolve_config_file(
+        "dbmanager.database.yaml",
+        template,
+        "server:\n  host: first\n",
+        &system,
+        &auto,
+        &vault,
+        &literals,
+        &values,
+    )
+    .expect("first file");
+    let error = resolve_config_file(
+        "apiserver.database.yaml",
+        template,
+        "server:\n  host: second\n",
+        &system,
+        &auto,
+        &vault,
+        &literals,
+        &values,
+    )
+    .expect_err("a second, different value must be rejected");
+    assert!(matches!(
+        error,
+        ResolverError::DivergingPlaceholderValue { .. }
+    ));
+    assert!(
+        error.to_string().contains("apiserver.database.yaml"),
+        "the error must name the offending file, got: {error}"
+    );
+}
+
+#[test]
+fn diverging_secret_values_across_files_error() {
+    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let vault = RefCell::new(HashMap::new());
+    let literals = RefCell::new(HashMap::new());
+    let values = RefCell::new(HashMap::new());
+    resolve_config_file(
+        "dbmanager.database.yaml",
+        template,
+        "server:\n  username: dbadmin\n",
+        &system,
+        &auto,
+        &vault,
+        &literals,
+        &values,
+    )
+    .expect("first file");
+    let error = resolve_config_file(
+        "apiserver.database.yaml",
+        template,
+        "server:\n  username: someoneelse\n",
+        &system,
+        &auto,
+        &vault,
+        &literals,
+        &values,
+    )
+    .expect_err("a second, different value must be rejected");
+    assert!(matches!(
+        error,
+        ResolverError::DivergingPlaceholderValue { .. }
+    ));
+    let message = error.to_string();
+    assert!(
+        !message.contains("dbadmin") && !message.contains("someoneelse"),
+        "a divergence report must not leak the secret values, got: {message}"
+    );
+}
+
+#[test]
+fn unqualified_placeholders_are_independent_of_each_other() {
+    let template = "\
+storage:
+  mounts:
+    ROOT:
+      options:
+        aws_region: ${{secret}}
+        aws_access_key: ${{secret}}
+";
+    let init = "\
+storage:
+  mounts:
+    ROOT:
+      options:
+        aws_region: eu-west-1
+        aws_access_key: AKIAEXAMPLE
+";
+    let outcome = resolve(template, init);
+    let values: Vec<String> = outcome
+        .secrets
+        .iter()
+        .map(|entry| entry.value.clone())
+        .collect();
+    assert!(values.contains(&"eu-west-1".to_owned()));
+    assert!(values.contains(&"AKIAEXAMPLE".to_owned()));
+}
+
+#[test]
+fn unqualified_placeholders_across_files_are_independent() {
+    let template = "options:\n  token: ${{secret}}\n";
+    let (first, second) = resolve_pair(
+        (
+            "apiserver.storage.yaml",
+            template,
+            "options:\n  token: one\n",
+        ),
+        ("aiagent.yaml", template, "options:\n  token: two\n"),
+    );
+    assert_eq!(first.secrets[0].value, "one");
+    assert_eq!(
+        second.secrets[0].value, "two",
+        "an unqualified placeholder names nothing, so occurrences stand alone"
+    );
+}
+
+#[test]
+fn unqualified_literals_are_independent_of_each_other() {
+    let template = "a: ${{literal}}\nb: ${{literal}}\n";
+    let init = "a: one\nb: two\n";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(value["a"], Value::String("one".to_owned()));
+    assert_eq!(value["b"], Value::String("two".to_owned()));
 }
