@@ -186,8 +186,8 @@ impl SystemValues {
         }
     }
 
-    pub fn uv_default_index() -> Result<String, TdError> {
-        Ok(uv_mode()?.default_index())
+    pub fn uv_default_index(reach: IndexReach) -> Result<String, TdError> {
+        Ok(uv_mode()?.default_index(reach))
     }
 
     pub fn uv_extra_index_url(reach: IndexReach) -> Result<String, TdError> {

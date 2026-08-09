@@ -51,6 +51,12 @@ pub enum IndexReach {
     Cluster,
 }
 
+impl IndexReach {
+    pub fn propagates_local_settings(self) -> bool {
+        matches!(self, Self::Host | Self::HostContainer)
+    }
+}
+
 impl UvMode {
     pub fn from_environment() -> Result<Self, CliError> {
         let value = std::env::var(ENV_TD_KUBE_UV_MODE).unwrap_or_default();
@@ -76,12 +82,17 @@ impl UvMode {
         }
     }
 
-    pub fn default_index(self) -> String {
+    pub fn default_index(self, reach: IndexReach) -> String {
         match self {
             Self::Local => String::new(),
             Self::Devpi | Self::Pypi => PYPI_INDEX_URL.to_owned(),
             Self::Unset => {
-                environment_index(ENV_UV_DEFAULT_INDEX).unwrap_or_else(|| PYPI_INDEX_URL.to_owned())
+                if reach.propagates_local_settings() {
+                    environment_index(ENV_UV_DEFAULT_INDEX)
+                        .unwrap_or_else(|| PYPI_INDEX_URL.to_owned())
+                } else {
+                    PYPI_INDEX_URL.to_owned()
+                }
             }
         }
     }
@@ -95,30 +106,18 @@ impl UvMode {
                 IndexReach::Cluster => DEVPI_INDEX_URL_CLUSTER.to_owned(),
             },
             Self::Pypi => String::new(),
-            Self::Unset => match environment_index(ENV_UV_EXTRA_INDEX_URL) {
-                Some(index) => match reach {
-                    IndexReach::Host => index,
-                    IndexReach::HostContainer => reach_from_container(&index),
-                    IndexReach::Cluster => DEVPI_INDEX_URL_CLUSTER.to_owned(),
-                },
-                None => String::new(),
+            Self::Unset => match reach {
+                IndexReach::Host => environment_index(ENV_UV_EXTRA_INDEX_URL).unwrap_or_default(),
+                IndexReach::HostContainer => environment_index(ENV_UV_EXTRA_INDEX_URL)
+                    .map(|index| reach_from_container(&index))
+                    .unwrap_or_default(),
+                IndexReach::Cluster => String::new(),
             },
         }
     }
 
     pub fn index_strategy(self) -> String {
-        match self {
-            Self::Local => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
-            Self::Devpi => UV_INDEX_STRATEGY_BEST_MATCH.to_owned(),
-            Self::Pypi => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
-            Self::Unset => match environment_index(ENV_UV_INDEX_STRATEGY) {
-                Some(strategy) => strategy,
-                None if environment_index(ENV_UV_EXTRA_INDEX_URL).is_some() => {
-                    UV_INDEX_STRATEGY_BEST_MATCH.to_owned()
-                }
-                None => UV_INDEX_STRATEGY_FIRST_INDEX.to_owned(),
-            },
-        }
+        UV_INDEX_STRATEGY_BEST_MATCH.to_owned()
     }
 }
 
