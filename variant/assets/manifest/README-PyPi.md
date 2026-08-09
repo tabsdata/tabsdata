@@ -128,8 +128,8 @@ the same access control, and earlier versions remain readable.
 * **Built-in agent** - in the Tabsdata UI, scoped to operations: what ran, what failed and why.
 
 For more details refer
-to [Tabsdata Getting Started](https://docs.tabsdata.com/2.0.0/guide/introduction)
-(latest) or the [Tabsdata User Guide](https://docs.tabsdata.com/2.0.0/guide) (latest).
+to [Tabsdata Getting Started](https://docs.tabsdata.com/guide/introduction)
+(latest) or the [Tabsdata User Guide](https://docs.tabsdata.com/guide) (latest).
 
 ## Installation
 
