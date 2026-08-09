@@ -34,7 +34,7 @@ use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
 use crate::runtime::instance::cluster::ClusterProperties;
 use crate::runtime::provider::{ClusterProvider, provider_for};
 
-const DEFAULT_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
+// const DEFAULT_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
 
 #[derive(Debug, Clone, Args)]
 pub struct InitArguments {
@@ -129,11 +129,14 @@ pub async fn init_instance(
 
     let instance_in_settings = instance.in_settings;
     let instance_defaulted = instance.value.is_none();
-    let provider_defaulted = cluster.provider.is_none() && !cluster_in_settings.provider;
+    // let provider_defaulted = cluster.provider.is_none() && !cluster_in_settings.provider;
     let instance = instance
         .value
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
-    let provider = cluster.provider.unwrap_or(DEFAULT_PROVIDER);
+    // let provider = cluster.provider.unwrap_or(DEFAULT_PROVIDER);
+    let Some(provider) = cluster.provider else {
+        return abort_with(NoAction, ProviderError::ProviderNotSupplied);
+    };
     cluster.provider = Some(provider);
 
     if !provider.supported() {
@@ -163,7 +166,7 @@ pub async fn init_instance(
             instance_defaulted,
             provider.as_str(),
             cluster_in_settings.provider,
-            provider_defaulted,
+            // provider_defaulted,
             loglevel.map(|level| (level.as_str(), loglevel_defaulted)),
         );
     }

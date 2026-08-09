@@ -134,6 +134,11 @@ pub enum ProviderError {
         scheduler: String,
         expected: String,
     } = 5116,
+    #[error(
+        "Argument --provider is required. Pass it explicitly, or set a default with \
+         'tdkserver session set --provider <PROVIDER>'."
+    )]
+    ProviderNotSupplied = 5119,
     #[error("Failed to handle {phase} secrets: {cause}.")]
     SecretHandlerFailed { phase: String, cause: String } = 5200,
     #[error("Argument --provider is required when no active context is set.")]

@@ -76,7 +76,7 @@ pub fn init_service(
     instance_defaulted: bool,
     provider: &str,
     provider_in_settings: bool,
-    provider_defaulted: bool,
+    // provider_defaulted: bool,
     loglevel: Option<(&str, bool)>,
 ) {
     info!("About to initialize tabsdata instance:");
@@ -86,7 +86,8 @@ pub fn init_service(
     );
     info!(
         "  - provider.....: {provider}{}",
-        origin_marker(provider_in_settings, provider_defaulted)
+        // origin_marker(provider_in_settings, provider_defaulted)
+        origin_marker(provider_in_settings, false)
     );
     if let Some((loglevel, loglevel_defaulted)) = loglevel {
         info!(
