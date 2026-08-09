@@ -107,6 +107,7 @@ run_task = [
         "check_py",
         "clippy_py",
         "fmt_py",
+        # "lint_py",
         "license_py",
         "outdated_py",
         "machete_py",
