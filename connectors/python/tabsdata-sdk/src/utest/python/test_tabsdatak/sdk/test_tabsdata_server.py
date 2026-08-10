@@ -27,6 +27,9 @@ from tabsdatak.api import (
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.sdk import _apiserver as a
+
+# noinspection PyProtectedMember
 from tabsdatak.sdk import tabsdata_server as ts
 
 # ---------------------------------------------------------------------------
@@ -724,3 +727,53 @@ def test_register_function_base_path_defaults_none(project_root, _no_op_bundle):
 
     # No override supplied -> the server applies the collection default.
     assert seen["base_path"] is None
+
+
+# ---------------------------------------------------------------------------
+# Lazy ``_data`` re-fetch on execution-plane entities.
+#
+# The rows come from cross-project list endpoints, which `_project_narrow`
+# narrows to the active project. An entity's id is globally unique, so its
+# re-fetch must span every project -- otherwise a row listed from another
+# project re-fetches to nothing and the `[0]` blows up.
+# ---------------------------------------------------------------------------
+
+
+class _PageResponse:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def json(self):
+        return {
+            "data": {"data": self._rows, "next_pagination_id": None, "next": None}
+        }
+
+
+def _connection_recording_project(monkeypatch, endpoint, rows):
+    connection = a.APIServer("host")
+    connection.project = "acme"
+    seen = []
+
+    def _list(*_args, **_kwargs):
+        seen.append(connection.project)
+        return _PageResponse(rows)
+
+    monkeypatch.setattr(connection, endpoint, _list)
+    return connection, seen
+
+
+@pytest.mark.parametrize(
+    "entity,endpoint,row",
+    [
+        (ts.Execution, "execution_list", {"id": "ep-1", "status": "R"}),
+        (ts.Transaction, "transaction_list", {"id": "tx-1", "status": "R"}),
+        (ts.FunctionRun, "function_list_runs", {"id": "fr-1", "status": "R"}),
+        (ts.Worker, "workers_list", {"id": "w-1", "status": "R"}),
+    ],
+)
+def test_lazy_data_refetch_spans_projects(monkeypatch, entity, endpoint, row):
+    connection, seen = _connection_recording_project(monkeypatch, endpoint, [row])
+
+    assert entity(connection, row["id"])._data["status"] == "R"
+    assert seen == [None]
+    assert connection.project == "acme"

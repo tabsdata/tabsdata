@@ -223,6 +223,23 @@ def test_project_narrow_appends_filter_when_project_set(monkeypatch):
     assert s._project_narrow(["status:eq:D"]) == ["status:eq:D", "project:eq:acme"]
 
 
+def test_spanning_suspends_and_restores_the_active_project():
+    s = a.APIServer("host")
+    s.project = "acme"
+    with s.spanning():
+        assert s.project is None
+    assert s.project == "acme"
+
+
+def test_spanning_restores_the_active_project_on_error():
+    s = a.APIServer("host")
+    s.project = "acme"
+    with pytest.raises(RuntimeError):
+        with s.spanning():
+            raise RuntimeError("boom")
+    assert s.project == "acme"
+
+
 # ---------------------------------------------------------------------------
 # Factory helpers + small static methods
 # ---------------------------------------------------------------------------

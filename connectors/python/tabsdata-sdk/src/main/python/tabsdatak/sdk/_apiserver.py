@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import time
+from contextlib import contextmanager
 from http import HTTPStatus
 from typing import List
 from urllib.parse import urlparse
@@ -220,6 +221,17 @@ class APIServer:
         if not self.project:
             raise NoProjectSelectedError()
         return f"/projects/{self.project}{path}"
+
+    @contextmanager
+    def spanning(self):
+        """Suspend the active project for one call: by-id lookups resolve a
+        globally unique id and must not be narrowed to the active project."""
+        project = self.project
+        self.project = None
+        try:
+            yield
+        finally:
+            self.project = project
 
     def _project_narrow(
         self, request_filter: List[str] | str = None

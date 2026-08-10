@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 import tempfile
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -1007,7 +1006,10 @@ class Execution:
     @property
     def _data(self):
         if self._data_dict is None:
-            response = self.connection.execution_list(request_filter=f"id:eq:{self.id}")
+            with self.connection.spanning():
+                response = self.connection.execution_list(
+                    request_filter=f"id:eq:{self.id}"
+                )
             try:
                 self._data = response.json().get("data").get("data")[0]
             except IndexError:
@@ -1696,7 +1698,10 @@ class FunctionRun:
             tabsdata_server = TabsdataServer.__new__(TabsdataServer)
             tabsdata_server.connection = self.connection
             try:
-                run = tabsdata_server.list_function_runs(filter=f"id:eq:{self.id}")[0]
+                with tabsdata_server._spanning():
+                    run = tabsdata_server.list_function_runs(filter=f"id:eq:{self.id}")[
+                        0
+                    ]
             except IndexError:
                 raise ValueError(f"Function run with ID {self.id} not found.")
             self._data = run.kwargs
@@ -2975,9 +2980,13 @@ class Transaction:
         if self._data_dict is None:
             tabsdata_server = TabsdataServer.__new__(TabsdataServer)
             tabsdata_server.connection = self.connection
-            transaction = tabsdata_server.list_transactions(filter=f"id:eq:{self.id}")[
-                0
-            ]
+            with tabsdata_server._spanning():
+                try:
+                    transaction = tabsdata_server.list_transactions(
+                        filter=f"id:eq:{self.id}"
+                    )[0]
+                except IndexError:
+                    raise ValueError(f"Transaction with ID {self.id} not found.")
             self._data = transaction.kwargs
         return self._data_dict
 
@@ -3370,7 +3379,8 @@ class Worker:
             tabsdata_server = TabsdataServer.__new__(TabsdataServer)
             tabsdata_server.connection = self.connection
             try:
-                worker = tabsdata_server.list_workers(filter=f"id:eq:{self.id}")[0]
+                with tabsdata_server._spanning():
+                    worker = tabsdata_server.list_workers(filter=f"id:eq:{self.id}")[0]
             except IndexError:
                 raise ValueError(f"Worker with ID {self.id} not found.")
             self._data = worker.kwargs
@@ -3971,16 +3981,10 @@ class TabsdataServer:
         execution = Execution(self.connection, execution_id)
         return execution.cancel()
 
-    @contextmanager
     def _spanning(self):
         """Suspend the active project for one call: by-id lookups resolve a
         globally unique id and must not be narrowed to the active project."""
-        project = self.connection.project
-        self.connection.project = None
-        try:
-            yield
-        finally:
-            self.connection.project = project
+        return self.connection.spanning()
 
     def get_execution(self, execution_id: str) -> Execution:
         """
