@@ -94,7 +94,7 @@ spec:
           mountPath: /tabsdata/config
           readOnly: true
         - name: runtimes
-          mountPath: ${{system:tdk_runtimes_root}}
+          mountPath: /tabsdata/runtimes
         - name: shuttle
           mountPath: /tabsdata/shuttle
       volumes:

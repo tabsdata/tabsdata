@@ -100,7 +100,7 @@ spec:
           mountPath: /tabsdata/config
           readOnly: true
         - name: runtimes
-          mountPath: ${{system:tdk_runtimes_root}}
+          mountPath: /tabsdata/runtimes
       containers:
       - name: 1000-dbcreate
         image: ubuntu:24.04
@@ -143,7 +143,7 @@ spec:
           mountPath: /tabsdata/config
           readOnly: true
         - name: runtimes
-          mountPath: ${{system:tdk_runtimes_root}}
+          mountPath: /tabsdata/runtimes
         - name: certs
           mountPath: /tabsdata/certs
           readOnly: true

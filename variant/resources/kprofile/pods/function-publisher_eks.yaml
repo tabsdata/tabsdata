@@ -98,7 +98,7 @@ spec:
               mountPath: /tabsdata/config-storage
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
         - name: 0020-inspect-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -150,7 +150,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -204,7 +204,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: certs
               mountPath: /tabsdata/certs
@@ -260,7 +260,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -330,7 +330,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -408,7 +408,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -484,7 +484,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -554,7 +554,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -637,7 +637,7 @@ spec:
               mountPath: /tabsdata/connection
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -707,7 +707,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -781,7 +781,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -851,7 +851,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -921,7 +921,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -991,7 +991,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -1061,7 +1061,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -1132,7 +1132,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared

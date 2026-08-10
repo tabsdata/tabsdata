@@ -109,7 +109,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
         - name: 0020-dbready
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
@@ -155,7 +155,7 @@ spec:
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: certs
               mountPath: /tabsdata/certs
@@ -194,7 +194,7 @@ spec:
             - name: resources
               mountPath: /tabsdata/resources
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: certs
               mountPath: /tabsdata/certs
@@ -249,7 +249,7 @@ spec:
               mountPath: /tabsdata/resources
               readOnly: true
             - name: runtimes
-              mountPath: ${{system:tdk_runtimes_root}}
+              mountPath: /tabsdata/runtimes
               readOnly: true
             - name: certs
               mountPath: /tabsdata/certs
