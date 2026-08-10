@@ -13,6 +13,7 @@ import sys
 import tarfile
 import time
 import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import IO, Iterator
 
@@ -62,6 +63,8 @@ UV_MODE_LOCAL = "local"
 
 TAR_EXECUTABLE = "tar"
 COPY_BLOCK_SIZE = 1 << 22
+
+LOCALHOST = "localhost"
 
 STARTED = time.monotonic()
 
@@ -191,10 +194,17 @@ def image_uri(uri: str, subfolder: str, name: str) -> str:
     return f"{prefix}{name}"
 
 
+def file_uri_to_path(source: str) -> Path:
+    parsed = urllib.parse.urlparse(source)
+    path = urllib.request.url2pathname(parsed.path)
+    if parsed.netloc and parsed.netloc.lower() != LOCALHOST:
+        return Path(f"//{parsed.netloc}") / path.lstrip("\\/")
+    return Path(path)
+
+
 @contextlib.contextmanager
 def open_file(source: str) -> Iterator[IO[bytes]]:
-    parsed = urllib.parse.urlparse(source)
-    origin = Path(urllib.parse.unquote(parsed.path))
+    origin = file_uri_to_path(source)
     if not origin.is_file():
         die("Downloading the image", f"Image not found: {origin}")
     trace(f"Reading {origin}")
