@@ -51,10 +51,6 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.py
         - --output
         - ${{system:tdk_runtimes_root}}
-        - --venv
-        - td
-        - --venv
-        - fn
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         env:

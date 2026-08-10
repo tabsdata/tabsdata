@@ -39,7 +39,6 @@ IMAGES_SUBFOLDER = "python"
 IMAGE_NAME = "tdvenvs.tar.zst"
 IMAGE_SUFFIX = ".tar.zst"
 
-VENV_TD = "td"
 
 UV_FOLDER = ".uv"
 KENVS_FOLDER = "kenvs"
@@ -120,7 +119,9 @@ def parse_arguments() -> argparse.Namespace:
         metavar="VENV",
         help=(
             "Virtual environment to load; repeat to load several into the same"
-            f" uv home (default: {VENV_TD})"
+            " uv home. Loading nothing when none is given, so a caller that"
+            " already has its environments can keep the step and make it a"
+            " no-op"
         ),
     )
     return parser.parse_args()
@@ -316,11 +317,14 @@ def main() -> int:
     if os.environ.get(ENV_UV_MODE, "").strip().lower() == UV_MODE_LOCAL:
         trace(f"Skipping the load; {ENV_UV_MODE} is {UV_MODE_LOCAL}")
         return 0
+    venvs = arguments.venvs
+    if not venvs:
+        trace("Skipping the load; no --venv was requested")
+        return 0
     output = Path(arguments.output)
     uv_home = output / UV_FOLDER
 
     uri, options = load_mount(Path(arguments.storage_config), arguments.mount)
-    venvs = arguments.venvs or [VENV_TD]
 
     output.mkdir(parents=True, exist_ok=True)
     for venv in venvs:
