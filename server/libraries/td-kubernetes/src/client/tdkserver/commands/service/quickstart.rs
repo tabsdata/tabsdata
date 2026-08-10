@@ -9,6 +9,7 @@ use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
 #[cfg(feature = "enterprise")]
 use td_common::status::ExitStatus::Cancelled;
+use td_common::status::ExitStatus::NoAction;
 use td_error::TdError;
 use tracing::{info, warn};
 
@@ -18,6 +19,7 @@ use crate::base::constants::{KPROFILE_ASSETS_FAMILY, LogLevel, REQUIREMENTS_TD_A
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
+use crate::base::error::provider::ProviderError;
 use crate::client::registry::{InstanceSettings, instance_folder, instance_init_input_folder};
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
@@ -35,12 +37,15 @@ use crate::client::tdkserver::widgets::show_notice;
 use crate::client::vault::InstanceVault;
 #[cfg(feature = "enterprise")]
 use crate::core::system::exit::abort;
-use crate::core::system::exit::{CommandResult, render_error};
+use crate::core::system::exit::{CommandResult, abort_with, render_error};
 use crate::cwarn;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{Rule, placeholder_occurrences};
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
 use crate::runtime::instance::profile::load_profile;
+use crate::runtime::provider::ClusterProvider;
+
+const QUICKSTART_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
 
 #[allow(dead_code)]
 const VAULT_DISCLAIMER: &str = "The database passwords this quickstart generated are stored in \
@@ -217,6 +222,20 @@ pub async fn command_quickstart(
     let folder = instance_folder(&name)?;
     let preexisting = folder.exists();
 
+    let mut cluster = cluster;
+    match cluster.provider {
+        None => cluster.provider = Some(QUICKSTART_PROVIDER),
+        Some(provider) if provider != QUICKSTART_PROVIDER => {
+            return abort_with(
+                NoAction,
+                ProviderError::CommandNotSupportedForProvider {
+                    command: "quickstart".to_owned(),
+                    provider: provider.as_str().to_owned(),
+                },
+            );
+        }
+        Some(_) => {}
+    }
     let outcome = run_quickstart(
         instance,
         cluster,

@@ -160,6 +160,8 @@ pub enum ProviderError {
     NotImplemented(String) = 6000,
     #[error("Command '{0}' is not yet implemented.")]
     CommandNotImplemented(String) = 6001,
+    #[error("Command '{command}' is not yet supported for the '{provider}' provider.")]
+    CommandNotSupportedForProvider { command: String, provider: String } = 6007,
     #[error("Could not determine the user home directory.")]
     HomeDirNotFound = 6002,
     #[error(
