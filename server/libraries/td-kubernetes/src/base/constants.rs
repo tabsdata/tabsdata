@@ -14,7 +14,7 @@ pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
 pub const ENV_TD_KUBE_UV_MODE: &str = "TD_KUBE_UV_MODE";
 
 pub const ENV_UV_DEFAULT_INDEX: &str = "UV_DEFAULT_INDEX";
-pub const ENV_UV_EXTRA_INDEX_URL: &str = "UV_EXTRA_INDEX_URL";
+pub const ENV_UV_INDEX: &str = "UV_INDEX";
 pub const ENV_UV_INDEX_STRATEGY: &str = "UV_INDEX_STRATEGY";
 pub const ENV_UV_PYTHON_INSTALL_DIR: &str = "UV_PYTHON_INSTALL_DIR";
 
@@ -82,7 +82,7 @@ impl UvMode {
         }
     }
 
-    pub fn default_index(self, reach: IndexReach) -> String {
+    pub fn uv_default_index(self, reach: IndexReach) -> String {
         match self {
             Self::Local => String::new(),
             Self::Devpi | Self::Pypi => PYPI_INDEX_URL.to_owned(),
@@ -97,7 +97,7 @@ impl UvMode {
         }
     }
 
-    pub fn extra_index_url(self, reach: IndexReach) -> String {
+    pub fn uv_index(self, reach: IndexReach) -> String {
         match self {
             Self::Local => String::new(),
             Self::Devpi => match reach {
@@ -107,8 +107,8 @@ impl UvMode {
             },
             Self::Pypi => String::new(),
             Self::Unset => match reach {
-                IndexReach::Host => environment_index(ENV_UV_EXTRA_INDEX_URL).unwrap_or_default(),
-                IndexReach::HostContainer => environment_index(ENV_UV_EXTRA_INDEX_URL)
+                IndexReach::Host => environment_index(ENV_UV_INDEX).unwrap_or_default(),
+                IndexReach::HostContainer => environment_index(ENV_UV_INDEX)
                     .map(|index| reach_from_container(&index))
                     .unwrap_or_default(),
                 IndexReach::Cluster => String::new(),
@@ -116,7 +116,7 @@ impl UvMode {
         }
     }
 
-    pub fn index_strategy(self) -> String {
+    pub fn uv_index_strategy(self) -> String {
         UV_INDEX_STRATEGY_BEST_MATCH.to_owned()
     }
 }

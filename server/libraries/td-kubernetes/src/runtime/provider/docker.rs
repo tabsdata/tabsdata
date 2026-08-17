@@ -498,7 +498,7 @@ pub fn system_values_for(
         storage_path: Some(storage_folder.to_string_lossy().to_string()),
         storage_url: Some(container_storage_url()),
         uv_default_index: Some(SystemValues::uv_default_index(IndexReach::HostContainer)?),
-        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::HostContainer)?),
+        uv_index: Some(SystemValues::uv_index(IndexReach::HostContainer)?),
         uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
         ..SystemValues::default()
     })

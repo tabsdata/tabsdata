@@ -48,6 +48,8 @@ pub enum CliError {
     FileParseFailed { file: String, cause: String } = 5008,
     #[error("Could not serialize file '{file}': {cause}.")]
     FileSerializeFailed { file: String, cause: String } = 5009,
+    #[error("File '{file}' has no '{entry}' entry to set.")]
+    FileEntryMissing { file: String, entry: String } = 5010,
 }
 
 #[cfg(test)]

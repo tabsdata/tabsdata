@@ -15,7 +15,10 @@ use tracing::{info, warn};
 
 #[cfg(feature = "enterprise")]
 use crate::base::constants::REQUIREMENTS_AG_ASSET;
-use crate::base::constants::{KPROFILE_ASSETS_FAMILY, LogLevel, REQUIREMENTS_TD_ASSET};
+use crate::base::constants::{
+    ENV_UV_INDEX, ENV_UV_INDEX_STRATEGY, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, LogLevel,
+    REQUIREMENTS_TD_ASSET, UV_INDEX_STRATEGY_BEST_MATCH,
+};
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
@@ -43,6 +46,7 @@ use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{Rule, placeholder_occurrences};
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
 use crate::runtime::instance::profile::load_profile;
+use crate::runtime::instance::tabsdata::{EnvValue, TABSDATA_FILE, TabsdataConfig};
 use crate::runtime::provider::ClusterProvider;
 
 const QUICKSTART_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
@@ -138,6 +142,20 @@ pub struct QuickstartArguments {
     pub requirements_ag: Option<PathBuf>,
 
     #[arg(
+        long = "uv-index",
+        name = "uv-index",
+        required = false,
+        value_name = "URI",
+        display_order = 150,
+        long_help = "Python package index for the instance. The URI is set as the 'UV_INDEX' \
+                     global environment variable of the initialized instance, which every \
+                     container of every pod receives.\n\n\
+                     Example:\n  \
+                     tdk quickstart --uv-index http://localhost:8000/+simple"
+    )]
+    pub uv_index: Option<String>,
+
+    #[arg(
         long,
         name = "save",
         required = false,
@@ -193,6 +211,7 @@ pub async fn command_quickstart(
         requirements_td,
         #[cfg(feature = "enterprise")]
         requirements_ag,
+        uv_index,
     } = arguments;
 
     #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
@@ -247,6 +266,7 @@ pub async fn command_quickstart(
         requirements_td,
         #[cfg(feature = "enterprise")]
         requirements_ag,
+        uv_index,
         &overrides,
         globals,
     )
@@ -298,6 +318,50 @@ fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandRe
     Ok(())
 }
 
+fn persist_uv_index(instance: &str, uv_index: &str) -> CommandResult {
+    let target = instance_init_input_folder(instance)?
+        .join(KPROFILE_CONFIGS_FAMILY.folder)
+        .join(TABSDATA_FILE);
+    let contents = std::fs::read_to_string(&target).map_err(|error| {
+        TdError::from(CliError::FileReadFailed {
+            file: target.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    let mut config = TabsdataConfig::parse(&contents).map_err(|error| {
+        TdError::from(CliError::FileParseFailed {
+            file: target.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    config
+        .pods
+        .global
+        .envs
+        .insert(ENV_UV_INDEX.to_owned(), EnvValue::Text(uv_index.to_owned()));
+    config.pods.global.envs.insert(
+        ENV_UV_INDEX_STRATEGY.to_owned(),
+        EnvValue::Text(UV_INDEX_STRATEGY_BEST_MATCH.to_owned()),
+    );
+    let updated = serde_yaml::to_string(&config).map_err(|error| {
+        TdError::from(CliError::FileSerializeFailed {
+            file: target.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    std::fs::write(&target, updated).map_err(|error| {
+        TdError::from(CliError::FileWriteFailed {
+            file: target.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    info!(
+        "Set {} to {} and {} to {} in {}",
+        ENV_UV_INDEX, uv_index, ENV_UV_INDEX_STRATEGY, UV_INDEX_STRATEGY_BEST_MATCH, TABSDATA_FILE
+    );
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn seed_vault(name: &str, verbose: bool) -> CommandResult {
     let provider = InstanceSettings::load(name)?.provider;
@@ -337,6 +401,7 @@ async fn run_quickstart(
     loglevel: Option<LogLevel>,
     requirements_td: Option<PathBuf>,
     #[cfg(feature = "enterprise")] requirements_ag: Option<PathBuf>,
+    uv_index: Option<String>,
     overrides: &HashMap<String, String>,
     globals: &GlobalArguments,
 ) -> CommandResult {
@@ -363,6 +428,9 @@ async fn run_quickstart(
     #[cfg(feature = "enterprise")]
     if let Some(source) = &requirements_ag {
         persist_requirements(&target_instance, REQUIREMENTS_AG_ASSET, source)?;
+    }
+    if let Some(uv_index) = &uv_index {
+        persist_uv_index(&target_instance, uv_index)?;
     }
 
     seed_vault(&target_instance, globals.verbose)?;
@@ -395,3 +463,6 @@ async fn run_quickstart(
     )
     .await
 }
+
+#[cfg(test)]
+mod tests;

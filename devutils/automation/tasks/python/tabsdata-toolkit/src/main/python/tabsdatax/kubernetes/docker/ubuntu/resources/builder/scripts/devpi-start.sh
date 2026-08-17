@@ -58,5 +58,6 @@ done
 echo "Server devpi ready at http://localhost:${DEVPI_PORT}/${DEVPI_INDEX}/ (${waited}s)."
 
 export PIP_INDEX_URL="http://localhost:${DEVPI_PORT}/${DEVPI_INDEX}/"
+export PIP_EXTRA_INDEX_URL="http://localhost:${DEVPI_PORT}/${DEVPI_INDEX}/"
 export UV_DEFAULT_INDEX="http://localhost:${DEVPI_PORT}/${DEVPI_INDEX}/"
-export UV_INDEX_URL="http://localhost:${DEVPI_PORT}/${DEVPI_INDEX}/"
+export UV_INDEX="http://localhost:${DEVPI_PORT}/${DEVPI_INDEX}/"

@@ -58,11 +58,11 @@ PYTHON_EXECUTABLE: str = "python"
 UV_EXECUTABLE: str = "uv"
 
 ENV_UV_DEFAULT_INDEX: str = "UV_DEFAULT_INDEX"
-ENV_UV_EXTRA_INDEX_URL: str = "UV_EXTRA_INDEX_URL"
+ENV_UV_INDEX: str = "UV_INDEX"
 ENV_UV_INDEX_STRATEGY: str = "UV_INDEX_STRATEGY"
-ENV_UV_INDEX: tuple[str, ...] = (
+ENV_UV_INDEXES: tuple[str, ...] = (
     ENV_UV_DEFAULT_INDEX,
-    ENV_UV_EXTRA_INDEX_URL,
+    ENV_UV_INDEX,
     ENV_UV_INDEX_STRATEGY,
 )
 UNSET_INDEX: str = "<unset>"
@@ -389,8 +389,8 @@ def setup_workspace(arguments: argparse.Namespace) -> dict[str, str]:
 
 
 def report_indexes() -> None:
-    width = max(len(variable) for variable in ENV_UV_INDEX)
-    for variable in ENV_UV_INDEX:
+    width = max(len(variable) for variable in ENV_UV_INDEXES)
+    for variable in ENV_UV_INDEXES:
         value = os.environ.get(variable, "").strip()
         print(f">> {variable:<{width}} = {value if value else UNSET_INDEX}")
 
@@ -459,7 +459,7 @@ def package_names(index_url: str) -> list[str]:
 
 
 def clean_cache(workspace: dict[str, str]) -> None:
-    index_url = os.environ.get(ENV_UV_EXTRA_INDEX_URL, "").strip()
+    index_url = os.environ.get(ENV_UV_INDEX, "").strip()
     if not index_url:
         print(">> Skipping the cache clean; no extra index in use")
         return

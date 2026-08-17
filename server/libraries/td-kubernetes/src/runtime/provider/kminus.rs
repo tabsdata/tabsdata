@@ -992,7 +992,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         database_ssl_mode: Some(DATABASE_SSL_MODE_PREFER.to_owned()),
         database_ssl_root_cert: Some(YAML_NULL.to_owned()),
         uv_default_index: Some(SystemValues::uv_default_index(IndexReach::Host)?),
-        uv_extra_index_url: Some(SystemValues::uv_extra_index_url(IndexReach::Host)?),
+        uv_index: Some(SystemValues::uv_index(IndexReach::Host)?),
         uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
         ..SystemValues::default()
     })

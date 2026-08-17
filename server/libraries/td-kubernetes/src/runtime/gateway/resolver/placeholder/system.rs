@@ -86,8 +86,8 @@ pub enum SystemKey {
     CronSchedule,
     #[strum(serialize = "tdk_uv_default_index")]
     UvDefaultIndex,
-    #[strum(serialize = "tdk_uv_extra_index_url")]
-    UvExtraIndexUrl,
+    #[strum(serialize = "tdk_uv_index")]
+    UvIndex,
     #[strum(serialize = "tdk_uv_index_strategy")]
     UvIndexStrategy,
 }
@@ -141,7 +141,7 @@ pub struct SystemValues {
     pub connection_secret_name: Option<String>,
     pub cron_schedule: Option<String>,
     pub uv_default_index: Option<String>,
-    pub uv_extra_index_url: Option<String>,
+    pub uv_index: Option<String>,
     pub uv_index_strategy: Option<String>,
 }
 
@@ -179,21 +179,21 @@ impl SystemValues {
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),
             SystemKey::CronSchedule => self.cron_schedule.as_deref(),
             SystemKey::UvDefaultIndex => self.uv_default_index.as_deref(),
-            SystemKey::UvExtraIndexUrl => self.uv_extra_index_url.as_deref(),
+            SystemKey::UvIndex => self.uv_index.as_deref(),
             SystemKey::UvIndexStrategy => self.uv_index_strategy.as_deref(),
         }
     }
 
     pub fn uv_default_index(reach: IndexReach) -> Result<String, TdError> {
-        Ok(uv_mode()?.default_index(reach))
+        Ok(uv_mode()?.uv_default_index(reach))
     }
 
-    pub fn uv_extra_index_url(reach: IndexReach) -> Result<String, TdError> {
-        Ok(uv_mode()?.extra_index_url(reach))
+    pub fn uv_index(reach: IndexReach) -> Result<String, TdError> {
+        Ok(uv_mode()?.uv_index(reach))
     }
 
     pub fn uv_index_strategy() -> Result<String, TdError> {
-        Ok(uv_mode()?.index_strategy())
+        Ok(uv_mode()?.uv_index_strategy())
     }
 
     pub fn apply_worker_settings(&mut self, settings: &WorkerSettings) {

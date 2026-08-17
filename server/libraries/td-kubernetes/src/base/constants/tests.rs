@@ -9,7 +9,7 @@ use super::*;
 const UV_ENVIRONMENT_VARIABLES: [&str; 4] = [
     ENV_TD_KUBE_UV_MODE,
     ENV_UV_DEFAULT_INDEX,
-    ENV_UV_EXTRA_INDEX_URL,
+    ENV_UV_INDEX,
     ENV_UV_INDEX_STRATEGY,
 ];
 
@@ -80,7 +80,7 @@ fn unsupported_mode_fails() {
 fn named_modes_ignore_the_index_environment_variables() {
     let entries = [
         (ENV_UV_DEFAULT_INDEX, "http://localhost:3142/default/"),
-        (ENV_UV_EXTRA_INDEX_URL, "http://localhost:3142/extra/"),
+        (ENV_UV_INDEX, "http://localhost:3142/extra/"),
         (ENV_UV_INDEX_STRATEGY, "first-index"),
     ];
     for (mode, expected_default, expected_extra, expected_strategy) in [
@@ -99,9 +99,9 @@ fn named_modes_ignore_the_index_environment_variables() {
         ),
     ] {
         with_environment(&entries, || {
-            assert_eq!(mode.default_index(IndexReach::Host), expected_default);
-            assert_eq!(mode.extra_index_url(IndexReach::Host), expected_extra);
-            assert_eq!(mode.index_strategy(), expected_strategy);
+            assert_eq!(mode.uv_default_index(IndexReach::Host), expected_default);
+            assert_eq!(mode.uv_index(IndexReach::Host), expected_extra);
+            assert_eq!(mode.uv_index_strategy(), expected_strategy);
         });
     }
 }
@@ -110,11 +110,11 @@ fn named_modes_ignore_the_index_environment_variables() {
 #[serial]
 fn devpi_rewrites_the_host_for_containers() {
     assert_eq!(
-        UvMode::Devpi.extra_index_url(IndexReach::Host),
+        UvMode::Devpi.uv_index(IndexReach::Host),
         DEVPI_INDEX_URL_HOST
     );
     assert_eq!(
-        UvMode::Devpi.extra_index_url(IndexReach::HostContainer),
+        UvMode::Devpi.uv_index(IndexReach::HostContainer),
         DEVPI_INDEX_URL_CONTAINER
     );
 }
@@ -125,19 +125,22 @@ fn unset_mode_honors_the_index_environment_variables() {
     with_environment(
         &[
             (ENV_UV_DEFAULT_INDEX, "http://localhost:3142/default/"),
-            (ENV_UV_EXTRA_INDEX_URL, "http://localhost:3142/extra/"),
+            (ENV_UV_INDEX, "http://localhost:3142/extra/"),
             (ENV_UV_INDEX_STRATEGY, UV_INDEX_STRATEGY_FIRST_INDEX),
         ],
         || {
             assert_eq!(
-                UvMode::Unset.default_index(IndexReach::Host),
+                UvMode::Unset.uv_default_index(IndexReach::Host),
                 "http://localhost:3142/default/"
             );
             assert_eq!(
-                UvMode::Unset.extra_index_url(IndexReach::Host),
+                UvMode::Unset.uv_index(IndexReach::Host),
                 "http://localhost:3142/extra/"
             );
-            assert_eq!(UvMode::Unset.index_strategy(), UV_INDEX_STRATEGY_BEST_MATCH);
+            assert_eq!(
+                UvMode::Unset.uv_index_strategy(),
+                UV_INDEX_STRATEGY_BEST_MATCH
+            );
         },
     );
 }
@@ -147,23 +150,26 @@ fn unset_mode_honors_the_index_environment_variables() {
 fn unset_mode_falls_back_to_pypi_when_no_variable_is_set() {
     with_environment(&[], || {
         assert_eq!(
-            UvMode::Unset.default_index(IndexReach::Host),
+            UvMode::Unset.uv_default_index(IndexReach::Host),
             PYPI_INDEX_URL
         );
-        assert_eq!(UvMode::Unset.extra_index_url(IndexReach::Host), "");
-        assert_eq!(UvMode::Unset.index_strategy(), UV_INDEX_STRATEGY_BEST_MATCH);
+        assert_eq!(UvMode::Unset.uv_index(IndexReach::Host), "");
+        assert_eq!(
+            UvMode::Unset.uv_index_strategy(),
+            UV_INDEX_STRATEGY_BEST_MATCH
+        );
     });
 }
 
 #[test]
 #[serial]
 fn unset_mode_always_uses_best_match() {
-    with_environment(
-        &[(ENV_UV_EXTRA_INDEX_URL, "http://localhost:3142/extra/")],
-        || {
-            assert_eq!(UvMode::Unset.index_strategy(), UV_INDEX_STRATEGY_BEST_MATCH);
-        },
-    );
+    with_environment(&[(ENV_UV_INDEX, "http://localhost:3142/extra/")], || {
+        assert_eq!(
+            UvMode::Unset.uv_index_strategy(),
+            UV_INDEX_STRATEGY_BEST_MATCH
+        );
+    });
 }
 
 #[test]
@@ -172,16 +178,19 @@ fn unset_mode_treats_blank_variables_as_absent() {
     with_environment(
         &[
             (ENV_UV_DEFAULT_INDEX, "   "),
-            (ENV_UV_EXTRA_INDEX_URL, "   "),
+            (ENV_UV_INDEX, "   "),
             (ENV_UV_INDEX_STRATEGY, "   "),
         ],
         || {
             assert_eq!(
-                UvMode::Unset.default_index(IndexReach::Host),
+                UvMode::Unset.uv_default_index(IndexReach::Host),
                 PYPI_INDEX_URL
             );
-            assert_eq!(UvMode::Unset.extra_index_url(IndexReach::Host), "");
-            assert_eq!(UvMode::Unset.index_strategy(), UV_INDEX_STRATEGY_BEST_MATCH);
+            assert_eq!(UvMode::Unset.uv_index(IndexReach::Host), "");
+            assert_eq!(
+                UvMode::Unset.uv_index_strategy(),
+                UV_INDEX_STRATEGY_BEST_MATCH
+            );
         },
     );
 }
@@ -190,10 +199,10 @@ fn unset_mode_treats_blank_variables_as_absent() {
 #[serial]
 fn unset_mode_trims_variable_values() {
     with_environment(
-        &[(ENV_UV_EXTRA_INDEX_URL, "  http://localhost:3142/extra/  ")],
+        &[(ENV_UV_INDEX, "  http://localhost:3142/extra/  ")],
         || {
             assert_eq!(
-                UvMode::Unset.extra_index_url(IndexReach::Host),
+                UvMode::Unset.uv_index(IndexReach::Host),
                 "http://localhost:3142/extra/"
             );
         },
@@ -205,8 +214,8 @@ fn unset_mode_trims_variable_values() {
 fn unset_mode_rewrites_a_loopback_index_for_containers() {
     for host in ["localhost", "127.0.0.1", "[::1]"] {
         let index = format!("http://{host}:3142/tabsdata/td/+simple/");
-        let rewritten = with_environment(&[(ENV_UV_EXTRA_INDEX_URL, index.as_str())], || {
-            UvMode::Unset.extra_index_url(IndexReach::HostContainer)
+        let rewritten = with_environment(&[(ENV_UV_INDEX, index.as_str())], || {
+            UvMode::Unset.uv_index(IndexReach::HostContainer)
         });
         assert_eq!(
             rewritten,
@@ -220,8 +229,8 @@ fn unset_mode_rewrites_a_loopback_index_for_containers() {
 #[serial]
 fn unset_mode_keeps_a_loopback_index_for_the_host() {
     let index = "http://localhost:3142/tabsdata/td/+simple/";
-    let kept = with_environment(&[(ENV_UV_EXTRA_INDEX_URL, index)], || {
-        UvMode::Unset.extra_index_url(IndexReach::Host)
+    let kept = with_environment(&[(ENV_UV_INDEX, index)], || {
+        UvMode::Unset.uv_index(IndexReach::Host)
     });
     assert_eq!(kept, index);
 }
@@ -230,8 +239,8 @@ fn unset_mode_keeps_a_loopback_index_for_the_host() {
 #[serial]
 fn unset_mode_keeps_a_routable_index_for_containers() {
     let index = "https://devpi.example.com:3142/tabsdata/td/+simple/";
-    let kept = with_environment(&[(ENV_UV_EXTRA_INDEX_URL, index)], || {
-        UvMode::Unset.extra_index_url(IndexReach::HostContainer)
+    let kept = with_environment(&[(ENV_UV_INDEX, index)], || {
+        UvMode::Unset.uv_index(IndexReach::HostContainer)
     });
     assert_eq!(kept, index);
 }
@@ -239,13 +248,8 @@ fn unset_mode_keeps_a_routable_index_for_containers() {
 #[test]
 #[serial]
 fn cluster_reach_always_uses_the_in_cluster_index() {
-    let entries = [(
-        ENV_UV_EXTRA_INDEX_URL,
-        "http://localhost:3142/tabsdata/td/+simple/",
-    )];
-    let resolved = with_environment(&entries, || {
-        UvMode::Devpi.extra_index_url(IndexReach::Cluster)
-    });
+    let entries = [(ENV_UV_INDEX, "http://localhost:3142/tabsdata/td/+simple/")];
+    let resolved = with_environment(&entries, || UvMode::Devpi.uv_index(IndexReach::Cluster));
     assert_eq!(resolved, DEVPI_INDEX_URL_CLUSTER);
 }
 
@@ -253,7 +257,7 @@ fn cluster_reach_always_uses_the_in_cluster_index() {
 #[serial]
 fn cluster_reach_stays_empty_for_local_and_pypi() {
     for mode in [UvMode::Local, UvMode::Pypi] {
-        let resolved = with_environment(&[], || mode.extra_index_url(IndexReach::Cluster));
+        let resolved = with_environment(&[], || mode.uv_index(IndexReach::Cluster));
         assert_eq!(resolved, "", "mode {mode:?}");
     }
 }
@@ -263,14 +267,17 @@ fn cluster_reach_stays_empty_for_local_and_pypi() {
 fn devpi_serves_tabsdata_and_pypi_serves_the_rest() {
     with_environment(&[], || {
         assert_eq!(
-            UvMode::Devpi.default_index(IndexReach::Host),
+            UvMode::Devpi.uv_default_index(IndexReach::Host),
             PYPI_INDEX_URL
         );
         assert_eq!(
-            UvMode::Devpi.extra_index_url(IndexReach::Cluster),
+            UvMode::Devpi.uv_index(IndexReach::Cluster),
             DEVPI_INDEX_URL_CLUSTER
         );
-        assert_eq!(UvMode::Devpi.index_strategy(), UV_INDEX_STRATEGY_BEST_MATCH);
+        assert_eq!(
+            UvMode::Devpi.uv_index_strategy(),
+            UV_INDEX_STRATEGY_BEST_MATCH
+        );
     });
 }
 
@@ -280,16 +287,19 @@ fn cluster_reach_ignores_the_local_index_environment_variables() {
     with_environment(
         &[
             (ENV_UV_DEFAULT_INDEX, "http://localhost:3142/default/"),
-            (ENV_UV_EXTRA_INDEX_URL, "http://localhost:3142/extra/"),
+            (ENV_UV_INDEX, "http://localhost:3142/extra/"),
             (ENV_UV_INDEX_STRATEGY, UV_INDEX_STRATEGY_FIRST_INDEX),
         ],
         || {
             assert_eq!(
-                UvMode::Unset.default_index(IndexReach::Cluster),
+                UvMode::Unset.uv_default_index(IndexReach::Cluster),
                 PYPI_INDEX_URL
             );
-            assert_eq!(UvMode::Unset.extra_index_url(IndexReach::Cluster), "");
-            assert_eq!(UvMode::Unset.index_strategy(), UV_INDEX_STRATEGY_BEST_MATCH);
+            assert_eq!(UvMode::Unset.uv_index(IndexReach::Cluster), "");
+            assert_eq!(
+                UvMode::Unset.uv_index_strategy(),
+                UV_INDEX_STRATEGY_BEST_MATCH
+            );
         },
     );
 }
@@ -298,7 +308,7 @@ fn cluster_reach_ignores_the_local_index_environment_variables() {
 #[serial]
 fn devpi_mode_still_reaches_the_cluster_index() {
     assert_eq!(
-        UvMode::Devpi.extra_index_url(IndexReach::Cluster),
+        UvMode::Devpi.uv_index(IndexReach::Cluster),
         DEVPI_INDEX_URL_CLUSTER
     );
 }

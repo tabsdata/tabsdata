@@ -2468,7 +2468,7 @@ pub fn is_dev_mode() -> bool {
 }
 
 pub fn get_pip_uv_repository_envs() -> BTreeMap<String, String> {
-    const PIP_UV_ENV_VARS: [&str; 11] = [
+    const PIP_UV_ENV_VARS: [&str; 9] = [
         "PIP_INDEX_URL",
         "PIP_PYPI_URL",
         "PIP_EXTRA_INDEX_URL",
@@ -2477,8 +2477,6 @@ pub fn get_pip_uv_repository_envs() -> BTreeMap<String, String> {
         "UV_DEFAULT_INDEX",
         "UV_INDEX",
         "UV_INDEX_STRATEGY",
-        "UV_INDEX_URL",
-        "UV_EXTRA_INDEX_URL",
         "UV_FIND_LINKS",
     ];
 

@@ -258,7 +258,7 @@ setup_workspace() {
 
 report_indexes() {
    local variable
-   for variable in UV_DEFAULT_INDEX UV_EXTRA_INDEX_URL UV_INDEX_STRATEGY; do
+   for variable in UV_DEFAULT_INDEX UV_INDEX UV_INDEX_STRATEGY; do
       printf ">> %-18s = %s\n" "$variable" "${!variable:-<unset>}"
    done
 }
