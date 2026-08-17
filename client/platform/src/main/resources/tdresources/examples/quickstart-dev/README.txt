@@ -36,24 +36,30 @@ Run it
 
 Create the project, add the three collections, register one function in each,
 then trigger the publisher -- Tabsdata runs the transformer and subscriber
-automatically. Run these commands from the directory that contains qs-example/.
+automatically. Run these commands from the directory where this README file is.
 
-  # Create the project and make it the default for the commands below
-  tdk project create --name quickstart-dev
-  tdk pin set --proj quickstart-dev
+  # Create the project and make it the default for the command line
+
+  tdk project create --name quickstart_dev
+  tdk set --proj quickstart_dev
+
 
   # Collections: a source (input), a transformation (dataprod), a destination (output)
-  tdk collection create --name input --group sources --conn-file qs-example/conn-input.yaml
+
+  tdk collection create --name input --group sources --conn-file conn-input.yaml
   tdk collection create --name dataprod --group default
-  tdk collection create --name output --group destinations --conn-file qs-example/conn-output.yaml
+  tdk collection create --name output --group destinations --conn-file conn-output.yaml
+
 
   # Register one function per collection
-  tdk fn register --coll input --path qs-example/input.py::qs_pub
-  tdk fn register --coll dataprod --path qs-example/transform.py::qs_tfr
-  tdk fn register --coll output --path qs-example/output.py::qs_sub
+
+  tdk fn register --coll input --path input.py::qs_pub
+  tdk fn register --coll dataprod --path transform.py::qs_tfr
+  tdk fn register --coll output --path output.py::qs_sub
+
 
   # Run it
+
   tdk fn trigger --coll input --name qs_pub
 
-When the flow finishes, the result is written to the qs-example/output-data/
-directory.
+When the flow finishes, the result is written to the output-data/ directory.
