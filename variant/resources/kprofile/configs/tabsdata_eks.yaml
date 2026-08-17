@@ -8,8 +8,8 @@ pods:
     # container of every pod. A variable a container declares itself is left
     # alone, so these are defaults rather than overrides.
     envs:
-      UV_INDEX: ""
       UV_DEFAULT_INDEX: https://pypi.org/simple/
+      UV_INDEX: ""
       UV_INDEX_STRATEGY: unsafe-best-match
 
   # Sizing and placement. These values are what tabsdata applies: the pod
