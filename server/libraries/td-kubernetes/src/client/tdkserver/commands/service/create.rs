@@ -19,8 +19,8 @@ use crate::client::tdkserver::commands::service::{
     instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
 use crate::client::tdkserver::common::confirm;
-use crate::client::tdkserver::render::preview;
 use crate::client::tdkserver::render::report::helper::common::activation_command;
+use crate::client::tdkserver::render::{preview, report};
 use crate::client::tdkserver::widgets::show_hint;
 use crate::client::vault::Vault;
 use crate::core::system::exit::{CommandResult, abort};
@@ -116,10 +116,12 @@ pub async fn command_create(
         yes.value,
         verbose,
         &HashMap::new(),
+        true,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_instance(
     instance: Option<String>,
     instance_in_settings: bool,
@@ -128,6 +130,7 @@ pub async fn create_instance(
     yes: bool,
     verbose: bool,
     secret_overrides: &HashMap<String, String>,
+    with_hint: bool,
 ) -> CommandResult {
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
 
@@ -219,6 +222,8 @@ pub async fn create_instance(
     settings.cluster = provider.refresh_cluster_views(settings.cluster)?;
     settings.state = InstanceState::Created;
     settings.save()?;
+
+    report::component::service::created_service(&provider.summary(), with_hint);
 
     // if provider.cluster_provider().hosts_runtimes()? {
     //     report_venv_activation(&settings.name)?;

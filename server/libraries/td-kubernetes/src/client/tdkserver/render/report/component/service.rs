@@ -192,6 +192,31 @@ pub fn instance_inspect(settings: &InstanceSettings, folder: &Path, alive: Optio
     }
 }
 
+pub fn created_service(summary: &Summary, with_hint: bool) {
+    if let Some(name) = &summary.instance_name {
+        if let Some(path) = &summary.instance_path {
+            info!("Created tabsdata instance '{name}' at {}.", path.display());
+        } else {
+            info!("Created tabsdata instance '{name}'.");
+        }
+    } else if let Some(namespace) = &summary.namespace {
+        info!("Created tabsdata instance in namespace '{namespace}'.");
+    } else {
+        info!("Created tabsdata instance.");
+    }
+    render_session_lines(summary);
+    if with_hint {
+        match &summary.instance_name {
+            Some(name) => show_hint(
+                &format!("Run 'tdkserver start --instance {name}' to start the instance."),
+                80,
+                true,
+            ),
+            None => show_hint("Run 'tdkserver start' to start the instance.", 80, true),
+        }
+    }
+}
+
 pub fn started_service(summary: &Summary) {
     if let Some(name) = &summary.instance_name {
         if let Some(path) = &summary.instance_path {

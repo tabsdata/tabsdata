@@ -415,6 +415,7 @@ async fn run_quickstart(
         resolved_yes_value.value,
         resolved_verbose_value,
         overrides,
+        false,
     )
     .await?;
 
