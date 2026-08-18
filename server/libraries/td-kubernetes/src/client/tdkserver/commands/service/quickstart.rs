@@ -17,7 +17,7 @@ use tracing::{info, warn};
 use crate::base::constants::REQUIREMENTS_AG_ASSET;
 use crate::base::constants::{
     ENV_UV_INDEX, ENV_UV_INDEX_STRATEGY, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, LogLevel,
-    REQUIREMENTS_TD_ASSET, UV_INDEX_STRATEGY_BEST_MATCH,
+    REQUIREMENTS_FN_ASSET, REQUIREMENTS_TD_ASSET, UV_INDEX_STRATEGY_BEST_MATCH,
 };
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
@@ -124,6 +124,18 @@ pub struct QuickstartArguments {
     )]
     pub requirements_td: Option<PathBuf>,
 
+    #[arg(
+        long = "reqs-fn",
+        name = "reqs-fn",
+        required = false,
+        value_name = "FILE",
+        display_order = 135,
+        long_help = "Complementary packages for the fn virtual environment. The file \
+                     replaces the empty requirements-fn.txt of the initialized instance \
+                     and is installed when the virtual environment is built."
+    )]
+    pub requirements_fn: Option<PathBuf>,
+
     #[cfg(feature = "enterprise")]
     #[arg(
         long = "reqs-ag",
@@ -205,6 +217,7 @@ pub async fn command_quickstart(
         yes,
         loglevel,
         requirements_td,
+        requirements_fn,
         #[cfg(feature = "enterprise")]
         requirements_ag,
         uv_index,
@@ -260,6 +273,7 @@ pub async fn command_quickstart(
         yes,
         loglevel,
         requirements_td,
+        requirements_fn,
         #[cfg(feature = "enterprise")]
         requirements_ag,
         uv_index,
@@ -368,6 +382,7 @@ async fn run_quickstart(
     yes: Option<bool>,
     loglevel: Option<LogLevel>,
     requirements_td: Option<PathBuf>,
+    requirements_fn: Option<PathBuf>,
     #[cfg(feature = "enterprise")] requirements_ag: Option<PathBuf>,
     uv_index: Option<String>,
     overrides: &HashMap<String, String>,
@@ -392,6 +407,9 @@ async fn run_quickstart(
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
     if let Some(source) = &requirements_td {
         persist_requirements(&target_instance, REQUIREMENTS_TD_ASSET, source)?;
+    }
+    if let Some(source) = &requirements_fn {
+        persist_requirements(&target_instance, REQUIREMENTS_FN_ASSET, source)?;
     }
     #[cfg(feature = "enterprise")]
     if let Some(source) = &requirements_ag {

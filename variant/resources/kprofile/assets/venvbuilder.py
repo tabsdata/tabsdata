@@ -216,6 +216,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Complementary packages for td (default: none)",
     )
     parser.add_argument(
+        "--requirements-fn",
+        dest="requirements_fn",
+        default="",
+        help="Complementary packages for fn (default: none)",
+    )
+    parser.add_argument(
         "--constraint",
         dest="constraint",
         default="",
@@ -288,6 +294,13 @@ def validate_arguments(arguments: argparse.Namespace) -> None:
     if arguments.requirements_td and not os.path.isfile(arguments.requirements_td):
         print(
             f"Requirements file for td not found: {arguments.requirements_td}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if arguments.requirements_fn and not os.path.isfile(arguments.requirements_fn):
+        print(
+            f"Requirements file for fn not found: {arguments.requirements_fn}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -601,7 +614,7 @@ def install_packages(arguments: argparse.Namespace, workspace: dict[str, str]) -
         workspace,
         workspace["virtual_environment_fn"],
         pinned(PACKAGES_FN, arguments.version),
-        arguments.requirements_td,
+        arguments.requirements_fn,
     )
 
 
@@ -631,9 +644,13 @@ def prune_one_virtual_environment(
 
 
 def prune_virtual_environment(workspace: dict[str, str]) -> None:
-    prune_one_virtual_environment(workspace["virtual_environment_td"], PRUNED_BIN_FILES)
     prune_one_virtual_environment(
-        workspace["virtual_environment_fn"], PRUNED_BIN_FILES_FN
+        workspace["virtual_environment_td"],
+        PRUNED_BIN_FILES,
+    )
+    prune_one_virtual_environment(
+        workspace["virtual_environment_fn"],
+        PRUNED_BIN_FILES_FN,
     )
 
 
@@ -774,8 +791,10 @@ def main() -> None:
 
     hours = (time.monotonic() - start) / 3600
     print(
-        f">> Done! Images written to {workspace['output_image_td']}"
-        f" and {workspace['output_image_fn']}"
+        f">> Done! Images written to "
+        f"{workspace['output_image_td']}"
+        f" and "
+        f"{workspace['output_image_fn']}"
     )
     print(f">> Elapsed time: {hours:.4f} hours")
 

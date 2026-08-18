@@ -237,6 +237,8 @@ pub const KPROFILE_ASSETS_FAMILY: Family = Family {
 };
 
 pub const REQUIREMENTS_TD_ASSET: &str = "requirements-td.txt";
+pub const REQUIREMENTS_FN_ASSET: &str = "requirements-fn.txt";
+#[cfg(feature = "enterprise")]
 pub const REQUIREMENTS_AG_ASSET: &str = "requirements-ag.txt";
 pub const TABSDATA_REQUIREMENTS_LOCK_ASSET: &str = "tabsdata-requirements.txt";
 
@@ -271,8 +273,17 @@ impl ForeignAsset {
 
 pub const FOREIGN_ASSETS: &[ForeignAsset] = &[ForeignAsset::TabsdataRequirementLock];
 
+#[cfg(not(feature = "enterprise"))]
 pub const CUSTOMIZABLE_ASSETS: &[&str] = &[
     REQUIREMENTS_TD_ASSET,
+    REQUIREMENTS_FN_ASSET,
+    TABSDATA_REQUIREMENTS_LOCK_ASSET,
+];
+
+#[cfg(feature = "enterprise")]
+pub const CUSTOMIZABLE_ASSETS: &[&str] = &[
+    REQUIREMENTS_TD_ASSET,
+    REQUIREMENTS_FN_ASSET,
     REQUIREMENTS_AG_ASSET,
     TABSDATA_REQUIREMENTS_LOCK_ASSET,
 ];

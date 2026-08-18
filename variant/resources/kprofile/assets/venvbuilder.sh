@@ -115,6 +115,7 @@ show_usage() {
    echo "Usage: $0 [options]"
    echo "  -p, --python VERSION           Python version                   (default: $PYTHON_VERSION)"
    echo "      --requirements-td FILE     Complementary packages for td    (default: none)"
+   echo "      --requirements-fn FILE     Complementary packages for fn    (default: none)"
    echo "      --constraint FILE          Constraint file pinning the versions of every install    (default: none)"
    echo "  -o, --output FOLDER            Output folder                    (mandatory)"
    echo "      --version VERSION          Tabsdata version to install      (mandatory)"
@@ -132,6 +133,7 @@ constrained() {
 parse_arguments() {
    python_version="$PYTHON_VERSION"
    requirements_td=""
+   requirements_fn=""
    constraint=""
    output=""
    image="$IMAGE_NAME$IMAGE_SUFFIX"
@@ -143,6 +145,7 @@ parse_arguments() {
       case "$1" in
          -p|--python)         python_version="$2";  shift 2 ;;
          --requirements-td)   requirements_td="$2"; shift 2 ;;
+         --requirements-fn)   requirements_fn="$2"; shift 2 ;;
          --constraint)        constraint="$2";      shift 2 ;;
          -o|--output)         output="$2";          shift 2 ;;
          --image)             image="$2";           shift 2 ;;
@@ -179,6 +182,10 @@ validate_arguments() {
    fi
    if [[ -n "$requirements_td" && ! -f "$requirements_td" ]]; then
       echo "Requirements file for td not found: $requirements_td" >&2
+      exit 1
+   fi
+   if [[ -n "$requirements_fn" && ! -f "$requirements_fn" ]]; then
+      echo "Requirements file for fn not found: $requirements_fn" >&2
       exit 1
    fi
 
@@ -313,9 +320,12 @@ has_requirements() {
 install_packages() {
    if has_requirements "$requirements_td"; then
       run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "tabsdata[all]==$version" -r "$requirements_td"
-      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "tabsdata[all]==$version" -r "$requirements_td"
    else
       run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "tabsdata[all]==$version"
+   fi
+   if has_requirements "$requirements_fn"; then
+      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "tabsdata[all]==$version" -r "$requirements_fn"
+   else
       run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "tabsdata[all]==$version"
    fi
 }
