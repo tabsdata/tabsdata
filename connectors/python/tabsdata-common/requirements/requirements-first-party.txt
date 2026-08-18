@@ -2,4 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-tabsdata-api==2.0.0
+tabsdata-api==2.0.1

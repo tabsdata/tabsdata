@@ -49,7 +49,7 @@ static PROVIDER_LONG_HELP: LazyLock<String> = LazyLock::new(|| {
 #[derive(Debug, Clone, Parser)]
 #[command(
     name = "Tabsdata Client for Tabsdata Server on Kubernetes",
-    version = "2.0.0",
+    version = "2.0.1",
     about = "Client for the tabsdata server on kubernetes",
     long_about = "Manage tabsdata instances on kubernetes clusters.",
     disable_help_subcommand = true

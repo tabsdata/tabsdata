@@ -11,7 +11,7 @@ from tabsdatak.server._tdrunner.function.commands.inspect_instance.runner import
 
 __all__ = ["main"]
 
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 
 
 def _build_parser() -> argparse.ArgumentParser:

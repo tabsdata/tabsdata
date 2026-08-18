@@ -175,12 +175,13 @@ def main():
     root = os.path.basename(args.root.rstrip(os.sep))
     parent = Path(args.root).resolve().parent
     if root == TABSDATA_UI:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "npm",
                 "version",
                 new_version,
                 "--no-git-tag-version",
+                "--allow-same-version",
             ],
             cwd=os.path.join(parent, TABSDATA_UI),
             capture_output=False,
@@ -188,6 +189,12 @@ def main():
             encoding="utf-8",
             errors="strict",
         )
+        if result.returncode != 0:
+            logger.error(
+                f"❌ Error: npm version failed for {TABSDATA_UI} with code"
+                f" {result.returncode}"
+            )
+            exit(1)
     else:
         logger.info(f"✂️ No need for additional upgrades for root: {root}")
 

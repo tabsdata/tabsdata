@@ -20,7 +20,7 @@ build==1.5.0
 cachetools==6.2.6
 certifi==2026.7.22
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
-charset-normalizer==3.4.9
+charset-normalizer==3.5.1
 click==8.4.2
 click-repl==0.3.0
 clickhouse-connect==0.14.1
@@ -48,7 +48,7 @@ google-cloud-storage-control==1.10.0
 google-crc32c==1.8.0
 google-resumable-media==2.10.1
 googleapis-common-protos==1.75.1
-greenlet==3.5.4 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.5
 grpcio==1.83.0
 grpcio-status==1.83.0
@@ -102,7 +102,7 @@ pycountries==1.2.1
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
 pydantic==2.12.5
 pydantic-core==2.41.5
-pygments==2.20.0
+pygments==2.21.0
 pyiceberg==0.11.1
 pyjwt==2.13.0
 pymongo==4.16.0
@@ -141,7 +141,7 @@ tomlkit==0.15.1
 types-pyyaml==6.0.3
 types-s3transfer==0.16.0
 typing-extensions==4.15.0
-typing-inspection==0.4.2
+typing-inspection==0.4.4
 tzdata==2026.3
 tzlocal==5.3.1
 urllib3==2.7.0
@@ -149,7 +149,7 @@ uuid-v7==1.0.0
 uuid6==2025.0.1
 uv==0.10.12
 wcwidth==0.8.2
-wheel==0.47.0
+wheel==0.48.0
 zeep==4.3.3
 zipp==4.1.0
 zstandard==0.25.0

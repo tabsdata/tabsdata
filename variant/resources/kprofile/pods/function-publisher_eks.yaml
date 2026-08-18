@@ -13,7 +13,7 @@ metadata:
   labels:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/instance: tabsdata
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.0.1"
     app.kubernetes.io/component: function-publisher
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
@@ -30,7 +30,7 @@ spec:
       labels:
         app.kubernetes.io/name: tabsdata
         app.kubernetes.io/instance: tabsdata
-        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/version: "2.0.1"
         app.kubernetes.io/component: function-publisher
         app.kubernetes.io/part-of: tabsdata
         app.kubernetes.io/managed-by: tdkserver
