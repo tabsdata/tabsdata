@@ -22,7 +22,7 @@ use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::preview;
 use crate::client::tdkserver::render::report::helper::common::activation_command;
 use crate::client::tdkserver::widgets::show_hint;
-use crate::client::vault::InstanceVault;
+use crate::client::vault::Vault;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::secret::upsert_secret;
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
@@ -181,10 +181,11 @@ pub async fn create_instance(
     settings.save()?;
 
     let mut system = provider.system_values()?;
-    let auto: HashMap<String, String> = InstanceVault::load(&settings.name)?
-        .secrets
-        .into_iter()
-        .collect();
+    let mut vault = Vault::of(&settings.name)?;
+    if settings.provider == ClusterProvider::Kminus {
+        vault.provision(&profile)?;
+    }
+    let auto: HashMap<String, String> = vault.secrets().clone().into_iter().collect();
 
     apply_ports(&mut system, &assigned);
 
@@ -204,6 +205,9 @@ pub async fn create_instance(
 
     let context = provider.kube_context().await?;
     store_secrets(&context, &fused, secret_overrides, &reporter).await?;
+    if settings.provider == ClusterProvider::Kminus {
+        vault.persist(&fused, secret_overrides)?;
+    }
 
     provider.create_runtimes(&reporter).await?;
     provider.create_images(&reporter).await?;

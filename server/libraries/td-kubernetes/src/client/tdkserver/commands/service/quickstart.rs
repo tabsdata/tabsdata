@@ -23,7 +23,7 @@ use crate::base::constants::{
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
-use crate::client::registry::{InstanceSettings, instance_folder, instance_init_input_folder};
+use crate::client::registry::{instance_folder, instance_init_input_folder};
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
@@ -37,15 +37,11 @@ use crate::client::tdkserver::commands::service::{
 use crate::client::tdkserver::common::confirm;
 #[allow(unused_imports)]
 use crate::client::tdkserver::widgets::show_notice;
-use crate::client::vault::InstanceVault;
 #[cfg(feature = "enterprise")]
 use crate::core::system::exit::abort;
 use crate::core::system::exit::{CommandResult, abort_with, render_error};
 use crate::cwarn;
-use crate::runtime::gateway::resolver::kind::PlaceholderKind;
-use crate::runtime::gateway::resolver::walker::{Rule, placeholder_occurrences};
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
-use crate::runtime::instance::profile::load_profile;
 use crate::runtime::instance::tabsdata::{EnvValue, TABSDATA_FILE, TabsdataConfig};
 use crate::runtime::provider::ClusterProvider;
 
@@ -363,34 +359,6 @@ fn persist_uv_index(instance: &str, uv_index: &str) -> CommandResult {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn seed_vault(name: &str, verbose: bool) -> CommandResult {
-    let provider = InstanceSettings::load(name)?.provider;
-    let profile = load_profile(provider, verbose)?;
-    let mut vault = InstanceVault::load(name)?;
-    let known = vault.secrets.len();
-    for content in profile.configs.values() {
-        for placeholder in placeholder_occurrences(content) {
-            let Ok(PlaceholderKind::Secret) = placeholder.kind.parse::<PlaceholderKind>() else {
-                continue;
-            };
-            let Some(category) = placeholder.category.filter(|category| !category.is_empty())
-            else {
-                continue;
-            };
-            if placeholder.rule == Rule::Optional {
-                continue;
-            }
-            vault.value_for(&category);
-        }
-    }
-    if vault.secrets.len() != known {
-        vault.save(name)?;
-        // show_notice(VAULT_DISCLAIMER, 80, true);
-    }
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
 async fn run_quickstart(
     instance: Option<String>,
     cluster: ClusterArguments,
@@ -432,8 +400,6 @@ async fn run_quickstart(
     if let Some(uv_index) = &uv_index {
         persist_uv_index(&target_instance, uv_index)?;
     }
-
-    seed_vault(&target_instance, globals.verbose)?;
 
     let settings = SettingsContext::settings();
     let resolved_instance_value = resolved_instance(instance.clone(), &settings);

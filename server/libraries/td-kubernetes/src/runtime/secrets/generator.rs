@@ -85,6 +85,20 @@ impl Generator {
         !self.dependencies().is_empty()
     }
 
+    pub fn is_storable(self) -> bool {
+        !matches!(
+            self,
+            Generator::JwtSigningKey | Generator::APIServerServiceToken
+        )
+    }
+
+    pub fn is_storable_category(category: &str) -> bool {
+        match Generator::from_name(category) {
+            Some(generator) => generator.is_storable(),
+            None => !category.is_empty(),
+        }
+    }
+
     pub fn generate(self, resolved: &BTreeMap<Generator, String>) -> Result<String, SecretError> {
         match self {
             Generator::JwtSigningKey => Ok(td_common::id::id().to_string()),
@@ -125,3 +139,6 @@ pub trait SecretGenerator: Send + Sync {
         context: &KubeContext,
     ) -> Result<BTreeMap<String, String>, KubernetesError>;
 }
+
+#[cfg(test)]
+mod tests;

@@ -143,8 +143,8 @@ fn notes(pending: &[CheckEntry]) -> Vec<String> {
         return Vec::new();
     }
     vec![format!(
-        "'quickstart' injects {} straight into the instance secrets, so they stay \
-         pending here even once supplied.",
+        "'quickstart' injects {} straight into the instance secrets and the instance \
+         vault, so they stay pending here even once supplied.",
         injected.join(" and ")
     )]
 }

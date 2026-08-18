@@ -5,7 +5,7 @@
 database:
   apiserver:
     postgres:
-      password: ${{secret:postgres_apiserver_password}}
+      password: ${{secretAuto:postgres_apiserver_password}}
     pool:
       min_connections: 5
       max_connections: 50

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -14,41 +14,128 @@ use crate::base::constants::VAULT_FILE;
 use crate::base::error::cli::CliError;
 use crate::client::registry::instance_folder;
 use crate::core::system::exit::CommandResult;
+use crate::runtime::gateway::resolver::fusion::FusedSecrets;
+use crate::runtime::gateway::resolver::kind::PlaceholderKind;
+use crate::runtime::gateway::resolver::walker::placeholder_occurrences;
+use crate::runtime::instance::profile::Profile;
 use crate::runtime::secrets::generator::Generator;
 
-pub fn instance_vault_file(name: &str) -> CommandResult<PathBuf> {
-    Ok(instance_folder(name)?.join(VAULT_FILE))
-}
-
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub struct InstanceVault {
+pub struct Vault {
+    #[serde(skip)]
+    instance: String,
     #[serde(default)]
-    pub secrets: BTreeMap<String, String>,
+    secrets: BTreeMap<String, String>,
 }
 
-impl InstanceVault {
-    pub fn load(name: &str) -> CommandResult<Self> {
-        let path = instance_vault_file(name)?;
-        if !path.exists() {
-            return Ok(Self::default());
-        }
-        let data = fs::read_to_string(&path).map_err(|error| {
-            TdError::from(CliError::FileParseFailed {
-                file: path.display().to_string(),
-                cause: error.to_string(),
-            })
-        })?;
-        let vault = serde_json::from_str(&data).map_err(|error| {
-            TdError::from(CliError::FileParseFailed {
-                file: path.display().to_string(),
-                cause: error.to_string(),
-            })
-        })?;
+impl Vault {
+    pub fn of(instance: &str) -> CommandResult<Self> {
+        let path = Self::file(instance)?;
+        let mut vault = if path.exists() {
+            let data = fs::read_to_string(&path).map_err(|error| {
+                TdError::from(CliError::FileParseFailed {
+                    file: path.display().to_string(),
+                    cause: error.to_string(),
+                })
+            })?;
+            serde_json::from_str::<Self>(&data).map_err(|error| {
+                TdError::from(CliError::FileParseFailed {
+                    file: path.display().to_string(),
+                    cause: error.to_string(),
+                })
+            })?
+        } else {
+            Self::default()
+        };
+        vault.instance = instance.to_owned();
         Ok(vault)
     }
 
-    pub fn save(&self, name: &str) -> CommandResult {
-        let path = instance_vault_file(name)?;
+    pub fn secrets(&self) -> &BTreeMap<String, String> {
+        &self.secrets
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.secrets.is_empty()
+    }
+
+    pub fn provision(&mut self, profile: &Profile) -> CommandResult {
+        let mut provisioned = false;
+        for content in profile.configs.values() {
+            for placeholder in placeholder_occurrences(content) {
+                let Ok(kind) = placeholder.kind.parse::<PlaceholderKind>() else {
+                    continue;
+                };
+                if !matches!(kind, PlaceholderKind::Secret | PlaceholderKind::SecretAuto) {
+                    continue;
+                }
+                let Some(category) = placeholder.category.filter(|category| !category.is_empty())
+                else {
+                    continue;
+                };
+                provisioned |= self.provision_category(&category);
+            }
+        }
+        if provisioned { self.save() } else { Ok(()) }
+    }
+
+    pub fn persist(
+        &mut self,
+        fused: &FusedSecrets,
+        overrides: &HashMap<String, String>,
+    ) -> CommandResult {
+        let mut stored = false;
+        for (_, entries) in &fused.by_file {
+            for entry in entries {
+                let Some(category) = entry.category.as_deref() else {
+                    continue;
+                };
+                let value = overrides
+                    .get(category)
+                    .map(String::as_str)
+                    .unwrap_or(entry.value.as_str());
+                stored |= self.store(category, value);
+            }
+        }
+        for (category, value) in overrides {
+            stored |= self.store(category, value);
+        }
+        if stored { self.save() } else { Ok(()) }
+    }
+
+    pub(crate) fn provision_category(&mut self, category: &str) -> bool {
+        match Generator::from_name(category) {
+            Some(generator) if generator.is_storable() => {
+                if self.secrets.contains_key(category) {
+                    return false;
+                }
+                let value = generator
+                    .generate(&BTreeMap::new())
+                    .unwrap_or_else(|_| td_common::random::password());
+                self.secrets.insert(category.to_owned(), value);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn store(&mut self, category: &str, value: &str) -> bool {
+        if value.is_empty() || !Generator::is_storable_category(category) {
+            return false;
+        }
+        if self.secrets.get(category).is_some_and(|held| held == value) {
+            return false;
+        }
+        self.secrets.insert(category.to_owned(), value.to_owned());
+        true
+    }
+
+    fn file(instance: &str) -> CommandResult<PathBuf> {
+        Ok(instance_folder(instance)?.join(VAULT_FILE))
+    }
+
+    fn save(&self) -> CommandResult {
+        let path = Self::file(&self.instance)?;
         let data = serde_json::to_string_pretty(self).map_err(|error| {
             TdError::from(CliError::FileSerializeFailed {
                 file: path.display().to_string(),
@@ -62,24 +149,6 @@ impl InstanceVault {
             })
         })?;
         restrict(&path)
-    }
-
-    pub fn value_for(&mut self, category: &str) -> String {
-        if let Some(value) = self.secrets.get(category) {
-            return value.clone();
-        }
-        let value = match Generator::from_name(category) {
-            Some(generator) => generator
-                .generate(&BTreeMap::new())
-                .unwrap_or_else(|_| td_common::random::password()),
-            None => td_common::random::password(),
-        };
-        self.secrets.insert(category.to_owned(), value.clone());
-        value
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.secrets.is_empty()
     }
 }
 
