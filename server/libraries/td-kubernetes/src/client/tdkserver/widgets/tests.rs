@@ -81,6 +81,13 @@ fn show_box_does_not_panic_on_zero_min_width() {
 }
 
 #[test]
+fn show_caution_does_not_panic_on_long_text() {
+    let text: String = "the environment variable is set ".repeat(20);
+    let outcome = std::panic::catch_unwind(|| show_caution(&text, 80, true, &["variable"]));
+    assert!(outcome.is_ok(), "show_caution panicked on long text");
+}
+
+#[test]
 fn show_banner_does_not_panic() {
     let outcome = std::panic::catch_unwind(show_banner);
     assert!(outcome.is_ok(), "show_banner panicked");

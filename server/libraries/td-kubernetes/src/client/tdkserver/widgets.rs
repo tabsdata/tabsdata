@@ -24,19 +24,86 @@ const BORDER_ORANGE: (u8, u8, u8) = (215, 95, 0);
 const BODY_ORANGE: (u8, u8, u8) = (255, 175, 95);
 const BORDER_YELLOW: (u8, u8, u8) = (215, 175, 0);
 const BODY_YELLOW: (u8, u8, u8) = (255, 215, 95);
+const BORDER_RED: (u8, u8, u8) = (225, 75, 75);
+const BODY_RED: (u8, u8, u8) = (255, 95, 95);
 
 pub fn show_box(text: &str, min: usize, spaced: bool) {
-    show_colored_box(text, min, BORDER_GREEN, BODY_GREEN, true, false, spaced)
+    show_colored_box(text, min, BORDER_GREEN, BODY_GREEN, true, false, spaced, &[])
 }
 
 pub fn show_notice(text: &str, min: usize, spaced: bool) {
-    show_colored_box(text, min, BORDER_ORANGE, BODY_ORANGE, false, false, spaced)
+    show_colored_box(
+        text,
+        min,
+        BORDER_ORANGE,
+        BODY_ORANGE,
+        false,
+        false,
+        spaced,
+        &[],
+    )
 }
 
 pub fn show_hint(text: &str, min: usize, spaced: bool) {
-    show_colored_box(text, min, BORDER_YELLOW, BODY_YELLOW, false, true, spaced)
+    show_colored_box(
+        text,
+        min,
+        BORDER_YELLOW,
+        BODY_YELLOW,
+        false,
+        true,
+        spaced,
+        &[],
+    )
 }
 
+pub fn show_caution(text: &str, min: usize, spaced: bool, emphasized: &[&str]) {
+    show_colored_box(
+        text,
+        min,
+        BORDER_RED,
+        BODY_RED,
+        false,
+        false,
+        spaced,
+        emphasized,
+    )
+}
+
+fn emphasize(line: &str, body: (u8, u8, u8), emphasized: &[&str]) -> String {
+    let mut rendered = String::new();
+    let mut rest = line;
+    while !rest.is_empty() {
+        let found = emphasized
+            .iter()
+            .filter(|needle| !needle.is_empty())
+            .filter_map(|needle| rest.find(*needle).map(|at| (at, needle.len())))
+            .min();
+        match found {
+            Some((at, length)) => {
+                rendered.push_str(
+                    &rest[..at]
+                        .truecolor(body.0, body.1, body.2)
+                        .to_string(),
+                );
+                rendered.push_str(
+                    &rest[at..at + length]
+                        .truecolor(body.0, body.1, body.2)
+                        .bold()
+                        .to_string(),
+                );
+                rest = &rest[at + length..];
+            }
+            None => {
+                rendered.push_str(&rest.truecolor(body.0, body.1, body.2).to_string());
+                break;
+            }
+        }
+    }
+    rendered
+}
+
+#[allow(clippy::too_many_arguments)]
 fn show_colored_box(
     text: &str,
     min: usize,
@@ -45,6 +112,7 @@ fn show_colored_box(
     centered: bool,
     keep_lines: bool,
     spaced: bool,
+    emphasized: &[&str],
 ) {
     #[cfg(not(windows))]
     let use_colors = supports_color::on(supports_color::Stream::Stdout).is_some();
@@ -108,12 +176,7 @@ fn show_colored_box(
         };
         if use_colors {
             let edge = "│".truecolor(border.0, border.1, border.2).bold();
-            println!(
-                "{} {} {}",
-                edge,
-                padded_line.truecolor(body.0, body.1, body.2),
-                edge
-            );
+            println!("{} {} {}", edge, emphasize(&padded_line, body, emphasized), edge);
         } else {
             println!("│ {padded_line} │");
         }
@@ -122,7 +185,16 @@ fn show_colored_box(
 }
 
 pub fn show_banner() {
-    show_colored_box(BANNER, 80, BORDER_GREEN, BODY_GREEN, true, false, false)
+    show_colored_box(
+        BANNER,
+        80,
+        BORDER_GREEN,
+        BODY_GREEN,
+        true,
+        false,
+        false,
+        &[],
+    )
 }
 
 pub struct Spinner {
