@@ -14,3 +14,4 @@ pub mod service;
 pub mod session;
 pub mod shell;
 pub mod template;
+pub mod venvs;

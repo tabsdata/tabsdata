@@ -33,6 +33,7 @@ use crate::client::tdkserver::commands::service::view::ViewArguments;
 use crate::client::tdkserver::commands::session::set::SetArguments;
 use crate::client::tdkserver::commands::session::settings::SettingsArguments;
 use crate::client::tdkserver::commands::session::unset::UnpinArguments;
+use crate::client::tdkserver::commands::venvs::VenvCommands;
 // use crate::client::tdkserver::commands::session::SessionCommands;
 // use crate::client::tdkserver::commands::template::TemplateCommands;
 use crate::runtime::provider::ClusterProvider;
@@ -201,6 +202,12 @@ pub enum Commands {
         about = "View the configmaps of a tabsdata instance"
     )]
     View(ViewArguments),
+    #[command(
+        subcommand,
+        about = "Manage the python virtual environments of a tabsdata instance",
+        arg_required_else_help = true
+    )]
+    Venv(VenvCommands),
     #[command(about = "Set a session setting used when commands omit it")]
     Set(SetArguments),
     #[command(about = "Unset a session setting")]

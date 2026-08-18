@@ -242,6 +242,56 @@ pub const REQUIREMENTS_FN_ASSET: &str = "requirements-fn.txt";
 pub const REQUIREMENTS_AG_ASSET: &str = "requirements-ag.txt";
 pub const TABSDATA_REQUIREMENTS_LOCK_ASSET: &str = "tabsdata-requirements.txt";
 
+pub const VENV_TD: &str = "td";
+pub const VENV_FN: &str = "fn";
+#[cfg(feature = "enterprise")]
+pub const VENV_AG: &str = "ag";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "lower")]
+pub enum Venv {
+    Td,
+    Fn,
+    #[cfg(feature = "enterprise")]
+    Ag,
+}
+
+impl Venv {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Td => VENV_TD,
+            Self::Fn => VENV_FN,
+            #[cfg(feature = "enterprise")]
+            Self::Ag => VENV_AG,
+        }
+    }
+
+    pub const fn requirements_asset(self) -> &'static str {
+        match self {
+            Self::Td => REQUIREMENTS_TD_ASSET,
+            Self::Fn => REQUIREMENTS_FN_ASSET,
+            #[cfg(feature = "enterprise")]
+            Self::Ag => REQUIREMENTS_AG_ASSET,
+        }
+    }
+
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::Td => "Virtual environment for internal tasks of pods & jobs",
+            Self::Fn => "Virtual environment to run user functions",
+            #[cfg(feature = "enterprise")]
+            Self::Ag => "Virtual environment to run tabsdata ai tasks",
+        }
+    }
+}
+
+pub const VENVS: &[Venv] = &[
+    Venv::Td,
+    Venv::Fn,
+    #[cfg(feature = "enterprise")]
+    Venv::Ag,
+];
+
 pub const RESOURCE_TABSDATA_REQUIREMENTS_LOCK: &str =
     concatcp!("resources/lock/", TABSDATA_REQUIREMENTS_LOCK_ASSET);
 

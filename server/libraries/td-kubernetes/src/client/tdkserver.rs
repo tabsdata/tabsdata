@@ -44,6 +44,7 @@ use crate::client::tdkserver::commands::session::settings::command_settings;
 use crate::client::tdkserver::commands::session::unset::command_unset;
 // use crate::client::tdkserver::commands::session::command_session;
 use crate::client::tdkserver::commands::shell::command_shell;
+use crate::client::tdkserver::commands::venvs::command_venv;
 // use crate::client::tdkserver::commands::template::command_template;
 use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use td_common::crypto::install_crypto_provider;
@@ -89,6 +90,7 @@ impl TabsDataKubernetesClient {
             //     command_unregister(arguments, &globals).await
             // }
             Some(Commands::Check(arguments)) => command_check(arguments, &globals).await,
+            Some(Commands::Venv(command)) => command_venv(command, &globals).await,
             Some(Commands::Get(arguments)) => command_get(arguments, &globals).await,
             Some(Commands::Put(arguments)) => command_put(arguments, &globals).await,
             Some(Commands::View(arguments)) => command_view(arguments, &globals).await,

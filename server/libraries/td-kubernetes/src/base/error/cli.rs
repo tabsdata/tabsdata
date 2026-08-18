@@ -30,6 +30,12 @@ pub enum CliError {
          'tdkserver init' and before 'tdkserver create'."
     )]
     ArgumentNoLongerSupported { argument: String } = 4,
+    #[error("File '{file}' is not a valid pip requirements file; line {line}: {cause}.")]
+    RequirementsInvalid {
+        file: String,
+        line: usize,
+        cause: String,
+    } = 5,
     #[error("Folder '{0}' does not exist.")]
     FolderNotFound(String) = 1000,
     #[error("Folder '{0}' is not empty.")]

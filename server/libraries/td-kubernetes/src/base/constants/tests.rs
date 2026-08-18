@@ -320,3 +320,52 @@ fn only_local_reaches_propagate_local_settings() {
     assert!(IndexReach::HostContainer.propagates_local_settings());
     assert!(!IndexReach::Cluster.propagates_local_settings());
 }
+
+#[test]
+fn every_venv_maps_to_its_requirements_asset() {
+    assert_eq!(Venv::Td.requirements_asset(), REQUIREMENTS_TD_ASSET);
+    assert_eq!(Venv::Fn.requirements_asset(), REQUIREMENTS_FN_ASSET);
+    #[cfg(feature = "enterprise")]
+    assert_eq!(Venv::Ag.requirements_asset(), REQUIREMENTS_AG_ASSET);
+}
+
+#[test]
+fn every_venv_requirements_asset_is_customizable() {
+    for venv in VENVS {
+        assert!(
+            CUSTOMIZABLE_ASSETS.contains(&venv.requirements_asset()),
+            "{} is not customizable",
+            venv.as_str()
+        );
+    }
+}
+
+#[test]
+fn the_listed_venvs_are_unique_and_described() {
+    let mut names: Vec<&str> = VENVS.iter().map(|venv| venv.as_str()).collect();
+    let listed = names.len();
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(names.len(), listed, "the venv names repeat");
+    for venv in VENVS {
+        assert!(
+            !venv.description().is_empty(),
+            "{} has no description",
+            venv.as_str()
+        );
+    }
+}
+
+#[test]
+fn the_open_source_venvs_are_always_listed() {
+    let names: Vec<&str> = VENVS.iter().map(|venv| venv.as_str()).collect();
+    assert!(names.contains(&VENV_TD));
+    assert!(names.contains(&VENV_FN));
+}
+
+#[cfg(feature = "enterprise")]
+#[test]
+fn the_agent_venv_is_listed_in_the_enterprise_edition() {
+    let names: Vec<&str> = VENVS.iter().map(|venv| venv.as_str()).collect();
+    assert!(names.contains(&VENV_AG));
+}

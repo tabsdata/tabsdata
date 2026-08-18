@@ -89,6 +89,7 @@ k8s-openapi = { workspace = true, features = ["latest"] }
 kube = { workspace = true, default-features = false, features = ["client", "config", "runtime", "rustls-tls"] }
 libc = { workspace = true }
 once_cell = { workspace = true }
+pep508_rs = { workspace = true }
 reedline = { workspace = true }
 regex = { workspace = true }
 semver = { workspace = true }
