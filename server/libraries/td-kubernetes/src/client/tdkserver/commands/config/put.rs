@@ -2,284 +2,256 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeMap, HashMap};
+use std::fs;
 
 use clap_derive::Args;
-use td_common::status::ExitStatus::GeneralError;
+use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
-use tracing::{info, warn};
+use tracing::info;
 
-use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
+use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG};
 use crate::base::error::cli::CliError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
-use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::core::system::exit::{CommandError, CommandResult, abort_with};
-use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{LabelFilter, get_configmaps, replace_configmap};
+use crate::base::reporter::{InteractiveReporter, Reporter};
+use crate::client::registry::{
+    InstanceSettings, instance_edit_input_folder, instance_edit_stage_folder,
+};
+use crate::client::session::settings::SettingsContext;
+use crate::client::tdkserver::arguments::GlobalArguments;
+use crate::client::tdkserver::commands::service::restart::restart_service;
+use crate::client::tdkserver::commands::service::{
+    resolved_details, resolved_instance, resolved_yes,
+};
+use crate::client::tdkserver::common::confirm;
+use crate::core::system::exit::{CommandResult, abort};
+use crate::kube::api::configmap::replace_configmap;
+use crate::kube::api::secret::{get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
-use crate::runtime::provider::{Provider, provider_for_or_tdkcontext, require_started_cluster};
+use crate::runtime::gateway::resolver::fusion::{MergedConfig, merge};
+use crate::runtime::instance::ports::apply_ports;
+use crate::runtime::instance::profile::Profile;
+use crate::runtime::instance::profile::load_profile;
+use crate::runtime::provider::Provider;
+use crate::runtime::provider::provider_for_instance_mutating;
+use crate::runtime::secrets::settler::auto_fill_generated_secrets;
+use crate::runtime::secrets::source::to_secret_name;
+
+const SCHEMA_EXTENSION: &str = ".yamls";
 
 #[derive(Debug, Clone, Args)]
-#[command(group(
-    clap::ArgGroup::new("source")
-        .args(["folder", "file"])
-        .required(true)
-        .multiple(false),
-))]
 pub struct PutArguments {
-    #[command(flatten)]
-    pub cluster: ClusterArguments,
-
-    #[command(flatten)]
-    pub instance: InstanceArguments,
+    #[arg(
+        long,
+        name = "instance",
+        required = false,
+        display_order = 10,
+        long_help = "Name of the instance whose configmaps are replaced. Defaults to 'tabsdata'."
+    )]
+    pub instance: Option<String>,
 
     #[arg(
         long,
-        name = "folder",
-        value_parser = clap::value_parser!(PathBuf),
-        long_help = "Source folder containing one file per config to update. \
-                     Each file name must map (via the naming convention) to an existing \
-                     config in the cluster; otherwise that file is skipped with a warning. \
-                     File contents replace the configmap entry. Mutually exclusive with --file."
+        name = "apply",
+        required = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 70,
+        long_help = "Restart the instance after replacing the configmaps. Defaults to 'false'."
     )]
-    pub folder: Option<PathBuf>,
+    pub apply: Option<bool>,
 
     #[arg(
         long,
-        name = "file",
-        value_parser = clap::value_parser!(PathBuf),
-        long_help = "Single file to upload. The file name must map (via the naming \
-                     convention) to an existing config in the cluster. File contents \
-                     replace the configmap entry. Mutually exclusive with --folder."
+        name = "details",
+        required = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 110,
+        long_help = "Show the summary of resolved values before replacing the configmaps. \
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub file: Option<PathBuf>,
-}
+    pub details: Option<bool>,
 
-pub enum PutSource {
-    Folder(PathBuf),
-    File(PathBuf),
-}
-
-impl PutSource {
-    fn from_args(folder: Option<PathBuf>, file: Option<PathBuf>) -> Self {
-        match (folder, file) {
-            (Some(folder), _) => PutSource::Folder(folder),
-            (_, Some(file)) => PutSource::File(file),
-            _ => unreachable!("clap ArgGroup ensures exactly one of --folder/--file"),
-        }
-    }
+    #[arg(
+        long,
+        name = "yes",
+        short = 'y',
+        required = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 120,
+        long_help = "Skip the interactive confirmation prompt and proceed immediately."
+    )]
+    pub yes: Option<bool>,
 }
 
 pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> CommandResult {
     let PutArguments {
-        cluster,
         instance,
-        folder,
-        file,
+        apply,
+        details,
+        yes,
     } = arguments;
-    let source = PutSource::from_args(folder, file);
-    ensure_source(&source)?;
-    let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
-    require_started_cluster(provider.as_ref()).await?;
-    put_configs(provider.as_ref(), &source).await
+
+    let settings = SettingsContext::settings();
+    let instance = resolved_instance(instance, &settings);
+    let details = resolved_details(details, &settings);
+    let yes = resolved_yes(yes, &settings);
+    let apply = apply.unwrap_or(false);
+    let verbose = globals.verbose;
+
+    let provider = provider_for_instance_mutating(instance.value, verbose, None).await?;
+    let name = provider.summary().instance_name.unwrap_or_default();
+
+    let profile = load_profile(provider.cluster_provider(), verbose)?;
+    let settings = InstanceSettings::load(&name)?;
+    let mut system = provider.system_values()?;
+    apply_ports(&mut system, &settings.ports);
+    let context = provider.kube_context().await?;
+
+    let input = instance_edit_input_folder(&name)?;
+    let server_secrets = read_server_secrets(&context, &profile).await?;
+
+    let merged = merge(&profile, &system, &input, &server_secrets).map_err(TdError::from)?;
+
+    if details.value {
+        info!("About to replace configmaps for tabsdata instance '{name}':");
+        for config in &merged {
+            info!("  - {}", config.file);
+        }
+        if apply {
+            info!("The instance will be restarted after the replacement.");
+        }
+    }
+    if !confirm(yes.value, "Proceed with the replacement?")? {
+        info!("Operation cancelled.");
+        return abort(Cancelled);
+    }
+
+    write_stage(&name, &merged)?;
+
+    let reporter = InteractiveReporter::new();
+    let step = reporter.step("Replacing tabsdata configmaps and secrets");
+    for config in &merged {
+        if let Err(error) = replace_config(&context, config).await {
+            step.fail();
+            return Err(error);
+        }
+    }
+    step.done(&format!("Replaced {} tabsdata configmaps", merged.len()));
+
+    let fill_step = reporter.step("Filling generated secrets");
+    if let Err(error) = auto_fill_generated_secrets(&context).await {
+        fill_step.fail();
+        return Err(error.into());
+    }
+    fill_step.done("Filled generated secrets");
+
+    if apply {
+        restart(provider.as_ref(), &reporter).await?;
+    }
+
+    Ok(())
 }
 
-pub fn ensure_source(source: &PutSource) -> CommandResult {
-    match source {
-        PutSource::Folder(folder) => {
-            if !folder.is_dir() {
-                return abort_with(
-                    GeneralError,
-                    CliError::FolderNotFound(folder.display().to_string()),
-                );
-            }
-            let mut entries = std::fs::read_dir(folder).map_err(|error| {
-                TdError::from(CliError::FolderReadFailed {
-                    folder: folder.display().to_string(),
-                    cause: error.to_string(),
-                })
-            })?;
-            if entries.next().is_none() {
-                return abort_with(
-                    GeneralError,
-                    CliError::FolderEmpty(folder.display().to_string()),
-                );
+async fn read_server_secrets(
+    context: &KubeContext,
+    profile: &Profile,
+) -> CommandResult<HashMap<String, HashMap<String, String>>> {
+    let mut server_secrets = HashMap::new();
+    for file in profile.configs.keys() {
+        if file.ends_with(SCHEMA_EXTENSION) {
+            continue;
+        }
+        let secret_name = to_secret_name(file).map_err(TdError::from)?;
+        let Some(data) = get_secret(context, &secret_name)
+            .await
+            .map_err(TdError::from)?
+        else {
+            continue;
+        };
+        let mut values = HashMap::new();
+        for (key, value) in data {
+            if let Ok(text) = String::from_utf8(value) {
+                values.insert(key, text);
             }
         }
-        PutSource::File(file) => {
-            if !file.is_file() {
-                return abort_with(
-                    GeneralError,
-                    CliError::FolderNotFound(file.display().to_string()),
-                );
-            }
+        if !values.is_empty() {
+            server_secrets.insert(file.clone(), values);
         }
+    }
+    Ok(server_secrets)
+}
+
+fn write_stage(name: &str, merged: &[MergedConfig]) -> CommandResult {
+    let stage = instance_edit_stage_folder(name)?;
+    let configs_folder = stage.join(KPROFILE_CONFIGS_FAMILY.folder);
+    fs::create_dir_all(&configs_folder).map_err(|error| {
+        TdError::from(CliError::FolderCreateFailed {
+            folder: configs_folder.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    for config in merged {
+        let target = configs_folder.join(&config.file);
+        fs::write(&target, &config.rendered).map_err(|error| {
+            TdError::from(CliError::FileWriteFailed {
+                file: target.display().to_string(),
+                cause: error.to_string(),
+            })
+        })?;
     }
     Ok(())
 }
 
-pub async fn put_configs(provider: &dyn Provider, source: &PutSource) -> CommandResult {
-    let context = provider.kube_context().await?;
-    let known_configs = list_known_configs(&context).await?;
-    let candidates = collect_candidates(source)?;
-
-    let mut warnings: Vec<String> = Vec::new();
-    let mut replaced: Vec<String> = Vec::new();
-    let mut error: Option<CommandError> = None;
-
-    for candidate in candidates {
-        match candidate {
-            Candidate::Skip(reason) => warnings.push(reason),
-            Candidate::Process { file_name, path } => {
-                match process_candidate(&context, &known_configs, &file_name, &path).await {
-                    Ok(Outcome::Replaced) => replaced.push(file_name),
-                    Ok(Outcome::Skipped(reason)) => warnings.push(reason),
-                    Err(failure) => {
-                        error = Some(failure);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    report_summary(&replaced, &warnings, "config");
-    match error {
-        Some(failure) => Err(failure),
-        None => Ok(()),
-    }
-}
-
-fn report_summary(replaced: &[String], warnings: &[String], noun_singular: &str) {
-    for warning in warnings {
-        warn!("{warning}");
-    }
-    for name in replaced {
-        info!("Replaced: {name}.");
-    }
-    let count = replaced.len();
-    let noun = if count == 1 {
-        noun_singular.to_owned()
-    } else {
-        format!("{noun_singular}s")
-    };
-    info!("Replaced {count} tabsdata {noun}.");
-}
-
-async fn list_known_configs(context: &KubeContext) -> CommandResult<BTreeSet<String>> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
-    let configs = get_configmaps(context, Some(filter))
-        .await?
-        .into_iter()
-        .map(|(name, _entries)| name)
-        .collect();
-    Ok(configs)
-}
-
-enum Candidate {
-    Process { file_name: String, path: PathBuf },
-    Skip(String),
-}
-
-enum Outcome {
-    Replaced,
-    Skipped(String),
-}
-
-fn collect_candidates(source: &PutSource) -> CommandResult<Vec<Candidate>> {
-    match source {
-        PutSource::Folder(folder) => collect_folder_candidates(folder),
-        PutSource::File(file) => Ok(vec![candidate_for_file(file)]),
-    }
-}
-
-fn collect_folder_candidates(folder: &Path) -> CommandResult<Vec<Candidate>> {
-    let reader = std::fs::read_dir(folder).map_err(|error| {
-        TdError::from(CliError::FolderReadFailed {
-            folder: folder.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
-    let mut entries: Vec<std::fs::DirEntry> = reader.filter_map(|entry| entry.ok()).collect();
-    entries.sort_by_key(|entry| entry.file_name());
-    let mut out = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let path = entry.path();
-        if is_hidden_or_system(&path) {
-            continue;
-        }
-        let file_name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
-            out.push(Candidate::Skip(format!(
-                "Subfolder '{file_name}' ignored; expected a flat layout."
-            )));
-            continue;
-        }
-        out.push(Candidate::Process { file_name, path });
-    }
-    Ok(out)
-}
-
-fn candidate_for_file(path: &Path) -> Candidate {
-    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-        return Candidate::Skip(format!(
-            "File '{}' has no readable name; ignored.",
-            path.display()
-        ));
-    };
-    Candidate::Process {
-        file_name: file_name.to_owned(),
-        path: path.to_path_buf(),
-    }
-}
-
-async fn process_candidate(
-    context: &KubeContext,
-    known_configs: &BTreeSet<String>,
-    file_name: &str,
-    path: &Path,
-) -> CommandResult<Outcome> {
-    let id = id_from_file(file_name);
-    let configmap_name = match to_kube_resource_name(
+async fn replace_config(context: &KubeContext, config: &MergedConfig) -> CommandResult {
+    let id = id_from_file(&config.file);
+    let configmap_name = to_kube_resource_name(
         KPROFILE_CONFIGS_FAMILY.scope,
         id,
         KPROFILE_CONFIGS_FAMILY.kind,
-        file_name,
-    ) {
-        Ok(name) => name,
-        Err(error) => {
-            return Ok(Outcome::Skipped(format!(
-                "File '{file_name}' does not map to a valid config name: {error}; ignored."
-            )));
-        }
-    };
-    if !known_configs.contains(&configmap_name) {
-        return Ok(Outcome::Skipped(format!(
-            "No config named '{configmap_name}' exists; ignored."
-        )));
-    }
-    let bytes = std::fs::read(path).map_err(|error| {
-        TdError::from(CliError::FileReadFailed {
-            file: file_name.to_owned(),
-            cause: error.to_string(),
-        })
-    })?;
-    let text = String::from_utf8(bytes).map_err(|error| {
-        TdError::from(CliError::FileNotUtf8 {
-            file: file_name.to_owned(),
-            cause: error.to_string(),
-        })
-    })?;
-    let mut data: BTreeMap<String, String> = BTreeMap::new();
-    data.insert(file_name.to_owned(), text);
+        &config.file,
+    )
+    .map_err(TdError::from)?;
+
+    let mut configmap_data = BTreeMap::new();
+    configmap_data.insert(config.file.clone(), config.rendered.clone());
     replace_configmap(
         context,
         &configmap_name,
-        data,
+        configmap_data,
         BTreeMap::new(),
         Some(KPROFILE_CONFIGS_FAMILY.kind),
     )
-    .await?;
-    Ok(Outcome::Replaced)
+    .await
+    .map_err(TdError::from)?;
+
+    let secret_name = to_secret_name(&config.file).map_err(TdError::from)?;
+    let secret_data: BTreeMap<String, String> = config
+        .secrets
+        .iter()
+        .map(|entry| (entry.key.clone(), entry.value.clone()))
+        .collect();
+    upsert_secret(
+        context,
+        &secret_name,
+        secret_data,
+        BTreeMap::new(),
+        None,
+        Some(SECRET_FAMILY_CONFIG),
+    )
+    .await
+    .map_err(TdError::from)?;
+
+    Ok(())
+}
+
+async fn restart(provider: &dyn Provider, reporter: &dyn Reporter) -> CommandResult {
+    let not_dead = !provider.service_dead().await;
+    if not_dead {
+        provider.ensure_stoppable_service().await?;
+    }
+    provider.ensure_startable_service().await?;
+    restart_service(provider, reporter, not_dead).await
 }

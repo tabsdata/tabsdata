@@ -14,21 +14,19 @@ use crate::base::constants::ENV_TD_KUBE_UV_MODE;
 use crate::client::tdkserver::arguments::{Commands, GlobalArguments, parse_arguments};
 use crate::client::tdkserver::widgets::{set_keep_progress, show_caution};
 // use crate::client::tdkserver::commands::cluster::command_cluster;
-// use crate::client::tdkserver::commands::config::command_config;
 // use crate::client::tdkserver::commands::instance::command_instance;
 // use crate::client::tdkserver::commands::secret::command_secret;
 // use crate::client::tdkserver::commands::server::command_server;
 use crate::client::tdkserver::commands::about::command_about;
 use crate::client::tdkserver::commands::banner::command_banner;
+use crate::client::tdkserver::commands::config::command_config;
 use crate::client::tdkserver::commands::help::{HelpArguments, command_help};
 use crate::client::tdkserver::commands::service::create::command_create;
 use crate::client::tdkserver::commands::service::delete::command_delete;
-use crate::client::tdkserver::commands::service::get::command_get;
 use crate::client::tdkserver::commands::service::info::command_info;
 use crate::client::tdkserver::commands::service::init::command_init;
 use crate::client::tdkserver::commands::service::inspect::command_inspect;
 use crate::client::tdkserver::commands::service::list::command_list;
-use crate::client::tdkserver::commands::service::put::command_put;
 use crate::client::tdkserver::commands::service::quickstart::command_quickstart;
 // use crate::client::tdkserver::commands::service::register::command_register;
 use crate::client::tdkserver::commands::service::restart::command_restart;
@@ -37,8 +35,6 @@ use crate::client::tdkserver::commands::service::status::command_status;
 use crate::client::tdkserver::commands::service::stop::command_stop;
 use crate::client::tdkserver::commands::service::trash::command_trash;
 // use crate::client::tdkserver::commands::service::unregister::command_unregister;
-use crate::client::tdkserver::commands::service::check::command_check;
-use crate::client::tdkserver::commands::service::view::command_view;
 use crate::client::tdkserver::commands::session::set::command_set;
 use crate::client::tdkserver::commands::session::settings::command_settings;
 use crate::client::tdkserver::commands::session::unset::command_unset;
@@ -89,11 +85,8 @@ impl TabsDataKubernetesClient {
             // Some(Commands::Unregister(arguments)) => {
             //     command_unregister(arguments, &globals).await
             // }
-            Some(Commands::Check(arguments)) => command_check(arguments, &globals).await,
+            Some(Commands::Config(command)) => command_config(command, &globals).await,
             Some(Commands::Venv(command)) => command_venv(command, &globals).await,
-            Some(Commands::Get(arguments)) => command_get(arguments, &globals).await,
-            Some(Commands::Put(arguments)) => command_put(arguments, &globals).await,
-            Some(Commands::View(arguments)) => command_view(arguments, &globals).await,
             Some(Commands::Trash(arguments)) => command_trash(arguments, &globals).await,
             Some(Commands::Set(arguments)) => command_set(arguments, &globals).await,
             Some(Commands::Unset(arguments)) => command_unset(arguments, &globals).await,
@@ -104,7 +97,6 @@ impl TabsDataKubernetesClient {
             // Some(Commands::Cluster(command)) => command_cluster(command, &globals).await,
             // Some(Commands::Instance(command)) => command_instance(command, &globals).await,
             // Some(Commands::Server(command)) => command_server(command, &globals).await,
-            // Some(Commands::Config(command)) => command_config(command, &globals).await,
             // Some(Commands::Secret(command)) => command_secret(command, &globals).await,
             // Some(Commands::Session(command)) => command_session(command, &globals).await,
         }

@@ -2,15 +2,12 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-pub mod check;
 pub mod create;
 pub mod delete;
-pub mod get;
 pub mod info;
 pub mod init;
 pub mod inspect;
 pub mod list;
-pub mod put;
 pub mod quickstart;
 pub mod register;
 pub mod restart;
@@ -19,7 +16,6 @@ pub mod status;
 pub mod stop;
 pub mod trash;
 pub mod unregister;
-pub mod view;
 
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;

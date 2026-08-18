@@ -67,7 +67,7 @@ fn test_full_help_text_lists_nested_commands() {
     let text = build_full_help(HelpFormat::Text);
     assert!(text.contains("tdkserver quickstart"));
     assert!(text.contains("tdkserver info third-party"));
-    assert!(text.contains("tdkserver get-cfg"));
+    assert!(text.contains("tdkserver config get"));
 }
 
 #[test]

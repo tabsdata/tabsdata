@@ -20,24 +20,21 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 
 use super::about::command_about;
 use super::banner::command_banner;
+use super::config::{ConfigCommands, command_config};
 use super::help::{ShellHelpArguments, command_shell_help};
 use super::service::InstanceNameArguments;
-use super::service::check::{CheckArguments, command_check};
 use super::service::create::{CreateArguments, command_create};
 use super::service::delete::{DeleteArguments, command_delete};
-use super::service::get::{GetArguments, command_get};
 use super::service::info::{InfoCommands, command_info};
 use super::service::init::{InitArguments, command_init};
 use super::service::inspect::command_inspect;
 use super::service::list::command_list;
-use super::service::put::{PutArguments, command_put};
 use super::service::quickstart::{QuickstartArguments, command_quickstart};
 use super::service::restart::{RestartArguments, command_restart};
 use super::service::start::{StartArguments, command_start};
 use super::service::status::command_status;
 use super::service::stop::{StopArguments, command_stop};
 use super::service::trash::{TrashArguments, command_trash};
-use super::service::view::{ViewArguments, command_view};
 use super::session::set::{SetArguments, command_set};
 use super::session::settings::{SettingsArguments, command_settings};
 use super::session::unset::{UnpinArguments, command_unset};
@@ -84,25 +81,11 @@ enum ShellCommand {
     #[command(about = "Trash a local kminus tabsdata instance")]
     Trash(TrashArguments),
     #[command(
-        name = "check-cfg",
-        about = "Check the values still to be provided in the configs of a tabsdata instance"
+        subcommand,
+        about = "Manage the configmaps of a tabsdata instance",
+        arg_required_else_help = true
     )]
-    Check(CheckArguments),
-    #[command(
-        name = "get-cfg",
-        about = "Download the configmaps of a tabsdata instance for editing"
-    )]
-    Get(GetArguments),
-    #[command(
-        name = "put-cfg",
-        about = "Replace the configmaps of a tabsdata instance from edited files"
-    )]
-    Put(PutArguments),
-    #[command(
-        name = "view-cfg",
-        about = "View the configmaps of a tabsdata instance"
-    )]
-    View(ViewArguments),
+    Config(ConfigCommands),
     #[command(about = "Set a session setting used when commands omit it")]
     Set(SetArguments),
     #[command(about = "Unset a session setting")]
@@ -235,17 +218,8 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 ShellCommand::Trash(arguments) => {
                     let _ = command_trash(arguments, globals).await;
                 }
-                ShellCommand::Check(arguments) => {
-                    let _ = command_check(arguments, globals).await;
-                }
-                ShellCommand::Get(arguments) => {
-                    let _ = command_get(arguments, globals).await;
-                }
-                ShellCommand::Put(arguments) => {
-                    let _ = command_put(arguments, globals).await;
-                }
-                ShellCommand::View(arguments) => {
-                    let _ = command_view(arguments, globals).await;
+                ShellCommand::Config(command) => {
+                    let _ = command_config(command, globals).await;
                 }
                 ShellCommand::Set(arguments) => {
                     let _ = command_set(arguments, globals).await;

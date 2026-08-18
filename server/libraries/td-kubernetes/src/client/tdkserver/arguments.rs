@@ -10,26 +10,22 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use clap_derive::{Args, Subcommand};
 
 // use crate::client::tdkserver::commands::cluster::ClusterCommands;
-// use crate::client::tdkserver::commands::config::ConfigCommands;
 // use crate::client::tdkserver::commands::instance::InstanceCommands;
 // use crate::client::tdkserver::commands::secret::SecretCommands;
 // use crate::client::tdkserver::commands::server::ServerCommands;
+use crate::client::tdkserver::commands::config::ConfigCommands;
 use crate::client::tdkserver::commands::help::HelpArguments;
 use crate::client::tdkserver::commands::service::InstanceNameArguments;
 use crate::client::tdkserver::commands::service::create::CreateArguments;
 use crate::client::tdkserver::commands::service::delete::DeleteArguments;
-use crate::client::tdkserver::commands::service::get::GetArguments;
 use crate::client::tdkserver::commands::service::info::InfoCommands;
 use crate::client::tdkserver::commands::service::init::InitArguments;
-use crate::client::tdkserver::commands::service::put::PutArguments;
 use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments;
 // use crate::client::tdkserver::commands::service::register::RegisterArguments;
-use crate::client::tdkserver::commands::service::check::CheckArguments;
 use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
 use crate::client::tdkserver::commands::service::trash::TrashArguments;
-use crate::client::tdkserver::commands::service::view::ViewArguments;
 use crate::client::tdkserver::commands::session::set::SetArguments;
 use crate::client::tdkserver::commands::session::settings::SettingsArguments;
 use crate::client::tdkserver::commands::session::unset::UnpinArguments;
@@ -183,25 +179,11 @@ pub enum Commands {
     // #[command(about = "Unregister a tabsdata instance")]
     // Unregister(InstanceNameArguments),
     #[command(
-        name = "check-cfg",
-        about = "Check the values still to be provided in the configs of a tabsdata instance"
+        subcommand,
+        about = "Manage the configmaps of a tabsdata instance",
+        arg_required_else_help = true
     )]
-    Check(CheckArguments),
-    #[command(
-        name = "get-cfg",
-        about = "Download the configmaps of a tabsdata instance for editing"
-    )]
-    Get(GetArguments),
-    #[command(
-        name = "put-cfg",
-        about = "Replace the configmaps of a tabsdata instance from edited files"
-    )]
-    Put(PutArguments),
-    #[command(
-        name = "view-cfg",
-        about = "View the configmaps of a tabsdata instance"
-    )]
-    View(ViewArguments),
+    Config(ConfigCommands),
     #[command(
         subcommand,
         about = "Manage the python virtual environments of a tabsdata instance",
@@ -230,8 +212,6 @@ pub enum Commands {
     // Instance(InstanceCommands),
     // #[command(subcommand, about = "Manage tabsdata servers")]
     // Server(ServerCommands),
-    // #[command(subcommand, about = "Manage tabsdata configs")]
-    // Config(ConfigCommands),
     // #[command(subcommand, about = "Manage tabsdata secrets")]
     // Secret(SecretCommands),
     // #[command(subcommand, about = "Manage tabsdata sessions")]
