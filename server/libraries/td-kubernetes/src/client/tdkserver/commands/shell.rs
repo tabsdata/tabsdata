@@ -38,6 +38,7 @@ use super::service::trash::{TrashArguments, command_trash};
 use super::session::set::{SetArguments, command_set};
 use super::session::settings::{SettingsArguments, command_settings};
 use super::session::unset::{UnpinArguments, command_unset};
+use super::venvs::{VenvCommands, command_venv};
 use crate::cerror;
 use crate::client::session::settings::{SettingsContext, tdksettings_path};
 use crate::core::system::exit::CommandResult;
@@ -86,6 +87,12 @@ enum ShellCommand {
         arg_required_else_help = true
     )]
     Config(ConfigCommands),
+    #[command(
+        subcommand,
+        about = "Manage the python virtual environments of a tabsdata instance",
+        arg_required_else_help = true
+    )]
+    Venv(VenvCommands),
     #[command(about = "Set a session setting used when commands omit it")]
     Set(SetArguments),
     #[command(about = "Unset a session setting")]
@@ -220,6 +227,9 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 }
                 ShellCommand::Config(command) => {
                     let _ = command_config(command, globals).await;
+                }
+                ShellCommand::Venv(command) => {
+                    let _ = command_venv(command, globals).await;
                 }
                 ShellCommand::Set(arguments) => {
                     let _ = command_set(arguments, globals).await;
@@ -457,3 +467,6 @@ impl Prompt for ShellPrompt {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests;
