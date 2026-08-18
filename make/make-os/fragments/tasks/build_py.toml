@@ -399,64 +399,8 @@ script = [
     rm target/pytest/build/wheel
     rm target/pytest/build/wheel.exe
 
-    setup_toml_file = set "${PROJECT_TABSDATA_ROOT_FOLDER}/setup.toml"
-    if is_path_exists ${setup_toml_file}
-        debug "🔸🔸🔸 Reading setup.toml to extract base_binaries"
-        setup_toml_content = readfile ${setup_toml_file}
-        setup_toml_lines = split ${setup_toml_content} "\n"
-        in_base_binaries = set false
-        base_binaries = array
-        for setup_toml_line in ${setup_toml_lines}
-            setup_toml_line = trim ${setup_toml_line}
-            is_in_base_binaries = starts_with ${setup_toml_line} "binaries = ["
-            is_out_base_binaries = starts_with ${setup_toml_line} "]"
-            if ${is_in_base_binaries}
-                in_base_binaries = set true
-            elif ${is_out_base_binaries}
-                in_base_binaries = set false
-            else
-                if ${in_base_binaries}
-                    binary_name = replace ${setup_toml_line} "\"" ""
-                    binary_name = replace ${binary_name} "," ""
-                    binary_name = trim ${binary_name}
-                    array_push ${base_binaries} ${binary_name}
-                    debug "🔸🔸🔸 Found binary: ${binary_name}"
-                end
-            end
-        end
-
-        base_binaries_size = array_length ${base_binaries}
-        debug "🔸🔸🔸 Found ${base_binaries_size} base binaries"
-
-        for base_binary in ${base_binaries}
-            if eq ${os_family} "windows"
-                binary_name = set "${base_binary}.exe"
-            else
-                binary_name = set "${base_binary}"
-            end
-            source_binary = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${binary_name}"
-            target_binary = set "${python_scripts_folder}/${binary_name}"
-            if eq ${os_family} "windows"
-                source_binary = replace ${source_binary} "/" "\\"
-                target_binary = replace ${target_binary} "/" "\\"
-            else
-                source_binary = replace ${source_binary} "\\" "/"
-                target_binary = replace ${target_binary} "\\" "/"
-            end
-            exists = is_path_exists ${source_binary}
-            if not ${exists}
-                warn "🔥 Binary not found: ${source_binary}"
-            end
-            debug "🔅 Creating symbolic link for '${binary_name}': ${source_binary} -> ${target_binary}"
-            target_exists = is_path_exists ${target_binary}
-            if ${target_exists}
-                rm ${target_binary}
-            end
-            exec --fail-on-error python -c "import os; os.symlink(r'${source_binary}', r'${target_binary}')"
-        end
-    else
-        warn "⚠️ setup.toml file not found at ${setup_toml_file}"
-    end
+    debug "🔸🔸🔸 Linking the binaries declared by every setup.toml"
+    exec --fail-on-error python ${LINK_BINARIES_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER} ${python_scripts_folder} "${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}"
     ''']
 
 [tasks.__os__egg_py_connectors]

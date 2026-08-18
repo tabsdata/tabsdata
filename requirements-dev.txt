@@ -8,6 +8,7 @@
 
 -r requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-api/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-backend/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-cli/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-common/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-conn-azureblob/requirements/requirements-dev-third-party.txt
@@ -33,6 +34,8 @@
 -r connectors/python/tabsdata-conn-snowflake/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-conn-starrocks/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-conn-stream-stage/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-control-plane/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-execution-plane/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-medallion/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-sdk/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-server/requirements/requirements-dev-third-party.txt
@@ -41,6 +44,7 @@
 
 -r requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-api/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-backend/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-cli/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-common/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-conn-azureblob/requirements/requirements-third-party.txt
@@ -66,6 +70,8 @@
 -r connectors/python/tabsdata-conn-snowflake/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-conn-starrocks/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-conn-stream-stage/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-control-plane/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-execution-plane/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-medallion/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-sdk/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-server/requirements/requirements-third-party.txt

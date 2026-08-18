@@ -14,6 +14,7 @@ from pathlib import Path
 class PackageDescriptor:
     name: str
     display: str
+    identity: tuple[str, ...] | None = None
 
     @property
     def package(self) -> str:
@@ -36,6 +37,8 @@ class PackageDescriptor:
         )
 
     def namespace_parts(self, root: str) -> tuple[str, ...]:
+        if self.identity is not None:
+            return (root, *self.identity)
         if self.module == ("api",):
             return (root,)
         infix = ("connector",) if root == "tabsdata" else ()
@@ -74,7 +77,9 @@ def load_package_descriptor(setup_file: str) -> PackageDescriptor:
     with open(pyproject_path, "rb") as f:
         pyproject_toml = tomllib.load(f)
     tabsdata = pyproject_toml["tool"]["tabsdata"]
+    identity = tabsdata.get("identity")
     return PackageDescriptor(
         name=tabsdata["name"],
         display=tabsdata["display"],
+        identity=tuple(identity.split(".")) if identity else None,
     )

@@ -2,7 +2,7 @@
 Copyright 2026 Tabsdata Inc.
 -->
 
-Oracle Connector (tabsdatak) Python Package
+Oracle Connector Python Package
 
 Warning: this is not a standalone package. It is an `extra` of the Tabsdata package.
 Refer to the Tabsdata package for details on how to install it: https://pypi.org/project/tabsdata/

@@ -66,6 +66,7 @@ markers = [
     "azure: mark tests that require credentials to Azure.",
     "azureblob: test exercises the AzureBlob connector.",
     "azureblob_live: live test that needs the td_transporter binary + real Azure.",
+    "backend: mark tests that require the tabsdata-backend package.",
     "bigquery: mark tests that require the tabsdata-bigquery package.",
     "catalog: mark tests for catalog functionality.",
     "cdc_common: mark tests that require the tabsdata-cdc-common package.",
@@ -80,6 +81,7 @@ markers = [
     "conn_dev: mark tests that require the tabsdata-conn-dev package.",
     "conn_kafka: mark tests that require the tabsdata-conn-kafka package.",
     "conn_stream_stage: mark tests that require the tabsdata-conn-stream-stage package.",
+    "control_plane: mark tests that require the tabsdata-control-plane package.",
     "crontrigger: mark tests for the CronTrigger class.",
     "databricks: mark tests that require the tabsdata-databricks package.",
     "databricks_live: live test that needs a real Databricks workspace.",
@@ -88,6 +90,7 @@ markers = [
     "db2_seq: mark test as requiring running sequentially in the db2 scope (normally using a docker container).",
     "dq: mark tests for data quality functionality.",
     "druid: mark tests that require Druid dialect/connection logic.",
+    "execution_plane: mark tests that require the tabsdata-execution-plane package.",
     "gcs: mark tests that require credentials to GCS.",
     "gcs_live: live test that needs the td_transporter binary + real GCS.",
     "hashicorp: mark test as requiring a hashicorp vault docker container.",
@@ -156,4 +159,4 @@ extend = "../../../pyproject.toml"
 
 [tool.tabsdata]
 name = "tabsdata-conn-starrocks"
-display = "StarRocks Connector (tabsdatak)"
+display = "StarRocks Connector"

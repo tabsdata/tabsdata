@@ -7,6 +7,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -14,9 +15,20 @@ logger = logging.getLogger(__name__)
 TABSDATA_TO_ROOT = "."
 CONNECTOR_TO_ROOT = os.path.join("..", "..", "..")
 
+PACKAGE_FOLDER_ARGUMENT = "--package-folder"
+
+
+def package_folder(setup_file: str) -> str:
+    if PACKAGE_FOLDER_ARGUMENT in sys.argv:
+        position = sys.argv.index(PACKAGE_FOLDER_ARGUMENT)
+        folder = sys.argv[position + 1]
+        del sys.argv[position : position + 2]
+        return folder
+    return str(Path(setup_file).parent.absolute())
+
 
 def root_folder(setup_file: str, fallback: str = TABSDATA_TO_ROOT) -> str:
-    current_folder = Path(setup_file).parent.absolute()
+    current_folder = Path(package_folder(setup_file))
     logger.debug(f"📁 Current setup folder is: {current_folder}")
     while True:
         root_file = Path(os.path.join(current_folder, ".root"))

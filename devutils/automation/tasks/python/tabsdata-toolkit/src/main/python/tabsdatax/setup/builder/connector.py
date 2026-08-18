@@ -20,6 +20,7 @@ from tabsdatax.setup.common.commands import (
 )
 from tabsdatax.setup.common.config import load_setup_configuration
 from tabsdatax.setup.common.descriptor import load_package_descriptor
+from tabsdatax.setup.common.groups import load_binary_groups
 from tabsdatax.setup.common.logging import global_spinner, init_logging
 from tabsdatax.setup.common.paths import (
     CONNECTOR_TO_ROOT,
@@ -27,8 +28,15 @@ from tabsdatax.setup.common.paths import (
     read_file,
     root_folder,
 )
-from tabsdatax.setup.common.platform import check_cpython, get_platname, get_python_tags
+from tabsdatax.setup.common.platform import (
+    check_cpython,
+    get_platname,
+    get_python_tags,
+    get_target_release_folder,
+)
 from tabsdatax.setup.common.requirements import read_requirements
+from tabsdatax.setup.tabsdata.binaries import collect_group_datafiles
+from tabsdatax.setup.tabsdata.editable import create_editable_binary_symlinks
 
 
 def build(setup_file: str) -> None:
@@ -67,7 +75,17 @@ def build(setup_file: str) -> None:
             configuration.skip_non_existing_assets,
         )
 
-    datafiles = create_empty_datafiles()
+    binary_groups = load_binary_groups(os.path.dirname(os.path.abspath(setup_file)))
+    if binary_groups:
+        datafiles = collect_group_datafiles(
+            binary_groups,
+            os.path.join(root, get_target_release_folder()),
+            require_server_binaries=configuration.require_server_binaries,
+            root=root,
+        )
+    else:
+        datafiles = create_empty_datafiles()
+    create_editable_binary_symlinks(datafiles)
     ensure_egg_folder()
 
     python_source_root = Path("src") / "main" / "python"

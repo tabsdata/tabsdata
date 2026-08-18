@@ -120,6 +120,7 @@ datafiles = collect_group_datafiles(
     binary_groups,
     target_release_folder,
     require_server_binaries=configuration.require_server_binaries,
+    root=ROOT,
 )
 
 PYTHON_SOURCE_ROOT = os.path.join(

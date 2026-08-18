@@ -92,6 +92,7 @@ CHECK_NATIVE_LIBS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/a
 SCAN_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/scan_version.py", normalize = true }
 CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
 COPY_ASSETS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
+LINK_BINARIES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/link_binaries.py", normalize = true }
 LOCK_REQUIREMENTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/lock_requirements.py", normalize = true }
 MYPY_PLUGIN_GATE_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/mypy_plugin_gate.py", normalize = true }
 CHECK_PY_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/check_py.py", normalize = true }

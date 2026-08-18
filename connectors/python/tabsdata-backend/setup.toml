@@ -1,0 +1,12 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[[binary_groups]]
+name = "backend"
+package = "tabsdata-backend"
+names = [
+    "td_apiserver",
+    "td_dbmanager",
+    "td_transporter2",
+]

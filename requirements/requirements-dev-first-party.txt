@@ -3,6 +3,7 @@
 #
 
 tabsdata-api[deps]==2.0.1
+tabsdata-backend[deps]==2.0.1
 tabsdata-cli[deps]==2.0.1
 tabsdata-common[deps]==2.0.1
 tabsdata-conn-azureblob[deps]==2.0.1
@@ -28,6 +29,8 @@ tabsdata-conn-salesforce[deps]==2.0.1
 tabsdata-conn-snowflake[deps]==2.0.1
 tabsdata-conn-starrocks[deps]==2.0.1
 tabsdata-conn-stream-stage[deps]==2.0.1
+tabsdata-control-plane[deps]==2.0.1
+tabsdata-execution-plane[deps]==2.0.1
 tabsdata-medallion[deps]==2.0.1
 tabsdata-sdk[deps]==2.0.1
 tabsdata-server[deps]==2.0.1

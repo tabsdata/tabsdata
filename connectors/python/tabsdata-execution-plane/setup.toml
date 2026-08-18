@@ -1,0 +1,13 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[[binary_groups]]
+name = "kubernetes-run"
+package = "tabsdata-execution-plane"
+km_subpath = "target/dist"
+install_dest = "libexec/tabsdata"
+names = [
+    "pod-runner",
+    "virtual-kubelet",
+]

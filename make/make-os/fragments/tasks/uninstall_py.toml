@@ -51,7 +51,7 @@ script = [
             exec uv cache clean ${connector_package}
             exec pip cache remove ${connector_package}
 
-            exec python setup.py --quiet clean --all
+            exec python setup.py --quiet clean --all --package-folder ${connector}
 
             rm -r ${connector}/target/python/
         end

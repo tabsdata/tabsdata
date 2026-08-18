@@ -2,13 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Caution!!!
-# The flattened union of all `names` below is replicated in project python file
-# 'bundle_utils.py' in folder 'client/platform/src/main/python/tabsdata/_utils',
-# to ensure that when testing with pytest, the binaries are distributed and
-# available from tabsdata as a local package.
-# Please, make sure you update both places.
-#
 # Each group describes a set of binaries that ship together as part of a
 # tabsdata wheel. A group with neither `source` nor `km_subpath` resolves its
 # source folder dynamically via `get_target_release_folder()` (profile and
@@ -19,6 +12,10 @@
 # tabsdatax.setup.common.platform). External groups are auto-detected: if
 # the folder is missing, the group is silently skipped.
 #
+# `package` names the distribution that ships the group. Groups owned by
+# another distribution carry their own `setup.toml` in the package folder;
+# this file only declares what the `tabsdata` wheel itself ships.
+#
 # `install_dest` (optional) is the wheel install destination relative to
 # `<sys.prefix>`. When omitted, defaults to the Python scripts folder
 # (`bin` on POSIX, `Scripts` on Windows) — i.e., on PATH. Set explicitly
@@ -26,36 +23,22 @@
 
 [[binary_groups]]
 name = "tabsdata"
+package = "tabsdata"
 names = [
     "td_about",
-    "td_apiserver",
   # "td_bootloader",
   # "td_crontrigger",
-    "td_dbmanager",
   # "td_supervisor",
   # "td_transporter1",
-    "td_transporter2",
     "tdkserver",
   # "tdserver",
 ]
 
 [[binary_groups]]
 name = "kubernetes-cli"
+package = "tabsdata"
 km_subpath = "target/dist"
 names = [
     "km",
     "kmc",
-]
-
-[[binary_groups]]
-name = "kubernetes-srv"
-km_subpath = "target/dist"
-install_dest = "libexec/tabsdata"
-names = [
-    "control-plane",
-    "etcd",
-    "kube-apiserver",
-    "kube-controller-manager",
-    "pod-runner",
-    "virtual-kubelet",
 ]

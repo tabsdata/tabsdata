@@ -142,8 +142,8 @@ script = [
                 in_folder = pwd
                 trace "🧶 Base folder for assembly - ${connector}: ${in_folder}"
 
-                debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-                exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+                debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist --package-folder ${connector}"
+                exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist --package-folder ${connector}
 
                 in_folder = pwd
                 trace "🧶 Base folder for assembly - ${connector}: ${in_folder}"

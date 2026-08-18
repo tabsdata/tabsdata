@@ -50,6 +50,7 @@ def collect_group_datafiles(
     binary_groups: Sequence[Mapping],
     default_target_folder: str,
     require_server_binaries: bool = False,
+    root: str = "",
 ) -> list[tuple[str, list[str]]]:
     default_destination = get_python_binaries_folder()
     datafiles: list[tuple[str, list[str]]] = []
@@ -62,7 +63,7 @@ def collect_group_datafiles(
         install_dest = group.get("install_dest", default_destination)
 
         if km_subpath is not None:
-            km_root = resolve_km_project_relative()
+            km_root = resolve_km_project_relative(root)
             if km_root is None:
                 if require_server_binaries:
                     raise FileNotFoundError(
@@ -97,7 +98,10 @@ def collect_group_datafiles(
         )
         if not existing:
             continue
-        files = [os.path.join(folder, binary) for binary in existing]
+        files = [
+            os.path.relpath(os.path.join(folder, binary)).replace(os.sep, "/")
+            for binary in existing
+        ]
         datafiles.append((install_dest, files))
 
     if not datafiles:

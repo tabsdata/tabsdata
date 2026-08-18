@@ -9,6 +9,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from tabsdatak.common._interpreter.python.binary import binaries_from_setup_toml
 from tabsdatak.common._interpreter.python.recipe import (
     InstallRecipe,
     PackageRecipe,
@@ -234,13 +235,17 @@ def build_connector_recipe(name: str, tabsdata: PackageRecipe) -> PackageRecipe:
             version=tabsdata.version,
             location=None,
         )
+    location = (
+        tabsdata.location / CONNECTORS_RELATIVE_PATH / name
+        if tabsdata.location is not None
+        else None
+    )
     return PackageRecipe(
         name=name,
         recipe=tabsdata.recipe,
         version=tabsdata.version,
-        location=tabsdata.location / CONNECTORS_RELATIVE_PATH / name
-        if tabsdata.location is not None
-        else None,
+        location=location,
+        binaries=binaries_from_setup_toml(location) if location is not None else (),
     )
 
 

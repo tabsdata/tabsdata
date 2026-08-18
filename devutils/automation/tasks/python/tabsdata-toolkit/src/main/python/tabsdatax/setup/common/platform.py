@@ -129,9 +129,9 @@ KM_PROJECT_PRIMARY_NAME = "tabsdata-km"
 KM_PROJECT_ALTERNATE_NAME = "kminus"
 
 
-def resolve_km_project_relative() -> str | None:
+def resolve_km_project_relative(root: str = "") -> str | None:
     for name in (KM_PROJECT_PRIMARY_NAME, KM_PROJECT_ALTERNATE_NAME):
-        candidate = os.path.join("..", name)
+        candidate = os.path.join(root, "..", name)
         if os.path.isdir(candidate):
             return candidate
     return None

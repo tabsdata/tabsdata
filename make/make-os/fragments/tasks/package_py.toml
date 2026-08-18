@@ -38,8 +38,8 @@ script = [
         is_connector = is_dir ${connector}
         if ${is_connector}
             cd ${connector}
-            debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-            exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+            debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored --package-folder ${connector}"
+            exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored --package-folder ${connector}
         end
     end
     ''']

@@ -7,11 +7,14 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import tomllib
 from pathlib import Path
 
 from setuptools import Command
 
+from tabsdatax.setup.common.groups import (
+    binary_names_by_destination,
+    load_binary_groups,
+)
 from tabsdatax.setup.common.platform import get_python_binaries_folder
 
 logger = logging.getLogger(__name__)
@@ -107,20 +110,25 @@ def create_custom_clean_class(root: str, setup_toml_path: str) -> type:
                 logger.warning(f"Setup toml not found: {full_setup_toml_path}")
                 return
 
-            with open(full_setup_toml_path, "rb") as setup_toml:
-                setup_config = tomllib.load(setup_toml)
-                binary_names = setup_config.get("setup", {}).get("binaries", [])
+            groups = load_binary_groups(os.path.dirname(full_setup_toml_path))
+            venv_root = venv_bin_dir.parent
+            destinations = binary_names_by_destination(
+                groups,
+                get_python_binaries_folder(),
+            )
 
-            for binary_name in binary_names:
-                for name in (binary_name, f"{binary_name}.exe"):
-                    symlink_path = venv_bin_dir / name
-                    if symlink_path.is_symlink():
-                        try:
-                            symlink_path.unlink()
-                            logger.info(f"Removed symlink {symlink_path}")
-                        except OSError as e:
-                            logger.warning(
-                                f"Failed to remove symlink {symlink_path}: {e}"
-                            )
+            for destination, names in destinations.items():
+                folder = venv_root / destination
+                for binary_name in names:
+                    for name in (binary_name, f"{binary_name}.exe"):
+                        symlink_path = folder / name
+                        if symlink_path.is_symlink():
+                            try:
+                                symlink_path.unlink()
+                                logger.info(f"Removed symlink {symlink_path}")
+                            except OSError as e:
+                                logger.warning(
+                                    f"Failed to remove symlink {symlink_path}: {e}"
+                                )
 
     return CustomClean

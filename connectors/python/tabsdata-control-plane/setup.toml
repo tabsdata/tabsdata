@@ -1,0 +1,15 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[[binary_groups]]
+name = "kubernetes-srv"
+package = "tabsdata-control-plane"
+km_subpath = "target/dist"
+install_dest = "libexec/tabsdata"
+names = [
+    "control-plane",
+    "etcd",
+    "kube-apiserver",
+    "kube-controller-manager",
+]

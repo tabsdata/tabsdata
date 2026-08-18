@@ -49,6 +49,7 @@ TABSDATA_CORE_PACKAGES: tuple[Package, ...] = (
 
 TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-api",
+    "tabsdata-backend",
     "tabsdata-cli",
     "tabsdata-common",
     "tabsdata-conn-azureblob",
@@ -74,6 +75,8 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-conn-snowflake",
     "tabsdata-conn-starrocks",
     "tabsdata-conn-stream-stage",
+    "tabsdata-control-plane",
+    "tabsdata-execution-plane",
     "tabsdata-medallion",
     "tabsdata-sdk",
     "tabsdata-server",
@@ -477,10 +480,14 @@ class PythonEnvironment:
     def binary(self, name: str) -> Path:
         scripts = self.scripts()
         # noinspection PyDeprecation
-        candidate = scripts / (name + sysconfig.get_config_var(SYSCONFIG_VAR_EXE))
-        if not candidate.is_file():
-            raise BinaryNotFoundError(name=name, scripts=scripts)
-        return candidate
+        executable = name + sysconfig.get_config_var(SYSCONFIG_VAR_EXE)
+        candidate = scripts / executable
+        if candidate.is_file():
+            return candidate
+        candidate = self.root / LIBEXEC_INSTALL_RELATIVE_PATH / executable
+        if candidate.is_file():
+            return candidate
+        raise BinaryNotFoundError(name=name, scripts=scripts)
 
     def archive(self, archive_path: Path) -> None:
         if archive_path.exists():
