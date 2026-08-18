@@ -3,7 +3,10 @@
 //
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+/*
+use std::path::Path;
+*/
+use std::path::PathBuf;
 
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
@@ -13,11 +16,16 @@ use td_common::status::ExitStatus::NoAction;
 use td_error::TdError;
 use tracing::{info, warn};
 
+/*
 #[cfg(feature = "enterprise")]
 use crate::base::constants::REQUIREMENTS_AG_ASSET;
 use crate::base::constants::{
-    ENV_UV_INDEX, ENV_UV_INDEX_STRATEGY, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, LogLevel,
-    REQUIREMENTS_FN_ASSET, REQUIREMENTS_TD_ASSET, UV_INDEX_STRATEGY_BEST_MATCH,
+    KPROFILE_ASSETS_FAMILY, REQUIREMENTS_FN_ASSET, REQUIREMENTS_TD_ASSET,
+};
+*/
+use crate::base::constants::{
+    ENV_UV_INDEX, ENV_UV_INDEX_STRATEGY, KPROFILE_CONFIGS_FAMILY, LogLevel,
+    UV_INDEX_STRATEGY_BEST_MATCH,
 };
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
@@ -112,6 +120,7 @@ pub struct QuickstartArguments {
     )]
     pub anthropic_key: Option<String>,
 
+    /*
     #[arg(
         long = "reqs-td",
         name = "reqs-td",
@@ -122,8 +131,11 @@ pub struct QuickstartArguments {
                      replaces the empty requirements-td.txt of the initialized instance \
                      and is installed when the virtual environment is built."
     )]
+    */
+    #[arg(long = "reqs-td", name = "reqs-td", required = false, hide = true)]
     pub requirements_td: Option<PathBuf>,
 
+    /*
     #[arg(
         long = "reqs-fn",
         name = "reqs-fn",
@@ -134,8 +146,11 @@ pub struct QuickstartArguments {
                      replaces the empty requirements-fn.txt of the initialized instance \
                      and is installed when the virtual environment is built."
     )]
+    */
+    #[arg(long = "reqs-fn", name = "reqs-fn", required = false, hide = true)]
     pub requirements_fn: Option<PathBuf>,
 
+    /*
     #[cfg(feature = "enterprise")]
     #[arg(
         long = "reqs-ag",
@@ -147,6 +162,9 @@ pub struct QuickstartArguments {
                      replaces the empty requirements-ag.txt of the initialized instance \
                      and is installed when the virtual environment is built."
     )]
+    */
+    #[cfg(feature = "enterprise")]
+    #[arg(long = "reqs-ag", name = "reqs-ag", required = false, hide = true)]
     pub requirements_ag: Option<PathBuf>,
 
     #[arg(
@@ -224,6 +242,27 @@ pub async fn command_quickstart(
     } = arguments;
 
     #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
+    let mut unsupported: Vec<&str> = Vec::new();
+    if requirements_td.is_some() {
+        unsupported.push("reqs-td");
+    }
+    if requirements_fn.is_some() {
+        unsupported.push("reqs-fn");
+    }
+    #[cfg(feature = "enterprise")]
+    if requirements_ag.is_some() {
+        unsupported.push("reqs-ag");
+    }
+    if let Some(argument) = unsupported.first() {
+        return abort_with(
+            NoAction,
+            CliError::ArgumentNoLongerSupported {
+                argument: (*argument).to_owned(),
+            },
+        );
+    }
+
+    #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
     let mut overrides: HashMap<String, String> = HashMap::new();
     #[cfg(feature = "enterprise")]
     {
@@ -265,20 +304,14 @@ pub async fn command_quickstart(
         Some(_) => {}
     }
     let outcome = run_quickstart(
-        instance,
-        cluster,
-        port,
-        save,
-        details,
-        yes,
-        loglevel,
+        instance, cluster, port, save, details, yes, loglevel,
+        /*
         requirements_td,
         requirements_fn,
         #[cfg(feature = "enterprise")]
         requirements_ag,
-        uv_index,
-        &overrides,
-        globals,
+        */
+        uv_index, &overrides, globals,
     )
     .await;
 
@@ -308,6 +341,7 @@ pub async fn command_quickstart(
     outcome
 }
 
+/*
 fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandResult {
     let contents = std::fs::read_to_string(source).map_err(|error| {
         TdError::from(CliError::FileReadFailed {
@@ -327,6 +361,7 @@ fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandRe
     info!("Wrote {} from {}", asset, source.display());
     Ok(())
 }
+*/
 
 fn persist_uv_index(instance: &str, uv_index: &str) -> CommandResult {
     let target = instance_init_input_folder(instance)?
@@ -381,9 +416,12 @@ async fn run_quickstart(
     details: Option<bool>,
     yes: Option<bool>,
     loglevel: Option<LogLevel>,
+    /*
     requirements_td: Option<PathBuf>,
     requirements_fn: Option<PathBuf>,
-    #[cfg(feature = "enterprise")] requirements_ag: Option<PathBuf>,
+    #[cfg(feature = "enterprise")]
+    requirements_ag: Option<PathBuf>,
+    */
     uv_index: Option<String>,
     overrides: &HashMap<String, String>,
     globals: &GlobalArguments,
@@ -405,6 +443,7 @@ async fn run_quickstart(
     let target_instance = resolved_instance(instance.clone(), &SettingsContext::settings())
         .value
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    /*
     if let Some(source) = &requirements_td {
         persist_requirements(&target_instance, REQUIREMENTS_TD_ASSET, source)?;
     }
@@ -415,6 +454,7 @@ async fn run_quickstart(
     if let Some(source) = &requirements_ag {
         persist_requirements(&target_instance, REQUIREMENTS_AG_ASSET, source)?;
     }
+    */
     if let Some(uv_index) = &uv_index {
         persist_uv_index(&target_instance, uv_index)?;
     }

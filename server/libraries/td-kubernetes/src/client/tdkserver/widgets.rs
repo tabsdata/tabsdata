@@ -28,7 +28,16 @@ const BORDER_RED: (u8, u8, u8) = (225, 75, 75);
 const BODY_RED: (u8, u8, u8) = (255, 95, 95);
 
 pub fn show_box(text: &str, min: usize, spaced: bool) {
-    show_colored_box(text, min, BORDER_GREEN, BODY_GREEN, true, false, spaced, &[])
+    show_colored_box(
+        text,
+        min,
+        BORDER_GREEN,
+        BODY_GREEN,
+        true,
+        false,
+        spaced,
+        &[],
+    )
 }
 
 pub fn show_notice(text: &str, min: usize, spaced: bool) {
@@ -59,14 +68,7 @@ pub fn show_hint(text: &str, min: usize, spaced: bool) {
 
 pub fn show_caution(text: &str, min: usize, spaced: bool, emphasized: &[&str]) {
     show_colored_box(
-        text,
-        min,
-        BORDER_RED,
-        BODY_RED,
-        false,
-        false,
-        spaced,
-        emphasized,
+        text, min, BORDER_RED, BODY_RED, false, false, spaced, emphasized,
     )
 }
 
@@ -81,11 +83,7 @@ fn emphasize(line: &str, body: (u8, u8, u8), emphasized: &[&str]) -> String {
             .min();
         match found {
             Some((at, length)) => {
-                rendered.push_str(
-                    &rest[..at]
-                        .truecolor(body.0, body.1, body.2)
-                        .to_string(),
-                );
+                rendered.push_str(&rest[..at].truecolor(body.0, body.1, body.2).to_string());
                 rendered.push_str(
                     &rest[at..at + length]
                         .truecolor(body.0, body.1, body.2)
@@ -176,7 +174,12 @@ fn show_colored_box(
         };
         if use_colors {
             let edge = "│".truecolor(border.0, border.1, border.2).bold();
-            println!("{} {} {}", edge, emphasize(&padded_line, body, emphasized), edge);
+            println!(
+                "{} {} {}",
+                edge,
+                emphasize(&padded_line, body, emphasized),
+                edge
+            );
         } else {
             println!("│ {padded_line} │");
         }

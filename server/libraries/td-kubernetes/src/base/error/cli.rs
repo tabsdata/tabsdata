@@ -22,6 +22,14 @@ pub enum CliError {
         value: String,
         supported: String,
     } = 3,
+    #[error(
+        "Argument '--{argument}' is no longer supported by 'tdkserver quickstart'. To declare \
+         additional packages for any of the tabsdata base virtual environments, either run \
+         'tdkserver venv update', which works both with 'tdkserver quickstart' and on an \
+         already created instance, or edit the requirements-*.txt init assets after \
+         'tdkserver init' and before 'tdkserver create'."
+    )]
+    ArgumentNoLongerSupported { argument: String } = 4,
     #[error("Folder '{0}' does not exist.")]
     FolderNotFound(String) = 1000,
     #[error("Folder '{0}' is not empty.")]
