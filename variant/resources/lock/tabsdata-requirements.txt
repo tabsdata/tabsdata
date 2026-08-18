@@ -57,7 +57,7 @@ humanize==4.15.0
 hvac==2.4.0
 ibm-db==3.2.8 ; (platform_machine != 'ARM64' and platform_machine != 'aarch64') or sys_platform == 'darwin'
 ibm-db-sa==0.4.4 ; (platform_machine != 'ARM64' and platform_machine != 'aarch64') or sys_platform == 'darwin'
-idna==3.18
+idna==3.19
 ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
