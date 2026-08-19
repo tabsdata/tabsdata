@@ -76,6 +76,7 @@ normalized_licenses = {
     "Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR CC0-1.0": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or Creative Commons Zero Version 1.0 Universal",  # noqa: E231,E241,E501
     "Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or MIT License",                                      # noqa: E231,E241,E501
     "Apache-2.0 OR BSD-2-Clause OR MIT": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause) or MIT License",                                                                 # noqa: E231,E241,E501
+    "Apache-2.0 OR BSD-2-Clause": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause)",                                                                                      # noqa: E231,E241,E501
     "Apache-2.0 OR BSL-1.0 OR MIT": "Apache License Version 2.0 or Boost Software License Version 1.0 or MIT License",                                                                         # noqa: E231,E241,E501
     "Apache-2.0 OR BSL-1.0": "Apache License Version 2.0 or Boost Software License Version 1.0",                                                                                               # noqa: E231,E241,E501
     "Apache-2.0 OR CC0-1.0 OR MIT-0": "Apache License Version 2.0 or Creative Commons Zero Version 1.0 Universal or MIT No Attribution License",                                               # noqa: E231,E241,E501
@@ -132,7 +133,6 @@ normalized_licenses = {
     "MIT LICENSE;; APACHE SOFTWARE LICENSE": "MIT License or Apache Software License Version 2.0",                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE;; MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "MIT License or Mozilla Public License Version 2.0",                                                                                 # noqa: E231,E241,E501
     "MIT LICENSE": "MIT License",                                                                                                                                                              # noqa: E231,E241,E501
-    "MIT_;; MPL-2.0;; _Apache-2.0": "MIT License or Mozilla Public License Version 2.0 or Apache License Version 2.0",                                                                         # noqa: E231,E241,E501
     "MIT NO ATTRIBUTION LICENSE _MIT-0_": "MIT No Attribution License",                                                                                                                        # noqa: E231,E241,E501
     "MIT OR Apache2": "MIT License or Apache License Version 2.0",                                                                                                                             # noqa: E231,E241,E501
     "MIT OR Unlicense": "MIT License or The Unlicense",                                                                                                                                        # noqa: E231,E241,E501
@@ -141,6 +141,7 @@ normalized_licenses = {
     "MIT;; MPL-2.0": "MIT License or Mozilla Public License Version 2.0",                                                                                                                      # noqa: E231,E241,E501
     "MIT;; PSF-2.0": "MIT License or Python Software Foundation License Version 2.0",                                                                                                          # noqa: E231,E241,E501
     "MIT;; PYTHON-2.0": "MIT License or Python Software Foundation License Version 2.0",                                                                                                       # noqa: E231,E241,E501
+    "MIT_;; MPL-2.0;; _Apache-2.0": "MIT License or Mozilla Public License Version 2.0 or Apache License Version 2.0",                                                                         # noqa: E231,E241,E501
     "MIT": "MIT License",                                                                                                                                                                      # noqa: E231,E241,E501
     "MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "Mozilla Public License Version 2.0",                                                                                                              # noqa: E231,E241,E501
     "MOZILLA PUBLIC LICENSE 2.0 (MPL 2.0)": "Mozilla Public License Version 2.0",                                                                                                              # noqa: E231,E241,E501
