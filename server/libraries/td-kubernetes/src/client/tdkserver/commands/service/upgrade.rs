@@ -3,17 +3,18 @@
 //
 
 use clap_derive::Args;
+use colored::Colorize;
 use td_common::status::ExitStatus::Cancelled;
 use tracing::info;
 
 use crate::base::reporter::{InteractiveReporter, Reporter};
-use crate::client::registry::{instance_edit_folder, instance_init_folder};
+use crate::client::registry::{InstanceSettings, instance_edit_folder, instance_init_folder};
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
     instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
-use crate::client::tdkserver::common::confirm;
+use crate::client::tdkserver::common::confirm_at_leisure;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::context::KubeContext;
@@ -22,7 +23,7 @@ use crate::runtime::instance::upgrade::latch;
 use crate::runtime::instance::upgrade::lock::UpgradeLock;
 use crate::runtime::instance::upgrade::preflight::{Preflight, Standing, inspect};
 use crate::runtime::provider::summary::Summary;
-use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_mutating};
+use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_upgrading};
 
 struct Phases {
     total: usize,
@@ -45,9 +46,14 @@ impl Phases {
     }
 
     fn announce(&self, caption: &str) {
-        let step = self.current.get() + 1;
-        self.current.set(step);
-        info!("Step {step} of {} - {caption}", self.total);
+        let phase = self.current.get() + 1;
+        self.current.set(phase);
+        println!(
+            "{}",
+            format!("Phase {phase} of {} - {caption}", self.total)
+                .bold()
+                .truecolor(0x56, 0xD4, 0xDD)
+        );
     }
 }
 
@@ -131,7 +137,7 @@ pub async fn command_upgrade(
     let unlock = unlock.unwrap_or(false);
     let verbose = globals.verbose;
 
-    let provider = provider_for_instance_mutating(instance.value, verbose, None).await?;
+    let provider = provider_for_instance_upgrading(instance.value, verbose).await?;
     let summary = provider.summary();
     let instance_name = summary.instance_name.clone().unwrap_or_default();
     let reporter = InteractiveReporter::new();
@@ -220,7 +226,7 @@ fn instance_confirmation_phase(
         let markers = instance_markers(summary, in_settings);
         preview::upgrade_service(summary, &markers);
     }
-    let accepted = confirm(yes, "Proceed with the upgrade of this instance?")?;
+    let accepted = confirm_at_leisure(yes, "Proceed with the upgrade of this instance?")?;
     if !accepted {
         info!("Operation cancelled.");
     }
@@ -237,7 +243,7 @@ async fn cluster_start_phase(
     info!("The cluster of this instance is stopped.");
     info!("It will be started so the instance can be inspected and upgraded.");
     info!("The instance itself stays stopped.");
-    if !confirm(yes, "Start the cluster?")? {
+    if !confirm_at_leisure(yes, "Start the cluster?")? {
         info!("Operation cancelled.");
         return Ok(false);
     }
@@ -257,7 +263,7 @@ fn upgrade_viability_phase(
     info!("  Tabsdata version.: {}", preflight.product_version);
     report_lock(preflight.lock.as_ref());
     info!(
-        "  Upgrade steps....: {} ({} requiring actions)",
+        "  Version steps...: {} ({} requiring actions)",
         preflight.hops.len(),
         preflight.upgraders()
     );
@@ -290,7 +296,7 @@ fn upgrade_viability_phase(
     if apply {
         info!("'--apply' will start the instance once the upgrade completes.");
     }
-    let accepted = confirm(yes, "Proceed with the upgrade?")?;
+    let accepted = confirm_at_leisure(yes, "Proceed with the upgrade?")?;
     if !accepted {
         info!("Operation cancelled.");
     }
@@ -342,7 +348,7 @@ async fn instance_shutdown_phase(
         "The upgrade will take the instance from '{}' to '{}'.",
         preflight.instance_version, preflight.product_version
     );
-    if !confirm(yes, "Stop the instance and hold it for the upgrade?")? {
+    if !confirm_at_leisure(yes, "Stop the instance and hold it for the upgrade?")? {
         info!("Operation cancelled.");
         return Ok(false);
     }
@@ -368,7 +374,7 @@ async fn instance_upgrade_phase(
 ) -> CommandResult<bool> {
     phases.announce("Instance upgrade");
     info!(
-        "  Upgrade steps....: {} ({} requiring actions)",
+        "  Version steps...: {} ({} requiring actions)",
         preflight.hops.len(),
         preflight.upgraders()
     );
@@ -378,7 +384,7 @@ async fn instance_upgrade_phase(
     for folder in editable_folders(instance)? {
         info!("The editable folder '{folder}' will be deleted.");
     }
-    if !confirm(yes, "Upgrade the resources of this instance?")? {
+    if !confirm_at_leisure(yes, "Upgrade the resources of this instance?")? {
         info!("Operation cancelled.");
         return Ok(false);
     }
@@ -407,6 +413,11 @@ async fn instance_upgrade_phase(
     provider.upgrade_database(reporter).await?;
 
     latch::finalise(context, instance, lock, &preflight.product_version).await?;
+
+    let mut settings = InstanceSettings::load(instance)?;
+    settings.version = preflight.product_version.clone();
+    settings.save()?;
+
     info!(
         "Instance '{instance}' is upgraded to version '{}'.",
         preflight.product_version
@@ -423,7 +434,7 @@ async fn instance_restart_phase(
 ) -> CommandResult<bool> {
     phases.announce("Instance restart");
     info!("The instance is upgraded to '{version}' and will be started.");
-    if !confirm(yes, "Start the instance?")? {
+    if !confirm_at_leisure(yes, "Start the instance?")? {
         info!("Operation cancelled. The instance stays stopped.");
         return Ok(false);
     }

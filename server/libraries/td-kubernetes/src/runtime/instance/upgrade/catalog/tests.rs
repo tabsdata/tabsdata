@@ -150,3 +150,81 @@ fn the_sibling_ee_catalog_loads() {
         }
     }
 }
+
+fn lay_out_spec(body: &str) -> tempfile::TempDir {
+    let root = tempfile::tempdir().expect("temp dir");
+    let folder = root.path().join(UPGRADES_FOLDER);
+    fs::create_dir_all(&folder).expect("specs folder");
+    fs::write(folder.join("2.0.1.yaml"), body).expect("spec");
+    root
+}
+
+#[test]
+fn a_variant_grouped_under_its_own_suffixed_name_is_rejected() {
+    let root = lay_out_spec(
+        "schema: 1\nconfigs:\n  apiserver.database_kminus.yaml:\n    \
+         apiserver.database_kminus.yaml:\n      action: retain\n",
+    );
+    let outcome = load_spec(root.path(), "2.0.1");
+    assert!(
+        outcome.is_err(),
+        "a group keyed by a suffixed variant must be rejected"
+    );
+}
+
+#[test]
+fn variants_grouped_under_their_stripped_name_are_accepted() {
+    let root = lay_out_spec(
+        "schema: 1\nconfigs:\n  apiserver.database.yaml:\n    \
+         apiserver.database_kminus.yaml:\n      action: retain\n    \
+         apiserver.database_docker.yaml:\n      action: retain\n",
+    );
+    assert!(load_spec(root.path(), "2.0.1").is_ok());
+}
+
+#[test]
+fn the_shipped_kupgrade_catalog_loads() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../variant/resources/kupgrade");
+    let Ok(root) = root.canonicalize() else {
+        return;
+    };
+    let inventory = load_inventory(&root).expect("the shipped inventory loads");
+    for entry in &inventory.versions {
+        if entry.upgrader {
+            let outcome = load_spec(&root, &entry.version);
+            assert!(
+                outcome.is_ok(),
+                "the shipped spec '{}' must load: {:?}",
+                entry.version,
+                outcome.err()
+            );
+        }
+    }
+}
+
+#[test]
+fn no_shipped_pod_uses_a_placeholder_as_a_list_item_identity() {
+    let folder = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../variant/resources/kprofile/pods");
+    let Ok(folder) = folder.canonicalize() else {
+        return;
+    };
+    for entry in fs::read_dir(&folder).expect("pods folder") {
+        let path = entry.expect("entry").path();
+        if path.extension().is_none_or(|suffix| suffix != "yaml") {
+            continue;
+        }
+        let body = fs::read_to_string(&path).expect("pod");
+        for (number, line) in body.lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("- name:") && trimmed.contains("${{") {
+                panic!(
+                    "{}:{}: a list item's identity must not hold a placeholder: {trimmed}",
+                    path.display(),
+                    number + 1
+                );
+            }
+        }
+    }
+}

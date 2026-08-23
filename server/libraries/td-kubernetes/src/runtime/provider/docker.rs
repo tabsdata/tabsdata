@@ -21,6 +21,7 @@ use crate::base::constants::{
 };
 use td_python::tabsdata::tabsdata_version;
 
+use crate::base::constants::DbManagerMode;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{
@@ -122,6 +123,20 @@ impl DockerProvider {
         apply_ports(&mut system, &settings.ports);
 
         Ok((context, system, profile))
+    }
+
+    async fn provision_database_as_pod(&self, mode: DbManagerMode) -> CommandResult {
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_database(
+            &context,
+            self.cluster_provider(),
+            &system,
+            &profile,
+            &multi,
+            mode,
+        )
+        .await
     }
 
     async fn create_runtimes_as_pod(&self) -> CommandResult {
@@ -334,9 +349,11 @@ impl Provider for DockerProvider {
     }
 
     async fn create_database(&self, _reporter: &dyn Reporter) -> CommandResult {
-        let (context, system, profile) = self.runtimes_context().await?;
-        let multi = td_common::logging::multi_progress().unwrap_or_default();
-        provision_database(&context, self.cluster_provider(), &system, &profile, &multi).await
+        self.provision_database_as_pod(DbManagerMode::Create).await
+    }
+
+    async fn upgrade_database(&self, _reporter: &dyn Reporter) -> CommandResult {
+        self.provision_database_as_pod(DbManagerMode::Upgrade).await
     }
 
     async fn create_runtimes(&self, _reporter: &dyn Reporter) -> CommandResult {

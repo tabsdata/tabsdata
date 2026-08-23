@@ -185,6 +185,30 @@ pub enum UpgradeError {
         entry: String,
         cause: String,
     } = 5349,
+    #[error(
+        "The pattern '{pattern}' for '{entry}' in the upgrade to '{version}' is invalid: {cause}."
+    )]
+    ModifyPatternInvalid {
+        version: String,
+        entry: String,
+        pattern: String,
+        cause: String,
+    } = 5352,
+    #[error(
+        "The upgrade to '{version}' asks to merge '{entry}', but the merge action is not \
+         implemented yet."
+    )]
+    MergeNotImplemented { version: String, entry: String } = 5354,
+    #[error(
+        "The upgrade to '{version}' groups the variant '{variant}' under '{entry}', but it \
+         belongs to '{stripped}'."
+    )]
+    VariantOutsideGroup {
+        version: String,
+        entry: String,
+        variant: String,
+        stripped: String,
+    } = 5353,
     #[error("Could not render '{entry}' while upgrading to '{version}': {cause}.")]
     ModifyRenderFailed {
         version: String,

@@ -24,8 +24,8 @@ use tracing::{info, warn};
 
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DATABASE_NAME_POSTGRES,
-    DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, ENV_UV_PYTHON_INSTALL_DIR, FOLDER_CLUSTER,
-    FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_FN,
+    DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, DbManagerMode, ENV_UV_PYTHON_INSTALL_DIR,
+    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_FN,
     FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV,
     FOREIGN_ASSETS, IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
     KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, RUNTIMES_LOCK_FILE, UvMode, VENVS_IMAGE,
@@ -439,7 +439,13 @@ impl Provider for KminusProvider {
     }
 
     async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult {
-        self.create_database_as_pod(reporter).await
+        self.create_database_as_pod(reporter, DbManagerMode::Create)
+            .await
+    }
+
+    async fn upgrade_database(&self, reporter: &dyn Reporter) -> CommandResult {
+        self.create_database_as_pod(reporter, DbManagerMode::Upgrade)
+            .await
     }
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
@@ -726,10 +732,22 @@ impl KminusProvider {
         Ok((context, system, profile))
     }
 
-    async fn create_database_as_pod(&self, _reporter: &dyn Reporter) -> CommandResult {
+    async fn create_database_as_pod(
+        &self,
+        _reporter: &dyn Reporter,
+        mode: DbManagerMode,
+    ) -> CommandResult {
         let (context, system, profile) = self.database_context().await?;
         let multi = td_common::logging::multi_progress().unwrap_or_default();
-        provision_database(&context, ClusterProvider::Kminus, &system, &profile, &multi).await
+        provision_database(
+            &context,
+            ClusterProvider::Kminus,
+            &system,
+            &profile,
+            &multi,
+            mode,
+        )
+        .await
     }
 
     #[allow(dead_code)]

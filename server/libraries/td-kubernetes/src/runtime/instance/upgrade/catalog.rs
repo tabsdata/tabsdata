@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::base::constants::RESOURCE_KUPGRADE;
 use crate::base::error::upgrade::UpgradeError;
 use crate::core::system::exit::CommandResult;
+use crate::runtime::instance::profile::bundle::parse_filename;
 use crate::runtime::instance::profile::resolve_resource_path;
 use crate::runtime::instance::upgrade::inventory::{
     INVENTORY_FILE, Inventory, UPGRADES_FOLDER, deserialize_inventory,
@@ -54,6 +55,7 @@ pub fn load_spec(root: &Path, version: &str) -> CommandResult<Spec> {
         cause: error.to_string(),
     })?;
     let spec = deserialize_spec(version, &yaml)?;
+    ensure_grouping(version, &spec)?;
     ensure_content(root, version, &spec)?;
     Ok(spec)
 }
@@ -73,6 +75,26 @@ pub fn read_content(
         }
         .into()
     })
+}
+
+fn ensure_grouping(version: &str, spec: &Spec) -> CommandResult {
+    for (family, groups) in spec.families() {
+        for (file, group) in groups {
+            for variant in group.keys() {
+                let stripped = parse_filename(variant).render_stripped();
+                if &stripped != file {
+                    return Err(UpgradeError::VariantOutsideGroup {
+                        version: version.to_owned(),
+                        entry: format!("{family}/{file}"),
+                        variant: variant.clone(),
+                        stripped,
+                    }
+                    .into());
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn ensure_content(root: &Path, version: &str, spec: &Spec) -> CommandResult {

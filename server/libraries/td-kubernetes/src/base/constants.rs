@@ -402,6 +402,21 @@ pub const PART_OF_TABSDATA: &str = "tabsdata";
 pub const TD_VERSION_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "version");
 pub const LEGACY_VERSION: &str = "2.0.0";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbManagerMode {
+    Create,
+    Upgrade,
+}
+
+impl DbManagerMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Upgrade => "upgrade",
+        }
+    }
+}
+
 pub const POD_YAML_COMPONENT_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "component");
 
 pub const RESOURCE_CPU: &str = "cpu";

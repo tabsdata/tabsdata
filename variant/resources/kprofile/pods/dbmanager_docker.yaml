@@ -102,13 +102,13 @@ spec:
         - name: runtimes
           mountPath: /tabsdata/runtimes
       containers:
-      - name: 1000-dbcreate
+      - name: 1000-dbmanage
         image: ubuntu:24.04
         imagePullPolicy: IfNotPresent
         command: ["${{system:tdk_pyenv_td_root}}/bin/td_dbmanager"]
         args:
         - db
-        - create
+        - ${{system:tdk_dbmanager_mode}}
         - --config-file
         - /tabsdata/config/apiserver.database.yaml
         - --config-file

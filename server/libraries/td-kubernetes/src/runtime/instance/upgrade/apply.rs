@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use chrono::Utc;
+use regex::Regex;
 use tracing::info;
 
 use crate::base::constants::{
@@ -21,7 +22,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::Manifest;
 use crate::runtime::instance::upgrade::catalog::read_content;
 use crate::runtime::instance::upgrade::plan::Step;
-use crate::runtime::instance::upgrade::spec::{Action, ModifyLeafValueIf, Operation};
+use crate::runtime::instance::upgrade::spec::{Action, ModifyLeafValueIf, ModifyTextIf, Operation};
 
 pub struct Outcome {
     pub applied: usize,
@@ -51,6 +52,11 @@ pub async fn apply_step(
             manifest.stamp_entry(&step.entry, version, now, true);
             Ok(true)
         }
+        Action::Merge(_) => Err(UpgradeError::MergeNotImplemented {
+            version: version.to_owned(),
+            entry: step.entry.clone(),
+        }
+        .into()),
         Action::Delete(_) => {
             if exists_configmap(context, &name).await? {
                 delete_configmap(context, &name).await?;
@@ -128,59 +134,119 @@ fn modify(
     current: &str,
     changes: &[Operation],
 ) -> CommandResult<(String, bool)> {
-    let mut document: serde_yaml::Value =
-        serde_yaml::from_str(current).map_err(|error| UpgradeError::ModifyParseFailed {
-            version: version.to_owned(),
-            entry: entry.to_owned(),
-            cause: error.to_string(),
-        })?;
+    let mut text = current.to_owned();
     let mut touched = false;
     for change in changes {
-        match change {
-            Operation::ModifyLeafValueIf(operation) => {
-                if replace_leaf(&mut document, operation) {
-                    touched = true;
-                } else {
-                    info!(
-                        "Upgrade to '{version}' left '{entry}' leaf '{}' alone; it does not \
-                         hold the expected value.",
-                        operation.leaf
-                    );
-                }
-            }
-        }
+        let (rewritten, hit) = change.replace(version, entry, &text)?;
+        text = rewritten;
+        touched |= hit;
     }
-    let rendered =
-        serde_yaml::to_string(&document).map_err(|error| UpgradeError::ModifyRenderFailed {
-            version: version.to_owned(),
-            entry: entry.to_owned(),
-            cause: error.to_string(),
-        })?;
-    Ok((rendered, touched))
+    Ok((text, touched))
 }
 
-fn replace_leaf(document: &mut serde_yaml::Value, operation: &ModifyLeafValueIf) -> bool {
-    let mut cursor = document;
-    let segments = split_leaf(&operation.leaf);
-    let mut walking = segments.iter().peekable();
-    while let Some(segment) = walking.next() {
-        let key = serde_yaml::Value::from(segment.as_str());
-        if walking.peek().is_none() {
-            let Some(slot) = cursor.get_mut(&key) else {
+impl Operation {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        match self {
+            Self::ModifyTextIf(operation) => operation.replace(version, entry, current),
+            Self::ModifyLeafValueIf(operation) => operation.replace(version, entry, current),
+        }
+    }
+}
+
+impl ModifyTextIf {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let expression = format!(
+            "{}{}{}",
+            boundary("before", self.before.as_deref()),
+            self.pattern,
+            boundary("after", self.after.as_deref())
+        );
+        let pattern =
+            Regex::new(&expression).map_err(|error| UpgradeError::ModifyPatternInvalid {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                pattern: expression.clone(),
+                cause: error.to_string(),
+            })?;
+        if !pattern.is_match(current) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' alone; the pattern '{expression}' matched \
+                 nothing."
+            );
+            return Ok((current.to_owned(), false));
+        }
+        let mut replacement = String::new();
+        if self.before.is_some() {
+            replacement.push_str("${before}");
+        }
+        replacement.push_str(&self.replacement.replace('$', "$$"));
+        if self.after.is_some() {
+            replacement.push_str("${after}");
+        }
+        Ok((
+            pattern
+                .replace_all(current, replacement.as_str())
+                .into_owned(),
+            true,
+        ))
+    }
+}
+
+impl ModifyLeafValueIf {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let mut document: serde_yaml::Value =
+            serde_yaml::from_str(current).map_err(|error| UpgradeError::ModifyParseFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        if !self.assign(&mut document) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' leaf '{}' alone; it does not hold the \
+                 expected value.",
+                self.leaf
+            );
+            return Ok((current.to_owned(), false));
+        }
+        let rendered =
+            serde_yaml::to_string(&document).map_err(|error| UpgradeError::ModifyRenderFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        Ok((rendered, true))
+    }
+
+    fn assign(&self, document: &mut serde_yaml::Value) -> bool {
+        let mut cursor = document;
+        let segments = split_leaf(&self.leaf);
+        let mut walking = segments.iter().peekable();
+        while let Some(segment) = walking.next() {
+            let key = serde_yaml::Value::from(segment.as_str());
+            if walking.peek().is_none() {
+                let Some(slot) = cursor.get_mut(&key) else {
+                    return false;
+                };
+                if *slot != self.from {
+                    return false;
+                }
+                *slot = self.to.clone();
+                return true;
+            }
+            let Some(next) = cursor.get_mut(&key) else {
                 return false;
             };
-            if *slot != operation.from {
-                return false;
-            }
-            *slot = operation.to.clone();
-            return true;
+            cursor = next;
         }
-        let Some(next) = cursor.get_mut(&key) else {
-            return false;
-        };
-        cursor = next;
+        false
     }
-    false
+}
+
+fn boundary(name: &str, expression: Option<&str>) -> String {
+    match expression {
+        Some(expression) => format!("(?<{name}>{expression})"),
+        None => String::new(),
+    }
 }
 
 fn split_leaf(leaf: &str) -> Vec<String> {

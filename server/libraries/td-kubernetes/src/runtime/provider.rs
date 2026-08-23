@@ -664,6 +664,13 @@ pub async fn provider_for_instance_mutating(
     provider_for_instance_inner(instance, verbose, loglevel, true, true).await
 }
 
+pub async fn provider_for_instance_upgrading(
+    instance: Option<String>,
+    verbose: bool,
+) -> CommandResult<Box<dyn Provider>> {
+    provider_for_instance_inner(instance, verbose, None, true, false).await
+}
+
 /// Same as [`provider_for_instance_mutating`], for commands that act on an instance
 /// in any state.
 pub async fn provider_for_instance_mutating_any_state(

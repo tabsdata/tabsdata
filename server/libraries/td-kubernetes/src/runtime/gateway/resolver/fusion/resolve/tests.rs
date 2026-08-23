@@ -482,6 +482,35 @@ fn the_version_label_resolves_from_the_tabsdata_version() {
 }
 
 #[test]
+fn the_dbmanager_mode_resolves_in_the_name_and_the_argument() {
+    let template = "name: 1000-db${{system:tdk_dbmanager_mode}}\nargs:\n  - db\n  - ${{system:tdk_dbmanager_mode}}\n";
+    for (mode, container) in [("create", "1000-dbcreate"), ("upgrade", "1000-dbupgrade")] {
+        let system = SystemValues {
+            dbmanager_mode: Some(mode.to_owned()),
+            ..SystemValues::default()
+        };
+        let auto = HashMap::new();
+        let outcome = resolve_config_file(
+            "dbmanager.yaml",
+            template,
+            template,
+            &system,
+            &auto,
+            &RefCell::new(HashMap::new()),
+            &RefCell::new(HashMap::new()),
+            &RefCell::new(HashMap::new()),
+        )
+        .expect("resolve the dbmanager mode");
+        assert!(
+            outcome.rendered.contains(container),
+            "rendered was: {}",
+            outcome.rendered
+        );
+        assert!(outcome.rendered.contains(&format!("- {mode}")));
+    }
+}
+
+#[test]
 fn venv_archive_name_splices_cluster_and_namespace() {
     let template =
         "image: tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst\n";

@@ -13,6 +13,7 @@ use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 
+use crate::base::constants::DbManagerMode;
 use crate::base::constants::SERVICE_TYPE_LOAD_BALANCER;
 use crate::base::constants::{
     POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, SEQUENCE_LABEL, TIER_LABEL,
@@ -1152,7 +1153,11 @@ pub async fn provision_database(
     system: &SystemValues,
     profile: &Profile,
     multi: &MultiProgress,
+    mode: DbManagerMode,
 ) -> CommandResult {
+    let mut system = system.clone();
+    system.dbmanager_mode = Some(mode.as_str().to_owned());
+    let system = &system;
     let available_secrets = list_available_secrets(context).await?;
     let hosts_database = cluster_provider.hosts_database();
 

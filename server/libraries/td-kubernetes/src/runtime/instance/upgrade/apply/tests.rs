@@ -136,8 +136,24 @@ fn every_change_is_attempted_even_when_one_does_not_match() {
 
 #[test]
 fn an_unparseable_document_is_an_error() {
-    let outcome = modify("2.0.1", "configs/a.yaml", "a: [unclosed", &[]);
+    let outcome = modify(
+        "2.0.1",
+        "configs/a.yaml",
+        "a: [unclosed",
+        &[Operation::ModifyLeafValueIf(ModifyLeafValueIf {
+            leaf: "a".to_owned(),
+            from: serde_yaml::Value::from("before"),
+            to: serde_yaml::Value::from("after"),
+        })],
+    );
     assert!(outcome.is_err());
+}
+
+#[test]
+fn a_document_with_no_changes_is_left_untouched() {
+    let (rendered, touched) = modify("2.0.1", "configs/a.yaml", "a: [unclosed", &[]).expect("noop");
+    assert_eq!(rendered, "a: [unclosed");
+    assert!(!touched);
 }
 
 #[test]
@@ -200,4 +216,122 @@ fn discarding_absent_editable_folders_is_a_no_op() {
     )
     .expect("no folders to discard");
     assert!(discarded.is_empty());
+}
+
+fn text(pattern: &str, replacement: &str, before: Option<&str>, after: Option<&str>) -> Operation {
+    Operation::ModifyTextIf(ModifyTextIf {
+        pattern: pattern.to_owned(),
+        replacement: replacement.to_owned(),
+        before: before.map(str::to_owned),
+        after: after.map(str::to_owned),
+    })
+}
+
+#[test]
+fn a_text_change_rewrites_a_container_name() {
+    let (rendered, touched) = applied(
+        "spec:\n  containers:\n  - name: 1000-dbcreate\n    image: /dev/null\n",
+        &[text(
+            "1000-dbcreate",
+            "1000-db${{system:tdk_dbmanager_mode}}",
+            None,
+            None,
+        )],
+    );
+    assert!(touched);
+    assert!(rendered.contains("1000-db${{system:tdk_dbmanager_mode}}"));
+}
+
+#[test]
+fn boundaries_anchor_a_pattern_without_consuming_it() {
+    let document = "args:\n    - db\n    - create\nother:\n    - create\n";
+    let (rendered, touched) = applied(
+        document,
+        &[text(
+            "- create",
+            "- ${{system:tdk_dbmanager_mode}}",
+            Some("- db\n    "),
+            None,
+        )],
+    );
+    assert!(touched);
+    assert!(
+        rendered.contains("- db"),
+        "the boundary must survive the rewrite: {rendered}"
+    );
+    assert!(
+        rendered.contains("${{system:tdk_dbmanager_mode}}"),
+        "the anchored occurrence must be rewritten: {rendered}"
+    );
+    assert!(
+        rendered.contains("other:\n    - create"),
+        "the unanchored occurrence must survive: {rendered}"
+    );
+}
+
+#[test]
+fn a_pattern_matching_nothing_leaves_the_text_alone() {
+    let (rendered, touched) = applied("a: 1\n", &[text("absent", "present", None, None)]);
+    assert!(!touched);
+    assert_eq!(rendered, "a: 1\n");
+}
+
+#[test]
+fn text_and_structural_changes_compose() {
+    let (rendered, touched) = applied(
+        "metadata:\n  labels:\n    app.kubernetes.io/version: \"2.0.0\"\nspec:\n  containers:\n  - name: 1000-dbcreate\n",
+        &[
+            text("1000-dbcreate", "1000-dbupgrade", None, None),
+            operation(
+                "metadata.labels.\"app.kubernetes.io/version\"",
+                serde_yaml::Value::from("2.0.0"),
+                serde_yaml::Value::from("2.0.1"),
+            ),
+        ],
+    );
+    assert!(touched);
+    assert!(rendered.contains("1000-dbupgrade"));
+    assert!(rendered.contains("2.0.1"));
+}
+
+#[test]
+fn an_invalid_pattern_is_an_error() {
+    let outcome = modify(
+        "2.0.1",
+        "pods/a.yaml",
+        "a: 1\n",
+        &[text("[unclosed", "x", None, None)],
+    );
+    assert!(outcome.is_err());
+}
+
+#[test]
+fn operations_apply_in_the_declared_order_across_types() {
+    let document = "metadata:\n  labels:\n    version: \"2.0.0\"\n";
+    let changes = [
+        Operation::ModifyLeafValueIf(ModifyLeafValueIf {
+            leaf: "metadata.labels.version".to_owned(),
+            from: serde_yaml::Value::from("2.0.0"),
+            to: serde_yaml::Value::from("staged"),
+        }),
+        Operation::ModifyTextIf(ModifyTextIf {
+            pattern: "staged".to_owned(),
+            replacement: "settled".to_owned(),
+            before: None,
+            after: None,
+        }),
+    ];
+    let (rendered, touched) = modify("2.0.1", "pods/a.yaml", document, &changes).expect("modified");
+    assert!(touched);
+    assert!(
+        rendered.contains("settled"),
+        "the text change must see the leaf change: {rendered}"
+    );
+
+    let reversed = [changes[1].clone(), changes[0].clone()];
+    let (rendered, _) = modify("2.0.1", "pods/a.yaml", document, &reversed).expect("modified");
+    assert!(
+        rendered.contains("staged") && !rendered.contains("settled"),
+        "reversing the order must change the outcome: {rendered}"
+    );
 }

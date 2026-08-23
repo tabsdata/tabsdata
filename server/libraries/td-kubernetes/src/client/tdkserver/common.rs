@@ -15,6 +15,8 @@ use crate::{cerror, cwarn};
 
 pub const PROMPT_TIMEOUT: Duration = Duration::from_secs(60);
 
+pub const LONG_PROMPT_TIMEOUT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
 const MAX_INSTANCE_NAME_LENGTH: usize = 256;
 
 const FORBIDDEN_CHARACTERS: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
@@ -108,10 +110,6 @@ fn stdin_lines() -> &'static Mutex<mpsc::Receiver<LineOutcome>> {
     })
 }
 
-pub fn prompt_yes_no(message: &str) -> Confirmation {
-    prompt_yes_no_with_timeout(message, PROMPT_TIMEOUT)
-}
-
 fn prompt_yes_no_with_timeout(message: &str, timeout: Duration) -> Confirmation {
     let receiver = stdin_lines().lock().unwrap();
     let started = std::time::Instant::now();
@@ -176,16 +174,24 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
 }
 
 pub fn confirm(skip: bool, message: &str) -> CommandResult<bool> {
+    confirm_within(skip, message, PROMPT_TIMEOUT)
+}
+
+pub fn confirm_at_leisure(skip: bool, message: &str) -> CommandResult<bool> {
+    confirm_within(skip, message, LONG_PROMPT_TIMEOUT)
+}
+
+fn confirm_within(skip: bool, message: &str, timeout: Duration) -> CommandResult<bool> {
     if skip {
         return Ok(true);
     }
-    match prompt_yes_no(message) {
+    match prompt_yes_no_with_timeout(message, timeout) {
         Confirmation::Yes => Ok(true),
         Confirmation::No => Ok(false),
         Confirmation::TimedOut => {
             cerror!(
                 "No response received within {} seconds; the operation was cancelled.",
-                PROMPT_TIMEOUT.as_secs()
+                timeout.as_secs()
             );
             abort(ExitStatus::Aborted)
         }

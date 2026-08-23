@@ -36,6 +36,7 @@ pub enum Action {
     Create(Bare),
     Replace(Bare),
     Delete(Bare),
+    Merge(Bare),
     Modify { changes: Vec<Operation> },
 }
 
@@ -45,13 +46,17 @@ pub struct Bare {}
 
 impl Action {
     pub fn writes_content(&self) -> bool {
-        matches!(self, Self::Create(_) | Self::Replace(_))
+        matches!(self, Self::Create(_) | Self::Replace(_) | Self::Merge(_))
     }
 
     pub fn changes(&self) -> &[Operation] {
         match self {
             Self::Modify { changes } => changes,
-            _ => &[],
+            Self::Retain(_)
+            | Self::Create(_)
+            | Self::Replace(_)
+            | Self::Delete(_)
+            | Self::Merge(_) => &[],
         }
     }
 }
@@ -60,6 +65,18 @@ impl Action {
 #[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Operation {
     ModifyLeafValueIf(ModifyLeafValueIf),
+    ModifyTextIf(ModifyTextIf),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModifyTextIf {
+    pub pattern: String,
+    pub replacement: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

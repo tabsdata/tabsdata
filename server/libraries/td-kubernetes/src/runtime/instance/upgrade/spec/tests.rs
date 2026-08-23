@@ -58,7 +58,9 @@ fn a_modify_block_parses_as_a_tagged_operation_list() {
     let spec = deserialize_spec("2.0.1", SAMPLE).expect("parses");
     let operations = &spec.configs["tabsdata.yaml"]["tabsdata_eks.yaml"].changes();
     assert_eq!(operations.len(), 1);
-    let Operation::ModifyLeafValueIf(modify) = &operations[0];
+    let Operation::ModifyLeafValueIf(modify) = &operations[0] else {
+        panic!("expected a leaf-value operation")
+    };
     assert_eq!(modify.leaf, "pods.global.envs.UV_INDEX");
     assert_eq!(modify.from, serde_yaml::Value::from(""));
     assert_eq!(
@@ -88,8 +90,12 @@ configs:
     let spec = deserialize_spec("2.0.1", yaml).expect("parses");
     let operations = &spec.configs["a.yaml"]["a_kminus.yaml"].changes();
     assert_eq!(operations.len(), 2);
-    let Operation::ModifyLeafValueIf(first) = &operations[0];
-    let Operation::ModifyLeafValueIf(second) = &operations[1];
+    let Operation::ModifyLeafValueIf(first) = &operations[0] else {
+        panic!("expected a leaf-value operation")
+    };
+    let Operation::ModifyLeafValueIf(second) = &operations[1] else {
+        panic!("expected a leaf-value operation")
+    };
     assert_eq!(first.leaf, "one");
     assert_eq!(second.leaf, "two");
 }
@@ -112,10 +118,14 @@ configs:
 ";
     let spec = deserialize_spec("2.0.1", yaml).expect("parses");
     let operations = &spec.configs["a.yaml"]["a_kminus.yaml"].changes();
-    let Operation::ModifyLeafValueIf(absent) = &operations[0];
+    let Operation::ModifyLeafValueIf(absent) = &operations[0] else {
+        panic!("expected a leaf-value operation")
+    };
     assert!(absent.from.is_null());
     assert!(absent.to.is_null());
-    let Operation::ModifyLeafValueIf(nulled) = &operations[1];
+    let Operation::ModifyLeafValueIf(nulled) = &operations[1] else {
+        panic!("expected a leaf-value operation")
+    };
     assert_eq!(nulled.from, serde_yaml::Value::from("unsafe-best-match"));
     assert!(nulled.to.is_null());
 }
@@ -140,10 +150,14 @@ configs:
 ";
     let spec = deserialize_spec("2.0.1", yaml).expect("parses");
     let operations = &spec.configs["a.yaml"]["a_kminus.yaml"].changes();
-    let Operation::ModifyLeafValueIf(number) = &operations[0];
+    let Operation::ModifyLeafValueIf(number) = &operations[0] else {
+        panic!("expected a leaf-value operation")
+    };
     assert_eq!(number.from, serde_yaml::Value::from(50));
     assert_eq!(number.to, serde_yaml::Value::from(100));
-    let Operation::ModifyLeafValueIf(flag) = &operations[1];
+    let Operation::ModifyLeafValueIf(flag) = &operations[1] else {
+        panic!("expected a leaf-value operation")
+    };
     assert_eq!(flag.from, serde_yaml::Value::from(true));
     assert_eq!(flag.to, serde_yaml::Value::from(false));
 }

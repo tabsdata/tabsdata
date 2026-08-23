@@ -264,7 +264,7 @@ PACKAGE_RESOURCES = {
     ],
 }
 
-with global_spinner("Building package 'tabsdata' (TabsData)..."):
+with global_spinner("Building package 'tabsdata' (Tabsdata)..."):
     setup(
         version=TABSDATA_VERSION,
         long_description=read_file(

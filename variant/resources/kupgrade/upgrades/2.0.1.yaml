@@ -14,21 +14,68 @@ assets:
     venvbuilder.sh:
       action: replace
 configs:
-  apiserver.database_docker.yaml:
+  apiserver.database.yaml:
     apiserver.database_docker.yaml:
-      action: replace
-  apiserver.database_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_apiserver_password"
+          replacement: "secretAuto:postgres_apiserver_password"
     apiserver.database_eks.yaml:
-      action: replace
-  apiserver.database_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_apiserver_password"
+          replacement: "secretAuto:postgres_apiserver_password"
     apiserver.database_fargate.yaml:
-      action: replace
-  apiserver.database_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_apiserver_password"
+          replacement: "secretAuto:postgres_apiserver_password"
     apiserver.database_kminus.yaml:
-      action: replace
-  dbmanager.database_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_apiserver_password"
+          replacement: "secretAuto:postgres_apiserver_password"
+  dbmanager.database.yaml:
+    dbmanager.database_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_system_user"
+          replacement: "secretAuto:postgres_system_user"
+        - op: modify-text-if
+          pattern: "secret:postgres_system_password"
+          replacement: "secretAuto:postgres_system_password"
+    dbmanager.database_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_system_user"
+          replacement: "secretAuto:postgres_system_user"
+        - op: modify-text-if
+          pattern: "secret:postgres_system_password"
+          replacement: "secretAuto:postgres_system_password"
+    dbmanager.database_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_system_user"
+          replacement: "secretAuto:postgres_system_user"
+        - op: modify-text-if
+          pattern: "secret:postgres_system_password"
+          replacement: "secretAuto:postgres_system_password"
     dbmanager.database_kminus.yaml:
-      action: replace
+      action: modify
+      changes:
+        - op: modify-text-if
+          pattern: "secret:postgres_system_user"
+          replacement: "secretAuto:postgres_system_user"
+        - op: modify-text-if
+          pattern: "secret:postgres_system_password"
+          replacement: "secretAuto:postgres_system_password"
   tabsdata.yaml:
     tabsdata_docker.yaml:
       action: retain
@@ -192,6 +239,12 @@ pods:
           leaf: metadata.labels."app.kubernetes.io/version"
           from: "2.0.0"
           to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-text-if
+          pattern: "1000-dbcreate"
+          replacement: "1000-dbmanage"
+        - op: modify-text-if
+          pattern: "- create"
+          replacement: "- ${{system:tdk_dbmanager_mode}}"
     dbmanager_eks.yaml:
       action: modify
       changes:
@@ -199,6 +252,12 @@ pods:
           leaf: metadata.labels."app.kubernetes.io/version"
           from: "2.0.0"
           to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-text-if
+          pattern: "1000-dbcreate"
+          replacement: "1000-dbmanage"
+        - op: modify-text-if
+          pattern: "- create"
+          replacement: "- ${{system:tdk_dbmanager_mode}}"
     dbmanager_fargate.yaml:
       action: modify
       changes:
@@ -206,6 +265,12 @@ pods:
           leaf: metadata.labels."app.kubernetes.io/version"
           from: "2.0.0"
           to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-text-if
+          pattern: "1000-dbcreate"
+          replacement: "1000-dbmanage"
+        - op: modify-text-if
+          pattern: "- create"
+          replacement: "- ${{system:tdk_dbmanager_mode}}"
     dbmanager_kminus.yaml:
       action: modify
       changes:
@@ -213,6 +278,12 @@ pods:
           leaf: metadata.labels."app.kubernetes.io/version"
           from: "2.0.0"
           to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-text-if
+          pattern: "1000-dbcreate"
+          replacement: "1000-dbmanage"
+        - op: modify-text-if
+          pattern: "- create"
+          replacement: "- ${{system:tdk_dbmanager_mode}}"
   disruption.yaml:
     disruption_docker.yaml:
       action: modify

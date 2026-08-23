@@ -471,7 +471,7 @@ main() {
 
    local elapsed="$(( SECONDS - start ))"
    local hours="$(awk "BEGIN { printf \"%.4f\", $elapsed / 3600 }")"
-   echo ">> Done! Image written to $output_image_td"
+   echo ">> Done! Images written to $output_image_td and $output_image_fn"
    echo ">> Elapsed time: $hours hours"
 }
 
