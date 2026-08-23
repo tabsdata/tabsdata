@@ -10,7 +10,7 @@
 //! test queries. Returned databases are freshly connected but **un-upgraded**;
 //! callers that need the schema applied call [`TestDb::upgrade`].
 //!
-//! Only this crate's own white-box factories boot the shared embedded server
+//! Only this crate's own internal factories boot the shared embedded server
 //! ([`server`]); the [`postgres::pools`] path the `#[td_test::test(db)]` macro
 //! uses takes its connect from the caller, which points it at a tdx-provisioned
 //! domain's database.

@@ -20,7 +20,7 @@
 //!   here starts a server.
 //! - [`pool`] — td-database's own `components`/RLS tests: one schema (left un-upgraded;
 //!   the caller applies it via [`TestDb::upgrade`]) plus the privileged handle and
-//!   superuser connect target those white-box tests need.
+//!   superuser connect target those internal tests need.
 //!
 //! # Project scope in tests
 //!
@@ -35,7 +35,7 @@ use crate::pool::TdPool;
 use crate::test_utils::TestDb;
 use crate::test_utils::test_pool_config;
 use crate::test_utils::{MultiTestDb, TestDbCleanup};
-// Only the crate's own white-box factories still boot a server; the macro path
+// Only the crate's own internal factories still boot a server; the macro path
 // takes the connect from its caller.
 #[cfg(test)]
 use crate::test_utils::server;

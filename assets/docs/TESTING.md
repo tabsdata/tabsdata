@@ -161,6 +161,14 @@ A backend is looked for in three places, in this order, identically in Rust and 
              --format export --prefix APISERVER_POSTGRES)"
    ```
 
+   A whole manifest exports in one go, each domain keyed on its own upper-cased name,
+   which is what `cargo make test_rs` does for the Rust domains:
+
+   ```sh
+   eval "$(tdx-domain info --manifest variant/config/pytest/domains_rs.yaml \
+             --format export)"
+   ```
+
    `__ENTITIES` is read as a JSON object (`{"city": 4079}`), so a seeded domain's row
    counts survive the round trip and `staged()` / `tables()` keep working. `NAME` is
    filled from the requested name.
@@ -218,10 +226,10 @@ parallel and isolate completely:
 ```
 
 `cargo make test_rs` provisions the domains itself, from a manifest of its own rather than
-`domains.yaml` — a Rust test run has no business provisioning the domains of the other two
+`domains_py.yaml` — a Rust test run has no business provisioning the domains of the other two
 dozen systems, and nothing in it declares an env-sourced option, so the run needs no
 1Password load, only `TD_BACKENDS_CRYPTO_KEY`. That manifest,
-`variant/config/pytest/rust-domains.yaml`, holds `apiserver_postgres` for the db tests and
+`variant/config/pytest/domains_rs.yaml`, holds `apiserver_postgres` for the db tests and
 `apiserver_s3` / `apiserver_az` / `apiserver_gcs` for the object-store ones — named apart
 from the `s3` / `azureblob` / `gcs` the Python suite reads, because the manifest recreates
 what it names and a Rust run must not clear a domain another suite is reading.
@@ -235,15 +243,22 @@ long-running and expected to be up, so `tdx-system create` / `restart` stay a se
 deliberate act.
 
 `cargo make test_rs_backends` runs just that provisioning, for when you want the domains
-without the suite. `TD_TEST_RS_SKIP_BACKENDS=true` skips it, for a run against a domain you
+without the suite. `--no-domains` (or `--light`) skips it, for a run against a domain you
 provisioned yourself. Point the tests at a different one with `TD_TEST_DB_DOMAIN=<name>`.
+
+Every domain task takes a mandatory `--python` or `--rust` to say which suite's domains it
+means: `cargo make domains_create --rust`, `cargo make domains_destroy --python`. The
+descriptors are named to match, `domains_py.yaml` and `domains_rs.yaml`, with the GA Python
+variants as `domains_py_ga_<os>.yaml`.
 
 The domain descriptor carries the owning system's superuser as `SYS_ADMIN_USER` /
 `SYS_ADMIN_PASSWORD`, which is what the per-test path connects as: creating and dropping
 schemas and ensuring the cluster-global RLS role are beyond the domain's own owner role.
 
 The same `TD_TEST_ON_MISSING_DOMAIN` policy applies, so a developer without a tdx setup can
-set it to `skip`. The one remaining user of the embedded server is td-database's own
-white-box suite (`components/tests/*`, `pool::connect`), which tests the database layer
-itself rather than apiserver logic and still boots a server lazily into
-`target/td-test-pg`.
+set it to `skip`. td-database's own internals suite (`components/tests/*`,
+`pool::connect`) tests the database layer itself rather than apiserver logic, so it needs
+a superuser: it creates and drops cluster-global roles and sets `BYPASSRLS`. It takes that
+from the `apiserver_postgres_internals` domain, whose descriptor carries the owning system's
+superuser, and falls back to the embedded server in `target/td-test-pg` when that domain's
+environment tier is absent.

@@ -22,8 +22,8 @@ use td_database::config::{PostgresConfig, PostgresConnect};
 use td_database::test_utils::MultiTestDb;
 
 /// The domain the db tests carve their per-test schemas out of. Declared in
-/// `variant/config/pytest/domains.yaml`, which the `domains_create` task
-/// provisions with `--force` on every run.
+/// `variant/config/pytest/domains_rs.yaml`, which the `domains_create --rust`
+/// task provisions with `--force` on every run.
 pub const DEFAULT_DOMAIN: &str = "apiserver_postgres";
 
 /// Points the db tests at a different domain — for a developer running against

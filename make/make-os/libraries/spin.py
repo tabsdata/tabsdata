@@ -2,6 +2,7 @@
 # Copyright 2025 Tabsdata Inc.
 #
 
+import os
 import signal
 import sys
 import threading
@@ -55,8 +56,13 @@ def main(message: str) -> int:
     signal.signal(signal.SIGINT, handler)
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
+    parent = os.getppid()
     while not event.is_set():
+        if os.getppid() != parent:
+            break
         time.sleep(1)
+    event.set()
+    thread.join(timeout=1)
     return 0
 
 

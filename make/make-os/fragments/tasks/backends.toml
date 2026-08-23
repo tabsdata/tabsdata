@@ -319,18 +319,14 @@ script = [
             echo "                             TD_OVERRIDE_SYSTEMS_MANIFEST environment"
             echo "                             variable, if set, selects a file by name"
             echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
-            echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
-            echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
-            echo "                             When no argument is given, the"
-            echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
-            echo "                             variable, if set, selects a file by name"
-            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
+            echo ""
+            echo "The domains of both test suites are destroyed first."
             echo ""
             exit 0
         end
     end
 
-    cm_run_task __os__destroy_domains
+    cm_run_task __os__destroy_all_domains
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
@@ -485,6 +481,36 @@ script = [
     cm_run_task __os__reset_venv_env
     ''']
 
+[tasks.__os__setup_test_py_backends]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/domain.ds
+
+    with_domains = get_env TD_WITH_DOMAINS
+    if eq ${with_domains} "false"
+        info "🚜 Creating backend domains skipped."
+        exit 0
+    end
+
+    manifest = default_domains_manifest py
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    info "📄 Using domains manifest: ${manifest}"
+    info "🛠️ Creating backend domains..."
+    debug "🚀 tdx-domain create --manifest ${manifest} -f"
+    exec --fail-on-error tdx-domain create --manifest ${manifest} -f
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
 [tasks.__os__setup_test_rs_backends]
 plugin = "td-task-tracker"
 category = "12 - Backends"
@@ -493,36 +519,28 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/domain.ds
 
-    skip_backends = get_env TD_TEST_RS_SKIP_BACKENDS
-    if eq ${skip_backends} "true"
-        info "⏭️ Skipping the Rust test domains; assuming they are already provisioned"
+    with_domains = get_env TD_WITH_DOMAINS
+    if eq ${with_domains} "false"
+        info "🚜 Creating backend domains skipped."
         exit 0
     end
+
+    manifest = default_domains_manifest rs
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
 
-    # No __os__set_secrets: nothing in the Rust manifest declares an env-sourced
-    # option, so a Rust test run needs no 1Password load.
-
-    # Systems are long-running and expected to be up already, so only the domain
-    # is this task's business. Recreated every run: the db tests want an empty
-    # database, and dropping it takes any per-test schema an earlier run left
-    # behind with it.
-    info "📄 Using Rust domains manifest: ${BACKENDS_RUST_DOMAINS_MANIFEST}"
-    info "🛠️ Creating the backend domains the Rust tests use..."
-    debug "🚀 tdx-domain create --manifest ${BACKENDS_RUST_DOMAINS_MANIFEST} -f"
-    exec --fail-on-error tdx-domain create --manifest ${BACKENDS_RUST_DOMAINS_MANIFEST} -f
+    info "📄 Using domains manifest: ${manifest}"
+    info "🛠️ Creating backend domains..."
+    debug "🚀 tdx-domain create --manifest ${manifest} -f"
+    exec --fail-on-error tdx-domain create --manifest ${manifest} -f
 
     cm_run_task __os__reset_venv_env
 
-    # Only now that the domain exists -- and carries the password this run just
-    # minted for it -- is its descriptor worth exporting. Loaded any earlier the
-    # variables would either be missing or name the database this task has since
-    # dropped, and a complete-looking set outranks the descriptor in the fixtures.
-    cm_run_task __os__set_apiserver_postgres_envs
-    cm_run_task __os__get_apiserver_postgres_envs
+    cm_run_task __os__set_domain_envs_rs
+    cm_run_task __os__get_domain_envs_rs
     ''']
 
 [tasks.__os__generate_domains]
@@ -533,18 +551,22 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/domain.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         if eq ${argument} "--help"
             echo ""
-            echo "Usage: cargo make domains_create [--domains-manifest <FILE>]"
+            echo "Usage: cargo make domains_create (--python | --rust) [--domains-manifest <FILE>]"
             echo ""
-            echo "Create the backend domains from a manifest file."
+            echo "Create the backend domains of a test suite from a manifest file."
             echo ""
             echo "Options:"
+            echo "  --python                   Act on the domains the Python suite uses."
+            echo "  --rust                     Act on the domains the Rust suite uses."
             echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
-            echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo "                             Default: ${BACKENDS_PY_DOMAINS_MANIFEST} (--python)"
+            echo "                             Default: ${BACKENDS_RS_DOMAINS_MANIFEST} (--rust)"
             echo "                             When no argument is given, the"
             echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
             echo "                             variable, if set, selects a file by name"
@@ -554,41 +576,19 @@ script = [
         end
     end
 
+    with_domains = get_env TD_WITH_DOMAINS
+    if eq ${with_domains} "false"
+        info "🚜 Creating backend domains skipped."
+        exit 0
+    end
+
+    language = resolve_domains_language
+    manifest = resolve_domains_manifest ${language}
+
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
-    cm_run_task __os__set_secrets
-
-    manifest = set ""
-    take_next = set false
-    for argument in ${arguments}
-        if ${take_next}
-            manifest = set ${argument}
-            take_next = set false
-        elseif eq ${argument} "--domains-manifest"
-            take_next = set true
-        end
-    end
-    manifest = trim ${manifest}
-    if is_empty ${manifest}
-        override = get_env TD_OVERRIDE_DOMAINS_MANIFEST
-        override = trim ${override}
-        if is_empty ${override}
-            manifest = set ${BACKENDS_DOMAINS_MANIFEST}
-        else
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
-        end
-    else
-        absolute = starts_with ${manifest} "/"
-        if not ${absolute}
-            absolute = starts_with ${manifest} "\\"
-        end
-        if not ${absolute}
-            second = substring ${manifest} 1 2
-            absolute = eq ${second} ":"
-        end
-        if not ${absolute}
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
-        end
+    if eq ${language} "py"
+        cm_run_task __os__set_secrets
     end
 
     info "📄 Using domains manifest: ${manifest}"
@@ -597,6 +597,11 @@ script = [
     exec --fail-on-error tdx-domain create --manifest ${manifest} -f
 
     cm_run_task __os__reset_venv_env
+
+    if eq ${language} "rs"
+        cm_run_task __os__set_domain_envs_rs
+        cm_run_task __os__get_domain_envs_rs
+    end
     ''']
 
 [tasks.__os__create_domains]
@@ -621,18 +626,22 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/domain.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         if eq ${argument} "--help"
             echo ""
-            echo "Usage: cargo make domains_destroy [--domains-manifest <FILE>]"
+            echo "Usage: cargo make domains_destroy (--python | --rust) [--domains-manifest <FILE>]"
             echo ""
-            echo "Destroy the backend domains."
+            echo "Destroy the backend domains of a test suite."
             echo ""
             echo "Options:"
+            echo "  --python                   Act on the domains the Python suite uses."
+            echo "  --rust                     Act on the domains the Rust suite uses."
             echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
-            echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo "                             Default: ${BACKENDS_PY_DOMAINS_MANIFEST} (--python)"
+            echo "                             Default: ${BACKENDS_RS_DOMAINS_MANIFEST} (--rust)"
             echo "                             When no argument is given, the"
             echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
             echo "                             variable, if set, selects a file by name"
@@ -642,47 +651,58 @@ script = [
         end
     end
 
+    with_domains = get_env TD_WITH_DOMAINS
+    if eq ${with_domains} "false"
+        info "🚜 Destroying backend domains skipped."
+        exit 0
+    end
+
+    language = resolve_domains_language
+    manifest = resolve_domains_manifest ${language}
+
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
-    cm_run_task __os__set_secrets
-
-    manifest = set ""
-    take_next = set false
-    for argument in ${arguments}
-        if ${take_next}
-            manifest = set ${argument}
-            take_next = set false
-        elseif eq ${argument} "--domains-manifest"
-            take_next = set true
-        end
-    end
-    manifest = trim ${manifest}
-    if is_empty ${manifest}
-        override = get_env TD_OVERRIDE_DOMAINS_MANIFEST
-        override = trim ${override}
-        if is_empty ${override}
-            manifest = set ${BACKENDS_DOMAINS_MANIFEST}
-        else
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
-        end
-    else
-        absolute = starts_with ${manifest} "/"
-        if not ${absolute}
-            absolute = starts_with ${manifest} "\\"
-        end
-        if not ${absolute}
-            second = substring ${manifest} 1 2
-            absolute = eq ${second} ":"
-        end
-        if not ${absolute}
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
-        end
+    if eq ${language} "py"
+        cm_run_task __os__set_secrets
     end
 
     info "📄 Using domains manifest: ${manifest}"
     info "💥 Destroying backend domains..."
     debug "🚀 tdx-domain destroy --manifest ${manifest}"
     exec --fail-on-error tdx-domain destroy --manifest ${manifest}
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__destroy_all_domains]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/domain.ds
+
+    with_domains = get_env TD_WITH_DOMAINS
+    if eq ${with_domains} "false"
+        info "🚜 Destroying backend domains skipped."
+        exit 0
+    end
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    languages = array py rs
+    for language in ${languages}
+        manifest = default_domains_manifest ${language}
+        info "📄 Using domains manifest: ${manifest}"
+        info "💥 Destroying backend domains..."
+        debug "🚀 tdx-domain destroy --manifest ${manifest}"
+        exec --fail-on-error tdx-domain destroy --manifest ${manifest}
+    end
+    release ${languages}
 
     cm_run_task __os__reset_venv_env
     ''']

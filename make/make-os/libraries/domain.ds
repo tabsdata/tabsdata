@@ -1,0 +1,111 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+fn resolve_domains_language
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    seen_python = set false
+    seen_rust = set false
+    for argument in ${arguments}
+        if eq ${argument} "--python"
+            seen_python = set true
+        end
+        if eq ${argument} "--rust"
+            seen_rust = set true
+        end
+    end
+
+    if ${seen_python}
+        if ${seen_rust}
+            error ""
+            error "🧨 Flags '--python' and '--rust' are mutually exclusive."
+            error ""
+            error "🛟 Use '--python' to act on the domains the Python suite uses."
+            error "🛟 Use '--rust' to act on the domains the Rust suite uses."
+            error ""
+            assert false
+        end
+    end
+    if ${seen_python}
+        return py
+    end
+    if ${seen_rust}
+        return rs
+    end
+
+    error ""
+    error "🧨 Either '--python' or '--rust' is required."
+    error ""
+    error "🛟 Use '--python' to act on the domains the Python suite uses."
+    error "🛟 Use '--rust' to act on the domains the Rust suite uses."
+    error ""
+    assert false
+end
+
+fn default_domains_manifest
+    language = set ${1}
+    if eq ${language} "rs"
+        return ${BACKENDS_RS_DOMAINS_MANIFEST}
+    end
+
+    on_ga = get_env TD_ON_GA
+    if eq ${on_ga} "true"
+        target_os = get_env TDX_OS
+        target_os = trim ${target_os}
+        target_os_empty = is_empty ${target_os}
+        if not ${target_os_empty}
+            return ${BACKENDS_MANIFEST_FOLDER}/domains_py_ga_${target_os}.yaml
+        end
+    end
+    return ${BACKENDS_PY_DOMAINS_MANIFEST}
+end
+
+fn absolute_manifest_path
+    candidate = set ${1}
+    absolute = starts_with ${candidate} "/"
+    if not ${absolute}
+        absolute = starts_with ${candidate} "\\"
+    end
+    if not ${absolute}
+        second = substring ${candidate} 1 2
+        absolute = eq ${second} ":"
+    end
+    if ${absolute}
+        return ${candidate}
+    end
+    return ${BACKENDS_MANIFEST_FOLDER}/${candidate}
+end
+
+fn resolve_domains_manifest
+    language = set ${1}
+
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    manifest = set ""
+    take_next = set false
+    for argument in ${arguments}
+        if ${take_next}
+            manifest = set ${argument}
+            take_next = set false
+        elseif eq ${argument} "--domains-manifest"
+            take_next = set true
+        end
+    end
+
+    manifest = trim ${manifest}
+    manifest_empty = is_empty ${manifest}
+    if ${manifest_empty}
+        override = get_env TD_OVERRIDE_DOMAINS_MANIFEST
+        override = trim ${override}
+        override_empty = is_empty ${override}
+        if ${override_empty}
+            manifest = default_domains_manifest ${language}
+        else
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
+        end
+    else
+        manifest = absolute_manifest_path ${manifest}
+    end
+    return ${manifest}
+end
+
+trace "📌 Duckscript 'domain' library loaded"

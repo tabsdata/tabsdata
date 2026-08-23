@@ -570,11 +570,33 @@ run_task = [
     ] }
 ]
 
+[tasks.test_parallel_tmux_rs]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${TMUX_TEST_RS_SCRIPT} __os__test_rs_macros __os__test_rs_modules_standard __os__test_rs_modules_logging __os__test_rs_modules_tower __os__test_rs_expansions"
+    exit_code = exec --get-exit-code python ${TMUX_TEST_RS_SCRIPT} __os__test_rs_macros __os__test_rs_modules_standard __os__test_rs_modules_logging __os__test_rs_modules_tower __os__test_rs_expansions
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        set_env TD_TESTS_CODE_RS ${exit_code}
+    end
+    ''']
+
 [tasks.test_parallel_rs]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
 run_task = [
+    { name = ["test_parallel_tmux_rs"], condition = { env_set = ["TD_TMUX"] } },
     { name = [
         "__os__test_rs_macros",
         "__os__test_rs_modules_standard",
@@ -2474,16 +2496,6 @@ description = "List the backend domains"
 run_task = [
     { name = [
         "__os__list_domains"
-    ] }
-]
-
-[tasks.test_rs_backends]
-plugin = "td-task-tracker"
-category = "12 - Backends"
-description = "Create the backend domains the Rust tests use (test_rs does this itself)"
-run_task = [
-    { name = [
-        "__os__setup_test_rs_backends"
     ] }
 ]
 

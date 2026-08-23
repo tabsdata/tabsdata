@@ -18,6 +18,16 @@ script = [
     else
         info "🚆 _____ The Rust tests will run in parallel mode"
         set_env TD_TEST_RS_PARALLEL true
+        on_ga = get_env TD_ON_GA
+        on_ga_true = eq ${on_ga} "true"
+        tmux = which tmux
+        unset_env TD_TMUX
+        if not ${on_ga_true}
+            if ${tmux}
+                info "🖥️ _____ Each group of Rust tests will run on its own tmux pane"
+                set_env TD_TMUX true
+            end
+        end
     end
 
     aiagent_source_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-ag/src/main/python/tabsdatak/ag/resources/registry/_generated"
@@ -47,7 +57,7 @@ script = [
 
     ''']
 
-[tasks.__os__set_apiserver_postgres_envs]
+[tasks.__os__set_domain_envs_rs]
 plugin = "td-task-tracker"
 category = "02 - Tidy"
 private = true
@@ -55,26 +65,60 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/domain.ds
 
-    domain = set "apiserver_postgres"
-    prefix = set "APISERVER_POSTGRES"
+    manifest = default_domains_manifest rs
+    folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/domains.env"
 
-    tdx_domain_exists = which tdx-domain
-    if is_empty ${tdx_domain_exists}
-        error "🚫 Required tool tdx-domain not found; cannot load the '${domain}' descriptor."
-        assert_fail
-    end
-
-    debug "🚀 tdx-domain info --domain ${domain} --format export --prefix ${prefix}"
-    output = exec tdx-domain info --domain ${domain} --format export --prefix ${prefix}
+    debug "🚀 python ${EXPORTS_SCRIPT} ${manifest} ${folder}"
+    output = exec python ${EXPORTS_SCRIPT} ${manifest} ${folder}
     if not eq ${output.code} "0"
-        error "🚫 Could not read the '${domain}' descriptor (exit code ${output.code})."
+        error "🚫 Could not read the descriptors of '${manifest}' (exit code ${output.code})."
         error "\n${output.stderr}"
         assert_fail
     end
 
     count = set 0
-    names = array
+    names = split ${output.stdout} "\n"
+    for name in ${names}
+        name = trim ${name}
+        name_empty = is_empty ${name}
+        if not ${name_empty}
+            value = readfile ${folder}/${name}
+            set_env ${name} ${value}
+            count = calc ${count} + 1
+        end
+    end
+    if eq ${count} 0
+        error "🚫 The descriptors of '${manifest}' yielded no variables."
+        assert_fail
+    end
+    info "🐘 Loaded ${count} domain variable(s) from ${manifest}"
+    ''']
+
+[tasks.__os__get_domain_envs_rs]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/domain.ds
+
+    manifest = default_domains_manifest rs
+
+    debug "🚀 tdx-domain info --manifest ${manifest} --format export"
+    output = exec tdx-domain info --manifest ${manifest} --format export
+    if not eq ${output.code} "0"
+        error "🚫 Could not read the descriptors of '${manifest}' (exit code ${output.code})."
+        error "\n${output.stderr}"
+        assert_fail
+    end
+
+    expected = set 0
+    missing = set 0
+    found = set 0
     lines = split ${output.stdout} "\n"
     for line in ${lines}
         entry = trim ${line}
@@ -84,53 +128,28 @@ script = [
             separator = indexof ${assignment} "="
             if not is_empty ${separator}
                 name = substring ${assignment} 0 ${separator}
-                value_start = calc ${separator} + 1
-                quoted = substring ${assignment} ${value_start}
-                quoted_length = length ${quoted}
-                value_end = calc ${quoted_length} - 1
-                value = substring ${quoted} 1 ${value_end}
-                set_env ${name} ${value}
-                array_push ${names} ${name}
-                count = calc ${count} + 1
+                expected = calc ${expected} + 1
+                value = get_env ${name}
+                value_empty = is_empty ${value}
+                if ${value_empty}
+                    error "🚫 Domain variable ${name} is not set."
+                    missing = calc ${missing} + 1
+                else
+                    debug "🐘 - ${name}=${value}"
+                    found = calc ${found} + 1
+                end
             end
         end
     end
-    if eq ${count} 0
-        error "🚫 The '${domain}' descriptor yielded no ${prefix}__* variables."
+    if eq ${expected} 0
+        error "🚫 The descriptors of '${manifest}' yielded no variables."
         assert_fail
     end
-    info "🐘 Loaded ${count} '${domain}' variable(s) as ${prefix}__*"
-    ''']
-
-[tasks.__os__get_apiserver_postgres_envs]
-plugin = "td-task-tracker"
-category = "02 - Tidy"
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/make-os/libraries/log.ds
-
-    prefix = set "APISERVER_POSTGRES"
-
-    count = set 0
-    names = env_to_map
-    keys = map_keys ${names}
-    for name in ${keys}
-        is_domain_env = starts_with ${name} "${prefix}__"
-        if ${is_domain_env}
-            value = get_env ${name}
-            info "🐘 - ${name}=${value}"
-            count = calc ${count} + 1
-        end
-    end
-    release ${keys}
-    release ${names}
-    if eq ${count} 0
-        error "🚫 No ${prefix}__* variable survived into this task."
+    if not eq ${missing} 0
+        error "🚫 ${missing} of ${expected} domain variable(s) did not survive into this task."
         assert_fail
     end
-    info "🐘 Found ${count} ${prefix}__* variable(s) set by a previous task"
+    info "🐘 Found ${found} domain variable(s) set by a previous task"
     ''']
 
 [tasks.__os__set_mode_test_py]
@@ -149,6 +168,8 @@ script = [
 
     at_fast = get_env TD_AT_FAST
     at_fast = eq ${at_fast} "true"
+    at_light = get_env TD_AT_LIGHT
+    at_light = eq ${at_light} "true"
     at_warp = get_env TD_AT_WARP
     at_warp = eq ${at_warp} "true"
 
@@ -209,6 +230,9 @@ script = [
         if eq ${argument} "--fast"
             at_fast = set true
         end
+        if eq ${argument} "--light"
+            at_light = set true
+        end
         if eq ${argument} "--warp"
             at_warp = set true
         end
@@ -257,6 +281,9 @@ script = [
         assert false
     end
 
+    if ${at_light}
+        at_fast = set true
+    end
     if ${at_warp}
         at_fast = set true
     end
@@ -270,6 +297,11 @@ script = [
         set_env TD_MAKE_WITH_BANNERS "false"
         set_env TD_MAKE_WITH_RESPONSIVE "false"
         debug "✈️ Fast mode: skipping permit, license, compile, deploy, banners and responsive."
+    end
+    if ${at_light}
+        set_env TD_AT_LIGHT "true"
+        set_env TD_WITH_DOMAINS "false"
+        debug "🪶 Light mode: also skipping domains."
     end
     if ${at_warp}
         set_env TD_AT_WARP "true"

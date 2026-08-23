@@ -85,6 +85,8 @@ BOOK_DEVELOPER_GUIDE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/books/d
 MAKE_LIBRARIES_PATH = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries", normalize = true }
 
 SPINNER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/spin.py", normalize = true }
+EXPORTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/exports.py", normalize = true }
+TMUX_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/tmuxtestrs.py", normalize = true }
 
 BRUSH_NATIVE_LIBS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/brush_native_libs.py", normalize = true }
 BUMP_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
@@ -134,8 +136,8 @@ ITEST_BOOTEST_SCRIPT = { value = "${PROJECT_PY_TD_TABSDATA_FOLDER}/src/itest/pyt
 ITEST_INSTANCES_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/config/pytest/kubernetes.yaml", normalize = true }
 BACKENDS_MANIFEST_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/config/pytest", normalize = true }
 BACKENDS_SYSTEMS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/systems.yaml", normalize = true }
-BACKENDS_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains.yaml", normalize = true }
-BACKENDS_RUST_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/rust-domains.yaml", normalize = true }
+BACKENDS_PY_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains_py.yaml", normalize = true }
+BACKENDS_RS_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains_rs.yaml", normalize = true }
 ITEST_REGISTRY_FILE = { value = "${HOME}/.tabsdatax/instances/tdkpytest.yaml", normalize = true }
 ITEST_PORTS_LOCK = { value = "${HOME}/.tabsdatax/instances/tdkpytest.ports.lock", normalize = true }
 

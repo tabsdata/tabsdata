@@ -331,7 +331,7 @@ script = [
                         exec --fail-on-error %{command}
                     else
                         spinner = spawn python ${SPINNER_SCRIPT} "Waiting for the instance ${instance} to start..."
-                        output = exec --fail-on-error %{command}
+                        output = exec %{command}
                         exec kill ${spinner}
                         sleep 2000
                         code = set ${output.code}

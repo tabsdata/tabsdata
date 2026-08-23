@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The **shared** embedded postgres used by td-database's own white-box tests
+//! The **shared** embedded postgres used by td-database's own internal tests
 //! (`components/tests/*`, `pool::connect`). The `#[td_test::test(db)]` macro path
 //! does **not** come here — it runs against a tdx-provisioned domain's database,
 //! so testing apiserver logic never starts a server. One server per worktree
@@ -118,6 +118,10 @@ async fn probe() -> bool {
 pub async fn ensure_started() {
     STARTED
         .get_or_init(|| async {
+            // The tdx domain is provisioned out of band, so there is nothing to boot.
+            if domain_identity(INTERNALS_DOMAIN).is_some() {
+                return;
+            }
             // Fast path: the server already answers — just use it.
             if probe().await {
                 return;
@@ -204,11 +208,44 @@ pub async fn ensure_started() {
         .await;
 }
 
-/// Superuser connect target for the running shared server, for building
-/// per-schema admin and serving connectables. Call after [`ensure_started`].
+/// The tdx domain this crate's internals suite runs against. Its descriptor
+/// carries the owning system's superuser, which the suite needs for the
+/// cluster-global work a domain's own owner role cannot do: creating and
+/// dropping roles, and setting `BYPASSRLS`.
+pub const INTERNALS_DOMAIN: &str = "APISERVER_POSTGRES_INTERNALS";
+
+/// Superuser connect target, for building per-schema admin and serving
+/// connectables. Prefers the tdx domain named by [`INTERNALS_DOMAIN`] when its
+/// environment tier is present, and falls back to the embedded server
+/// otherwise. Call after [`ensure_started`].
 pub fn admin_base() -> PostgresConnect {
-    admin_identity(&embedded_config())
-        .expect("shared test postgres must be running (call ensure_started first)")
+    match domain_identity(INTERNALS_DOMAIN) {
+        Some(connect) => connect,
+        None => admin_identity(&embedded_config())
+            .expect("shared test postgres must be running (call ensure_started first)"),
+    }
+}
+
+/// Superuser identity from a domain's `<NAME>__*` environment tier, or `None`
+/// when the tier is absent or incomplete — every "not provisioned" reason
+/// collapses to a fall back onto the embedded server.
+fn domain_identity(domain: &str) -> Option<PostgresConnect> {
+    let attribute = |key: &str| {
+        std::env::var(format!("{domain}__{key}"))
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    Some(PostgresConnect {
+        options: PostgresConfig {
+            host: attribute("HOST")?,
+            port: attribute("PORT")?.parse().ok()?,
+            database: Some(attribute("DB")?),
+            ..Default::default()
+        },
+        username: attribute("SYS_ADMIN_USER")?,
+        password: attribute("SYS_ADMIN_PASSWORD")?,
+    })
 }
 
 /// Superuser identity for the **fixed-port** shared server.
