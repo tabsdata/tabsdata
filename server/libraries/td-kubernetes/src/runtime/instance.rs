@@ -13,6 +13,7 @@ pub mod profile;
 pub mod sizing;
 pub mod staging;
 pub mod tabsdata;
+pub mod teardown;
 pub mod tier;
 pub mod upgrade;
 pub mod version;

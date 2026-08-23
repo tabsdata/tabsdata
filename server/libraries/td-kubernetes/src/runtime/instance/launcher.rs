@@ -37,6 +37,7 @@ use crate::runtime::instance::injection::{
 };
 use crate::runtime::instance::ports::AssignedPort;
 use crate::runtime::instance::profile::Profile;
+use crate::runtime::instance::teardown::delete_workload;
 use crate::runtime::instance::tier::Tier;
 use crate::runtime::provider::ClusterProvider;
 
@@ -110,9 +111,7 @@ pub async fn start_workload(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
-    delete_workload_controllers(context, multi).await?;
-    delete_ephemeral_workload(context, multi).await?;
-    delete_non_ephemeral_workload(context, multi).await?;
+    delete_workload(context, multi).await?;
     create_non_ephemeral_workload(context, cluster_provider, system, profile, multi).await
 }
 
@@ -153,9 +152,7 @@ async fn create_non_ephemeral_workload(
 
 pub async fn stop_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult<bool> {
     let present = !present_non_ephemeral_names(context).await?.is_empty();
-    delete_workload_controllers(context, multi).await?;
-    delete_ephemeral_workload(context, multi).await?;
-    delete_non_ephemeral_workload(context, multi).await?;
+    delete_workload(context, multi).await?;
     Ok(present)
 }
 
@@ -357,7 +354,7 @@ pub async fn wait_init_phase(
     for name in jobs {
         let bar = phase.add_resource(name);
         let settled =
-            match job_api::await_job_condition_forever(context, name, is_job_settled()).await {
+            match job_api::await_job_condition_resumable(context, name, is_job_settled()).await {
                 Ok(Some(job)) => job,
                 Ok(None) => {
                     bar.finish_with_message(format!("{name} (deleted)"));
@@ -491,7 +488,7 @@ pub async fn wait_server_phase(
     for (kind, name) in workloads {
         let bar = phase.add_resource(name);
         if matches!(kind, TemplateKind::Deployment) {
-            match deployment_api::await_deployment_condition_forever(
+            match deployment_api::await_deployment_condition_resumable(
                 context,
                 name,
                 is_deployment_available(),
@@ -516,7 +513,7 @@ pub async fn wait_server_phase(
             }
         }
         let settled =
-            match pod_api::await_pod_condition_forever(context, name, is_pod_settled()).await {
+            match pod_api::await_pod_condition_resumable(context, name, is_pod_settled()).await {
                 Ok(Some(pod)) => pod,
                 Ok(None) => {
                     bar.finish_with_message(format!("{name} (deleted)"));
@@ -843,7 +840,7 @@ pub async fn wait_regular_phase(
         async move {
             match kind {
                 TemplateKind::CronJob => {
-                    match cronjob_api::await_cronjob_condition_forever(
+                    match cronjob_api::await_cronjob_condition_resumable(
                         &context,
                         name,
                         cronjob_exists(),
@@ -868,7 +865,7 @@ pub async fn wait_regular_phase(
                     }
                 }
                 TemplateKind::Deployment => {
-                    match deployment_api::await_deployment_condition_forever(
+                    match deployment_api::await_deployment_condition_resumable(
                         &context,
                         name,
                         is_deployment_available(),
@@ -895,7 +892,7 @@ pub async fn wait_regular_phase(
                     }
                 }
                 TemplateKind::Pod | TemplateKind::Job => {
-                    let settled = match pod_api::await_pod_condition_forever(
+                    let settled = match pod_api::await_pod_condition_resumable(
                         &context,
                         name,
                         is_pod_settled(),
@@ -1002,7 +999,7 @@ async fn clear_settled_job(
         .into());
     }
     job_api::delete_job(context, name).await?;
-    job_api::await_job_condition_forever(context, name, is_job_absent()).await?;
+    job_api::await_job_condition_resumable(context, name, is_job_absent()).await?;
     Ok(true)
 }
 
@@ -1030,7 +1027,7 @@ pub async fn provision_pyvenvs(
     }
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None, None).await?;
     let settled =
-        job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
+        job_api::await_job_condition_resumable(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {
         bar.finish_with_message(format!("{setup_key} (failed)"));
         return Err(LauncherError::JobFailed { name: setup_name }.into());
@@ -1095,7 +1092,7 @@ async fn start_database_workload(
                 None,
             )
             .await?;
-            deployment_api::await_deployment_condition_forever(
+            deployment_api::await_deployment_condition_resumable(
                 context,
                 name,
                 is_deployment_available(),
@@ -1104,7 +1101,7 @@ async fn start_database_workload(
         }
         ServerWorkload::Pod(pod) => {
             pod_api::create_pod(context, pod, Vec::new(), Vec::new(), None, None).await?;
-            pod_api::await_pod_condition_forever(context, name, is_pod_settled()).await?;
+            pod_api::await_pod_condition_resumable(context, name, is_pod_settled()).await?;
         }
     }
     Ok(())
@@ -1133,7 +1130,7 @@ async fn await_database_workload_absent(
 ) -> CommandResult {
     match workload {
         ServerWorkload::Deployment(_) => {
-            deployment_api::await_deployment_condition_forever(
+            deployment_api::await_deployment_condition_resumable(
                 context,
                 name,
                 is_deployment_absent(),
@@ -1141,7 +1138,7 @@ async fn await_database_workload_absent(
             .await?;
         }
         ServerWorkload::Pod(_) => {
-            pod_api::await_pod_condition_forever(context, name, is_pod_absent()).await?;
+            pod_api::await_pod_condition_resumable(context, name, is_pod_absent()).await?;
         }
     }
     Ok(())
@@ -1199,7 +1196,7 @@ pub async fn provision_database(
     }
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None, None).await?;
     let settled =
-        job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
+        job_api::await_job_condition_resumable(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {
         bar.finish_with_message(format!("{setup_key} (failed)"));
         if let Some((_, workload, server_name)) = &server {
@@ -1378,144 +1375,4 @@ async fn present_non_ephemeral_names(context: &KubeContext) -> CommandResult<BTr
             .filter_map(|cronjob| cronjob.metadata.name),
     );
     Ok(names)
-}
-
-async fn delete_workload_controllers(
-    context: &KubeContext,
-    multi: &MultiProgress,
-) -> CommandResult {
-    let phase = phase_spinner_in(multi, "Deleting tabsdata workload controllers");
-    let cronjobs_bar = phase.add_resource("CronJobs");
-    match cronjob_api::delete_cronjobs(context).await {
-        Ok(()) => cronjobs_bar.finish_with_message("CronJobs (deleted)"),
-        Err(error) => {
-            cronjobs_bar.finish_with_message("CronJobs (failed)");
-            drop(phase);
-            return Err(CommandError::from(error));
-        }
-    }
-    let jobs_bar = phase.add_resource("Jobs");
-    match job_api::delete_jobs(context).await {
-        Ok(()) => jobs_bar.finish_with_message("Jobs (deleted)"),
-        Err(error) => {
-            jobs_bar.finish_with_message("Jobs (failed)");
-            drop(phase);
-            return Err(CommandError::from(error));
-        }
-    }
-    drop(phase);
-    Ok(())
-}
-
-async fn delete_ephemeral_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult {
-    let phase = phase_spinner_in(multi, "Deleting tabsdata ephemeral workload");
-    let pods_bar = phase.add_resource("Pods");
-    let result = match pod_api::delete_pods_ephemeral(context).await {
-        Ok(()) => {
-            pods_bar.finish_with_message("Pods (deleted)");
-            Ok(())
-        }
-        Err(error) => {
-            pods_bar.finish_with_message("Pods (failed)");
-            Err(CommandError::from(error))
-        }
-    };
-    drop(phase);
-    result
-}
-
-async fn delete_non_ephemeral_workload(
-    context: &KubeContext,
-    multi: &MultiProgress,
-) -> CommandResult {
-    let phase = phase_spinner_in(multi, "Deleting tabsdata non-ephemeral workload");
-    let pods_bar = phase.add_resource("Pods");
-    let deployments_bar = phase.add_resource("Deployments");
-    let jobs_bar = phase.add_resource("Jobs");
-    let cronjobs_bar = phase.add_resource("CronJobs");
-    let services_bar = phase.add_resource("Services");
-    let authorizations_bar = phase.add_resource("Authorizations");
-    let pods_delete = async {
-        match pod_api::delete_pods_non_ephemeral(context).await {
-            Ok(()) => {
-                pods_bar.finish_with_message("Pods (deleted)");
-                Ok(())
-            }
-            Err(error) => {
-                pods_bar.finish_with_message("Pods (failed)");
-                Err(CommandError::from(error))
-            }
-        }
-    };
-    let deployments_delete = async {
-        match deployment_api::delete_deployments_non_ephemeral(context).await {
-            Ok(()) => {
-                deployments_bar.finish_with_message("Deployments (deleted)");
-                Ok(())
-            }
-            Err(error) => {
-                deployments_bar.finish_with_message("Deployments (failed)");
-                Err(CommandError::from(error))
-            }
-        }
-    };
-    let jobs_delete = async {
-        match job_api::delete_jobs_non_ephemeral(context).await {
-            Ok(()) => {
-                jobs_bar.finish_with_message("Jobs (deleted)");
-                Ok(())
-            }
-            Err(error) => {
-                jobs_bar.finish_with_message("Jobs (failed)");
-                Err(CommandError::from(error))
-            }
-        }
-    };
-    let cronjobs_delete = async {
-        match cronjob_api::delete_cronjobs_non_ephemeral(context).await {
-            Ok(()) => {
-                cronjobs_bar.finish_with_message("CronJobs (deleted)");
-                Ok(())
-            }
-            Err(error) => {
-                cronjobs_bar.finish_with_message("CronJobs (failed)");
-                Err(CommandError::from(error))
-            }
-        }
-    };
-    let services_delete = async {
-        match service_api::delete_services(context).await {
-            Ok(_) => {
-                services_bar.finish_with_message("Services (deleted)");
-                Ok(())
-            }
-            Err(error) => {
-                services_bar.finish_with_message("Services (failed)");
-                Err(CommandError::from(error))
-            }
-        }
-    };
-    let result = futures::future::try_join5(
-        pods_delete,
-        deployments_delete,
-        jobs_delete,
-        cronjobs_delete,
-        services_delete,
-    )
-    .await;
-    if result.is_ok() {
-        match rbac_api::delete_authorizations(context).await {
-            Ok(_) => authorizations_bar.finish_with_message("Authorizations (deleted)"),
-            Err(error) => {
-                authorizations_bar.finish_with_message("Authorizations (failed)");
-                drop(phase);
-                return Err(CommandError::from(error));
-            }
-        }
-    } else {
-        authorizations_bar.finish_with_message("Authorizations (skipped)");
-    }
-    drop(phase);
-    result?;
-    Ok(())
 }

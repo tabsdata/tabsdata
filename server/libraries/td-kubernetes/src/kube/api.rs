@@ -67,23 +67,25 @@ use crate::base::constants::{
 };
 use crate::base::error::kubernetes::{KubeStampError, KubernetesError};
 use crate::base::error::naming::NamingError;
+use crate::client::tdkserver::common::confirm_resume;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::tier::Tier;
 use crate::runtime::instance::version::instance_version;
 
 const WATCH_EXPIRED_REASON: &str = "Expired";
 
-pub const AWAIT_CONDITION_TIMEOUT: Duration = Duration::from_secs(300);
+pub const AWAIT_CONDITION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const AWAIT_CONDITION_HEARTBEAT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AwaitPatience {
     Bounded,
+    Resumable,
     Forever,
 }
 
-pub async fn await_condition_forever<K>(
+pub async fn await_condition_with_patience<K>(
     api: Api<K>,
     name: &str,
     condition: impl Condition<K> + Clone,
@@ -93,37 +95,41 @@ where
     K: Clone + Debug + DeserializeOwned + KubeResource + Send + 'static,
 {
     let started = Instant::now();
+    let mut budget = AWAIT_CONDITION_TIMEOUT;
     loop {
         let waiting = await_condition(api.clone(), name, condition.clone());
-        let outcome = match patience {
-            AwaitPatience::Bounded => {
-                let remaining = AWAIT_CONDITION_TIMEOUT.saturating_sub(started.elapsed());
-                match heartbeat(waiting, name, started, remaining).await {
-                    Some(outcome) => outcome,
-                    None => {
-                        return Err(WaitError::ProbeFailed(WatcherError::WatchError(
-                            ErrorResponse {
-                                status: "Failure".to_owned(),
-                                message: format!(
-                                    "The wait for '{name}' exceeded the limit of {}",
-                                    format_duration(AWAIT_CONDITION_TIMEOUT)
-                                ),
-                                reason: "Timeout".to_owned(),
-                                code: 504,
-                            },
-                        )));
-                    }
-                }
+        let remaining = match patience {
+            AwaitPatience::Bounded | AwaitPatience::Resumable => {
+                Some(budget.saturating_sub(started.elapsed()))
             }
-            AwaitPatience::Forever => match heartbeat(waiting, name, started, None).await {
-                Some(outcome) => outcome,
-                None => unreachable!("a forever wait has no deadline"),
-            },
+            AwaitPatience::Forever => None,
+        };
+        let outcome = match heartbeat(waiting, name, started, remaining).await {
+            Some(outcome) => outcome,
+            None => {
+                if patience == AwaitPatience::Resumable
+                    && confirm_resume(&format!("'{name}'"), started.elapsed()).await
+                {
+                    budget = started.elapsed() + AWAIT_CONDITION_TIMEOUT;
+                    continue;
+                }
+                return Err(WaitError::ProbeFailed(WatcherError::WatchError(
+                    ErrorResponse {
+                        status: "Failure".to_owned(),
+                        message: format!(
+                            "The wait for '{name}' exceeded the limit of {}",
+                            format_duration(AWAIT_CONDITION_TIMEOUT)
+                        ),
+                        reason: "Timeout".to_owned(),
+                        code: 504,
+                    },
+                )));
+            }
         };
         match outcome {
             Err(WaitError::ProbeFailed(WatcherError::WatchError(response)))
                 if response.reason == WATCH_EXPIRED_REASON
-                    && patience == AwaitPatience::Forever =>
+                    && patience != AwaitPatience::Bounded =>
             {
                 debug!("The watch on '{name}' expired; re-establishing it");
             }

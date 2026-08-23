@@ -77,7 +77,7 @@ pub async fn delete_service(context: &KubeContext, name: &str) -> Result<(), Kub
     }
 }
 
-pub async fn delete_services(context: &KubeContext) -> Result<bool, KubernetesError> {
+pub async fn delete_services(context: &KubeContext) -> Result<usize, KubernetesError> {
     let api: Api<Service> = Api::namespaced(context.client().clone(), context.namespace());
     let selector = tabsdata_selector(None);
     let parameters = ListParams::default().labels(&selector.to_string());
@@ -89,12 +89,14 @@ pub async fn delete_services(context: &KubeContext) -> Result<bool, KubernetesEr
             cause: error.to_string(),
         })?
         .items;
+    let mut deleted = 0usize;
     for service in &present {
         if let Some(name) = &service.metadata.name {
             delete_service(context, name).await?;
+            deleted += 1;
         }
     }
-    Ok(!present.is_empty())
+    Ok(deleted)
 }
 
 pub async fn list_services(

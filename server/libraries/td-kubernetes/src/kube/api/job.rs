@@ -13,7 +13,7 @@ use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    AwaitPatience, await_condition_forever, label_tabsdata, owner_ref_for_job,
+    AwaitPatience, await_condition_with_patience, label_tabsdata, owner_ref_for_job,
     tabsdata_non_ephemeral_selector, tabsdata_selector,
 };
 use crate::kube::context::KubeContext;
@@ -92,7 +92,7 @@ pub async fn delete_jobs_non_ephemeral(context: &KubeContext) -> Result<(), Kube
     delete_jobs_matching(context, tabsdata_non_ephemeral_selector()).await
 }
 
-async fn delete_jobs_matching(
+pub async fn delete_jobs_matching(
     context: &KubeContext,
     selector: Selector,
 ) -> Result<(), KubernetesError> {
@@ -123,7 +123,7 @@ pub async fn list_jobs_non_ephemeral(context: &KubeContext) -> Result<Vec<Job>, 
     list_jobs_matching(context, tabsdata_non_ephemeral_selector()).await
 }
 
-async fn list_jobs_matching(
+pub async fn list_jobs_matching(
     context: &KubeContext,
     selector: Selector,
 ) -> Result<Vec<Job>, KubernetesError> {
@@ -150,12 +150,12 @@ pub async fn await_job_condition(
     await_job_condition_with(context, name, condition, AwaitPatience::Bounded).await
 }
 
-pub async fn await_job_condition_forever(
+pub async fn await_job_condition_resumable(
     context: &KubeContext,
     name: &str,
     condition: impl Condition<Job> + Clone + Send + Sync + 'static,
 ) -> Result<Option<Job>, KubernetesError> {
-    await_job_condition_with(context, name, condition, AwaitPatience::Forever).await
+    await_job_condition_with(context, name, condition, AwaitPatience::Resumable).await
 }
 
 async fn await_job_condition_with(
@@ -165,7 +165,7 @@ async fn await_job_condition_with(
     patience: AwaitPatience,
 ) -> Result<Option<Job>, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_forever(api, name, condition, patience)
+    await_condition_with_patience(api, name, condition, patience)
         .await
         .map_err(|error| {
             KubeJobError::AwaitFailed {

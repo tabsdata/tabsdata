@@ -118,4 +118,13 @@ pub enum LauncherError {
         started: String,
         active: i32,
     } = 5020,
+    #[error(
+        "There is/are {count} {kind} of {stage} still present after {attempts} deletion attempt(s)."
+    )]
+    WorkloadStillPresent {
+        count: usize,
+        kind: String,
+        stage: String,
+        attempts: usize,
+    } = 5021,
 }

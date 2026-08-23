@@ -7,6 +7,8 @@ use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread;
 use std::time::Duration;
 
+use humantime::format_duration;
+
 use td_common::status::ExitStatus;
 
 use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
@@ -175,6 +177,32 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
 
 pub fn confirm(skip: bool, message: &str) -> CommandResult<bool> {
     confirm_within(skip, message, PROMPT_TIMEOUT)
+}
+
+pub async fn confirm_resume(what: &str, waited: Duration) -> bool {
+    let message = format!(
+        "The wait for {what} exceeded {}. Continue waiting?",
+        format_duration(Duration::from_secs(waited.as_secs()))
+    );
+    let asked = tokio::task::spawn_blocking(move || {
+        let ask = || prompt_yes_no_with_timeout(&message, PROMPT_TIMEOUT);
+        match td_common::logging::multi_progress() {
+            Some(multi) => multi.suspend(ask),
+            None => ask(),
+        }
+    })
+    .await;
+    match asked {
+        Ok(Confirmation::Yes) => true,
+        Ok(_) => {
+            cerror!(
+                "The wait was not resumed within {} seconds; the operation was cancelled.",
+                PROMPT_TIMEOUT.as_secs()
+            );
+            false
+        }
+        Err(_) => false,
+    }
 }
 
 pub fn confirm_at_leisure(skip: bool, message: &str) -> CommandResult<bool> {

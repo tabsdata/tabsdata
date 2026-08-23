@@ -12,13 +12,13 @@ use kube::runtime::wait::Condition;
 use tracing::debug;
 
 use crate::base::constants::{
-    DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT, HTTP_STATUS_FORBIDDEN,
+    DELETE_WORKLOAD_POLL_INTERVAL, DELETE_WORKLOAD_WAIT_TIMEOUT, HTTP_STATUS_FORBIDDEN,
     HTTP_STATUS_NOT_FOUND, PROBE_CPU, PROBE_IMAGE, PROBE_MEMORY, PROBE_POD,
 };
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    AwaitPatience, LabelFilter, await_condition_forever, label_tabsdata, owner_ref_for_pod,
+    AwaitPatience, LabelFilter, await_condition_with_patience, label_tabsdata, owner_ref_for_pod,
     tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector, tabsdata_selector,
 };
 use crate::kube::context::KubeContext;
@@ -144,7 +144,7 @@ pub async fn delete_pods_ephemeral(context: &KubeContext) -> Result<(), Kubernet
     delete_pods_matching(context, tabsdata_ephemeral_selector()).await
 }
 
-async fn delete_pods_matching(
+pub async fn delete_pods_matching(
     context: &KubeContext,
     selector: Selector,
 ) -> Result<(), KubernetesError> {
@@ -162,7 +162,7 @@ async fn delete_pods_matching(
             label_selector: selector.to_string(),
             cause: error.to_string(),
         })?;
-    let deadline = Instant::now() + DELETE_POD_WAIT_TIMEOUT;
+    let deadline = Instant::now() + DELETE_WORKLOAD_WAIT_TIMEOUT;
     loop {
         let remaining = api
             .list(&list_params)
@@ -182,12 +182,12 @@ async fn delete_pods_matching(
                 label_selector: selector.to_string(),
                 cause: format!(
                     "There is/are {remaining} pod(s) still present after {}s",
-                    DELETE_POD_WAIT_TIMEOUT.as_secs()
+                    DELETE_WORKLOAD_WAIT_TIMEOUT.as_secs()
                 ),
             }
             .into());
         }
-        tokio::time::sleep(DELETE_POD_POLL_INTERVAL).await;
+        tokio::time::sleep(DELETE_WORKLOAD_POLL_INTERVAL).await;
     }
 }
 
@@ -199,7 +199,7 @@ pub async fn list_pods_non_ephemeral(context: &KubeContext) -> Result<Vec<Pod>, 
     list_pods_matching(context, tabsdata_non_ephemeral_selector()).await
 }
 
-async fn list_pods_matching(
+pub async fn list_pods_matching(
     context: &KubeContext,
     selector: Selector,
 ) -> Result<Vec<Pod>, KubernetesError> {
@@ -226,12 +226,12 @@ pub async fn await_pod_condition(
     await_pod_condition_with(context, name, condition, AwaitPatience::Bounded).await
 }
 
-pub async fn await_pod_condition_forever(
+pub async fn await_pod_condition_resumable(
     context: &KubeContext,
     name: &str,
     condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
 ) -> Result<Option<Pod>, KubernetesError> {
-    await_pod_condition_with(context, name, condition, AwaitPatience::Forever).await
+    await_pod_condition_with(context, name, condition, AwaitPatience::Resumable).await
 }
 
 async fn await_pod_condition_with(
@@ -241,7 +241,7 @@ async fn await_pod_condition_with(
     patience: AwaitPatience,
 ) -> Result<Option<Pod>, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_forever(api, name, condition, patience)
+    await_condition_with_patience(api, name, condition, patience)
         .await
         .map_err(|error| {
             KubePodError::AwaitFailed {

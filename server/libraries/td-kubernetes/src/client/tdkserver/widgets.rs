@@ -288,6 +288,18 @@ impl PhaseSpinner {
         bar
     }
 
+    pub fn add_note(&self, note: &str) {
+        let bar = self.multi.add(ProgressBar::new_spinner());
+        bar.set_style(
+            ProgressStyle::with_template("  {msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        );
+        bar.set_message(note.to_owned());
+        if let Ok(mut bars) = self.resources.lock() {
+            bars.push(bar);
+        }
+    }
+
     fn flush_resources(&self) {
         let Ok(mut bars) = self.resources.lock() else {
             return;
@@ -303,7 +315,6 @@ impl PhaseSpinner {
 
 impl Drop for PhaseSpinner {
     fn drop(&mut self) {
-        self.flush_resources();
         if keep_progress() {
             let elapsed =
                 humantime::format_duration(Duration::from_secs(self.header.elapsed().as_secs()));
@@ -313,6 +324,7 @@ impl Drop for PhaseSpinner {
             );
             let _ = self.multi.println(&line);
         }
+        self.flush_resources();
         self.header.finish_and_clear();
     }
 }

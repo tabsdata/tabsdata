@@ -86,7 +86,7 @@ where
     }
 }
 
-async fn delete_all<K>(context: &KubeContext) -> Result<bool, KubernetesError>
+async fn delete_all<K>(context: &KubeContext) -> Result<usize, KubernetesError>
 where
     K: Resource<DynamicType = (), Scope = NamespaceResourceScope>
         + Clone
@@ -104,12 +104,14 @@ where
             cause: error.to_string(),
         })?
         .items;
+    let mut deleted = 0usize;
     for resource in &present {
         if let Some(name) = &resource.meta().name {
             delete_named::<K>(context, name).await?;
+            deleted += 1;
         }
     }
-    Ok(!present.is_empty())
+    Ok(deleted)
 }
 
 pub async fn upsert_service_account(
@@ -166,12 +168,12 @@ pub async fn upsert_role_binding(
     .await
 }
 
-pub async fn delete_authorizations(context: &KubeContext) -> Result<bool, KubernetesError> {
+pub async fn delete_authorizations(context: &KubeContext) -> Result<usize, KubernetesError> {
     let budgets = delete_all::<PodDisruptionBudget>(context).await?;
     let bindings = delete_all::<RoleBinding>(context).await?;
     let roles = delete_all::<Role>(context).await?;
     let accounts = delete_all::<ServiceAccount>(context).await?;
-    Ok(budgets || bindings || roles || accounts)
+    Ok(budgets + bindings + roles + accounts)
 }
 
 pub async fn list_roles(
