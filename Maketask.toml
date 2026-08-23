@@ -31,6 +31,9 @@ category = "00 - Make"
 description = "Full build and verification"
 run_task = [
     { name = [
+        "update",
+        "kminus",
+        "lock",
         "make_rs",
         "make_py"
     ] }
