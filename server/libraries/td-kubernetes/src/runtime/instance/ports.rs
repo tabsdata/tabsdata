@@ -10,9 +10,15 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::base::error::provider::ProviderError;
+use crate::client::tdkserver::widgets::show_caution_in_lines;
 use crate::runtime::gateway::resolver::SystemValues;
+use crate::runtime::provider::kminus::cluster::{
+    BoundPort, PORT_BOUND_REASON, probe_cluster_ports,
+};
 
 pub const DEFAULT_BASE_PORT: u16 = 2457;
+
+const PORT_REPORT_BOX_WIDTH: usize = 100;
 
 const PORT_RELEASE_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const PORT_RELEASE_LOG_INTERVAL: Duration = Duration::from_secs(5);
@@ -289,6 +295,73 @@ pub fn database_port(assigned: &[AssignedPort]) -> Option<u16> {
         .iter()
         .find(|entry| entry.role == PortRole::Database.as_str())
         .map(|entry| entry.port)
+}
+
+pub fn claimed_ports(assigned: &[AssignedPort]) -> Vec<BoundPort> {
+    let mut claimed: Vec<BoundPort> = assigned
+        .iter()
+        .filter(|entry| !port_available(entry.port))
+        .map(|entry| BoundPort {
+            port: entry.port,
+            label: entry.caption.clone(),
+            reason: PORT_BOUND_REASON.to_owned(),
+        })
+        .collect();
+    if let Some(portstart) = kminus_api_port(assigned) {
+        match probe_cluster_ports(portstart) {
+            Ok(bound) => {
+                for entry in bound {
+                    if !claimed.iter().any(|known| known.port == entry.port) {
+                        claimed.push(entry);
+                    }
+                }
+            }
+            Err(error) => warn!("Could not probe the cluster port range: {error:?}."),
+        }
+    }
+    claimed.sort_by_key(|entry| entry.port);
+    claimed
+}
+
+pub fn ensure_ports_unclaimed_on_host(assigned: &[AssignedPort]) -> Result<(), ProviderError> {
+    let claimed = claimed_ports(assigned);
+    let Some(first) = claimed.first() else {
+        return Ok(());
+    };
+    report_claimed_ports(&claimed);
+    Err(ProviderError::PortInUse {
+        port: first.port,
+        caption: first.label.clone(),
+    })
+}
+
+pub fn report_claimed_ports(claimed: &[BoundPort]) {
+    if claimed.is_empty() {
+        return;
+    }
+    let rendered = claimed
+        .iter()
+        .map(|entry| {
+            format!(
+                "  - {} (port {}): {}",
+                entry.label, entry.port, entry.reason
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let emphasized: Vec<String> = claimed.iter().map(|entry| entry.port.to_string()).collect();
+    let emphasized: Vec<&str> = emphasized.iter().map(String::as_str).collect();
+    show_caution_in_lines(
+        &format!(
+            "Caution: {} of the port(s) this instance needs are already taken by another \
+             process:\n{rendered}\nChoose a different starting port, or stop whatever holds \
+             these ports, and try again.",
+            claimed.len()
+        ),
+        PORT_REPORT_BOX_WIDTH,
+        true,
+        &emphasized,
+    );
 }
 
 pub fn apply_ports(values: &mut SystemValues, assigned: &[AssignedPort]) {

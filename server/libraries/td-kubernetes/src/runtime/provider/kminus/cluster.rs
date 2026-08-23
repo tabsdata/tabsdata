@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command as SystemCommand, Stdio};
 use std::time::Duration;
 
+use tokio::time::Instant as TokioInstant;
+
 use kube::Client;
 use kube::config::{Config, KubeConfigOptions, Kubeconfig};
 use td_python::python::resolve_python_binary;
@@ -24,10 +26,41 @@ use crate::runtime::provider::{Cluster, Transaction};
 const KM_BINARY: &str = "km";
 const KM_CREATE_SUBCOMMAND: &str = "create";
 const KM_START_SUBCOMMAND: &str = "start";
+const KM_STATUS_SUBCOMMAND: &str = "status";
 const KM_WORKDIR_ARGUMENT: &str = "--workdir";
 const KM_IMAGESDIR_ARGUMENT: &str = "--imagesdir";
 const KM_PORTSTART_ARGUMENT: &str = "--portstart";
 const KM_LOGLEVEL_ARGUMENT: &str = "--loglevel";
+const KM_DRYRUN_ARGUMENT: &str = "--dryrun";
+
+const KM_PROBE_WORKDIR: &str = "tdk-port-probe";
+
+const KM_PORT_BUSY_MARKER: &str = "IN USE";
+
+pub const PORT_BOUND_REASON: &str = "already bound";
+
+const KM_STATUS_STARTED: i32 = 0;
+const KM_STATUS_STARTING: i32 = 1;
+const KM_STATUS_DEAD: i32 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClusterState {
+    Started,
+    Starting,
+    Dead,
+    Unknown,
+}
+
+impl ClusterState {
+    fn from_exit_code(code: Option<i32>) -> Self {
+        match code {
+            Some(KM_STATUS_STARTED) => Self::Started,
+            Some(KM_STATUS_STARTING) => Self::Starting,
+            Some(KM_STATUS_DEAD) => Self::Dead,
+            _ => Self::Unknown,
+        }
+    }
+}
 
 const KM_CONFIG_FOLDER: &str = "config";
 const KM_DATA_FOLDER: &str = "data";
@@ -48,6 +81,63 @@ const KM_POLL_ALIVE_TIMEOUT: Duration = Duration::from_secs(300);
 const KM_POLL_DEAD_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(windows)]
 const KM_TERMINATE_GRACE: Duration = Duration::from_secs(30);
+
+pub struct BoundPort {
+    pub port: u16,
+    pub label: String,
+    pub reason: String,
+}
+
+pub fn probe_cluster_ports(portstart: u16) -> CommandResult<Vec<BoundPort>> {
+    let km = resolve_python_binary(KM_BINARY)
+        .map_err(|error| ProviderError::BinaryNotFound(KM_BINARY.to_owned(), error.to_string()))?;
+    let probe = std::env::temp_dir().join(KM_PROBE_WORKDIR);
+    let mut command = SystemCommand::new(&km);
+    command
+        .arg(KM_CREATE_SUBCOMMAND)
+        .arg(KM_WORKDIR_ARGUMENT)
+        .arg(&probe)
+        .arg(KM_PORTSTART_ARGUMENT)
+        .arg(portstart.to_string())
+        .arg(KM_DRYRUN_ARGUMENT)
+        .stdin(Stdio::null());
+    apply_detached_flags(&mut command);
+    let output = subprocess::run(&mut command, KM_BINARY, false).map_err(|error| {
+        ProviderError::KminusStartFailed(format!(
+            "run '{} {KM_CREATE_SUBCOMMAND} {KM_DRYRUN_ARGUMENT}': {error}",
+            km.display()
+        ))
+    })?;
+    if output.status.success() {
+        return Ok(Vec::new());
+    }
+    let report = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(parse_bound_ports(&report))
+}
+
+fn parse_bound_ports(report: &str) -> Vec<BoundPort> {
+    report
+        .lines()
+        .filter_map(|line| parse_bound_port(line.trim()))
+        .collect()
+}
+
+fn parse_bound_port(line: &str) -> Option<BoundPort> {
+    let (head, _) = line.split_once(KM_PORT_BUSY_MARKER)?;
+    let head = head.trim_end();
+    let (label, port) = head.rsplit_once(char::is_whitespace)?;
+    let port = port.parse().ok()?;
+    let label = label.trim().trim_start_matches("ports").trim().to_owned();
+    Some(BoundPort {
+        port,
+        label,
+        reason: PORT_BOUND_REASON.to_owned(),
+    })
+}
 
 pub struct KminusCluster {
     path: PathBuf,
@@ -143,6 +233,50 @@ impl KminusCluster {
         Ok(())
     }
 
+    async fn await_started(&self) -> CommandResult {
+        let deadline = TokioInstant::now() + KM_POLL_ALIVE_TIMEOUT;
+        loop {
+            match self.cluster_state() {
+                ClusterState::Started => return Ok(()),
+                ClusterState::Dead => {
+                    return Err(ProviderError::KminusStartFailed(
+                        "the cluster stopped while it was starting; see the kminus logs \
+                         under 'cluster/log' for the component that failed"
+                            .to_owned(),
+                    )
+                    .into());
+                }
+                ClusterState::Starting | ClusterState::Unknown => {
+                    if TokioInstant::now() >= deadline {
+                        return Err(ProviderError::KminusStartFailed(format!(
+                            "the cluster did not report started within {} seconds",
+                            KM_POLL_ALIVE_TIMEOUT.as_secs()
+                        ))
+                        .into());
+                    }
+                    tokio::time::sleep(KM_POLL_INTERVAL).await;
+                }
+            }
+        }
+    }
+
+    fn cluster_state(&self) -> ClusterState {
+        let Ok(km) = resolve_python_binary(KM_BINARY) else {
+            return ClusterState::Unknown;
+        };
+        let mut command = SystemCommand::new(&km);
+        command
+            .arg(KM_STATUS_SUBCOMMAND)
+            .arg(KM_WORKDIR_ARGUMENT)
+            .arg(self.path())
+            .stdin(Stdio::null());
+        apply_detached_flags(&mut command);
+        match subprocess::run(&mut command, KM_BINARY, false) {
+            Ok(output) => ClusterState::from_exit_code(output.status.code()),
+            Err(_) => ClusterState::Unknown,
+        }
+    }
+
     async fn poll_ready(&self) -> bool {
         let kubefile = self.kubefile();
         tokio::time::timeout(KM_POLL_ALIVE_TIMEOUT, async {
@@ -219,6 +353,7 @@ impl Cluster for KminusCluster {
             ))
             .into());
         }
+        self.await_started().await?;
         if !self.poll_ready().await {
             return Err(ProviderError::KminusStartFailed(format!(
                 "kubernetes apiserver did not become ready within {} seconds",
@@ -323,4 +458,91 @@ async fn try_connect(kubefile: &Path) -> bool {
         return false;
     };
     client.apiserver_version().await.is_ok()
+}
+
+#[cfg(test)]
+mod port_tests {
+    use super::*;
+
+    const REPORT: &str = "
+Tabsdata K- (K minus) instance cannot be created
+
+  ports      kube-apiserver api  2461  IN USE (Address already in use (os error 48))
+             kube-controller-manager  2462  free
+             pod-runner  2463  IN USE (Address already in use (os error 48))
+             pod-runner metrics  2464  free
+             virtual-kubelet  2465  free
+             etcd  2466  free
+             etcd peer  2467  free
+
+ERROR: kube-apiserver api port 2461 is unusable: Address already in use (os error 48)
+Cannot create: 2 check(s) failed
+";
+
+    #[test]
+    fn only_busy_ports_are_reported() {
+        let bound = parse_bound_ports(REPORT);
+        assert_eq!(
+            bound.iter().map(|entry| entry.port).collect::<Vec<_>>(),
+            vec![2461, 2463]
+        );
+    }
+
+    #[test]
+    fn multi_word_labels_survive_parsing() {
+        let bound = parse_bound_ports(REPORT);
+        assert_eq!(bound[0].label, "kube-apiserver api");
+        assert_eq!(bound[1].label, "pod-runner");
+    }
+
+    #[test]
+    fn every_reason_reads_the_same_as_a_locally_detected_one() {
+        for entry in parse_bound_ports(REPORT) {
+            assert_eq!(entry.reason, PORT_BOUND_REASON);
+        }
+    }
+
+    #[test]
+    fn a_nested_parenthesis_does_not_leak_into_the_report() {
+        let bound = parse_bound_ports(REPORT);
+        for entry in &bound {
+            let opened = entry.reason.matches('(').count();
+            let closed = entry.reason.matches(')').count();
+            assert_eq!(opened, closed, "{}", entry.reason);
+        }
+        assert!(!bound.is_empty());
+    }
+
+    #[test]
+    fn a_clean_report_yields_nothing() {
+        let clean = "  ports      kube-apiserver api  2461  free\n             etcd  2466  free";
+        assert!(parse_bound_ports(clean).is_empty());
+    }
+
+    #[test]
+    fn unrelated_output_is_ignored() {
+        assert!(parse_bound_ports("Nothing was created.\nERROR: something else").is_empty());
+    }
+
+    #[test]
+    fn the_status_contract_maps_every_documented_code() {
+        assert_eq!(ClusterState::from_exit_code(Some(0)), ClusterState::Started);
+        assert_eq!(
+            ClusterState::from_exit_code(Some(1)),
+            ClusterState::Starting
+        );
+        assert_eq!(ClusterState::from_exit_code(Some(2)), ClusterState::Dead);
+    }
+
+    #[test]
+    fn an_unexpected_code_is_not_taken_as_started_or_dead() {
+        for code in [3, 4, 127] {
+            assert_eq!(
+                ClusterState::from_exit_code(Some(code)),
+                ClusterState::Unknown,
+                "{code}"
+            );
+        }
+        assert_eq!(ClusterState::from_exit_code(None), ClusterState::Unknown);
+    }
 }

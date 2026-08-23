@@ -78,6 +78,36 @@ pub const AWAIT_CONDITION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const AWAIT_CONDITION_HEARTBEAT: Duration = Duration::from_secs(60);
 
+const CONNECT_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
+
+const CONNECT_RETRY_INTERVAL: Duration = Duration::from_millis(500);
+
+pub fn is_connect_failure(error: &kube::Error) -> bool {
+    matches!(error, kube::Error::Service(_) | kube::Error::HyperError(_))
+}
+
+pub async fn retry_while_unreachable<T, F, Fut>(
+    what: &str,
+    mut attempt: F,
+) -> Result<T, kube::Error>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, kube::Error>>,
+{
+    let deadline = Instant::now() + CONNECT_RETRY_TIMEOUT;
+    loop {
+        let error = match attempt().await {
+            Ok(value) => return Ok(value),
+            Err(error) => error,
+        };
+        if !is_connect_failure(&error) || Instant::now() >= deadline {
+            return Err(error);
+        }
+        debug!("The cluster is not reachable yet while {what}; retrying");
+        tokio::time::sleep(CONNECT_RETRY_INTERVAL).await;
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AwaitPatience {
     Bounded,

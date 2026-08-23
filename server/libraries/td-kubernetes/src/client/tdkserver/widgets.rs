@@ -72,6 +72,12 @@ pub fn show_caution(text: &str, min: usize, spaced: bool, emphasized: &[&str]) {
     )
 }
 
+pub fn show_caution_in_lines(text: &str, min: usize, spaced: bool, emphasized: &[&str]) {
+    show_colored_box(
+        text, min, BORDER_RED, BODY_RED, false, true, spaced, emphasized,
+    )
+}
+
 fn emphasize(line: &str, body: (u8, u8, u8), emphasized: &[&str]) -> String {
     let mut rendered = String::new();
     let mut rest = line;

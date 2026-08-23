@@ -32,7 +32,7 @@ use crate::runtime::gateway::resolver::fusion::FusedSecrets;
 use crate::runtime::instance::launcher::ensure_ports_unclaimed;
 use crate::runtime::instance::ports::{
     AssignedPort, DEFAULT_BASE_PORT, NO_PATIENCE, apply_ports, assign_ports, ensure_ports_free,
-    kminus_api_port,
+    ensure_ports_unclaimed_on_host, kminus_api_port,
 };
 use crate::runtime::instance::profile::load_profile;
 use crate::runtime::instance::verify_instance_version;
@@ -144,6 +144,9 @@ pub async fn create_instance(
 
     let assigned = assign_ports(port);
     if let Some(filter) = settings.provider.ports_to_check_on_host() {
+        if settings.provider == ClusterProvider::Kminus {
+            ensure_ports_unclaimed_on_host(&assigned)?;
+        }
         ensure_ports_free(&assigned, filter, NO_PATIENCE)?;
     }
 

@@ -14,7 +14,7 @@ use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, TD_VERSION_LABEL,
 };
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
-use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
+use crate::kube::api::{LabelFilter, label_tabsdata, retry_while_unreachable, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 pub async fn create_configmap(
@@ -234,7 +234,9 @@ pub async fn get_configmap(
     name: &str,
 ) -> Result<Option<BTreeMap<String, String>>, KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    match api.get_opt(name).await {
+    match retry_while_unreachable(&format!("reading configmap '{name}'"), || api.get_opt(name))
+        .await
+    {
         Ok(Some(configmap)) => Ok(Some(configmap.data.unwrap_or_default())),
         Ok(None) => Ok(None),
         Err(error) => Err(KubeConfigMapError::ReadFailed {
@@ -257,7 +259,9 @@ pub async fn get_versioned_configmap(
     name: &str,
 ) -> Result<Option<VersionedConfigMap>, KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    match api.get_opt(name).await {
+    match retry_while_unreachable(&format!("reading configmap '{name}'"), || api.get_opt(name))
+        .await
+    {
         Ok(Some(configmap)) => Ok(Some(VersionedConfigMap {
             data: configmap.data.unwrap_or_default(),
             labels: configmap.metadata.labels.unwrap_or_default(),
