@@ -44,6 +44,95 @@ script = [
     else
         info "🤖 Skipping AI agent baseline staging; artifacts not found under ${aiagent_source_folder}"
     end
+
+    cm_run_task __os__set_apiserver_postgres_envs
+    cm_run_task __os__get_apiserver_postgres_envs
+    ''']
+
+[tasks.__os__set_apiserver_postgres_envs]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    domain = set "apiserver_postgres"
+    prefix = set "APISERVER_POSTGRES"
+
+    tdx_domain_exists = which tdx-domain
+    if is_empty ${tdx_domain_exists}
+        error "🚫 Required tool tdx-domain not found; cannot load the '${domain}' descriptor."
+        assert_fail
+    end
+
+    debug "🚀 tdx-domain info --domain ${domain} --format export --prefix ${prefix}"
+    output = exec tdx-domain info --domain ${domain} --format export --prefix ${prefix}
+    if not eq ${output.code} "0"
+        error "🚫 Could not read the '${domain}' descriptor (exit code ${output.code})."
+        error "\n${output.stderr}"
+        assert_fail
+    end
+
+    count = set 0
+    names = array
+    lines = split ${output.stdout} "\n"
+    for line in ${lines}
+        entry = trim ${line}
+        is_export = starts_with ${entry} "export "
+        if ${is_export}
+            assignment = substring ${entry} 7
+            separator = indexof ${assignment} "="
+            if not is_empty ${separator}
+                name = substring ${assignment} 0 ${separator}
+                value_start = calc ${separator} + 1
+                quoted = substring ${assignment} ${value_start}
+                quoted_length = length ${quoted}
+                value_end = calc ${quoted_length} - 1
+                value = substring ${quoted} 1 ${value_end}
+                set_env ${name} ${value}
+                array_push ${names} ${name}
+                count = calc ${count} + 1
+            end
+        end
+    end
+    if eq ${count} 0
+        error "🚫 The '${domain}' descriptor yielded no ${prefix}__* variables."
+        assert_fail
+    end
+    info "🐘 Loaded ${count} '${domain}' variable(s) as ${prefix}__*"
+    ''']
+
+[tasks.__os__get_apiserver_postgres_envs]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    prefix = set "APISERVER_POSTGRES"
+
+    count = set 0
+    names = env_to_map
+    keys = map_keys ${names}
+    for name in ${keys}
+        is_domain_env = starts_with ${name} "${prefix}__"
+        if ${is_domain_env}
+            value = get_env ${name}
+            info "🐘 - ${name}=${value}"
+            count = calc ${count} + 1
+        end
+    end
+    release ${keys}
+    release ${names}
+    if eq ${count} 0
+        error "🚫 No ${prefix}__* variable survived into this task."
+        assert_fail
+    end
+    info "🐘 Found ${count} ${prefix}__* variable(s) set by a previous task"
     ''']
 
 [tasks.__os__set_mode_test_py]
