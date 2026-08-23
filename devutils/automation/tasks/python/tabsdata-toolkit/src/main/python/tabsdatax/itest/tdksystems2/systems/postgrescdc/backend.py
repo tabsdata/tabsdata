@@ -28,6 +28,7 @@ class Postgrescdc(Postgres):
     ddl_from_slug = "postgres"
 
     cmd_args = [
+        *Postgres.cmd_args,
         "-c",
         "wal_level=logical",
         "-c",

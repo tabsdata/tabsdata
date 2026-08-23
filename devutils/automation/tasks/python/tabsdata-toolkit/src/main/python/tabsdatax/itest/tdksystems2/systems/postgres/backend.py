@@ -33,6 +33,11 @@ class Postgres(SqlContainerBackend):
     admin_autocommit = True
     system_schemas = frozenset({"postgres", "template0", "template1"})
 
+    # Matches the ceiling td-database's own embedded server boots with. The Rust
+    # db tests run 32-way parallel, each holding an admin, a serving and a
+    # teardown pool, which overruns the image default of 100.
+    cmd_args = ["-c", "max_connections=500"]
+
     def env_vars(self, password: str) -> dict[str, str]:
         return {"POSTGRES_PASSWORD": password}
 
