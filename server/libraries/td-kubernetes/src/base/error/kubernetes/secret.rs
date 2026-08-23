@@ -46,4 +46,14 @@ pub enum KubeSecretError {
         name: String,
         cause: String,
     } = 5005,
+    #[error(
+        "Could not label Secret '{name}' in namespace '{namespace}' with version \
+         '{version}': {cause}."
+    )]
+    StampFailed {
+        namespace: String,
+        name: String,
+        version: String,
+        cause: String,
+    } = 5006,
 }

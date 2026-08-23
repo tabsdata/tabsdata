@@ -13,7 +13,13 @@ use tracing::debug;
 
 use crate::base::constants::{
     DELETE_WORKLOAD_POLL_INTERVAL, DELETE_WORKLOAD_WAIT_TIMEOUT, HTTP_STATUS_FORBIDDEN,
-    HTTP_STATUS_NOT_FOUND, PROBE_CPU, PROBE_IMAGE, PROBE_MEMORY, PROBE_POD,
+    HTTP_STATUS_NOT_FOUND, KUBE_METADATA_FIELD_NAME, POD_API_VERSION_V1, POD_KIND,
+    POD_RESTART_POLICY_NEVER, POD_YAML_FIELD_API_VERSION, POD_YAML_FIELD_COMMAND,
+    POD_YAML_FIELD_CONTAINERS, POD_YAML_FIELD_CPU, POD_YAML_FIELD_IMAGE, POD_YAML_FIELD_KIND,
+    POD_YAML_FIELD_MEMORY, POD_YAML_FIELD_METADATA, POD_YAML_FIELD_NAMESPACE,
+    POD_YAML_FIELD_REQUESTS, POD_YAML_FIELD_RESOURCES, POD_YAML_FIELD_RESTART_POLICY,
+    POD_YAML_FIELD_SPEC, PROBE_COMMAND, PROBE_CONTAINER, PROBE_CPU, PROBE_IMAGE, PROBE_MEMORY,
+    PROBE_POD,
 };
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
@@ -55,22 +61,22 @@ pub async fn probe_scheduler(context: &KubeContext) -> Result<Option<String>, Ku
 
 fn probe_pod(namespace: &str) -> Pod {
     serde_json::from_value(serde_json::json!({
-        "apiVersion": "v1",
-        "kind": "Pod",
-        "metadata": {
-            "name": PROBE_POD,
-            "namespace": namespace,
+        POD_YAML_FIELD_API_VERSION: POD_API_VERSION_V1,
+        POD_YAML_FIELD_KIND: POD_KIND,
+        POD_YAML_FIELD_METADATA: {
+            KUBE_METADATA_FIELD_NAME: PROBE_POD,
+            POD_YAML_FIELD_NAMESPACE: namespace,
         },
-        "spec": {
-            "restartPolicy": "Never",
-            "containers": [{
-                "name": "probe",
-                "image": PROBE_IMAGE,
-                "command": ["true"],
-                "resources": {
-                    "requests": {
-                        "cpu": PROBE_CPU,
-                        "memory": PROBE_MEMORY,
+        POD_YAML_FIELD_SPEC: {
+            POD_YAML_FIELD_RESTART_POLICY: POD_RESTART_POLICY_NEVER,
+            POD_YAML_FIELD_CONTAINERS: [{
+                KUBE_METADATA_FIELD_NAME: PROBE_CONTAINER,
+                POD_YAML_FIELD_IMAGE: PROBE_IMAGE,
+                POD_YAML_FIELD_COMMAND: [PROBE_COMMAND],
+                POD_YAML_FIELD_RESOURCES: {
+                    POD_YAML_FIELD_REQUESTS: {
+                        POD_YAML_FIELD_CPU: PROBE_CPU,
+                        POD_YAML_FIELD_MEMORY: PROBE_MEMORY,
                     },
                 },
             }],

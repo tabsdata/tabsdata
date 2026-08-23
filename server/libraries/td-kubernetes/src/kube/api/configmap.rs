@@ -7,14 +7,16 @@ use std::collections::BTreeMap;
 use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::Api;
-use kube::api::{DeleteParams, ListParams, PostParams};
+use kube::api::{DeleteParams, ListParams, PatchParams, PostParams};
 use tracing::debug;
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, TD_VERSION_LABEL,
 };
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
-use crate::kube::api::{LabelFilter, label_tabsdata, retry_while_unreachable, tabsdata_selector};
+use crate::kube::api::{
+    LabelFilter, label_tabsdata, retry_while_unreachable, tabsdata_selector, version_patch,
+};
 use crate::kube::context::KubeContext;
 
 pub async fn create_configmap(
@@ -392,6 +394,30 @@ pub async fn list_configmap_stamps(
         .collect();
     listed.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(listed)
+}
+
+pub async fn stamp_configmaps(
+    context: &KubeContext,
+    version: &str,
+    skip: &[&str],
+) -> Result<Vec<String>, KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut stamped = Vec::new();
+    for (name, current) in list_configmap_stamps(context).await? {
+        if current.as_deref() == Some(version) || skip.contains(&name.as_str()) {
+            continue;
+        }
+        api.patch(&name, &PatchParams::default(), &version_patch(version))
+            .await
+            .map_err(|error| KubeConfigMapError::StampFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.clone(),
+                version: version.to_owned(),
+                cause: error.to_string(),
+            })?;
+        stamped.push(name);
+    }
+    Ok(stamped)
 }
 
 pub async fn list_configmaps(

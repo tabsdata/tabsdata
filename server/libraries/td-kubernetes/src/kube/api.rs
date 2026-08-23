@@ -54,6 +54,7 @@ use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::Api;
 use kube::Resource as KubeResource;
+use kube::api::Patch;
 use kube::core::{ErrorResponse, Expression, Selector};
 use kube::runtime::wait::{Condition, Error as WaitError, await_condition};
 use kube::runtime::watcher::Error as WatcherError;
@@ -63,7 +64,7 @@ use tracing::{debug, info};
 
 use crate::base::constants::{
     KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA,
-    TD_VERSION_LABEL, TIER_LABEL,
+    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, TD_VERSION_LABEL, TIER_LABEL,
 };
 use crate::base::error::kubernetes::{KubeStampError, KubernetesError};
 use crate::base::error::naming::NamingError;
@@ -73,6 +74,10 @@ use crate::runtime::instance::tier::Tier;
 use crate::runtime::instance::version::instance_version;
 
 const WATCH_EXPIRED_REASON: &str = "Expired";
+
+const WATCH_FAILURE_STATUS: &str = "Failure";
+
+const WATCH_TIMEOUT_REASON: &str = "Timeout";
 
 pub const AWAIT_CONDITION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
@@ -145,12 +150,12 @@ where
                 }
                 return Err(WaitError::ProbeFailed(WatcherError::WatchError(
                     ErrorResponse {
-                        status: "Failure".to_owned(),
+                        status: WATCH_FAILURE_STATUS.to_owned(),
                         message: format!(
                             "The wait for '{name}' exceeded the limit of {}",
                             format_duration(AWAIT_CONDITION_TIMEOUT)
                         ),
-                        reason: "Timeout".to_owned(),
+                        reason: WATCH_TIMEOUT_REASON.to_owned(),
                         code: 504,
                     },
                 )));
@@ -246,6 +251,14 @@ pub async fn label_tabsdata(
         add_label(metadata, label.key, label.value);
     }
     Ok(())
+}
+
+pub fn version_patch(version: &str) -> Patch<serde_json::Value> {
+    Patch::Merge(serde_json::json!({
+        POD_YAML_FIELD_METADATA: {
+            POD_YAML_FIELD_LABELS: { TD_VERSION_LABEL: version }
+        }
+    }))
 }
 
 fn add_label(metadata: &mut ObjectMeta, key: &str, value: &str) {

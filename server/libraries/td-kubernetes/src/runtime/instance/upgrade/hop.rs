@@ -13,6 +13,7 @@ use crate::base::reporter::Reporter;
 use crate::client::registry::{instance_edit_folder, instance_init_folder};
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::configmap::replace_configmap_at_version;
+use crate::kube::api::{configmap as configmap_api, secret as secret_api};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::{MANIFEST_FILE, Manifest, serialize_manifest};
 use crate::runtime::instance::profile::bundle::Axis;
@@ -120,6 +121,20 @@ pub async fn walk(
     Ok(walked)
 }
 
+async fn stamp_instance(context: &KubeContext, version: &str) -> CommandResult {
+    let configmaps =
+        configmap_api::stamp_configmaps(context, version, &[CONFIGMAP_TABSDATA_MANIFEST]).await?;
+    let secrets = secret_api::stamp_secrets(context, version).await?;
+    if !configmaps.is_empty() || !secrets.is_empty() {
+        info!(
+            "  Labelled {} configmap(s) and {} secret(s) with version {version}",
+            configmaps.len(),
+            secrets.len()
+        );
+    }
+    Ok(())
+}
+
 fn untouched(manifest: &Manifest, version: &str) -> Vec<String> {
     manifest
         .entries
@@ -135,6 +150,7 @@ async fn commit(
     read: &InstanceManifest,
     version: &str,
 ) -> CommandResult {
+    stamp_instance(context, version).await?;
     let mut data = read.data.clone();
     data.insert(
         MANIFEST_FILE.to_owned(),

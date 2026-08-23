@@ -456,6 +456,23 @@ pub const PROBE_MEMORY: &str = "512Mi";
 pub const POD_YAML_FIELD_KIND: &str = "kind";
 pub const POD_YAML_FIELD_METADATA: &str = "metadata";
 pub const POD_YAML_FIELD_LABELS: &str = "labels";
+pub const POD_YAML_FIELD_API_VERSION: &str = "apiVersion";
+pub const POD_YAML_FIELD_NAMESPACE: &str = "namespace";
+pub const POD_YAML_FIELD_SPEC: &str = "spec";
+pub const POD_YAML_FIELD_RESTART_POLICY: &str = "restartPolicy";
+pub const POD_YAML_FIELD_CONTAINERS: &str = "containers";
+pub const POD_YAML_FIELD_IMAGE: &str = "image";
+pub const POD_YAML_FIELD_COMMAND: &str = "command";
+pub const POD_YAML_FIELD_RESOURCES: &str = "resources";
+pub const POD_YAML_FIELD_REQUESTS: &str = "requests";
+pub const POD_YAML_FIELD_CPU: &str = "cpu";
+pub const POD_YAML_FIELD_MEMORY: &str = "memory";
+
+pub const POD_API_VERSION_V1: &str = "v1";
+pub const POD_KIND: &str = "Pod";
+pub const POD_RESTART_POLICY_NEVER: &str = "Never";
+pub const PROBE_CONTAINER: &str = "probe";
+pub const PROBE_COMMAND: &str = "true";
 
 pub const VALUE_Y: &str = "y";
 pub const VALUE_YES: &str = "yes";

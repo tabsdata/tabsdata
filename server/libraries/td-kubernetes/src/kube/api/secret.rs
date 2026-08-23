@@ -8,12 +8,14 @@ use k8s_openapi::ByteString;
 use k8s_openapi::api::core::v1::Secret;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::Api;
-use kube::api::{DeleteParams, ListParams, PostParams};
+use kube::api::{DeleteParams, ListParams, PatchParams, PostParams};
 use tracing::debug;
 
-use crate::base::constants::{HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, SECRET_FAMILY_LABEL};
+use crate::base::constants::{
+    HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, SECRET_FAMILY_LABEL, TD_VERSION_LABEL,
+};
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
-use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
+use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector, version_patch};
 use crate::kube::context::KubeContext;
 
 pub async fn create_secret(
@@ -306,6 +308,47 @@ pub async fn require_secret(
         }
         .into()),
     }
+}
+
+pub async fn stamp_secrets(
+    context: &KubeContext,
+    version: &str,
+) -> Result<Vec<String>, KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = tabsdata_selector(None);
+    let list_params = ListParams::default().labels_from(&selector);
+    let secrets = api
+        .list(&list_params)
+        .await
+        .map_err(|error| KubeSecretError::ListFailed {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+            cause: error.to_string(),
+        })?;
+    let mut stamped = Vec::new();
+    for secret in secrets {
+        let Some(name) = secret.metadata.name else {
+            continue;
+        };
+        let current = secret
+            .metadata
+            .labels
+            .and_then(|labels| labels.get(TD_VERSION_LABEL).cloned());
+        if current.as_deref() == Some(version) {
+            continue;
+        }
+        api.patch(&name, &PatchParams::default(), &version_patch(version))
+            .await
+            .map_err(|error| KubeSecretError::StampFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.clone(),
+                version: version.to_owned(),
+                cause: error.to_string(),
+            })?;
+        stamped.push(name);
+    }
+    stamped.sort();
+    Ok(stamped)
 }
 
 pub async fn list_secrets(
