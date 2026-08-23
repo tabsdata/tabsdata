@@ -102,17 +102,19 @@ pub struct TolerationConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EnvValue {
+    Unset(()),
     Text(String),
     Number(serde_yaml::Number),
     Flag(bool),
 }
 
 impl EnvValue {
-    pub fn render(&self) -> String {
+    pub fn render(&self) -> Option<String> {
         match self {
-            Self::Text(text) => text.clone(),
-            Self::Number(number) => number.to_string(),
-            Self::Flag(flag) => flag.to_string(),
+            Self::Unset(()) => None,
+            Self::Text(text) => Some(text.clone()),
+            Self::Number(number) => Some(number.to_string()),
+            Self::Flag(flag) => Some(flag.to_string()),
         }
     }
 }

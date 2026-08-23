@@ -5,8 +5,8 @@
 pods:
   global:
     # Every entry here is injected as an environment variable into every
-    # container of every pod. A variable a container declares itself is left
-    # alone, so these are defaults rather than overrides.
+    # container of every pod, replacing any value a container declares for the
+    # same name, so these are overrides rather than defaults.
     envs: {}
 
   # Sizing and placement. These values are what tabsdata applies: the pod

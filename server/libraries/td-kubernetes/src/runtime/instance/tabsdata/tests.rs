@@ -29,9 +29,20 @@ fn text_numbers_and_flags_all_render_as_strings() {
     )
     .expect("parses");
     let envs = config.pods.global.envs;
-    assert_eq!(envs["TD_TRACE"].render(), "verbose");
-    assert_eq!(envs["TD_RETRIES"].render(), "3");
-    assert_eq!(envs["TD_STRICT"].render(), "true");
+    assert_eq!(envs["TD_TRACE"].render().as_deref(), Some("verbose"));
+    assert_eq!(envs["TD_RETRIES"].render().as_deref(), Some("3"));
+    assert_eq!(envs["TD_STRICT"].render().as_deref(), Some("true"));
+}
+
+#[test]
+fn an_unspecified_env_value_renders_as_nothing() {
+    let config = TabsdataConfig::parse(
+        "pods:\n  global:\n    envs:\n      TD_UNSET:\n      TD_EMPTY: \"\"\n",
+    )
+    .expect("parses");
+    let envs = config.pods.global.envs;
+    assert_eq!(envs["TD_UNSET"].render(), None);
+    assert_eq!(envs["TD_EMPTY"].render().as_deref(), Some(""));
 }
 
 #[test]
@@ -47,7 +58,10 @@ fn unknown_sections_are_tolerated_so_the_file_can_grow() {
         "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\nfuture:\n  section: value\n",
     )
     .expect("parses");
-    assert_eq!(config.pods.global.envs["TD_TRACE"].render(), "verbose");
+    assert_eq!(
+        config.pods.global.envs["TD_TRACE"].render().as_deref(),
+        Some("verbose")
+    );
 }
 
 #[test]

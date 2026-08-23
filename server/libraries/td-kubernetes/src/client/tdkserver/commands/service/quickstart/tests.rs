@@ -39,6 +39,7 @@ fn env_value(yaml: &str, name: &str) -> String {
         .get(name)
         .expect("env")
         .render()
+        .expect("specified env")
 }
 
 #[test]

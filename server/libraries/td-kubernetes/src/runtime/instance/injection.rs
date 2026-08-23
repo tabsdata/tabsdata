@@ -117,7 +117,7 @@ pub fn inject_secret_envs(
 ) -> Result<(), LauncherError> {
     let globals = collect_global_env_entries(profile)?;
     if !globals.is_empty() {
-        apply_env_entries(spec, &globals);
+        override_env_entries(spec, &globals);
     }
     let mounted = mounted_config_files(spec);
     let entries = collect_env_entries(profile, pod_template_key, &mounted, available_secrets)?;
@@ -143,10 +143,12 @@ fn collect_global_env_entries(profile: &Profile) -> Result<Vec<EnvVar>, Launcher
         .global
         .envs
         .iter()
-        .map(|(name, value)| EnvVar {
-            name: name.clone(),
-            value: Some(value.render()),
-            value_from: None,
+        .filter_map(|(name, value)| {
+            value.render().map(|value| EnvVar {
+                name: name.clone(),
+                value: Some(value),
+                value_from: None,
+            })
         })
         .collect())
 }
@@ -258,6 +260,27 @@ fn append_env(container: &mut Container, entries: &[EnvVar]) {
             continue;
         }
         existing.push(entry.clone());
+    }
+}
+
+fn override_env_entries(spec: &mut PodSpec, entries: &[EnvVar]) {
+    for container in spec.containers.iter_mut() {
+        replace_env(container, entries);
+    }
+    if let Some(init_containers) = spec.init_containers.as_mut() {
+        for container in init_containers.iter_mut() {
+            replace_env(container, entries);
+        }
+    }
+}
+
+fn replace_env(container: &mut Container, entries: &[EnvVar]) {
+    let existing = container.env.get_or_insert_with(Vec::new);
+    for entry in entries {
+        match existing.iter_mut().find(|env| env.name == entry.name) {
+            Some(current) => *current = entry.clone(),
+            None => existing.push(entry.clone()),
+        }
     }
 }
 

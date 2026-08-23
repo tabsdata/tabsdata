@@ -272,7 +272,38 @@ fn an_empty_global_envs_map_injects_nothing() {
 }
 
 #[test]
-fn a_container_env_wins_over_a_global_one() {
+fn an_unspecified_global_env_leaves_the_container_one_alone() {
+    let profile = build_profile(&[(
+        "tabsdata.yaml",
+        "pods:\n  global:\n    envs:\n      UV_INDEX:\n      UV_INDEX_STRATEGY: \"\"\n",
+    )]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
+    spec.containers[0].env = Some(vec![
+        EnvVar {
+            name: "UV_INDEX".to_owned(),
+            value: Some("from-pod".to_owned()),
+            value_from: None,
+        },
+        EnvVar {
+            name: "UV_INDEX_STRATEGY".to_owned(),
+            value: Some("from-pod".to_owned()),
+            value_from: None,
+        },
+    ]);
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    let entries = spec.containers[0].env.as_ref().expect("env");
+    let value = |name: &str| {
+        entries
+            .iter()
+            .find(|env| env.name == name)
+            .and_then(|env| env.value.clone())
+    };
+    assert_eq!(value("UV_INDEX").as_deref(), Some("from-pod"));
+    assert_eq!(value("UV_INDEX_STRATEGY").as_deref(), Some(""));
+}
+
+#[test]
+fn a_global_env_wins_over_a_container_one() {
     let profile = build_profile(&[(
         "tabsdata.yaml",
         "pods:\n  global:\n    envs:\n      TD_TRACE: global\n",
@@ -284,14 +315,40 @@ fn a_container_env_wins_over_a_global_one() {
         value_from: None,
     }]);
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
-    let value = spec.containers[0]
+    let entries = spec.containers[0].env.as_ref().expect("env");
+    let matches: Vec<_> = entries
+        .iter()
+        .filter(|env| env.name == "TD_TRACE")
+        .collect();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].value, Some("global".to_owned()));
+}
+
+#[test]
+fn a_global_env_overrides_an_init_container_one() {
+    let profile = build_profile(&[(
+        "tabsdata.yaml",
+        "pods:\n  global:\n    envs:\n      UV_INDEX: from-config\n",
+    )]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
+    spec.init_containers = Some(vec![Container {
+        name: "bootstrap".to_owned(),
+        env: Some(vec![EnvVar {
+            name: "UV_INDEX".to_owned(),
+            value: Some("from-pod".to_owned()),
+            value_from: None,
+        }]),
+        ..Default::default()
+    }]);
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    let value = spec.init_containers.as_ref().expect("init containers")[0]
         .env
         .as_ref()
         .expect("env")
         .iter()
-        .find(|env| env.name == "TD_TRACE")
+        .find(|env| env.name == "UV_INDEX")
         .and_then(|env| env.value.clone());
-    assert_eq!(value, Some("container".to_owned()));
+    assert_eq!(value, Some("from-config".to_owned()));
 }
 
 #[test]
