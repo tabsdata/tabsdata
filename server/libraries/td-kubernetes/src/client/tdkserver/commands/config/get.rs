@@ -6,18 +6,21 @@ use std::collections::HashMap;
 use std::fs;
 
 use clap_derive::Args;
+use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::error::cli::CliError;
 use crate::base::naming::name_from_kube_resource_name;
 use crate::base::reporter::{InteractiveReporter, Reporter};
-use crate::client::registry::instance_edit_input_folder;
+use crate::client::registry::{instance_edit_folder, instance_edit_input_folder};
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::resolved_instance;
-use crate::core::system::exit::CommandResult;
+use crate::client::tdkserver::common::confirm;
+use crate::client::tdkserver::widgets::show_hint;
+use crate::core::system::exit::{CommandResult, abort};
 use crate::cwarn;
 use crate::kube::api::secret::get_secret;
 use crate::kube::api::{LabelFilter, get_configmaps};
@@ -52,14 +55,28 @@ pub struct GetArguments {
                      cannot modify are kept as placeholders. Defaults to 'false'."
     )]
     pub with_secrets: Option<bool>,
+
+    #[arg(
+        long,
+        name = "force",
+        required = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 80,
+        long_help = "Delete the existing edit folder without asking before downloading the \
+                     configs. Defaults to 'false'."
+    )]
+    pub force: Option<bool>,
 }
 
 pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> CommandResult {
     let GetArguments {
         instance,
         with_secrets,
+        force,
     } = arguments;
     let values = with_secrets.unwrap_or(false);
+    let force = force.unwrap_or(false);
 
     let settings = SettingsContext::settings();
     let instance = resolved_instance(instance, &settings);
@@ -70,6 +87,10 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
 
     let profile = load_profile(provider.cluster_provider(), verbose)?;
     let context = provider.kube_context().await?;
+
+    if !discard_edit_folder(&name, force)? {
+        return abort(Cancelled);
+    }
 
     let reporter = InteractiveReporter::new();
     let step = reporter.step("Downloading tabsdata configmaps");
@@ -159,14 +180,43 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
 
     step.done(&format!("Downloaded {count} tabsdata configmaps"));
     info!("Configmaps written to {}", configs_folder.display());
-    warn!(
-        "Edit the configmaps in '{}', then run 'tdkserver config put --instance {}' to upload \
-         your changes. The instance must be restarted for the changes to take effect; \
-         restart it manually or pass '--apply' to 'config put'.",
-        edit_input.display(),
-        name,
+    show_hint(
+        &format!(
+            "You can inspect and edit the config in '{}'. To upload your changes, run \
+             'tdkserver config put --instance {}'. The instance must be restarted for the \
+             changes to take effect; restart it manually or pass '--apply' to 'config put'.",
+            edit_input.display(),
+            name,
+        ),
+        80,
+        true,
     );
     Ok(())
+}
+
+fn discard_edit_folder(name: &str, force: bool) -> CommandResult<bool> {
+    let folder = instance_edit_folder(name)?;
+    if !folder.is_dir() {
+        return Ok(true);
+    }
+    if !force {
+        info!(
+            "The edit folder '{}' already exists and will be deleted before downloading.",
+            folder.display()
+        );
+        if !confirm(false, "Delete it and download the configs?")? {
+            info!("Operation cancelled.");
+            return Ok(false);
+        }
+    }
+    fs::remove_dir_all(&folder).map_err(|error| {
+        TdError::from(CliError::FolderRemoveFailed {
+            folder: folder.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    info!("Deleted the edit folder '{}'.", folder.display());
+    Ok(true)
 }
 
 fn parse_schema(

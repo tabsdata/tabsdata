@@ -64,6 +64,8 @@ pub enum CliError {
     FileSerializeFailed { file: String, cause: String } = 5009,
     #[error("File '{file}' has no '{entry}' entry to set.")]
     FileEntryMissing { file: String, entry: String } = 5010,
+    #[error("Could not remove folder '{folder}': {cause}.")]
+    FolderRemoveFailed { folder: String, cause: String } = 5011,
 }
 
 #[cfg(test)]

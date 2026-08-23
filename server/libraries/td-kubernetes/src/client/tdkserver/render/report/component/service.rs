@@ -8,7 +8,7 @@ use std::path::Path;
 
 use tracing::info;
 
-use crate::base::constants::DEFAULT_LOG_LEVEL;
+use crate::base::constants::{DEFAULT_LOG_LEVEL, INIT_FOLDER, INPUT_FOLDER};
 #[cfg(feature = "enterprise")]
 use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{InstanceSettings, td_venv_activate_file};
@@ -307,10 +307,12 @@ pub fn initialized_service(settings: &InstanceSettings, with_hint: bool) {
     };
     render_summary_lines(&summary);
     if with_hint {
+        let input = settings.folder.join(INIT_FOLDER).join(INPUT_FOLDER);
         show_hint(
             &format!(
-                "Inspect and edit the config in the instance's init folder, then run \
-                 'tdkserver create --instance {}' to create the instance.",
+                "You can inspect and edit the config in '{}'. To create the instance, run \
+                 'tdkserver create --instance {}'.",
+                input.display(),
                 settings.name
             ),
             80,
