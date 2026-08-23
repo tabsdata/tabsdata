@@ -49,10 +49,13 @@ def root_folder(setup_file: str, fallback: str = TABSDATA_TO_ROOT) -> str:
         root_file_exists = root_file.exists() and root_file.is_file()
 
         if root_file_exists:
-            tabsdata_core_repository_root = as_tabsdata_core_repository_root(current_folder)
+            tabsdata_core_repository_root = as_tabsdata_core_repository_root(
+                current_folder
+            )
             if tabsdata_core_repository_root:
                 logger.debug(
-                    f"🗂️ Root project folder for setup is: {tabsdata_core_repository_root} "
+                    "🗂️ Root project folder for setup is: "
+                    f"{tabsdata_core_repository_root} "
                     f"(declared by {TABSDATA_BASE_FOLDER_VARIABLE})"
                 )
                 return tabsdata_core_repository_root
