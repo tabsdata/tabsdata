@@ -33,10 +33,18 @@ class Postgres(SqlContainerBackend):
     admin_autocommit = True
     system_schemas = frozenset({"postgres", "template0", "template1"})
 
-    # Matches the ceiling td-database's own embedded server boots with. The Rust
-    # db tests run 32-way parallel, each holding an admin, a serving and a
-    # teardown pool, which overruns the image default of 100.
-    cmd_args = ["-c", "max_connections=500"]
+    # Both knobs match what td-database's own embedded server boots with. The
+    # Rust db tests run 32-way parallel, each holding an admin, a serving and a
+    # teardown pool, which overruns the image default of 100 connections; and
+    # each builds a whole schema in one transaction, holding a lock per object
+    # until it commits, which the default lock-table sizing (64 per transaction)
+    # cannot seat concurrently -- it fails as "out of shared memory" (53200).
+    cmd_args = [
+        "-c",
+        "max_connections=500",
+        "-c",
+        "max_locks_per_transaction=1024",
+    ]
 
     def env_vars(self, password: str) -> dict[str, str]:
         return {"POSTGRES_PASSWORD": password}
