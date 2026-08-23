@@ -14,6 +14,7 @@ use crate::base::error::naming::NamingError;
 use crate::base::error::profile::ProfileError;
 use crate::base::error::provider::ProviderError;
 use crate::base::error::secret::SecretError;
+use crate::base::error::upgrade::UpgradeError;
 
 #[derive(Debug)]
 pub struct CommandError {
@@ -87,7 +88,8 @@ crate::command_error_from!(
     NamingError,
     ProfileError,
     ProviderError,
-    SecretError
+    SecretError,
+    UpgradeError
 );
 
 pub type CommandResult<T = ()> = Result<T, CommandError>;

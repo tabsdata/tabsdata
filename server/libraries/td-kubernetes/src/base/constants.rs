@@ -195,6 +195,7 @@ pub const FILE_KUBECONFIG: &str = "config";
 pub const LIBEXEC_TABSDATA: &str = "libexec/tabsdata";
 
 pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
+pub const RESOURCE_KUPGRADE: &str = "resources/kupgrade";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
@@ -398,6 +399,8 @@ pub const SECRET_GENERATOR_APISERVER_SERVICE_TOKEN: &str = "apiserver_service_to
 
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");
 pub const PART_OF_TABSDATA: &str = "tabsdata";
+pub const TD_VERSION_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "version");
+pub const LEGACY_VERSION: &str = "2.0.0";
 
 pub const POD_YAML_COMPONENT_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "component");
 

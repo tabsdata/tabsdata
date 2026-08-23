@@ -304,6 +304,7 @@ async fn store_secrets(
             BTreeMap::new(),
             None,
             Some(SECRET_FAMILY_CONFIG),
+            None,
         )
         .await
         {

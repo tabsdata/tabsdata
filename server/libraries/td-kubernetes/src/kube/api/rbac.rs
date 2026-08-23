@@ -32,6 +32,7 @@ async fn upsert<K>(
     context: &KubeContext,
     resource: &K,
     apply_failed: fn(String, String, String) -> KubeRbacError,
+    stamp: Option<&str>,
 ) -> Result<K, KubernetesError>
 where
     K: Resource<DynamicType = (), Scope = NamespaceResourceScope>
@@ -42,7 +43,7 @@ where
 {
     let api: Api<K> = Api::namespaced(context.client().clone(), context.namespace());
     let mut resource = resource.clone();
-    label_tabsdata(resource.meta_mut(), &[]);
+    label_tabsdata(context, resource.meta_mut(), &[], stamp).await?;
     let name = resource_name(&resource)?;
     let namespace = context.namespace().to_owned();
     match api.get_opt(&name).await {
@@ -114,39 +115,54 @@ where
 pub async fn upsert_service_account(
     context: &KubeContext,
     account: &ServiceAccount,
+    stamp: Option<&str>,
 ) -> Result<ServiceAccount, KubernetesError> {
-    upsert(context, account, |namespace, name, cause| {
-        KubeRbacError::ServiceAccountApplyFailed {
+    upsert(
+        context,
+        account,
+        |namespace, name, cause| KubeRbacError::ServiceAccountApplyFailed {
             namespace,
             name,
             cause,
-        }
-    })
+        },
+        stamp,
+    )
     .await
 }
 
-pub async fn upsert_role(context: &KubeContext, role: &Role) -> Result<Role, KubernetesError> {
-    upsert(context, role, |namespace, name, cause| {
-        KubeRbacError::RoleApplyFailed {
+pub async fn upsert_role(
+    context: &KubeContext,
+    role: &Role,
+    stamp: Option<&str>,
+) -> Result<Role, KubernetesError> {
+    upsert(
+        context,
+        role,
+        |namespace, name, cause| KubeRbacError::RoleApplyFailed {
             namespace,
             name,
             cause,
-        }
-    })
+        },
+        stamp,
+    )
     .await
 }
 
 pub async fn upsert_role_binding(
     context: &KubeContext,
     binding: &RoleBinding,
+    stamp: Option<&str>,
 ) -> Result<RoleBinding, KubernetesError> {
-    upsert(context, binding, |namespace, name, cause| {
-        KubeRbacError::RoleBindingApplyFailed {
+    upsert(
+        context,
+        binding,
+        |namespace, name, cause| KubeRbacError::RoleBindingApplyFailed {
             namespace,
             name,
             cause,
-        }
-    })
+        },
+        stamp,
+    )
     .await
 }
 

@@ -25,10 +25,11 @@ pub async fn create_deployment(
     configmaps: Vec<ConfigMap>,
     secrets: Vec<Secret>,
     latch: Option<ConfigMap>,
+    stamp: Option<&str>,
 ) -> Result<Deployment, KubernetesError> {
     let api: Api<Deployment> = Api::namespaced(context.client().clone(), context.namespace());
     let mut deployment = deployment.clone();
-    label_tabsdata(&mut deployment.metadata, &[]);
+    label_tabsdata(context, &mut deployment.metadata, &[], stamp).await?;
     let created = api
         .create(&PostParams::default(), &deployment)
         .await
@@ -42,7 +43,7 @@ pub async fn create_deployment(
         return Ok(created);
     }
     let owner = owner_ref_for_deployment(&created)?;
-    attach_companions(context, owner, configmaps, secrets, latch).await?;
+    attach_companions(context, owner, configmaps, secrets, latch, None).await?;
     Ok(created)
 }
 

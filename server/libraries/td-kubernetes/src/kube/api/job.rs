@@ -25,10 +25,11 @@ pub async fn create_job(
     configmaps: Vec<ConfigMap>,
     secrets: Vec<Secret>,
     latch: Option<ConfigMap>,
+    stamp: Option<&str>,
 ) -> Result<Job, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
     let mut job = job.clone();
-    label_tabsdata(&mut job.metadata, &[]);
+    label_tabsdata(context, &mut job.metadata, &[], stamp).await?;
     let created = api
         .create(&PostParams::default(), &job)
         .await
@@ -42,7 +43,7 @@ pub async fn create_job(
         return Ok(created);
     }
     let owner = owner_ref_for_job(&created)?;
-    attach_companions(context, owner, configmaps, secrets, latch).await?;
+    attach_companions(context, owner, configmaps, secrets, latch, None).await?;
     Ok(created)
 }
 

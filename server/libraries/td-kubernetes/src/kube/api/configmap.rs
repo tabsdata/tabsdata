@@ -10,7 +10,9 @@ use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams};
 use tracing::debug;
 
-use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND};
+use crate::base::constants::{
+    CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, TD_VERSION_LABEL,
+};
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
 use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
@@ -22,6 +24,7 @@ pub async fn create_configmap(
     labels: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
     family: Option<&str>,
+    stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     let mut metadata = ObjectMeta {
@@ -31,7 +34,7 @@ pub async fn create_configmap(
         labels: Some(labels),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata, &family_labels(family));
+    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
     let configmap = ConfigMap {
         metadata,
         data: Some(data),
@@ -63,6 +66,7 @@ pub async fn replace_configmap(
     data: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
     family: Option<&str>,
+    stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     let existing = match api.get_opt(name).await {
@@ -91,7 +95,7 @@ pub async fn replace_configmap(
         labels: Some(labels),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata, &family_labels(family));
+    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
     let configmap = ConfigMap {
         metadata,
         data: Some(data),
@@ -117,6 +121,7 @@ pub async fn upsert_configmap(
     labels: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
     family: Option<&str>,
+    stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     match api.get_opt(name).await {
@@ -129,7 +134,7 @@ pub async fn upsert_configmap(
                 labels: Some(labels),
                 ..Default::default()
             };
-            label_tabsdata(&mut metadata, &family_labels(family));
+            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
             let configmap = ConfigMap {
                 metadata,
                 data: Some(data),
@@ -155,7 +160,7 @@ pub async fn upsert_configmap(
                 labels: Some(labels),
                 ..Default::default()
             };
-            label_tabsdata(&mut metadata, &family_labels(family));
+            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
             let configmap = ConfigMap {
                 metadata,
                 data: Some(data),
@@ -241,6 +246,67 @@ pub async fn get_configmap(
     }
 }
 
+pub struct VersionedConfigMap {
+    pub data: BTreeMap<String, String>,
+    pub labels: BTreeMap<String, String>,
+    pub resource_version: Option<String>,
+}
+
+pub async fn get_versioned_configmap(
+    context: &KubeContext,
+    name: &str,
+) -> Result<Option<VersionedConfigMap>, KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    match api.get_opt(name).await {
+        Ok(Some(configmap)) => Ok(Some(VersionedConfigMap {
+            data: configmap.data.unwrap_or_default(),
+            labels: configmap.metadata.labels.unwrap_or_default(),
+            resource_version: configmap.metadata.resource_version,
+        })),
+        Ok(None) => Ok(None),
+        Err(error) => Err(KubeConfigMapError::ReadFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
+    }
+}
+
+pub async fn replace_configmap_at_version(
+    context: &KubeContext,
+    name: &str,
+    data: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    resource_version: Option<String>,
+    stamp: Option<&str>,
+) -> Result<bool, KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(context.namespace().to_owned()),
+        resource_version,
+        labels: Some(labels),
+        ..Default::default()
+    };
+    label_tabsdata(context, &mut metadata, &[], stamp).await?;
+    let configmap = ConfigMap {
+        metadata,
+        data: Some(data),
+        ..Default::default()
+    };
+    match api.replace(name, &PostParams::default(), &configmap).await {
+        Ok(_) => Ok(true),
+        Err(kube::Error::Api(error)) if error.code == HTTP_STATUS_CONFLICT => Ok(false),
+        Err(error) => Err(KubeConfigMapError::ReplaceFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
+    }
+}
+
 pub async fn get_configmaps(
     context: &KubeContext,
     label: Option<LabelFilter<'_>>,
@@ -293,6 +359,35 @@ pub async fn require_configmap(
         }
         .into()),
     }
+}
+
+pub async fn list_configmap_stamps(
+    context: &KubeContext,
+) -> Result<Vec<(String, Option<String>)>, KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = tabsdata_selector(None);
+    let list_params = ListParams::default().labels_from(&selector);
+    let configmaps =
+        api.list(&list_params)
+            .await
+            .map_err(|error| KubeConfigMapError::ListFailed {
+                namespace: context.namespace().to_owned(),
+                label_selector: selector.to_string(),
+                cause: error.to_string(),
+            })?;
+    let mut listed: Vec<(String, Option<String>)> = configmaps
+        .into_iter()
+        .filter_map(|configmap| {
+            let name = configmap.metadata.name?;
+            let stamp = configmap
+                .metadata
+                .labels
+                .and_then(|labels| labels.get(TD_VERSION_LABEL).cloned());
+            Some((name, stamp))
+        })
+        .collect();
+    listed.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(listed)
 }
 
 pub async fn list_configmaps(

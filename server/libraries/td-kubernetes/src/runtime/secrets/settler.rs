@@ -217,6 +217,7 @@ async fn fill_generated_keys(
         BTreeMap::new(),
         None,
         Some(SECRET_FAMILY_CONFIG),
+        None,
     )
     .await?;
     Ok(())

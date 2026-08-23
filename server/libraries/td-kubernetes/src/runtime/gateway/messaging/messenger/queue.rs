@@ -413,7 +413,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             }
                             None => (Vec::new(), Vec::new(), None),
                         };
-                        create_pod(&self.context, &pod, configmaps, secrets, latch)
+                        create_pod(&self.context, &pod, configmaps, secrets, latch, None)
                             .await
                             .map_err(|error| QueueError::BackendError {
                                 cause: error.to_string(),
@@ -440,7 +440,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             }
                             None => (Vec::new(), Vec::new(), None),
                         };
-                        create_job(&self.context, &job, configmaps, secrets, latch)
+                        create_job(&self.context, &job, configmaps, secrets, latch, None)
                             .await
                             .map_err(|error| QueueError::BackendError {
                                 cause: error.to_string(),
@@ -471,7 +471,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             }
                             None => (Vec::new(), Vec::new(), None),
                         };
-                        create_cronjob(&self.context, &cronjob, configmaps, secrets, latch)
+                        create_cronjob(&self.context, &cronjob, configmaps, secrets, latch, None)
                             .await
                             .map_err(|error| QueueError::BackendError {
                                 cause: error.to_string(),

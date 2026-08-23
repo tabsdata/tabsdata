@@ -13,11 +13,12 @@ use crate::kube::context::KubeContext;
 pub async fn upsert_disruption_budget(
     context: &KubeContext,
     budget: &PodDisruptionBudget,
+    stamp: Option<&str>,
 ) -> Result<PodDisruptionBudget, KubernetesError> {
     let api: Api<PodDisruptionBudget> =
         Api::namespaced(context.client().clone(), context.namespace());
     let mut budget = budget.clone();
-    label_tabsdata(&mut budget.metadata, &[]);
+    label_tabsdata(context, &mut budget.metadata, &[], stamp).await?;
     let name = budget
         .metadata
         .name

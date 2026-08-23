@@ -217,6 +217,7 @@ async fn replace_requirements(context: &KubeContext, asset: &str, contents: &str
         configmap_data,
         BTreeMap::new(),
         Some(KPROFILE_ASSETS_FAMILY.kind),
+        None,
     )
     .await
     .map_err(TdError::from)?;

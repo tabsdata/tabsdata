@@ -87,6 +87,7 @@ impl ConnectionStore for KubernetesConnectionStore {
             labels.clone(),
             None,
             None,
+            None,
         )
         .await?;
         secret::upsert_secret(
@@ -94,6 +95,7 @@ impl ConnectionStore for KubernetesConnectionStore {
             &name,
             entries_to_map(new_object.secrets.as_deref()),
             labels,
+            None,
             None,
             None,
         )

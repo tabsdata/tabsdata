@@ -68,7 +68,10 @@ fn normalize_schema_name(parsed: ParsedFileName) -> ParsedFileName {
     }
 }
 
-fn resolve_resource_path(resource: &str, verbose: bool) -> Result<PathBuf, ProfileError> {
+pub(crate) fn resolve_resource_path(
+    resource: &str,
+    verbose: bool,
+) -> Result<PathBuf, ProfileError> {
     let resolver = resolve_python_binary(PROGRAM_TD_RESOURCE).map_err(|error| {
         ProfileError::ResourceBinaryNotFound(PROGRAM_TD_RESOURCE.to_owned(), error.to_string())
     })?;

@@ -457,13 +457,13 @@ main() {
    parse_arguments "$@"
    validate_arguments
    setup_workspace
-   step "Reporting the package indexes"      report_indexes
-   step "Installing prerequisites"           install_prerequisites
-   step "Installing uv"                      install_uv
-   step "Installing Python"                  install_python
+   step "Reporting the package indexes"       report_indexes
+   step "Installing prerequisites"            install_prerequisites
+   step "Installing uv"                       install_uv
+   step "Installing Python"                   install_python
    step "Creating the compressor environment" create_compressor_environment
    step "Creating the virtual environments"   create_virtual_environment
-   step "Installing packages"                install_packages
+   step "Installing packages"                 install_packages
    step "Pruning the virtual environments"    prune_virtual_environment
    step "Verifying the image"                 verify_image
    step "Writing the image"                   write_image

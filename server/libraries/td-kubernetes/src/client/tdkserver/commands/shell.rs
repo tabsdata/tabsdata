@@ -35,6 +35,7 @@ use super::service::start::{StartArguments, command_start};
 use super::service::status::command_status;
 use super::service::stop::{StopArguments, command_stop};
 use super::service::trash::{TrashArguments, command_trash};
+use super::service::upgrade::{UpgradeArguments, command_upgrade};
 use super::session::set::{SetArguments, command_set};
 use super::session::settings::{SettingsArguments, command_settings};
 use super::session::unset::{UnpinArguments, command_unset};
@@ -75,6 +76,8 @@ enum ShellCommand {
     Stop(StopArguments),
     #[command(about = "Restart a tabsdata instance")]
     Restart(RestartArguments),
+    #[command(about = "Upgrade a tabsdata instance to the running tabsdata version")]
+    Upgrade(UpgradeArguments),
     #[command(about = "Show the running workloads of a tabsdata instance")]
     Status(InstanceNameArguments),
     #[command(about = "Show the configuration and state of a tabsdata instance")]
@@ -215,6 +218,9 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 }
                 ShellCommand::Restart(arguments) => {
                     let _ = command_restart(arguments, globals).await;
+                }
+                ShellCommand::Upgrade(arguments) => {
+                    let _ = command_upgrade(arguments, globals).await;
                 }
                 ShellCommand::Status(arguments) => {
                     let _ = command_status(arguments, globals).await;

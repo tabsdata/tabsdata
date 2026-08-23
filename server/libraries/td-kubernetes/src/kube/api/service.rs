@@ -14,10 +14,11 @@ use crate::kube::context::KubeContext;
 pub async fn upsert_service(
     context: &KubeContext,
     service: &Service,
+    stamp: Option<&str>,
 ) -> Result<Service, KubernetesError> {
     let api: Api<Service> = Api::namespaced(context.client().clone(), context.namespace());
     let mut service = service.clone();
-    label_tabsdata(&mut service.metadata, &[]);
+    label_tabsdata(context, &mut service.metadata, &[], stamp).await?;
     let name = service
         .metadata
         .name

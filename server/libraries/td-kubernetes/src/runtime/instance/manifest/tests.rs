@@ -128,19 +128,29 @@ fn entry_state_serializes_lowercase() {
 }
 
 #[test]
-fn check_versions_passes_when_major_minor_match() {
+fn check_versions_passes_when_every_entry_is_identical() {
     let manifest = manifest_with_entries(&[
         ("pods/foo.yaml", "1.4.0", EntryState::Active),
-        ("pods/bar.yaml", "1.4.7", EntryState::Active),
+        ("pods/bar.yaml", "1.4.0", EntryState::Active),
     ]);
     assert!(check_versions(&manifest, "1.4.0").is_ok());
-    assert!(check_versions(&manifest, "1.4.99").is_ok());
 }
 
 #[test]
-fn check_versions_ignores_micro_difference() {
+fn check_versions_fails_on_micro_difference() {
     let manifest = manifest_with_entries(&[("pods/foo.yaml", "1.4.5", EntryState::Active)]);
-    assert!(check_versions(&manifest, "1.4.0").is_ok());
+    let outcome = check_versions(&manifest, "1.4.0");
+    assert!(matches!(outcome, Err(VersionMismatch::Mismatch { .. })));
+}
+
+#[test]
+fn check_versions_accepts_pep440_pre_release_versions() {
+    let manifest = manifest_with_entries(&[("pods/foo.yaml", "2.0.1rc1", EntryState::Active)]);
+    assert!(check_versions(&manifest, "2.0.1rc1").is_ok());
+    assert!(matches!(
+        check_versions(&manifest, "2.0.1"),
+        Err(VersionMismatch::Mismatch { .. })
+    ));
 }
 
 #[test]
@@ -181,8 +191,9 @@ fn check_versions_reports_every_active_mismatch() {
     let Err(VersionMismatch::Mismatch { entries, .. }) = check_versions(&manifest, "1.4.0") else {
         panic!("expected mismatch");
     };
-    assert_eq!(entries.len(), 1);
+    assert_eq!(entries.len(), 2);
     assert_eq!(entries[0].path, "pods/bar.yaml");
+    assert_eq!(entries[1].path, "pods/baz.yaml");
 }
 
 #[test]

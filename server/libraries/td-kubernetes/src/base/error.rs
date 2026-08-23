@@ -16,3 +16,4 @@ pub mod provider;
 pub mod schema;
 pub mod secret;
 pub mod system;
+pub mod upgrade;

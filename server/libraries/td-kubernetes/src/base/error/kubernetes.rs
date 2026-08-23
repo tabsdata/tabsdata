@@ -24,6 +24,7 @@ pub mod podcontext;
 pub mod rbac;
 pub mod secret;
 pub mod service;
+pub mod stamp;
 
 use td_error::TdError;
 use thiserror::Error;
@@ -45,6 +46,7 @@ pub use podcontext::KubePodContextError;
 pub use rbac::KubeRbacError;
 pub use secret::KubeSecretError;
 pub use service::KubeServiceError;
+pub use stamp::KubeStampError;
 
 #[derive(Debug, Error)]
 pub enum KubernetesError {
@@ -62,6 +64,8 @@ pub enum KubernetesError {
     Disruption(#[from] KubeDisruptionError),
     #[error(transparent)]
     Job(#[from] KubeJobError),
+    #[error(transparent)]
+    Stamp(#[from] KubeStampError),
     #[error(transparent)]
     Kubeconfig(#[from] KubeconfigError),
     #[error(transparent)]
@@ -92,6 +96,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::Deployment(inner) => TdError::new(inner),
             KubernetesError::Disruption(inner) => TdError::new(inner),
             KubernetesError::Job(inner) => TdError::new(inner),
+            KubernetesError::Stamp(inner) => TdError::new(inner),
             KubernetesError::Kubeconfig(inner) => TdError::new(inner),
             KubernetesError::Messaging(inner) => TdError::new(inner),
             KubernetesError::Namespace(inner) => TdError::new(inner),

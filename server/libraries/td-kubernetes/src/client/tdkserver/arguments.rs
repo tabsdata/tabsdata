@@ -26,6 +26,7 @@ use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
 use crate::client::tdkserver::commands::service::trash::TrashArguments;
+use crate::client::tdkserver::commands::service::upgrade::UpgradeArguments;
 use crate::client::tdkserver::commands::session::set::SetArguments;
 use crate::client::tdkserver::commands::session::settings::SettingsArguments;
 use crate::client::tdkserver::commands::session::unset::UnpinArguments;
@@ -168,6 +169,8 @@ pub enum Commands {
     Stop(StopArguments),
     #[command(about = "Restart a tabsdata instance")]
     Restart(RestartArguments),
+    #[command(about = "Upgrade a tabsdata instance to the running tabsdata version")]
+    Upgrade(UpgradeArguments),
     #[command(about = "Show the running workloads of a tabsdata instance")]
     Status(InstanceNameArguments),
     #[command(about = "Show the configuration and state of a tabsdata instance")]

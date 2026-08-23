@@ -21,7 +21,7 @@ fn every_variant_reports_manifest_error_as_domain() {
         Box::new(ManifestError::EntryMissing("pods/init/foo.yaml".to_owned())),
         Box::new(ManifestError::VersionParseFailed(
             "garbage".to_owned(),
-            "expected semver".to_owned(),
+            "expected a PEP 440 version".to_owned(),
         )),
         Box::new(ManifestError::ParseFailed("bad yaml".to_owned())),
     ];

@@ -25,10 +25,11 @@ pub async fn create_cronjob(
     configmaps: Vec<ConfigMap>,
     secrets: Vec<Secret>,
     latch: Option<ConfigMap>,
+    stamp: Option<&str>,
 ) -> Result<CronJob, KubernetesError> {
     let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
     let mut cronjob = cronjob.clone();
-    label_tabsdata(&mut cronjob.metadata, &[]);
+    label_tabsdata(context, &mut cronjob.metadata, &[], stamp).await?;
     let created = api
         .create(&PostParams::default(), &cronjob)
         .await
@@ -42,7 +43,7 @@ pub async fn create_cronjob(
         return Ok(created);
     }
     let owner = owner_ref_for_cronjob(&created)?;
-    attach_companions(context, owner, configmaps, secrets, latch).await?;
+    attach_companions(context, owner, configmaps, secrets, latch, None).await?;
     Ok(created)
 }
 

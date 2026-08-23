@@ -456,6 +456,32 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
 }
 
 #[test]
+fn the_version_label_resolves_from_the_tabsdata_version() {
+    let template = "metadata:\n  labels:\n    app.kubernetes.io/version: \"${{system:tdk_tabsdata_version}}\"\n";
+    let system = SystemValues {
+        tabsdata_version: Some("2.0.1".to_owned()),
+        ..SystemValues::default()
+    };
+    let auto = HashMap::new();
+    let outcome = resolve_config_file(
+        "pod.yaml",
+        template,
+        template,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve the version label");
+    assert!(
+        outcome.rendered.contains("2.0.1"),
+        "rendered was: {}",
+        outcome.rendered
+    );
+}
+
+#[test]
 fn venv_archive_name_splices_cluster_and_namespace() {
     let template =
         "image: tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst\n";

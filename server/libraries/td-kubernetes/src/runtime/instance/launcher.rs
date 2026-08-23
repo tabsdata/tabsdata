@@ -191,20 +191,22 @@ pub async fn apply_authorization_phase(
                 let account =
                     deserialize_pod_entry::<ServiceAccount>(key, yaml, Tier::Authorization, system)
                         .await?;
-                rbac_api::upsert_service_account(context, &account)
+                rbac_api::upsert_service_account(context, &account, None)
                     .await
                     .map(|_| ())
             }
             TemplateKind::Role => {
                 let role =
                     deserialize_pod_entry::<Role>(key, yaml, Tier::Authorization, system).await?;
-                rbac_api::upsert_role(context, &role).await.map(|_| ())
+                rbac_api::upsert_role(context, &role, None)
+                    .await
+                    .map(|_| ())
             }
             TemplateKind::RoleBinding => {
                 let binding =
                     deserialize_pod_entry::<RoleBinding>(key, yaml, Tier::Authorization, system)
                         .await?;
-                rbac_api::upsert_role_binding(context, &binding)
+                rbac_api::upsert_role_binding(context, &binding, None)
                     .await
                     .map(|_| ())
             }
@@ -216,7 +218,7 @@ pub async fn apply_authorization_phase(
                     system,
                 )
                 .await?;
-                disruption_api::upsert_disruption_budget(context, &budget)
+                disruption_api::upsert_disruption_budget(context, &budget, None)
                     .await
                     .map(|_| ())
             }
@@ -251,7 +253,7 @@ pub async fn apply_endpoint_phase(
     for (key, yaml) in entries {
         let bar = phase.add_resource(key);
         let service = deserialize_pod_entry::<Service>(key, yaml, Tier::Endpoint, system).await?;
-        match service_api::upsert_service(context, &service).await {
+        match service_api::upsert_service(context, &service, None).await {
             Ok(_) => bar.finish_with_message(format!("{key} (applied)")),
             Err(error) => {
                 bar.finish_with_message(format!("{key} (failed)"));
@@ -310,16 +312,17 @@ async fn apply_init_group(
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in group {
         let bar = phase.add_resource(&key);
-        let created = match job_api::create_job(context, &job, Vec::new(), Vec::new(), None).await {
-            Ok(created) => {
-                bar.finish_with_message(format!("{key} (applied)"));
-                created
-            }
-            Err(error) => {
-                bar.finish_with_message(format!("{key} (failed)"));
-                return Err(error.into());
-            }
-        };
+        let created =
+            match job_api::create_job(context, &job, Vec::new(), Vec::new(), None, None).await {
+                Ok(created) => {
+                    bar.finish_with_message(format!("{key} (applied)"));
+                    created
+                }
+                Err(error) => {
+                    bar.finish_with_message(format!("{key} (failed)"));
+                    return Err(error.into());
+                }
+            };
         let name = created
             .metadata
             .name
@@ -421,51 +424,54 @@ pub async fn apply_server_phase(
     let mut applied: Vec<(TemplateKind, String)> = Vec::new();
     for (key, workload) in prepared {
         let bar = phase.add_resource(&key);
-        let named =
-            match workload {
-                ServerWorkload::Deployment(deployment) => {
-                    match deployment_api::create_deployment(
-                        context,
-                        &deployment,
-                        Vec::new(),
-                        Vec::new(),
-                        None,
-                    )
-                    .await
-                    {
-                        Ok(created) => {
-                            bar.finish_with_message(format!("{key} (applied)"));
-                            (
-                                TemplateKind::Deployment,
-                                created.metadata.name.ok_or_else(|| {
-                                    LauncherError::DeploymentMissingName { key: key.clone() }
-                                })?,
-                            )
-                        }
-                        Err(error) => {
-                            bar.finish_with_message(format!("{key} (failed)"));
-                            return Err(error.into());
-                        }
+        let named = match workload {
+            ServerWorkload::Deployment(deployment) => {
+                match deployment_api::create_deployment(
+                    context,
+                    &deployment,
+                    Vec::new(),
+                    Vec::new(),
+                    None,
+                    None,
+                )
+                .await
+                {
+                    Ok(created) => {
+                        bar.finish_with_message(format!("{key} (applied)"));
+                        (
+                            TemplateKind::Deployment,
+                            created.metadata.name.ok_or_else(|| {
+                                LauncherError::DeploymentMissingName { key: key.clone() }
+                            })?,
+                        )
+                    }
+                    Err(error) => {
+                        bar.finish_with_message(format!("{key} (failed)"));
+                        return Err(error.into());
                     }
                 }
-                ServerWorkload::Pod(pod) => {
-                    match pod_api::create_pod(context, &pod, Vec::new(), Vec::new(), None).await {
-                        Ok(created) => {
-                            bar.finish_with_message(format!("{key} (applied)"));
-                            (
-                                TemplateKind::Pod,
-                                created.metadata.name.ok_or_else(|| {
-                                    LauncherError::PodMissingName { key: key.clone() }
+            }
+            ServerWorkload::Pod(pod) => {
+                match pod_api::create_pod(context, &pod, Vec::new(), Vec::new(), None, None).await {
+                    Ok(created) => {
+                        bar.finish_with_message(format!("{key} (applied)"));
+                        (
+                            TemplateKind::Pod,
+                            created
+                                .metadata
+                                .name
+                                .ok_or_else(|| LauncherError::PodMissingName {
+                                    key: key.clone(),
                                 })?,
-                            )
-                        }
-                        Err(error) => {
-                            bar.finish_with_message(format!("{key} (failed)"));
-                            return Err(error.into());
-                        }
+                        )
+                    }
+                    Err(error) => {
+                        bar.finish_with_message(format!("{key} (failed)"));
+                        return Err(error.into());
                     }
                 }
-            };
+            }
+        };
         applied.push(named);
     }
     drop(phase);
@@ -730,16 +736,22 @@ pub async fn apply_regular_phase(
         async move {
             match workload {
                 RegularWorkload::Pod(pod) => {
-                    let created =
-                        match pod_api::create_pod(&context, &pod, Vec::new(), Vec::new(), None)
-                            .await
-                        {
-                            Ok(created) => created,
-                            Err(error) => {
-                                bar.finish_with_message(format!("{key} (failed)"));
-                                return Err::<(TemplateKind, String), CommandError>(error.into());
-                            }
-                        };
+                    let created = match pod_api::create_pod(
+                        &context,
+                        &pod,
+                        Vec::new(),
+                        Vec::new(),
+                        None,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(created) => created,
+                        Err(error) => {
+                            bar.finish_with_message(format!("{key} (failed)"));
+                            return Err::<(TemplateKind, String), CommandError>(error.into());
+                        }
+                    };
                     match created.metadata.name {
                         Some(name) => {
                             bar.finish_with_message(format!("{key} (applied)"));
@@ -757,6 +769,7 @@ pub async fn apply_regular_phase(
                         &deployment,
                         Vec::new(),
                         Vec::new(),
+                        None,
                         None,
                     )
                     .await
@@ -784,6 +797,7 @@ pub async fn apply_regular_phase(
                         &cronjob,
                         Vec::new(),
                         Vec::new(),
+                        None,
                         None,
                     )
                     .await
@@ -1013,7 +1027,7 @@ pub async fn provision_pyvenvs(
     if clear_settled_job(context, PYMANAGER_COMPONENT, &setup_name).await? {
         bar.set_message(format!("{setup_key} (replacing previous run)"));
     }
-    job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
+    job_api::create_job(context, &setup, Vec::new(), Vec::new(), None, None).await?;
     let settled =
         job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {
@@ -1071,8 +1085,15 @@ async fn start_database_workload(
 ) -> CommandResult {
     match workload {
         ServerWorkload::Deployment(deployment) => {
-            deployment_api::create_deployment(context, deployment, Vec::new(), Vec::new(), None)
-                .await?;
+            deployment_api::create_deployment(
+                context,
+                deployment,
+                Vec::new(),
+                Vec::new(),
+                None,
+                None,
+            )
+            .await?;
             deployment_api::await_deployment_condition_forever(
                 context,
                 name,
@@ -1081,7 +1102,7 @@ async fn start_database_workload(
             .await?;
         }
         ServerWorkload::Pod(pod) => {
-            pod_api::create_pod(context, pod, Vec::new(), Vec::new(), None).await?;
+            pod_api::create_pod(context, pod, Vec::new(), Vec::new(), None, None).await?;
             pod_api::await_pod_condition_forever(context, name, is_pod_settled()).await?;
         }
     }
@@ -1171,7 +1192,7 @@ pub async fn provision_database(
     if clear_settled_job(context, DBMANAGER_COMPONENT, &setup_name).await? {
         bar.set_message(format!("{setup_key} (replacing previous run)"));
     }
-    job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
+    job_api::create_job(context, &setup, Vec::new(), Vec::new(), None, None).await?;
     let settled =
         job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
     if settled.as_ref().is_some_and(has_failed_condition) {

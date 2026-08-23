@@ -544,6 +544,9 @@ version = "1.0.15"
 [workspace.dependencies.path-slash]
 version = "0.2.1"
 
+[workspace.dependencies.pep440_rs]
+version = "0.7.3"
+
 [workspace.dependencies.pep508_rs]
 version = "0.9.2"
 

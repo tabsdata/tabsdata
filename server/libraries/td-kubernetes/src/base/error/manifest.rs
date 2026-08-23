@@ -40,6 +40,30 @@ pub enum ManifestError {
     SerializeFailed(String) = 5002,
     #[error("Could not resolve the tabsdata package version: {0}.")]
     TabsdataVersionResolveFailed(String) = 5003,
+    #[error(
+        "The manifest configmap '{configmap}' was not found; instance '{instance}' is not \
+         initialized."
+    )]
+    ConfigmapMissing { instance: String, configmap: String } = 5004,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntryMismatch {
+    pub path: String,
+    pub version: String,
+}
+
+#[td_error]
+pub enum VersionMismatch {
+    #[error("Failed to parse version '{value}': {cause}.")]
+    Parse { value: String, cause: String } = 5010,
+    #[error(
+        "Profile entries do not match the running tabsdata SDK version '{running}': {entries:?}."
+    )]
+    Mismatch {
+        running: String,
+        entries: Vec<EntryMismatch>,
+    } = 5011,
 }
 
 #[cfg(test)]

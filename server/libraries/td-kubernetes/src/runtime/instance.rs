@@ -14,11 +14,13 @@ pub mod sizing;
 pub mod staging;
 pub mod tabsdata;
 pub mod tier;
+pub mod upgrade;
+pub mod version;
 
 use td_python::tabsdata::tabsdata_version;
 
-use crate::base::error::manifest::ManifestError;
-use crate::runtime::instance::manifest::{VersionMismatch, check_versions, deserialize_manifest};
+use crate::base::error::manifest::{ManifestError, VersionMismatch};
+use crate::runtime::instance::manifest::{check_versions, deserialize_manifest};
 
 pub fn verify_manifest_compatibility(manifest_yaml: &str) -> Result<(), ManifestError> {
     let manifest = deserialize_manifest(manifest_yaml)
@@ -27,8 +29,8 @@ pub fn verify_manifest_compatibility(manifest_yaml: &str) -> Result<(), Manifest
         .map_err(|error| ManifestError::TabsdataVersionResolveFailed(error.to_string()))?;
     match check_versions(&manifest, &running) {
         Ok(()) => Ok(()),
-        Err(VersionMismatch::Parse { value, source }) => {
-            Err(ManifestError::VersionParseFailed(value, source.to_string()))
+        Err(VersionMismatch::Parse { value, cause }) => {
+            Err(ManifestError::VersionParseFailed(value, cause))
         }
         Err(VersionMismatch::Mismatch { running, entries }) => {
             let entries = entries

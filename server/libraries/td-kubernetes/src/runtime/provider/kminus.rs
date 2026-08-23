@@ -67,6 +67,7 @@ use crate::runtime::instance::profile::{
     Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
     resolve_foreign_path, resolve_kprofile_path,
 };
+use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::runtime::provider::kminus::instance::KminusInstance;
@@ -603,6 +604,11 @@ impl Provider for KminusProvider {
                 )
             })?;
             verify_manifest_compatibility(&yaml)?;
+        }
+        if self.cluster_alive().await {
+            let context = self.kube_context().await?;
+            let instance = self.summary().instance_name.unwrap_or_default();
+            ensure_upgraded(&context, &instance).await?;
         }
         Ok(())
     }

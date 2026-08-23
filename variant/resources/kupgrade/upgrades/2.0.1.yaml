@@ -1,0 +1,582 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+schema: 1
+assets:
+  requirements-fn.txt:
+    requirements-fn.txt:
+      action: create
+  venvbuilder.py:
+    venvbuilder.py:
+      action: replace
+  venvbuilder.sh:
+    venvbuilder.sh:
+      action: replace
+configs:
+  apiserver.database_docker.yaml:
+    apiserver.database_docker.yaml:
+      action: replace
+  apiserver.database_eks.yaml:
+    apiserver.database_eks.yaml:
+      action: replace
+  apiserver.database_fargate.yaml:
+    apiserver.database_fargate.yaml:
+      action: replace
+  apiserver.database_kminus.yaml:
+    apiserver.database_kminus.yaml:
+      action: replace
+  dbmanager.database_kminus.yaml:
+    dbmanager.database_kminus.yaml:
+      action: replace
+  tabsdata.yaml:
+    tabsdata_docker.yaml:
+      action: retain
+    tabsdata_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: pods.global.envs.UV_INDEX
+          from: ""
+          to: ~
+    tabsdata_fargate.yaml:
+      action: retain
+    tabsdata_kminus.yaml:
+      action: retain
+pods:
+  apiserver-endpoint.yaml:
+    apiserver-endpoint_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    apiserver-endpoint_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    apiserver-endpoint_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  apiserver.yaml:
+    apiserver_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    apiserver_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    apiserver_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    apiserver_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  cron-publisher.yaml:
+    cron-publisher_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    cron-publisher_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    cron-publisher_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    cron-publisher_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.jobTemplate.spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  database.yaml:
+    database_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  dbmanager.yaml:
+    dbmanager_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    dbmanager_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    dbmanager_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    dbmanager_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  disruption.yaml:
+    disruption_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    disruption_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    disruption_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  function-publisher.yaml:
+    function-publisher_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-publisher_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-publisher_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-publisher_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  function-subscriber.yaml:
+    function-subscriber_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-subscriber_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-subscriber_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-subscriber_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  function-transformer.yaml:
+    function-transformer_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-transformer_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-transformer_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    function-transformer_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  inspector.yaml:
+    inspector_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    inspector_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    inspector_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    inspector_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  pymanager.yaml:
+    pymanager_docker.yaml:
+      action: replace
+    pymanager_eks.yaml:
+      action: replace
+    pymanager_fargate.yaml:
+      action: replace
+    pymanager_kminus.yaml:
+      action: replace
+  role.yaml:
+    role_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    role_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    role_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  rolebinding.yaml:
+    rolebinding_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    rolebinding_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    rolebinding_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  serviceaccount.yaml:
+    serviceaccount_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    serviceaccount_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    serviceaccount_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  stream-publisher.yaml:
+    stream-publisher_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    stream-publisher_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    stream-publisher_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    stream-publisher_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+  venvloader.yaml:
+    venvloader_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    venvloader_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    venvloader_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+    venvloader_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"
+        - op: modify-leaf-value-if
+          leaf: spec.template.metadata.labels."app.kubernetes.io/version"
+          from: "2.0.0"
+          to: "${{system:tdk_tabsdata_version}}"

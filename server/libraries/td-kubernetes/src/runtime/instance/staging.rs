@@ -147,6 +147,7 @@ async fn replace_settings_configmap(context: &KubeContext, instance: &Path) -> C
         BTreeMap::new(),
         None,
         None,
+        None,
     )
     .await?;
     Ok(())
@@ -174,6 +175,7 @@ pub async fn replace_family_configmaps(
             BTreeMap::new(),
             None,
             Some(family.kind),
+            None,
         )
         .await?;
     }
@@ -191,6 +193,7 @@ async fn replace_manifest_configmap(context: &KubeContext, manifest: String) -> 
         CONFIGMAP_TABSDATA_MANIFEST,
         data,
         BTreeMap::new(),
+        None,
         None,
         None,
     )

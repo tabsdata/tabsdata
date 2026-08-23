@@ -280,6 +280,7 @@ async fn process_candidate(
         parsed.labels,
         None,
         Some(SECRET_FAMILY_CONFIG),
+        None,
     )
     .await?;
     Ok(Outcome::Replaced(breakdown))

@@ -23,6 +23,7 @@ pub async fn create_secret(
     labels: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
     family: Option<&str>,
+    stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     let mut metadata = ObjectMeta {
@@ -32,7 +33,7 @@ pub async fn create_secret(
         labels: Some(labels),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata, &family_labels(family));
+    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
     let secret = Secret {
         metadata,
         data: Some(to_byte_strings(data)),
@@ -64,6 +65,7 @@ pub async fn replace_secret(
     data: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
     family: Option<&str>,
+    stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     let existing = match api.get_opt(name).await {
@@ -92,7 +94,7 @@ pub async fn replace_secret(
         labels: Some(labels),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata, &family_labels(family));
+    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
     let secret = Secret {
         metadata,
         data: Some(to_byte_strings(data)),
@@ -118,6 +120,7 @@ pub async fn upsert_secret(
     labels: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
     family: Option<&str>,
+    stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     match api.get_opt(name).await {
@@ -130,7 +133,7 @@ pub async fn upsert_secret(
                 labels: Some(labels),
                 ..Default::default()
             };
-            label_tabsdata(&mut metadata, &family_labels(family));
+            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
             let secret = Secret {
                 metadata,
                 data: Some(to_byte_strings(data)),
@@ -156,7 +159,7 @@ pub async fn upsert_secret(
                 labels: Some(labels),
                 ..Default::default()
             };
-            label_tabsdata(&mut metadata, &family_labels(family));
+            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
             let secret = Secret {
                 metadata,
                 data: Some(to_byte_strings(data)),

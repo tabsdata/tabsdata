@@ -42,6 +42,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::profile::bundle::Axis;
+use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::axes::{Lifecycle, Locality, Location, Platform, Workload};
 use crate::runtime::provider::docker::DockerProvider;
@@ -381,6 +382,13 @@ pub trait Provider: Send + Sync {
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult;
     async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult<ImagesOutcome>;
 
+    async fn upgrade_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
+        self.create_runtimes(reporter).await
+    }
+    async fn upgrade_database(&self, reporter: &dyn Reporter) -> CommandResult {
+        self.create_database(reporter).await
+    }
+
     async fn cluster_alive(&self) -> bool;
     async fn cluster_dead(&self) -> bool {
         !self.cluster_alive().await
@@ -427,6 +435,8 @@ pub trait Provider: Send + Sync {
             return Ok(InstanceStartOutcome::AlreadyRunning);
         }
         let context = self.kube_context().await?;
+        let instance = self.summary().instance_name.unwrap_or_default();
+        ensure_upgraded(&context, &instance).await?;
         auto_fill_generated_secrets(&context).await?;
         settle_cluster_configs_and_secrets(&context).await?;
         self.start_instance_hook(reporter).await?;

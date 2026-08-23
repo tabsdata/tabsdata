@@ -34,6 +34,7 @@ use crate::client::tdkserver::commands::service::start::command_start;
 use crate::client::tdkserver::commands::service::status::command_status;
 use crate::client::tdkserver::commands::service::stop::command_stop;
 use crate::client::tdkserver::commands::service::trash::command_trash;
+use crate::client::tdkserver::commands::service::upgrade::command_upgrade;
 // use crate::client::tdkserver::commands::service::unregister::command_unregister;
 use crate::client::tdkserver::commands::session::set::command_set;
 use crate::client::tdkserver::commands::session::settings::command_settings;
@@ -79,15 +80,16 @@ impl TabsDataKubernetesClient {
             Some(Commands::Start(arguments)) => command_start(arguments, &globals).await,
             Some(Commands::Stop(arguments)) => command_stop(arguments, &globals).await,
             Some(Commands::Restart(arguments)) => command_restart(arguments, &globals).await,
+            Some(Commands::Upgrade(arguments)) => command_upgrade(arguments, &globals).await,
             Some(Commands::Status(arguments)) => command_status(arguments, &globals).await,
             Some(Commands::Inspect(arguments)) => command_inspect(arguments, &globals).await,
             // Some(Commands::Register(arguments)) => command_register(arguments, &globals).await,
             // Some(Commands::Unregister(arguments)) => {
             //     command_unregister(arguments, &globals).await
             // }
+            Some(Commands::Trash(arguments)) => command_trash(arguments, &globals).await,
             Some(Commands::Config(command)) => command_config(command, &globals).await,
             Some(Commands::Venv(command)) => command_venv(command, &globals).await,
-            Some(Commands::Trash(arguments)) => command_trash(arguments, &globals).await,
             Some(Commands::Set(arguments)) => command_set(arguments, &globals).await,
             Some(Commands::Unset(arguments)) => command_unset(arguments, &globals).await,
             Some(Commands::Settings(arguments)) => command_settings(arguments, &globals).await,

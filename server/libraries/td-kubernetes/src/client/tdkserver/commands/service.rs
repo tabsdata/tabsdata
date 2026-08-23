@@ -16,6 +16,7 @@ pub mod status;
 pub mod stop;
 pub mod trash;
 pub mod unregister;
+pub mod upgrade;
 
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;

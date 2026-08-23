@@ -31,7 +31,7 @@ use crate::client::session::settings::{FargateInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandResult, abort_with};
-use crate::kube::api::configmap::{get_configmap, require_configmap};
+use crate::kube::api::configmap::require_configmap;
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
 use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
@@ -44,7 +44,7 @@ use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
 use crate::runtime::instance::staging::promote_staged_profile;
-use crate::runtime::instance::verify_manifest_compatibility;
+use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::provider::fargate::cluster::FargateCluster;
 use crate::runtime::provider::fargate::instance::FargateInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
@@ -420,11 +420,8 @@ impl Provider for FargateProvider {
 
     async fn ensure_startable_server(&self) -> CommandResult {
         let context = self.kube_context().await?;
-        if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?
-            && let Some(yaml) = data.get(MANIFEST_FILE)
-        {
-            verify_manifest_compatibility(yaml)?;
-        }
+        let instance = self.summary().instance_name.unwrap_or_default();
+        ensure_upgraded(&context, &instance).await?;
         Ok(())
     }
 

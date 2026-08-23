@@ -47,6 +47,14 @@ pub fn trash_root() -> CommandResult<PathBuf> {
     Ok(home.join(TABSDATA_HOME_DIR).join(TRASH_FOLDER))
 }
 
+pub fn instance_init_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(INIT_FOLDER))
+}
+
+pub fn instance_edit_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(EDIT_FOLDER))
+}
+
 pub fn instance_init_input_folder(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(INIT_FOLDER).join(INPUT_FOLDER))
 }

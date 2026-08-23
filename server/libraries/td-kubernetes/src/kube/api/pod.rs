@@ -85,10 +85,11 @@ pub async fn create_pod(
     configmaps: Vec<ConfigMap>,
     secrets: Vec<Secret>,
     latch: Option<ConfigMap>,
+    stamp: Option<&str>,
 ) -> Result<Pod, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     let mut pod = pod.clone();
-    label_tabsdata(&mut pod.metadata, &[]);
+    label_tabsdata(context, &mut pod.metadata, &[], stamp).await?;
     let created = api
         .create(&PostParams::default(), &pod)
         .await
@@ -102,7 +103,7 @@ pub async fn create_pod(
         return Ok(created);
     }
     let owner = owner_ref_for_pod(&created)?;
-    attach_companions(context, owner, configmaps, secrets, latch).await?;
+    attach_companions(context, owner, configmaps, secrets, latch, None).await?;
     Ok(created)
 }
 

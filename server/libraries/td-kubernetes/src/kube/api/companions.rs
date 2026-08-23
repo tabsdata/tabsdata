@@ -17,6 +17,7 @@ pub(super) async fn attach_companions(
     configmaps: Vec<ConfigMap>,
     secrets: Vec<Secret>,
     latch: Option<ConfigMap>,
+    stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let configmap_api: Api<ConfigMap> =
         Api::namespaced(context.client().clone(), context.namespace());
@@ -25,29 +26,49 @@ pub(super) async fn attach_companions(
         attach_configmap(
             context,
             &configmap_api,
-            prepare_configmap(configmap, &owner),
+            prepare_configmap(context, configmap, &owner, stamp).await?,
         )
         .await?;
     }
     for secret in secrets {
-        attach_secret(context, &secret_api, prepare_secret(secret, &owner)).await?;
+        attach_secret(
+            context,
+            &secret_api,
+            prepare_secret(context, secret, &owner, stamp).await?,
+        )
+        .await?;
     }
     if let Some(latch) = latch {
-        attach_configmap(context, &configmap_api, prepare_configmap(latch, &owner)).await?;
+        attach_configmap(
+            context,
+            &configmap_api,
+            prepare_configmap(context, latch, &owner, stamp).await?,
+        )
+        .await?;
     }
     Ok(())
 }
 
-fn prepare_configmap(mut configmap: ConfigMap, owner: &OwnerReference) -> ConfigMap {
+async fn prepare_configmap(
+    context: &KubeContext,
+    mut configmap: ConfigMap,
+    owner: &OwnerReference,
+    stamp: Option<&str>,
+) -> Result<ConfigMap, KubernetesError> {
     stamp_owner(&mut configmap.metadata, owner);
-    label_tabsdata(&mut configmap.metadata, &[]);
-    configmap
+    label_tabsdata(context, &mut configmap.metadata, &[], stamp).await?;
+    Ok(configmap)
 }
 
-fn prepare_secret(mut secret: Secret, owner: &OwnerReference) -> Secret {
+async fn prepare_secret(
+    context: &KubeContext,
+    mut secret: Secret,
+    owner: &OwnerReference,
+    stamp: Option<&str>,
+) -> Result<Secret, KubernetesError> {
     stamp_owner(&mut secret.metadata, owner);
-    label_tabsdata(&mut secret.metadata, &[]);
-    secret
+    label_tabsdata(context, &mut secret.metadata, &[], stamp).await?;
+    Ok(secret)
 }
 
 fn stamp_owner(metadata: &mut ObjectMeta, owner: &OwnerReference) {

@@ -223,6 +223,7 @@ async fn replace_config(context: &KubeContext, config: &MergedConfig) -> Command
         configmap_data,
         BTreeMap::new(),
         Some(KPROFILE_CONFIGS_FAMILY.kind),
+        None,
     )
     .await
     .map_err(TdError::from)?;
@@ -240,6 +241,7 @@ async fn replace_config(context: &KubeContext, config: &MergedConfig) -> Command
         BTreeMap::new(),
         None,
         Some(SECRET_FAMILY_CONFIG),
+        None,
     )
     .await
     .map_err(TdError::from)?;

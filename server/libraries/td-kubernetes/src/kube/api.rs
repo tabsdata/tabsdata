@@ -62,10 +62,14 @@ use tokio::time::{Instant, timeout};
 use tracing::{debug, info};
 
 use crate::base::constants::{
-    KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA, TIER_LABEL,
+    KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA,
+    TD_VERSION_LABEL, TIER_LABEL,
 };
+use crate::base::error::kubernetes::{KubeStampError, KubernetesError};
 use crate::base::error::naming::NamingError;
+use crate::kube::context::KubeContext;
 use crate::runtime::instance::tier::Tier;
+use crate::runtime::instance::version::instance_version;
 
 const WATCH_EXPIRED_REASON: &str = "Expired";
 
@@ -186,11 +190,26 @@ impl<'a> LabelFilter<'a> {
     }
 }
 
-pub fn label_tabsdata(metadata: &mut ObjectMeta, extras: &[LabelFilter<'_>]) {
+pub async fn label_tabsdata(
+    context: &KubeContext,
+    metadata: &mut ObjectMeta,
+    extras: &[LabelFilter<'_>],
+    stamp: Option<&str>,
+) -> Result<(), KubernetesError> {
     add_label(metadata, PART_OF_LABEL, PART_OF_TABSDATA);
+    let version = match stamp {
+        Some(version) => version.to_owned(),
+        None => instance_version(context, context.namespace(), None)
+            .await
+            .map_err(|error| KubeStampError::ResolveFailed {
+                cause: format!("{error:?}"),
+            })?,
+    };
+    add_label(metadata, TD_VERSION_LABEL, &version);
     for label in extras {
         add_label(metadata, label.key, label.value);
     }
+    Ok(())
 }
 
 fn add_label(metadata: &mut ObjectMeta, key: &str, value: &str) {
