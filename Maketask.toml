@@ -124,7 +124,8 @@ description = "Verify that all essential language tools are available"
 run_task = [
     { name = [
         "permit_py",
-        "permit_rs"
+        "permit_rs",
+        "kminus"
     ] }
 ]
 
@@ -145,6 +146,28 @@ description = "Task 'permit' for Python projects"
 run_task = [
     { name = [
         "__os__permit_py"
+    ] }
+]
+
+[tasks.update]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+description = "Verify and update the essential language tools, which no other task does by default"
+env = { "TD_WITH_PERMIT" = "true", "TD_AT_FAST" = "false", "TD_AT_WARP" = "false" }
+run_task = [
+    { name = [
+        "permit_py",
+        "permit_rs"
+    ] }
+]
+
+[tasks.kminus]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+description = "Assemble the kminus binaries from the sibling checkout when they are out of date"
+run_task = [
+    { name = [
+        "__os__kminus_km"
     ] }
 ]
 

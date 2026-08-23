@@ -22,6 +22,8 @@ extend = [
     { path = "./make/make-os/fragments/tasks/permit_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/permit_py.toml", relative = "git" },
 
+    { path = "./make/make-os/fragments/tasks/kminus_km.toml", relative = "git" },
+
     { path = "./make/make-os/fragments/tasks/setup_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/setup_py.toml", relative = "git" },
 

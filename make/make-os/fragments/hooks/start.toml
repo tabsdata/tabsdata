@@ -104,22 +104,29 @@ script = [
     debug "✅ Real PATH: ${PATH}"
 
     with_permit = get_env TD_WITH_PERMIT
-    with_permit_false = eq ${with_permit} "false"
-    if ${with_permit_false}
-        with_permit = set false
-    else
+    with_permit_true = eq ${with_permit} "true"
+    if ${with_permit_true}
         with_permit = set true
+    else
+        with_permit = set false
     end
     at_fast = get_env TD_AT_FAST
     at_fast = eq ${at_fast} "true"
     at_warp = get_env TD_AT_WARP
     at_warp = eq ${at_warp} "true"
+    demands_permit = set false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         argument = trim ${argument}
+        is_permit = eq ${argument} "--permit"
+        if ${is_permit}
+            with_permit = set true
+            demands_permit = set true
+        end
         is_no_permit = eq ${argument} "--no-permit"
         if ${is_no_permit}
             with_permit = set false
+            demands_permit = set false
         end
         if eq ${argument} "--fast"
             at_fast = set true
@@ -156,13 +163,17 @@ script = [
         at_fast = set true
     end
     if ${at_fast}
-        with_permit = set false
+        if not ${demands_permit}
+            with_permit = set false
+        end
         set_env TD_AT_FAST "true"
         set_env TD_MAKE_WITH_BANNERS "false"
         set_env TD_MAKE_WITH_RESPONSIVE "false"
     end
     if ${at_warp}
-        with_permit = set false
+        if not ${demands_permit}
+            with_permit = set false
+        end
         set_env TD_AT_WARP "true"
         set_env TD_MAKE_WITH_BANNERS "false"
         set_env TD_MAKE_WITH_RESPONSIVE "false"
@@ -174,6 +185,9 @@ script = [
     end
 
     is_permit_task = starts_with ${make_task} "permit"
+    if eq ${make_task} "update"
+        is_permit_task = set true
+    end
     if eq ${make_task} "docs"
         noop
     elseif eq ${make_task} "setup"
