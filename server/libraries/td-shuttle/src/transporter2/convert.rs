@@ -261,6 +261,7 @@ mod test {
     use super::*;
     use crate::transporter2::spec::Location;
     use std::collections::HashMap;
+    use td_test::domain::{AzureblobDomain, GcsDomain, S3Domain};
 
     const CSV: &[u8] = b"id,name\n1,alice\n2,bob\n3,carol\n";
 
@@ -446,13 +447,10 @@ mod test {
     }
 
     // ----------------------------------------------------------------------
-    // Cloud integration: round-trip a convert through a real bucket. Each is
-    // skipped (early return) unless its credentials are present in the env.
+    // Cloud integration: round-trip a convert through a real bucket, each one in
+    // its tdx-provisioned domain -- a prefix that re-provisioning clears, so the
+    // objects a run leaves behind do not accumulate under the staging root.
     // ----------------------------------------------------------------------
-
-    fn env(name: &str) -> Option<String> {
-        std::env::var(name).ok().filter(|s| !s.is_empty())
-    }
 
     /// Run a full cloud round-trip against `base_uri` with `configs`:
     /// local csv → cloud csv (write) → convert cloud csv → local parquet →
@@ -531,68 +529,52 @@ mod test {
         let _ = std::fs::remove_dir_all(&d);
     }
 
-    #[tokio::test]
-    async fn s3_round_trip() {
-        let (Some(uri), Some(ak), Some(sk), Some(region)) = (
-            env("TRANSPORTER_AWS_URI"),
-            env("TRANSPORTER_AWS_ACCESS_KEY_ID"),
-            env("TRANSPORTER_AWS_SECRET_ACCESS_KEY"),
-            env("TRANSPORTER_AWS_REGION"),
-        ) else {
-            eprintln!("skipping s3_round_trip: TRANSPORTER_AWS_* not set");
-            return;
-        };
-        let _ = (ak, sk, region);
-        let configs = HashMap::from([
-            ("region".into(), "env:TRANSPORTER_AWS_REGION".into()),
-            (
-                "access_key_id".into(),
-                "env:TRANSPORTER_AWS_ACCESS_KEY_ID".into(),
-            ),
-            (
-                "secret_access_key".into(),
-                "env:TRANSPORTER_AWS_SECRET_ACCESS_KEY".into(),
-            ),
-        ]);
-        cloud_round_trip(&uri, configs).await;
+    /// `configs` for a [`Location`], as `val:` literals — the tdx descriptor
+    /// hands out resolved credentials, so there is no env var left to reference.
+    /// Blank keys are dropped, falling back to the cloud's default chain.
+    fn configs<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> HashMap<String, String> {
+        pairs
+            .into_iter()
+            .filter(|(_, value)| !value.is_empty())
+            .map(|(key, value)| (key.to_string(), format!("val:{value}")))
+            .collect()
     }
 
+    #[td_test::domain("apiserver_s3")]
     #[tokio::test]
-    async fn gcs_round_trip() {
-        let (Some(uri), Some(_key)) = (
-            env("GCP0__GCP_STORAGE_URI"),
-            env("GCP0__GCP_SERVICE_ACCOUNT_KEY"),
-        ) else {
-            eprintln!("skipping gcs_round_trip: GCP0__GCP_* not set");
-            return;
-        };
-        let configs = HashMap::from([(
-            "service_account_key".into(),
-            "env:GCP0__GCP_SERVICE_ACCOUNT_KEY".into(),
-        )]);
-        cloud_round_trip(&uri, configs).await;
+    async fn s3_round_trip(domain_apiserver_s3: S3Domain) {
+        let configs = configs([
+            ("region", domain_apiserver_s3.region.as_str()),
+            ("access_key_id", domain_apiserver_s3.access_key.as_str()),
+            ("secret_access_key", domain_apiserver_s3.secret_key.as_str()),
+        ]);
+        cloud_round_trip(domain_apiserver_s3.url().unwrap().as_str(), configs).await;
     }
 
+    #[td_test::domain("apiserver_gcs")]
     #[tokio::test]
-    async fn azure_round_trip() {
-        let (Some(base), Some(_an), Some(_ak)) = (
-            env("COPY_AZURE_BASE_URL"),
-            env("TRANSPORTER_AZURE_ACCOUNT_NAME"),
-            env("TRANSPORTER_AZURE_ACCOUNT_KEY"),
-        ) else {
-            eprintln!("skipping azure_round_trip: azure env not set");
-            return;
+    async fn gcs_round_trip(domain_apiserver_gcs: GcsDomain) {
+        // The descriptor's key is inline JSON or a path to it, and those are two
+        // different config keys.
+        let key = domain_apiserver_gcs.service_account_key.trim();
+        let name = match key.starts_with('{') {
+            true => "service_account_key",
+            false => "service_account",
         };
-        let configs = HashMap::from([
-            (
-                "account_name".into(),
-                "env:TRANSPORTER_AZURE_ACCOUNT_NAME".into(),
-            ),
-            (
-                "account_key".into(),
-                "env:TRANSPORTER_AZURE_ACCOUNT_KEY".into(),
-            ),
+        cloud_round_trip(
+            domain_apiserver_gcs.url().unwrap().as_str(),
+            configs([(name, key)]),
+        )
+        .await;
+    }
+
+    #[td_test::domain("apiserver_az")]
+    #[tokio::test]
+    async fn azure_round_trip(domain_apiserver_az: AzureblobDomain) {
+        let configs = configs([
+            ("account_name", domain_apiserver_az.account_name.as_str()),
+            ("account_key", domain_apiserver_az.account_key.as_str()),
         ]);
-        cloud_round_trip(&base, configs).await;
+        cloud_round_trip(domain_apiserver_az.url().unwrap().as_str(), configs).await;
     }
 }

@@ -11,6 +11,7 @@ pub use tm_test::*;
 
 mod backend_cfg;
 pub mod db;
+pub mod domain;
 pub mod reqs;
 
 #[doc(hidden)]

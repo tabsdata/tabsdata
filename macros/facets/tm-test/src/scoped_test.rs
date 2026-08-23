@@ -3,7 +3,8 @@
 //
 
 //! Entry point and argument parsing for `#[td_test::test(...)]`. The actual
-//! per-flavor code emission lives in [`crate::db_arm`] and [`crate::requires_arm`].
+//! per-flavor code emission lives in [`crate::db_arm`] and
+//! [`crate::requires_arm`].
 
 extern crate proc_macro;
 
@@ -15,9 +16,9 @@ use quote::quote;
 use syn::ItemFn;
 use td_shared::meta_parser::SynMetaOrLit;
 
-use crate::common::{EmitCtx, get_all_fn_args, get_fn_args};
+use crate::common::{EmitCtx, emit_injected_arg, get_all_fn_args, get_fn_args};
 use crate::db_arm::{DbComponents, db_arms, emit_db_wrapper};
-use crate::requires_arm::{emit_requires, requires_setup_expr};
+use crate::requires_arm::requires_setup_expr;
 
 /// Top-level attribute arguments. The two test flavors (`db`, `requires`) are
 /// modeled as siblings at the top level rather than nested variants — this
@@ -108,7 +109,7 @@ fn try_scoped_test(args: TokenStream, item: TokenStream) -> darling::Result<Toke
             })?;
             let fn_arg = get_fn_args(&input.sig, reqs)?;
             let setup_expr = requires_setup_expr(&ctx.original_name.to_string(), reqs, env_prefix);
-            Ok(emit_requires(&ctx, &fn_arg, &setup_expr))
+            Ok(emit_injected_arg(&ctx, &fn_arg, &setup_expr))
         }
         (Some(_), Some(_)) => Err(darling::Error::custom(
             "`db` and `requires = ...` are mutually exclusive — pick one",
