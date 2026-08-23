@@ -2,11 +2,5 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Forced SQLAlchemy DBAPI driver (``mysql+mysqlconnector``) for the
-# batch read/write, explorer and CDC snapshot engines.
-mysql-connector-python==9.6.0
-
-# MySQL binlog stream reader -- used by ``_cdc_ingester.BinlogIngester``
-# to consume the source's change stream.
 pymysql==1.2.0
 mysql-replication==1.0.15

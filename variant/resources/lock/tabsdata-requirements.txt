@@ -71,7 +71,6 @@ mdurl==0.1.2
 mmh3==5.2.1
 more-itertools==11.1.0
 mypy-boto3-glue==1.42.97
-mysql-connector-python==9.6.0
 mysql-replication==1.0.15
 numpy==2.4.3
 oauthlib==3.3.1
@@ -79,7 +78,6 @@ openpyxl==3.1.5
 opentelemetry-api==1.40.0
 opentelemetry-sdk==1.40.0
 opentelemetry-semantic-conventions==0.61b0
-oracledb==3.4.2
 orjson==3.11.7
 packaging==26.0
 pandas==2.3.3
@@ -92,7 +90,6 @@ polars-runtime-32==1.39.3
 prompt-toolkit==3.0.52
 proto-plus==1.28.3
 protobuf==6.33.6
-psycopg2-binary==2.9.11
 py-cpuinfo==9.0.0
 pyarrow==23.0.1
 pyasn1==0.6.4
