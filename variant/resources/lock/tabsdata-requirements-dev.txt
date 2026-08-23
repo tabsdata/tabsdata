@@ -14,7 +14,7 @@ appdirs==1.4.4
 archspec==0.2.5
 argcomplete==3.7.2
 argon2-cffi==25.1.0
-argon2-cffi-bindings==25.1.0
+argon2-cffi-bindings==26.1.0
 ast-serialize==0.8.0
 attrs==23.2.0
 azure-core==1.41.0
@@ -263,4 +263,4 @@ win32-setctime==1.2.0 ; sys_platform == 'win32'
 wrapt==2.3.0
 xlrd==2.0.2
 zope-deprecation==6.0
-zope-interface==8.5
+zope-interface==8.6

@@ -81,6 +81,7 @@ colored = { workspace = true }
 const_format = { workspace = true }
 cron-descriptor = { workspace = true }
 dirs = { workspace = true }
+fslock = { workspace = true }
 futures = { workspace = true }
 homedir = { workspace = true }
 humantime = { workspace = true }

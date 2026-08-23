@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import logging
 import platform
+import shutil
 import site
 import subprocess
 import sys
 import sysconfig
 import tarfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,6 +38,9 @@ from tabsdatak.common._resources.reader import td_resource
 
 logger = logging.getLogger(__name__)
 
+
+CLEAR_ATTEMPTS = 8
+CLEAR_DELAY = 1
 
 TABSDATA_PACKAGE = "tabsdata"
 TABSDATA_TOOLKIT_PACKAGE = "tabsdata-toolkit"
@@ -262,6 +267,23 @@ class PythonEnvironment:
                     continue
         return frozenset(names)
 
+    def clear(self) -> None:
+        if not self.root.exists():
+            return
+        logger.debug(f"Clearing {self.root}")
+        for attempt in range(CLEAR_ATTEMPTS):
+            try:
+                shutil.rmtree(self.root)
+                return
+            except OSError as error:
+                if attempt == CLEAR_ATTEMPTS - 1:
+                    raise VenvCreationError(
+                        detail=f"Could not clear '{self.root}': {error}",
+                        cause=error,
+                    ) from error
+                logger.warning(f"Clearing {self.root} failed ({error}); retrying...")
+                time.sleep(CLEAR_DELAY)
+
     def create(
         self,
         recipe: VenvRecipe,
@@ -269,6 +291,7 @@ class PythonEnvironment:
         python_version: str,
         verbose: bool = False,
     ) -> None:
+        self.clear()
         self.install_venv(python_version, verbose=verbose)
         self.upgrade_pip(verbose=verbose)
         self.install_requirements_dev(recipe.packages, verbose=verbose)
@@ -366,6 +389,7 @@ class PythonEnvironment:
         if not verbose:
             command.append("--quiet")
         command.extend([
+            "--clear",
             "--seed",
             "--relocatable",
             "--python-preference",

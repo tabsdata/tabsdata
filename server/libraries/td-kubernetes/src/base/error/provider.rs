@@ -107,6 +107,13 @@ pub enum ProviderError {
     RuntimesFolderCreateFailed(String, String) = 5107,
     #[error("Could not create Python virtual environment templates under '{folder}': {cause}.")]
     PyvenvCreateFailed { folder: String, cause: String } = 5108,
+    #[error(
+        "Another process is already building the Python virtual environments under \
+         '{folder}'{holder}. Wait for it to finish before provisioning again."
+    )]
+    RuntimesProvisionInProgress { folder: String, holder: String } = 5120,
+    #[error("Could not lock the Python virtual environments folder '{folder}': {cause}.")]
+    RuntimesLockFailed { folder: String, cause: String } = 5121,
     #[error("Could not create images folder '{0}': {1}.")]
     ImagesFolderCreateFailed(String, String) = 5109,
     #[error("Could not copy image tree from '{from}' to '{to}': {cause}.")]

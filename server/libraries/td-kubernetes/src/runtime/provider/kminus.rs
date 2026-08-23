@@ -10,6 +10,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use fslock::LockFile;
 use indicatif::MultiProgress;
 use once_cell::sync::OnceCell;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
@@ -27,7 +28,8 @@ use crate::base::constants::{
     FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_FN,
     FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV,
     FOREIGN_ASSETS, IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, UvMode, VENVS_IMAGE, YAML_NULL,
+    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, RUNTIMES_LOCK_FILE, UvMode, VENVS_IMAGE,
+    YAML_NULL,
 };
 use td_python::tabsdata::tabsdata_version;
 
@@ -753,6 +755,7 @@ impl KminusProvider {
                 error.to_string(),
             )
         })?;
+        let _guard = claim_runtimes(&runtimes_folder)?;
         let runtimes_python = runtimes_folder.join(FOLDER_UV).join(FOLDER_PYTHON);
         fs::create_dir_all(&runtimes_python).map_err(|error| {
             ProviderError::RuntimesFolderCreateFailed(
@@ -927,6 +930,27 @@ impl KminusProvider {
         step.done(done_label);
         Ok(())
     }
+}
+
+fn claim_runtimes(runtimes_folder: &std::path::Path) -> CommandResult<LockFile> {
+    let lock_path = runtimes_folder.join(RUNTIMES_LOCK_FILE);
+    let lock_failed = |error: fslock::Error| ProviderError::RuntimesLockFailed {
+        folder: runtimes_folder.display().to_string(),
+        cause: error.to_string(),
+    };
+    let mut lock = LockFile::open(&lock_path).map_err(lock_failed)?;
+    if !lock.try_lock_with_pid().map_err(lock_failed)? {
+        let holder = match fs::read_to_string(&lock_path) {
+            Ok(pid) if !pid.trim().is_empty() => format!(" (process {})", pid.trim()),
+            _ => String::new(),
+        };
+        return Err(ProviderError::RuntimesProvisionInProgress {
+            folder: runtimes_folder.display().to_string(),
+            holder,
+        }
+        .into());
+    }
+    Ok(lock)
 }
 
 pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<SystemValues> {

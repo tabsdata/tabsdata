@@ -151,6 +151,7 @@ pub const FOLDER_STORAGE: &str = "storage";
 pub const FOLDER_RUNTIMES: &str = "runtimes";
 pub const FOLDER_UV: &str = ".uv";
 pub const FOLDER_KENVS: &str = "kenvs";
+pub const RUNTIMES_LOCK_FILE: &str = ".provision.lock";
 pub const VENVS_IMAGE: &str = "tdvenvs.tar.zst";
 pub const CONTAINER_RUNTIMES_ROOT: &str = "/tabsdata/runtimes";
 pub const CONTAINER_PYENV_TD_ROOT: &str = concatcp!(
