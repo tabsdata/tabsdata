@@ -103,9 +103,10 @@ script = [
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
 
-    on_ga_for_license = get_env TD_ON_GA
-    if eq ${on_ga_for_license} "true"
+    on_ga_for_defaults = get_env TD_ON_GA
+    if eq ${on_ga_for_defaults} "true"
         set_env TD_AUTO_LICENSE "true"
+        set_env TD_WITH_PERMIT "true"
     end
     auto_license = get_env TD_AUTO_LICENSE
     if not eq ${auto_license} "true"
@@ -124,6 +125,9 @@ script = [
     at_warp = get_env TD_AT_WARP
     at_warp = eq ${at_warp} "true"
     demands_permit = set false
+    if eq ${on_ga_for_defaults} "true"
+        demands_permit = set true
+    end
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         argument = trim ${argument}

@@ -135,8 +135,8 @@ script = [
                     error "🚫 Domain variable ${name} is not set."
                     missing = calc ${missing} + 1
                 else
-                    debug "🐘 - ${name}=${value}"
-                    found = calc ${found} + 1
+                    debug "🐘 - ${name}=..."
+                        found = calc ${found} + 1
                 end
             end
         end
