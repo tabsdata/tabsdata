@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from tabsdatak.common._interpreter.python.binary import binaries_from_setup_toml
+from tabsdatak.common._interpreter.python.package import Package
 from tabsdatak.common._interpreter.python.recipe import (
     InstallRecipe,
     PackageRecipe,
@@ -221,10 +222,20 @@ def build_connector_recipes(
     if tabsdata is None:
         return ()
     if tabsdata.recipe == InstallRecipe.WHEEL:
-        return ()
+        return installed_connector_recipes()
     return tuple(
         build_connector_recipe(name, tabsdata) for name in TABSDATA_CONNECTORS_NAMES
     )
+
+
+def installed_connector_recipes() -> tuple[PackageRecipe, ...]:
+    recipes = []
+    for name in TABSDATA_CONNECTORS_NAMES:
+        recipe = Package(name).recipe()
+        if recipe is None or recipe.recipe != InstallRecipe.WHEEL:
+            continue
+        recipes.append(recipe)
+    return tuple(recipes)
 
 
 def build_connector_recipe(name: str, tabsdata: PackageRecipe) -> PackageRecipe:
