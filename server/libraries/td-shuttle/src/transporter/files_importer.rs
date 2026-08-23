@@ -316,15 +316,13 @@ mod tests {
     use td_common::id::id;
 
     use crate::transporter::args::FileInfo;
-    use td_test::reqs::{
-        AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
-        S3WithAccessKeySecretKeyReqs,
-    };
+    use td_test::domain::{AzureblobDomain, GcsDomain, S3Domain};
     use url::Url;
 
     //noinspection DuplicatedCode
-    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30", flavor = "multi_thread")]
-    async fn test_import_from_local_to_aws(s3: S3WithAccessKeySecretKeyReqs) {
+    #[td_test::domain("apiserver_s3")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_from_local_to_aws(domain_apiserver_s3: S3Domain) {
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
             .with_name(PlSmallStr::from("col_int"));
@@ -362,7 +360,12 @@ mod tests {
         .collect()
         .unwrap();
 
-        let url_w = Url::parse(&format!("{}/unit_test/{}", s3.uri, file_r.clone())).unwrap();
+        let url_w = Url::parse(&format!(
+            "{}/unit_test/{}",
+            domain_apiserver_s3.url().unwrap(),
+            file_r.clone()
+        ))
+        .unwrap();
 
         let request = ImportRequestBuilder::default()
             .source(
@@ -381,9 +384,9 @@ mod tests {
                     .location(Location::S3 {
                         url: BaseUrl(url_w.clone()),
                         configs: AwsConfigs {
-                            access_key: Value::Literal(s3.access_key.to_string()),
-                            secret_key: Value::Literal(s3.secret_key.to_string()),
-                            region: Some(Value::Literal(s3.region.to_string())),
+                            access_key: Value::Literal(domain_apiserver_s3.access_key.to_string()),
+                            secret_key: Value::Literal(domain_apiserver_s3.secret_key.to_string()),
+                            region: Some(Value::Literal(domain_apiserver_s3.region.to_string())),
                             extra_configs: None,
                         },
                     })
@@ -421,12 +424,18 @@ mod tests {
         let url_tf = response.first().unwrap().to.clone();
 
         let mut config = HashMap::new();
-        config.insert("AWS_ACCESS_KEY_ID".to_string(), s3.access_key.to_string());
+        config.insert(
+            "AWS_ACCESS_KEY_ID".to_string(),
+            domain_apiserver_s3.access_key.to_string(),
+        );
         config.insert(
             "AWS_SECRET_ACCESS_KEY".to_string(),
-            s3.secret_key.to_string(),
+            domain_apiserver_s3.secret_key.to_string(),
         );
-        config.insert("AWS_REGION".to_string(), s3.region.to_string());
+        config.insert(
+            "AWS_REGION".to_string(),
+            domain_apiserver_s3.region.to_string(),
+        );
         let e_config = config.clone();
         let pl_path = PlPath::new(url_tf.as_str());
         let cloud_options =
@@ -458,8 +467,9 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0", flavor = "multi_thread")]
-    async fn test_import_from_local_to_azure(az: AzureStorageWithAccountKeyReqs) {
+    #[td_test::domain("apiserver_az")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_from_local_to_azure(domain_apiserver_az: AzureblobDomain) {
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
             .with_name(PlSmallStr::from("col_int"));
@@ -497,7 +507,12 @@ mod tests {
         .collect()
         .unwrap();
 
-        let url_w = Url::parse(&format!("{}/unit_test/{}", az.uri, file_r.clone())).unwrap();
+        let url_w = Url::parse(&format!(
+            "{}/unit_test/{}",
+            domain_apiserver_az.url().unwrap(),
+            file_r.clone()
+        ))
+        .unwrap();
 
         let request = ImportRequestBuilder::default()
             .source(
@@ -516,8 +531,12 @@ mod tests {
                     .location(Location::Azure {
                         url: BaseUrl(url_w.clone()),
                         configs: AzureConfigs {
-                            account_name: Value::Literal(az.account_name.to_string()),
-                            account_key: Value::Literal(az.account_key.to_string()),
+                            account_name: Value::Literal(
+                                domain_apiserver_az.account_name.to_string(),
+                            ),
+                            account_key: Value::Literal(
+                                domain_apiserver_az.account_key.to_string(),
+                            ),
                             extra_configs: None,
                         },
                     })
@@ -557,11 +576,11 @@ mod tests {
         let mut config = HashMap::new();
         config.insert(
             "azure_storage_account_name".to_string(),
-            az.account_name.to_string(),
+            domain_apiserver_az.account_name.to_string(),
         );
         config.insert(
             "azure_storage_account_key".to_string(),
-            az.account_key.to_string(),
+            domain_apiserver_az.account_key.to_string(),
         );
         let e_config = config.clone();
         let pl_path = PlPath::new(url_tf.as_str());
@@ -594,8 +613,9 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0", flavor = "multi_thread")]
-    async fn test_import_from_local_to_gcp(gcp: GcpStorageWithServiceAccountKeyReqs) {
+    #[td_test::domain("apiserver_gcs")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_from_local_to_gcp(domain_apiserver_gcs: GcsDomain) {
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
             .with_name(PlSmallStr::from("col_int"));
@@ -633,7 +653,12 @@ mod tests {
         .collect()
         .unwrap();
 
-        let url_w = Url::parse(&format!("{}/unit_test/{}", gcp.uri, file_r.clone())).unwrap();
+        let url_w = Url::parse(&format!(
+            "{}/unit_test/{}",
+            domain_apiserver_gcs.url().unwrap(),
+            file_r.clone()
+        ))
+        .unwrap();
 
         let request = ImportRequestBuilder::default()
             .source(
@@ -653,7 +678,7 @@ mod tests {
                         url: BaseUrl(url_w.clone()),
                         configs: GcpConfigs {
                             service_account_key: Value::Literal(
-                                gcp.service_account_key.to_string(),
+                                domain_apiserver_gcs.service_account_key.to_string(),
                             ),
                             extra_configs: None,
                         },
@@ -694,7 +719,7 @@ mod tests {
         let mut config = HashMap::new();
         config.insert(
             "google_service_account_key".to_string(),
-            gcp.service_account_key.to_string(),
+            domain_apiserver_gcs.service_account_key.to_string(),
         );
 
         let e_config = config.clone();
@@ -1129,14 +1154,15 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30", flavor = "multi_thread")]
-    async fn test_import_s3_binary(s3: S3WithAccessKeySecretKeyReqs) {
+    #[td_test::domain("apiserver_s3")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_s3_binary(domain_apiserver_s3: S3Domain) {
         let from_base = Location::S3 {
-            url: Url::parse(&format!("{}/{}", s3.uri, id())).unwrap(),
+            url: Url::parse(&format!("{}/{}", domain_apiserver_s3.url().unwrap(), id())).unwrap(),
             configs: AwsConfigs {
-                access_key: Value::Literal(s3.access_key.to_string()),
-                secret_key: Value::Literal(s3.secret_key.to_string()),
-                region: Some(Value::Literal(s3.region.to_string())),
+                access_key: Value::Literal(domain_apiserver_s3.access_key.to_string()),
+                secret_key: Value::Literal(domain_apiserver_s3.secret_key.to_string()),
+                region: Some(Value::Literal(domain_apiserver_s3.region.to_string())),
                 extra_configs: None,
             },
         };
@@ -1153,13 +1179,14 @@ mod tests {
         .await;
     }
 
-    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0", flavor = "multi_thread")]
-    async fn test_import_azure_binary(az: AzureStorageWithAccountKeyReqs) {
+    #[td_test::domain("apiserver_az")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_azure_binary(domain_apiserver_az: AzureblobDomain) {
         let from_base = Location::Azure {
-            url: Url::parse(&format!("{}/{}", az.uri, id())).unwrap(),
+            url: Url::parse(&format!("{}/{}", domain_apiserver_az.url().unwrap(), id())).unwrap(),
             configs: AzureConfigs {
-                account_name: Value::Literal(az.account_name.to_string()),
-                account_key: Value::Literal(az.account_key.to_string()),
+                account_name: Value::Literal(domain_apiserver_az.account_name.to_string()),
+                account_key: Value::Literal(domain_apiserver_az.account_key.to_string()),
                 extra_configs: None,
             },
         };
@@ -1176,12 +1203,15 @@ mod tests {
         .await;
     }
 
-    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0", flavor = "multi_thread")]
-    async fn test_import_gcp_binary(gcp: GcpStorageWithServiceAccountKeyReqs) {
+    #[td_test::domain("apiserver_gcs")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_gcp_binary(domain_apiserver_gcs: GcsDomain) {
         let from_base = Location::GCS {
-            url: Url::parse(&format!("{}/{}", gcp.uri, id())).unwrap(),
+            url: Url::parse(&format!("{}/{}", domain_apiserver_gcs.url().unwrap(), id())).unwrap(),
             configs: GcpConfigs {
-                service_account_key: Value::Literal(gcp.service_account_key.to_string()),
+                service_account_key: Value::Literal(
+                    domain_apiserver_gcs.service_account_key.to_string(),
+                ),
                 extra_configs: None,
             },
         };

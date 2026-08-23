@@ -429,10 +429,7 @@ mod tests {
     use object_store::path::Path;
     use std::collections::HashMap;
     use td_common::absolute_path::AbsolutePath;
-    use td_test::reqs::{
-        AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
-        S3WithAccessKeySecretKeyReqs, TestRequirements,
-    };
+    use td_test::domain::{AzureblobDomain, GcsDomain, S3Domain};
     use url::Url;
 
     fn bar_file() -> String {
@@ -730,114 +727,61 @@ mod tests {
         test_mount(&uri, "/mount", store, Mount::new(mount_def).unwrap()).await;
     }
 
-    async fn test_aws_mount(path: &str, s3_info: &S3WithAccessKeySecretKeyReqs) {
-        let options = HashMap::from([
-            ("aws_region".to_string(), s3_info.region.clone()),
-            ("aws_access_key_id".to_string(), s3_info.access_key.clone()),
-            (
-                "aws_secret_access_key".to_string(),
-                s3_info.secret_key.clone(),
-            ),
-        ]);
-
-        let uri = format!("{}/{}", s3_info.uri, s3_info.test_path().to_str().unwrap());
-        let uri = Url::parse(&uri).unwrap();
-
+    /// Mount `uri` at `path` with `options` and exercise it. Each caller writes
+    /// into its own `run_url` corner of the tdx staging root.
+    async fn test_cloud_mount(path: &str, uri: Url, options: HashMap<String, String>) {
         let object_store = object_store::parse_url_opts(&uri, &options).unwrap().0;
 
         let mount_def = MountDef::builder()
             .id("id")
             .path(path)
             .uri(uri.to_string())
-            .options(options)
+            .options(options.clone())
             .build()
             .unwrap();
 
         test_mount(&uri, path, object_store, Mount::new(mount_def).unwrap()).await;
     }
 
-    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30")]
-    async fn test_s3_root_mount(reqas: S3WithAccessKeySecretKeyReqs) {
-        test_aws_mount("/", &reqas).await;
+    #[td_test::domain("apiserver_s3")]
+    #[tokio::test]
+    async fn test_s3_root_mount(domain_apiserver_s3: S3Domain) {
+        let uri = domain_apiserver_s3.run_url("td-mount").unwrap();
+        test_cloud_mount("/", uri, domain_apiserver_s3.options()).await;
     }
 
-    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30")]
-    async fn test_s3_non_root_mount(reqs: S3WithAccessKeySecretKeyReqs) {
-        test_aws_mount("/foo", &reqs).await;
+    #[td_test::domain("apiserver_s3")]
+    #[tokio::test]
+    async fn test_s3_non_root_mount(domain_apiserver_s3: S3Domain) {
+        let uri = domain_apiserver_s3.run_url("td-mount").unwrap();
+        test_cloud_mount("/foo", uri, domain_apiserver_s3.options()).await;
     }
 
-    async fn test_azure_mount(path: &str, az_info: &AzureStorageWithAccountKeyReqs) {
-        let configs = HashMap::from([
-            (
-                "azure_storage_account_name".to_string(),
-                az_info.account_name.clone(),
-            ),
-            (
-                "azure_storage_account_key".to_string(),
-                az_info.account_key.clone(),
-            ),
-        ]);
-
-        let uri = format!("{}/{}", az_info.uri, az_info.test_path().to_str().unwrap());
-        let uri = Url::parse(&uri).unwrap();
-
-        let object_store = object_store::parse_url_opts(&uri, &configs).unwrap().0;
-
-        let mount_def = MountDef::builder()
-            .id("id")
-            .path(path)
-            .uri(uri.to_string())
-            .options(configs)
-            .build()
-            .unwrap();
-
-        test_mount(&uri, path, object_store, Mount::new(mount_def).unwrap()).await;
+    #[td_test::domain("apiserver_az")]
+    #[tokio::test]
+    async fn test_azure_root_mount(domain_apiserver_az: AzureblobDomain) {
+        let uri = domain_apiserver_az.run_url("td-mount").unwrap();
+        test_cloud_mount("/", uri, domain_apiserver_az.options()).await;
     }
 
-    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0")]
-    async fn test_azure_root_mount(reqs: AzureStorageWithAccountKeyReqs) {
-        test_azure_mount("/", &reqs).await;
+    #[td_test::domain("apiserver_az")]
+    #[tokio::test]
+    async fn test_azure_non_root_mount(domain_apiserver_az: AzureblobDomain) {
+        let uri = domain_apiserver_az.run_url("td-mount").unwrap();
+        test_cloud_mount("/foo", uri, domain_apiserver_az.options()).await;
     }
 
-    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0")]
-    async fn test_azure_non_root_mount(reqs: AzureStorageWithAccountKeyReqs) {
-        test_azure_mount("/foo", &reqs).await;
+    #[td_test::domain("apiserver_gcs")]
+    #[tokio::test]
+    async fn test_gcp_root_mount(domain_apiserver_gcs: GcsDomain) {
+        let uri = domain_apiserver_gcs.run_url("td-mount").unwrap();
+        test_cloud_mount("/", uri, domain_apiserver_gcs.options()).await;
     }
 
-    async fn test_gcp_mount(path: &str, gcp_info: &GcpStorageWithServiceAccountKeyReqs) {
-        let configs = HashMap::from([(
-            "google_service_account_key".to_string(),
-            gcp_info.service_account_key.to_string(),
-        )]);
-
-        let uri = format!(
-            "{}/{}",
-            gcp_info.uri,
-            gcp_info.test_path().to_str().unwrap()
-        );
-        let uri = Url::parse(&uri).unwrap();
-
-        let object_store = object_store::parse_url_opts(&uri, &configs);
-        let object_store = object_store.unwrap().0;
-
-        let mount_def = MountDef::builder()
-            .id("id")
-            .path(path)
-            .uri(uri.to_string())
-            .options(configs)
-            .build()
-            .unwrap();
-
-        test_mount(&uri, path, object_store, Mount::new(mount_def).unwrap()).await;
-    }
-
-    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0")]
-    async fn test_gcp_root_mount(reqs: GcpStorageWithServiceAccountKeyReqs) {
-        test_gcp_mount("/", &reqs).await;
-    }
-
-    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0")]
-    async fn test_gcp_non_root_mount(reqs: GcpStorageWithServiceAccountKeyReqs) {
-        test_gcp_mount("/foo", &reqs).await;
+    #[td_test::domain("apiserver_gcs")]
+    #[tokio::test]
+    async fn test_gcp_non_root_mount(domain_apiserver_gcs: GcsDomain) {
+        let uri = domain_apiserver_gcs.run_url("td-mount").unwrap();
+        test_cloud_mount("/foo", uri, domain_apiserver_gcs.options()).await;
     }
 }

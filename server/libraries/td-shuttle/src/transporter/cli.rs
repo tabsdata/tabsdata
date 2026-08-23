@@ -199,10 +199,7 @@ pub(crate) mod tests {
     use std::io::Write;
     use td_common::id::id;
 
-    use td_test::reqs::{
-        AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
-        S3WithAccessKeySecretKeyReqs,
-    };
+    use td_test::domain::{AzureblobDomain, GcsDomain, S3Domain};
     use tokio::io::AsyncWriteExt;
     use url::Url;
 
@@ -323,7 +320,7 @@ pub(crate) mod tests {
             samples: false,
         })
         .await;
-        assert!(response.is_ok());
+        assert!(response.is_ok(), "{:?}", response.as_ref().err());
         match response {
             Ok(Some(TransporterReport::CopyV1(report))) => {
                 assert_eq!(report.files().len(), 1);
@@ -350,16 +347,15 @@ pub(crate) mod tests {
         test_run_impl_copy(target).await;
     }
 
-    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30")]
-    async fn test_copy_local_to_aws(
-        s3: S3WithAccessKeySecretKeyReqs,
-    ) -> Result<(), TransporterError> {
+    #[td_test::domain("apiserver_s3")]
+    #[tokio::test]
+    async fn test_copy_local_to_aws(domain_apiserver_s3: S3Domain) -> Result<(), TransporterError> {
         let target = Location::S3 {
-            url: build_uuid_v7_url(s3.uri.to_string())?,
+            url: build_uuid_v7_url(domain_apiserver_s3.url().unwrap().to_string())?,
             configs: AwsConfigs {
-                region: Some(Value::Literal(s3.region.to_string())),
-                access_key: Value::Literal(s3.access_key.to_string()),
-                secret_key: Value::Literal(s3.secret_key.to_string()),
+                region: Some(Value::Literal(domain_apiserver_s3.region.to_string())),
+                access_key: Value::Literal(domain_apiserver_s3.access_key.to_string()),
+                secret_key: Value::Literal(domain_apiserver_s3.secret_key.to_string()),
                 extra_configs: None,
             },
         };
@@ -367,15 +363,16 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0")]
+    #[td_test::domain("apiserver_az")]
+    #[tokio::test]
     async fn test_copy_local_to_azure(
-        az: AzureStorageWithAccountKeyReqs,
+        domain_apiserver_az: AzureblobDomain,
     ) -> Result<(), TransporterError> {
         let target = Location::Azure {
-            url: build_uuid_v7_url(az.uri.to_string())?,
+            url: build_uuid_v7_url(domain_apiserver_az.url().unwrap().to_string())?,
             configs: AzureConfigs {
-                account_name: Value::Literal(az.account_name.to_string()),
-                account_key: Value::Literal(az.account_key.to_string()),
+                account_name: Value::Literal(domain_apiserver_az.account_name.to_string()),
+                account_key: Value::Literal(domain_apiserver_az.account_key.to_string()),
                 extra_configs: None,
             },
         };
@@ -383,14 +380,17 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0")]
+    #[td_test::domain("apiserver_gcs")]
+    #[tokio::test]
     async fn test_copy_local_to_gcp(
-        gcp: GcpStorageWithServiceAccountKeyReqs,
+        domain_apiserver_gcs: GcsDomain,
     ) -> Result<(), TransporterError> {
         let target = Location::GCS {
-            url: build_uuid_v7_url(gcp.uri.to_string())?,
+            url: build_uuid_v7_url(domain_apiserver_gcs.url().unwrap().to_string())?,
             configs: GcpConfigs {
-                service_account_key: Value::Literal(gcp.service_account_key.to_string()),
+                service_account_key: Value::Literal(
+                    domain_apiserver_gcs.service_account_key.to_string(),
+                ),
                 extra_configs: None,
             },
         };
@@ -398,11 +398,13 @@ pub(crate) mod tests {
         Ok(())
     }
 
+    /// `<url>/<uuid7>.parquet`. A trailing slash is trimmed first: pushing onto a
+    /// path that already ends in one leaves an empty segment, which the object
+    /// stores reject.
     pub(crate) fn build_uuid_v7_url(url: String) -> Result<Url, TransporterError> {
         let mut url = Url::parse(&url).map_err(|e| TransporterError::InvalidUrl(url.clone(), e))?;
-        if !url.path().ends_with('/') {
-            url.set_path(&format!("{}/", url.path()));
-        }
+        let path = url.path().trim_end_matches('/').to_string();
+        url.set_path(&path);
         let file = format!("{}.parquet", id());
         let url_str = url.as_str().to_string();
         {
