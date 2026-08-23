@@ -15,7 +15,12 @@ logger = logging.getLogger(__name__)
 TABSDATA_TO_ROOT = "."
 CONNECTOR_TO_ROOT = os.path.join("..", "..", "..")
 
+ROOT_FILE = ".root"
+
 PACKAGE_FOLDER_ARGUMENT = "--package-folder"
+
+TABSDATA_BASE_FOLDER_VARIABLE = "PROJECT_TABSDATA_BASE_FOLDER"
+TABSDATA_CORE_REPOSITORIES = ("tabsdata", "tabsdata-os", "tabsdata-ee")
 
 
 def package_folder(setup_file: str) -> str:
@@ -27,14 +32,30 @@ def package_folder(setup_file: str) -> str:
     return str(Path(setup_file).parent.absolute())
 
 
+def as_tabsdata_core_repository_root(found_root: Path) -> str | None:
+    declared = os.environ.get(TABSDATA_BASE_FOLDER_VARIABLE, "").strip()
+    if not declared:
+        return None
+    if found_root.name not in TABSDATA_CORE_REPOSITORIES:
+        return None
+    return declared
+
+
 def root_folder(setup_file: str, fallback: str = TABSDATA_TO_ROOT) -> str:
     current_folder = Path(package_folder(setup_file))
     logger.debug(f"📁 Current setup folder is: {current_folder}")
     while True:
-        root_file = Path(os.path.join(current_folder, ".root"))
+        root_file = Path(os.path.join(current_folder, ROOT_FILE))
         root_file_exists = root_file.exists() and root_file.is_file()
 
         if root_file_exists:
+            tabsdata_core_repository_root = as_tabsdata_core_repository_root(current_folder)
+            if tabsdata_core_repository_root:
+                logger.debug(
+                    f"🗂️ Root project folder for setup is: {tabsdata_core_repository_root} "
+                    f"(declared by {TABSDATA_BASE_FOLDER_VARIABLE})"
+                )
+                return tabsdata_core_repository_root
             logger.debug(f"🗂️ Root project folder for setup is: {current_folder}")
             return str(current_folder)
         else:
