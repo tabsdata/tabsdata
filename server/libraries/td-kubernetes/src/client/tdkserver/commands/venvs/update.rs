@@ -18,15 +18,15 @@ use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
-use crate::client::tdkserver::commands::service::restart::restart_service;
 use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
 };
-use crate::client::tdkserver::common::confirm;
+use crate::client::tdkserver::common::{confirm, confirm_at_leisure};
+use crate::client::tdkserver::render::report;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::configmap::replace_configmap;
 use crate::kube::context::KubeContext;
-use crate::runtime::provider::{Provider, provider_for_instance_mutating};
+use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_mutating};
 
 const REQUIREMENTS_OPTION_PREFIX: char = '-';
 
@@ -67,18 +67,6 @@ pub struct UpdateArguments {
 
     #[arg(
         long,
-        name = "apply",
-        required = false,
-        num_args = 0..=1,
-        default_missing_value = "true",
-        display_order = 70,
-        long_help = "Restart the instance after rebuilding the virtual environments. \
-                     Defaults to 'false'."
-    )]
-    pub apply: Option<bool>,
-
-    #[arg(
-        long,
         name = "details",
         required = false,
         num_args = 0..=1,
@@ -110,7 +98,6 @@ pub async fn command_venv_update(
         instance,
         name,
         requirements,
-        apply,
         details,
         yes,
     } = arguments;
@@ -122,12 +109,18 @@ pub async fn command_venv_update(
     let instance = resolved_instance(instance, &settings);
     let details = resolved_details(details, &settings);
     let yes = resolved_yes(yes, &settings);
-    let apply = apply.unwrap_or(false);
     let verbose = globals.verbose;
 
     let provider = provider_for_instance_mutating(instance.value, verbose, None).await?;
     let instance_name = provider.summary().instance_name.unwrap_or_default();
     let asset = name.requirements_asset();
+    let quiesces = provider.cluster_provider() == ClusterProvider::Kminus;
+
+    let standing = if quiesces {
+        Standing::observe(provider.as_ref()).await
+    } else {
+        Standing::running()
+    };
 
     if details.value {
         info!(
@@ -137,8 +130,11 @@ pub async fn command_venv_update(
         );
         info!("  - {} from {}", asset, requirements.display());
         info!("The tabsdata python environments will be rebuilt afterwards.");
-        if apply {
-            info!("The instance will be restarted after the rebuild.");
+        if quiesces && standing.instance {
+            info!(
+                "The instance is running. It will be stopped while the virtual \
+                 environments are rebuilt, and started again afterwards."
+            );
         }
     }
     if !confirm(yes.value, "Proceed with the update?")? {
@@ -146,8 +142,13 @@ pub async fn command_venv_update(
         return abort(Cancelled);
     }
 
-    let context = provider.kube_context().await?;
     let reporter = InteractiveReporter::new();
+
+    if quiesces && !quiesce(provider.as_ref(), &reporter, &standing, yes.value).await? {
+        return abort(Cancelled);
+    }
+
+    let context = provider.kube_context().await?;
 
     let step = reporter.step(&format!("Replacing the {asset} configmap"));
     if let Err(error) = replace_requirements(&context, asset, &contents).await {
@@ -158,8 +159,8 @@ pub async fn command_venv_update(
 
     provider.create_runtimes(&reporter).await?;
 
-    if apply {
-        restart(provider.as_ref(), &reporter).await?;
+    if quiesces {
+        restore(provider.as_ref(), &reporter, &standing).await?;
     }
 
     Ok(())
@@ -224,13 +225,60 @@ async fn replace_requirements(context: &KubeContext, asset: &str, contents: &str
     Ok(())
 }
 
-async fn restart(provider: &dyn Provider, reporter: &dyn Reporter) -> CommandResult {
-    let not_dead = !provider.service_dead().await;
-    if not_dead {
-        provider.ensure_stoppable_service().await?;
+pub(super) struct Standing {
+    cluster: bool,
+    instance: bool,
+}
+
+impl Standing {
+    async fn observe(provider: &dyn Provider) -> Self {
+        Self {
+            cluster: provider.cluster_alive().await,
+            instance: provider.instance_alive().await,
+        }
     }
-    provider.ensure_startable_service().await?;
-    restart_service(provider, reporter, not_dead).await
+
+    fn running() -> Self {
+        Self {
+            cluster: true,
+            instance: true,
+        }
+    }
+}
+
+async fn quiesce(
+    provider: &dyn Provider,
+    reporter: &dyn Reporter,
+    standing: &Standing,
+    yes: bool,
+) -> CommandResult<bool> {
+    if standing.instance {
+        info!("The instance is running and holds the virtual environments in use.");
+        info!("It will be stopped so the virtual environments can be rebuilt.");
+        if !confirm_at_leisure(yes, "Stop the instance?")? {
+            info!("Operation cancelled. The instance stays running.");
+            return Ok(false);
+        }
+        provider.ensure_stoppable_service().await?;
+        provider.stop_service(reporter).await?;
+    }
+    provider.start_cluster(reporter).await?;
+    Ok(true)
+}
+
+async fn restore(
+    provider: &dyn Provider,
+    reporter: &dyn Reporter,
+    standing: &Standing,
+) -> CommandResult {
+    if standing.instance {
+        provider.ensure_startable_service().await?;
+        provider.start_service(reporter).await?;
+        report::component::service::started_service(&provider.summary());
+    } else if !standing.cluster {
+        provider.stop_cluster(reporter).await?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

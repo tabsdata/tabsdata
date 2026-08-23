@@ -7,6 +7,7 @@ import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import sysconfig
@@ -486,14 +487,57 @@ def clean_cache(workspace: dict[str, str]) -> None:
 
 
 def install_python(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
-    run([uv_binary(workspace), "python", "install", arguments.python_version])
-    run([uv_binary(workspace), "python", "find", arguments.python_version])
+    run([
+        uv_binary(workspace),
+        "python",
+        "install",
+        "--managed-python",
+        "--no-bin",
+        "--no-registry",
+        arguments.python_version,
+    ])
+    run([
+        uv_binary(workspace),
+        "python",
+        "find",
+        "--managed-python",
+        "--no-project",
+        arguments.python_version,
+    ])
+
+
+def locked_virtual_environment(
+    virtual_environment: str, locked: str | None
+) -> RuntimeError:
+    return RuntimeError(
+        f"Cannot remove the virtual environment {virtual_environment}; access to"
+        f" {locked or virtual_environment} is denied. An executable cannot be"
+        " deleted while a process is running it, so a process using this virtual"
+        " environment is most likely still up. Stop all the instance services"
+        " before rebuilding the virtual environments."
+    )
 
 
 def remove_virtual_environment(virtual_environment: str) -> None:
-    if os.path.isdir(virtual_environment):
-        print(f">> Removing the existing virtual environment {virtual_environment}")
-        shutil.rmtree(virtual_environment)
+    if not os.path.isdir(virtual_environment):
+        return
+    print(f">> Removing the existing virtual environment {virtual_environment}")
+
+    def unlock(function: Callable[[str], Any], path: str, cause: BaseException) -> None:
+        if not isinstance(cause, PermissionError):
+            raise cause
+        try:
+            os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+            function(path)
+        except OSError:
+            raise locked_virtual_environment(
+                virtual_environment, getattr(cause, "filename", None) or path
+            ) from cause
+
+    try:
+        shutil.rmtree(virtual_environment, onexc=unlock)
+    except PermissionError as cause:
+        raise locked_virtual_environment(virtual_environment, cause.filename) from cause
 
 
 def create_compressor_environment(

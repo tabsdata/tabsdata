@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import platform
 import shutil
 import site
+import stat
 import subprocess
 import sys
 import sysconfig
@@ -271,14 +273,29 @@ class PythonEnvironment:
         if not self.root.exists():
             return
         logger.debug(f"Clearing {self.root}")
+
+        def unlock(function, path, cause) -> None:
+            if not isinstance(cause, PermissionError):
+                raise cause
+            os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+            function(path)
+
         for attempt in range(CLEAR_ATTEMPTS):
             try:
-                shutil.rmtree(self.root)
+                shutil.rmtree(self.root, onexc=unlock)
                 return
             except OSError as error:
                 if attempt == CLEAR_ATTEMPTS - 1:
+                    locked = getattr(error, "filename", None) or self.root
                     raise VenvCreationError(
-                        detail=f"Could not clear '{self.root}': {error}",
+                        detail=(
+                            f"Could not clear '{self.root}': access to '{locked}' is"
+                            " denied. An executable cannot be deleted while a process"
+                            " is running it, so a process using this virtual"
+                            " environment is most likely still up. Stop all the"
+                            " instance services before rebuilding the virtual"
+                            f" environments. Cause: {error}"
+                        ),
                         cause=error,
                     ) from error
                 logger.warning(f"Clearing {self.root} failed ({error}); retrying...")
