@@ -66,7 +66,6 @@ td-common = { workspace = true }
 td-error = { workspace = true }
 td-process = { workspace = true }
 td-tableframe = { workspace = true }
-td-test = { workspace = true }
 
 ## Extensions
 
@@ -114,6 +113,7 @@ libflate = { workspace = true }
 
 [dev-dependencies]
 td-shuttle = { workspace = true, features = ["td-test"] }
+td-test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

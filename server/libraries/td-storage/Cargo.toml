@@ -56,7 +56,6 @@ ignored = ["openssl", "strum", "td-build", "td-storage", "thiserror", "toml"]
 td-common = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
-td-test = { workspace = true }
 
 # External dependencies
 
@@ -76,6 +75,7 @@ url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 td-storage = { workspace = true, features = ["td-test"] }
+td-test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

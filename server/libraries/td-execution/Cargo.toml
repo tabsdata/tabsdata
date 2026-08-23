@@ -60,7 +60,6 @@ te-execution = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
 td-queries = { workspace = true }
-td-test = { workspace = true }
 
 # External dependencies
 
@@ -77,6 +76,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 td-execution = { workspace = true, features = ["td-test"] }
+td-test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
