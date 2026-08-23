@@ -1,0 +1,28 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# The domains `cargo make test_rs` needs, and nothing else: one postgres domain
+# the db tests (`#[td_test::test(db)]`) take a schema each out of, and one prefix
+# per object store for the tests that write scratch data. Deliberately not
+# domains.yaml: a Rust test run has no business provisioning the domains of the
+# other two dozen systems.
+#
+# Recreated on every run, which is the point: the db tests start against an empty
+# database, no per-test schema outlives the run that made it, and re-provisioning
+# clears the object-store prefixes, so what the tests write is reclaimed instead
+# of accumulating under the system's staging root. That is also why the cloud
+# ones are named apart from the `s3` / `azureblob` / `gcs` the Python suite
+# reads: a Rust run must not clear a domain another suite is reading.
+#
+# Carries no model or data: each test builds what it needs. Systems are
+# long-running and expected to be up already — this provisions domains only.
+
+- name: apiserver_postgres
+  sys: postgres
+- name: apiserver_s3
+  sys: s3
+- name: apiserver_az
+  sys: azureblob
+- name: apiserver_gcs
+  sys: gcs

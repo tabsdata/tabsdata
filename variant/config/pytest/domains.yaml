@@ -4,8 +4,6 @@
 
 - name: anthropic
   sys: anthropic
-- name: apiserver_postgres
-  sys: postgres
 - name: azureblob
   sys: azureblob
 - name: azureblob_world_xs

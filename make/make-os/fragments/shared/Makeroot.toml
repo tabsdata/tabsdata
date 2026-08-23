@@ -135,6 +135,7 @@ ITEST_INSTANCES_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/conf
 BACKENDS_MANIFEST_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/config/pytest", normalize = true }
 BACKENDS_SYSTEMS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/systems.yaml", normalize = true }
 BACKENDS_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains.yaml", normalize = true }
+BACKENDS_RUST_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/rust-domains.yaml", normalize = true }
 ITEST_REGISTRY_FILE = { value = "${HOME}/.tabsdatax/instances/tdkpytest.yaml", normalize = true }
 ITEST_PORTS_LOCK = { value = "${HOME}/.tabsdatax/instances/tdkpytest.ports.lock", normalize = true }
 

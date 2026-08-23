@@ -485,6 +485,46 @@ script = [
     cm_run_task __os__reset_venv_env
     ''']
 
+[tasks.__os__setup_test_rs_backends]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    skip_backends = get_env TD_TEST_RS_SKIP_BACKENDS
+    if eq ${skip_backends} "true"
+        info "⏭️ Skipping the Rust test domains; assuming they are already provisioned"
+        exit 0
+    end
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+
+    # No __os__set_secrets: nothing in the Rust manifest declares an env-sourced
+    # option, so a Rust test run needs no 1Password load.
+
+    # Systems are long-running and expected to be up already, so only the domain
+    # is this task's business. Recreated every run: the db tests want an empty
+    # database, and dropping it takes any per-test schema an earlier run left
+    # behind with it.
+    info "📄 Using Rust domains manifest: ${BACKENDS_RUST_DOMAINS_MANIFEST}"
+    info "🛠️ Creating the backend domains the Rust tests use..."
+    debug "🚀 tdx-domain create --manifest ${BACKENDS_RUST_DOMAINS_MANIFEST} -f"
+    exec --fail-on-error tdx-domain create --manifest ${BACKENDS_RUST_DOMAINS_MANIFEST} -f
+
+    cm_run_task __os__reset_venv_env
+
+    # Only now that the domain exists -- and carries the password this run just
+    # minted for it -- is its descriptor worth exporting. Loaded any earlier the
+    # variables would either be missing or name the database this task has since
+    # dropped, and a complete-looking set outranks the descriptor in the fixtures.
+    cm_run_task __os__set_apiserver_postgres_envs
+    cm_run_task __os__get_apiserver_postgres_envs
+    ''']
+
 [tasks.__os__generate_domains]
 plugin = "td-task-tracker"
 category = "12 - Backends"

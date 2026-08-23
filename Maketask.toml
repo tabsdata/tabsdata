@@ -2477,6 +2477,16 @@ run_task = [
     ] }
 ]
 
+[tasks.test_rs_backends]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Create the backend domains the Rust tests use (test_rs does this itself)"
+run_task = [
+    { name = [
+        "__os__setup_test_rs_backends"
+    ] }
+]
+
 [tasks.env]
 plugin = "td-task-tracker"
 category = "70 - Debug"

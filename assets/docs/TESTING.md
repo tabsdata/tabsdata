@@ -166,8 +166,7 @@ without a tdx setup can set `TD_TEST_ON_MISSING_SYSTEM=skip` and
 # Db-backed Tests (`#[td_test::test(db)]`)
 
 Tests of apiserver logic take a database rather than an external resource, and they get it
-from a tdx domain too — `apiserver_postgres`, declared in
-`variant/config/pytest/domains.yaml`. **Nothing in the test code starts a database
+from a tdx domain too — `apiserver_postgres`. **Nothing in the test code starts a database
 server.** Each test creates its own uniquely-named schema in that domain's database,
 brings it to the current version, and drops it on teardown, so tests still provision in
 parallel and isolate completely:
@@ -179,13 +178,26 @@ parallel and isolate completely:
     }
 ```
 
-`cargo make domains_create` provisions it with `--force`, dropping and recreating the
-database, so each provisioning starts empty and no schema outlives it. Point the tests at a
-different domain with `TD_TEST_DB_DOMAIN=<name>`.
+`cargo make test_rs` provisions the domains itself, from a manifest of its own rather than
+`domains.yaml` — a Rust test run has no business provisioning the domains of the other two
+dozen systems, and nothing in it declares an env-sourced option, so the run needs no
+1Password load, only `TD_BACKENDS_CRYPTO_KEY`. That manifest,
+`variant/config/pytest/rust-domains.yaml`, holds `apiserver_postgres` for the db tests and
+`apiserver_s3` / `apiserver_az` / `apiserver_gcs` for the object-store ones — named apart
+from the `s3` / `azureblob` / `gcs` the Python suite reads, because the manifest recreates
+what it names and a Rust run must not clear a domain another suite is reading.
 
-*NOTE:* `domains_create` is a task of its own — nothing chains it into `test_rs` — so it
-has to have been run before `cargo make test_rs`, or the db tests fail naming the missing
-domain.
+The domains are recreated with `--force` on every run, so the db tests start against an
+empty database, no per-test schema outlives the run that made it, and the objects the
+object-store tests write are reclaimed rather than accumulating under a system's staging
+root. All four are **required**: a store missing one fails the provisioning task instead of
+failing every test that needed it. **Systems** are not this task's business: they are
+long-running and expected to be up, so `tdx-system create` / `restart` stay a separate,
+deliberate act.
+
+`cargo make test_rs_backends` runs just that provisioning, for when you want the domains
+without the suite. `TD_TEST_RS_SKIP_BACKENDS=true` skips it, for a run against a domain you
+provisioned yourself. Point the tests at a different one with `TD_TEST_DB_DOMAIN=<name>`.
 
 The domain descriptor carries the owning system's superuser as `SYS_ADMIN_USER` /
 `SYS_ADMIN_PASSWORD`, which is what the per-test path connects as: creating and dropping
