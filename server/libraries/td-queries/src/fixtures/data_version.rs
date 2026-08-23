@@ -25,11 +25,8 @@ impl SchemaSource for DataVersionSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn build(&self, b: Backend) -> Vec<String> {
-        let mut stmts = Vec::new();
-
-        // CREATE TABLE test_dv_table
-        stmts.push(
+    fn tables(&self, b: Backend) -> Vec<String> {
+        vec![
             b.build_schema(
                 Table::create()
                     .table(TestDvTable::Table)
@@ -48,7 +45,10 @@ impl SchemaSource for DataVersionSource {
                     )
                     .to_owned(),
             ),
-        );
+        ]
+    }
+    fn seeds(&self, b: Backend) -> Vec<String> {
+        let mut stmts = Vec::new();
 
         // Partition p0: 3 active versions
         // After ranking (ORDER BY defined_on DESC):

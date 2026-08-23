@@ -14,6 +14,10 @@ use crate::schema::Entity;
 use crate::schema::backend::Backend;
 use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
 
+/// `FunctionStatus::Deleted` discriminant, hoisted as a `&str` because
+/// td-schema sits below td-objects in the dep graph.
+pub(super) const FUNCTION_STATUS_DELETED: &str = "D";
+
 #[derive(Iden, Clone, Copy)]
 #[iden = "functions__with_names"]
 pub struct FunctionsWithNames;

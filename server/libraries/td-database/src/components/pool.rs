@@ -21,6 +21,7 @@ use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
 use sea_query::{Expr, ExprTrait, OnConflict, Query};
 use td_schema::SchemaSource;
 use td_schema::schema::backend::Backend;
+use td_schema::schema::{derived_scripts, install_script};
 use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem, tabsdata_system_ddl};
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::{debug, info, instrument, warn};
@@ -240,12 +241,14 @@ impl AdminPool {
 
     /// Walk the delta ladder from the stored `db_version` up to the source's
     /// current version (or build fresh when absent); each delta in its own
-    /// transaction. Refuses a database newer than the binary.
+    /// transaction, so a failed ladder resumes rather than replays. Refuses a
+    /// database newer than the binary.
     pub async fn upgrade_db_version(&self, source: &dyn SchemaSource) -> Result<(), DbError> {
         // The pool, not the schema's SQL, owns the `tabsdata_system` ledger
         // and its `db_version` row.
         self.ensure_system_table().await?;
 
+        let backend = self.kind().into();
         let current = source.current_version();
         match crate::pool::state::db_version(&self.pool).await? {
             Some(version) if version == current => {
@@ -253,12 +256,22 @@ impl AdminPool {
             }
             Some(version) if version < current => {
                 info!(from = version, to = current, "Upgrading schema");
+                let (drop, create) = derived_scripts(source, backend);
+                // Standing views block destructive deltas on PostgreSQL.
+                if !drop.is_empty() {
+                    execute_batch_tx(&self.pool, &drop).await?;
+                    debug!(count = drop.len(), "Derived objects dropped");
+                }
                 for target in (version + 1)..=current {
-                    let stmts = source.delta(target, self.kind().into());
+                    let stmts = source.delta(target, backend);
                     execute_batch_tx(&self.pool, &stmts).await?;
                     info!(target, "Schema delta applied");
                 }
                 self.set_db_version(current).await?;
+                if !create.is_empty() {
+                    execute_batch_tx(&self.pool, &create).await?;
+                    debug!(count = create.len(), "Derived objects rebuilt");
+                }
             }
             Some(version) => {
                 warn!(
@@ -273,7 +286,7 @@ impl AdminPool {
                     version = current,
                     "No existing schema found, creating fresh install"
                 );
-                let stmts = source.build(self.kind().into());
+                let stmts = install_script(source, backend);
                 execute_batch_tx(&self.pool, &stmts).await?;
                 self.set_db_version(current).await?;
                 info!(version = current, "Fresh schema created");

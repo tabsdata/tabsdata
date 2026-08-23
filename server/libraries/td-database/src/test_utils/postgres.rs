@@ -153,7 +153,7 @@ mod tests {
         fn current_version(&self) -> usize {
             1
         }
-        fn build(&self, _backend: Backend) -> Vec<String> {
+        fn tables(&self, _backend: Backend) -> Vec<String> {
             vec!["CREATE TABLE IF NOT EXISTS dummy_kv (k TEXT PRIMARY KEY)".to_string()]
         }
     }

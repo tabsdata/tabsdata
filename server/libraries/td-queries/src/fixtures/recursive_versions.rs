@@ -35,11 +35,8 @@ impl SchemaSource for RecursiveVersionsSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn build(&self, b: Backend) -> Vec<String> {
-        let mut stmts = Vec::new();
-
-        // CREATE TABLE test_table
-        stmts.push(
+    fn tables(&self, b: Backend) -> Vec<String> {
+        vec![
             b.build_schema(
                 Table::create()
                     .table(TestTable::Table)
@@ -59,7 +56,10 @@ impl SchemaSource for RecursiveVersionsSource {
                     )
                     .to_owned(),
             ),
-        );
+        ]
+    }
+    fn seeds(&self, b: Backend) -> Vec<String> {
+        let mut stmts = Vec::new();
 
         // 5 test_table rows (AAA-EEE)
         for (id, status, current, downstream, defined_on) in [

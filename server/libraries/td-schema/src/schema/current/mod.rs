@@ -39,21 +39,17 @@ mod users_roles;
 mod with_status_views;
 mod workers;
 
-use tracing::{debug, info};
-
+use crate::schema::Entity;
 use crate::schema::backend::Backend;
+use crate::schema::deltas;
+use crate::schema::source::{Derived, SchemaSource, install_script};
 use crate::schema::sql;
-use crate::schema::{Entity, SchemaVersion};
+use sea_query::{DynIden, IntoIden};
 
-/// `LogicalPointerStatus::Bound` discriminant, hoisted as a `&str` because
-/// td-schema sits below td-objects in the dep graph.
-pub(crate) const POINTER_STATUS_BOUND: &str = "B";
-
-/// `FunctionStatus::Deleted` discriminant, hoisted for the same reason.
-pub(crate) const FUNCTION_STATUS_DELETED: &str = "D";
-
-/// Marker type for the current schema version.
-pub struct Schema;
+/// Schema revision within the current major; resets to 1 at each major bump
+/// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
+/// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
+pub const VERSION: usize = 1;
 
 /// FK-safe ordering of every entity in the current schema.
 ///
@@ -106,129 +102,108 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &with_status_views::Defs,
 ];
 
-/// Tables that carry a `project_id` and get PostgreSQL row-level security
-/// (Phase 6). These are exactly the tables to which `project_id` was added in
-/// `current/`; keep this list in sync with that column. The `projects` registry
-/// itself is intentionally absent — it is keyed by `id`, not `project_id`, and
-/// the app never lists it (the active project arrives in the request).
+/// Tables that carry a `project_id` and get PostgreSQL row-level security.
+/// These are exactly the tables to which `project_id` was added in `current/`;
+/// keep this list in sync with that column. The `projects` registry itself is
+/// intentionally absent — it is keyed by `id`, not `project_id`, and the app
+/// never lists it (the active project arrives in the request).
 ///
 /// `test_project_scoped_tables_match_project_id_columns` cross-checks this list
 /// against the tables that actually declare a `project_id` column, so an
 /// omission (which would silently skip RLS for that table) fails the build.
-pub(crate) const PROJECT_SCOPED_TABLES: &[&str] = &[
-    "groups",
-    "connections",
-    "collections",
-    "bundles",
-    "functions",
-    "functions_current",
-    "function_patches",
-    "function_patches_current",
-    "tables",
-    "tables_current",
-    "dependencies",
-    "dependencies_current",
-    "triggers",
-    "triggers_current",
-    "executions",
-    "transactions",
-    "physical_function_runs",
-    "physical_table_data_versions",
-    "table_partitions",
-    "workers",
-    "logical_function_runs",
-    "logical_table_data_versions",
-    "logical_function_run_inputs",
-    "logical_function_run_pointers",
-    "logical_function_run_pointers_current",
-    "logical_table_data_version_pointers",
-    "logical_table_data_version_pointers_current",
-];
-
-impl SchemaVersion for Schema {
-    const VERSION: usize = 1;
-
-    fn build(backend: impl Into<Backend>) -> Vec<String> {
-        let b = backend.into();
-        info!(version = Self::VERSION, backend = ?b, "Building schema");
-        let mut out: Vec<String> = Vec::new();
-
-        // Phase 1: CREATE TABLE — FK-safe ENTITIES order.
-        let before = out.len();
-        for e in ENTITIES {
-            for t in e.create_tables() {
-                out.push(b.build_schema(t));
-            }
-        }
-        debug!(count = out.len() - before, "Tables created");
-
-        // Phase 2: CREATE TRIGGER — after tables, before views.
-        let before = out.len();
-        for e in ENTITIES {
-            for spec in e.create_db_triggers() {
-                out.extend(spec.render(&b));
-            }
-        }
-        debug!(count = out.len() - before, "Triggers created");
-
-        // Phase 3: CREATE VIEW — single ENTITIES-order pass. Cross-view
-        // dependencies are isolated in `with_status_views` (declared last),
-        // so every consumer view is emitted after its producer.
-        let before = out.len();
-        for e in ENTITIES {
-            for v in e.create_views(&b) {
-                out.push(v.render(&b));
-            }
-        }
-        debug!(count = out.len() - before, "Views created");
-
-        // Phase 4: CREATE INDEX.
-        let before = out.len();
-        for e in ENTITIES {
-            for i in e.create_indices() {
-                out.push(b.build_schema(i));
-            }
-        }
-        debug!(count = out.len() - before, "Indices created");
-
-        // Phase 5a: INSERT seeds — all of one entity's seeds before the next,
-        // so any cross-entity dependency resolves via ENTITIES ordering.
-        let before = out.len();
-        for e in ENTITIES {
-            for ins in e.seeds() {
-                out.push(b.build_query(ins));
-            }
-        }
-        // Phase 5b: `_current` snapshot seeding — runs after every event-log
-        // table is seeded so `ROW_NUMBER` ranks against the complete history.
-        for e in ENTITIES {
-            for spec in e.seed_current() {
-                out.push(spec.render(&b));
-            }
-        }
-        debug!(count = out.len() - before, "Seed rows inserted");
-
-        // Phase 6: PostgreSQL row-level security — enable + force RLS and a
-        // project-isolation policy on every project-scoped table, and override
-        // the `project_id` default to read `app.project_id`. PostgreSQL only;
-        // SQLite/MySQL have no RLS. Runs last so FORCE RLS + WITH CHECK never
-        // reject the un-scoped seed inserts emitted above.
-        if matches!(b, Backend::Postgres) {
-            let before = out.len();
-            for table in PROJECT_SCOPED_TABLES {
-                out.extend(sql::rls::policy_statements(table));
-            }
-            debug!(count = out.len() - before, "RLS statements emitted");
-        }
-
-        info!(version = Self::VERSION, total = out.len(), "Schema built");
-        out
-    }
+pub(crate) fn project_scoped_tables() -> Vec<DynIden> {
+    vec![
+        groups::Groups::Table.into_iden(),
+        connections::Connections::Table.into_iden(),
+        collections::Collections::Table.into_iden(),
+        bundles::Bundles::Table.into_iden(),
+        functions::Functions::Table.into_iden(),
+        functions_current::FunctionsCurrent::Table.into_iden(),
+        function_patches::FunctionPatches::Table.into_iden(),
+        function_patches_current::FunctionPatchesCurrent::Table.into_iden(),
+        tables::Tables::Table.into_iden(),
+        tables_current::TablesCurrent::Table.into_iden(),
+        dependencies::Dependencies::Table.into_iden(),
+        dependencies_current::DependenciesCurrent::Table.into_iden(),
+        triggers::Triggers::Table.into_iden(),
+        triggers_current::TriggersCurrent::Table.into_iden(),
+        executions::Executions::Table.into_iden(),
+        transactions::Transactions::Table.into_iden(),
+        physical_function_runs::PhysicalFunctionRuns::Table.into_iden(),
+        physical_table_data_versions::PhysicalTableDataVersions::Table.into_iden(),
+        table_partitions::TablePartitions::Table.into_iden(),
+        workers::Workers::Table.into_iden(),
+        logical_function_runs::LogicalFunctionRuns::Table.into_iden(),
+        logical_table_data_versions::LogicalTableDataVersions::Table.into_iden(),
+        logical_function_run_inputs::LogicalFunctionRunInputs::Table.into_iden(),
+        logical_function_run_pointers::LogicalFunctionRunPointers::Table.into_iden(),
+        logical_function_run_pointers_current::LogicalFunctionRunPointersCurrent::Table.into_iden(),
+        logical_table_data_version_pointers::LogicalTableDataVersionPointers::Table.into_iden(),
+        logical_table_data_version_pointers_current::LogicalTableDataVersionPointersCurrent::Table.into_iden(),
+    ]
 }
 
-/// Build the complete current schema as a list of SQL statements for the given backend.
-///
-/// Delegates to [`Schema::build()`] via the [`SchemaVersion`] trait.
+/// The complete fresh-install script for the current schema.
 pub fn build(b: Backend) -> Vec<String> {
-    Schema::build(b)
+    install_script(&Source, b)
+}
+
+/// [`SchemaSource`] for the live schema, over `ENTITIES` plus [`deltas`].
+/// Re-exported as `CurrentSource`. An archive copy of this module keeps the
+/// struct, dropping only the `delta` override (archives install fresh).
+pub struct Source;
+
+impl SchemaSource for Source {
+    fn current_version(&self) -> usize {
+        VERSION
+    }
+
+    fn tables(&self, b: Backend) -> Vec<String> {
+        ENTITIES.iter().flat_map(|e| e.create_tables()).map(|t| b.build_schema(t)).collect()
+    }
+
+    fn triggers(&self, b: Backend) -> Vec<Derived> {
+        ENTITIES
+            .iter()
+            .flat_map(|e| e.create_db_triggers())
+            .map(|t| Derived {
+                create: t.render(&b),
+                drop: t.render_drop(&b),
+            })
+            .collect()
+    }
+
+    fn views(&self, b: Backend) -> Vec<Derived> {
+        ENTITIES
+            .iter()
+            .flat_map(|e| e.create_views(&b))
+            .map(|v| Derived {
+                create: vec![v.render(&b)],
+                drop: vec![v.render_drop()],
+            })
+            .collect()
+    }
+
+    fn indexes(&self, b: Backend) -> Vec<String> {
+        ENTITIES.iter().flat_map(|e| e.create_indices()).map(|i| b.build_schema(i)).collect()
+    }
+
+    fn seeds(&self, b: Backend) -> Vec<String> {
+        let mut out: Vec<String> = ENTITIES.iter().flat_map(|e| e.seeds()).map(|ins| b.build_query(ins)).collect();
+        // `_current` snapshot seeding after every event-log table is seeded,
+        // so `ROW_NUMBER` ranks against the complete history.
+        out.extend(ENTITIES.iter().flat_map(|e| e.seed_current()).map(|spec| spec.render(&b)));
+        out
+    }
+
+    fn rls(&self, b: Backend) -> Vec<String> {
+        if !matches!(b, Backend::Postgres) {
+            return vec![];
+        }
+        project_scoped_tables().iter().flat_map(|t| sql::rls::policy_statements(&t.to_string())).collect()
+    }
+
+    fn delta(&self, target: usize, b: Backend) -> Vec<String> {
+        deltas::get(target, b)
+    }
 }

@@ -19,11 +19,11 @@ use sea_query::{
     Query, SubQueryStatement, Table, TableCreateStatement,
 };
 
-use super::POINTER_STATUS_BOUND;
 use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
+use super::logical_function_run_pointers::POINTER_STATUS_BOUND;
 use super::logical_function_run_pointers_current::LogicalFunctionRunPointersCurrent;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};

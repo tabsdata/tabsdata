@@ -37,6 +37,11 @@ impl ViewDef {
             _ => format!("CREATE VIEW {} AS {}", self.name, body),
         }
     }
+
+    /// No `CASCADE`: an unexpected dependent must fail loudly, not vanish.
+    pub(crate) fn render_drop(&self) -> String {
+        format!("DROP VIEW IF EXISTS {}", self.name)
+    }
 }
 
 #[cfg(test)]

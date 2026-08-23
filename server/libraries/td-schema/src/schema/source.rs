@@ -2,32 +2,97 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The pool-facing schema view: [`SchemaSource`] (object-safe schema content the
-//! pool drives), the shared `tabsdata_system` ledger DDL ([`tabsdata_system_ddl`]),
-//! and [`CurrentSource`] for the built-in schema.
+//! The pool-facing schema view: [`SchemaSource`] (structured schema content),
+//! the script builders the pool drives ([`install_script`],
+//! [`derived_scripts`]), and the shared `tabsdata_system` ledger DDL
+//! ([`tabsdata_system_ddl`]). Each schema module (`current/`, `archive/vN/`)
+//! implements the trait with its own `Source`.
 
 use super::backend::Backend;
-use super::version::SchemaVersion;
-use super::{current, deltas};
 use crate::TabsdataSystem;
 use sea_query::{ColumnDef, Table};
+use tracing::debug;
 
-/// Object-safe view of a schema's content the connection pool drives, so the pool
-/// upgrades *any* component's schema without knowing which it is.
+/// A derived object (view or trigger) as its create/drop statement pair, both
+/// rendered from the same definition so they cannot disagree.
+pub struct Derived {
+    pub create: Vec<String>,
+    pub drop: Vec<String>,
+}
+
+/// Object-safe, structured view of a schema's content, so the pool composes the
+/// install and the derived-object lifecycle for *any* component's schema — a
+/// source cannot have a view or trigger the pool does not know about.
 ///
-/// [`build`](Self::build)/[`delta`](Self::delta) return **only the schema's own
-/// content**: the pool creates the `tabsdata_system` ledger ([`tabsdata_system_ddl`])
-/// and writes `db_version` itself, around them. The ledger resolves per-schema via
-/// each connection's pinned `search_path`.
+/// Parts return **only the schema's own content**: the pool creates the
+/// `tabsdata_system` ledger ([`tabsdata_system_ddl`]) and writes `db_version`
+/// itself, around them. The ledger resolves per-schema via each connection's
+/// pinned `search_path`. A [`delta`](Self::delta) additionally bumps
+/// `db_version` itself — see [`SchemaDelta`](super::SchemaDelta).
 pub trait SchemaSource: Send + Sync + 'static {
     /// Version this binary builds to.
     fn current_version(&self) -> usize;
-    /// Statements creating the schema's own content from scratch.
-    fn build(&self, backend: Backend) -> Vec<String>;
+    /// `CREATE TABLE` statements, FK-safe order.
+    fn tables(&self, backend: Backend) -> Vec<String>;
+    /// Triggers, creation order. Defaults to none.
+    fn triggers(&self, _backend: Backend) -> Vec<Derived> {
+        vec![]
+    }
+    /// Views, creation order (consumers after producers). Defaults to none.
+    fn views(&self, _backend: Backend) -> Vec<Derived> {
+        vec![]
+    }
+    /// `CREATE INDEX` statements. Defaults to none.
+    fn indexes(&self, _backend: Backend) -> Vec<String> {
+        vec![]
+    }
+    /// Seed inserts. Defaults to none.
+    fn seeds(&self, _backend: Backend) -> Vec<String> {
+        vec![]
+    }
+    /// PostgreSQL row-level security statements. Defaults to none.
+    fn rls(&self, _backend: Backend) -> Vec<String> {
+        vec![]
+    }
     /// Statements migrating the schema's own content to `target`. Defaults to none.
     fn delta(&self, _target: usize, _backend: Backend) -> Vec<String> {
         vec![]
     }
+}
+
+/// The fresh-install script: tables, triggers, views, indexes, seeds, RLS.
+/// Triggers precede seeds so `_current` peers fill during seeding; RLS runs
+/// last so `FORCE RLS` never rejects the un-scoped seed inserts.
+pub fn install_script(source: &dyn SchemaSource, b: Backend) -> Vec<String> {
+    let mut out = source.tables(b);
+    let tables = out.len();
+    out.extend(source.triggers(b).into_iter().flat_map(|d| d.create));
+    out.extend(source.views(b).into_iter().flat_map(|d| d.create));
+    out.extend(source.indexes(b));
+    out.extend(source.seeds(b));
+    out.extend(source.rls(b));
+    debug!(
+        version = source.current_version(),
+        backend = ?b,
+        tables,
+        total = out.len(),
+        "Install script composed"
+    );
+    out
+}
+
+/// The derived-object lifecycle scripts, split from a single render of the
+/// parts: drops (views in reverse creation order, so no `CASCADE` is needed,
+/// then triggers) and creates (triggers, then views). The drop runs before a
+/// delta ladder — standing views block destructive deltas on PostgreSQL.
+pub fn derived_scripts(source: &dyn SchemaSource, b: Backend) -> (Vec<String>, Vec<String>) {
+    let triggers = source.triggers(b);
+    let views = source.views(b);
+    let mut drop: Vec<String> = views.iter().rev().flat_map(|d| d.drop.clone()).collect();
+    drop.extend(triggers.iter().flat_map(|d| d.drop.clone()));
+    let mut create: Vec<String> = triggers.into_iter().flat_map(|d| d.create).collect();
+    create.extend(views.into_iter().flat_map(|d| d.create));
+    (drop, create)
 }
 
 /// The shared `tabsdata_system(name, value)` ledger DDL for `backend`. The pool
@@ -42,19 +107,4 @@ pub fn tabsdata_system_ddl(backend: Backend) -> String {
             .col(ColumnDef::new(TabsdataSystem::Value).text().null())
             .to_owned(),
     )
-}
-
-/// [`SchemaSource`] for the built-in schema ([`current`] + [`deltas`]).
-pub struct CurrentSource;
-
-impl SchemaSource for CurrentSource {
-    fn current_version(&self) -> usize {
-        current::Schema::VERSION
-    }
-    fn build(&self, backend: Backend) -> Vec<String> {
-        current::Schema::build(backend)
-    }
-    fn delta(&self, target: usize, backend: Backend) -> Vec<String> {
-        deltas::get(target, backend)
-    }
 }

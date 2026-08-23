@@ -16,6 +16,11 @@ use super::logical_function_runs::LogicalFunctionRuns;
 use crate::schema::Entity;
 use crate::schema::sql::{ImmutableTriggerDef, SeedCurrent, TriggerSpec, VersionedTriggerDef, cols_of};
 
+/// `LogicalPointerStatus::Bound` discriminant, shared with the LTDV pointer
+/// log; hoisted as a `&str` because td-schema sits below td-objects in the
+/// dep graph.
+pub(super) const POINTER_STATUS_BOUND: &str = "B";
+
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalFunctionRunPointers {
     Table,

@@ -36,22 +36,20 @@ pub enum DbError {
     InvalidConnections(u32, u32) = 2,
     #[error(
         "The Tabsdata database schema has not been created. Create it with \
-         `tdserver create` on a managed instance, or `td_dbmanager db create` \
+         `tdkserver create` on a managed instance, or `td_dbmanager db create` \
          directly against an external database."
     )]
     DatabaseSchemaDoesNotExist = 5000,
     #[error(
         "The Tabsdata database schema is out of date and must be upgraded: {0}. \
-         Back up the database, then run `tdserver upgrade` on a managed instance \
-         (`--instance <instance>` for a non-default one), or `td_dbmanager db \
-         upgrade` directly against an external database."
+         Back up the database, then run `td_dbmanager db upgrade` against it."
     )]
     DatabaseNeedsUpgrade(String) = 5001,
     #[error(
         "The Tabsdata database belongs to major version '{0}' and cannot be \
          opened by major version '{1}'. Cross-major upgrade is not supported: \
          back up the existing database, create a fresh one with this release \
-         (`tdserver create` or `td_dbmanager db create`), and re-ingest your \
+         (`tdkserver create` or `td_dbmanager db create`), and re-ingest your \
          data."
     )]
     IncompatibleMajorVersion(usize, usize) = 5017,
@@ -64,7 +62,7 @@ pub enum DbError {
     DatabaseIsNewer(String, usize) = 5002,
     #[error(
         "The Tabsdata database is corrupted: {0}. Restore from a known-good \
-         backup; if none is available, create a fresh database (`tdserver \
+         backup; if none is available, create a fresh database (`tdkserver \
          create` or `td_dbmanager db create`) and re-ingest your data."
     )]
     DatabaseCorrupted(String) = 5003,
@@ -180,8 +178,8 @@ pub enum DbError {
         "Failed to create or upgrade the database schema: {0}. The connecting \
          (upgrader) role may lack CREATE/ALTER on the application schema, or a \
          previous run left the schema partially migrated. Check the role's \
-         privileges and the server logs, then retry the upgrade (`tdserver \
-         upgrade` or `td_dbmanager db upgrade`)."
+         privileges and the server logs, then retry the upgrade \
+         (`td_dbmanager db upgrade`)."
     )]
     FailedToCreateOrUpgradeDatabaseSchema(#[source] sqlx::Error) = 5008,
     #[error(

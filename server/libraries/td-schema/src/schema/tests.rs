@@ -10,12 +10,12 @@
 
 use super::backend::Backend;
 use super::sql::TriggerSpec;
-use super::{SchemaDelta, SchemaVersion, archive, current, deltas};
+use super::{CurrentSource, SchemaDelta, SchemaSource, archive, current, deltas, install_script};
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 /// Cached `current::build()` output per backend. The consistency tests
-/// only read this — `Schema::build()` is deterministic (gated by
+/// only read this — the install script is deterministic (gated by
 /// `test_schema_build_is_deterministic`) so a single build per backend
 /// is reused across every test that just inspects the statement list.
 static BUILD_SQLITE: LazyLock<Vec<String>> = LazyLock::new(|| current::build(Backend::Sqlite));
@@ -30,30 +30,32 @@ fn cached_build(b: Backend) -> &'static [String] {
     }
 }
 
-/// Validate that a [`SchemaVersion`] implementation produces non-empty output
-/// for every enabled backend.
+/// Validate that a [`SchemaSource`] produces a non-empty install script for
+/// every enabled backend.
 ///
 /// Per-backend statement counts are not asserted equal: Postgres emits a
 /// supporting `CREATE FUNCTION` alongside each trigger because sqlx-postgres
 /// rejects multi-statement strings, so the backends legitimately diverge in
 /// total statement count even when the schema is logically identical.
-pub(crate) fn validate_schema_version<S: SchemaVersion>() {
+pub(crate) fn validate_schema_source(source: &dyn SchemaSource) {
     for b in Backend::ALL {
-        let stmts = S::build(b);
-        assert!(!stmts.is_empty(), "SchemaVersion v{} produced empty output on {b:?}", S::VERSION);
+        let stmts = install_script(source, b);
+        assert!(!stmts.is_empty(), "schema v{} produced an empty install script on {b:?}", source.current_version());
     }
 }
 
 #[test]
 fn test_validate_current_schema() {
-    validate_schema_version::<current::Schema>();
+    validate_schema_source(&CurrentSource);
 }
 
 /// Validate that a [`SchemaDelta`] implementation:
 /// - Is a single-step migration (`FROM_VERSION + 1 == TO_VERSION`)
 /// - Produces non-empty output across all backends
 /// - Last statement updates `db_version` to `TO_VERSION` (the bump guard)
-/// - Produces consistent statement counts across backends
+///
+/// Statement counts legitimately differ per backend, so equivalence is proven
+/// against a real database by td-database's `components::tests::migration`.
 ///
 /// Each delta module's own tests call this against its `Migration` impl.
 #[allow(dead_code)]
@@ -137,7 +139,7 @@ fn test_schema_ddl_snapshot() {
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_archive_ddl_snapshots() {
-    for v in 1..current::Schema::VERSION {
+    for v in 1..current::VERSION {
         crate::snapshot::assert_snapshot(&snapshot_dir(&format!("archive/v{v}/snapshots")), |b| archive::build(v, b));
     }
 }
@@ -147,7 +149,7 @@ fn test_archive_ddl_snapshots() {
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_delta_ddl_snapshots() {
-    for v in 2..=current::Schema::VERSION {
+    for v in 2..=current::VERSION {
         crate::snapshot::assert_snapshot(&snapshot_dir(&format!("deltas/snapshots/v{}_to_v{v}", v - 1)), |b| deltas::get(v, b));
     }
 }
@@ -159,14 +161,14 @@ fn test_delta_ddl_snapshots() {
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_migration_guard_archives_exist() {
-    for v in 1..current::Schema::VERSION {
+    for v in 1..current::VERSION {
         for b in Backend::ALL {
             let result = std::panic::catch_unwind(|| archive::build(v, b));
             assert!(
                 result.is_ok(),
                 "Missing archive for version {v} on {b:?}. When bumping \
                  CURRENT_VERSION to {}, copy current/ to archive/v{v}/.",
-                current::Schema::VERSION
+                current::VERSION
             );
             assert!(!result.unwrap().is_empty(), "Archive v{v} produced empty output on {b:?}");
         }
@@ -180,17 +182,36 @@ fn test_migration_guard_archives_exist() {
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_migration_guard_deltas_exist() {
-    for v in 2..=current::Schema::VERSION {
+    for v in 2..=current::VERSION {
         for b in Backend::ALL {
             let result = std::panic::catch_unwind(|| deltas::get(v, b));
             assert!(
                 result.is_ok(),
                 "Missing delta for version {v} on {b:?}. When bumping \
                  CURRENT_VERSION to {}, create deltas/v{}_to_v{v}.rs.",
-                current::Schema::VERSION,
+                current::VERSION,
                 v - 1
             );
             assert!(!result.unwrap().is_empty(), "Delta v{v} produced empty output on {b:?}");
+        }
+    }
+}
+
+/// Every wired delta must end with the `db_version` bump — without it a
+/// mid-ladder failure replays the committed delta on retry. Unlike
+/// `validate_delta`, this needs no per-module opt-in. No-op at v1 baseline.
+#[allow(clippy::reversed_empty_ranges)]
+#[test]
+fn test_migration_guard_deltas_bump_db_version() {
+    for v in 2..=current::VERSION {
+        for b in Backend::ALL {
+            let stmts = deltas::get(v, b);
+            assert_eq!(
+                stmts.last(),
+                Some(&b.update_db_version(v)),
+                "Delta v{}->v{v} on {b:?} must end with `b.update_db_version({v})`",
+                v - 1,
+            );
         }
     }
 }
@@ -290,10 +311,10 @@ fn test_schema_build_is_deterministic() {
     }
 }
 
-/// T6: `Schema::build` output is segmented by phase — CREATE TABLE,
+/// T6: the install script is segmented by phase — CREATE TABLE,
 /// then CREATE TRIGGER (and supporting CREATE FUNCTION on Postgres),
 /// then CREATE VIEW, then CREATE INDEX, then INSERT. A regression that
-/// reorders the phase loops in `Schema::build` fails here.
+/// reorders `install_script`'s composition fails here.
 #[test]
 fn test_schema_build_phase_ordering() {
     for b in Backend::ALL {
@@ -443,29 +464,6 @@ fn fk_references(sql: &str) -> Vec<String> {
     out
 }
 
-/// Every backend must produce the same statement count for each
-/// archived/delta version — guards against silently skipping a backend
-/// in an archive or delta. No-op while the ranges are empty.
-#[allow(clippy::reversed_empty_ranges)]
-#[test]
-fn test_migration_guard_backend_consistency() {
-    let assert_consistent = |kind: &str, v: usize, counts: Vec<(Backend, usize)>| {
-        let (first_b, first) = counts[0];
-        for (b, count) in &counts[1..] {
-            assert_eq!(first, *count, "{kind} v{v}: {first_b:?} produced {first} stmts but {b:?} produced {count}",);
-        }
-    };
-
-    for v in 1..current::Schema::VERSION {
-        let counts = Backend::ALL.iter().map(|&b| (b, archive::build(v, b).len())).collect();
-        assert_consistent("Archive", v, counts);
-    }
-    for v in 2..=current::Schema::VERSION {
-        let counts = Backend::ALL.iter().map(|&b| (b, deltas::get(v, b).len())).collect();
-        assert_consistent("Delta", v, counts);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Cross-validation tests
 // ---------------------------------------------------------------------------
@@ -570,7 +568,7 @@ fn test_maintain_current_trigger_columns_match_tables() {
     }
 }
 
-/// T11: the hand-maintained `PROJECT_SCOPED_TABLES` list is exactly the set of
+/// T11: the hand-maintained `project_scoped_tables` list is exactly the set of
 /// tables that declare a `project_id` column. The schema build attaches an RLS
 /// policy to every table in that list, so a table that grows a `project_id`
 /// column but is omitted from the list gets NO row-level-security policy — a
@@ -582,27 +580,27 @@ fn test_project_scoped_tables_match_project_id_columns() {
     // `roles` carries a `project_id` column for per-project roles, but it is a
     // plain FK to `projects` — roles are managed GLOBALLY (a single namespace
     // shared across tenants), NOT tenant-RLS-scoped. So `roles` is deliberately
-    // absent from PROJECT_SCOPED_TABLES and must be excluded from this
+    // absent from project_scoped_tables and must be excluded from this
     // column-vs-list cross-check.
-    let with_project_id: HashSet<&str> = COLS_BY_TABLE
+    let with_project_id: HashSet<String> = COLS_BY_TABLE
         .iter()
         .filter(|(t, cols)| t.as_str() != "roles" && cols.iter().any(|c| c == "project_id"))
-        .map(|(t, _)| t.as_str())
+        .map(|(t, _)| t.clone())
         .collect();
-    let listed: HashSet<&str> = current::PROJECT_SCOPED_TABLES.iter().copied().collect();
+    let listed: HashSet<String> = current::project_scoped_tables().iter().map(|t| t.to_string()).collect();
 
-    let missing: Vec<&str> = with_project_id.difference(&listed).copied().collect();
+    let missing: Vec<&String> = with_project_id.difference(&listed).collect();
     assert!(
         missing.is_empty(),
         "tables declare a `project_id` column but are absent from \
-         PROJECT_SCOPED_TABLES, so they get NO RLS policy (silent cross-tenant \
-         leak): {missing:?}. Add them to PROJECT_SCOPED_TABLES in current/mod.rs.",
+         project_scoped_tables, so they get NO RLS policy (silent cross-tenant \
+         leak): {missing:?}. Add them to project_scoped_tables in current/mod.rs.",
     );
 
-    let stale: Vec<&str> = listed.difference(&with_project_id).copied().collect();
+    let stale: Vec<&String> = listed.difference(&with_project_id).collect();
     assert!(
         stale.is_empty(),
-        "PROJECT_SCOPED_TABLES lists tables that have no `project_id` column: \
+        "project_scoped_tables lists tables that have no `project_id` column: \
          {stale:?}. Remove them from the list or add the column.",
     );
 }

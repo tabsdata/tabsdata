@@ -2,27 +2,15 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The static authoring contract: [`SchemaVersion`] (a full schema snapshot) and
-//! [`SchemaDelta`] (a migration between two consecutive versions).
+//! The static authoring contract: [`SchemaDelta`] (a migration between two
+//! consecutive versions). A full schema snapshot is a module of part functions
+//! (see `current/`) exposed through a [`SchemaSource`](super::SchemaSource).
 
 use super::backend::Backend;
 
-/// A complete schema snapshot, implemented by `current::Schema`.
-///
-/// Tabsdata 2.0+ never upgrades across majors: a binary creates a fresh database
-/// and refuses one from an older major (gated by the `tabsdata_version` row, see
-/// [`CURRENT_TABSDATA_VERSION`](crate::CURRENT_TABSDATA_VERSION)). `VERSION` counts
-/// schema revisions *within* the current major. To evolve the schema, follow the
-/// runbook in `README.md`; `test_schema_ddl_snapshot` gates the committed DDL.
-pub trait SchemaVersion {
-    /// The schema revision this snapshot represents.
-    const VERSION: usize;
-    /// All statements that create the schema from scratch for `backend`.
-    fn build(backend: impl Into<Backend>) -> Vec<String>;
-}
-
-/// A migration between two consecutive schema versions. `up` returns only content
-/// statements — the pool writes `db_version` after applying it.
+/// A migration between two consecutive schema versions. `up` must end by bumping
+/// `db_version` to `TO_VERSION`: each step commits separately, so that bump is
+/// what lets a failed ladder resume instead of replaying.
 pub trait SchemaDelta {
     /// Version migrated from.
     const FROM_VERSION: usize;

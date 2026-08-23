@@ -338,6 +338,30 @@ impl TriggerSpec {
             TriggerSpec::Immutable(d) => d.render(b),
         }
     }
+
+    /// The `DROP TRIGGER`s that precede a re-create. PostgreSQL's supporting
+    /// function is deliberately left alone: [`render`](Self::render) emits it as
+    /// `CREATE OR REPLACE`, and dropping it would fail while its triggers exist.
+    pub(crate) fn render_drop(&self, b: &Backend) -> Vec<String> {
+        match self {
+            TriggerSpec::MaintainCurrent(d) => vec![drop_trigger(&d.name, &d.source_table, b)],
+            TriggerSpec::VersionedCurrent(d) => vec![drop_trigger(&d.name, &d.source_table, b)],
+            TriggerSpec::StickyTerminals(d) => vec![drop_trigger(&d.name, &d.source_table, b)],
+            TriggerSpec::Immutable(d) => vec![
+                drop_trigger(&format!("{}_no_update", d.name), &d.source_table, b),
+                drop_trigger(&format!("{}_no_delete", d.name), &d.source_table, b),
+            ],
+        }
+    }
+}
+
+/// Only PostgreSQL scopes a trigger name to its table; elsewhere the name is
+/// schema-global.
+fn drop_trigger(name: &str, table: &DynIden, b: &Backend) -> String {
+    match b {
+        Backend::Postgres => format!("DROP TRIGGER IF EXISTS {name} ON {table}"),
+        _ => format!("DROP TRIGGER IF EXISTS {name}"),
+    }
 }
 
 #[cfg(test)]

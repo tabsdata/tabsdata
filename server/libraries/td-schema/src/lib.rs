@@ -36,4 +36,4 @@ pub const CURRENT_TABSDATA_VERSION: usize = 2;
 
 /// Schema counter within the current major version. Resets to 1 at each
 /// major bump.
-pub const CURRENT_VERSION: usize = <schema::current::Schema as schema::SchemaVersion>::VERSION;
+pub const CURRENT_VERSION: usize = schema::current::VERSION;

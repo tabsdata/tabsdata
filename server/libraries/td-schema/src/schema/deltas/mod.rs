@@ -21,7 +21,7 @@
 //!
 //! Tabsdata 2.0 resets the ladder: `current/` is the v1 baseline of the 2.x
 //! line and there are no deltas yet. The first upgrade
-//! (`current::Schema::VERSION` bumped to 2) creates `v1_to_v2.rs` here — see
+//! (`current::VERSION` bumped to 2) creates `v1_to_v2.rs` here — see
 //! the workflow below.
 //!
 //! ## Adding a new delta

@@ -122,10 +122,12 @@ impl SchemaSource for LoadDvSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn build(&self, b: Backend) -> Vec<String> {
+    fn tables(&self, b: Backend) -> Vec<String> {
+        vec![dv_create_table_sql(&b)]
+    }
+    fn seeds(&self, b: Backend) -> Vec<String> {
         let (partitions, versions) = dims();
-        let mut stmts = Vec::with_capacity(partitions * versions + 1);
-        stmts.push(dv_create_table_sql(&b));
+        let mut stmts = Vec::with_capacity(partitions * versions);
         let mut seq = 1u64;
         for p in 0..partitions {
             for v in 0..versions {
@@ -181,7 +183,7 @@ impl SchemaSource for LoadDvTableSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn build(&self, b: Backend) -> Vec<String> {
+    fn tables(&self, b: Backend) -> Vec<String> {
         vec![dv_create_table_sql(&b)]
     }
 }

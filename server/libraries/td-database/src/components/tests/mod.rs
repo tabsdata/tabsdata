@@ -17,6 +17,7 @@
 //! This module holds the shared query helpers; the submodules reach them via
 //! `super::`.
 
+mod migration;
 #[cfg(postgres)]
 mod provisioning;
 #[cfg(postgres)]

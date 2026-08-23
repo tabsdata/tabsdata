@@ -14,11 +14,11 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use super::POINTER_STATUS_BOUND;
 use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
+use super::logical_function_run_pointers::POINTER_STATUS_BOUND;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::logical_table_data_version_pointers_current::LogicalTableDataVersionPointersCurrent;
 use super::physical_function_runs::PhysicalFunctionRuns;

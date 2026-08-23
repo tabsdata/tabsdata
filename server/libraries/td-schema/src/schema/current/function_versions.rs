@@ -14,9 +14,9 @@
 
 use sea_query::{Alias, Asterisk, Expr, ExprTrait, Iden, JoinType, Query, UnionType};
 
-use super::FUNCTION_STATUS_DELETED;
 use super::collections::{Collections, CollectionsResolved};
 use super::function_patches::FunctionPatches;
+use super::functions::FUNCTION_STATUS_DELETED;
 use super::functions::Functions;
 use super::users::Users;
 use crate::schema::Entity;
