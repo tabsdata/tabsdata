@@ -4,28 +4,53 @@
 
 //! Workload observation: the read-side port the recovery loop reconciles
 //! through. Orchestrators that manage worker liveness themselves expose no
-//! observer and recovery falls back to its time-based sweep.
+//! observer, and recovery falls back to its time-based sweep.
 
 use async_trait::async_trait;
+use td_common::worker::WorkerName;
 use td_error::td_error;
 use td_objects::types::basic::{AtTime, WorkerId};
 
 #[td_error]
 pub enum ObserverError {
     #[error("Workload observation backend error: {cause}")]
-    BackendError { cause: String },
+    BackendError { cause: String } = 0,
+    #[error(
+        "Workload '{workload}' carries '{label}: {value}', which the observer has no mapping \
+         for; it must be taught how to observe it"
+    )]
+    UnmappedWorkload {
+        workload: String,
+        label: String,
+        value: String,
+    } = 1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkloadKind {
-    Pod,
-    Job,
-    CronJob,
-    Deployment,
+    Function,
+    CronTrigger,
+    StageTrigger,
 }
 
-/// `Present` is the phase-less state of schedule-holding workloads (a
-/// CronJob's children run and finish; it has no phase of its own).
+impl WorkloadKind {
+    pub fn holds_a_schedule(self) -> bool {
+        matches!(self, Self::CronTrigger)
+    }
+}
+
+impl From<&WorkerName> for WorkloadKind {
+    fn from(worker: &WorkerName) -> Self {
+        match worker {
+            WorkerName::Function => Self::Function,
+            WorkerName::CronTrigger => Self::CronTrigger,
+            WorkerName::StageTrigger => Self::StageTrigger,
+        }
+    }
+}
+
+/// `Present` is the phase-less state of schedule-holding workloads
+/// (a cron trigger's runs come and go; the schedule itself has no phase).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkloadPhase {
     Pending,
@@ -43,8 +68,7 @@ pub struct ObservedWorkload {
     pub kind: WorkloadKind,
     pub name: String,
     pub phase: WorkloadPhase,
-    /// When the workload entered its current phase, if the backend can date
-    /// it.
+    /// When the workload entered its current phase if the backend can date it.
     pub phase_since: Option<AtTime>,
     pub finished_at: Option<AtTime>,
     pub message: Option<String>,
@@ -57,8 +81,8 @@ pub struct WorkloadObservation {
 
 #[async_trait]
 pub trait WorkloadObserver: Send + Sync {
-    /// Workloads owned by another observed workload (e.g. a CronJob's
-    /// children) fold into their owner, not listed.
+    /// Workloads owned by another observed workload fold into their owner, not listed
+    /// (e.g., the runs a cron trigger spawns).
     async fn observe(&self) -> Result<WorkloadObservation, ObserverError>;
 
     /// Idempotent: removing an already-gone workload succeeds.

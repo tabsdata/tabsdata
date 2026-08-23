@@ -26,6 +26,7 @@ pub mod secret;
 pub mod service;
 pub mod stamp;
 
+use td_bridge::observer::ObserverError;
 use td_error::TdError;
 use thiserror::Error;
 
@@ -84,6 +85,14 @@ pub enum KubernetesError {
     Service(#[from] KubeServiceError),
     #[error(transparent)]
     Naming(#[from] NamingError),
+}
+
+impl From<KubernetesError> for ObserverError {
+    fn from(error: KubernetesError) -> Self {
+        ObserverError::BackendError {
+            cause: error.to_string(),
+        }
+    }
 }
 
 impl From<KubernetesError> for TdError {

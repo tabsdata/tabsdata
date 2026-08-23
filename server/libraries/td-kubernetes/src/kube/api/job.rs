@@ -14,7 +14,7 @@ use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
     AwaitPatience, await_condition_with_patience, label_tabsdata, owner_ref_for_job,
-    tabsdata_non_ephemeral_selector, tabsdata_selector,
+    tabsdata_non_ephemeral_selector, tabsdata_selector, tabsdata_worker_selector,
 };
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
@@ -117,6 +117,10 @@ pub async fn delete_jobs_matching(
 
 pub async fn list_jobs(context: &KubeContext) -> Result<Vec<Job>, KubernetesError> {
     list_jobs_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn list_jobs_of_workers(context: &KubeContext) -> Result<Vec<Job>, KubernetesError> {
+    list_jobs_matching(context, tabsdata_worker_selector()).await
 }
 
 pub async fn list_jobs_non_ephemeral(context: &KubeContext) -> Result<Vec<Job>, KubernetesError> {

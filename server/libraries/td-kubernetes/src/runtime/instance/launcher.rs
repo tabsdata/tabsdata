@@ -16,7 +16,9 @@ use serde::de::DeserializeOwned;
 use crate::base::constants::DbManagerMode;
 use crate::base::constants::SERVICE_TYPE_LOAD_BALANCER;
 use crate::base::constants::{
-    POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, SEQUENCE_LABEL, TIER_LABEL,
+    JOB_CONDITION_COMPLETE, JOB_CONDITION_FAILED, JOB_CONDITION_STATUS_TRUE, POD_CONDITION_READY,
+    POD_CONDITION_STATUS_TRUE, POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
+    SEQUENCE_LABEL, TIER_LABEL,
 };
 use crate::base::error::launcher::LauncherError;
 use crate::base::error::provider::ProviderError;
@@ -44,12 +46,6 @@ use crate::runtime::provider::ClusterProvider;
 const DATABASE_COMPONENT: &str = "database";
 const DBMANAGER_COMPONENT: &str = "dbmanager";
 const PYMANAGER_COMPONENT: &str = "pymanager";
-
-const JOB_CONDITION_COMPLETE: &str = "Complete";
-const JOB_CONDITION_FAILED: &str = "Failed";
-const JOB_CONDITION_STATUS_TRUE: &str = "True";
-const POD_CONDITION_READY: &str = "Ready";
-const POD_CONDITION_STATUS_TRUE: &str = "True";
 
 pub async fn ensure_ports_unclaimed(
     context: &KubeContext,

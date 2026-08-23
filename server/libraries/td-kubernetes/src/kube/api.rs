@@ -64,10 +64,12 @@ use tracing::{debug, info};
 
 use crate::base::constants::{
     KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA,
-    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, TD_VERSION_LABEL, TIER_LABEL,
+    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, POD_YAML_WORKER_LABEL, TD_VERSION_LABEL,
+    TIER_LABEL,
 };
 use crate::base::error::kubernetes::{KubeStampError, KubernetesError};
 use crate::base::error::naming::NamingError;
+use crate::base::labels::LABEL_WORKER_ID;
 use crate::client::tdkserver::common::confirm_resume;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::tier::Tier;
@@ -274,6 +276,15 @@ pub fn tabsdata_selector(label: Option<LabelFilter<'_>>) -> Selector {
     if let Some(LabelFilter { key, value }) = label {
         selector.extend([Expression::Equal(key.to_owned(), value.to_owned())]);
     }
+    selector
+}
+
+pub fn tabsdata_worker_selector() -> Selector {
+    let mut selector = tabsdata_selector(None);
+    selector.extend([
+        Expression::Exists(POD_YAML_WORKER_LABEL.to_owned()),
+        Expression::Exists(LABEL_WORKER_ID.to_owned()),
+    ]);
     selector
 }
 

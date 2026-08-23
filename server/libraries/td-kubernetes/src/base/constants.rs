@@ -425,6 +425,12 @@ pub const RESOURCE_EPHEMERAL_STORAGE: &str = "ephemeral-storage";
 pub const POD_YAML_DECORATOR_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "decorator");
 pub const POD_YAML_WORKER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "worker");
 
+pub const DECORATOR_PUBLISHER: &str = "publisher";
+pub const DECORATOR_SUBSCRIBER: &str = "subscriber";
+pub const DECORATOR_TRANSFORMER: &str = "transformer";
+pub const DECORATOR_CRON_PUBLISHER: &str = "cron_publisher";
+pub const DECORATOR_STREAM_PUBLISHER: &str = "stream_publisher";
+
 pub const TABSDATA_NAME_PREFIX: &str = "td-";
 
 pub const CONFIGMAP_TABSDATA_MANIFEST: &str = "td-sys-tabsdata-manifest-manifest.yaml";
@@ -486,6 +492,15 @@ pub const POD_PHASE_PENDING: &str = "Pending";
 pub const POD_PHASE_RUNNING: &str = "Running";
 pub const POD_PHASE_SUCCEEDED: &str = "Succeeded";
 pub const POD_PHASE_FAILED: &str = "Failed";
+
+pub const JOB_CONDITION_COMPLETE: &str = "Complete";
+pub const JOB_CONDITION_FAILED: &str = "Failed";
+pub const JOB_CONDITION_STATUS_TRUE: &str = "True";
+pub const POD_CONDITION_READY: &str = "Ready";
+pub const POD_CONDITION_STATUS_TRUE: &str = "True";
+
+pub const KUBE_KIND_JOB: &str = "Job";
+pub const KUBE_KIND_CRONJOB: &str = "CronJob";
 
 pub const LOG_POD_POLL_INTERVAL: Duration = Duration::from_millis(500);
 

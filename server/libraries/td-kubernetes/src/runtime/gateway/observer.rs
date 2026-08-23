@@ -2,15 +2,13 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Kubernetes [`WorkloadObserver`]: one LIST per workload kind; owned
-//! workloads (a CronJob's child Jobs, a Job's pods) fold into their owner.
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use std::collections::HashMap;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
 use td_bridge::observer::{
     ObservedWorkload, ObserverError, WorkloadKind, WorkloadObservation, WorkloadObserver,
     WorkloadPhase,
@@ -18,14 +16,16 @@ use td_bridge::observer::{
 use td_objects::types::basic::{AtTime, WorkerId};
 
 use crate::base::constants::{
+    DECORATOR_CRON_PUBLISHER, DECORATOR_PUBLISHER, DECORATOR_STREAM_PUBLISHER,
+    DECORATOR_SUBSCRIBER, DECORATOR_TRANSFORMER, JOB_CONDITION_FAILED, JOB_CONDITION_STATUS_TRUE,
+    KUBE_KIND_CRONJOB, KUBE_KIND_JOB, POD_CONDITION_READY, POD_CONDITION_STATUS_TRUE,
     POD_PHASE_FAILED, POD_PHASE_PENDING, POD_PHASE_RUNNING, POD_PHASE_SUCCEEDED,
+    POD_YAML_DECORATOR_LABEL,
 };
-use crate::base::error::kubernetes::KubernetesError;
 use crate::base::labels::LABEL_WORKER_ID;
-use crate::kube::api::cronjob::{delete_cronjob, list_cronjobs};
-use crate::kube::api::deployment::delete_deployment;
-use crate::kube::api::job::{delete_job, list_jobs};
-use crate::kube::api::pod::{delete_pod, list_pods};
+use crate::kube::api::cronjob::{delete_cronjob, list_cronjobs_of_workers};
+use crate::kube::api::job::{delete_job, list_jobs_of_workers};
+use crate::kube::api::pod::{delete_pod, list_pods_of_workers};
 use crate::kube::context::KubeContext;
 
 pub struct KubernetesWorkloadObserver {
@@ -38,199 +38,283 @@ impl KubernetesWorkloadObserver {
     }
 }
 
-fn backend(error: KubernetesError) -> ObserverError {
-    ObserverError::BackendError {
-        cause: error.to_string(),
+fn at_time(time: Option<&Time>) -> Option<AtTime> {
+    time.and_then(|stamp| AtTime::try_from(DateTime::<Utc>::from(stamp.0)).ok())
+}
+
+trait WorkloadMetadata {
+    fn name(&self) -> String;
+    fn label(&self, label: &str) -> Option<&str>;
+    fn unmapped(&self, label: &str, value: Option<&str>) -> ObserverError;
+    fn worker_id(&self) -> Result<WorkerId, ObserverError>;
+    fn workload_kind(&self) -> Result<WorkloadKind, ObserverError>;
+    fn created(&self) -> Option<AtTime>;
+    fn owned_by(&self, kind: &str) -> bool;
+    fn owner_name(&self, kind: &str) -> Option<&str>;
+}
+
+impl WorkloadMetadata for ObjectMeta {
+    fn name(&self) -> String {
+        self.name.clone().unwrap_or_default()
+    }
+
+    fn label(&self, label: &str) -> Option<&str> {
+        self.labels
+            .as_ref()
+            .and_then(|labels| labels.get(label))
+            .map(String::as_str)
+    }
+
+    fn unmapped(&self, label: &str, value: Option<&str>) -> ObserverError {
+        ObserverError::UnmappedWorkload {
+            workload: self.name(),
+            label: label.to_owned(),
+            value: value.unwrap_or_default().to_owned(),
+        }
+    }
+
+    fn worker_id(&self) -> Result<WorkerId, ObserverError> {
+        let value = self.label(LABEL_WORKER_ID);
+        value
+            .and_then(|value| WorkerId::try_from(value).ok())
+            .ok_or_else(|| self.unmapped(LABEL_WORKER_ID, value))
+    }
+
+    fn workload_kind(&self) -> Result<WorkloadKind, ObserverError> {
+        match self.label(POD_YAML_DECORATOR_LABEL) {
+            Some(DECORATOR_PUBLISHER) => Ok(WorkloadKind::Function),
+            Some(DECORATOR_SUBSCRIBER) => Ok(WorkloadKind::Function),
+            Some(DECORATOR_TRANSFORMER) => Ok(WorkloadKind::Function),
+            Some(DECORATOR_CRON_PUBLISHER) => Ok(WorkloadKind::CronTrigger),
+            Some(DECORATOR_STREAM_PUBLISHER) => Ok(WorkloadKind::StageTrigger),
+            other => Err(self.unmapped(POD_YAML_DECORATOR_LABEL, other)),
+        }
+    }
+
+    fn created(&self) -> Option<AtTime> {
+        at_time(self.creation_timestamp.as_ref())
+    }
+
+    fn owned_by(&self, kind: &str) -> bool {
+        self.owner_name(kind).is_some()
+    }
+
+    fn owner_name(&self, kind: &str) -> Option<&str> {
+        self.owner_references
+            .as_ref()
+            .and_then(|owners| owners.iter().find(|owner| owner.kind == kind))
+            .map(|owner| owner.name.as_str())
     }
 }
 
-fn worker_id_of(metadata: &ObjectMeta) -> Option<WorkerId> {
-    metadata
-        .labels
-        .as_ref()
-        .and_then(|labels| labels.get(LABEL_WORKER_ID))
-        .and_then(|value| WorkerId::try_from(value.as_str()).ok())
+trait PodProgress {
+    fn phase(&self) -> WorkloadPhase;
+    fn phase_since(&self) -> Option<AtTime>;
+    fn message(&self) -> Option<String>;
+    fn started(&self) -> Option<AtTime>;
+    fn unready_since(&self) -> Option<AtTime>;
 }
 
-fn owned_by(metadata: &ObjectMeta, kind: &str) -> bool {
-    metadata
-        .owner_references
-        .as_ref()
-        .map(|owners| owners.iter().any(|owner| owner.kind == kind))
-        .unwrap_or(false)
-}
+impl PodProgress for Pod {
+    fn phase(&self) -> WorkloadPhase {
+        match self
+            .status
+            .as_ref()
+            .and_then(|status| status.phase.as_deref())
+        {
+            Some(POD_PHASE_PENDING) => WorkloadPhase::Pending,
+            Some(POD_PHASE_RUNNING) => WorkloadPhase::Running,
+            Some(POD_PHASE_SUCCEEDED) => WorkloadPhase::Succeeded,
+            Some(POD_PHASE_FAILED) => WorkloadPhase::Failed,
+            _ => WorkloadPhase::Unknown,
+        }
+    }
 
-fn owner_job_name(metadata: &ObjectMeta) -> Option<&str> {
-    metadata
-        .owner_references
-        .as_ref()
-        .and_then(|owners| owners.iter().find(|owner| owner.kind == "Job"))
-        .map(|owner| owner.name.as_str())
-}
+    fn phase_since(&self) -> Option<AtTime> {
+        match self.phase() {
+            WorkloadPhase::Pending => self.metadata.created(),
+            WorkloadPhase::Running => self.started().or_else(|| self.metadata.created()),
+            WorkloadPhase::Unknown => self.unready_since(),
+            _ => None,
+        }
+    }
 
-fn at_time(time: Option<&k8s_openapi::apimachinery::pkg::apis::meta::v1::Time>) -> Option<AtTime> {
-    time.and_then(|t| {
-        let dt: DateTime<Utc> = t.0;
-        AtTime::try_from(dt).ok()
-    })
-}
+    fn message(&self) -> Option<String> {
+        self.status
+            .as_ref()
+            .and_then(|status| status.message.clone())
+    }
 
-fn creation(metadata: &ObjectMeta) -> Option<AtTime> {
-    at_time(metadata.creation_timestamp.as_ref())
-}
-
-fn main_container_started(pod: &Pod) -> Option<AtTime> {
-    pod.status
-        .as_ref()
-        .and_then(|status| status.container_statuses.as_ref())
-        .and_then(|containers| {
-            containers.iter().find_map(|container| {
-                container
-                    .state
-                    .as_ref()
-                    .and_then(|state| state.running.as_ref())
-                    .and_then(|running| at_time(running.started_at.as_ref()))
+    fn started(&self) -> Option<AtTime> {
+        self.status
+            .as_ref()
+            .and_then(|status| status.container_statuses.as_ref())
+            .and_then(|containers| {
+                containers.iter().find_map(|container| {
+                    container
+                        .state
+                        .as_ref()
+                        .and_then(|state| state.running.as_ref())
+                        .and_then(|running| at_time(running.started_at.as_ref()))
+                })
             })
-        })
-}
+    }
 
-fn unready_since(pod: &Pod) -> Option<AtTime> {
-    pod.status
-        .as_ref()
-        .and_then(|status| status.conditions.as_ref())
-        .and_then(|conditions| {
-            conditions
-                .iter()
-                .find(|condition| condition.type_ == "Ready" && condition.status != "True")
-        })
-        .and_then(|condition| at_time(condition.last_transition_time.as_ref()))
-}
-
-fn pod_phase(pod: &Pod) -> (WorkloadPhase, Option<AtTime>, Option<String>) {
-    let phase = pod
-        .status
-        .as_ref()
-        .and_then(|status| status.phase.as_deref());
-    let message = pod
-        .status
-        .as_ref()
-        .and_then(|status| status.message.clone());
-    match phase {
-        Some(POD_PHASE_PENDING) => (WorkloadPhase::Pending, creation(&pod.metadata), message),
-        Some(POD_PHASE_RUNNING) => (
-            WorkloadPhase::Running,
-            main_container_started(pod).or_else(|| creation(&pod.metadata)),
-            message,
-        ),
-        Some(POD_PHASE_SUCCEEDED) => (WorkloadPhase::Succeeded, None, message),
-        Some(POD_PHASE_FAILED) => (WorkloadPhase::Failed, None, message),
-        // Dated from unreadiness, never creation: a long-lived pod must not
-        // look "long Unknown" on the first blip.
-        _ => (WorkloadPhase::Unknown, unready_since(pod), message),
+    fn unready_since(&self) -> Option<AtTime> {
+        self.status
+            .as_ref()
+            .and_then(|status| status.conditions.as_ref())
+            .and_then(|conditions| {
+                conditions.iter().find(|condition| {
+                    condition.type_ == POD_CONDITION_READY
+                        && condition.status != POD_CONDITION_STATUS_TRUE
+                })
+            })
+            .and_then(|condition| at_time(condition.last_transition_time.as_ref()))
     }
 }
 
-fn job_failed_condition(job: &Job) -> Option<(Option<AtTime>, Option<String>)> {
-    job.status
-        .as_ref()
-        .and_then(|status| status.conditions.as_ref())
-        .and_then(|conditions| {
-            conditions
-                .iter()
-                .find(|condition| condition.type_ == "Failed" && condition.status == "True")
-        })
-        .map(|condition| {
-            (
-                at_time(condition.last_transition_time.as_ref()),
-                condition.message.clone(),
-            )
-        })
+trait JobOutcome {
+    fn succeeded(&self) -> bool;
+    fn has_failed_pod(&self) -> bool;
+    fn completed_at(&self) -> Option<AtTime>;
+    fn failure(&self) -> Option<(Option<AtTime>, Option<String>)>;
 }
 
-fn observe_job(job: &Job, pods_by_owner: &HashMap<String, &Pod>) -> ObservedWorkload {
-    let name = job.metadata.name.clone().unwrap_or_default();
-    let status = job.status.as_ref();
-    let (phase, phase_since, finished_at, message) =
-        if status.and_then(|s| s.succeeded).unwrap_or(0) > 0 {
-            (
-                WorkloadPhase::Succeeded,
-                None,
-                at_time(status.and_then(|s| s.completion_time.as_ref())),
-                None,
-            )
-        } else if let Some((finished_at, message)) = job_failed_condition(job) {
+impl JobOutcome for Job {
+    fn succeeded(&self) -> bool {
+        self.status
+            .as_ref()
+            .and_then(|status| status.succeeded)
+            .unwrap_or(0)
+            > 0
+    }
+
+    fn has_failed_pod(&self) -> bool {
+        self.status
+            .as_ref()
+            .and_then(|status| status.failed)
+            .unwrap_or(0)
+            > 0
+    }
+
+    fn completed_at(&self) -> Option<AtTime> {
+        at_time(
+            self.status
+                .as_ref()
+                .and_then(|status| status.completion_time.as_ref()),
+        )
+    }
+
+    fn failure(&self) -> Option<(Option<AtTime>, Option<String>)> {
+        self.status
+            .as_ref()
+            .and_then(|status| status.conditions.as_ref())
+            .and_then(|conditions| {
+                conditions.iter().find(|condition| {
+                    condition.type_ == JOB_CONDITION_FAILED
+                        && condition.status == JOB_CONDITION_STATUS_TRUE
+                })
+            })
+            .map(|condition| {
+                (
+                    at_time(condition.last_transition_time.as_ref()),
+                    condition.message.clone(),
+                )
+            })
+    }
+}
+
+trait FromKubernetes: Sized {
+    fn from_job(job: &Job, pods_by_owner: &HashMap<String, &Pod>) -> Result<Self, ObserverError>;
+    fn from_cronjob(cronjob: &CronJob) -> Result<Self, ObserverError>;
+    fn from_pod(pod: &Pod) -> Result<Self, ObserverError>;
+}
+
+impl FromKubernetes for ObservedWorkload {
+    fn from_job(job: &Job, pods_by_owner: &HashMap<String, &Pod>) -> Result<Self, ObserverError> {
+        let name = job.metadata.name();
+        let (phase, phase_since, finished_at, message) = if job.succeeded() {
+            (WorkloadPhase::Succeeded, None, job.completed_at(), None)
+        } else if let Some((finished_at, message)) = job.failure() {
             (WorkloadPhase::Failed, None, finished_at, message)
-        } else if status.and_then(|s| s.failed).unwrap_or(0) > 0 {
-            // backoffLimit 0: a failed pod is terminal before the Failed
-            // condition materializes.
+        } else if job.has_failed_pod() {
             (WorkloadPhase::Failed, None, None, None)
         } else if let Some(pod) = pods_by_owner.get(&name) {
-            let (phase, phase_since, message) = pod_phase(pod);
-            (phase, phase_since, None, message)
+            (pod.phase(), pod.phase_since(), None, pod.message())
         } else {
-            (WorkloadPhase::Pending, creation(&job.metadata), None, None)
+            (WorkloadPhase::Pending, job.metadata.created(), None, None)
         };
-    ObservedWorkload {
-        worker_id: worker_id_of(&job.metadata),
-        kind: WorkloadKind::Job,
-        name,
-        phase,
-        phase_since,
-        finished_at,
-        message,
+        Ok(Self {
+            worker_id: Some(job.metadata.worker_id()?),
+            kind: job.metadata.workload_kind()?,
+            name,
+            phase,
+            phase_since,
+            finished_at,
+            message,
+        })
+    }
+
+    fn from_cronjob(cronjob: &CronJob) -> Result<Self, ObserverError> {
+        Ok(Self {
+            worker_id: Some(cronjob.metadata.worker_id()?),
+            kind: cronjob.metadata.workload_kind()?,
+            name: cronjob.metadata.name(),
+            phase: WorkloadPhase::Present,
+            phase_since: cronjob.metadata.created(),
+            finished_at: None,
+            message: None,
+        })
+    }
+
+    fn from_pod(pod: &Pod) -> Result<Self, ObserverError> {
+        Ok(Self {
+            worker_id: Some(pod.metadata.worker_id()?),
+            kind: pod.metadata.workload_kind()?,
+            name: pod.metadata.name(),
+            phase: pod.phase(),
+            phase_since: pod.phase_since(),
+            finished_at: None,
+            message: pod.message(),
+        })
     }
 }
 
 #[async_trait]
 impl WorkloadObserver for KubernetesWorkloadObserver {
     async fn observe(&self) -> Result<WorkloadObservation, ObserverError> {
-        let jobs = list_jobs(&self.context).await.map_err(backend)?;
-        let cronjobs = list_cronjobs(&self.context).await.map_err(backend)?;
-        let pods = list_pods(&self.context).await.map_err(backend)?;
+        let jobs = list_jobs_of_workers(&self.context).await?;
+        let cronjobs = list_cronjobs_of_workers(&self.context).await?;
+        let pods = list_pods_of_workers(&self.context).await?;
 
         let pods_by_owner: HashMap<String, &Pod> = pods
             .iter()
-            .filter_map(|pod| owner_job_name(&pod.metadata).map(|owner| (owner.to_owned(), pod)))
+            .filter_map(|pod| {
+                pod.metadata
+                    .owner_name(KUBE_KIND_JOB)
+                    .map(|owner| (owner.to_owned(), pod))
+            })
             .collect();
 
         let mut workloads = Vec::new();
 
         for cronjob in &cronjobs {
-            let Some(worker_id) = worker_id_of(&cronjob.metadata) else {
-                continue;
-            };
-            workloads.push(observe_cronjob(cronjob, worker_id));
+            workloads.push(ObservedWorkload::from_cronjob(cronjob)?);
         }
 
         for job in &jobs {
-            // A CronJob's child jobs (and their pods) fold into the CronJob.
-            if owned_by(&job.metadata, "CronJob") {
+            if job.metadata.owned_by(KUBE_KIND_CRONJOB) {
                 continue;
             }
-            let observed = observe_job(job, &pods_by_owner);
-            if observed.worker_id.is_some() {
-                workloads.push(observed);
-            }
+            workloads.push(ObservedWorkload::from_job(job, &pods_by_owner)?);
         }
 
         for pod in &pods {
-            // Job-owned pods folded above; bare pods are workloads themselves.
-            if owner_job_name(&pod.metadata).is_some() {
+            if pod.metadata.owned_by(KUBE_KIND_JOB) {
                 continue;
             }
-            let Some(worker_id) = worker_id_of(&pod.metadata) else {
-                continue;
-            };
-            let (phase, phase_since, message) = pod_phase(pod);
-            workloads.push(ObservedWorkload {
-                worker_id: Some(worker_id),
-                kind: WorkloadKind::Pod,
-                name: pod.metadata.name.clone().unwrap_or_default(),
-                phase,
-                phase_since,
-                finished_at: None,
-                message,
-            });
+            workloads.push(ObservedWorkload::from_pod(pod)?);
         }
 
         Ok(WorkloadObservation { workloads })
@@ -238,24 +322,15 @@ impl WorkloadObserver for KubernetesWorkloadObserver {
 
     async fn remove(&self, kind: &WorkloadKind, name: &str) -> Result<(), ObserverError> {
         match kind {
-            WorkloadKind::Pod => delete_pod(&self.context, name).await.map_err(backend),
-            WorkloadKind::Job => delete_job(&self.context, name).await.map_err(backend),
-            WorkloadKind::CronJob => delete_cronjob(&self.context, name).await.map_err(backend),
-            WorkloadKind::Deployment => delete_deployment(&self.context, name)
-                .await
-                .map_err(backend),
+            WorkloadKind::CronTrigger => delete_cronjob(&self.context, name).await?,
+            WorkloadKind::Function | WorkloadKind::StageTrigger => {
+                delete_job(&self.context, name).await?;
+                delete_pod(&self.context, name).await?;
+            }
         }
+        Ok(())
     }
 }
 
-fn observe_cronjob(cronjob: &CronJob, worker_id: WorkerId) -> ObservedWorkload {
-    ObservedWorkload {
-        worker_id: Some(worker_id),
-        kind: WorkloadKind::CronJob,
-        name: cronjob.metadata.name.clone().unwrap_or_default(),
-        phase: WorkloadPhase::Present,
-        phase_since: creation(&cronjob.metadata),
-        finished_at: None,
-        message: None,
-    }
-}
+#[cfg(test)]
+mod tests;

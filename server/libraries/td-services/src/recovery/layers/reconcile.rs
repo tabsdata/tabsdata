@@ -231,12 +231,7 @@ fn before_or_undated(time: &Option<AtTime>, cutoff: &DateTime<Utc>) -> bool {
 }
 
 fn kind_rank(kind: &WorkloadKind) -> u8 {
-    match kind {
-        WorkloadKind::CronJob => 0,
-        WorkloadKind::Deployment => 1,
-        WorkloadKind::Job => 2,
-        WorkloadKind::Pod => 3,
-    }
+    if kind.holds_a_schedule() { 0 } else { 1 }
 }
 
 pub fn classify_divergence(

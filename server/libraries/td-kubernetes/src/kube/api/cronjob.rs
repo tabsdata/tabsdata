@@ -14,7 +14,7 @@ use crate::base::error::kubernetes::{KubeCronJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
     AwaitPatience, await_condition_with_patience, label_tabsdata, owner_ref_for_cronjob,
-    tabsdata_non_ephemeral_selector, tabsdata_selector,
+    tabsdata_non_ephemeral_selector, tabsdata_selector, tabsdata_worker_selector,
 };
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
@@ -105,6 +105,12 @@ pub async fn delete_cronjobs_matching(
 
 pub async fn list_cronjobs(context: &KubeContext) -> Result<Vec<CronJob>, KubernetesError> {
     list_cronjobs_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn list_cronjobs_of_workers(
+    context: &KubeContext,
+) -> Result<Vec<CronJob>, KubernetesError> {
+    list_cronjobs_matching(context, tabsdata_worker_selector()).await
 }
 
 pub async fn list_cronjobs_non_ephemeral(
