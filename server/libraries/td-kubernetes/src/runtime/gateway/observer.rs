@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
@@ -39,7 +38,7 @@ impl KubernetesWorkloadObserver {
 }
 
 fn at_time(time: Option<&Time>) -> Option<AtTime> {
-    time.and_then(|stamp| AtTime::try_from(DateTime::<Utc>::from(stamp.0)).ok())
+    time.and_then(|stamp| AtTime::try_from(stamp.0).ok())
 }
 
 trait WorkloadMetadata {

@@ -12,17 +12,16 @@ pub struct SqliteProvider;
 mod imp {
     use super::SqliteProvider;
     use crate::db::DbBackendProvider;
-    use std::future::Future;
     use td_database::components::SchemaComponent;
     use td_database::test_utils::MultiTestDb;
 
     impl DbBackendProvider for SqliteProvider {
         const NAME: &'static str = "sqlite";
-        fn provision(
+        async fn provision(
             _test_name: &'static str,
             components: &'static [&'static dyn SchemaComponent],
-        ) -> impl Future<Output = Option<MultiTestDb>> + Send {
-            async move { Some(td_database::test_utils::sqlite::pools(components).await) }
+        ) -> Option<MultiTestDb> {
+            Some(td_database::test_utils::sqlite::pools(components).await)
         }
     }
 }
