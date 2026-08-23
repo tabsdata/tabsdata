@@ -20,7 +20,7 @@ use td_queries::{LiveEntry, VersionedEntry};
 use td_schema::schema::backend::Backend;
 
 use crate::bulk::bulk_insert;
-use crate::harness::{timed, timed_once};
+use crate::harness::{analyze, timed, timed_once};
 use crate::profile::SizeProfile;
 use crate::scaling::assert_subquadratic;
 
@@ -400,14 +400,10 @@ async fn report_scaling_data_version(db: TdPool) -> Result<(), TdError> {
     const BIG_V: usize = 2_000;
 
     bulk_insert(&db, &dv_rows(0, SMALL_V)?).await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after small dv seed");
+    analyze(&db, "after small dv seed").await;
     let t1 = time_dv_queries(&db).await?;
     bulk_insert(&db, &dv_rows(SMALL_V, BIG_V)?).await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after big dv seed");
+    analyze(&db, "after big dv seed").await;
     let t2 = time_dv_queries(&db).await?;
 
     let n_small = SMALL_V as f64;

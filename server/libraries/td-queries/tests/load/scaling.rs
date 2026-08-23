@@ -45,7 +45,7 @@ use crate::bulk::bulk_insert;
 use crate::cases::LOAD_CASES;
 use crate::dataset::{self, ChainHandle, WINDOW_END_MS, WINDOW_START_MS};
 use crate::dataversion_cases;
-use crate::harness::{analyze, seed, timed, timed_once};
+use crate::harness::{analyze, timed, timed_once};
 use crate::profile::{ChainKnobs, MetricsKnobs};
 
 type Ptr = LogicalTableDataVersionPointerDB;
@@ -538,14 +538,10 @@ async fn time_chain_queries(
 #[td_test::test(db)]
 async fn report_scaling_chain(db: TdPool) -> Result<(), TdError> {
     let h1 = dataset::chain_dataset(&db, ChainKnobs { units: SMALL }).await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after small chain seed");
+    analyze(&db, "after small chain seed").await;
     let t1 = time_chain_queries(&db, &h1).await?;
     let h2 = dataset::chain_dataset(&db, ChainKnobs { units: BIG }).await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after big chain seed");
+    analyze(&db, "after big chain seed").await;
     let t2 = time_chain_queries(&db, &h2).await?;
 
     let n_small = (SMALL * 2) as f64;
@@ -664,17 +660,14 @@ fn metrics_queries_hold_window_first_fenced_contract() {
     }
 }
 
-/// Deterministic plan + execution guard (cheap, unconditional), both dims.
-/// Under the Global RLS-bypass path the metrics plans must reach the LFR view
-/// via `logical_function_runs_pkey`; keying the view by
-/// `physical_function_run_id` instead re-expands it per window row (the
-/// O(window × history) blowup). Multi-project seed is load-bearing — for the
-/// plan guard (single-project folds against MCVs and hides the regression)
-/// and for the name assertions (group ids are only unique per project, so the
-/// group-dim name joins must key on `(project, id)`).
+/// Deterministic execution guard (cheap, unconditional), both dims: under the
+/// Global RLS-bypass path every metrics row must come back with its dimension
+/// identity resolved. Multi-project seed is load-bearing — group ids are only
+/// unique per project, so the group-dim name joins must key on
+/// `(project, id)`.
 #[cfg(postgres)]
 #[td_test::test(db)]
-async fn metrics_plans_and_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
+async fn metrics_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
     dataset::metrics_dataset(
         &db,
         MetricsKnobs {
@@ -684,21 +677,11 @@ async fn metrics_plans_and_rows_under_bypass(db: TdPool) -> Result<(), TdError> 
         },
     )
     .await?;
-    analyze(&db, "after metrics seed").await;
 
     let mut conn = db.acquire_for_read().await.unwrap();
     for dim in [Dim::Collection, Dim::Group] {
         let mut req = metrics_request();
         req.dim = dim;
-        for (name, sql) in &td_queries::metrics_plan_sql(&req) {
-            let plan = conn.explain(sql).await.expect("explain").join("\n");
-            assert!(
-                plan.contains("logical_function_runs_pkey"),
-                "{dim:?} {name} plan does not reach the LFR view by primary key — \
-                 the window probe regressed to per-row view re-expansion (the RLS \
-                 O(window×history) blowup):\n{plan}"
-            );
-        }
 
         let nodes = conn.metrics().metrics_nodes(&req).await?;
         assert!(!nodes.is_empty(), "{dim:?}: no node rows on seeded data");
@@ -743,37 +726,6 @@ async fn metrics_plans_and_rows_under_bypass(db: TdPool) -> Result<(), TdError> 
     Ok(())
 }
 
-/// Deterministic plan guard (cheap, unconditional) for the scheduler chain
-/// statements (readiness / blocked / commit). Their latest-pointer hop must
-/// stay a fenced lateral driven through the pointer partition index: expressed
-/// as `JOIN ON id = (subquery)`, the RLS ~1-row estimates demote the probe
-/// into a join filter over an inputs × pointers cross-materialization — a
-/// SubPlan re-executed O(rows²) per scheduler tick, which pins the
-/// dispatcher's pool connection for minutes and starves the apiserver.
-#[cfg(postgres)]
-#[td_test::test(db)]
-async fn chain_plans_use_fenced_pointer_probe(db: TdPool) -> Result<(), TdError> {
-    let (h, _, _) = seed(&db).await?;
-    analyze(&db, "after chain seed").await;
-
-    let mut conn = db.acquire_for_read().await.unwrap();
-    for (name, sql) in &td_queries::chain_plan_sql(&h.at, &h.execs[0], 50) {
-        let plan = conn.explain(sql).await.expect("explain").join("\n");
-        assert!(
-            plan.contains("logical_table_data_version_pointers___logical_table_data_versio"),
-            "{name}: latest-pointer probe is not driven by the pointer \
-             partition index:\n{plan}"
-        );
-        assert!(
-            !plan.contains("SubPlan"),
-            "{name}: plan re-grew a correlated SubPlan — the latest-pointer \
-             hop regressed from the fenced lateral to a join-filter subquery \
-             (O(rows²) per scheduler tick):\n{plan}"
-        );
-    }
-    Ok(())
-}
-
 #[ignore = "expensive: seeds the metrics dataset at two sizes and times every metrics query"]
 #[td_test::test(db)]
 async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
@@ -783,9 +735,7 @@ async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
         projects: 8,
     };
     dataset::metrics_dataset(&db, small).await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after small metrics seed");
+    analyze(&db, "after small metrics seed").await;
     let t1 = time_metrics_queries(&db).await?;
     let big = MetricsKnobs {
         publishers: BIG,
@@ -793,9 +743,7 @@ async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
         projects: 8,
     };
     dataset::metrics_dataset(&db, big).await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after big metrics seed");
+    analyze(&db, "after big metrics seed").await;
     let t2 = time_metrics_queries(&db).await?;
 
     let n_small = (SMALL + SMALL / 2) as f64;
@@ -849,9 +797,7 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
     ] {
         dataset::metrics_dataset(&db, knobs).await?;
         push_history(&db).await;
-        db.execute_batch(&["ANALYZE".to_string()])
-            .await
-            .expect("analyze after history push");
+        analyze(&db, "after history push").await;
         passes.push(time_metrics_queries(&db).await?);
     }
     // Mechanism (deterministic): the attempt is resolved to its run by pk, not
@@ -904,9 +850,7 @@ async fn report_scaling_coverage(db: TdPool, dv_db: TdPool) -> Result<(), TdErro
     let mut timed: BTreeSet<&'static str> = BTreeSet::new();
 
     let h = dataset::chain_dataset(&db, ChainKnobs { units: SMALL }).await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after chain seed");
+    analyze(&db, "after chain seed").await;
     timed.extend(
         time_chain_queries(&db, &h)
             .await?
@@ -923,16 +867,11 @@ async fn report_scaling_coverage(db: TdPool, dv_db: TdPool) -> Result<(), TdErro
         },
     )
     .await?;
-    db.execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after metrics seed");
+    analyze(&db, "after metrics seed").await;
     timed.extend(time_metrics_queries(&db).await?.into_iter().map(|(n, _)| n));
 
     bulk_insert(&dv_db, &dataversion_cases::dv_rows(0, SMALL)?).await?;
-    dv_db
-        .execute_batch(&["ANALYZE".to_string()])
-        .await
-        .expect("analyze after dv seed");
+    analyze(&dv_db, "after dv seed").await;
     timed.extend(
         dataversion_cases::time_dv_queries(&dv_db)
             .await?

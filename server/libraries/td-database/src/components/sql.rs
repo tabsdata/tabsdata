@@ -162,6 +162,21 @@ pub(super) fn grant_app_role_tables_sql(schema: &str, app_role: &str) -> String 
     )
 }
 
+/// Let the app role `ANALYZE` the schema's tables. Test-only: the test factories
+/// keep the schema superuser-owned, so without `MAINTAIN` the app role's
+/// `ANALYZE` is skipped with a warning and statistics never update. `MAINTAIN`
+/// is PostgreSQL 16+, and 15 is still a supported server.
+#[cfg(all(postgres, any(test, feature = "test-utils")))]
+pub(super) fn grant_app_role_maintain_sql(schema: &str, app_role: &str) -> String {
+    format!(
+        "DO $$ BEGIN \
+           IF current_setting('server_version_num')::int >= 160000 THEN \
+             EXECUTE format('GRANT MAINTAIN ON ALL TABLES IN SCHEMA %I TO %I', '{schema}', '{app_role}'); \
+           END IF; \
+         END $$"
+    )
+}
+
 #[cfg(postgres)]
 pub(super) fn grant_app_role_privileges_sql(schema: &str, app_role: &str) -> [String; 3] {
     [

@@ -137,6 +137,10 @@ pub async fn pools(
         // schema-local ⇒ runs concurrently with other tests.
         let (schema, config, admin) = provision_schema(&admin_connect, index).await;
         admin.upgrade(*component).await.expect("upgrade component");
+        admin
+            .grant_app_role_maintain(&schema)
+            .await
+            .expect("grant app role MAINTAIN");
         admin.close().await;
 
         serving.push(

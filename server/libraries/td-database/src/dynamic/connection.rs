@@ -203,6 +203,37 @@ impl<'c> DynamicConnection<'c> {
         }
     }
 
+    /// `ANALYZE` every table of the connection's own schema. Test-only plumbing
+    /// for the load suite's plan-shape guards, which need real statistics.
+    ///
+    /// Scoped to `current_schema()` on purpose: a bare `ANALYZE` sweeps the whole
+    /// database, and tests share one database isolated only by schema, so the
+    /// sweep's `pg_class` ACL pass dies with 42P01 whenever a concurrent test
+    /// drops its schema mid-run. Naming this schema's tables removes the race
+    /// rather than retrying it. PostgreSQL only — other backends are a no-op.
+    #[cfg(feature = "td-test")]
+    pub async fn analyze_current_schema(&mut self) -> Result<(), Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                let tables: Vec<String> = sqlx::query_scalar(
+                    "SELECT format('%I.%I', schemaname, tablename) FROM pg_tables \
+                     WHERE schemaname = current_schema()",
+                )
+                .fetch_all(&mut **h)
+                .await?;
+                if !tables.is_empty() {
+                    sqlx::query(&format!("ANALYZE {}", tables.join(", ")))
+                        .execute(&mut **h)
+                        .await?;
+                }
+                Ok(())
+            }
+            #[allow(unreachable_patterns)]
+            _ => Ok(()),
+        }
+    }
+
     /// Bind this connection's transaction to a project: set `app.project_id`
     /// **and clear `app.bypass_rls`**, so row-level security enforces exactly
     /// this project. The connection already runs as the non-bypass

@@ -6,6 +6,8 @@
 
 use crate::components::ProvisionSpec;
 use crate::components::sql::execute_batch_tx;
+#[cfg(all(postgres, any(test, feature = "test-utils")))]
+use crate::components::sql::grant_app_role_maintain_sql;
 #[cfg(postgres)]
 use crate::components::sql::{
     OWNER_PASSWORD_GUC, create_app_role_sql, create_owner_role_sql, create_schema_sql,
@@ -212,6 +214,27 @@ impl AdminPool {
             ];
             execute_batch_tx(&self.pool, &stmts).await?;
             debug!(role = self.app_role, "Ensured RLS app role");
+        }
+        Ok(())
+    }
+
+    /// Grant the app role `MAINTAIN` on `schema`'s tables so its `ANALYZE`
+    /// takes effect. Test-only — the test factories keep the schema
+    /// superuser-owned, and the app role owns nothing. Runs after the tables
+    /// exist, i.e. after [`Self::upgrade`].
+    #[cfg(any(test, feature = "test-utils"))]
+    pub async fn grant_app_role_maintain(&self, schema: &str) -> Result<(), DbError> {
+        if !matches!(self.kind().into(), Backend::Postgres) {
+            return Ok(());
+        }
+        #[cfg(postgres)]
+        {
+            execute_batch_tx(
+                &self.pool,
+                &[grant_app_role_maintain_sql(schema, &self.app_role)],
+            )
+            .await?;
+            debug!(role = self.app_role, schema, "Granted app role MAINTAIN");
         }
         Ok(())
     }
