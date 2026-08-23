@@ -299,3 +299,88 @@ def test_models_lists_employees(stores, faked, capsys):
     _dom(["create", "--sys", "s", "--domain", "d"])
     assert _dom(["models", "--domain", "d"]) == 0
     assert "employees" in capsys.readouterr().out
+
+
+def _exported(out: str) -> dict[str, str]:
+    """The ``export NAME=value`` lines of an ``info`` render, as a dict."""
+    return dict(
+        line[len("export ") :].split("=", 1)
+        for line in out.splitlines()
+        if line.startswith("export ")
+    )
+
+
+@pytest.mark.parametrize("selector", ["ALL", "s1,s2"])
+def test_info_export_of_several_systems_prefixes_each_with_its_name(
+    selector, stores, faked, capsys
+):
+    _sys(["create", "--type", "mysql", "--sys", "s1"])
+    _sys(["create", "--type", "mysql", "--sys", "s2"])
+    capsys.readouterr()
+
+    assert _sys(["info", "--sys", selector, "--format", "export"]) == 0
+    exported = _exported(capsys.readouterr().out)
+    assert {"S1__HOST", "S1__PORT", "S2__HOST", "S2__PORT"} <= set(exported)
+    # unprefixed keys would collapse the two systems onto one set of variables
+    assert "HOST" not in exported
+
+
+def test_info_export_of_one_system_stays_unprefixed(stores, faked, capsys):
+    _sys(["create", "--type", "mysql", "--sys", "s1"])
+    capsys.readouterr()
+
+    assert _sys(["info", "--sys", "s1", "--format", "export"]) == 0
+    exported = _exported(capsys.readouterr().out)
+    assert "HOST" in exported and "S1__HOST" not in exported
+
+    assert _sys(["info", "--sys", "s1", "--format", "export", "--prefix", "P"]) == 0
+    assert "P__HOST" in _exported(capsys.readouterr().out)
+
+
+def test_info_unset_of_several_systems_prefixes_each_with_its_name(
+    stores, faked, capsys
+):
+    _sys(["create", "--type", "mysql", "--sys", "s1"])
+    _sys(["create", "--type", "mysql", "--sys", "s2"])
+    capsys.readouterr()
+
+    assert _sys(["info", "--sys", "ALL", "--format", "unset"]) == 0
+    unset = [line for line in capsys.readouterr().out.splitlines() if line]
+    assert "unset S1__HOST" in unset and "unset S2__HOST" in unset
+
+
+def test_info_export_from_a_manifest_prefixes_each_with_its_name(
+    stores, faked, capsys, tmp_path
+):
+    _sys(["create", "--type", "mysql", "--sys", "s1"])
+    _sys(["create", "--type", "mysql", "--sys", "s2"])
+    capsys.readouterr()
+    m = tmp_path / "systems.yaml"
+    m.write_text("- name: s1\n  type: mysql\n- name: s2\n  type: mysql\n")
+
+    assert _sys(["info", "--manifest", str(m), "--format", "export"]) == 0
+    exported = _exported(capsys.readouterr().out)
+    assert {"S1__HOST", "S2__HOST"} <= set(exported)
+
+
+def test_info_export_of_several_domains_prefixes_each_with_its_name(
+    stores, faked, capsys
+):
+    _sys(["create", "--type", "mysql", "--sys", "s"])
+    _dom(["create", "--sys", "s", "--domain", "d1"])
+    _dom(["create", "--sys", "s", "--domain", "d2"])
+    capsys.readouterr()
+
+    assert _dom(["info", "--domain", "ALL", "--format", "export"]) == 0
+    exported = _exported(capsys.readouterr().out)
+    assert {"D1__DB", "D2__DB"} <= set(exported)
+    assert exported["D1__DB"] != exported["D2__DB"]
+
+
+@pytest.mark.parametrize("selector", ["ALL", "s1,s2"])
+def test_info_rejects_prefix_for_several_backends(selector, stores, faked):
+    _sys(["create", "--type", "mysql", "--sys", "s1"])
+    _sys(["create", "--type", "mysql", "--sys", "s2"])
+    with pytest.raises(TdxError) as exc:
+        _sys(["info", "--sys", selector, "--format", "export", "--prefix", "P"])
+    assert "--prefix" in str(exc.value)

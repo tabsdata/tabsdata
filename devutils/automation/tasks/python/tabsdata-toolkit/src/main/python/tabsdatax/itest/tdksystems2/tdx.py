@@ -47,6 +47,12 @@
 ``--out json`` on the data verbs prints ``{entity: {insert, update, delete}}`` to
 stdout (nothing else) and routes progress to the log; omit it for human output.
 
+``info`` over several backends (``ALL``, a comma list or a manifest) keys each
+one's ``export`` / ``unset`` lines on its own upper-cased name — the
+``<NAME>__<KEY>`` shape both languages' fixtures read — so one
+``eval "$(tdx-domain info --domain ALL --format export)"`` sets up the whole
+store. ``--prefix`` names a single backend and is rejected there.
+
 Batch: the multi-target selector is ``--type`` for a system ``create`` (one
 system per type, named after it), ``--sys`` for a domain ``create`` (one domain
 per system, named after it), and ``--sys`` / ``--domain`` for every other verb
@@ -513,9 +519,12 @@ def _add_info_manifest(p: ArgumentParser) -> None:
 
 def _info_targets(
     tool: str, target: str | None, manifest_file: str | None, dir_opt: str | None
-) -> list[str]:
-    """The names an ``info`` invocation should render: the manifest's entries, or
-    a single / comma-listed target, or ``ALL`` stored names."""
+) -> tuple[list[str], bool]:
+    """The names an ``info`` invocation should render — the manifest's entries, or
+    a single / comma-listed target, or ``ALL`` stored names — and whether it asked
+    for many of them (a manifest, ``ALL``, or a comma list). Being a batch is the
+    selector's shape, not how many names it happens to resolve to, so a store
+    holding one backend renders ``ALL`` the same way as a store holding ten."""
     role = (
         constants.ROLE_DOMAIN if tool == constants.DOM_TOOL else constants.ROLE_SYSTEM
     )
@@ -526,7 +535,7 @@ def _info_targets(
     )
     if manifest_file:
         entries = manifest.read(manifest_file)
-        return [str(e["name"]) for e in entries if e.get("name")]
+        return [str(e["name"]) for e in entries if e.get("name")], True
     selector = constants.OPT_DOMAIN if tool == constants.DOM_TOOL else constants.OPT_SYS
     if not target:
         raise TdxError(
@@ -535,20 +544,37 @@ def _info_targets(
         )
     names = [n.strip() for n in target.split(",") if n.strip()]
     if len(names) == 1 and names[0].upper() == constants.TARGET_ALL:
-        return [i.name for i in _store_infos(store_dir, role)]
-    return names
+        return [i.name for i in _store_infos(store_dir, role)], True
+    return names, len(names) > 1
 
 
 def _render_infos(
-    tool: str, names: list[str], dir_opt: str | None, fmt: str, prefix: str | None
+    tool: str,
+    names: list[str],
+    dir_opt: str | None,
+    fmt: str,
+    prefix: str | None,
+    batch: bool,
 ) -> int:
+    """Render each name's descriptor. A `batch` render keys every backend's
+    ``export`` / ``unset`` lines on its own upper-cased name — the
+    ``<NAME>__<KEY>`` shape both languages' fixtures read — so one
+    ``eval "$(tdx-domain info --domain ALL --format export)"`` sets up the whole
+    store instead of collapsing it onto one set of variables."""
+    if batch and prefix:
+        raise TdxError(
+            f"{tool} {constants.V_INFO}: {constants.OPT_PREFIX} names one backend; "
+            f"a batch render prefixes each with its own name"
+        )
     role = (
         constants.ROLE_DOMAIN if tool == constants.DOM_TOOL else constants.ROLE_SYSTEM
     )
     path_fn = store.domain_path if tool == constants.DOM_TOOL else store.system_path
     chunks = [
         descriptor.info_render(
-            _load_desc(path_fn(name, dir_opt), role, name), fmt, prefix
+            _load_desc(path_fn(name, dir_opt), role, name),
+            fmt,
+            name.upper() if batch else prefix,
         )
         for name in names
     ]
@@ -563,8 +589,8 @@ def _cmn_sys_info(tool: str, rest: list[str]) -> int:
     _add_info_manifest(p)
     cli.add_info_format(p)
     a = p.parse_args(rest)
-    names = _info_targets(tool, a.sys, a.manifest, a.sys_dir)
-    return _render_infos(tool, names, a.sys_dir, a.format, a.prefix)
+    names, batch = _info_targets(tool, a.sys, a.manifest, a.sys_dir)
+    return _render_infos(tool, names, a.sys_dir, a.format, a.prefix, batch)
 
 
 def _cmn_dom_list(tool: str, rest: list[str]) -> int:
@@ -627,8 +653,8 @@ def _cmn_dom_info(tool: str, rest: list[str]) -> int:
     _add_info_manifest(p)
     cli.add_info_format(p)
     a = p.parse_args(rest)
-    names = _info_targets(tool, a.domain, a.manifest, a.domain_dir)
-    return _render_infos(tool, names, a.domain_dir, a.format, a.prefix)
+    names, batch = _info_targets(tool, a.domain, a.manifest, a.domain_dir)
+    return _render_infos(tool, names, a.domain_dir, a.format, a.prefix, batch)
 
 
 def _add_manifest_out(p: ArgumentParser) -> None:

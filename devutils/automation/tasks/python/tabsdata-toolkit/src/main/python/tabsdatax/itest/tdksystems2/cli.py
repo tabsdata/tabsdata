@@ -306,5 +306,6 @@ def add_info_format(parser: argparse.ArgumentParser) -> None:
         constants.OPT_PREFIX,
         default=None,
         metavar="PREFIX",
-        help="emit keys as <PREFIX>__<KEY>",
+        help="emit keys as <PREFIX>__<KEY> (one backend; a batch render uses "
+        "each backend's own name)",
     )
