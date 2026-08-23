@@ -3,6 +3,7 @@
 //
 
 use super::*;
+use crate::runtime::provider::ClusterProvider;
 
 fn assigned(entries: &[(PortRole, u16)]) -> Vec<AssignedPort> {
     entries
@@ -88,4 +89,38 @@ fn a_taken_published_port_is_reported() {
     let ports = assigned(&[(PortRole::ApiserverPublic, taken)]);
     let found = first_port_in_use(&ports, CHECK_ONLY_PUBLISHED_PORTS_FILTER, NO_PATIENCE);
     assert_eq!(found.map(|entry| entry.port), Some(taken));
+}
+
+#[test]
+fn every_provider_reports_the_ports_it_serves_on_the_host() {
+    let ports = assign_ports(DEFAULT_BASE_PORT);
+    for provider in [
+        ClusterProvider::Docker,
+        ClusterProvider::Eks,
+        ClusterProvider::Fargate,
+    ] {
+        let roles: Vec<&str> = ports_matching(&ports, provider.ports_to_report())
+            .iter()
+            .map(|entry| entry.role.as_str())
+            .collect();
+        assert!(
+            !roles.contains(&PortRole::Database.as_str()),
+            "{provider:?} reports the database port"
+        );
+        assert!(
+            !roles.contains(&PortRole::KminusApi.as_str()),
+            "{provider:?} reports the kminus api port"
+        );
+        assert!(
+            roles.contains(&PortRole::ApiserverPublic.as_str()),
+            "{provider:?}"
+        );
+    }
+}
+
+#[test]
+fn kminus_reports_every_assigned_port() {
+    let ports = assign_ports(DEFAULT_BASE_PORT);
+    let reported = ports_matching(&ports, ClusterProvider::Kminus.ports_to_report());
+    assert_eq!(reported.len(), ports.len());
 }

@@ -119,6 +119,22 @@ pub const CHECK_ONLY_PUBLISHED_PORTS_FILTER: &[&str] = &[PortRole::ApiserverPubl
 
 pub const CHECK_ALL_PORTS_FILTER: &[&str] = &[];
 
+pub const REPORT_ONLY_SERVED_PORTS_FILTER: &[&str] = &[
+    PortRole::ApiserverPublic.as_str(),
+    PortRole::ApiserverPrivate.as_str(),
+    #[cfg(feature = "enterprise")]
+    PortRole::AiagentPublic.as_str(),
+];
+
+pub const REPORT_ALL_PORTS_FILTER: &[&str] = &[];
+
+pub fn ports_matching<'a>(assigned: &'a [AssignedPort], roles: &[&str]) -> Vec<&'a AssignedPort> {
+    assigned
+        .iter()
+        .filter(|entry| roles.is_empty() || roles.contains(&entry.role.as_str()))
+        .collect()
+}
+
 pub const NO_PATIENCE: Duration = Duration::ZERO;
 
 pub fn first_port_in_use<'a>(

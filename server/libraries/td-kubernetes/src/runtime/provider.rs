@@ -31,7 +31,8 @@ use crate::client::registry::{ClusterViews, InstanceSettings, InstanceState};
 use crate::client::session::settings::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::runtime::instance::ports::{
-    CHECK_ALL_PORTS_FILTER, CHECK_ONLY_PUBLISHED_PORTS_FILTER, kminus_api_port,
+    CHECK_ALL_PORTS_FILTER, CHECK_ONLY_PUBLISHED_PORTS_FILTER, REPORT_ALL_PORTS_FILTER,
+    REPORT_ONLY_SERVED_PORTS_FILTER, kminus_api_port,
 };
 use std::sync::Arc;
 use td_error::TdError;
@@ -181,6 +182,13 @@ impl ClusterProvider {
             Self::Kminus => Some(CHECK_ALL_PORTS_FILTER),
             Self::Docker => Some(CHECK_ONLY_PUBLISHED_PORTS_FILTER),
             Self::Eks | Self::Fargate => None,
+        }
+    }
+
+    pub fn ports_to_report(self) -> &'static [&'static str] {
+        match self {
+            Self::Kminus => REPORT_ALL_PORTS_FILTER,
+            Self::Docker | Self::Eks | Self::Fargate => REPORT_ONLY_SERVED_PORTS_FILTER,
         }
     }
 

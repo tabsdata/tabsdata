@@ -32,7 +32,7 @@ use crate::runtime::gateway::resolver::fusion::FusedSecrets;
 use crate::runtime::instance::launcher::ensure_ports_unclaimed;
 use crate::runtime::instance::ports::{
     AssignedPort, DEFAULT_BASE_PORT, NO_PATIENCE, apply_ports, assign_ports, ensure_ports_free,
-    ensure_ports_unclaimed_on_host, kminus_api_port,
+    ensure_ports_unclaimed_on_host, kminus_api_port, ports_matching,
 };
 use crate::runtime::instance::profile::load_profile;
 use crate::runtime::instance::verify_instance_version;
@@ -173,7 +173,7 @@ pub async fn create_instance(
     if details {
         let markers = instance_markers(&provider.summary(), instance_in_settings);
         preview::create_service(&provider.summary(), &markers);
-        report_ports(&assigned);
+        report_ports(&assigned, settings.provider);
     }
     if !confirm(yes, "Proceed with the creation?")? {
         info!("Operation cancelled.");
@@ -181,7 +181,7 @@ pub async fn create_instance(
     }
 
     if !details {
-        report_ports(&assigned);
+        report_ports(&assigned, settings.provider);
     }
     settings.ports = assigned.clone();
     settings.save()?;
@@ -319,9 +319,13 @@ async fn store_secrets(
     Ok(())
 }
 
-fn report_ports(assigned: &[AssignedPort]) {
+fn report_ports(assigned: &[AssignedPort], provider: ClusterProvider) {
+    let reported = ports_matching(assigned, provider.ports_to_report());
+    if reported.is_empty() {
+        return;
+    }
     info!("Assigned ports:");
-    for entry in assigned {
+    for entry in reported {
         info!("  - {}: {}", entry.caption, entry.port);
     }
 }
