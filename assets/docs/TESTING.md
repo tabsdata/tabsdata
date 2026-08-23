@@ -98,8 +98,8 @@ carve out its own corner with `run_prefix`.
 
 ## Available Fixture Structs
 
-The storage backends are ported so far; the rest stay Python-only until a Rust test needs
-them. All of these live in `td_test::domain`:
+These are ported so far; the rest stay Python-only until a Rust test needs them. All of
+them live in `td_test::domain`:
 
 | tdx type | System | Domain |
 |---|---|---|
@@ -107,6 +107,7 @@ them. All of these live in `td_test::domain`:
 | `gcs` | `GcsSystem` | `GcsDomain` |
 | `azureblob` | `AzureblobSystem` | `AzureblobDomain` |
 | `fs` | `FsSystem` | `FsDomain` |
+| `postgres` | `PostgresSystem` | `PostgresDomain` |
 
 The three object-store ones share a shape: `options()` is the `object_store` config,
 `url()` / `child_url()` locate the prefix, and `object_store()` opens a store **rooted at
@@ -126,6 +127,15 @@ for connectors that reach GCS over the S3 protocol.
 `fs` is a local directory with nothing above it, so it deals in `PathBuf`s instead —
 `path()`, `child_path()`, `run_path()` — and its `object_store()` is rooted at the
 fixture's own directory, where a `staged()` path addresses the store as-is.
+
+`postgres` is a SQL backend, so it has no store at all: a system is the container, a domain
+is one database in it owned by a role of the same name. `url()` is the connection —
+`postgres://<user>:<password>@<host>:<port>/<db>`, the libpq form sqlx and tokio-postgres
+take. Use it rather than the descriptor's `sqlalchemy_uri` field, which carries the
+`+psycopg2` dialect prefix only SQLAlchemy understands, or `uri`, which has no credentials.
+`PostgresSystem::admin_url()` connects as the superuser to the maintenance database, the
+only place `CREATE` / `DROP DATABASE` can be issued from. The seeded tables and their row
+counts are `tables()` and `rows(table)`, the SQL counterpart of `staged()`.
 
 Python names the same things the same way, so a test reads alike in either language:
 

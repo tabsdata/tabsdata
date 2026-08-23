@@ -61,7 +61,8 @@ pub mod descriptor;
 pub mod store;
 
 pub use backends::{
-    AzureblobDomain, AzureblobSystem, FsDomain, FsSystem, GcsDomain, GcsSystem, S3Domain, S3System,
+    AzureblobDomain, AzureblobSystem, FsDomain, FsSystem, GcsDomain, GcsSystem, PostgresDomain,
+    PostgresSystem, S3Domain, S3System,
 };
 
 /// The identity keys [`Attrs`] adds on top of a descriptor's `meta`. The tests

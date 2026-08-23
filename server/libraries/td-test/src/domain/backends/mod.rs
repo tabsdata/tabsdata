@@ -22,11 +22,13 @@ use url::Url;
 pub mod azureblob;
 pub mod fs;
 pub mod gcs;
+pub mod postgres;
 pub mod s3;
 
 pub use azureblob::{AzureblobDomain, AzureblobSystem};
 pub use fs::{FsDomain, FsSystem};
 pub use gcs::{GcsDomain, GcsSystem};
+pub use postgres::{PostgresDomain, PostgresSystem};
 pub use s3::{S3Domain, S3System};
 
 /// The `object_store` config a fixture struct hands out.
