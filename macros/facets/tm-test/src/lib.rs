@@ -61,6 +61,14 @@ pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
 /// skipped, or fails, per `TD_TEST_ON_MISSING_DOMAIN` (see the `td-test`
 /// `domain` module).
 ///
+/// The backend is resolved from, in order: the per-process cache; a complete set
+/// of `<UPCASE_NAME>__<KEY>` environment variables (the shape `tdx-domain info
+/// --format export --prefix <NAME>` emits, which avoids the descriptor's
+/// expensive key derivation); then the descriptor itself. An incomplete prefix
+/// warns and is discarded rather than half-applied. A stale export outranks a
+/// fresh descriptor, so re-export after re-provisioning. See the `td-test`
+/// `domain` module for the full contract.
+///
 /// ```ignore
 /// #[td_test::domain("s3_world_xs")]
 /// #[td_test::system("s3")]

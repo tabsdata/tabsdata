@@ -145,6 +145,45 @@ Python names the same things the same way, so a test reads alike in either langu
         ...
 ```
 
+## Resolution Order
+
+A backend is looked for in three places, in this order, identically in Rust and Python:
+
+1. **The cache** — per `(descriptor path, fixture type)`. Python caches for the pytest
+   session; Rust caches for the process, and the Rust harness runs a process per test, so
+   it buys much less there.
+2. **`<UPCASE_NAME>__<KEY>` environment variables.** A *complete* set is the whole
+   backend: neither the descriptor nor `TD_BACKENDS_CRYPTO_KEY` is touched. It is the
+   shape `tdx-domain info` emits, so exporting one is one command:
+
+   ```sh
+   eval "$(tdx-domain info --domain apiserver_postgres \
+             --format export --prefix APISERVER_POSTGRES)"
+   ```
+
+   `__ENTITIES` is read as a JSON object (`{"city": 4079}`), so a seeded domain's row
+   counts survive the round trip and `staged()` / `tables()` keep working. `NAME` is
+   filled from the requested name.
+3. **The descriptor**, which stays the source of truth.
+
+The environment tier exists for cost: opening a descriptor runs a 200k-round PBKDF2 key
+derivation (~350ms on an M-series Mac). Python pays that once per session, but the Rust
+harness runs a **process per test**, so it would pay it once per test — around 40s across
+the Rust suite.
+
+An **incomplete** prefix is not an error. It prints
+`[td-test] WARNING: $<NAME>__* is set but does not describe a whole ...` on stderr, keeps
+**none** of the environment's values, and reads the descriptor instead — the two sources
+are never mixed. Falling through rather than failing is what makes a collision harmless:
+`<NAME>__<KEY>` is also the shape tdx's own create-time options use, so a system named
+`s3` shares a prefix with the `S3__BUCKET` / `S3__REGION` variables `tdx-system create`
+reads.
+
+*WARNING:* **a stale export outranks a fresh descriptor.** `tdx-domain create` mints a new
+password every time, so an environment exported before a re-provision still builds a
+complete — and wrong — backend, and every test then fails against a database that no longer
+exists. Re-export after provisioning, or unset the prefix.
+
 ## Skipping when a Backend is Absent
 
 Independently per family, so systems and domains are governed separately:

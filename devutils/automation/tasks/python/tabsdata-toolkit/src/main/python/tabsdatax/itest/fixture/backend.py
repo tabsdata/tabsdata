@@ -22,6 +22,32 @@ match the dataclass, and builds it — each field pulled from the descriptor key
 of the same (upper-cased) name, pydantic coercing the type. Loads are lazy and
 cached for the session.
 
+Resolution order
+----------------
+
+A backend is looked for in three places, in this order:
+
+1. **The session cache**, per ``(descriptor path, dataclass)``.
+2. **``<UPCASE_NAME>__<KEY>`` environment variables**, the shape
+   ``tdx-domain info --format export --prefix <NAME>`` emits. A *complete* set is
+   the whole backend: neither the descriptor nor ``$TD_BACKENDS_CRYPTO_KEY`` is
+   touched. It exists because decrypting a descriptor costs a 200k-round key
+   derivation, which a per-test process pays every time. ``__ENTITIES`` is read as
+   a JSON object (``{"city": 4079}``) so a seeded domain's row counts survive;
+   ``NAME`` is filled from the requested name.
+3. **The descriptor**, which stays the source of truth.
+
+An *incomplete* prefix is not an error — it warns on stderr and falls through to
+the descriptor, keeping **none** of the environment's values, so the two sources
+are never mixed. Falling through rather than failing is what makes a collision
+harmless: ``<NAME>__<KEY>`` is also the shape tdx's own create-time options use,
+so a system named ``s3`` shares a prefix with the ``S3__BUCKET`` / ``S3__REGION``
+variables ``tdx-system create`` reads.
+
+**A stale export outranks a fresh descriptor.** ``tdx-domain create`` mints a new
+password each time, so an environment exported before a re-provision still builds
+a complete — and wrong — backend. Re-export after provisioning.
+
 The declaration and the fixtures a test uses are held in exact agreement at
 collection time, keyed by ``(family, name)`` where family is ``system`` or
 ``domain`` (so ``system_orders`` and ``domain_orders`` are distinct). The check
@@ -43,7 +69,9 @@ present.
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
+import sys
 from typing import ClassVar
 
 import pytest
@@ -73,6 +101,17 @@ MARKER = "tabsdata_backend"
 
 SYSTEM_FIXTURE_PREFIX = "system_"
 DOMAIN_FIXTURE_PREFIX = "domain_"
+
+# The identity keys the flat attribute view adds on top of a descriptor's `meta`,
+# and the separator between a backend's name and a key in the environment. The
+# tests assert the literals rather than these, so renaming a value is caught.
+KEY_NAME = "NAME"
+KEY_MODEL = "MODEL"
+KEY_DATA = "DATA"
+KEY_ENTITIES = "ENTITIES"
+KEY_EXTERNAL_NAME = "EXTERNAL_NAME"
+KEY_SYS_NAME = "SYS_NAME"
+ENV_KEY_SEPARATOR = "__"
 
 
 class System:
@@ -154,6 +193,26 @@ def load(name: str, cls: type):
     else:
         pytest.fail(f"{cls.__name__} must subclass System or Domain")
 
+    # A backend the developer asked to skip is skipped whether or not it is
+    # reachable at all.
+    if name in _skip_names(backend_type):
+        pytest.skip(
+            f"Requested {backend_type} {name!r} is listed in "
+            f"${SKIP_ENV[backend_type]}, so this test is skipped."
+        )
+
+    key = (str(path), cls)
+    if key in _CACHE:
+        return _CACHE[key]
+
+    # Then the environment, ahead of the descriptor and of needing it at all: a
+    # complete `<NAME>__<KEY>` set is the whole backend, where opening the
+    # descriptor costs a 200k-round key derivation.
+    from_env = _from_env(cls, name, backend_type)
+    if from_env is not None:
+        _CACHE[key] = from_env
+        return _CACHE[key]
+
     # The descriptor secret is always $TD_BACKENDS_CRYPTO_KEY (the v2 crypto
     # reads it directly); missing / skip is re-checked per call.
     if not path.exists():
@@ -166,13 +225,7 @@ def load(name: str, cls: type):
             f"Provisioned {backend_type} {name!r} was not found at {path}. "
             f"Set ${ON_MISSING_ENV[backend_type]}=skip to skip instead of fail."
         )
-    if name in _skip_names(backend_type):
-        pytest.skip(
-            f"Requested {backend_type} {name!r} is listed in "
-            f"${SKIP_ENV[backend_type]}, so this test is skipped."
-        )
 
-    key = (str(path), cls)
     if key not in _CACHE:
         try:
             info = descriptor.load(path)
@@ -191,6 +244,82 @@ def load(name: str, cls: type):
     return _CACHE[key]
 
 
+def _env_attributes(name: str) -> dict[str, object] | None:
+    """The flat ``{KEY: value}`` view read from ``<UPCASE_NAME>__<KEY>`` environment
+    variables -- the shape ``tdx-domain info --format export --prefix <NAME>`` emits.
+
+    ``NAME`` is filled from the requested name (the env set carries the descriptor's
+    ``meta``, not its identity) and ``ENTITIES`` is read as a JSON object so a seeded
+    domain's row counts survive. ``None`` when the prefix names nothing, which is the
+    signal to read the descriptor."""
+    prefix = f"{name.upper()}{ENV_KEY_SEPARATOR}"
+    attrs: dict[str, object] = {
+        key[len(prefix) :]: value
+        for key, value in os.environ.items()
+        if key.startswith(prefix)
+    }
+    if not attrs:
+        return None
+    if KEY_ENTITIES in attrs:
+        try:
+            attrs[KEY_ENTITIES] = json.loads(attrs[KEY_ENTITIES])
+        except ValueError:
+            # Absent, exactly as for a domain create-data has not run against.
+            del attrs[KEY_ENTITIES]
+    attrs.setdefault(KEY_NAME, name)
+    return attrs
+
+
+def _missing_fields(cls, attrs: dict[str, object]) -> list[str]:
+    """The dataclass fields `attrs` cannot fill and that have no default."""
+    return [
+        f.name.upper()
+        for f in dataclasses.fields(cls)
+        if f.name.upper() not in attrs
+        and f.default is dataclasses.MISSING
+        and f.default_factory is dataclasses.MISSING
+    ]
+
+
+def _kwargs(cls, attrs: dict[str, object]) -> dict[str, object]:
+    return {
+        f.name: attrs[f.name.upper()]
+        for f in dataclasses.fields(cls)
+        if f.name.upper() in attrs
+    }
+
+
+def _from_env(cls, name: str, backend_type: str):
+    """Build `cls` from ``<UPCASE_NAME>__<KEY>``, or ``None`` to fall through to the
+    descriptor.
+
+    An incomplete prefix is not an error -- but it is never silent, a half-set prefix
+    being far more likely a typo or a stale export than a deliberate act. Nothing read
+    from the environment is kept in that case, so the two sources are never mixed."""
+    attrs = _env_attributes(name)
+    if attrs is None:
+        return None
+    prefix = f"{name.upper()}{ENV_KEY_SEPARATOR}"
+    missing = _missing_fields(cls, attrs)
+    if missing:
+        print(
+            f"[td-test] WARNING: ${prefix}* is set but does not describe a whole "
+            f"{backend_type} {name!r} (missing key(s): {', '.join(missing)}); "
+            f"ignoring it and reading the descriptor instead",
+            file=sys.stderr,
+        )
+        return None
+    try:
+        return cls(**_kwargs(cls, attrs))
+    except (ValidationError, TypeError, ValueError) as exc:
+        print(
+            f"[td-test] WARNING: ${prefix}* is set but does not build "
+            f"{cls.__name__} ({exc}); ignoring it and reading the descriptor instead",
+            file=sys.stderr,
+        )
+        return None
+
+
 def _attributes(info: SystemInfo | DomainInfo) -> dict[str, object]:
     """The flat ``{KEY: value}`` view the fixture dataclasses map their fields
     onto: the descriptor's connection ``meta`` (already upper-cased keys), plus
@@ -198,37 +327,26 @@ def _attributes(info: SystemInfo | DomainInfo) -> dict[str, object]:
     ``ENTITIES`` / ``EXTERNAL_NAME`` / ``SYS_NAME``). Values are strings except
     ``ENTITIES`` (the ``{table: rows}`` mapping)."""
     attrs: dict[str, object] = dict(info.meta)
-    attrs["NAME"] = info.name
+    attrs[KEY_NAME] = info.name
     if isinstance(info, DomainInfo):
         if info.model is not None:
-            attrs["MODEL"] = info.model
+            attrs[KEY_MODEL] = info.model
         if info.data is not None:
-            attrs["DATA"] = info.data
+            attrs[KEY_DATA] = info.data
         if info.entities:
-            attrs["ENTITIES"] = info.entities
-        attrs["EXTERNAL_NAME"] = info.external_name
-        attrs["SYS_NAME"] = info.sys_name
+            attrs[KEY_ENTITIES] = info.entities
+        attrs[KEY_EXTERNAL_NAME] = info.external_name
+        attrs[KEY_SYS_NAME] = info.sys_name
     return attrs
 
 
 def _construct(cls, attrs: dict[str, object], *, name: str):
     """Build `cls` from the flat attribute dict (field ← key ``field_name.upper()``).
     Values are strings except ``ENTITIES`` (the ``{table: rows}`` mapping)."""
-    kwargs = {
-        f.name: attrs[f.name.upper()]
-        for f in dataclasses.fields(cls)
-        if f.name.upper() in attrs
-    }
     try:
-        return cls(**kwargs)
+        return cls(**_kwargs(cls, attrs))
     except (ValidationError, TypeError, ValueError) as exc:
-        missing = [
-            f.name.upper()
-            for f in dataclasses.fields(cls)
-            if f.name.upper() not in attrs
-            and f.default is dataclasses.MISSING
-            and f.default_factory is dataclasses.MISSING
-        ]
+        missing = _missing_fields(cls, attrs)
         hint = f" (descriptor missing key(s): {', '.join(missing)})" if missing else ""
         pytest.fail(
             f"{name!r}: cannot build {cls.__name__} from its descriptor{hint}: {exc}"

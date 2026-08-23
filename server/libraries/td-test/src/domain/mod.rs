@@ -35,6 +35,34 @@
 //! (upper-cased) name. Loads are cached per `(descriptor path, struct)` for the
 //! lifetime of the test binary.
 //!
+//! # Resolution order
+//!
+//! A backend is looked for in three places, in this order:
+//!
+//! 1. **The cache**, per `(descriptor path, struct)` — but only within one
+//!    process, and the test harness runs a process per test.
+//! 2. **`<UPCASE_NAME>__<KEY>` environment variables**, the shape
+//!    `tdx-domain info --format export --prefix <NAME>` emits. A *complete* set
+//!    is the whole backend: neither the descriptor nor
+//!    `$TD_BACKENDS_CRYPTO_KEY` is touched. This exists because decrypting a
+//!    descriptor costs a 200k-round key derivation (~350ms), which a
+//!    process-per-test harness would otherwise pay once per test. `__ENTITIES`
+//!    is read as a JSON object (`{"city": 4079}`) so a seeded domain's row
+//!    counts survive; `NAME` is filled from the requested name.
+//! 3. **The descriptor**, which stays the source of truth.
+//!
+//! An *incomplete* prefix is not an error — it warns on stderr and falls
+//! through to the descriptor, keeping **none** of the environment's values, so
+//! the two sources are never mixed. Falling through rather than failing is what
+//! makes a collision harmless: `<NAME>__<KEY>` is also the shape tdx's own
+//! create-time options use, so a system named `s3` shares a prefix with the
+//! `S3__BUCKET` / `S3__REGION` variables `tdx-system create` reads.
+//!
+//! **A stale export outranks a fresh descriptor.** `tdx-domain create` mints a
+//! new password each time, so an environment exported before a re-provision
+//! still builds a complete — and wrong — backend. Re-export after provisioning,
+//! which is what the `test_rs` backends task does.
+//!
 //! Unlike the `reqs` fixtures, nothing here is created or torn down: a domain is
 //! provisioned by `tdx-domain create` before the run and dropped by
 //! `tdx-domain destroy` after it. Per-test isolation is the test's job — carve
@@ -65,13 +93,16 @@ pub use backends::{
     PostgresSystem, S3Domain, S3System,
 };
 
-/// The identity keys [`Attrs`] adds on top of a descriptor's `meta`. The tests
+/// The identity keys [`Attrs`] adds on top of a descriptor's `meta`, and the
+/// separator between a backend's name and a key in the environment. The tests
 /// assert the literals rather than these, so renaming a value is caught.
 const KEY_NAME: &str = "NAME";
+const KEY_ENTITIES: &str = "ENTITIES";
 const KEY_MODEL: &str = "MODEL";
 const KEY_DATA: &str = "DATA";
 const KEY_EXTERNAL_NAME: &str = "EXTERNAL_NAME";
 const KEY_SYS_NAME: &str = "SYS_NAME";
+const ENV_KEY_SEPARATOR: &str = "__";
 
 /// Which family a backend struct belongs to. `system_orders` and
 /// `domain_orders` are distinct backends that happen to share a name, so every
@@ -134,6 +165,42 @@ impl Attrs {
     /// The keys present, for the "descriptor missing key(s)" hint.
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.strings.keys().map(String::as_str)
+    }
+
+    /// The same flat view, read from `<NAME>__<KEY>` environment variables
+    /// instead of a descriptor — the shape `tdx-domain info --format export
+    /// --prefix <NAME>` emits.
+    ///
+    /// `NAME` is seeded from the backend's store name (the env set carries the
+    /// descriptor's `meta`, not its identity) and `ENTITIES` is read as a JSON
+    /// object so a seeded domain's row counts survive the round trip. `None`
+    /// when the prefix names nothing, which is the signal to read the descriptor.
+    pub(crate) fn from_env(name: &str) -> Option<Self> {
+        let prefix = format!("{}{ENV_KEY_SEPARATOR}", name.to_uppercase());
+        let mut attrs = Attrs::default();
+        for (key, value) in std::env::vars() {
+            let Some(key) = key.strip_prefix(&prefix) else {
+                continue;
+            };
+            if key == KEY_ENTITIES {
+                // Absent or unparseable leaves `entities` unset, exactly as for a
+                // domain that create-data has not run against.
+                if let Ok(entities) = serde_json::from_str(&value) {
+                    attrs.entities = entities;
+                    attrs.has_entities = true;
+                }
+                continue;
+            }
+            attrs.strings.insert(key.to_string(), value);
+        }
+        if attrs.strings.is_empty() && !attrs.has_entities {
+            return None;
+        }
+        attrs
+            .strings
+            .entry(KEY_NAME.to_string())
+            .or_insert_with(|| name.to_string());
+        Some(attrs)
     }
 
     pub(crate) fn of(info: &descriptor::Info) -> Self {
@@ -308,6 +375,48 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
     let path = store::path_of(role, name);
     let kind = role.as_str();
 
+    // A backend the developer asked to skip is skipped whether or not it is
+    // reachable at all.
+    if is_skipped_by_name(role, name) {
+        return Err(Unavailable::Skip(format!(
+            "requested {kind} '{name}' is listed in ${}, so this test is skipped",
+            role.skip_env()
+        )));
+    }
+
+    let key = (path.clone(), TypeId::of::<B>());
+    if let Some(cached) = CACHE.lock().unwrap().get(&key) {
+        return Ok(cached
+            .downcast_ref::<B>()
+            .expect("cached by TypeId")
+            .clone());
+    }
+
+    // Then the environment, ahead of the descriptor and of needing it at all: a
+    // complete `<NAME>__<KEY>` set is the whole backend, where opening the
+    // descriptor costs a 200k-round key derivation — and the harness runs a
+    // process per test, so it would pay that derivation once per test.
+    //
+    // An env set that does not build a whole backend is not an error; it falls
+    // through to the descriptor, which stays the source of truth. That is what
+    // keeps a collision harmless, `<NAME>__<KEY>` being the shape tdx's own
+    // create-time options already use.
+    if let Some(attrs) = Attrs::from_env(name) {
+        match B::build(&attrs) {
+            Ok(built) => return Ok(cache(key, built)),
+            // Not an error, but never silent: a half-set prefix is far more
+            // likely a typo or a stale export than a deliberate act. Nothing
+            // read from the environment is kept — the descriptor supplies every
+            // value, so the two are never mixed.
+            Err(missing) => eprintln!(
+                "[td-test] WARNING: ${}__* is set but does not describe a whole \
+                 {kind} '{name}' (missing key(s): {missing}); ignoring it and \
+                 reading the descriptor instead",
+                name.to_uppercase()
+            ),
+        }
+    }
+
     if !path.exists() {
         return Err(unreachable(
             role,
@@ -326,20 +435,6 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
             &format!("cannot read the {kind} '{name}' descriptor: {why}"),
             "Export it from 1Password (see the backends make task)",
         ));
-    }
-    if is_skipped_by_name(role, name) {
-        return Err(Unavailable::Skip(format!(
-            "requested {kind} '{name}' is listed in ${}, so this test is skipped",
-            role.skip_env()
-        )));
-    }
-
-    let key = (path.clone(), TypeId::of::<B>());
-    if let Some(cached) = CACHE.lock().unwrap().get(&key) {
-        return Ok(cached
-            .downcast_ref::<B>()
-            .expect("cached by TypeId")
-            .clone());
     }
 
     let info = descriptor::load(&path).map_err(Unavailable::Fail)?;
@@ -363,11 +458,16 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
             "'{name}': cannot build the {kind} from its descriptor (missing key(s): {missing})"
         ))
     })?;
+    Ok(cache(key, built))
+}
+
+/// Memoize a built backend for the rest of this process.
+fn cache<B: Backend>(key: (PathBuf, TypeId), built: B) -> B {
     CACHE
         .lock()
         .unwrap()
         .insert(key, Arc::new(built.clone()) as Arc<dyn Any + Send + Sync>);
-    Ok(built)
+    built
 }
 
 /// Resolve the domain `store_name` for `test_name`, or `None` to skip the test.
@@ -478,6 +578,74 @@ mod tests {
         );
     }
 
+    /// The prefixes here are deliberately names no provisioned backend can have:
+    /// `from_env` reads the ambient environment, so a test naming a real backend
+    /// would break the moment that backend's vars are exported for a run.
+    #[test]
+    fn test_attrs_from_env() {
+        temp_env::with_vars(
+            [
+                ("ZZ_PROBE_ONE__HOST", Some("localhost")),
+                ("ZZ_PROBE_ONE__PORT", Some("56018")),
+                ("ZZ_PROBE_ONE__DB", Some("d_tucu_0_apiserver_postgres")),
+                ("ZZ_PROBE_TWO__HOST", Some("nope")),
+            ],
+            || {
+                let attrs = Attrs::from_env("zz_probe_one").unwrap();
+                assert_eq!(attrs.get("HOST"), Some("localhost"));
+                assert_eq!(attrs.get("PORT"), Some("56018"));
+                // the store name fills NAME, which the env set does not carry
+                assert_eq!(attrs.get("NAME"), Some("zz_probe_one"));
+                // another backend's prefix is not ours
+                assert_eq!(attrs.get("DB"), Some("d_tucu_0_apiserver_postgres"));
+                assert_eq!(attrs.keys().count(), 4);
+                assert!(attrs.entities().is_none());
+            },
+        );
+    }
+
+    #[test]
+    fn test_attrs_from_env_is_none_without_the_prefix() {
+        temp_env::with_var("ZZ_PROBE_OTHER__HOST", Some("x"), || {
+            assert!(Attrs::from_env("zz_probe_absent").is_none());
+        });
+    }
+
+    /// A seeded domain's row counts have to survive the env round trip, or
+    /// `staged()` / `tables()` would silently come back empty.
+    #[test]
+    fn test_attrs_from_env_reads_entities_as_json() {
+        temp_env::with_vars(
+            [
+                ("ZZ_PROBE_SEEDED__HOST", Some("h")),
+                (
+                    "ZZ_PROBE_SEEDED__ENTITIES",
+                    Some(r#"{"city": 4079, "country": 239}"#),
+                ),
+            ],
+            || {
+                let attrs = Attrs::from_env("zz_probe_seeded").unwrap();
+                assert_eq!(attrs.entities().unwrap()["city"], 4079);
+                assert_eq!(attrs.entities().unwrap()["country"], 239);
+            },
+        );
+        // Unparseable is treated as absent, not as a failure.
+        temp_env::with_vars(
+            [
+                ("ZZ_PROBE_SEEDED__HOST", Some("h")),
+                ("ZZ_PROBE_SEEDED__ENTITIES", Some("{")),
+            ],
+            || {
+                assert!(
+                    Attrs::from_env("zz_probe_seeded")
+                        .unwrap()
+                        .entities()
+                        .is_none()
+                );
+            },
+        );
+    }
+
     #[test]
     fn test_role_envs() {
         assert_eq!(Role::System.as_str(), "system");
@@ -576,6 +744,35 @@ mod tests {
                     resolve::<S3Domain>("landing"),
                     Err(Unavailable::Fail(_))
                 ));
+            },
+        );
+    }
+
+    /// An incomplete prefix must not be half-applied: resolution falls through
+    /// to the descriptor, so a partial env set cannot smuggle a value in.
+    #[test]
+    fn test_incomplete_env_falls_through_to_the_descriptor() {
+        let store_dir = std::env::temp_dir().join("td-test-domain-partial-env/domains2");
+        std::fs::create_dir_all(&store_dir).unwrap();
+        std::fs::write(store_dir.join("landing"), "not a descriptor").unwrap();
+
+        temp_env::with_vars(
+            [
+                (
+                    store::ENV_BACKENDS_DIR,
+                    Some(store_dir.parent().unwrap().to_str().unwrap()),
+                ),
+                (crypto::ENV_CRYPTO_KEY, Some("a-test-secret-long-enough")),
+                // BUCKET/REGION/... are missing, so this cannot build an S3Domain
+                ("LANDING__HOST", Some("localhost")),
+            ],
+            || {
+                // Reaching the descriptor at all is the proof: it is unreadable,
+                // so the error comes from the file, not from the env set.
+                let Err(Unavailable::Fail(msg)) = resolve::<S3Domain>("landing") else {
+                    panic!("expected the descriptor read to be attempted");
+                };
+                assert!(msg.contains("PEM armor"), "got: {msg}");
             },
         );
     }
