@@ -30,6 +30,14 @@ class DecryptError(TdxError):
     surface a bad key instead of skipping the file as a non-descriptor."""
 
 
+class LegacyDescriptorError(TdxError):
+    """A descriptor is in the superseded ``TDX2`` format. It is intact and the key
+    is fine — it just has to be converted by ``tdx-system upgrade`` /
+    ``tdx-domain upgrade`` before anything will read it. Distinct from
+    DecryptError so callers can tell "run the migration" from "your key is
+    wrong"."""
+
+
 def _red(msg: str) -> str:
     if sys.stderr.isatty():
         return f"\033[31m{msg}\033[0m"

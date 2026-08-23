@@ -9,7 +9,11 @@ from __future__ import annotations
 import pytest
 
 from tabsdatax.itest.tdksystems2 import crypto, descriptor
-from tabsdatax.itest.tdksystems2.errors import DecryptError, TdxError
+from tabsdatax.itest.tdksystems2.errors import (
+    DecryptError,
+    LegacyDescriptorError,
+    TdxError,
+)
 
 
 def test_system_round_trip(tmp_path):
@@ -27,7 +31,78 @@ def test_encrypted_at_rest(tmp_path):
     descriptor.write_system(p, "mysql", "s1", {"PASSWORD": "hunter2"})
     text = p.read_text()
     assert "hunter2" not in text
-    assert "BEGIN TDX2 DESCRIPTOR" in text
+    assert "BEGIN TDX3 DESCRIPTOR" in text
+
+
+def test_each_descriptor_gets_its_own_salt(tmp_path):
+    """Two descriptors with identical content must not share a derivation."""
+    a, b = tmp_path / "a", tmp_path / "b"
+    for p in (a, b):
+        descriptor.write_system(p, "mysql", "s1", {"HOST": "h"})
+    assert a.read_text() != b.read_text()
+    assert descriptor.load(a).meta == descriptor.load(b).meta
+
+
+def test_legacy_tdx2_is_rejected_naming_the_upgrade(tmp_path):
+    """An ordinary read must refuse a TDX2 descriptor, say which command fixes
+    it, and leave the file alone."""
+    p = tmp_path / "s1"
+    descriptor.write_system(p, "mysql", "s1", {"HOST": "h", "PASSWORD": "hunter2"})
+    p.write_text(_as_legacy(p.read_text()), encoding="utf-8")
+    before = p.read_text()
+
+    with pytest.raises(LegacyDescriptorError) as excinfo:
+        descriptor.load(p)
+    assert "tdx-system upgrade" in str(excinfo.value)
+    assert "tdx-domain upgrade" in str(excinfo.value)
+    assert p.read_text() == before
+
+
+def test_upgrade_converts_a_legacy_descriptor(tmp_path):
+    p = tmp_path / "s1"
+    descriptor.write_system(p, "mysql", "s1", {"HOST": "h", "PASSWORD": "hunter2"})
+    p.write_text(_as_legacy(p.read_text()), encoding="utf-8")
+
+    assert descriptor.upgrade(p) is True
+    upgraded = p.read_text()
+    assert not crypto.is_legacy(upgraded)
+    assert "BEGIN TDX3 DESCRIPTOR" in upgraded
+    assert "hunter2" not in upgraded
+    assert descriptor.load(p).meta == {"HOST": "h", "PASSWORD": "hunter2"}
+    assert list(tmp_path.iterdir()) == [p]
+
+
+def test_upgrade_leaves_a_current_descriptor_untouched(tmp_path):
+    p = tmp_path / "s1"
+    descriptor.write_system(p, "mysql", "s1", {"HOST": "h"})
+    before = p.read_text()
+    assert descriptor.upgrade(p) is False
+    assert p.read_text() == before
+
+
+def _as_legacy(pem: str) -> str:
+    """Re-seal a current descriptor in the TDX2 shape: no salt in the payload,
+    key derived from the one hardcoded application salt."""
+    import base64
+    import hashlib
+    import os
+    import textwrap
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    plaintext = crypto.decrypt(pem, allow_legacy=True)
+    key = hashlib.pbkdf2_hmac(
+        "sha256",
+        crypto.require_secret().encode("utf-8"),
+        crypto._LEGACY_SALT,
+        crypto._ITERATIONS,
+        dklen=32,
+    )
+    nonce = os.urandom(crypto._NONCE_LEN)
+    blob = nonce + AESGCM(key).encrypt(nonce, plaintext, None)
+    body = "\n".join(textwrap.wrap(base64.b64encode(blob).decode(), 64))
+    label = crypto._LEGACY_PEM_LABEL
+    return f"-----BEGIN {label}-----\n{body}\n-----END {label}-----\n"
 
 
 def test_wrong_key_raises_decrypt_error(tmp_path, monkeypatch):

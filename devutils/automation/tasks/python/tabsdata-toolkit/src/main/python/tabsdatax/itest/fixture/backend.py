@@ -51,6 +51,7 @@ from pydantic import ValidationError
 
 from ..tdksystems2 import constants, descriptor, store
 from ..tdksystems2.descriptor import DomainInfo, SystemInfo
+from ..tdksystems2.errors import LegacyDescriptorError
 from . import operations
 
 SYSTEM = "system"
@@ -173,7 +174,12 @@ def load(name: str, cls: type):
 
     key = (str(path), cls)
     if key not in _CACHE:
-        info = descriptor.load(path)
+        try:
+            info = descriptor.load(path)
+        except LegacyDescriptorError as exc:
+            # Never skipped: the backend is there and usable, the store just has
+            # to be migrated, and that is one command away.
+            pytest.fail(f"{backend_type} {name!r}: {exc}", pytrace=False)
         if info.role != _DESCRIPTOR_ROLE[backend_type]:
             pytest.fail(f"{name!r} is a {info.role!r} descriptor, not a {backend_type}")
         if info.system != system_type:

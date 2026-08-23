@@ -15,6 +15,7 @@ commands never load the system descriptor.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal, Union
@@ -107,14 +108,34 @@ def validate_name(name: str) -> None:
 def save(info: SystemInfo | DomainInfo, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        crypto.encrypt(info.model_dump_json(indent=2).encode("utf-8")),
-        encoding="utf-8",
-    )
+    pem = crypto.encrypt(info.model_dump_json(indent=2).encode("utf-8"))
+    # Write-then-rename: a descriptor is read by parallel test workers and by
+    # concurrent batch commands, and a half-written one is unreadable.
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(pem, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def load(path: str | Path) -> SystemInfo | DomainInfo:
+    """Read a descriptor. A legacy ``TDX2`` one raises
+    :class:`.errors.LegacyDescriptorError` naming the ``upgrade`` command —
+    converting is an operator's explicit act, never a read's side effect."""
     return loads(Path(path).read_text(encoding="utf-8"))
+
+
+def upgrade(path: str | Path) -> bool:
+    """Rewrite `path` in the current format if it is a legacy ``TDX2``
+    descriptor. Returns whether it converted; a current descriptor is left byte
+    for byte alone rather than needlessly re-salted."""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    if not crypto.is_legacy(text):
+        return False
+    save(_ADAPTER.validate_json(crypto.decrypt(text, allow_legacy=True)), path)
+    return True
 
 
 def loads(text: str) -> SystemInfo | DomainInfo:

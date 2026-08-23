@@ -6,16 +6,26 @@
 
 Descriptors hold connection settings (hosts, users, passwords), so they're
 stored encrypted at rest as PEM-armored AES-256-GCM ciphertext. The key is
-derived from the secret with PBKDF2-HMAC-SHA256 over a fixed application salt
-(cached per process); every encryption uses a fresh 96-bit nonce stored with the
+derived from the secret with PBKDF2-HMAC-SHA256 (cached per secret+salt); every
+encryption draws a fresh 128-bit salt and 96-bit nonce, both stored ahead of the
 ciphertext:
 
-    -----BEGIN TDX2 DESCRIPTOR-----
-    <base64(nonce || ciphertext+tag)>
-    -----END TDX2 DESCRIPTOR-----
+    -----BEGIN TDX3 DESCRIPTOR-----
+    <base64(salt || nonce || ciphertext+tag)>
+    -----END TDX3 DESCRIPTOR-----
 
-The ``TDX2`` label is distinct from the v1 ``TDX`` label so the two toolchains
-never mistake each other's descriptors (they also use separate store dirs).
+A salt is not a secret — it exists to make each derivation unique, so it travels
+with the ciphertext exactly as it does in any PHC-style hash string.
+
+``TDX2`` is the previous format: same cipher, but no salt in the payload because
+every descriptor derived its key from one hardcoded application salt. A ``TDX2``
+descriptor is **rejected** by every ordinary read — only the ``upgrade`` command
+passes ``allow_legacy`` to convert it. Failing rather than silently upgrading
+keeps the migration something an operator runs once and can see, instead of a
+side effect that any command might have on any file.
+
+Each label is distinct so the toolchains never mistake each other's descriptors
+(they also use separate store dirs).
 """
 
 from __future__ import annotations
@@ -28,20 +38,36 @@ import textwrap
 from contextlib import contextmanager
 
 from tabsdatax.itest.tdksystems2 import constants
-from tabsdatax.itest.tdksystems2.errors import DecryptError, TdxError
+from tabsdatax.itest.tdksystems2.errors import (
+    DecryptError,
+    LegacyDescriptorError,
+    TdxError,
+)
 
 ENV_VAR = constants.ENV_CRYPTO_KEY
 MIN_SECRET_LEN = 12
 
-_PEM_LABEL = "TDX2 DESCRIPTOR"
+# The one instruction anything that trips over a TDX2 descriptor should give,
+# shared so the CLI, the Python fixtures and the Rust fixtures all say it.
+LEGACY_REMEDY = (
+    f"descriptor is in the legacy TDX2 format (one shared salt) — run "
+    f"'{constants.SYS_TOOL} {constants.V_UPGRADE}' and "
+    f"'{constants.DOM_TOOL} {constants.V_UPGRADE}' to convert the store"
+)
+
+_PEM_LABEL = "TDX3 DESCRIPTOR"
+_LEGACY_PEM_LABEL = "TDX2 DESCRIPTOR"
 _BEGIN = f"-----BEGIN {_PEM_LABEL}-----"
 _END = f"-----END {_PEM_LABEL}-----"
 _ARMOR_RE = re.compile(r"-----BEGIN ([A-Z0-9_]+ DESCRIPTOR)-----")
-_SALT = b"tabsdata-tdx2/descriptor/v1"
+# The one salt every TDX2 descriptor was derived from. Read-only: nothing new is
+# ever encrypted under it.
+_LEGACY_SALT = b"tabsdata-tdx2/descriptor/v1"
 _ITERATIONS = 200_000
+_SALT_LEN = 16
 _NONCE_LEN = 12
 
-_key_cache: dict[str, bytes] = {}
+_key_cache: dict[tuple[str, bytes], bytes] = {}
 
 # Set only inside `using_secret`. Everything else reads the environment.
 _secret_override: str | None = None
@@ -83,13 +109,13 @@ def require_secret() -> str:
     return secret
 
 
-def _key(secret: str) -> bytes:
-    cached = _key_cache.get(secret)
+def _key(secret: str, salt: bytes) -> bytes:
+    cached = _key_cache.get((secret, salt))
     if cached is None:
         cached = hashlib.pbkdf2_hmac(
-            "sha256", secret.encode("utf-8"), _SALT, _ITERATIONS, dklen=32
+            "sha256", secret.encode("utf-8"), salt, _ITERATIONS, dklen=32
         )
-        _key_cache[secret] = cached
+        _key_cache[(secret, salt)] = cached
     return cached
 
 
@@ -108,26 +134,42 @@ def is_pem(text: str) -> bool:
     return descriptor_label(text) is not None
 
 
+def is_legacy(text: str) -> bool:
+    """Whether `text` is a descriptor in the superseded ``TDX2`` format.
+
+    True means every ordinary read rejects it; ``tdx-system upgrade`` /
+    ``tdx-domain upgrade`` convert it.
+    """
+    return descriptor_label(text) == _LEGACY_PEM_LABEL
+
+
 def encrypt(plaintext: bytes) -> str:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-    key = _key(require_secret())
+    salt = os.urandom(_SALT_LEN)
     nonce = os.urandom(_NONCE_LEN)
-    ct = AESGCM(key).encrypt(nonce, plaintext, None)
-    body = "\n".join(textwrap.wrap(base64.b64encode(nonce + ct).decode(), 64))
+    ct = AESGCM(_key(require_secret(), salt)).encrypt(nonce, plaintext, None)
+    body = "\n".join(textwrap.wrap(base64.b64encode(salt + nonce + ct).decode(), 64))
     return f"{_BEGIN}\n{body}\n{_END}\n"
 
 
-def decrypt(pem: str) -> bytes:
-    """Decrypt a PEM string produced by :func:`encrypt`. Raises TdxError if it is
-    not a descriptor at all, DecryptError if it IS one but unreadable (wrong
-    label, wrong secret, or corrupt)."""
+def decrypt(pem: str, *, allow_legacy: bool = False) -> bytes:
+    """Decrypt a PEM string produced by :func:`encrypt`.
+
+    A legacy ``TDX2`` descriptor raises :class:`LegacyDescriptorError` unless
+    `allow_legacy` is set — only the ``upgrade`` command sets it.
+
+    Raises TdxError if it is not a descriptor at all, DecryptError if it IS one
+    but unreadable (unknown label, wrong secret, or corrupt).
+    """
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
     if not is_pem(pem):
         raise TdxError("not an encrypted descriptor (no PEM armor)")
     label = descriptor_label(pem)
-    if label != _PEM_LABEL:
+    if label == _LEGACY_PEM_LABEL and not allow_legacy:
+        raise LegacyDescriptorError(LEGACY_REMEDY)
+    if label not in (_PEM_LABEL, _LEGACY_PEM_LABEL):
         raise DecryptError(
             f"descriptor PEM label {label!r} is not the expected {_PEM_LABEL!r} — "
             f"recreate it with tdx-system / tdx-domain create"
@@ -135,8 +177,12 @@ def decrypt(pem: str) -> bytes:
     b64 = "".join(ln for ln in pem.splitlines() if ln and not ln.startswith("-----"))
     try:
         blob = base64.b64decode(b64)
-        nonce, ct = blob[:_NONCE_LEN], blob[_NONCE_LEN:]
-        return AESGCM(_key(require_secret())).decrypt(nonce, ct, None)
+        if label == _LEGACY_PEM_LABEL:
+            salt, rest = _LEGACY_SALT, blob
+        else:
+            salt, rest = blob[:_SALT_LEN], blob[_SALT_LEN:]
+        nonce, ct = rest[:_NONCE_LEN], rest[_NONCE_LEN:]
+        return AESGCM(_key(require_secret(), salt)).decrypt(nonce, ct, None)
     except TdxError:
         raise
     except Exception:  # noqa: BLE001 - corrupt blob or wrong key

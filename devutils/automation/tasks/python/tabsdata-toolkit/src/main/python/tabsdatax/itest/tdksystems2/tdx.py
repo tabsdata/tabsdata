@@ -26,11 +26,13 @@
                        --sys NAME [--ssh-port N] [--identity KEYFILE] [-f]
                                           # ssh-tunnel a remote container system;
                                           # destroy closes the tunnel
+    tdx-system upgrade [--sys-dir DIR]     # convert legacy TDX2 descriptors
     tdx-system secrets --set 1p:<vault> [--out json|export|unset]  # fetch creds
     tdx-system clear-venvs                 # delete the managed venvs
 
     tdx-domain list [--domain-dir DIR]     # domains in the store
     tdx-domain manifest [--out FILE]       # YAML manifest of the store
+    tdx-domain upgrade [--domain-dir DIR]  # convert legacy TDX2 descriptors
     tdx-domain info --domain NAME|list|ALL | --manifest FILE [--format ...]
     tdx-domain create      --sys NAME [--domain NAME] [--domain-prefix P] [-f]
     tdx-domain create      --sys ALL|s1,s2 [--domain-prefix P]  # one domain / system
@@ -86,7 +88,10 @@ store, ``modify-data`` on an append-only topic) is rejected naming what that
 system does support.
 
 Descriptors are addressed by *name* (a file in the store dir) and stored
-encrypted. The long-running verbs accept ``--latch FILE`` to be waitable in the
+encrypted, in the ``TDX3`` format (see ``crypto``). A store still holding older
+``TDX2`` descriptors is rejected by every other verb; ``upgrade`` converts it,
+and is the only thing that rewrites descriptors wholesale. The long-running
+verbs accept ``--latch FILE`` to be waitable in the
 background (write ``FILE.ok``/``FILE.err`` then touch ``FILE``); their chatty
 detail goes to a ``/tmp/tdx-logs/<name>-<timestamp>.log`` while the console shows
 brief, colored progress, and each run first deletes logs there older than a day.
@@ -570,6 +575,51 @@ def _cmn_dom_list(tool: str, rest: list[str]) -> int:
     return 0
 
 
+def _upgrade_store(store_dir: Path, role: str) -> int:
+    """Convert every legacy ``TDX2`` descriptor in `store_dir` to the current
+    format. The one place that rewrites descriptors wholesale, so the operator
+    sees exactly what changed."""
+    if not store_dir.is_dir():
+        console.out(f"(no {role}s: {store_dir} does not exist)")
+        return 0
+    converted, current, failed = 0, 0, []
+    for name in sorted(p.name for p in store_dir.iterdir() if p.is_file()):
+        path = store_dir / name
+        if not descriptor.is_descriptor(path):
+            continue
+        try:
+            if descriptor.upgrade(path):
+                console.good(f"  {name:20} upgraded to TDX3")
+                converted += 1
+            else:
+                current += 1
+        except TdxError as exc:
+            console.bad(f"  {name:20} {exc}")
+            failed.append(name)
+    console.out(
+        f"{converted} upgraded, {current} already current, {len(failed)} failed"
+    )
+    if failed:
+        raise TdxError(
+            f"could not upgrade {len(failed)} {role} descriptor(s): {', '.join(failed)}"
+        )
+    return 0
+
+
+def _cmn_sys_upgrade(tool: str, rest: list[str]) -> int:
+    p = ArgumentParser(prog=f"{tool} {constants.V_UPGRADE}")
+    cli.add_sys_dir(p)
+    a = p.parse_args(rest)
+    return _upgrade_store(store.system_dir(a.sys_dir), constants.ROLE_SYSTEM)
+
+
+def _cmn_dom_upgrade(tool: str, rest: list[str]) -> int:
+    p = ArgumentParser(prog=f"{tool} {constants.V_UPGRADE}")
+    cli.add_domain_dir(p)
+    a = p.parse_args(rest)
+    return _upgrade_store(store.domain_dir(a.domain_dir), constants.ROLE_DOMAIN)
+
+
 def _cmn_dom_info(tool: str, rest: list[str]) -> int:
     p = ArgumentParser(prog=f"{tool} {constants.V_INFO}")
     cli.add_domain(p, required=False)
@@ -648,6 +698,7 @@ _COMMON = {
         constants.V_LIST: _cmn_sys_list,
         constants.V_INFO: _cmn_sys_info,
         constants.V_MANIFEST: _cmn_sys_manifest,
+        constants.V_UPGRADE: _cmn_sys_upgrade,
         constants.V_SECRETS: _cmn_secrets,
         constants.V_CLEAR_VENVS: _cmn_clear_venvs,
     },
@@ -655,6 +706,7 @@ _COMMON = {
         constants.V_LIST: _cmn_dom_list,
         constants.V_INFO: _cmn_dom_info,
         constants.V_MANIFEST: _cmn_dom_manifest,
+        constants.V_UPGRADE: _cmn_dom_upgrade,
     },
 }
 
@@ -935,6 +987,7 @@ _STORE_READING_VERBS = {
     constants.V_LIST,
     constants.V_INFO,
     constants.V_MANIFEST,
+    constants.V_UPGRADE,
 }
 
 
@@ -981,6 +1034,7 @@ def _print_top_help(tool: str) -> None:
         constants.V_LIST: "list the descriptors in the store",
         constants.V_INFO: "print a descriptor",
         constants.V_MANIFEST: "dump a YAML manifest of the store (--out FILE)",
+        constants.V_UPGRADE: "convert legacy TDX2 descriptors in the store to TDX3",
         constants.V_SECRETS: "fetch a provider's secrets as env vars (--set 1p:VAULT)",
         constants.V_CLEAR_VENVS: "delete the managed venvs (rebuilt on next use)",
     }
