@@ -25,32 +25,41 @@ const BACKENDS_ENV: &str = "TD_TEST_BACKENDS";
 /// Backend-specific provisioning for one test: provision the requested
 /// [`SchemaComponent`]s — each on its own schema — and return a serving pool per
 /// component. Each impl owns whatever per-test isolation matches its backend
-/// (sqlite: temp file; postgres: fresh embedded server parked inside the returned
-/// [`MultiTestDb`]). When the test fn finishes the pools drop, taking any owned
-/// per-test resources with them. No singletons, no atexit, no leaks.
+/// (sqlite: a temp file; postgres: per-test schemas in a tdx-provisioned
+/// domain's database). When the test fn finishes the pools drop, and the
+/// teardown releases the per-test resources. No singletons, no atexit, no leaks.
 pub trait DbBackendProvider: Sized {
     /// Stable identifier matching the cfg/feature name (`sqlite`, `postgres`,
     /// `mysql`). Used by `TD_TEST_BACKENDS` filtering.
     const NAME: &'static str;
     /// Build the test database, provisioning the given components. The macro
     /// calls this once per test, per enabled backend.
+    ///
+    /// `None` declines the test — the backend it needs is out of reach and the
+    /// policy says skip rather than fail. `test_name` only labels the diagnostic.
     fn provision(
+        test_name: &'static str,
         components: &'static [&'static dyn SchemaComponent],
-    ) -> impl Future<Output = MultiTestDb> + Send;
+    ) -> impl Future<Output = Option<MultiTestDb>> + Send;
 }
 
 /// Generic test setup parameterized by a backend provider. The macro emits one
 /// instance per enabled backend, carrying the components the test asked for
 /// (defaulting to the apiserver component).
 pub struct DbTestSetup<P> {
+    test_name: &'static str,
     components: &'static [&'static dyn SchemaComponent],
     _provider: PhantomData<P>,
 }
 
 impl<P> DbTestSetup<P> {
     #[allow(dead_code)]
-    pub fn new(components: &'static [&'static dyn SchemaComponent]) -> Self {
+    pub fn new(
+        test_name: &'static str,
+        components: &'static [&'static dyn SchemaComponent],
+    ) -> Self {
         Self {
+            test_name,
             components,
             _provider: PhantomData,
         }
@@ -66,9 +75,14 @@ impl<P: DbBackendProvider + Send + Sync> TestSetup<Vec<TdPool>> for DbTestSetup<
 
         // Provision the requested components, each on its own schema. Hand the test
         // their serving pools (pure app pools); the per-test database resources
-        // (postgres: per-test schemas on the shared server; sqlite: a temp-file
-        // connection) are released by the guard's async teardown after the test body.
-        let MultiTestDb { serving, cleanup } = P::provision(self.components).await;
+        // (postgres: per-test schemas in the tdx domain's database; sqlite: a
+        // temp-file connection) are released by the guard's async teardown after
+        // the test body.
+        let Some(MultiTestDb { serving, cleanup }) =
+            P::provision(self.test_name, self.components).await
+        else {
+            return TestSetupExecution::Skip;
+        };
 
         TestSetupExecution::Run(serving, teardown(async move { cleanup.run().await }))
     }

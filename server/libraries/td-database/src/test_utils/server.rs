@@ -2,14 +2,17 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The **shared** embedded postgres used by the whole test suite (the
-//! `#[td_test::test(db)]` macro path). One server per worktree
+//! The **shared** embedded postgres used by td-database's own white-box tests
+//! (`components/tests/*`, `pool::connect`). The `#[td_test::test(db)]` macro path
+//! does **not** come here — it runs against a tdx-provisioned domain's database,
+//! so testing apiserver logic never starts a server. One server per worktree
 //! (`<root>/target/td-test-pg/data`, on a worktree-stable fixed port), reused
 //! across every test and process.
 //!
 //! It is started **lazily by the first test that needs it** via [`ensure_started`]
 //! — the test runner can't pre-start it (`__os__setup_test_rs` runs before the
-//! build).
+//! build). With the macro path moved off it, that is now only this crate's own
+//! tests, so a run of any other crate never brings it up.
 //!
 //! **Readiness is a real connection, never a pid file.** The server lives on a
 //! fixed, worktree-derived port ([`admin_port`]); a process [`probe`]s that port

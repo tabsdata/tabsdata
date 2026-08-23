@@ -95,7 +95,7 @@ impl DbComponents {
     }
 }
 
-pub(crate) fn db_arms(components: &[TokenStream2]) -> Vec<DbArm> {
+pub(crate) fn db_arms(test_name: &str, components: &[TokenStream2]) -> Vec<DbArm> {
     Backend::ALL
         .iter()
         .map(|&backend| {
@@ -111,6 +111,7 @@ pub(crate) fn db_arms(components: &[TokenStream2]) -> Vec<DbArm> {
                             &[&dyn ::td_database::components::SchemaComponent] =
                             &[#(& #components),*];
                         ::td_test::db::DbTestSetup::<::td_test::db::#provider>::new(
+                            #test_name,
                             __TD_TEST_COMPONENTS,
                         ).setup().await
                     }

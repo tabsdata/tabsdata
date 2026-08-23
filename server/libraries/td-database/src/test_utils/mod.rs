@@ -7,9 +7,13 @@
 //! td-database's own tests.
 //!
 //! A [`TestDb`] pairs a privileged [`AdminPool`] with the serving [`TdPool`] a
-//! test queries (and, for the embedded backend, owns the private embedded server
-//! so it stops when the test ends). Returned databases are freshly connected but
-//! **un-upgraded**; callers that need the schema applied call [`TestDb::upgrade`].
+//! test queries. Returned databases are freshly connected but **un-upgraded**;
+//! callers that need the schema applied call [`TestDb::upgrade`].
+//!
+//! Only this crate's own white-box factories boot the shared embedded server
+//! ([`server`]); the [`postgres::pools`] path the `#[td_test::test(db)]` macro
+//! uses takes its connect from the caller, which points it at a tdx-provisioned
+//! domain's database.
 
 use crate::components::{AdminPool, ApiserverComponent, SchemaComponent};
 use crate::config::{DatabaseConfig, PoolConfig, Schema};
@@ -25,8 +29,8 @@ pub mod server;
 #[cfg(sqlite)]
 pub mod sqlite;
 
-/// Pool settings for the shared-server test pools. One server backs the whole
-/// suite, so each pool stays lean and holds **no resident connections**
+/// Pool settings for the test pools. One server backs the whole suite, so each
+/// pool stays lean and holds **no resident connections**
 /// (`min_connections = 0` + short idle timeout: connections open on demand and
 /// release promptly, so the many concurrent test processes don't pile up on the one
 /// server). A generous acquire timeout lets a test wait out a brief connection-latency

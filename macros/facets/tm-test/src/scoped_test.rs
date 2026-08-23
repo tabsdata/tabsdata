@@ -85,6 +85,6 @@ fn try_scoped_test(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         ))
         .with_span(&input.sig.inputs));
     }
-    let arms = db_arms(&components);
+    let arms = db_arms(&ctx.original_name.to_string(), &components);
     Ok(emit_db_wrapper(&ctx, &fn_args, &arms))
 }

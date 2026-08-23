@@ -163,5 +163,36 @@ CI provisions the backends and leaves these unset, so a missing one is a failure
 without a tdx setup can set `TD_TEST_ON_MISSING_SYSTEM=skip` and
 `TD_TEST_ON_MISSING_DOMAIN=skip` locally to run the rest of the suite.
 
-*NOTE:* CI runs `systems_create` before the Rust tests but does not yet run
-`domains_create`, so only `#[td_test::system(...)]` tests can run there today.
+# Db-backed Tests (`#[td_test::test(db)]`)
+
+Tests of apiserver logic take a database rather than an external resource, and they get it
+from a tdx domain too — `apiserver_postgres`, declared in
+`variant/config/pytest/domains.yaml`. **Nothing in the test code starts a database
+server.** Each test creates its own uniquely-named schema in that domain's database,
+brings it to the current version, and drops it on teardown, so tests still provision in
+parallel and isolate completely:
+
+```rust
+    #[td_test::test(db)]
+    async fn reads_its_own_schema(db: TdPool) {
+        ...
+    }
+```
+
+`cargo make domains_create` provisions it with `--force`, dropping and recreating the
+database, so each provisioning starts empty and no schema outlives it. Point the tests at a
+different domain with `TD_TEST_DB_DOMAIN=<name>`.
+
+*NOTE:* `domains_create` is a task of its own — nothing chains it into `test_rs` — so it
+has to have been run before `cargo make test_rs`, or the db tests fail naming the missing
+domain.
+
+The domain descriptor carries the owning system's superuser as `SYS_ADMIN_USER` /
+`SYS_ADMIN_PASSWORD`, which is what the per-test path connects as: creating and dropping
+schemas and ensuring the cluster-global RLS role are beyond the domain's own owner role.
+
+The same `TD_TEST_ON_MISSING_DOMAIN` policy applies, so a developer without a tdx setup can
+set it to `skip`. The one remaining user of the embedded server is td-database's own
+white-box suite (`components/tests/*`, `pool::connect`), which tests the database layer
+itself rather than apiserver logic and still boots a server lazily into
+`target/td-test-pg`.

@@ -40,6 +40,8 @@ class PostgresDomain(Domain):
     uri: str  # credential-less; creds are supplied separately as UserPassword
     sqlalchemy_uri: str
     schema: str  # postgres calls the entity container a schema (== db here)
+    sys_admin_user: str  # the system superuser; the domain's own user owns only this db
+    sys_admin_password: str
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded

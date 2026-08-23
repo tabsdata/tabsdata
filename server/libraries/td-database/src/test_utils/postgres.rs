@@ -14,7 +14,10 @@
 //! (and drops) its own.
 //!
 //! - [`pools`] — the `#[td_test::test(db)]` macro path: one schema + serving pool
-//!   per requested component, brought to its current version.
+//!   per requested component, brought to its current version. The caller supplies
+//!   the superuser connect, so the schemas land on whichever server it names — a
+//!   tdx-provisioned domain's database for the apiserver-logic tests; nothing
+//!   here starts a server.
 //! - [`pool`] — td-database's own `components`/RLS tests: one schema (left un-upgraded;
 //!   the caller applies it via [`TestDb::upgrade`]) plus the privileged handle and
 //!   superuser connect target those white-box tests need.
@@ -26,12 +29,16 @@
 //! in tests. Use `db.scoped(p)` (or a service) to re-enforce RLS for a query.
 
 use crate::components::{AdminPool, SchemaComponent};
-use crate::config::{ConnectConfig, DatabaseConfig, Schema};
+use crate::config::{ConnectConfig, DatabaseConfig, PostgresConnect, Schema};
 use crate::pool::TdPool;
 #[cfg(test)]
 use crate::test_utils::TestDb;
+use crate::test_utils::test_pool_config;
 use crate::test_utils::{MultiTestDb, TestDbCleanup};
-use crate::test_utils::{server, test_pool_config};
+// Only the crate's own white-box factories still boot a server; the macro path
+// takes the connect from its caller.
+#[cfg(test)]
+use crate::test_utils::server;
 
 /// A schema name unique across all concurrent tests, processes and runs: a fresh
 /// UUIDv7 ([`td_common::id::id`]) per provisioned component. Globally unique ⇒ no
@@ -41,13 +48,13 @@ fn unique_schema(index: usize) -> String {
     format!("tdt_{}_{index}", td_common::id::id())
 }
 
-/// A superuser connectable to the shared server, pinned to `schema`. Used for both
-/// the privileged ([`AdminPool`]) and serving ([`TdPool`]) connects — the schema is
+/// A superuser connectable pinned to `schema`. Used for both the privileged
+/// ([`AdminPool`]) and serving ([`TdPool`]) connects — the schema is
 /// superuser-owned, so there is no per-test owner role; serving `SET ROLE`s the
 /// shared `td_app`.
-fn schema_connectable(schema: &str) -> DatabaseConfig {
+fn schema_connectable(admin: &PostgresConnect, schema: &str) -> DatabaseConfig {
     DatabaseConfig {
-        conn: ConnectConfig::Postgres(server::admin_base()),
+        conn: ConnectConfig::Postgres(admin.clone()),
         schema: Some(Schema::new(schema)),
         app_role: None,
         pool: test_pool_config(),
@@ -56,9 +63,9 @@ fn schema_connectable(schema: &str) -> DatabaseConfig {
 
 /// A superuser connectable with no schema pin — for dropping a test's schemas on
 /// teardown.
-fn admin_connectable() -> DatabaseConfig {
+fn admin_connectable(admin: &PostgresConnect) -> DatabaseConfig {
     DatabaseConfig {
-        conn: ConnectConfig::Postgres(server::admin_base()),
+        conn: ConnectConfig::Postgres(admin.clone()),
         schema: None,
         app_role: None,
         pool: test_pool_config(),
@@ -70,9 +77,12 @@ fn admin_connectable() -> DatabaseConfig {
 /// `td_app` (connects never provision roles). Shared by [`pool`] and [`pools`];
 /// both then connect their serving pool(s) to the same `config` (returned to
 /// avoid rebuilding it).
-async fn provision_schema(index: usize) -> (String, DatabaseConfig, AdminPool) {
+async fn provision_schema(
+    admin_connect: &PostgresConnect,
+    index: usize,
+) -> (String, DatabaseConfig, AdminPool) {
     let schema = unique_schema(index);
-    let config = schema_connectable(&schema);
+    let config = schema_connectable(admin_connect, &schema);
     let admin = AdminPool::connect(&config).await.expect("privileged pool");
     admin.create_app_role().await.expect("create app role");
     admin
@@ -92,7 +102,8 @@ async fn provision_schema(index: usize) -> (String, DatabaseConfig, AdminPool) {
 pub(crate) async fn pool() -> TestDb {
     server::ensure_started().await;
     // Keep the privileged pool open in the `TestDb` — the caller drives `upgrade`.
-    let (schema, config, admin) = provision_schema(0).await;
+    let admin_connect = server::admin_base();
+    let (schema, config, admin) = provision_schema(&admin_connect, 0).await;
     let serving = TdPool::connect(&config).await.expect("postgres test pool");
 
     TestDb {
@@ -100,27 +111,31 @@ pub(crate) async fn pool() -> TestDb {
         admin,
         schema: Schema::new(&schema),
         cleanup: TestDbCleanup::PostgresSchemas {
-            admin: Box::new(admin_connectable()),
+            admin: Box::new(admin_connectable(&admin_connect)),
             schemas: vec![schema],
         },
     }
 }
 
-/// Provision a test on its **own unique schema(s)** of the shared server and return
-/// a serving pool per component (in request order), each brought to its current
-/// version. The schema is created superuser-owned and the build runs as the
-/// superuser; serving pools `SET ROLE td_app`. Everything is schema-local, so
+/// Provision a test on its **own unique schema(s)** of the database `admin_connect`
+/// names, and return a serving pool per component (in request order), each brought
+/// to its current version. The schema is created superuser-owned and the build runs
+/// as the superuser; serving pools `SET ROLE td_app`. Everything is schema-local, so
 /// concurrent tests provision in parallel. [`TestDbCleanup`] drops the schemas.
-pub async fn pools(components: &[&'static dyn SchemaComponent]) -> MultiTestDb {
-    server::ensure_started().await;
-
+///
+/// The server is the caller's to choose and must already be running — this starts
+/// nothing.
+pub async fn pools(
+    admin_connect: PostgresConnect,
+    components: &[&'static dyn SchemaComponent],
+) -> MultiTestDb {
     let mut serving = Vec::with_capacity(components.len());
     let mut schemas = Vec::with_capacity(components.len());
     for (index, component) in components.iter().enumerate() {
         // Build the schema to its current version (tables + grant `td_app`) on the
         // privileged pool, then drop it and connect the serving pool. All
         // schema-local ⇒ runs concurrently with other tests.
-        let (schema, config, admin) = provision_schema(index).await;
+        let (schema, config, admin) = provision_schema(&admin_connect, index).await;
         component.upgrade(&admin).await.expect("upgrade component");
         admin.close().await;
 
@@ -135,7 +150,7 @@ pub async fn pools(components: &[&'static dyn SchemaComponent]) -> MultiTestDb {
     MultiTestDb {
         serving,
         cleanup: TestDbCleanup::PostgresSchemas {
-            admin: Box::new(admin_connectable()),
+            admin: Box::new(admin_connectable(&admin_connect)),
             schemas,
         },
     }
@@ -184,7 +199,12 @@ mod tests {
 
     #[tokio::test]
     async fn pools_provisions_each_component_on_its_own_schema() {
-        let db = pools(&[&ApiserverComponent, &DummyComponent]).await;
+        server::ensure_started().await;
+        let db = pools(
+            server::admin_base(),
+            &[&ApiserverComponent, &DummyComponent],
+        )
+        .await;
         assert_eq!(db.serving.len(), 2);
 
         // apiserver pool: its schema is fully provisioned (seeded admin present).

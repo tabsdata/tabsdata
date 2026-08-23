@@ -136,7 +136,7 @@ impl Attrs {
         self.strings.keys().map(String::as_str)
     }
 
-    fn of(info: &descriptor::Info) -> Self {
+    pub(crate) fn of(info: &descriptor::Info) -> Self {
         let mut attrs = Attrs::default();
         match info {
             descriptor::Info::System(i) => {

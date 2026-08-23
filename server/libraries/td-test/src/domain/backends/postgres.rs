@@ -54,6 +54,11 @@ crate::define_backend! {
         sqlalchemy_uri: String,
         /// What postgres calls the entity container (== `db`).
         schema: String,
+        /// The owning system's superuser. The domain's own `user` owns only this
+        /// database; creating schemas in it and ensuring the cluster-global RLS
+        /// role need the superuser. See [`PostgresDomain::admin_url`].
+        sys_admin_user: String,
+        sys_admin_password: String,
         model: Option<String>,
         data: Option<String>,
         /// `{table: record count}`, once loaded.
@@ -130,6 +135,18 @@ impl PostgresDomain {
         url_of(&self.host, &self.port, &self.db, &self.user, &self.password)
     }
 
+    /// The owning system's superuser, connected to this domain's own database —
+    /// what a caller needs to create or drop schemas inside it.
+    pub fn admin_url(&self) -> Result<Url, String> {
+        url_of(
+            &self.host,
+            &self.port,
+            &self.db,
+            &self.sys_admin_user,
+            &self.sys_admin_password,
+        )
+    }
+
     /// The published port, parsed.
     pub fn port(&self) -> Result<u16, String> {
         self.port
@@ -195,6 +212,8 @@ mod tests {
             ("DB".to_string(), "d_tucu_0_landing".to_string()),
             ("DATABASE".to_string(), "d_tucu_0_landing".to_string()),
             ("SCHEMA".to_string(), "d_tucu_0_landing".to_string()),
+            ("SYS_ADMIN_USER".to_string(), "postgres".to_string()),
+            ("SYS_ADMIN_PASSWORD".to_string(), PASSWORD.to_string()),
             (
                 "URI".to_string(),
                 "postgresql+psycopg2://127.0.0.1:15432/d_tucu_0_landing".to_string(),
@@ -260,6 +279,19 @@ mod tests {
         assert_eq!(d.model.as_deref(), Some("world"));
         assert_eq!(d.data.as_deref(), Some("200"));
         assert_eq!(d.entities.as_ref().unwrap()["city"], 4079);
+        assert_eq!(d.sys_admin_user, "postgres");
+        assert_eq!(d.sys_admin_password, PASSWORD);
+    }
+
+    /// The owner connects as itself; the superuser reaches the same database
+    /// with the rights to add and drop schemas in it.
+    #[test]
+    fn test_domain_admin_url_is_the_superuser_on_the_same_database() {
+        let d = domain();
+        let admin = d.admin_url().unwrap();
+        assert_eq!(admin.username(), "postgres");
+        assert_eq!(admin.path(), d.url().unwrap().path());
+        assert_eq!(admin.port(), d.url().unwrap().port());
     }
 
     #[test]
