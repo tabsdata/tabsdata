@@ -10,11 +10,15 @@ from pathlib import Path
 TESTING_RESOURCES_PATH = str(
     Path(__file__).absolute()
     .parent  # backend/
+    .parent  # tier/
+    .parent  # _subsystem/
     .parent  # test_tabsdatak/
     .parent  # python/
     .parent  # utest/
     / "resources"
     / "test_tabsdatak"
+    / "_subsystem"
+    / "tier"
     / "backend"
 )
 # fmt: on

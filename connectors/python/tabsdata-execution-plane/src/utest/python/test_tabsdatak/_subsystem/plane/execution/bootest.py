@@ -9,15 +9,17 @@ from pathlib import Path
 # fmt: off
 TESTING_RESOURCES_PATH = str(
     Path(__file__).absolute()
-    .parent  # plane/
     .parent  # execution/
+    .parent  # plane/
+    .parent  # _subsystem/
     .parent  # test_tabsdatak/
     .parent  # python/
     .parent  # utest/
     / "resources"
     / "test_tabsdatak"
-    / "execution"
+    / "_subsystem"
     / "plane"
+    / "execution"
 )
 # fmt: on
 

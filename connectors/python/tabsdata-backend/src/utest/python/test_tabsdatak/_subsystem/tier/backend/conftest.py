@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from test_tabsdatak.bootest import enrich_sys_path
-from test_tabsdatak.backend.bootest import TESTING_RESOURCES_PATH
+from test_tabsdatak._subsystem.tier.backend.bootest import TESTING_RESOURCES_PATH
 
 
 def _enrich_sys_path():
