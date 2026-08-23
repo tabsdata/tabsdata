@@ -313,11 +313,26 @@ script = [
     with_license = get_env TD_WITH_LICENSE
     with_license_empty = is_empty ${with_license}
     with_license_true = eq ${with_license} "true"
-    with_license = set ${with_license_empty} or ${with_license_true}
+    with_license = set false
+    if ${with_license_empty}
+        with_license = set true
+    end
+    if ${with_license_true}
+        with_license = set true
+    end
     if ${with_license}
         set_env TD_WITH_LICENSE "true"
     else
         set_env TD_WITH_LICENSE "false"
+    end
+    auto_license = get_env TD_AUTO_LICENSE
+    if not eq ${auto_license} "true"
+        with_license = set false
+    end
+    if ${with_license}
+        set_env TD_RUN_LICENSE "true"
+    else
+        set_env TD_RUN_LICENSE "false"
     end
     TD_WITH_LICENSE = get_env TD_WITH_LICENSE
     debug "🔅 Using td license: '${TD_WITH_LICENSE}'"
@@ -533,6 +548,9 @@ script = [
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
+        if eq ${argument} "--no-license"
+            set_env TD_WITH_LICENSE "false"
+        end
         if eq ${argument} "--fast"
             at_fast = set true
         end
@@ -561,11 +579,26 @@ script = [
     with_license = get_env TD_WITH_LICENSE
     with_license_empty = is_empty ${with_license}
     with_license_true = eq ${with_license} "true"
-    with_license = set ${with_license_empty} or ${with_license_true}
+    with_license = set false
+    if ${with_license_empty}
+        with_license = set true
+    end
+    if ${with_license_true}
+        with_license = set true
+    end
     if ${with_license}
         set_env TD_WITH_LICENSE "true"
     else
         set_env TD_WITH_LICENSE "false"
+    end
+    auto_license = get_env TD_AUTO_LICENSE
+    if not eq ${auto_license} "true"
+        with_license = set false
+    end
+    if ${with_license}
+        set_env TD_RUN_LICENSE "true"
+    else
+        set_env TD_RUN_LICENSE "false"
     end
     TD_WITH_LICENSE = get_env TD_WITH_LICENSE
     debug "🔅 Using td license: '${TD_WITH_LICENSE}'"
@@ -621,11 +654,26 @@ script = [
     with_license = get_env TD_WITH_LICENSE
     with_license_empty = is_empty ${with_license}
     with_license_true = eq ${with_license} "true"
-    with_license = set ${with_license_empty} or ${with_license_true}
+    with_license = set false
+    if ${with_license_empty}
+        with_license = set true
+    end
+    if ${with_license_true}
+        with_license = set true
+    end
     if ${with_license}
         set_env TD_WITH_LICENSE "true"
     else
         set_env TD_WITH_LICENSE "false"
+    end
+    auto_license = get_env TD_AUTO_LICENSE
+    if not eq ${auto_license} "true"
+        with_license = set false
+    end
+    if ${with_license}
+        set_env TD_RUN_LICENSE "true"
+    else
+        set_env TD_RUN_LICENSE "false"
     end
     TD_WITH_LICENSE = get_env TD_WITH_LICENSE
     debug "🔅 Using td license: '${TD_WITH_LICENSE}'"

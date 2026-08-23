@@ -103,6 +103,15 @@ script = [
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
 
+    on_ga_for_license = get_env TD_ON_GA
+    if eq ${on_ga_for_license} "true"
+        set_env TD_AUTO_LICENSE "true"
+    end
+    auto_license = get_env TD_AUTO_LICENSE
+    if not eq ${auto_license} "true"
+        set_env TD_AUTO_LICENSE "false"
+    end
+
     with_permit = get_env TD_WITH_PERMIT
     with_permit_true = eq ${with_permit} "true"
     if ${with_permit_true}

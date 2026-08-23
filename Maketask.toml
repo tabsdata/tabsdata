@@ -264,7 +264,8 @@ description = "Generate the dependencies lock files"
 run_task = [
     { name = [
         "lock_rs",
-        "lock_py"
+        "lock_py",
+        "license"
     ] }
 ]
 
@@ -1738,8 +1739,16 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    with_license = get_env TD_WITH_LICENSE
-    if eq ${with_license} "true"
+    run_license = get_env TD_RUN_LICENSE
+    run_license = eq ${run_license} "true"
+    make_task = get_env CARGO_MAKE_TASK
+    if starts_with ${make_task} "license"
+        run_license = set true
+    end
+    if eq ${make_task} "lock"
+        run_license = set true
+    end
+    if ${run_license}
         cm_run_task license_rs
         cm_run_task license_go
         cm_run_task license_py
