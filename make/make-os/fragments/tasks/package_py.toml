@@ -15,6 +15,10 @@ script = [
 
     cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
+    python_target_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/python"
+    debug "🔅 Deleting python target folder: ${python_target_folder}"
+    rm -r ${python_target_folder}
+
     debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
@@ -38,6 +42,11 @@ script = [
         is_connector = is_dir ${connector}
         if ${is_connector}
             cd ${connector}
+
+            python_target_folder = set "${connector}/target/python"
+            debug "🔅 Deleting python target folder: ${python_target_folder}"
+            rm -r ${python_target_folder}
+
             debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored --package-folder ${connector}"
             exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored --package-folder ${connector}
         end

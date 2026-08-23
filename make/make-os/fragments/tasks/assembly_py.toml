@@ -63,6 +63,10 @@ script = [
         in_folder = pwd
         trace "🧶 Base folder for assembly - tabsdata: ${in_folder}"
 
+        python_target_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/python"
+        debug "🔅 Deleting python target folder: ${python_target_folder}"
+        rm -r ${python_target_folder}
+
         debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
         exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
 
@@ -151,6 +155,10 @@ script = [
 
                 in_folder = pwd
                 trace "🧶 Base folder for assembly - ${connector}: ${in_folder}"
+
+                python_target_folder = set "${connector}/target/python"
+                debug "🔅 Deleting python target folder: ${python_target_folder}"
+                rm -r ${python_target_folder}
 
                 debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist --package-folder ${connector}"
                 exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist --package-folder ${connector}
