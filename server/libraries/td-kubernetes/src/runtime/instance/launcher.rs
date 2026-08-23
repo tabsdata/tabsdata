@@ -948,6 +948,49 @@ fn kind_of_entry(key: &str, yaml: &str) -> Result<TemplateKind, LauncherError> {
     })
 }
 
+fn is_job_absent() -> impl Condition<Job> + Clone {
+    |job: Option<&Job>| job.is_none()
+}
+
+fn job_active_pods(job: &Job) -> i32 {
+    job.status
+        .as_ref()
+        .and_then(|status| status.active)
+        .unwrap_or_default()
+}
+
+fn is_job_reclaimable(job: &Job) -> bool {
+    is_job_settled().matches_object(Some(job)) && job_active_pods(job) == 0
+}
+
+async fn clear_settled_job(
+    context: &KubeContext,
+    component: &str,
+    name: &str,
+) -> CommandResult<bool> {
+    let Some(existing) = job_api::get_job(context, name).await? else {
+        return Ok(false);
+    };
+    if !is_job_reclaimable(&existing) {
+        let active = job_active_pods(&existing);
+        return Err(LauncherError::ProvisionJobInProgress {
+            component: component.to_owned(),
+            name: name.to_owned(),
+            started: existing
+                .status
+                .as_ref()
+                .and_then(|status| status.start_time.as_ref())
+                .map(|time| format!("at {}", time.0.to_rfc3339()))
+                .unwrap_or_else(|| "at an unknown time".to_owned()),
+            active,
+        }
+        .into());
+    }
+    job_api::delete_job(context, name).await?;
+    job_api::await_job_condition_forever(context, name, is_job_absent()).await?;
+    Ok(true)
+}
+
 pub async fn provision_pyvenvs(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
@@ -967,6 +1010,9 @@ pub async fn provision_pyvenvs(
     let phase = phase_spinner_in(multi, "Provisioning tabsdata python environments");
 
     let bar = phase.add_resource(setup_key);
+    if clear_settled_job(context, PYMANAGER_COMPONENT, &setup_name).await? {
+        bar.set_message(format!("{setup_key} (replacing previous run)"));
+    }
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
     let settled =
         job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;
@@ -1122,6 +1168,9 @@ pub async fn provision_database(
     }
 
     let bar = phase.add_resource(setup_key);
+    if clear_settled_job(context, DBMANAGER_COMPONENT, &setup_name).await? {
+        bar.set_message(format!("{setup_key} (replacing previous run)"));
+    }
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
     let settled =
         job_api::await_job_condition_forever(context, &setup_name, is_job_settled()).await?;

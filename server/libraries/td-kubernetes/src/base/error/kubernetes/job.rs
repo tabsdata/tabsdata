@@ -40,4 +40,10 @@ pub enum KubeJobError {
         name: String,
         cause: String,
     } = 5007,
+    #[error("Could not get job '{name}' in namespace '{namespace}': {cause}.")]
+    GetFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5008,
 }

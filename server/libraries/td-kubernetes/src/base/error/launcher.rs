@@ -108,4 +108,14 @@ pub enum LauncherError {
          services are applied by the endpoint phase."
     )]
     UnawaitableWorkloadKind { name: String, kind: String } = 5015,
+    #[error(
+        "Another '{component}' provision job is in progress: job '{name}' started {started} \
+         and has {active} active pod(s). Wait for it to finish before provisioning again."
+    )]
+    ProvisionJobInProgress {
+        component: String,
+        name: String,
+        started: String,
+        active: i32,
+    } = 5020,
 }

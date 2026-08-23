@@ -46,6 +46,18 @@ pub async fn create_job(
     Ok(created)
 }
 
+pub async fn get_job(context: &KubeContext, name: &str) -> Result<Option<Job>, KubernetesError> {
+    let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
+    api.get_opt(name).await.map_err(|error| {
+        KubeJobError::GetFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()
+    })
+}
+
 pub async fn delete_job(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
     let delete_params = DeleteParams {

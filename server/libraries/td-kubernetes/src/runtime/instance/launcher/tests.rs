@@ -33,6 +33,14 @@ fn job_with_conditions(conditions: &[(&str, &str)]) -> Job {
     }
 }
 
+fn job_with_conditions_and_active(conditions: &[(&str, &str)], active: i32) -> Job {
+    let mut job = job_with_conditions(conditions);
+    if let Some(status) = job.status.as_mut() {
+        status.active = Some(active);
+    }
+    job
+}
+
 fn pod_with_status(phase: Option<&str>, ready: Option<&str>) -> Pod {
     let conditions = ready.map(|status| {
         vec![PodCondition {
@@ -198,6 +206,47 @@ fn is_job_settled_false_for_unrelated_condition() {
 fn is_job_settled_false_when_status_missing() {
     let job = Job::default();
     assert!(!is_job_settled().matches_object(Some(&job)));
+}
+
+#[test]
+fn is_job_reclaimable_true_when_settled_and_idle() {
+    let job = job_with_conditions(&[("Complete", "True")]);
+    assert!(is_job_reclaimable(&job));
+}
+
+#[test]
+fn is_job_reclaimable_true_for_a_settled_failed_run() {
+    let job = job_with_conditions(&[("Failed", "True")]);
+    assert!(is_job_reclaimable(&job));
+}
+
+#[test]
+fn is_job_reclaimable_false_while_pods_are_active() {
+    let job = job_with_conditions_and_active(&[("Complete", "True")], 1);
+    assert!(!is_job_reclaimable(&job));
+}
+
+#[test]
+fn is_job_reclaimable_false_while_still_running() {
+    let job = job_with_conditions_and_active(&[], 1);
+    assert!(!is_job_reclaimable(&job));
+}
+
+#[test]
+fn is_job_reclaimable_false_when_status_missing() {
+    assert!(!is_job_reclaimable(&Job::default()));
+}
+
+#[test]
+fn active_pods_defaults_to_zero() {
+    assert_eq!(job_active_pods(&Job::default()), 0);
+    assert_eq!(job_active_pods(&job_with_conditions_and_active(&[], 3)), 3);
+}
+
+#[test]
+fn is_job_absent_matches_only_a_missing_object() {
+    assert!(is_job_absent().matches_object(None));
+    assert!(!is_job_absent().matches_object(Some(&Job::default())));
 }
 
 #[test]
