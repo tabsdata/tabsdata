@@ -2,16 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-//! `#[td_test::test(...)]` — exactly one flavor must be set:
-//!
-//! * `db` — runs the test against freshly provisioned component schema(s). Bare
-//!   `db` provisions the apiserver component and the function must take
-//!   `db: TdPool`; `db(Type, ...)` provisions each listed component on its own
-//!   schema and injects one `TdPool` per type, in declaration order.
-//! * `requires = SomeReqs` + `env_prefix = "ns"` — runs only when the
-//!   provider's env vars are present; otherwise skipped (with
-//!   `TD_TEST_SKIP_IF_NO_REQS=true`) or panics. The function must take an arg
-//!   of type `SomeReqs`.
+//! `#[td_test::test(db)]` — runs the test against freshly provisioned component
+//! schema(s). Bare `db` provisions the apiserver component and the function must
+//! take `db: TdPool`; `db(Type, ...)` provisions each listed component on its own
+//! schema and injects one `TdPool` per type, in declaration order.
 //!
 //! tdx-provisioned backends are not a flavor of this macro — see
 //! [`macro@domain`] / [`macro@system`], which compose with any test attribute.
@@ -33,16 +27,12 @@
 //!
 //! #[td_test::test(db, flavor = "multi_thread")]
 //! async fn parallel(db: TdPool) { /* ... */ }
-//!
-//! #[td_test::test(requires = AwsS3Reqs, env_prefix = "s30")]
-//! async fn s3_only(s3: AwsS3Reqs) { /* ... */ }
 //! ```
 
 extern crate proc_macro;
 mod backend_attr;
 mod common;
 mod db_arm;
-mod requires_arm;
 mod scoped_test;
 
 use proc_macro::TokenStream;

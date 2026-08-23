@@ -12,7 +12,6 @@ pub use tm_test::*;
 mod backend_cfg;
 pub mod db;
 pub mod domain;
-pub mod reqs;
 
 #[doc(hidden)]
 pub mod __private {
@@ -22,7 +21,7 @@ pub mod __private {
     /// Per-test teardown the harness runs **after** the test body returns, without
     /// the test fn ever seeing it — e.g. dropping a postgres test's schemas on the
     /// shared server, or closing a sqlite temp-file connection. Async, so it can do
-    /// real database work. Setups with nothing to release use [`no_teardown`].
+    /// real database work.
     ///
     /// Best-effort: skipped if the test panics (the next `cargo make test` setup
     /// starts from a clean slate), so it must not be relied on for correctness.
@@ -31,11 +30,6 @@ pub mod __private {
     /// Wrap a teardown future. The harness awaits it after the test body.
     pub fn teardown(f: impl Future<Output = ()> + Send + 'static) -> Teardown {
         Box::pin(f)
-    }
-
-    /// A teardown that does nothing — for setups with no per-test resources.
-    pub fn no_teardown() -> Teardown {
-        Box::pin(async {})
     }
 
     pub enum TestSetupExecution<T> {
