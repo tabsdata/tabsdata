@@ -14,6 +14,7 @@ use crate::components::sql::is_undefined_table_error;
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
+use crate::sea_query::executor::SeaExecutor;
 use crate::sea_query::kind::DatabaseKind;
 use sea_query::{Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
@@ -46,14 +47,15 @@ fn map_system_db_error(err: Error) -> DbError {
 }
 
 /// Read a single `value` from `tabsdata_system` keyed by `name`. Missing rows
-/// return `Ok(None)`; only the read itself can fail.
-async fn read_system_value(pool: &DynamicPool, name: &str) -> Result<Option<String>, DbError> {
+/// return `Ok(None)`; only the read itself can fail. Takes any executor so the
+/// upgrade transaction reads the ledger it is about to write.
+async fn read_system_value(exec: impl SeaExecutor, name: &str) -> Result<Option<String>, DbError> {
     Query::select()
         .column(TabsdataSystem::Value)
         .from(TabsdataSystem::Table)
         .and_where(Expr::col(TabsdataSystem::Name).eq(name))
         .build_query_scalar()
-        .fetch_optional(pool)
+        .fetch_optional(exec)
         .await
         .map_err(map_system_db_error)
 }
@@ -62,8 +64,8 @@ async fn read_system_value(pool: &DynamicPool, name: &str) -> Result<Option<Stri
 /// either the `tabsdata_system` table is absent **or** its `db_version` row is.
 /// The pool creates the (empty) ledger before build, so a missing row is the
 /// fresh-install signal, not corruption; the pool writes the row after build/delta.
-pub(crate) async fn db_version(pool: &DynamicPool) -> Result<Option<usize>, DbError> {
-    let raw = match read_system_value(pool, DB_VERSION_NAME).await {
+pub(crate) async fn db_version(exec: impl SeaExecutor) -> Result<Option<usize>, DbError> {
+    let raw = match read_system_value(exec, DB_VERSION_NAME).await {
         Ok(value) => value,
         Err(DbError::DatabaseSchemaDoesNotExist) => return Ok(None),
         Err(e) => return Err(e),
@@ -126,8 +128,8 @@ pub(crate) async fn check_tabsdata_version(pool: &DynamicPool) -> Result<(), DbE
 }
 
 /// The recorded edition, or `None` when unset (used by both check and upgrade).
-pub(crate) async fn edition(pool: &DynamicPool) -> Result<Option<String>, DbError> {
-    read_system_value(pool, DB_EDITION_NAME).await
+pub(crate) async fn edition(exec: impl SeaExecutor) -> Result<Option<String>, DbError> {
+    read_system_value(exec, DB_EDITION_NAME).await
 }
 
 pub(crate) async fn check_tabsdata_edition(pool: &DynamicPool) -> Result<(), DbError> {

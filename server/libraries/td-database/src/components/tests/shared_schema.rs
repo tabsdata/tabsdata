@@ -77,7 +77,7 @@ async fn ledger_and_version_created_by_shared_logic() {
     let db = pool().await;
     let system = &db.admin;
     system
-        .upgrade_db_version(&WidgetSource { version: 1 })
+        .upgrade_source(&WidgetSource { version: 1 })
         .await
         .unwrap();
 
@@ -104,14 +104,14 @@ async fn upgrade_advances_version_via_delta() {
     let system = &db.admin;
 
     system
-        .upgrade_db_version(&WidgetSource { version: 1 })
+        .upgrade_source(&WidgetSource { version: 1 })
         .await
         .unwrap();
     assert_eq!(system.db_version().await.unwrap(), Some(1));
 
     // v1 → v2: shared logic runs the delta and bumps db_version.
     system
-        .upgrade_db_version(&WidgetSource { version: 2 })
+        .upgrade_source(&WidgetSource { version: 2 })
         .await
         .unwrap();
     assert_eq!(system.db_version().await.unwrap(), Some(2));
@@ -129,7 +129,7 @@ async fn upgrade_advances_version_via_delta() {
 
     // Idempotent: re-running at the current version is a no-op.
     system
-        .upgrade_db_version(&WidgetSource { version: 2 })
+        .upgrade_source(&WidgetSource { version: 2 })
         .await
         .unwrap();
     assert_eq!(system.db_version().await.unwrap(), Some(2));

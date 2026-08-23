@@ -15,7 +15,7 @@
 //! uses takes its connect from the caller, which points it at a tdx-provisioned
 //! domain's database.
 
-use crate::components::{AdminPool, ApiserverComponent, SchemaComponent};
+use crate::components::{AdminPool, ApiserverComponent};
 use crate::config::{DatabaseConfig, PoolConfig, Schema};
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
@@ -156,6 +156,6 @@ impl TestDb {
     /// Apply the apiserver schema to its current version, via the real
     /// [`ApiserverComponent`] on the privileged system pool.
     pub async fn upgrade(&self) -> Result<(), DbError> {
-        ApiserverComponent.upgrade(&self.admin).await
+        self.admin.upgrade(&ApiserverComponent).await
     }
 }

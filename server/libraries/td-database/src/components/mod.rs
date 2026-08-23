@@ -11,6 +11,7 @@ mod apiserver;
 mod component;
 mod pool;
 pub(crate) mod sql;
+mod upgrade;
 
 #[cfg(test)]
 mod tests;
@@ -18,6 +19,7 @@ mod tests;
 pub use apiserver::{APISERVER_COMPONENT_KEY, ApiserverComponent};
 pub use component::*;
 pub use pool::AdminPool;
+pub use upgrade::UpgradeTx;
 
 #[cfg(mysql)]
 use crate::config::MySqlConnect;
@@ -273,7 +275,7 @@ pub async fn provision_all(
 pub async fn upgrade_all(components: &DatabaseComponents) -> Result<(), DbError> {
     for component in registered() {
         let pool = admin_pool_for(components, component).await?;
-        component.upgrade(&pool).await?;
+        pool.upgrade(component).await?;
     }
     Ok(())
 }

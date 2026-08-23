@@ -6,7 +6,7 @@
 //! components at runtime; the edition extension (`te-database`) registers
 //! components via `inventory::submit!`.
 
-use crate::components::AdminPool;
+use crate::components::{AdminPool, UpgradeTx};
 use crate::config::DatabaseComponents;
 use crate::error::DbError;
 use crate::pool::TdPool;
@@ -25,10 +25,11 @@ pub struct ProvisionSpec<'a> {
     pub app_role: &'a str,
 }
 
-/// One self-describing schema component. Each phase takes the pool whose
-/// privilege it needs: `provision` on the privileged server pool, `upgrade` on
-/// the per-schema admin pool (owner DDL), `check` on the serving [`TdPool`]
-/// only — so an already-upgraded apiserver verifies with just its app pool.
+/// One self-describing schema component. Each phase takes the handle whose
+/// privilege it needs: `provision` on the privileged server pool, `preflight`
+/// on the per-schema admin pool (owner DDL), `upgrade` on the transaction that
+/// pool opens, `check` on the serving [`TdPool`] only — so an already-upgraded
+/// apiserver verifies with just its app pool.
 #[async_trait]
 pub trait SchemaComponent: Send + Sync + 'static {
     /// This component's identity in the registry and in the `database:` map.
@@ -46,10 +47,19 @@ pub trait SchemaComponent: Send + Sync + 'static {
         admin.provision_schema(spec).await
     }
 
+    /// Read-only gates run before the upgrade transaction opens, so a server
+    /// or privilege problem fails fast instead of half way through a ladder.
+    /// Default: nothing to check.
+    async fn preflight(&self, _admin: &AdminPool) -> Result<(), DbError> {
+        Ok(())
+    }
+
     /// Bring the schema to its current version, then grant the RLS app role.
-    async fn upgrade(&self, admin: &AdminPool) -> Result<(), DbError> {
-        admin.upgrade_db_version(self.schema_source()).await?;
-        admin.ensure_app_role().await
+    /// Runs inside the single upgrade transaction [`AdminPool::upgrade`] owns:
+    /// every step here commits together or not at all.
+    async fn upgrade(&self, tx: &mut UpgradeTx<'_>) -> Result<(), DbError> {
+        tx.upgrade_db_version(self.schema_source()).await?;
+        tx.grant_app_role_privileges().await
     }
 
     /// Verify the schema is serveable as-is, on the serving pool only.

@@ -84,7 +84,7 @@ async fn provision_schema(
     let schema = unique_schema(index);
     let config = schema_connectable(admin_connect, &schema);
     let admin = AdminPool::connect(&config).await.expect("privileged pool");
-    admin.create_app_role().await.expect("create app role");
+    admin.ensure_app_role().await.expect("create app role");
     admin
         .create_schema(&schema)
         .await
@@ -136,7 +136,7 @@ pub async fn pools(
         // privileged pool, then drop it and connect the serving pool. All
         // schema-local ⇒ runs concurrently with other tests.
         let (schema, config, admin) = provision_schema(&admin_connect, index).await;
-        component.upgrade(&admin).await.expect("upgrade component");
+        admin.upgrade(*component).await.expect("upgrade component");
         admin.close().await;
 
         serving.push(

@@ -125,15 +125,20 @@ crates can gate their own schemas with it — `te-aiagent` does.
 **Fresh installs** run `install_script(&CurrentSource, backend)` (also exposed
 as `current::build`, which the DDL snapshots gate).
 
-**Existing databases** within the same major run the delta ladder: `AdminPool::upgrade_db_version`
-iterates `(db_version + 1)..=CURRENT_VERSION` and calls `deltas::get(target, backend)` for
-each step, executing the resulting SQL in its own transaction. Each delta bumps
-`db_version` itself as its last statement, so a ladder that fails part-way up
-resumes from the last step that committed instead of replaying it.
+**Existing databases** within the same major run the delta ladder:
+`UpgradeTx::upgrade_db_version` iterates `(db_version + 1)..=CURRENT_VERSION` and
+calls `deltas::get(target, backend)` for each step. Each delta bumps `db_version`
+itself as its last statement, so a delta reads as a complete step on its own.
 
-The install script includes the derived objects; the ladder drops them
-**before** it runs and re-creates them after (`derived_scripts`), and a run
-against an already-current database re-renders them in one transaction — see
+The whole upgrade — every delta, the derived-object drop before them and the
+rebuild after (`derived_scripts`), the version and edition rows, and the app-role
+grants — runs as **one transaction**. A ladder that fails part-way up rolls all
+of it back and the next run replays from the version it started at; it never
+leaves a database at an intermediate version, nor without its views and triggers.
+Deltas must therefore emit only transaction-safe SQL: no `CREATE INDEX
+CONCURRENTLY`, no `VACUUM`.
+
+The install script includes the derived objects — see
 *Views and triggers are rebuilt for you* below.
 
 ## Changing the schema within a major
@@ -214,9 +219,8 @@ impl SchemaDelta for Migration {
             // Nothing about the views over `users` — the pool re-creates those
             // from `current/` after the ladder. See below.
 
-            // MANDATORY: always bump db_version as the last statement. Each delta
-            // runs in its own transaction, so this is what makes a multi-step
-            // ladder resumable after a failure part-way up.
+            // MANDATORY: always bump db_version as the last statement, so the
+            // delta is a complete step on its own.
             b.update_db_version(Self::TO_VERSION),
         ]
     }
@@ -365,7 +369,7 @@ and broke the archive/delta equivalence the migration-invariant tests asserted.
 Rather than reconstruct snapshots for a path that nobody will travel — 2.0 is
 a fresh install — the archives and deltas were emptied. The machinery (the
 trait, the dispatch functions, the guard tests, the upgrade loop in
-`AdminPool::upgrade_db_version`) stays in place, ready to be filled by the first
+`UpgradeTx::upgrade_db_version`) stays in place, ready to be filled by the first
 2.x in-major bump.
 
 ## Edition handling (`edition` row)

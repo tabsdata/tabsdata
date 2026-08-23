@@ -74,7 +74,7 @@ pub async fn pools(components: &[&'static dyn SchemaComponent]) -> MultiTestDb {
             )
             .await
             .expect("provision component");
-        component.upgrade(&admin).await.expect("upgrade component");
+        admin.upgrade(*component).await.expect("upgrade component");
     }
 
     let mut serving = Vec::with_capacity(components.len());

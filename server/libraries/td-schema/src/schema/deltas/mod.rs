@@ -37,6 +37,9 @@
 //! The last statement in every delta **must** update `db_version` using the
 //! helper: `b.update_db_version(Self::TO_VERSION)`.
 //!
+//! The whole ladder runs as one transaction, so a delta must emit only
+//! transaction-safe SQL — no `CREATE INDEX CONCURRENTLY`, no `VACUUM`.
+//!
 //! See the project README for a full guide and example.
 
 use crate::schema::backend::Backend;

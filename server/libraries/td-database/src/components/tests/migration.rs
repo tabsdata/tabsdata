@@ -191,13 +191,14 @@ async fn assert_ladder_matches_fresh_install(new_db: impl AsyncFn() -> TestDb) {
         let migrated = new_db().await;
         migrated
             .admin
-            .upgrade_db_version(archive::source(from))
+            .upgrade_source(archive::source(from))
             .await
             .unwrap_or_else(|e| panic!("installing archive v{from}: {e:?}"));
         assert_eq!(migrated.admin.db_version().await.unwrap(), Some(from));
 
-        ApiserverComponent
-            .upgrade(&migrated.admin)
+        migrated
+            .admin
+            .upgrade(&ApiserverComponent)
             .await
             .unwrap_or_else(|e| panic!("upgrading v{from} -> v{CURRENT_VERSION}: {e:?}"));
         assert_eq!(
@@ -321,16 +322,16 @@ async fn view_columns(db: &TdPool, view: &str) -> Vec<String> {
 
 async fn assert_destructive_delta_clears_standing_views(new_db: impl AsyncFn() -> TestDb) {
     let db = new_db().await;
+    // `upgrade_source` also grants the app role: without the schema `USAGE`
+    // grant, serving's `current_schema()` is NULL.
     db.admin
-        .upgrade_db_version(&DestructiveFixture(1))
+        .upgrade_source(&DestructiveFixture(1))
         .await
         .unwrap();
-    // Without the schema `USAGE` grant, serving's `current_schema()` is NULL.
-    db.admin.ensure_app_role().await.unwrap();
     assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a", "b"]);
 
     db.admin
-        .upgrade_db_version(&DestructiveFixture(2))
+        .upgrade_source(&DestructiveFixture(2))
         .await
         .unwrap();
     assert_eq!(db.admin.db_version().await.unwrap(), Some(2));
@@ -344,6 +345,86 @@ async fn destructive_delta_clears_standing_views_sqlite() {
         crate::test_utils::sqlite::pool().await
     })
     .await;
+}
+
+/// Two upgraders racing the same fresh schema: the `tabsdata_system` lock
+/// makes the loser wait, re-read `db_version`, and no-op — both must succeed.
+#[cfg(postgres)]
+#[tokio::test]
+async fn concurrent_upgrades_serialize_postgres() {
+    let db = crate::test_utils::postgres::pool().await;
+    let (a, b) = (db.admin.clone(), db.admin.clone());
+    let (ra, rb) = tokio::join!(
+        tokio::spawn(async move { a.upgrade_source(&DestructiveFixture(2)).await }),
+        tokio::spawn(async move { b.upgrade_source(&DestructiveFixture(2)).await }),
+    );
+    ra.unwrap().unwrap();
+    rb.unwrap().unwrap();
+    assert_eq!(db.admin.db_version().await.unwrap(), Some(2));
+    assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a"]);
+}
+
+/// A v1 -> v3 ladder whose second hop is invalid: the failure must undo the
+/// first hop *and* the derived-object drop the ladder needed, leaving the
+/// schema exactly as it was.
+struct FailingFixture;
+
+impl SchemaSource for FailingFixture {
+    fn current_version(&self) -> usize {
+        3
+    }
+
+    fn tables(&self, backend: Backend) -> Vec<String> {
+        DestructiveFixture(3).tables(backend)
+    }
+
+    fn views(&self, backend: Backend) -> Vec<Derived> {
+        DestructiveFixture(3).views(backend)
+    }
+
+    fn delta(&self, target: usize, backend: Backend) -> Vec<String> {
+        match target {
+            2 => DestructiveFixture(2).delta(2, backend),
+            3 => vec![
+                backend.build_schema(
+                    Table::alter()
+                        .table(Alias::new("fixture"))
+                        .drop_column(Alias::new("absent"))
+                        .to_owned(),
+                ),
+            ],
+            other => panic!("unexpected target {other}"),
+        }
+    }
+}
+
+async fn assert_failed_ladder_rolls_back(new_db: impl AsyncFn() -> TestDb) {
+    let db = new_db().await;
+    db.admin
+        .upgrade_source(&DestructiveFixture(1))
+        .await
+        .unwrap();
+    assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a", "b"]);
+
+    db.admin
+        .upgrade_source(&FailingFixture)
+        .await
+        .expect_err("the second hop must fail");
+
+    assert_eq!(db.admin.db_version().await.unwrap(), Some(1));
+    assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a", "b"]);
+}
+
+#[cfg(sqlite)]
+#[tokio::test]
+async fn failed_ladder_rolls_back_sqlite() {
+    assert_failed_ladder_rolls_back(async || crate::test_utils::sqlite::pool().await).await;
+}
+
+#[cfg(postgres)]
+#[tokio::test]
+async fn failed_ladder_rolls_back_postgres() {
+    assert_failed_ladder_rolls_back(async || crate::test_utils::postgres::pool().await).await;
 }
 
 #[cfg(postgres)]
