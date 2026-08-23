@@ -6,7 +6,7 @@ use anyhow::Result;
 use chrono::Local;
 use serde::Deserialize;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sysinfo::System;
 use tm_workspace::workspace_root;
 use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder, RustcBuilder, SysinfoBuilder};
@@ -16,6 +16,8 @@ const TABSDATA_PROJECT_MARKER: &str = "tabsdata";
 const TABSDATA_SOLUTION_HOME: &str = "TABSDATA_SOLUTION_HOME";
 
 const VERGEN_ALREADY_RAN: &str = "TD_VERGEN_ALREADY_RAN";
+
+const TD_ON_GA: &str = "TD_ON_GA";
 
 const LOG_CRATE_TD_BUILD: Option<&str> = option_env!("LOG_CRATE_TD_BUILD");
 
@@ -84,6 +86,28 @@ macro_rules! invoke_add_git_sections {
     ($sections:expr, $git_data:expr, $macro_name:ident) => {
         tm_workspace::repositories_metadata!($sections, $git_data, $macro_name)
     };
+}
+
+fn changed_tracked_files(repository_path: &Path) -> Vec<String> {
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(repository_path)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=no")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|status| {
+            status
+                .lines()
+                .map(str::trim_end)
+                .filter(|line| !line.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub struct Stamping;
@@ -163,6 +187,7 @@ impl Stamper for Stamping {
             }
             return Ok(());
         }
+        let on_ga = env::var(TD_ON_GA).unwrap_or_default().trim() == "true";
         let solution: PathBuf = Self::solution();
 
         let build = BuildBuilder::default()
@@ -217,7 +242,7 @@ impl Stamper for Stamping {
                 .commit_message(true)
                 .commit_count(true)
                 .describe(true, false, None)
-                .dirty(true)
+                .dirty(false)
                 .build()?;
             Emitter::default().add_instructions(&gix)?.emit_and_set()?;
             let git_envs = [
@@ -277,6 +302,21 @@ impl Stamper for Stamping {
                 "cargo:rustc-env=VERGEN_GIT_{}_TAG={}",
                 repository_prefix, tag
             );
+            if on_ga {
+                unsafe {
+                    env::set_var("VERGEN_GIT_DIRTY", "false");
+                }
+            } else if env::var("VERGEN_GIT_DIRTY").unwrap_or_default().trim() == "true" {
+                let changed_files = changed_tracked_files(&repository_path);
+                println!(
+                    "cargo:warning=Repository '{}' is dirty: {} tracked file(s) changed",
+                    repository.name,
+                    changed_files.len()
+                );
+                for changed_file in &changed_files {
+                    println!("cargo:warning=   {} | {}", repository.name, changed_file);
+                }
+            }
             for env_name in &git_envs {
                 if let Ok(env_value) = env::var(env_name) {
                     let prefixed_name = env_name
