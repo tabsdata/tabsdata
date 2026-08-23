@@ -10,11 +10,14 @@ use td_authz::rbac::enter_project_scope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames};
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::rest_urls::internal::WorkerIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, ProjectId, WorkerId, WorkerType};
+use td_objects::types::basic::{
+    AtTime, PhysicalFunctionRunStatus, ProjectId, WorkerId, WorkerStatus, WorkerType,
+};
 use td_queries::{By, LfrEntry, LiveEntry};
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
@@ -81,6 +84,21 @@ pub async fn resolve_worker_message(
                 )
             })?;
 
+            // A pod resolving a terminalized attempt gets a clean
+            // not-found instead of work.
+            let pfr: PhysicalFunctionRunDB = conn
+                .live()
+                .fetch_one::<PhysicalFunctionRunDB>(&function_run_id)
+                .await?;
+            if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status) {
+                return Err(api_error!(
+                    ApiError::NotFound,
+                    "function run [{}] for worker [{}] is not in flight",
+                    function_run_id,
+                    worker_id,
+                ));
+            }
+
             // Dispatch projection for this FR (patch-aware fvid COALESCE).
             let fr_ids = [function_run_id.clone()];
             let frs = conn.lfr().for_dispatch(&fr_ids).await?;
@@ -99,13 +117,30 @@ pub async fn resolve_worker_message(
             let function_input = build_function_v2(&mut conn, &storage, &f, &prefetch).await?;
             WorkerInput::Function(Box::new(function_input))
         }
-        WorkerType::StageTrigger => {
-            let streamer_input = build_streamer_input(&mut conn, &storage, &worker).await?;
-            WorkerInput::Streamer(Box::new(streamer_input))
-        }
-        WorkerType::CronTrigger => {
-            let cron_input = build_cron_input(&worker)?;
-            WorkerInput::Cron(Box::new(cron_input))
+        WorkerType::StageTrigger | WorkerType::CronTrigger => {
+            // Only stopping/stopped is fenced: pod callbacks can park the
+            // row at Failed/Done while recovery restarts the workload, and
+            // the restarted pod's re-pull must succeed.
+            if matches!(
+                worker.status,
+                WorkerStatus::StopScheduled | WorkerStatus::StopRequested | WorkerStatus::Stopped
+            ) {
+                return Err(api_error!(
+                    ApiError::NotFound,
+                    "trigger worker [{}] is stopping or stopped",
+                    worker_id,
+                ));
+            }
+            match worker.worker_type {
+                WorkerType::StageTrigger => {
+                    let streamer_input = build_streamer_input(&mut conn, &storage, &worker).await?;
+                    WorkerInput::Streamer(Box::new(streamer_input))
+                }
+                _ => {
+                    let cron_input = build_cron_input(&worker)?;
+                    WorkerInput::Cron(Box::new(cron_input))
+                }
+            }
         }
     };
 

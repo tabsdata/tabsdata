@@ -11,6 +11,7 @@
 pub mod catalog;
 pub mod connection;
 pub mod messaging;
+pub mod observer;
 #[cfg(feature = "test-utils")]
 pub mod test;
 pub mod worker;
@@ -22,6 +23,7 @@ pub use supervisor::SupervisorBridgeProvider;
 use crate::catalog::ServerCatalog;
 use crate::connection::ConnectionStore;
 use crate::messaging::OrchestratorMessageQueue;
+use crate::observer::WorkloadObserver;
 use crate::worker::WorkerHandler;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -66,6 +68,12 @@ pub trait BridgeProvider: Send + Sync {
     /// Queue the scheduler puts worker requests on for the orchestrator to
     /// execute.
     fn message_queue(&self) -> &dyn OrchestratorMessageQueue;
+
+    /// `None` (the default) means the orchestrator manages worker liveness
+    /// itself and recovery stays on its time-based sweep.
+    fn workload_observer(&self) -> Option<&dyn WorkloadObserver> {
+        None
+    }
 }
 
 #[derive(Clone)]

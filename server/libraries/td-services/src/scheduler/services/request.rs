@@ -2,9 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::update_status::{
-    abandon_requested_physical_runs, update_function_run_status,
-};
 use crate::logical::layers::dispatch_mint::mint_function_runs_on_dispatch;
 use crate::scheduler::layers::dispatch::notify_dispatcher;
 use crate::scheduler::layers::request::{
@@ -13,10 +10,9 @@ use crate::scheduler::layers::request::{
     create_locked_function_runner_workers_start_request,
     create_locked_stage_trigger_workers_start_request,
     create_locked_stage_trigger_workers_stop_request, dispatch_at_time, dispatch_saturated_flag,
-    enrich_minted_dispatch, fail_stale_abandoned_attempts, fetch_lfr_to_dispatch,
-    fetch_pfrs_to_dispatch, fetch_stale_dispatched_runs, lfr_ids_from_minted_dispatch,
-    materialize_replay_dispatch, notify_scheduler_if_saturated, pfr_ids_from_dispatched_workers,
-    stop_worker_update, stuck_lfrs_from_stale,
+    enrich_minted_dispatch, fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch,
+    lfr_ids_from_minted_dispatch, materialize_replay_dispatch, notify_scheduler_if_saturated,
+    pfr_ids_from_dispatched_workers, stop_worker_update,
 };
 use ta_services::factory::service_factory;
 use td_bridge::BridgeProviderHandle;
@@ -60,8 +56,6 @@ fn service() {
         // Seed the saturation flag; the capped function-runner readiness
         // fetches raise it when they return a full batch.
         from_fn(dispatch_saturated_flag),
-        // Runs first so recovered LFRs re-dispatch in this same tick.
-        auto_recover_stuck_function_runners(),
         // Request function runners that need to be started — initial
         // dispatch path (Scheduled/ReScheduled LFRs, mint + bind + flip
         // LFR.status to Requested).
@@ -82,20 +76,6 @@ fn service() {
         // remaining backlog drains without waiting for the failover timer.
         from_fn(notify_scheduler_if_saturated),
         from_fn(notify_dispatcher),
-    )
-}
-
-// Stale `Dispatched` PFRs (pod never provisioned) → `Failed`; those under
-// a `Requested` LFR additionally get the operator-recover flow.
-#[layer]
-pub fn auto_recover_stuck_function_runners() {
-    layers!(
-        from_fn(fetch_stale_dispatched_runs),
-        from_fn(fail_stale_abandoned_attempts),
-        from_fn(stuck_lfrs_from_stale),
-        from_fn(abandon_requested_physical_runs),
-        from_fn(UpdateLogicalFunctionRunDB::recover),
-        from_fn(update_function_run_status),
     )
 }
 
@@ -270,6 +250,7 @@ pub fn stop_stage_trigger_runners() {
 mod tests {
     use super::*;
     use crate::execution::services::execute::ExecuteFunctionService;
+    use crate::recovery::services::{RecoveryContext, RecoveryServices};
     use crate::scheduler::services::SchedulerContext;
     use http::Method;
     use std::collections::HashSet;
@@ -291,7 +272,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
     use td_error::TdError;
-    use td_execution::{MaxFunctionsPerTick, StuckRequestedTimeout};
+    use td_execution::{MaxFunctionsPerTick, RecoveryConfig, StuckRequestedTimeout};
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionRequest;
@@ -303,9 +284,8 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, CronMask, Decorator, EnvPrefix,
-        ExecutionName, FunctionIdName, FunctionRuntimeValues, LogicalFunctionRunStatus,
-        PhysicalFunctionRunStatus, ProjectId, TableName, TableNameDto, UserId, WorkerMessageStatus,
-        WorkerStatus, WorkerType,
+        ExecutionName, FunctionIdName, FunctionRuntimeValues, PhysicalFunctionRunStatus, ProjectId,
+        TableName, TableNameDto, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
@@ -325,13 +305,6 @@ mod tests {
             .assert_service::<(), ()>(&[
                 type_of_val(&dispatch_at_time),
                 type_of_val(&dispatch_saturated_flag),
-                // Auto-recover sweep
-                type_of_val(&fetch_stale_dispatched_runs),
-                type_of_val(&fail_stale_abandoned_attempts),
-                type_of_val(&stuck_lfrs_from_stale),
-                type_of_val(&abandon_requested_physical_runs),
-                type_of_val(&UpdateLogicalFunctionRunDB::recover),
-                type_of_val(&update_function_run_status),
                 // Function — initial
                 type_of_val(&fetch_lfr_to_dispatch),
                 type_of_val(&mint_function_runs_on_dispatch),
@@ -817,280 +790,6 @@ mod tests {
         Ok(())
     }
 
-    fn stuck_timeout_context(db: &TdPool, timeout: StuckRequestedTimeout) -> SchedulerContext {
-        let mut context = SchedulerContext::with_defaults(db.clone());
-        context.scheduler_config = Arc::new(SchedulerConfig {
-            stuck_requested_timeout: timeout,
-            ..SchedulerConfig::default()
-        });
-        context
-    }
-
-    #[td_test::test(db)]
-    async fn test_auto_recover_stuck_requested(db: TdPool) -> Result<(), TdError> {
-        use td_objects::and;
-        use td_objects::dxo::logical::LogicalFunctionRunDB;
-
-        let p = db.seed().test_project().await?;
-        let collection = db
-            .scoped(p.id)
-            .seed()
-            .collection(&CollectionName::try_from("c_stuck")?, &UserId::admin())
-            .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f_stuck")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
-        let _ = db
-            .scoped(p.id)
-            .seed()
-            .function(&collection, &create)
-            .await?;
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("f_stuck")?)
-                    .build()?,
-                ExecutionRequest::builder().name(None).build()?,
-            )
-            .in_project(p.id);
-        let execution = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(request)
-            .await?;
-
-        let context_1 = SchedulerContext::with_defaults(db.clone());
-        RequestService::build(&context_1)
-            .service()
-            .oneshot(())
-            .await?;
-        let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .live()
-            .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
-            .await?;
-        assert_eq!(pfrs.len(), 1);
-        let pfr_old = pfrs[0].clone();
-        assert_eq!(pfr_old.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(pfr_old.dispatched_on.is_some());
-        assert_eq!(
-            context_1
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .len(),
-            1
-        );
-
-        // A freshly-dispatched run is well within the default timeout — the
-        // sweep must not touch it.
-        let context_fresh = stuck_timeout_context(&db, StuckRequestedTimeout::default());
-        RequestService::build(&context_fresh)
-            .service()
-            .oneshot(())
-            .await?;
-        let pfr: PhysicalFunctionRunDB = db
-            .live()
-            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.id)
-            .await?;
-        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(
-            context_fresh
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .is_empty()
-        );
-
-        let context_2 = stuck_timeout_context(&db, StuckRequestedTimeout(Duration::ZERO));
-        RequestService::build(&context_2)
-            .service()
-            .oneshot(())
-            .await?;
-
-        let pfr_failed: PhysicalFunctionRunDB = db
-            .live()
-            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.id)
-            .await?;
-        assert_eq!(pfr_failed.status, PhysicalFunctionRunStatus::Failed);
-        assert!(pfr_failed.ended_on.is_some());
-        assert!(pfr_failed.ended_on_hour_ms.is_some());
-        assert!(pfr_failed.ended_on_day_ms.is_some());
-        assert!(pfr_failed.ended_on_week_ms.is_some());
-        assert!(pfr_failed.ended_on_month_ms.is_some());
-
-        let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .live()
-            .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
-            .await?;
-        assert_eq!(pfrs.len(), 2);
-        let pfr_new = pfrs.iter().find(|pfr| pfr.id != pfr_old.id).unwrap();
-        assert_eq!(pfr_new.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(pfr_new.dispatched_on.is_some());
-
-        let lfr: LogicalFunctionRunDB = db
-            .live()
-            .fetch_one::<LogicalFunctionRunDB>(and!(&pfr_old.execution_id, &pfr_old.function_id))
-            .await?;
-        assert_eq!(lfr.status, LogicalFunctionRunStatus::Requested);
-        assert_eq!(
-            context_2
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .len(),
-            1
-        );
-
-        let context_3 = SchedulerContext::with_defaults(db.clone());
-        RequestService::build(&context_3)
-            .service()
-            .oneshot(())
-            .await?;
-        let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .live()
-            .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
-            .await?;
-        assert_eq!(pfrs.len(), 2);
-        let pfr: PhysicalFunctionRunDB = db
-            .live()
-            .fetch_one::<PhysicalFunctionRunDB>(&pfr_new.id)
-            .await?;
-        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(
-            context_3
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .is_empty()
-        );
-
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_auto_recover_fails_stale_replay(db: TdPool) -> Result<(), TdError> {
-        use crate::logical::services::replay::ReplayLogicalFunctionRunService;
-        use td_objects::and;
-        use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunPointerDB};
-        use td_objects::rest_urls::LogicalFunctionRunParam;
-        use td_objects::types::basic::{AtTime, LogicalPointerStatus, TransactionKey};
-
-        let p = db.seed().test_project().await?;
-        let collection = db
-            .scoped(p.id)
-            .seed()
-            .collection(&CollectionName::try_from("c_stuck_rp")?, &UserId::admin())
-            .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f_stuck_rp")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
-        let function = db
-            .scoped(p.id)
-            .seed()
-            .function(&collection, &create)
-            .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
-        let txn = db
-            .scoped(p.id)
-            .seed()
-            .transaction(&execution, &TransactionKey::try_from("ANY")?)
-            .await?;
-        let fr_old = db
-            .scoped(p.id)
-            .seed()
-            .physical_function_run(
-                &collection,
-                &function,
-                &execution,
-                &txn,
-                &LogicalFunctionRunStatus::Committed,
-            )
-            .await?;
-        let lfr: LogicalFunctionRunDB = db
-            .live()
-            .fetch_one::<LogicalFunctionRunDB>(and!(&fr_old.execution_id, &fr_old.function_id))
-            .await?;
-
-        let replay_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(
-                LogicalFunctionRunParam::builder()
-                    .logical_function_run(lfr.id.clone())
-                    .build()?,
-                (),
-            );
-        let replay_response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(replay_request)
-            .await?;
-
-        let context_1 = SchedulerContext::with_defaults(db.clone());
-        RequestService::build(&context_1)
-            .service()
-            .oneshot(())
-            .await?;
-        let pfr: PhysicalFunctionRunDB = db
-            .live()
-            .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
-            .await?;
-        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(pfr.dispatched_on.is_some());
-
-        let context_2 = stuck_timeout_context(&db, StuckRequestedTimeout(Duration::ZERO));
-        RequestService::build(&context_2)
-            .service()
-            .oneshot(())
-            .await?;
-
-        let pfr: PhysicalFunctionRunDB = db
-            .live()
-            .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
-            .await?;
-        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Failed);
-        assert!(pfr.ended_on.is_some());
-
-        let lfr_after: LogicalFunctionRunDB =
-            db.live().fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
-        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Committed);
-        let latest = db
-            .versioned(&AtTime::now())
-            .fetch_one::<LogicalFunctionRunPointerDB>(&lfr.id)
-            .await?;
-        assert!(matches!(latest.status, LogicalPointerStatus::Bound));
-        assert_eq!(latest.physical_function_run_id, Some(fr_old.id.clone()));
-        assert!(
-            context_2
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .is_empty()
-        );
-
-        Ok(())
-    }
-
     /// In kubernetes mode the request path emits the per-action
     /// `FunctionRequest::Start` kind (not the flat request), carrying the
     /// decorator + resolver, with no pre-resolved context. WorkerDB stays Locked.
@@ -1531,9 +1230,20 @@ mod tests {
                 .is_empty()
         );
 
-        // The stuck-dispatched sweep is the recovery path: it fails the
-        // pod-less attempts and re-dispatches fresh ones.
-        let context = stuck_timeout_context(&db, StuckRequestedTimeout(Duration::ZERO));
+        // The stuck-dispatched sweep (recovery tick) is the recovery path:
+        // it fails the pod-less attempts; the next request tick
+        // re-dispatches fresh ones.
+        let mut recovery = RecoveryContext::with_defaults(db.clone());
+        recovery.recovery_config = Arc::new(RecoveryConfig {
+            stuck_requested_timeout: StuckRequestedTimeout(Duration::ZERO),
+            ..RecoveryConfig::default()
+        });
+        RecoveryServices::build(&recovery)
+            .recovery
+            .service()
+            .oneshot(())
+            .await?;
+        let context = kubernetes_scheduler_context(&db);
         RequestService::build(&context)
             .service()
             .oneshot(())

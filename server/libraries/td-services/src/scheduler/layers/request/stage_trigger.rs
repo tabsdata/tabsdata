@@ -96,7 +96,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
     Ok(kept)
 }
 
-async fn put_stage_trigger_start(
+pub(crate) async fn put_stage_trigger_start(
     bridge: &BridgeProviderHandle,
     storage: &Storage,
     server_endpoint: &InternalServerEndpoint,

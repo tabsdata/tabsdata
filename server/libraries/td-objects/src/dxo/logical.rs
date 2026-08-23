@@ -330,6 +330,12 @@ mod definitions {
             })
         }
 
+        pub async fn failed() -> Result<Self, TdError> {
+            Ok(Self {
+                status: LogicalFunctionRunStatus::Failed,
+            })
+        }
+
         pub async fn cancel() -> Result<Self, TdError> {
             Ok(Self {
                 status: LogicalFunctionRunStatus::Canceled,

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use td_bridge::catalog::ServerCatalog;
 use td_bridge::connection::ConnectionStore;
 use td_bridge::messaging::OrchestratorMessageQueue;
+use td_bridge::observer::WorkloadObserver;
 use td_bridge::worker::WorkerHandler;
 use td_bridge::{BridgeProvider, Orchestrator};
 use td_common::crypto::install_crypto_provider;
@@ -20,6 +21,7 @@ use crate::runtime::gateway::catalog::KubernetesServerCatalog;
 use crate::runtime::gateway::datasource::KubernetesConnectionStore;
 use crate::runtime::gateway::messaging::KubernetesOrchestratorMessageQueue;
 use crate::runtime::gateway::messaging::messenger::template::PodTemplateIndex;
+use crate::runtime::gateway::observer::KubernetesWorkloadObserver;
 use crate::runtime::gateway::workload::KubernetesWorkerHandler;
 use crate::runtime::reporting::build_pod_kube_client;
 
@@ -29,6 +31,7 @@ pub struct KubernetesBridgeProvider {
     worker_handler: KubernetesWorkerHandler,
     connection_store: KubernetesConnectionStore,
     message_queue: KubernetesOrchestratorMessageQueue,
+    workload_observer: KubernetesWorkloadObserver,
 }
 
 impl KubernetesBridgeProvider {
@@ -38,12 +41,14 @@ impl KubernetesBridgeProvider {
         let connection_store = KubernetesConnectionStore::new(context.clone());
         let pod_templates = PodTemplateIndex::load(&context).await?;
         let message_queue = KubernetesOrchestratorMessageQueue::new(context.clone(), pod_templates);
+        let workload_observer = KubernetesWorkloadObserver::new(context.clone());
         Ok(Self {
             context,
             server_catalog,
             worker_handler,
             connection_store,
             message_queue,
+            workload_observer,
         })
     }
 
@@ -78,5 +83,9 @@ impl BridgeProvider for KubernetesBridgeProvider {
 
     fn message_queue(&self) -> &dyn OrchestratorMessageQueue {
         &self.message_queue
+    }
+
+    fn workload_observer(&self) -> Option<&dyn WorkloadObserver> {
+        Some(&self.workload_observer)
     }
 }

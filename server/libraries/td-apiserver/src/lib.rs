@@ -6,13 +6,14 @@ use crate::apiserver::internal::InternalServer;
 use crate::apiserver::{ApiServer, ApiServerCtx};
 use crate::bridge::ServerBridgeFactory;
 use crate::config::{Config, Params};
+use crate::recovery::{RecoveryCtx, WorkerRecoverer};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
-use td_execution::{SchedulerConfig, SchedulerNotify};
+use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify};
 use td_objects::types::addresses::InternalServerEndpoint;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
@@ -26,6 +27,7 @@ mod bridge;
 pub mod config;
 mod extractors;
 mod layers;
+mod recovery;
 mod router;
 mod scheduler;
 
@@ -180,17 +182,35 @@ pub fn run() {
                 storage.clone(),
                 bridge.clone(),
                 internal_endpoint.clone(),
-                scheduler_notify,
+                scheduler_notify.clone(),
                 Arc::new(config.jwt.clone()),
                 Arc::new(SchedulerConfig {
                     check_frequency: config.check_frequency,
-                    stuck_requested_timeout: config.stuck_requested_timeout,
                     max_functions_per_tick: config.max_functions_per_tick,
                     tick_timeout: config.tick_timeout,
                 }),
             );
+            let recovery_context = RecoveryCtx::new(
+                db.clone(),
+                storage.clone(),
+                bridge.clone(),
+                internal_endpoint.clone(),
+                scheduler_notify,
+                Arc::new(config.jwt.clone()),
+                Arc::new(RecoveryConfig {
+                    check_frequency: config.check_frequency,
+                    tick_timeout: config.recovery_tick_timeout,
+                    stuck_requested_timeout: config.stuck_requested_timeout,
+                    dispatch_grace: config.dispatch_grace,
+                    max_pre_running_time: config.max_pre_running_time,
+                    max_running_time: config.max_running_time,
+                    max_completion_time: config.max_completion_time,
+                    max_recoveries_per_tick: config.max_recoveries_per_tick,
+                }),
+            );
             let function_request_server = FunctionRequester::new(&scheduler_context).await;
             let function_dispatch_server = FunctionDispatcher::new(&scheduler_context).await;
+            let worker_recovery_server = WorkerRecoverer::new(&recovery_context).await;
 
             // Start servers
             let outcome = ServerRunner::default()
@@ -199,6 +219,7 @@ pub fn run() {
                 .server(internal_server)
                 .server(function_request_server)
                 .server(function_dispatch_server)
+                .server(worker_recovery_server)
                 .run()
                 .await;
 

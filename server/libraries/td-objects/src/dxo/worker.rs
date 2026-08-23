@@ -70,8 +70,14 @@ mod definitions {
             EnabledTriggers = and!(Enabled::TRUE, or!(WorkerType::CronTrigger, WorkerType::StageTrigger)),
             CronTriggersToSchedule = and!(Enabled::TRUE, WorkerType::CronTrigger, WorkerStatus::Scheduled),
             CronTriggersToStop = and!(Enabled::TRUE, WorkerType::CronTrigger, WorkerStatus::StopScheduled),
+            // In flight = started and not stopping. Cron rows can park at
+            // Done/Failed via fire-side reports and recovery must keep
+            // owning them; a stage worker's own Failed callback is terminal
+            // (re-armed by enable/update), so Failed is excluded there.
+            CronTriggersInFlight = and!(Enabled::TRUE, WorkerType::CronTrigger, or!(WorkerStatus::Requested, WorkerStatus::Running, WorkerStatus::Done, WorkerStatus::Failed)),
             StageTriggersToSchedule = and!(Enabled::TRUE, WorkerType::StageTrigger, WorkerStatus::Scheduled),
             StageTriggersToStop = and!(Enabled::TRUE, WorkerType::StageTrigger, WorkerStatus::StopScheduled),
+            StageTriggersInFlight = and!(Enabled::TRUE, WorkerType::StageTrigger, or!(WorkerStatus::Requested, WorkerStatus::Running, WorkerStatus::Done)),
         )
     )]
     #[inherits(WorkerDB)]

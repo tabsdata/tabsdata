@@ -2,17 +2,17 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::logical::layers::index_lfrs_by_exec_fn;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_execution::SchedulerConfig;
+use td_execution::RecoveryConfig;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::types::basic::{
-    AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
-    PhysicalFunctionRunId,
+    AtTime, ExecutionId, LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
 };
 use td_queries::{ChunkedQueries, PfrEntry};
 use td_tower::extractors::{MutRef, Ref};
@@ -38,7 +38,7 @@ impl StaleDispatchedRuns {
 /// A PFR still `Dispatched` past the timeout never provisioned its pod;
 /// no callback will arrive.
 #[instrument(
-    name = "scheduler.fetch_stale_dispatched_runs",
+    name = "recovery.fetch_stale_dispatched_runs",
     skip_all,
     level = "debug",
     err(Debug)
@@ -46,7 +46,7 @@ impl StaleDispatchedRuns {
 pub async fn fetch_stale_dispatched_runs(
     mut conn: MutRef<DomainConnection<Apiserver>>,
     at: Ref<AtTime>,
-    config: Ref<SchedulerConfig>,
+    config: Ref<RecoveryConfig>,
 ) -> Result<StaleDispatchedRuns, TdError> {
     let timeout = config.stuck_requested_timeout.0;
     let cutoff: DateTime<Utc> = ***at - chrono::Duration::seconds(timeout.as_secs() as i64);
@@ -66,20 +66,19 @@ pub async fn fetch_stale_dispatched_runs(
     let logical_function_runs: Vec<LogicalFunctionRunDB> = conn
         .fetch_all_chunked::<LogicalFunctionRunDB, ExecutionId>(&execution_ids)
         .await?;
-    let lfr_by_function: HashMap<(&ExecutionId, &FunctionId), &LogicalFunctionRunDB> =
-        logical_function_runs
-            .iter()
-            .map(|lfr| ((&lfr.execution_id, &lfr.function_id), lfr))
-            .collect();
+    let lfr_by_exec_fn = index_lfrs_by_exec_fn(logical_function_runs);
 
     let mut seen: HashSet<LogicalFunctionRunId> = HashSet::new();
     let mut stuck_lfrs = Vec::new();
     let mut abandoned_pfr_ids = Vec::new();
     for pfr in &stale {
-        match lfr_by_function.get(&(&pfr.execution_id, &pfr.function_id)) {
+        let lfr = lfr_by_exec_fn
+            .get(&pfr.execution_id)
+            .and_then(|by_fn| by_fn.get(&pfr.function_id));
+        match lfr {
             Some(lfr) if lfr.status == LogicalFunctionRunStatus::Requested => {
                 if seen.insert(lfr.id.clone()) {
-                    stuck_lfrs.push((*lfr).clone());
+                    stuck_lfrs.push(lfr.clone());
                 }
             }
             _ => abandoned_pfr_ids.push(pfr.id.clone()),

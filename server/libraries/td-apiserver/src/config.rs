@@ -19,8 +19,9 @@ use td_database::components::propagate_server_target;
 use td_database::config::{ComponentConfig, DatabaseComponents};
 use td_error::{TdError, td_error};
 use td_execution::{
-    MaxFunctionsPerTick, SchedulerCheckFrequency, SchedulerTickTimeout, StuckRequestedTimeout,
-    TransactionBy,
+    DispatchGrace, MaxCompletionTime, MaxFunctionsPerTick, MaxPreRunningTime, MaxRecoveriesPerTick,
+    MaxRunningTime, RecoveryTickTimeout, SchedulerCheckFrequency, SchedulerTickTimeout,
+    StuckRequestedTimeout, TransactionBy,
 };
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
@@ -84,6 +85,18 @@ pub struct Config {
     pub max_functions_per_tick: MaxFunctionsPerTick,
     #[serde(default)]
     pub tick_timeout: SchedulerTickTimeout,
+    #[serde(default)]
+    pub recovery_tick_timeout: RecoveryTickTimeout,
+    #[serde(default)]
+    pub dispatch_grace: DispatchGrace,
+    #[serde(default)]
+    pub max_pre_running_time: MaxPreRunningTime,
+    #[serde(default)]
+    pub max_running_time: MaxRunningTime,
+    #[serde(default)]
+    pub max_completion_time: MaxCompletionTime,
+    #[serde(default)]
+    pub max_recoveries_per_tick: MaxRecoveriesPerTick,
     pub ssl_folder: PathBuf,
     #[serde(default)]
     pub database: DatabaseComponents,
@@ -193,6 +206,12 @@ impl Default for Config {
             stuck_requested_timeout: StuckRequestedTimeout::default(),
             max_functions_per_tick: MaxFunctionsPerTick::default(),
             tick_timeout: SchedulerTickTimeout::default(),
+            recovery_tick_timeout: RecoveryTickTimeout::default(),
+            dispatch_grace: DispatchGrace::default(),
+            max_pre_running_time: MaxPreRunningTime::default(),
+            max_running_time: MaxRunningTime::default(),
+            max_completion_time: MaxCompletionTime::default(),
+            max_recoveries_per_tick: MaxRecoveriesPerTick::default(),
             ssl_folder: PathBuf::default(),
             database: DatabaseComponents::default(),
             database_server: None,
@@ -286,6 +305,31 @@ pub struct Params {
     /// Seconds a scheduler tick may run before it is cancelled and retried;
     /// `<= 0` falls back to the default
     tick_timeout: Option<i64>,
+    #[clap(long)]
+    /// Seconds a recovery tick may run before it is cancelled and retried;
+    /// `<= 0` falls back to the default
+    recovery_tick_timeout: Option<i64>,
+    #[clap(long)]
+    /// Seconds a dispatched run must be old before recovery may judge its
+    /// missing workload dead; `<= 0` falls back to the default
+    dispatch_grace: Option<i64>,
+    #[clap(long)]
+    /// Seconds a function workload may spend before its run reports Running
+    /// before recovery kills the attempt; `<= 0` falls back to the default
+    max_pre_running_time: Option<i64>,
+    #[clap(long)]
+    /// Optional cap in seconds on a function run's execution time; `<= 0`
+    /// keeps it disabled
+    max_running_time: Option<i64>,
+    #[clap(long)]
+    /// Seconds a finished function workload may go without its terminal
+    /// callback landing before recovery kills the attempt; `<= 0` falls
+    /// back to the default
+    max_completion_time: Option<i64>,
+    #[clap(long)]
+    /// Maximum recovery actions of each kind per recovery tick; `<= 0`
+    /// falls back to the default
+    max_recoveries_per_tick: Option<i64>,
     #[clap(long, value_parser = parse_transaction_by)]
     /// Transaction by
     transaction_by: Option<TransactionBy>,
@@ -364,6 +408,30 @@ impl Params {
                 .tick_timeout
                 .map(SchedulerTickTimeout::from_secs)
                 .unwrap_or(config.tick_timeout),
+            recovery_tick_timeout: self
+                .recovery_tick_timeout
+                .map(RecoveryTickTimeout::from_secs)
+                .unwrap_or(config.recovery_tick_timeout),
+            dispatch_grace: self
+                .dispatch_grace
+                .map(DispatchGrace::from_secs)
+                .unwrap_or(config.dispatch_grace),
+            max_pre_running_time: self
+                .max_pre_running_time
+                .map(MaxPreRunningTime::from_secs)
+                .unwrap_or(config.max_pre_running_time),
+            max_running_time: self
+                .max_running_time
+                .map(MaxRunningTime::from_secs)
+                .unwrap_or(config.max_running_time),
+            max_completion_time: self
+                .max_completion_time
+                .map(MaxCompletionTime::from_secs)
+                .unwrap_or(config.max_completion_time),
+            max_recoveries_per_tick: self
+                .max_recoveries_per_tick
+                .map(MaxRecoveriesPerTick::from_count)
+                .unwrap_or(config.max_recoveries_per_tick),
             ssl_folder: self
                 .ssl_folder
                 .clone()
@@ -678,6 +746,12 @@ storage:
             stuck_requested_timeout: None,
             max_functions_per_tick: None,
             tick_timeout: None,
+            recovery_tick_timeout: None,
+            dispatch_grace: None,
+            max_pre_running_time: None,
+            max_running_time: None,
+            max_completion_time: None,
+            max_recoveries_per_tick: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,
@@ -740,6 +814,12 @@ storage:
             stuck_requested_timeout: None,
             max_functions_per_tick: None,
             tick_timeout: None,
+            recovery_tick_timeout: None,
+            dispatch_grace: None,
+            max_pre_running_time: None,
+            max_running_time: None,
+            max_completion_time: None,
+            max_recoveries_per_tick: None,
             transaction_by: Some(TransactionBy::default()),
             etc: None,
             msg: None,
@@ -787,6 +867,12 @@ storage:
             stuck_requested_timeout: None,
             max_functions_per_tick: None,
             tick_timeout: None,
+            recovery_tick_timeout: None,
+            dispatch_grace: None,
+            max_pre_running_time: None,
+            max_running_time: None,
+            max_completion_time: None,
+            max_recoveries_per_tick: None,
             transaction_by: None,
             etc: None,
             msg: None,

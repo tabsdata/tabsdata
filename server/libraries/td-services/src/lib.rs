@@ -47,6 +47,7 @@ pub mod logical;
 pub mod metrics;
 pub mod permission;
 pub mod project;
+pub mod recovery;
 pub mod role;
 pub mod scheduler;
 pub mod simple_permission;

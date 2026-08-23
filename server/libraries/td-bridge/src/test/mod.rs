@@ -13,6 +13,7 @@ use crate::connection::ConnectionStore;
 use crate::connection::memory::InMemoryConnectionStore;
 use crate::messaging::OrchestratorMessageQueue;
 use crate::messaging::memory::InMemoryOrchestratorMessageQueue;
+use crate::observer::{ObserverError, WorkloadKind, WorkloadObservation, WorkloadObserver};
 use crate::worker::{LogBridgeError, WorkerHandler, WorkerLogStream, WorkerLogTarget};
 use crate::{BridgeProvider, BridgeProviderHandle, Orchestrator};
 use async_trait::async_trait;
@@ -24,6 +25,7 @@ pub struct TestBridgeProvider {
     worker_handler: Box<dyn WorkerHandler>,
     connection_store: Box<dyn ConnectionStore>,
     message_queue: Box<dyn OrchestratorMessageQueue>,
+    workload_observer: Option<Box<dyn WorkloadObserver>>,
 }
 
 impl TestBridgeProvider {
@@ -46,6 +48,27 @@ impl TestBridgeProvider {
         self.orchestrator = orchestrator;
         self
     }
+
+    pub fn with_workload_observer(mut self, observer: impl WorkloadObserver + 'static) -> Self {
+        self.workload_observer = Some(Box::new(observer));
+        self
+    }
+}
+
+/// Observer that answers every `observe` with the same fixed observation
+/// and swallows removals.
+#[derive(Default)]
+pub struct StaticWorkloadObserver(pub WorkloadObservation);
+
+#[async_trait]
+impl WorkloadObserver for StaticWorkloadObserver {
+    async fn observe(&self) -> Result<WorkloadObservation, ObserverError> {
+        Ok(self.0.clone())
+    }
+
+    async fn remove(&self, _kind: &WorkloadKind, _name: &str) -> Result<(), ObserverError> {
+        Ok(())
+    }
 }
 
 impl Default for TestBridgeProvider {
@@ -56,6 +79,7 @@ impl Default for TestBridgeProvider {
             worker_handler: Box::new(NoopWorkerHandler),
             connection_store: Box::new(InMemoryConnectionStore::default()),
             message_queue: Box::new(InMemoryOrchestratorMessageQueue::default()),
+            workload_observer: None,
         }
     }
 }
@@ -79,6 +103,10 @@ impl BridgeProvider for TestBridgeProvider {
 
     fn message_queue(&self) -> &dyn OrchestratorMessageQueue {
         self.message_queue.as_ref()
+    }
+
+    fn workload_observer(&self) -> Option<&dyn WorkloadObserver> {
+        self.workload_observer.as_deref()
     }
 }
 

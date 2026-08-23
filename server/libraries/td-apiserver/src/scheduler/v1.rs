@@ -55,7 +55,7 @@ impl FunctionRequesterV1 {
 /// Runs one tick, warning when it consumes half its `tick_timeout` budget —
 /// the early signal that the scheduler is heading for `Elapsed` cancellations
 /// (e.g. a starved connection pool or a slow orchestrator backend).
-async fn timed_tick<T>(
+pub(crate) async fn timed_tick<T>(
     tick: &str,
     tick_timeout: Duration,
     fut: impl Future<Output = Result<T, BoxError>>,

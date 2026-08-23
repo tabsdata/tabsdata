@@ -9,12 +9,12 @@ mod at_time;
 mod cron_trigger;
 mod function_runner;
 mod notify;
-mod recover;
 mod shared;
 mod stage_trigger;
 mod stop;
 
 pub use at_time::dispatch_at_time;
+pub(crate) use cron_trigger::put_cron_trigger_start;
 pub use cron_trigger::{
     create_locked_cron_trigger_workers_start_request,
     create_locked_cron_trigger_workers_stop_request,
@@ -25,9 +25,7 @@ pub use function_runner::{
     lfr_ids_from_minted_dispatch, materialize_replay_dispatch, pfr_ids_from_dispatched_workers,
 };
 pub use notify::{notify_scheduler, notify_scheduler_if_saturated};
-pub use recover::{
-    fail_stale_abandoned_attempts, fetch_stale_dispatched_runs, stuck_lfrs_from_stale,
-};
+pub(crate) use stage_trigger::put_stage_trigger_start;
 pub use stage_trigger::{
     create_locked_stage_trigger_workers_start_request,
     create_locked_stage_trigger_workers_stop_request,
