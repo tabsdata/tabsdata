@@ -3,8 +3,8 @@
 #
 
 # Cloud storage providers (aws, azure, gcs)
-boto3==1.42.73
-boto3-stubs[glue]==1.42.73
+boto3==1.43.78
+boto3-stubs[glue]==1.43.78
 azure-storage-blob==12.28.0
 google-cloud-storage==3.10.0
 google-cloud-storage-control==1.10.0

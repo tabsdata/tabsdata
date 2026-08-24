@@ -3,7 +3,7 @@
 #
 
 avro==1.12.1
-boto3==1.42.73
+boto3==1.43.78
 confluent-kafka==2.14.0
 grpcio-tools==1.80.0
 jsonschema==4.26.0

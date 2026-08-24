@@ -48,7 +48,9 @@ script = [
     info "🛡  Ignored advisories: ${ignore_arguments}"
     info "🛡  Ignored vulnerabilities: ${ignore_vuln_arguments}"
 
-    exec --fail-on-error python -m pip install --upgrade "pip==25.2"
+    audit_pip_version = set "25.2"
+    debug "🚀 python -m pip install --upgrade pip==${audit_pip_version}"
+    exec --fail-on-error python -m pip install --upgrade "pip==${audit_pip_version}"
 
     requirements-third-party-all-path = temp_file txt
     info "🌤  Using temporary file at ${requirements-third-party-all-path} for requirements-third-party-all.txt"
@@ -82,7 +84,8 @@ script = [
         exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
     end
 
-    exec --fail-on-error python -m pip install --upgrade pip
+    debug "🚀 python -m pip install --upgrade pip==${TD_PIP_VERSION}"
+    exec --fail-on-error python -m pip install --upgrade "pip==${TD_PIP_VERSION}"
 
     # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt %{ignore_vuln_arguments}"
     # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt %{ignore_vuln_arguments}

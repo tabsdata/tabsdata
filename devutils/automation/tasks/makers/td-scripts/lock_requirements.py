@@ -457,6 +457,28 @@ def lock_connectors_venv(root: str, connectors: list[tuple[str, str]]) -> None:
         logger.debug("⚠️️ File venv.py TABSDATA_CONNECTORS_NAMES already up to date")
 
 
+def find_base_pytest_ini(root: str) -> Path | None:
+    relative = os.path.join(
+        "client",
+        "platform",
+        "src",
+        "utest",
+        "python",
+        "test_tabsdatak",
+        "pytest.ini",
+    )
+    candidates = [
+        os.path.join(root, relative),
+        os.path.join(root, "..", "tabsdata-os", relative),
+        os.path.join(root, "..", "tabsdata", relative),
+    ]
+    for candidate in candidates:
+        path = Path(candidate).resolve()
+        if path.is_file():
+            return path
+    return None
+
+
 def read_markers_from_pytest_ini(pytest_ini_path: Path) -> list[str]:
     config = configparser.RawConfigParser()
     config.read(pytest_ini_path, encoding="utf-8")
@@ -477,21 +499,10 @@ def read_markers_from_pytest_ini(pytest_ini_path: Path) -> list[str]:
 
 
 def lock_pyproject_markers(root: str) -> None:
-    tabsdata_pytest_ini_path = Path(
-        os.path.join(
-            root,
-            "client",
-            "platform",
-            "src",
-            "utest",
-            "python",
-            "test_tabsdatak",
-            "pytest.ini",
-        )
-    ).resolve()
-    if not tabsdata_pytest_ini_path.is_file():
+    tabsdata_pytest_ini_path = find_base_pytest_ini(root)
+    if tabsdata_pytest_ini_path is None:
         logger.warning(
-            f"⚠️ Main pytest.ini not found at {tabsdata_pytest_ini_path}, "
+            f"⚠️ Main pytest.ini not found from {Path(root).resolve()}, "
             f"skipping marker sync"
         )
         return
@@ -545,55 +556,11 @@ def lock_pyproject_markers(root: str) -> None:
 
 # noinspection DuplicatedCode
 def lock_pytest_ini(root: str) -> None:
-    tabsdata_pytest_ini_file = os.path.join(
-        root,
-        "client",
-        "platform",
-        "src",
-        "utest",
-        "python",
-        "test_tabsdatak",
-        "pytest.ini",
-    )
-    tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
-    if not tabsdata_pytest_ini_path.is_file():
-        logger.warning(
-            f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
+    tabsdata_pytest_ini_path = find_base_pytest_ini(root)
+    if tabsdata_pytest_ini_path is None:
+        raise FileNotFoundError(
+            f"Base tabsdata pytest.ini not found from {Path(root).resolve()}"
         )
-        tabsdata_pytest_ini_file = os.path.join(
-            root,
-            "..",
-            "tabsdata-os",
-            "client",
-            "platform",
-            "src",
-            "utest",
-            "python",
-            "test_tabsdatak",
-            "pytest.ini",
-        )
-        tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
-        if not tabsdata_pytest_ini_path.is_file():
-            logger.warning(
-                f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
-            )
-            tabsdata_pytest_ini_file = os.path.join(
-                root,
-                "..",
-                "tabsdata",
-                "client",
-                "platform",
-                "src",
-                "utest",
-                "python",
-                "test_tabsdatak",
-                "pytest.ini",
-            )
-            tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
-            if not tabsdata_pytest_ini_path.is_file():
-                raise FileNotFoundError(
-                    f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
-                )
 
     pytest_ini_name = tabsdata_pytest_ini_path.name
 

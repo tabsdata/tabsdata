@@ -10,7 +10,7 @@ ansi2html==1.9.2
 archspec==0.2.5
 azure-storage-blob==12.28.0
 black==26.5.1
-boto3==1.42.73
+boto3==1.43.78
 build==1.4.0
 colorama==0.4.6
 colorlog==6.10.1
