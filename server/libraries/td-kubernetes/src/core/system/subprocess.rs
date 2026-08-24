@@ -113,21 +113,22 @@ pub fn terminate_process(pid: u32, grace: Duration) {
 }
 
 pub fn terminate_single_process(pid: u32, grace: Duration) {
+    let descendants = collect_descendants(pid);
     request_single_graceful_shutdown(pid);
-    if wait_for_exit(pid, grace) {
-        warn!(pid, "Process terminated gracefully");
+    if wait_for_tree_exit(pid, &descendants, grace) {
+        warn!(pid, "Process tree terminated gracefully");
         return;
     }
     warn!(
         pid,
         grace_secs = grace.as_secs(),
-        "Process did not exit within grace period; force-killing"
+        "Process tree did not exit within grace period; force-killing"
     );
-    force_kill_process(pid);
+    force_kill_tree(pid, &descendants);
     if is_alive(pid) {
         warn!(pid, "Process still alive after force-kill");
     } else {
-        warn!(pid, "Process force-killed");
+        warn!(pid, "Process tree force-killed");
     }
 }
 
@@ -176,9 +177,6 @@ fn request_single_graceful_shutdown(pid: u32) {
     }
     #[cfg(target_os = "windows")]
     {
-        // A console event is group-addressed by nature; processes spawned
-        // with apply_subprocess_flags lead their own group, so this reaches
-        // only the target (and nothing it spawned into other groups).
         use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent};
         unsafe {
             GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
