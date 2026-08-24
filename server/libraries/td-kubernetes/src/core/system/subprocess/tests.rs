@@ -26,6 +26,25 @@ if pid == 0:
 os.waitpid(pid, 0)
 ";
 
+const SPAWN_DESCENDANT_IN_OWN_GROUP_GRACEFUL_ROOT: &str = "\
+import os, signal, sys, time
+marker = sys.argv[1]
+pid = os.fork()
+if pid == 0:
+    os.setpgrp()
+    def on_term(signum, frame):
+        with open(marker, 'w') as handle:
+            handle.write('terminated')
+        os._exit(0)
+    signal.signal(signal.SIGTERM, on_term)
+    sys.stdout.write(str(os.getpid()) + '\\n')
+    sys.stdout.flush()
+    time.sleep(30)
+    os._exit(1)
+signal.signal(signal.SIGTERM, lambda signum, frame: os._exit(0))
+time.sleep(30)
+";
+
 #[test]
 fn is_alive_returns_true_for_current_process() {
     assert!(is_alive(std::process::id()));
@@ -33,8 +52,6 @@ fn is_alive_returns_true_for_current_process() {
 
 #[test]
 fn is_alive_returns_false_for_unlikely_pid() {
-    // u32::MAX is reserved on every platform we run on;
-    // no live process can have it. This avoids racing with arbitrary PID reuse.
     assert!(!is_alive(u32::MAX));
 }
 
@@ -132,7 +149,7 @@ fn terminate_single_process_leaves_descendant_in_own_group_alone() {
     let mut command = SystemCommand::new(PYTHON_BINARY);
     command
         .arg("-c")
-        .arg(SPAWN_DESCENDANT_IN_OWN_GROUP)
+        .arg(SPAWN_DESCENDANT_IN_OWN_GROUP_GRACEFUL_ROOT)
         .arg(&marker)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -162,11 +179,12 @@ fn terminate_single_process_leaves_descendant_in_own_group_alone() {
     );
     assert!(
         is_alive(descendant),
-        "descendant killed; terminate_single_process must not touch descendants"
+        "descendant killed; a root that exits on SIGTERM must never reach the \
+         force-kill, and only the force-kill takes the tree"
     );
     assert!(
         !marker.exists(),
-        "descendant received SIGTERM; terminate_single_process must not signal descendants"
+        "descendant received SIGTERM; the graceful signal goes to the root alone"
     );
 
     unsafe {

@@ -10,6 +10,80 @@ use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessStatus, ProcessesToUpdate, System};
 use tracing::{info, warn};
 
+pub fn run_with_timeout(
+    command: &mut SystemCommand,
+    label: &str,
+    verbose: bool,
+    timeout: Duration,
+) -> io::Result<Option<Output>> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let pid = child.id();
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let stdout_handle = pump(stdout, label, "stdout", verbose);
+    let stderr_handle = pump(stderr, label, "stderr", verbose);
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait()? {
+            Some(status) => break Some(status),
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+            None => thread::sleep(Duration::from_millis(50)),
+        }
+    };
+    let _ = pid;
+
+    let captured_stdout = stdout_handle
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
+    let captured_stderr = stderr_handle
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
+    Ok(status.map(|status| Output {
+        status,
+        stdout: captured_stdout,
+        stderr: captured_stderr,
+    }))
+}
+
+fn pump<R: Read + Send + 'static>(
+    pipe: Option<R>,
+    label: &str,
+    stream: &'static str,
+    verbose: bool,
+) -> Option<thread::JoinHandle<Vec<u8>>> {
+    pipe.map(|pipe| {
+        let label = label.to_owned();
+        thread::spawn(move || {
+            if verbose {
+                stream_lines(pipe, &label, stream)
+            } else {
+                collect_lines(pipe)
+            }
+        })
+    })
+}
+
+fn collect_lines<R: Read>(pipe: R) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    let reader = BufReader::new(pipe);
+    for line in reader.lines() {
+        match line {
+            Ok(text) => {
+                buffer.extend_from_slice(text.as_bytes());
+                buffer.push(b'\n');
+            }
+            Err(_) => break,
+        }
+    }
+    buffer
+}
+
 pub fn run(command: &mut SystemCommand, label: &str, verbose: bool) -> io::Result<Output> {
     if !verbose {
         return command.output();
@@ -112,24 +186,29 @@ pub fn terminate_process(pid: u32, grace: Duration) {
     }
 }
 
-pub fn terminate_single_process(pid: u32, grace: Duration) {
-    let descendants = collect_descendants(pid);
+pub fn terminate_single_process(pid: u32, grace: Duration) -> bool {
     request_single_graceful_shutdown(pid);
-    if wait_for_tree_exit(pid, &descendants, grace) {
-        warn!(pid, "Process tree terminated gracefully");
-        return;
+    if wait_for_exit(pid, grace) {
+        warn!(pid, "Process terminated gracefully");
+        return true;
     }
     warn!(
         pid,
         grace_secs = grace.as_secs(),
-        "Process tree did not exit within grace period; force-killing"
+        "Process did not exit within grace period"
     );
+    false
+}
+
+pub fn force_terminate_process_tree(pid: u32, grace: Duration) -> bool {
+    let descendants = collect_descendants(pid);
     force_kill_tree(pid, &descendants);
-    if is_alive(pid) {
-        warn!(pid, "Process still alive after force-kill");
-    } else {
+    if wait_for_exit(pid, grace) {
         warn!(pid, "Process tree force-killed");
+        return true;
     }
+    warn!(pid, "Process still alive after force-kill");
+    false
 }
 
 fn collect_descendants(root: u32) -> Vec<u32> {
@@ -223,6 +302,7 @@ fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
     }
 }
 
+#[allow(dead_code)]
 fn force_kill_process(pid: u32) {
     #[cfg(unix)]
     {

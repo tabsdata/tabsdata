@@ -18,15 +18,17 @@ use crate::base::error::provider::ProviderError;
 use crate::core::system::exit::CommandResult;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
-    self, apply_detached_flags, apply_subprocess_flags, is_alive as process_is_alive,
-    terminate_single_process,
+    self, apply_detached_flags, apply_subprocess_flags, force_terminate_process_tree,
+    is_alive as process_is_alive, terminate_single_process,
 };
+use crate::cwarn;
 use crate::runtime::provider::{Cluster, Transaction};
 
 const KM_BINARY: &str = "km";
 const KM_CREATE_SUBCOMMAND: &str = "create";
 const KM_START_SUBCOMMAND: &str = "start";
 const KM_STATUS_SUBCOMMAND: &str = "status";
+const KM_STOP_SUBCOMMAND: &str = "stop";
 const KM_WORKDIR_ARGUMENT: &str = "--workdir";
 const KM_IMAGESDIR_ARGUMENT: &str = "--imagesdir";
 const KM_PORTSTART_ARGUMENT: &str = "--portstart";
@@ -70,18 +72,31 @@ const KM_SYSCONFIG_FILE: &str = "kmsysconfig.yaml";
 const KM_KUBECONFIG_FILE: &str = "kubeconfig.yaml";
 
 const KM_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
 #[cfg(not(windows))]
 const KM_POLL_ALIVE_TIMEOUT: Duration = Duration::from_secs(300);
-#[cfg(not(windows))]
-const KM_POLL_DEAD_TIMEOUT: Duration = Duration::from_secs(300);
-#[cfg(not(windows))]
-const KM_TERMINATE_GRACE: Duration = Duration::from_secs(300);
 #[cfg(windows)]
 const KM_POLL_ALIVE_TIMEOUT: Duration = Duration::from_secs(300);
-#[cfg(windows)]
+
+#[cfg(not(windows))]
 const KM_POLL_DEAD_TIMEOUT: Duration = Duration::from_secs(300);
 #[cfg(windows)]
-const KM_TERMINATE_GRACE: Duration = Duration::from_secs(300);
+const KM_POLL_DEAD_TIMEOUT: Duration = Duration::from_secs(600);
+
+#[cfg(not(windows))]
+const KM_STOP_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(windows)]
+const KM_STOP_TIMEOUT: Duration = Duration::from_secs(240);
+
+#[cfg(not(windows))]
+const KM_GRACEFUL_TIMEOUT: Duration = Duration::from_secs(60);
+#[cfg(windows)]
+const KM_GRACEFUL_TIMEOUT: Duration = Duration::from_secs(120);
+
+#[cfg(not(windows))]
+const KM_FORCE_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(windows)]
+const KM_FORCE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct BoundPort {
     pub port: u16,
@@ -118,6 +133,19 @@ pub fn probe_cluster_ports(portstart: u16) -> CommandResult<Vec<BoundPort>> {
         String::from_utf8_lossy(&output.stderr)
     );
     Ok(parse_bound_ports(&report))
+}
+
+fn reported(output: &std::process::Output) -> String {
+    let report = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = report.trim();
+    if report.is_empty() {
+        return String::new();
+    }
+    format!("\n{report}")
 }
 
 fn parse_bound_ports(report: &str) -> Vec<BoundPort> {
@@ -306,6 +334,43 @@ impl KminusCluster {
         .await
         .is_ok()
     }
+
+    fn stop_through_km(&self) -> bool {
+        let Ok(km) = resolve_python_binary(KM_BINARY) else {
+            cwarn!("Cannot locate the kminus binary. Signalling the process instead.");
+            return false;
+        };
+        let mut command = SystemCommand::new(&km);
+        command
+            .arg(KM_STOP_SUBCOMMAND)
+            .arg(KM_WORKDIR_ARGUMENT)
+            .arg(self.path())
+            .stdin(Stdio::null());
+        match subprocess::run_with_timeout(&mut command, KM_BINARY, self.verbose, KM_STOP_TIMEOUT) {
+            Ok(Some(output)) if output.status.success() => true,
+            Ok(Some(output)) => {
+                cwarn!(
+                    "Kminus stop failed with status {}. Signalling the process instead.{}",
+                    output.status,
+                    reported(&output)
+                );
+                false
+            }
+            Ok(None) => {
+                cwarn!(
+                    "Kminus stop did not finish within {} seconds. Signalling the process instead.",
+                    KM_STOP_TIMEOUT.as_secs()
+                );
+                false
+            }
+            Err(error) => {
+                cwarn!(
+                    "Cannot run the kminus stop command: {error}. Signalling the process instead."
+                );
+                false
+            }
+        }
+    }
 }
 
 impl Cluster for KminusCluster {
@@ -373,7 +438,15 @@ impl Cluster for KminusCluster {
         if !process_is_alive(pid) {
             return Ok(false);
         }
-        terminate_single_process(pid, KM_TERMINATE_GRACE);
+        if self.stop_through_km() {
+            return Ok(true);
+        }
+        if terminate_single_process(pid, KM_GRACEFUL_TIMEOUT) {
+            return Ok(true);
+        }
+        if force_terminate_process_tree(pid, KM_FORCE_TIMEOUT) {
+            return Ok(true);
+        }
         if !self.poll_process_dead(pid).await {
             return Err(ProviderError::KminusStopFailed(format!(
                 "process still alive after {} seconds",
