@@ -78,9 +78,9 @@ const KM_TERMINATE_GRACE: Duration = Duration::from_secs(10);
 #[cfg(windows)]
 const KM_POLL_ALIVE_TIMEOUT: Duration = Duration::from_secs(300);
 #[cfg(windows)]
-const KM_POLL_DEAD_TIMEOUT: Duration = Duration::from_secs(30);
+const KM_POLL_DEAD_TIMEOUT: Duration = Duration::from_secs(300);
 #[cfg(windows)]
-const KM_TERMINATE_GRACE: Duration = Duration::from_secs(30);
+const KM_TERMINATE_GRACE: Duration = Duration::from_secs(300);
 
 pub struct BoundPort {
     pub port: u16,
