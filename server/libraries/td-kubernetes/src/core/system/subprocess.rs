@@ -112,6 +112,25 @@ pub fn terminate_process(pid: u32, grace: Duration) {
     }
 }
 
+pub fn terminate_single_process(pid: u32, grace: Duration) {
+    request_single_graceful_shutdown(pid);
+    if wait_for_exit(pid, grace) {
+        warn!(pid, "Process terminated gracefully");
+        return;
+    }
+    warn!(
+        pid,
+        grace_secs = grace.as_secs(),
+        "Process did not exit within grace period; force-killing"
+    );
+    force_kill_process(pid);
+    if is_alive(pid) {
+        warn!(pid, "Process still alive after force-kill");
+    } else {
+        warn!(pid, "Process force-killed");
+    }
+}
+
 fn collect_descendants(root: u32) -> Vec<u32> {
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::All, true);
@@ -148,6 +167,25 @@ fn request_graceful_shutdown(root: u32, descendants: &[u32]) {
     }
 }
 
+fn request_single_graceful_shutdown(pid: u32) {
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGTERM);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // A console event is group-addressed by nature; processes spawned
+        // with apply_subprocess_flags lead their own group, so this reaches
+        // only the target (and nothing it spawned into other groups).
+        use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent};
+        unsafe {
+            GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
+        }
+    }
+}
+
 #[cfg(unix)]
 fn process_groups(root: u32, descendants: &[u32]) -> Vec<i32> {
     let mut groups: Vec<i32> = Vec::new();
@@ -171,6 +209,34 @@ fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool
             return false;
         }
         std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if !is_alive(pid) {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn force_kill_process(pid: u32) {
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGKILL);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = SystemCommand::new("taskkill.exe");
+        apply_detached_flags(&mut command);
+        let _ = command.arg("/PID").arg(pid.to_string()).arg("/F").status();
     }
 }
 

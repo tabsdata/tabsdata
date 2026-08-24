@@ -107,6 +107,76 @@ fn terminate_process_kills_descendant_in_own_process_group() {
 }
 
 #[cfg(unix)]
+#[test]
+fn terminate_single_process_leaves_descendant_in_own_group_alone() {
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command as SystemCommand, Stdio};
+
+    if SystemCommand::new(PYTHON_BINARY)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_err()
+    {
+        eprintln!("Skipping test; the '{PYTHON_BINARY}' interpreter is not available");
+        return;
+    }
+
+    let marker = std::env::temp_dir().join(format!(
+        "td_terminate_single_process_marker_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&marker);
+
+    let mut command = SystemCommand::new(PYTHON_BINARY);
+    command
+        .arg("-c")
+        .arg(SPAWN_DESCENDANT_IN_OWN_GROUP)
+        .arg(&marker)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    command.process_group(0);
+    let mut child = command.spawn().expect("spawn root python");
+    let root = child.id();
+
+    let descendant = read_first_pid(child.stdout.take().expect("captured stdout"));
+
+    assert!(is_alive(root), "root must be alive before terminate");
+    assert!(
+        is_alive(descendant),
+        "descendant must be alive before terminate"
+    );
+    assert_ne!(
+        process_group_of(root),
+        process_group_of(descendant),
+        "descendant must live in its own process group to exercise the contract"
+    );
+
+    terminate_single_process(root, Duration::from_secs(5));
+
+    assert!(
+        wait_for_death(root, Duration::from_secs(5)),
+        "root left running after terminate_single_process"
+    );
+    assert!(
+        is_alive(descendant),
+        "descendant killed; terminate_single_process must not touch descendants"
+    );
+    assert!(
+        !marker.exists(),
+        "descendant received SIGTERM; terminate_single_process must not signal descendants"
+    );
+
+    unsafe {
+        libc::kill(descendant as i32, libc::SIGKILL);
+    }
+    let _ = std::fs::remove_file(&marker);
+    child.wait().ok();
+}
+
+#[cfg(unix)]
 fn read_first_pid(stdout: impl std::io::Read) -> u32 {
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();

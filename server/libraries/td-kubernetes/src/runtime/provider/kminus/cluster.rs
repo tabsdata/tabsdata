@@ -19,7 +19,7 @@ use crate::core::system::exit::CommandResult;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
     self, apply_detached_flags, apply_subprocess_flags, is_alive as process_is_alive,
-    terminate_process,
+    terminate_single_process,
 };
 use crate::runtime::provider::{Cluster, Transaction};
 
@@ -373,7 +373,7 @@ impl Cluster for KminusCluster {
         if !process_is_alive(pid) {
             return Ok(false);
         }
-        terminate_process(pid, KM_TERMINATE_GRACE);
+        terminate_single_process(pid, KM_TERMINATE_GRACE);
         if !self.poll_process_dead(pid).await {
             return Err(ProviderError::KminusStopFailed(format!(
                 "process still alive after {} seconds",
