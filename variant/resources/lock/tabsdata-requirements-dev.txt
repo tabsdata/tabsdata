@@ -126,7 +126,7 @@ msgpack==1.2.1
 mypy==2.1.0
 mypy-extensions==1.1.0
 mysql-connector-python==9.6.0
-nh3==0.3.6
+nh3==0.3.7
 numpy==2.4.3
 oauthlib==3.3.1
 olefile==0.47
