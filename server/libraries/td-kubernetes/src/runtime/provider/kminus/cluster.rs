@@ -32,6 +32,7 @@ const KM_IMAGESDIR_ARGUMENT: &str = "--imagesdir";
 const KM_PORTSTART_ARGUMENT: &str = "--portstart";
 const KM_LOGLEVEL_ARGUMENT: &str = "--loglevel";
 const KM_DRYRUN_ARGUMENT: &str = "--dryrun";
+const KM_PURGE_ARGUMENT: &str = "--purge";
 
 const KM_PROBE_WORKDIR: &str = "tdk-port-probe";
 
@@ -214,6 +215,7 @@ impl KminusCluster {
             .arg(self.path())
             .arg(KM_IMAGESDIR_ARGUMENT)
             .arg(self.images_path())
+            .arg(KM_PURGE_ARGUMENT)
             .stdin(Stdio::null());
         if let Some(loglevel) = self.loglevel {
             command.arg(KM_LOGLEVEL_ARGUMENT).arg(loglevel.as_str());
