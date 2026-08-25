@@ -335,3 +335,52 @@ fn operations_apply_in_the_declared_order_across_types() {
         "reversing the order must change the outcome: {rendered}"
     );
 }
+
+#[test]
+fn the_shipped_agent_pin_bump_rewrites_the_previous_requirement() {
+    let root = std::path::PathBuf::from(format!(
+        "{}/../../../../tabsdata-ee/variant/resources/kupgrade",
+        env!("CARGO_MANIFEST_DIR")
+    ));
+    if !root.is_dir() {
+        return;
+    }
+    let entry = "aiagent.req.txt";
+    let spec = crate::runtime::instance::upgrade::catalog::load_spec(&root, "2.0.2")
+        .expect("the ee 2.0.2 spec must load");
+    let action = spec
+        .configs
+        .get(entry)
+        .and_then(|group| group.get(entry))
+        .unwrap_or_else(|| panic!("2.0.2 must carry a '{entry}' entry"));
+
+    let previous = std::fs::read_to_string(
+        root.join(crate::runtime::instance::upgrade::inventory::UPGRADES_FOLDER)
+            .join("2.0.1")
+            .join("configs")
+            .join(entry),
+    )
+    .expect("the 2.0.1 requirement must be readable");
+
+    let (rendered, touched) =
+        modify("2.0.2", entry, &previous, action.changes()).expect("modifies");
+    assert!(touched, "the shipped pattern must match 2.0.1: {previous}");
+    assert!(
+        rendered.contains("tabsdata-agent==2.0.2"),
+        "the pin must be bumped: {rendered}"
+    );
+    assert!(
+        !rendered.contains("tabsdata-agent==2.0.1"),
+        "no stale pin may survive: {rendered}"
+    );
+
+    let (again, retouched) = modify("2.0.2", entry, &rendered, action.changes()).expect("modifies");
+    assert!(!retouched, "re-running the hop must be a no-op: {again}");
+
+    let (untouched, matched) =
+        modify("2.0.2", entry, "tabsdata-agent==2X0X1\n", action.changes()).expect("modifies");
+    assert!(
+        !matched,
+        "the dots must be escaped, not wildcards: {untouched}"
+    );
+}

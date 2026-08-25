@@ -410,6 +410,8 @@ def report_indexes() -> None:
 
 
 def install_prerequisites() -> None:
+    print(">> Skipping prerequisites; this builder runs natively on the host")
+    return
     if windows() or on_path(APT_GET_EXECUTABLE) is None:
         print(">> Skipping prerequisites; apt-get is not available")
         return

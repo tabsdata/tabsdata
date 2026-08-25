@@ -1,0 +1,9 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+schema: 1
+assets:
+  venvbuilder.py:
+    venvbuilder.py:
+      action: replace
