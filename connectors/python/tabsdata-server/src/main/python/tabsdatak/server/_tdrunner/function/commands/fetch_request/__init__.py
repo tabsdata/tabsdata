@@ -27,7 +27,7 @@ from tabsdatak.server._tdrunner.function.commands.fetch_request.runner import (
 
 __all__ = ["_fetch", "run", "main"]
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 INFO = (
     "fetch-request — fetch a function-run definition (request.yaml) from the API server"
 )

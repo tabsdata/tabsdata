@@ -35,7 +35,7 @@ from tabsdatak.server._tdrunner.function.commands.begin_execution.runner import 
 
 __all__ = ["run", "main"]
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 INFO = "begin-execution — initialize the journal with the run's startup-phase data"
 MAN = (
     "begin-execution\n"

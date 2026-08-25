@@ -3065,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3077,7 +3077,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3089,7 +3089,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3108,7 +3108,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "openssl",
  "td-build",
@@ -3116,7 +3116,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "darling 0.23.0",
  "duct",
@@ -3208,7 +3208,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "openssl",
  "quote",
@@ -3217,7 +3217,7 @@ dependencies = [
 
 [[package]]
 name = "tm-objects"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "darling 0.23.0",
  "heck",
@@ -3230,7 +3230,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "openssl",
  "quote",
@@ -3239,7 +3239,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "openssl",
  "quote",
@@ -3248,7 +3248,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3259,7 +3259,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "openssl",
  "quote",
@@ -3268,7 +3268,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "openssl",
  "quote",

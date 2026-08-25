@@ -20,7 +20,7 @@ connectors.
 Tables can be populated with external data or using data from other tables already existing
 in the Tabsdata server.
 
-Tables can be manipulated using a [TableFrame API](https://docs.tabsdata.com/2.0.1/api/category/tableframe/)
+Tables can be manipulated using a [TableFrame API](https://docs.tabsdata.com/2.0.2/api/category/tableframe/)
 (internally Tabsdata uses [Polars](https://github.com/pola-rs/polars)) that enables selection,
 filtering, aggregation and joins operations.
 
@@ -39,8 +39,8 @@ pip install "tabsdata[all]"
 
 ### Tabsdata Binary Distribution Documentation
 
-* [User Guide](https://docs.tabsdata.com/2.0.1/guide)
-* [API Reference](https://docs.tabsdata.com/2.0.1/api)
+* [User Guide](https://docs.tabsdata.com/2.0.2/guide)
+* [API Reference](https://docs.tabsdata.com/2.0.2/api)
 
 ## Contributing
 
