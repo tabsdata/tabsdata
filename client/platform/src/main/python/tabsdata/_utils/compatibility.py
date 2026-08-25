@@ -13,6 +13,9 @@ POLARS_MODULE_NAME = "polars"
 
 STICKY_VERSION_PACKAGES = [POLARS_MODULE_NAME]
 
+MINIMUM_PYTHON_VERSION = (3, 12, 13)
+EXCLUSIVE_PYTHON_VERSION = (3, 13)
+
 
 class CompatibilityError(RuntimeError):
     def __init__(self, messages):
@@ -28,6 +31,24 @@ class PackageVersionError(RuntimeError):
             messages = [messages]
         self.messages = messages
         super().__init__("\n".join(messages))
+
+
+def python_version_supported(current: tuple[int, ...]) -> bool:
+    return MINIMUM_PYTHON_VERSION <= current < EXCLUSIVE_PYTHON_VERSION
+
+
+def check_python() -> None:
+    current = sys.version_info[:3]
+    if python_version_supported(current):
+        return
+    running = ".".join(str(part) for part in current)
+    minimum = ".".join(str(part) for part in MINIMUM_PYTHON_VERSION)
+    exclusive = ".".join(str(part) for part in EXCLUSIVE_PYTHON_VERSION)
+    raise CompatibilityError([
+        f"Tabsdata requires Python >={minimum},<{exclusive};"
+        f" this interpreter is {running}.",
+        f"Interpreter: {sys.executable}",
+    ])
 
 
 # noinspection PyBroadException
@@ -196,6 +217,18 @@ def sys_info():
 
 
 if __name__ == "__main__":  # noqa: C901
+    try:
+        check_python()
+    except CompatibilityError as python_error:
+        from colorama import Fore, Style, init
+
+        init()
+        print(Fore.RED, file=sys.stderr)
+        for message in python_error.messages:
+            print(message, file=sys.stderr)
+        print(Style.RESET_ALL, file=sys.stderr)
+        sys.exit(1)
+
     validation_messages = []
     try:
         check_load()

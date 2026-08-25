@@ -76,11 +76,16 @@ def get_python_binaries_folder() -> str:
     return os.path.basename(get_path("scripts"))
 
 
+def next_minor_version(version: str) -> str:
+    major, minor = version.split(".")[:2]
+    return f"{major}.{int(minor) + 1}"
+
+
 def get_python_tags(
     base: str,
     path: str,
     setup: str,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str]:
     tags: dict = {}
 
     def check_for_spec_py(base_path: str) -> str | None:
@@ -112,6 +117,7 @@ def get_python_tags(
         tags["MIN_PYTHON_VERSION"],
         tags["PYTHON_IMPLEMENTATION"],
         tags["MIN_PYTHON_ABI"],
+        tags["EXACT_PYTHON_VERSION"],
     )
 
 

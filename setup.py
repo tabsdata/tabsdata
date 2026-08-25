@@ -32,6 +32,7 @@ from tabsdatax.setup.common.platform import (
     get_platname,
     get_python_tags,
     get_target_release_folder,
+    next_minor_version,
 )
 from tabsdatax.setup.common.requirements import read_requirements
 from tabsdatax.setup.tabsdata.assets import check_third_party
@@ -61,20 +62,23 @@ logger.debug(f"Current path in setup is {ROOT}")
 
 configuration = load_setup_configuration()
 
-python_version, python_implementation, python_abi = get_python_tags(
-    ROOT,
-    os.path.join(
-        "client",
-        "platform",
-        "src",
-        "main",
-        "python",
-        "tabsdata",
-        "__spec.py",
-    ),
-    __file__,
+python_version, python_implementation, python_abi, exact_python_version = (
+    get_python_tags(
+        ROOT,
+        os.path.join(
+            "client",
+            "platform",
+            "src",
+            "main",
+            "python",
+            "tabsdata",
+            "__spec.py",
+        ),
+        __file__,
+    )
 )
-python_version_spec = f">={python_version}"
+next_python_version = next_minor_version(exact_python_version)
+python_version_spec = f">={exact_python_version},<{next_python_version}"
 python_version_tag = f"{python_implementation}{python_version.replace('.', '')}"
 python_version_abi = python_abi
 

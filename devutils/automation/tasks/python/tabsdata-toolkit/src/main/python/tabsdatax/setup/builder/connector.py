@@ -33,6 +33,7 @@ from tabsdatax.setup.common.platform import (
     get_platname,
     get_python_tags,
     get_target_release_folder,
+    next_minor_version,
 )
 from tabsdatax.setup.common.requirements import read_requirements
 from tabsdatax.setup.tabsdata.binaries import collect_group_datafiles
@@ -47,20 +48,23 @@ def build(setup_file: str) -> None:
     descriptor = load_package_descriptor(setup_file)
     configuration = load_setup_configuration()
 
-    python_version, python_implementation, python_abi = get_python_tags(
-        root,
-        os.path.join(
-            "client",
-            "platform",
-            "src",
-            "main",
-            "python",
-            "tabsdata",
-            "__spec.py",
-        ),
-        setup_file,
+    python_version, python_implementation, python_abi, exact_python_version = (
+        get_python_tags(
+            root,
+            os.path.join(
+                "client",
+                "platform",
+                "src",
+                "main",
+                "python",
+                "tabsdata",
+                "__spec.py",
+            ),
+            setup_file,
+        )
     )
-    python_version_spec = f">={python_version}"
+    next_python_version = next_minor_version(exact_python_version)
+    python_version_spec = f">={exact_python_version},<{next_python_version}"
     python_version_tag = f"{python_implementation}{python_version.replace('.', '')}"
     python_version_abi = python_abi
 

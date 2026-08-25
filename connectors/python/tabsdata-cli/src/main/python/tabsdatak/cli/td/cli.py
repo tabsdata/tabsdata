@@ -270,6 +270,13 @@ class _AiAgentGuardedGroup(click.RichGroup):
 @click.pass_context
 def cli(ctx: click.Context, no_prompt: bool):
     """Main CLI for the Tabsdata system."""
+    from tabsdatak.common._compatibility import CompatibilityError, check_python
+
+    try:
+        check_python()
+    except CompatibilityError as version_error:
+        raise click.ClickException("\n".join(version_error.messages)) from None
+
     try:
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
         ctx.obj = {

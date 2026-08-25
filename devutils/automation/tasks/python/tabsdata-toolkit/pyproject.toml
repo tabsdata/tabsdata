@@ -12,6 +12,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tabsdata-toolkit"
 description = "Tabsdata toolkit for developers."
+requires-python = ">=3.12.13,<3.13"
 authors = [{name = "Tabsdata Inc."}]
 keywords = [
     "tabsdata",
