@@ -149,7 +149,9 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
         io::stdout().flush().ok();
         let Some(remaining) = PROMPT_TIMEOUT.checked_sub(started.elapsed()) else {
             cerror!(
-                "No response received within {} seconds; the operation was cancelled.",
+                "This prompt was waiting for you to type the instance name, and \
+                 nothing was entered within {} seconds; the operation was \
+                 cancelled before it started, so it is safe to run again.",
                 PROMPT_TIMEOUT.as_secs()
             );
             return abort(ExitStatus::Aborted);
@@ -165,7 +167,10 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
             Ok(LineOutcome::Closed) => return Ok(false),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 cerror!(
-                    "No response received within {} seconds; the operation was cancelled.",
+                    "This prompt was waiting for you to type the instance name, \
+                     and nothing was entered within {} seconds; the operation \
+                     was cancelled before it started, so it is safe to run \
+                     again.",
                     PROMPT_TIMEOUT.as_secs()
                 );
                 return abort(ExitStatus::Aborted);
@@ -196,7 +201,9 @@ pub async fn confirm_resume(what: &str, waited: Duration) -> bool {
         Ok(Confirmation::Yes) => true,
         Ok(_) => {
             cerror!(
-                "The wait was not resumed within {} seconds; the operation was cancelled.",
+                "This prompt was waiting for your answer about whether to keep \
+                 waiting, and nothing was entered within {} seconds; the \
+                 operation was cancelled.",
                 PROMPT_TIMEOUT.as_secs()
             );
             false
@@ -218,7 +225,9 @@ fn confirm_within(skip: bool, message: &str, timeout: Duration) -> CommandResult
         Confirmation::No => Ok(false),
         Confirmation::TimedOut => {
             cerror!(
-                "No response received within {} seconds; the operation was cancelled.",
+                "This prompt was waiting for your answer, and nothing was \
+                 entered within {} seconds; the operation was cancelled before \
+                 it started, so it is safe to run again.",
                 timeout.as_secs()
             );
             abort(ExitStatus::Aborted)
