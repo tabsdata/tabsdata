@@ -11,7 +11,7 @@ use humantime::format_duration;
 
 use td_common::status::ExitStatus;
 
-use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
+use crate::base::constants::{PROMPT_REMINDER, VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::{cerror, cwarn};
 
@@ -22,6 +22,14 @@ pub const LONG_PROMPT_TIMEOUT_SECONDS: i64 = -1;
 pub const PROMPT_TIMEOUT: Option<Duration> = timeout_of(PROMPT_TIMEOUT_SECONDS);
 
 pub const LONG_PROMPT_TIMEOUT: Option<Duration> = timeout_of(LONG_PROMPT_TIMEOUT_SECONDS);
+
+fn waited_for(started: std::time::Instant) -> String {
+    let waited = Duration::from_secs(started.elapsed().as_secs());
+    if waited.is_zero() {
+        return String::new();
+    }
+    format!(" after {}", format_duration(waited))
+}
 
 fn budget_phrase(timeout: Option<Duration>) -> String {
     match timeout {
@@ -152,20 +160,31 @@ fn stdin_lines() -> &'static Mutex<mpsc::Receiver<LineOutcome>> {
 fn prompt_yes_no_with_timeout(message: &str, timeout: Option<Duration>) -> Confirmation {
     let receiver = stdin_lines().lock().unwrap();
     let started = std::time::Instant::now();
+    let mut reminded = false;
     loop {
+        if reminded {
+            println!("Still waiting for your answer{}.", waited_for(started));
+        }
         print!("{message} [{VALUE_Y}/{VALUE_YES}/{VALUE_N}/{VALUE_NO}]: ");
         io::stdout().flush().ok();
-        let outcome = match timeout {
-            None => receiver
-                .recv()
-                .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+        let slice = match timeout {
+            None => PROMPT_REMINDER,
             Some(budget) => {
                 let Some(remaining) = budget.checked_sub(started.elapsed()) else {
                     return Confirmation::TimedOut;
                 };
-                receiver.recv_timeout(remaining)
+                remaining.min(PROMPT_REMINDER)
             }
         };
+        let outcome = receiver.recv_timeout(slice);
+        if matches!(outcome, Err(mpsc::RecvTimeoutError::Timeout)) {
+            if timeout.is_none_or(|budget| started.elapsed() < budget) {
+                reminded = true;
+                println!();
+                continue;
+            }
+            return Confirmation::TimedOut;
+        }
         match outcome {
             Ok(LineOutcome::Line(line)) => {
                 if let Some(answer) = parse_yes_no(line.trim()) {
@@ -190,13 +209,18 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
     require_interactive("you to type the instance name")?;
     let receiver = stdin_lines().lock().unwrap();
     let started = std::time::Instant::now();
+    let mut reminded = false;
     loop {
+        if reminded {
+            println!(
+                "Still waiting for the instance name{}.",
+                waited_for(started)
+            );
+        }
         print!("Type the instance name '{name}' to confirm: ");
         io::stdout().flush().ok();
-        let outcome = match PROMPT_TIMEOUT {
-            None => receiver
-                .recv()
-                .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+        let slice = match PROMPT_TIMEOUT {
+            None => PROMPT_REMINDER,
             Some(budget) => {
                 let Some(remaining) = budget.checked_sub(started.elapsed()) else {
                     cerror!(
@@ -208,9 +232,17 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
                     );
                     return abort(ExitStatus::Aborted);
                 };
-                receiver.recv_timeout(remaining)
+                remaining.min(PROMPT_REMINDER)
             }
         };
+        let outcome = receiver.recv_timeout(slice);
+        if matches!(outcome, Err(mpsc::RecvTimeoutError::Timeout))
+            && PROMPT_TIMEOUT.is_none_or(|budget| started.elapsed() < budget)
+        {
+            reminded = true;
+            println!();
+            continue;
+        }
         match outcome {
             Ok(LineOutcome::Line(line)) => {
                 let answer = line.trim();

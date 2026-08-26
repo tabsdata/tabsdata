@@ -369,6 +369,7 @@ pub const KM_IO_CAPTURE_POLL: Duration = Duration::from_millis(200);
 pub const LOG_SIZE_WARNING: u64 = 16 * 1024 * 1024;
 pub const LOG_COUNT_WARNING: usize = 128;
 pub const VERBOSE_FLAG: &str = "--verbose";
+pub const PROMPT_REMINDER: Duration = Duration::from_secs(60);
 pub const WORKLOAD_LOG_TIMEOUT: Duration = Duration::from_secs(30);
 pub const WORKLOAD_LOG_WAIT: Duration = Duration::from_secs(10);
 pub const SETTINGS_FILE: &str = ".settings.json";
