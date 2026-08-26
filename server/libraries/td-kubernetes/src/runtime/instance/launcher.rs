@@ -13,7 +13,7 @@ use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 #[cfg(feature = "enterprise")]
-use tracing::info;
+use tracing::warn;
 
 use crate::base::constants::DbManagerMode;
 use crate::base::constants::SERVICE_TYPE_LOAD_BALANCER;
@@ -670,7 +670,7 @@ async fn ai_keys_supplied(context: &KubeContext) -> bool {
     let Ok(Some(data)) = get_secret(context, &name).await else {
         return false;
     };
-    [AIAGENT_SECRET_KEY_OPENAI, AIAGENT_SECRET_KEY_ANTHROPIC]
+    [AIAGENT_SECRET_KEY_ANTHROPIC, AIAGENT_SECRET_KEY_OPENAI]
         .iter()
         .any(|key| {
             data.get(*key)
@@ -687,13 +687,17 @@ async fn retain_ai_workloads(context: &KubeContext, entries: &mut Vec<(&str, &st
     if ai_keys_supplied(context).await {
         return;
     }
+    let mut skipped = Vec::new();
     entries.retain(|(key, yaml)| {
         let wanted = wants_ai_keys(yaml);
         if wanted {
-            info!("Skipping '{key}': no OpenAI or Anthropic key is configured.");
+            skipped.push((*key).to_owned());
         }
         !wanted
     });
+    for key in skipped {
+        warn!("Skipping '{key}': no Anthropic or OpenAI key is configured.");
+    }
 }
 
 async fn deserialize_pod_entry<T: DeserializeOwned>(

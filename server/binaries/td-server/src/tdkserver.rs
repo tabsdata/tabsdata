@@ -15,7 +15,7 @@ use td_common::logging::{
 };
 use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
-use td_kubernetes::base::constants::LOG_SIZE_WARNING;
+use td_kubernetes::base::constants::{ENV_TD_KUBE_UV_MODE, LOG_SIZE_WARNING};
 use td_kubernetes::base::privacy::mask_command_line;
 use td_kubernetes::base::trace;
 use td_kubernetes::client::registry::tdkserver_log_file;
@@ -109,7 +109,7 @@ fn check_banner(accept_terms: Option<bool>) -> std::io::Result<bool> {
 
 fn tdkserver_log_profile() -> LogProfile {
     LogProfile {
-        level: Level::DEBUG.to_string(),
+        level: Level::INFO.to_string(),
         directives: Vec::new(),
         output: LogProfileOutput::StdOut,
         format: Some(LogFormat::CompactColoredSpinner),
@@ -145,6 +145,28 @@ fn log_command_banner() {
     debug!("{}", "=".repeat(BANNER_WIDTH));
 }
 
+fn warn_on_uv_mode() {
+    let value = env::var(ENV_TD_KUBE_UV_MODE).unwrap_or_default();
+    let value = value.trim();
+    if value.is_empty() {
+        return;
+    }
+    show_caution(
+        &format!(
+            "Caution: the environment variable {ENV_TD_KUBE_UV_MODE} is set to '{value}'. \
+             Depending on its value, tdkserver will build its Python environments from your \
+             current (hydrated) virtual environment or from a development package index, \
+             instead of resolving them from PyPI. This instance therefore reflects your \
+             development setup rather than what an end user installing tabsdata from PyPI \
+             gets, and it may behave differently. Unset the variable to restore the standard \
+             behaviour."
+        ),
+        80,
+        true,
+        &[ENV_TD_KUBE_UV_MODE, &format!("'{value}'")],
+    );
+}
+
 fn warn_on_log_size() {
     let Ok(path) = tdkserver_log_file() else {
         return;
@@ -159,9 +181,9 @@ fn warn_on_log_size() {
     let limit = LOG_SIZE_WARNING / (1024 * 1024);
     show_caution(
         &format!(
-            "The tdkserver log has grown to {megabytes} MB, beyond the \
-             reasonable limit of {limit} MB.\n\n{}\n\nDelete it, or rename \
-             it, to start a fresh log.",
+            "The tdkserver log has grown to {megabytes} MB, above the \
+             notice threshold of {limit} MB.\n\n{}\n\nYou may want to delete \
+             it, or rename it, to start a fresh log.",
             path.display()
         ),
         80,
@@ -215,7 +237,6 @@ async fn main() {
         trace::set_operation(&operation);
     }
     log_command_banner();
-    warn_on_log_size();
     unsafe {
         match previous_rust_log {
             Some(value) => env::set_var(RUST_LOG, value),
@@ -228,6 +249,8 @@ async fn main() {
         if !previously_acknowledged {
             check_polars();
         }
+        warn_on_uv_mode();
+        warn_on_log_size();
     }
     // Setting env vars is not thread-safe; use with care.
     unsafe {

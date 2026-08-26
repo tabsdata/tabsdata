@@ -249,9 +249,9 @@ impl KminusCluster {
         }
         show_caution(
             &format!(
-                "The instance log folder holds {held} files, beyond the \
-                 reasonable limit of {LOG_COUNT_WARNING}.\n\n{}\n\nDelete \
-                 the ones you no longer need.",
+                "The instance log folder holds {held} files, above the \
+                 notice threshold of {LOG_COUNT_WARNING}.\n\n{}\n\nYou may \
+                 want to delete the ones you no longer need.",
                 root.join(LOG_FOLDER).display()
             ),
             80,

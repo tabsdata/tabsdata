@@ -38,7 +38,7 @@ use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::format::DefaultFields;
 use tracing_subscriber::fmt::format::{FormatEvent, FormatFields, Writer};
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
-use tracing_subscriber::layer::{Context, SubscriberExt};
+use tracing_subscriber::layer::{Context, Filter, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::reload::{Handle, Layer as ReloadLayer};
 use tracing_subscriber::util::SubscriberInitExt;
@@ -182,10 +182,28 @@ where
     }
 }
 
+#[derive(Default)]
+struct PlainFields(DefaultFields);
+
+impl<'writer> FormatFields<'writer> for PlainFields {
+    fn format_fields<R: tracing_subscriber::field::RecordFields>(
+        &self,
+        mut writer: Writer<'writer>,
+        fields: R,
+    ) -> std::fmt::Result {
+        let mut plain = String::new();
+        self.0.format_fields(Writer::new(&mut plain), fields)?;
+        write!(writer, "{plain}")
+    }
+}
+
+/// Unfiltered on purpose: `MultiWriterLayer` drives this layer's `on_event`
+/// directly, and a `with_filter` wrapper would gate on per-callsite state that
+/// only the subscriber's own `enabled` pass maintains, dropping the first event
+/// of every callsite. The level filter is applied by `MultiWriterLayer` instead.
 fn build_base_layer<S, W>(
     writer: W,
     log_with_ansi: bool,
-    base_filter: EnvFilter,
     format: LogFormat,
     without_time: bool,
 ) -> BoxedLayer<S>
@@ -199,28 +217,25 @@ where
                 .with_ansi(log_with_ansi)
                 .with_writer(writer);
             if without_time {
-                layer.without_time().with_filter(base_filter).boxed()
+                layer.without_time().boxed()
             } else {
-                layer.with_filter(base_filter).boxed()
+                layer.boxed()
             }
         }
         LogFormat::Compact => tracing_subscriber::fmt::layer()
             .event_format(CompactFormat)
             .with_ansi(log_with_ansi)
             .with_writer(writer)
-            .with_filter(base_filter)
             .boxed(),
         LogFormat::CompactColored => tracing_subscriber::fmt::layer()
             .event_format(CompactColoredFormat)
-            .with_ansi(log_with_ansi)
+            .with_ansi(true)
             .with_writer(writer)
-            .with_filter(base_filter)
             .boxed(),
         LogFormat::Cri => tracing_subscriber::fmt::layer()
             .event_format(CriFormat)
             .with_ansi(false)
             .with_writer(writer)
-            .with_filter(base_filter)
             .boxed(),
         LogFormat::CompactSpinner | LogFormat::CompactColoredSpinner => {
             unreachable!("formatter() collapses spinner variants")
@@ -240,7 +255,7 @@ where
     match format.formatter() {
         LogFormat::Full => {
             let layer = tracing_subscriber::fmt::layer()
-                .fmt_fields(DefaultFields::new())
+                .fmt_fields(PlainFields::default())
                 .with_ansi(log_with_ansi)
                 .with_writer(writer);
             if without_time {
@@ -372,13 +387,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     } else {
         BoxMakeWriter::new(writer)
     };
-    let base_layer = build_base_layer(
-        base_writer,
-        log_with_ansi,
-        base_filter,
-        format,
-        without_time,
-    );
+    let base_layer = build_base_layer(base_writer, log_with_ansi, format, without_time);
 
     let (filter, sinks) = match profile {
         Some(profile) => (build_profile_filter(&profile), profile.sinks.clone()),
@@ -421,7 +430,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
         );
         sink_layers.push(SinkLayer { layer, filter });
     }
-    let tabsdata_layers = MultiWriterLayer::new(base_layer, sink_layers);
+    let tabsdata_layers = MultiWriterLayer::new(base_layer, base_filter, sink_layers);
 
     let registry = tracing_subscriber::registry()
         .with(reload_filter)
@@ -811,6 +820,7 @@ where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
     base: BoxedLayer<S>,
+    base_filter: EnvFilter,
     sinks: Vec<SinkLayer<S>>,
 }
 
@@ -818,8 +828,12 @@ impl<S> MultiWriterLayer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    fn new(base: BoxedLayer<S>, sinks: Vec<SinkLayer<S>>) -> Self {
-        Self { base, sinks }
+    fn new(base: BoxedLayer<S>, base_filter: EnvFilter, sinks: Vec<SinkLayer<S>>) -> Self {
+        Self {
+            base,
+            base_filter,
+            sinks,
+        }
     }
 }
 
@@ -845,27 +859,20 @@ where
         &self,
         metadata: &'static tracing::Metadata<'static>,
     ) -> tracing::subscriber::Interest {
-        let mut base_interest = self.base.register_callsite(metadata);
+        self.base.register_callsite(metadata);
         for sink in &self.sinks {
-            let sink_interest = sink.layer.register_callsite(metadata);
-            if sink_interest.is_always() {
-                return tracing::subscriber::Interest::always();
-            } else if sink_interest.is_never() {
-                continue;
-            } else if !base_interest.is_always() {
-                base_interest = tracing::subscriber::Interest::sometimes();
-            }
+            sink.layer.register_callsite(metadata);
         }
-        base_interest
+        tracing::subscriber::Interest::sometimes()
     }
 
     fn enabled(&self, metadata: &tracing::Metadata<'_>, ctx: Context<'_, S>) -> bool {
-        for sink in &self.sinks {
-            if sink.filter.enabled(metadata, ctx.clone()) {
-                return true;
-            }
+        if Filter::<S>::enabled(&self.base_filter, metadata, &ctx) {
+            return true;
         }
-        self.base.enabled(metadata, ctx)
+        self.sinks
+            .iter()
+            .any(|sink| Filter::<S>::enabled(&sink.filter, metadata, &ctx))
     }
 
     fn on_new_span(
@@ -881,9 +888,9 @@ where
     }
 
     fn max_level_hint(&self) -> Option<LevelFilter> {
-        let mut hint = self.base.max_level_hint();
+        let mut hint = Filter::<S>::max_level_hint(&self.base_filter);
         for sink in &self.sinks {
-            if let Some(sink_hint) = sink.layer.max_level_hint() {
+            if let Some(sink_hint) = Filter::<S>::max_level_hint(&sink.filter) {
                 hint = match hint {
                     Some(current) if current >= sink_hint => Some(current),
                     _ => Some(sink_hint),
@@ -918,23 +925,21 @@ where
     }
 
     fn event_enabled(&self, event: &Event<'_>, ctx: Context<'_, S>) -> bool {
-        for sink in &self.sinks {
-            if sink.filter.enabled(event.metadata(), ctx.clone()) {
-                return true;
-            }
+        if Filter::<S>::enabled(&self.base_filter, event.metadata(), &ctx) {
+            return true;
         }
-        self.base.event_enabled(event, ctx)
+        self.sinks
+            .iter()
+            .any(|sink| Filter::<S>::enabled(&sink.filter, event.metadata(), &ctx))
     }
 
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
-        let mut handled = false;
         for sink in &self.sinks {
-            if sink.filter.enabled(event.metadata(), ctx.clone()) {
+            if Filter::<S>::enabled(&sink.filter, event.metadata(), &ctx) {
                 sink.layer.on_event(event, ctx.clone());
-                handled = true;
             }
         }
-        if !handled {
+        if Filter::<S>::enabled(&self.base_filter, event.metadata(), &ctx) {
             self.base.on_event(event, ctx);
         }
     }
@@ -1699,6 +1704,166 @@ mod sink_tests {
         let absolute = std::env::temp_dir().join("sql.log");
         let resolved = resolve_sink_path(absolute.to_str().unwrap(), None).unwrap();
         assert_eq!(resolved, absolute);
+    }
+
+    #[derive(Clone, Default)]
+    struct Captured(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl Captured {
+        fn text(&self) -> String {
+            String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
+        }
+    }
+
+    impl std::io::Write for Captured {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+        type Writer = Self;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    #[test]
+    fn a_sink_taking_an_event_does_not_starve_the_console() {
+        let console = Captured::default();
+        let sink = Captured::default();
+        let base = build_base_layer(console.clone(), false, LogFormat::Full, true);
+        let sinks = vec![SinkLayer {
+            layer: build_sink_layer(
+                BoxMakeWriter::new(sink.clone()),
+                false,
+                LogFormat::Full,
+                true,
+            ),
+            filter: EnvFilter::new("debug"),
+        }];
+        let subscriber = tracing_subscriber::registry().with(MultiWriterLayer::new(
+            base,
+            EnvFilter::new("info"),
+            sinks,
+        ));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!("a shared event");
+        });
+        assert!(
+            sink.text().contains("a shared event"),
+            "the sink must receive the event, got: {:?}",
+            sink.text()
+        );
+        assert!(
+            console.text().contains("a shared event"),
+            "the console must also receive it, got: {:?}",
+            console.text()
+        );
+    }
+
+    #[test]
+    fn a_debug_event_reaches_the_sink_but_not_an_info_console() {
+        let console = Captured::default();
+        let sink = Captured::default();
+        let base = build_base_layer(console.clone(), false, LogFormat::Full, true);
+        let sinks = vec![SinkLayer {
+            layer: build_sink_layer(
+                BoxMakeWriter::new(sink.clone()),
+                false,
+                LogFormat::Full,
+                true,
+            ),
+            filter: EnvFilter::new("debug"),
+        }];
+        let subscriber = tracing_subscriber::registry().with(MultiWriterLayer::new(
+            base,
+            EnvFilter::new("info"),
+            sinks,
+        ));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::debug!("a debug detail");
+            tracing::info!("an info line");
+        });
+        assert!(
+            sink.text().contains("a debug detail"),
+            "the sink must keep debug, got: {:?}",
+            sink.text()
+        );
+        assert!(
+            !console.text().contains("a debug detail"),
+            "the console must not show debug, got: {:?}",
+            console.text()
+        );
+        assert!(
+            console.text().contains("an info line"),
+            "the console must still show info, got: {:?}",
+            console.text()
+        );
+    }
+
+    #[test]
+    fn the_first_event_of_a_callsite_is_not_dropped() {
+        let console = Captured::default();
+        let sink = Captured::default();
+        let base = build_base_layer(console.clone(), false, LogFormat::Full, true);
+        let sinks = vec![SinkLayer {
+            layer: build_sink_layer(
+                BoxMakeWriter::new(sink.clone()),
+                false,
+                LogFormat::Full,
+                true,
+            ),
+            filter: EnvFilter::new("debug"),
+        }];
+        let subscriber = tracing_subscriber::registry().with(MultiWriterLayer::new(
+            base,
+            EnvFilter::new("info"),
+            sinks,
+        ));
+        tracing::subscriber::with_default(subscriber, || {
+            for index in 0..3 {
+                tracing::warn!("event {index}");
+            }
+        });
+        for index in 0..3 {
+            assert!(
+                console.text().contains(&format!("event {index}")),
+                "every event must reach the console, including the first; got: {:?}",
+                console.text()
+            );
+        }
+    }
+
+    #[test]
+    fn a_console_level_stays_independent_of_a_debug_sink() {
+        let profile = LogProfile {
+            level: Level::INFO.to_string(),
+            directives: Vec::new(),
+            sinks: vec![LogSinkConfig {
+                file: Some("out.log".to_owned()),
+                directives: vec![Level::DEBUG.to_string()],
+                output: LogSinkOutput::File,
+                format: None,
+                without_time: None,
+            }],
+            output: LogProfileOutput::StdOut,
+            format: None,
+        };
+        assert!(
+            build_base_layer_filter(Some(&profile))
+                .to_string()
+                .contains("info"),
+            "the console must stay at its own level, not the sink's"
+        );
+        assert!(
+            build_profile_filter(&profile).to_string().contains("trace"),
+            "the outer filter must widen so the sink still receives debug"
+        );
     }
 
     #[test]

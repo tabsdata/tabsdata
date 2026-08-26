@@ -10,11 +10,9 @@ pub mod widgets;
 
 use crate::cerror;
 
-use crate::base::constants::{
-    ENV_TD_KUBE_UV_MODE, KM_IO_LOG_PREFIX, LOG_FOLDER, TDKSERVER_LOG_FILE, VERBOSE_FLAG,
-};
+use crate::base::constants::{KM_IO_LOG_PREFIX, LOG_FOLDER, TDKSERVER_LOG_FILE, VERBOSE_FLAG};
 use crate::client::tdkserver::arguments::{Commands, GlobalArguments, parse_arguments};
-use crate::client::tdkserver::widgets::{set_keep_progress, show_caution, show_standout};
+use crate::client::tdkserver::widgets::{set_keep_progress, show_standout};
 // use crate::client::tdkserver::commands::cluster::command_cluster;
 // use crate::client::tdkserver::commands::instance::command_instance;
 // use crate::client::tdkserver::commands::secret::command_secret;
@@ -58,7 +56,6 @@ impl TabsDataKubernetesClient {
         let globals = arguments.globals;
         let verbose = globals.verbose;
         set_keep_progress(globals.keep_progress);
-        show_uv_mode_caution();
         match self.dispatch(arguments.command, globals).await {
             Ok(()) => ExitStatus::Success,
             Err(error) => {
@@ -117,28 +114,6 @@ pub async fn start() {
     if status != ExitStatus::Success {
         std::process::exit(status.code());
     }
-}
-
-fn show_uv_mode_caution() {
-    let value = std::env::var(ENV_TD_KUBE_UV_MODE).unwrap_or_default();
-    let value = value.trim();
-    if value.is_empty() {
-        return;
-    }
-    show_caution(
-        &format!(
-            "Caution: the environment variable {ENV_TD_KUBE_UV_MODE} is set to '{value}'. \
-             Depending on its value, tdkserver will build its Python environments from your \
-             current (hydrated) virtual environment or from a development package index, \
-             instead of resolving them from PyPI. This instance therefore reflects your \
-             development setup rather than what an end user installing tabsdata from PyPI \
-             gets, and it may behave differently. Unset the variable to restore the standard \
-             behaviour."
-        ),
-        80,
-        true,
-        &[ENV_TD_KUBE_UV_MODE, &format!("'{value}'")],
-    );
 }
 
 fn report_command_termination(error: &CommandError, verbose: bool) {

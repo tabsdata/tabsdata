@@ -198,7 +198,7 @@ pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 pub const HIDDEN_VALUE: &str = "*****";
 pub const UNDEFINED_FIELD: &str = "<undefined>";
 
-pub const SECRET_OPTIONS: &[&str] = &["--openai-key", "--anthropic-key"];
+pub const SECRET_OPTIONS: &[&str] = &["--anthropic-key", "--openai-key"];
 
 pub const RESOURCE_KUPGRADE: &str = "resources/kupgrade";
 
@@ -366,7 +366,7 @@ pub const KM_IO_LOG_STAMP: &str = "%Y%m%dT%H%M%S";
 pub const KM_IO_CAPTURE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const KM_IO_CAPTURE_QUIET: Duration = Duration::from_secs(5);
 pub const KM_IO_CAPTURE_POLL: Duration = Duration::from_millis(200);
-pub const LOG_SIZE_WARNING: u64 = 16 * 1024 * 1024;
+pub const LOG_SIZE_WARNING: u64 = 128 * 1024 * 1024;
 pub const LOG_COUNT_WARNING: usize = 128;
 pub const VERBOSE_FLAG: &str = "--verbose";
 pub const PROMPT_REMINDER: Duration = Duration::from_secs(60);
@@ -459,15 +459,15 @@ pub const CONTAINER_ROOT_ENV: &str = "CONTAINER_ROOT";
 pub const CONTAINER_TABSDATA_ROOT: &str = "/tabsdata";
 pub const CONTAINER_SETTINGS_RELATIVE: &str = "tabsdata/settings/.settings.json";
 
-pub const SECRET_CATEGORY_OPENAI_KEY: &str = "openai-key";
 pub const SECRET_CATEGORY_ANTHROPIC_KEY: &str = "anthropic-key";
+pub const SECRET_CATEGORY_OPENAI_KEY: &str = "openai-key";
 
 #[cfg(feature = "enterprise")]
 pub const AIAGENT_CONFIG_FILE: &str = "aiagent.yaml";
 #[cfg(feature = "enterprise")]
-pub const AIAGENT_SECRET_KEY_OPENAI: &str = "AI_PROVIDERS__OPENAI__API_KEY";
-#[cfg(feature = "enterprise")]
 pub const AIAGENT_SECRET_KEY_ANTHROPIC: &str = "AI_PROVIDERS__ANTHROPIC__API_KEY";
+#[cfg(feature = "enterprise")]
+pub const AIAGENT_SECRET_KEY_OPENAI: &str = "AI_PROVIDERS__OPENAI__API_KEY";
 pub const SECRET_TABSDATA_KUBECONFIG: &str = "td-sys-tabsdata-secret-kubeconfig";
 pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 

@@ -21,6 +21,7 @@ pub mod upgrade;
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
 
+use crate::base::trace;
 use crate::client::session::settings::{Resolved, Settings, resolve, resolve_flag};
 use crate::client::tdkserver::arguments::ClusterArguments;
 use crate::client::tdkserver::render::preview::SettingsMarkers;
@@ -49,7 +50,9 @@ pub struct InstanceNameArguments {
 }
 
 pub fn resolved_instance(user: Option<String>, settings: &Settings) -> Resolved<Option<String>> {
-    resolve(user, settings.instance.clone())
+    let resolved = resolve(user, settings.instance.clone());
+    trace::set_instance(resolved.value.as_deref().unwrap_or(DEFAULT_INSTANCE));
+    resolved
 }
 
 pub fn resolved_details(user: Option<bool>, settings: &Settings) -> Resolved<bool> {

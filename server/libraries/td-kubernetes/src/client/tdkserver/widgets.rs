@@ -177,29 +177,35 @@ fn show_colored_box(
     } else {
         format!("╰{}╯", "─".repeat(width + 2))
     };
-    if spaced {
-        println!();
-    }
-    println!("{top_border}");
-    for line in wrapped_text.lines() {
-        let padded_line = if centered {
-            format!("{line:^width$}")
-        } else {
-            format!("{line:<width$}")
-        };
-        if use_colors {
-            let edge = "│".truecolor(border.0, border.1, border.2).bold();
-            println!(
-                "{} {} {}",
-                edge,
-                emphasize(&padded_line, body, emphasized),
-                edge
-            );
-        } else {
-            println!("│ {padded_line} │");
+    let render = || {
+        if spaced {
+            println!();
         }
+        println!("{top_border}");
+        for line in wrapped_text.lines() {
+            let padded_line = if centered {
+                format!("{line:^width$}")
+            } else {
+                format!("{line:<width$}")
+            };
+            if use_colors {
+                let edge = "│".truecolor(border.0, border.1, border.2).bold();
+                println!(
+                    "{} {} {}",
+                    edge,
+                    emphasize(&padded_line, body, emphasized),
+                    edge
+                );
+            } else {
+                println!("│ {padded_line} │");
+            }
+        }
+        println!("{bottom_border}\n");
+    };
+    match td_common::logging::multi_progress() {
+        Some(multi) => multi.suspend(render),
+        None => render(),
     }
-    println!("{bottom_border}\n");
 }
 
 pub fn show_banner() {

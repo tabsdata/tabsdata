@@ -21,8 +21,8 @@ fn the_postgres_generators_are_storable() {
 
 #[test]
 fn a_category_without_a_generator_is_storable() {
-    assert!(Generator::is_storable_category("openai-key"));
     assert!(Generator::is_storable_category("anthropic-key"));
+    assert!(Generator::is_storable_category("openai-key"));
 }
 
 #[test]

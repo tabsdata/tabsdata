@@ -103,22 +103,22 @@ pub struct QuickstartArguments {
     #[cfg(feature = "enterprise")]
     #[arg(
         long,
-        name = "openai-key",
+        name = "anthropic-key",
         required = false,
         display_order = 80,
-        long_help = "OpenAI API key for the aiagent. Optional."
+        long_help = "Anthropic API key for the aiagent. Optional."
     )]
-    pub openai_key: Option<String>,
+    pub anthropic_key: Option<String>,
 
     #[cfg(feature = "enterprise")]
     #[arg(
         long,
-        name = "anthropic-key",
+        name = "openai-key",
         required = false,
         display_order = 90,
-        long_help = "Anthropic API key for the aiagent. Optional."
+        long_help = "OpenAI API key for the aiagent. Optional."
     )]
-    pub anthropic_key: Option<String>,
+    pub openai_key: Option<String>,
 
     /*
     #[arg(
@@ -227,9 +227,9 @@ pub async fn command_quickstart(
         cluster,
         port,
         #[cfg(feature = "enterprise")]
-        openai_key,
-        #[cfg(feature = "enterprise")]
         anthropic_key,
+        #[cfg(feature = "enterprise")]
+        openai_key,
         save,
         details,
         yes,
@@ -266,16 +266,16 @@ pub async fn command_quickstart(
     let mut overrides: HashMap<String, String> = HashMap::new();
     #[cfg(feature = "enterprise")]
     {
-        if let Some(value) = openai_key {
-            overrides.insert(SECRET_CATEGORY_OPENAI_KEY.to_owned(), value);
-        }
         if let Some(value) = anthropic_key {
             overrides.insert(SECRET_CATEGORY_ANTHROPIC_KEY.to_owned(), value);
+        }
+        if let Some(value) = openai_key {
+            overrides.insert(SECRET_CATEGORY_OPENAI_KEY.to_owned(), value);
         }
         if overrides.is_empty()
             && !confirm(
                 false,
-                "No OpenAI or Anthropic key provided. Proceed with no aiagent keys?",
+                "No Anthropic or OpenAI key provided. Proceed with no aiagent keys?",
             )?
         {
             return abort(Cancelled);

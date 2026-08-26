@@ -135,7 +135,7 @@ pub async fn command_check(arguments: CheckArguments, globals: &GlobalArguments)
 
 #[cfg(feature = "enterprise")]
 fn notes(pending: &[CheckEntry]) -> Vec<String> {
-    let injected: Vec<&str> = [SECRET_CATEGORY_OPENAI_KEY, SECRET_CATEGORY_ANTHROPIC_KEY]
+    let injected: Vec<&str> = [SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY]
         .into_iter()
         .filter(|category| pending.iter().any(|entry| entry.category == *category))
         .collect();
