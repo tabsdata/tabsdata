@@ -22,7 +22,9 @@ use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::Manifest;
 use crate::runtime::instance::upgrade::catalog::read_content;
 use crate::runtime::instance::upgrade::plan::Step;
-use crate::runtime::instance::upgrade::spec::{Action, ModifyLeafValueIf, ModifyTextIf, Operation};
+use crate::runtime::instance::upgrade::spec::{
+    Action, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf, Operation, Placement, Scope,
+};
 
 pub struct Outcome {
     pub applied: usize,
@@ -149,7 +151,96 @@ impl Operation {
         match self {
             Self::ModifyTextIf(operation) => operation.replace(version, entry, current),
             Self::ModifyLeafValueIf(operation) => operation.replace(version, entry, current),
+            Self::InsertSiblingIfExisting(operation) => operation.replace(version, entry, current),
         }
+    }
+}
+
+impl InsertSiblingIfExisting {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let mut document: serde_yaml::Value =
+            serde_yaml::from_str(current).map_err(|error| UpgradeError::ModifyParseFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        if !self.insert(&mut document) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' alone; leaf '{}' is absent or already has \
+                 sibling '{}'.",
+                self.leaf, self.sibling
+            );
+            return Ok((current.to_owned(), false));
+        }
+        let rendered =
+            serde_yaml::to_string(&document).map_err(|error| UpgradeError::ModifyRenderFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        Ok((rendered, true))
+    }
+
+    fn insert(&self, document: &mut serde_yaml::Value) -> bool {
+        let segments = split_leaf(&self.leaf);
+        let Some((anchor, parents)) = segments.split_last() else {
+            return false;
+        };
+        let anchor = serde_yaml::Value::from(anchor.as_str());
+        match self.scope {
+            Scope::Addressed => {
+                let mut cursor = document;
+                for segment in parents {
+                    let Some(next) = cursor.get_mut(serde_yaml::Value::from(segment.as_str()))
+                    else {
+                        return false;
+                    };
+                    cursor = next;
+                }
+                self.beside(cursor, &anchor)
+            }
+            Scope::Everywhere => self.beside_everywhere(document, &anchor),
+        }
+    }
+
+    fn beside_everywhere(&self, node: &mut serde_yaml::Value, anchor: &serde_yaml::Value) -> bool {
+        let mut inserted = self.beside(node, anchor);
+        match node {
+            serde_yaml::Value::Mapping(holder) => {
+                for (_, value) in holder.iter_mut() {
+                    inserted |= self.beside_everywhere(value, anchor);
+                }
+            }
+            serde_yaml::Value::Sequence(items) => {
+                for item in items.iter_mut() {
+                    inserted |= self.beside_everywhere(item, anchor);
+                }
+            }
+            _ => {}
+        }
+        inserted
+    }
+
+    fn beside(&self, node: &mut serde_yaml::Value, anchor: &serde_yaml::Value) -> bool {
+        let sibling = serde_yaml::Value::from(self.sibling.as_str());
+        let serde_yaml::Value::Mapping(holder) = node else {
+            return false;
+        };
+        if !holder.contains_key(anchor) || holder.contains_key(&sibling) {
+            return false;
+        }
+        let mut rebuilt = serde_yaml::Mapping::with_capacity(holder.len() + 1);
+        for (key, value) in holder.iter() {
+            if key == anchor && self.placement == Placement::Before {
+                rebuilt.insert(sibling.clone(), self.value.clone());
+            }
+            rebuilt.insert(key.clone(), value.clone());
+            if key == anchor && self.placement == Placement::After {
+                rebuilt.insert(sibling.clone(), self.value.clone());
+            }
+        }
+        *holder = rebuilt;
+        true
     }
 }
 

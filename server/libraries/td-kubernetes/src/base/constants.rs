@@ -402,6 +402,8 @@ pub const TABSDATA_LABEL_NAMESPACE: &str = "tabsdata.com/";
 pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
 
 pub const TIER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "tier");
+#[cfg(feature = "enterprise")]
+pub const AIAGENT_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "aiagent");
 pub const SEQUENCE_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "sequence");
 pub const CONFIGMAP_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "configmap-family");
 pub const SECRET_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "secret-family");
@@ -459,6 +461,13 @@ pub const CONTAINER_SETTINGS_RELATIVE: &str = "tabsdata/settings/.settings.json"
 
 pub const SECRET_CATEGORY_OPENAI_KEY: &str = "openai-key";
 pub const SECRET_CATEGORY_ANTHROPIC_KEY: &str = "anthropic-key";
+
+#[cfg(feature = "enterprise")]
+pub const AIAGENT_CONFIG_FILE: &str = "aiagent.yaml";
+#[cfg(feature = "enterprise")]
+pub const AIAGENT_SECRET_KEY_OPENAI: &str = "AI_PROVIDERS__OPENAI__API_KEY";
+#[cfg(feature = "enterprise")]
+pub const AIAGENT_SECRET_KEY_ANTHROPIC: &str = "AI_PROVIDERS__ANTHROPIC__API_KEY";
 pub const SECRET_TABSDATA_KUBECONFIG: &str = "td-sys-tabsdata-secret-kubeconfig";
 pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 

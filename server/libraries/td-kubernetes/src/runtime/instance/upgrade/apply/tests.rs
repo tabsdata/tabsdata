@@ -384,3 +384,293 @@ fn the_shipped_agent_pin_bump_rewrites_the_previous_requirement() {
         "the dots must be escaped, not wildcards: {untouched}"
     );
 }
+
+fn sibling(leaf: &str, sibling: &str, value: serde_yaml::Value, placement: Placement) -> Operation {
+    scoped(leaf, sibling, value, placement, Scope::Addressed)
+}
+
+fn scoped(
+    leaf: &str,
+    sibling: &str,
+    value: serde_yaml::Value,
+    placement: Placement,
+    scope: Scope,
+) -> Operation {
+    Operation::InsertSiblingIfExisting(InsertSiblingIfExisting {
+        leaf: leaf.to_owned(),
+        sibling: sibling.to_owned(),
+        value,
+        placement,
+        scope,
+    })
+}
+
+const LABELLED: &str = "metadata:\n  labels:\n    tabsdata.com/tier: regular\n";
+
+#[test]
+fn a_sibling_lands_after_an_existing_leaf() {
+    let (rendered, touched) = applied(
+        LABELLED,
+        &[sibling(
+            "metadata.labels.\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+        )],
+    );
+    assert!(touched);
+    let tier = rendered.find("tabsdata.com/tier").expect("the anchor");
+    let added = rendered.find("tabsdata.com/aiagent").expect("the sibling");
+    assert!(
+        tier < added,
+        "the sibling must follow the anchor: {rendered}"
+    );
+}
+
+#[test]
+fn a_sibling_lands_before_an_existing_leaf() {
+    let (rendered, touched) = applied(
+        LABELLED,
+        &[sibling(
+            "metadata.labels.\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::Before,
+        )],
+    );
+    assert!(touched);
+    let tier = rendered.find("tabsdata.com/tier").expect("the anchor");
+    let added = rendered.find("tabsdata.com/aiagent").expect("the sibling");
+    assert!(
+        added < tier,
+        "the sibling must precede the anchor: {rendered}"
+    );
+}
+
+#[test]
+fn an_absent_anchor_inserts_nothing() {
+    let (rendered, touched) = applied(
+        "metadata:\n  labels:\n    app: tabsdata\n",
+        &[sibling(
+            "metadata.labels.\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+        )],
+    );
+    assert!(!touched);
+    assert!(!rendered.contains("aiagent"));
+}
+
+#[test]
+fn an_existing_sibling_is_left_alone() {
+    let held =
+        "metadata:\n  labels:\n    tabsdata.com/tier: regular\n    tabsdata.com/aiagent: false\n";
+    let (rendered, touched) = applied(
+        held,
+        &[sibling(
+            "metadata.labels.\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+        )],
+    );
+    assert!(!touched);
+    assert_eq!(rendered, held);
+}
+
+#[test]
+fn inserting_a_sibling_twice_is_a_no_op() {
+    let change = [sibling(
+        "metadata.labels.\"tabsdata.com/tier\"",
+        "tabsdata.com/aiagent",
+        serde_yaml::Value::Bool(true),
+        Placement::After,
+    )];
+    let (once, touched) = applied(LABELLED, &change);
+    assert!(touched);
+    let (twice, retouched) = applied(&once, &change);
+    assert!(!retouched, "re-running must not double-insert: {twice}");
+}
+
+#[test]
+fn a_missing_parent_inserts_nothing() {
+    let (_, touched) = applied(
+        "metadata:\n  name: srv-aiagent\n",
+        &[sibling(
+            "metadata.labels.\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+        )],
+    );
+    assert!(!touched);
+}
+
+#[test]
+fn a_repeated_anchor_elsewhere_is_not_a_second_insertion_point() {
+    let held = "\
+metadata:
+  labels:
+    tabsdata.com/tier: regular
+spec:
+  jobTemplate:
+    metadata:
+      labels:
+        tabsdata.com/tier: ephemeral
+    spec:
+      template:
+        metadata:
+          labels:
+            tabsdata.com/tier: ephemeral
+";
+    let (rendered, touched) = applied(
+        held,
+        &[sibling(
+            "metadata.labels.\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+        )],
+    );
+    assert!(touched);
+    assert_eq!(
+        rendered.matches("tabsdata.com/aiagent").count(),
+        1,
+        "only the addressed mapping may gain the sibling: {rendered}"
+    );
+    let doc: serde_yaml::Value = serde_yaml::from_str(&rendered).expect("valid yaml");
+    assert_eq!(
+        doc.get("metadata")
+            .and_then(|node| node.get("labels"))
+            .and_then(|node| node.get("tabsdata.com/aiagent")),
+        Some(&serde_yaml::Value::Bool(true))
+    );
+}
+
+const NESTED: &str = "\
+metadata:
+  labels:
+    tabsdata.com/tier: regular
+spec:
+  jobTemplate:
+    metadata:
+      labels:
+        tabsdata.com/tier: ephemeral
+    spec:
+      template:
+        metadata:
+          labels:
+            tabsdata.com/tier: ephemeral
+";
+
+#[test]
+fn an_everywhere_scope_reaches_every_repeated_anchor() {
+    let (rendered, touched) = applied(
+        NESTED,
+        &[scoped(
+            "\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+            Scope::Everywhere,
+        )],
+    );
+    assert!(touched);
+    assert_eq!(
+        rendered.matches("tabsdata.com/aiagent").count(),
+        3,
+        "every holder of the anchor must gain the sibling: {rendered}"
+    );
+}
+
+#[test]
+fn an_everywhere_scope_is_idempotent() {
+    let change = [scoped(
+        "\"tabsdata.com/tier\"",
+        "tabsdata.com/aiagent",
+        serde_yaml::Value::Bool(true),
+        Placement::After,
+        Scope::Everywhere,
+    )];
+    let (once, touched) = applied(NESTED, &change);
+    assert!(touched);
+    let (twice, retouched) = applied(&once, &change);
+    assert!(!retouched, "re-running must not double-insert: {twice}");
+    assert_eq!(twice.matches("tabsdata.com/aiagent").count(), 3);
+}
+
+#[test]
+fn an_everywhere_scope_adds_the_sibling_only_where_the_anchor_sits() {
+    let (rendered, touched) = applied(
+        NESTED,
+        &[scoped(
+            "tabsdata.com/absent",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+            Scope::Everywhere,
+        )],
+    );
+    assert!(!touched);
+    assert!(!rendered.contains("aiagent"));
+}
+
+#[test]
+fn a_partially_labelled_document_gains_only_the_missing_siblings() {
+    let held = "\
+metadata:
+  labels:
+    tabsdata.com/tier: regular
+    tabsdata.com/aiagent: true
+spec:
+  jobTemplate:
+    metadata:
+      labels:
+        tabsdata.com/tier: ephemeral
+";
+    let (rendered, touched) = applied(
+        held,
+        &[scoped(
+            "\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+            Scope::Everywhere,
+        )],
+    );
+    assert!(touched);
+    assert_eq!(rendered.matches("tabsdata.com/aiagent").count(), 2);
+}
+
+#[test]
+fn an_addressed_scope_can_target_a_nested_anchor_over_the_first_one() {
+    let (rendered, touched) = applied(
+        NESTED,
+        &[sibling(
+            "spec.jobTemplate.metadata.labels.\"tabsdata.com/tier\"",
+            "tabsdata.com/aiagent",
+            serde_yaml::Value::Bool(true),
+            Placement::After,
+        )],
+    );
+    assert!(touched);
+    assert_eq!(rendered.matches("tabsdata.com/aiagent").count(), 1);
+    let doc: serde_yaml::Value = serde_yaml::from_str(&rendered).expect("valid yaml");
+    assert!(
+        doc.get("metadata")
+            .and_then(|node| node.get("labels"))
+            .and_then(|node| node.get("tabsdata.com/aiagent"))
+            .is_none(),
+        "the top-level anchor must be left alone: {rendered}"
+    );
+    assert_eq!(
+        doc.get("spec")
+            .and_then(|node| node.get("jobTemplate"))
+            .and_then(|node| node.get("metadata"))
+            .and_then(|node| node.get("labels"))
+            .and_then(|node| node.get("tabsdata.com/aiagent")),
+        Some(&serde_yaml::Value::Bool(true)),
+        "the addressed nested anchor must gain the sibling: {rendered}"
+    );
+}

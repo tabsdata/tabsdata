@@ -12,9 +12,16 @@ use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
+#[cfg(feature = "enterprise")]
+use tracing::info;
 
 use crate::base::constants::DbManagerMode;
 use crate::base::constants::SERVICE_TYPE_LOAD_BALANCER;
+#[cfg(feature = "enterprise")]
+use crate::base::constants::{
+    AIAGENT_CONFIG_FILE, AIAGENT_LABEL, AIAGENT_SECRET_KEY_ANTHROPIC, AIAGENT_SECRET_KEY_OPENAI,
+    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
+};
 use crate::base::constants::{
     JOB_CONDITION_COMPLETE, JOB_CONDITION_FAILED, JOB_CONDITION_STATUS_TRUE, POD_CONDITION_READY,
     POD_CONDITION_STATUS_TRUE, POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
@@ -26,6 +33,8 @@ use crate::client::tdkserver::widgets::phase_spinner_in;
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
 use crate::kube::api::deployment::is_deployment_available;
+#[cfg(feature = "enterprise")]
+use crate::kube::api::secret::get_secret;
 use crate::kube::api::{
     cronjob as cronjob_api, deployment as deployment_api, disruption as disruption_api,
     job as job_api, pod as pod_api, rbac as rbac_api, service as service_api,
@@ -42,6 +51,8 @@ use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::teardown::delete_workload;
 use crate::runtime::instance::tier::Tier;
 use crate::runtime::provider::ClusterProvider;
+#[cfg(feature = "enterprise")]
+use crate::runtime::secrets::source::to_secret_name;
 
 const DATABASE_COMPONENT: &str = "database";
 const DBMANAGER_COMPONENT: &str = "dbmanager";
@@ -239,7 +250,10 @@ pub async fn apply_endpoint_phase(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
-    let entries = pods_for_tier(profile, Tier::Endpoint)?;
+    #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
+    let mut entries = pods_for_tier(profile, Tier::Endpoint)?;
+    #[cfg(feature = "enterprise")]
+    retain_ai_workloads(context, &mut entries).await;
     if entries.is_empty() {
         return Ok(());
     }
@@ -635,6 +649,53 @@ fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>, Lau
     Ok(matched)
 }
 
+#[cfg(feature = "enterprise")]
+fn wants_ai_keys(yaml: &str) -> bool {
+    let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(yaml) else {
+        return false;
+    };
+    value
+        .get(POD_YAML_FIELD_METADATA)
+        .and_then(|metadata| metadata.get(POD_YAML_FIELD_LABELS))
+        .and_then(|labels| labels.get(AIAGENT_LABEL))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
+#[cfg(feature = "enterprise")]
+async fn ai_keys_supplied(context: &KubeContext) -> bool {
+    let Ok(name) = to_secret_name(AIAGENT_CONFIG_FILE) else {
+        return false;
+    };
+    let Ok(Some(data)) = get_secret(context, &name).await else {
+        return false;
+    };
+    [AIAGENT_SECRET_KEY_OPENAI, AIAGENT_SECRET_KEY_ANTHROPIC]
+        .iter()
+        .any(|key| {
+            data.get(*key)
+                .and_then(|value| std::str::from_utf8(value).ok())
+                .is_some_and(|value| !value.trim().is_empty())
+        })
+}
+
+#[cfg(feature = "enterprise")]
+async fn retain_ai_workloads(context: &KubeContext, entries: &mut Vec<(&str, &str)>) {
+    if !entries.iter().any(|(_, yaml)| wants_ai_keys(yaml)) {
+        return;
+    }
+    if ai_keys_supplied(context).await {
+        return;
+    }
+    entries.retain(|(key, yaml)| {
+        let wanted = wants_ai_keys(yaml);
+        if wanted {
+            info!("Skipping '{key}': no OpenAI or Anthropic key is configured.");
+        }
+        !wanted
+    });
+}
+
 async fn deserialize_pod_entry<T: DeserializeOwned>(
     key: &str,
     yaml: &str,
@@ -684,8 +745,12 @@ pub async fn apply_regular_phase(
     kind: RegularKind,
 ) -> CommandResult<Vec<(TemplateKind, String)>> {
     let available_secrets = list_available_secrets(context).await?;
+    #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
+    let mut entries = pods_for_tier(profile, Tier::Regular)?;
+    #[cfg(feature = "enterprise")]
+    retain_ai_workloads(context, &mut entries).await;
     let mut prepared: Vec<(String, RegularWorkload)> = Vec::new();
-    for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
+    for (key, yaml) in entries {
         match (kind, kind_of_entry(key, yaml)?) {
             (RegularKind::CronJob, TemplateKind::CronJob) => {
                 let mut cronjob =

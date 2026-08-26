@@ -463,3 +463,51 @@ fn init_sequence_requires_the_label() {
     let error = init_sequence("job", &init_template(None)).expect_err("must reject");
     assert!(matches!(error, LauncherError::MissingInitSequence { .. }));
 }
+
+#[cfg(feature = "enterprise")]
+fn labelled(label: Option<&str>) -> String {
+    let line = label
+        .map(|value| format!("\n    tabsdata.com/aiagent: {value}"))
+        .unwrap_or_default();
+    format!(
+        "apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: srv-aiagent
+  labels:
+    tabsdata.com/tier: regular{line}
+spec:
+  replicas: 1
+"
+    )
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn a_true_aiagent_label_marks_a_workload_as_key_dependent() {
+    assert!(wants_ai_keys(&labelled(Some("true"))));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn a_false_aiagent_label_leaves_a_workload_unconditional() {
+    assert!(!wants_ai_keys(&labelled(Some("false"))));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn an_absent_aiagent_label_leaves_a_workload_unconditional() {
+    assert!(!wants_ai_keys(&labelled(None)));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn a_quoted_aiagent_label_is_not_a_boolean() {
+    assert!(!wants_ai_keys(&labelled(Some("\"true\""))));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn unparseable_yaml_leaves_a_workload_unconditional() {
+    assert!(!wants_ai_keys("this: [is: not: valid"));
+}

@@ -66,6 +66,7 @@ impl Action {
 pub enum Operation {
     ModifyLeafValueIf(ModifyLeafValueIf),
     ModifyTextIf(ModifyTextIf),
+    InsertSiblingIfExisting(InsertSiblingIfExisting),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -87,6 +88,35 @@ pub struct ModifyLeafValueIf {
     pub from: serde_yaml::Value,
     #[serde(default)]
     pub to: serde_yaml::Value,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Placement {
+    Before,
+    #[default]
+    After,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Scope {
+    #[default]
+    Addressed,
+    Everywhere,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InsertSiblingIfExisting {
+    pub leaf: String,
+    pub sibling: String,
+    #[serde(default)]
+    pub value: serde_yaml::Value,
+    #[serde(default)]
+    pub placement: Placement,
+    #[serde(default)]
+    pub scope: Scope,
 }
 
 impl Spec {
