@@ -15,9 +15,28 @@ use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::{cerror, cwarn};
 
-pub const PROMPT_TIMEOUT: Duration = Duration::from_secs(60);
+pub const PROMPT_TIMEOUT_SECONDS: i64 = -1;
 
-pub const LONG_PROMPT_TIMEOUT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+pub const LONG_PROMPT_TIMEOUT_SECONDS: i64 = -1;
+
+pub const PROMPT_TIMEOUT: Option<Duration> = timeout_of(PROMPT_TIMEOUT_SECONDS);
+
+pub const LONG_PROMPT_TIMEOUT: Option<Duration> = timeout_of(LONG_PROMPT_TIMEOUT_SECONDS);
+
+fn budget_phrase(timeout: Option<Duration>) -> String {
+    match timeout {
+        Some(budget) => format!("within {} seconds", budget.as_secs()),
+        None => "while waiting forever".to_owned(),
+    }
+}
+
+const fn timeout_of(seconds: i64) -> Option<Duration> {
+    if seconds < 0 {
+        None
+    } else {
+        Some(Duration::from_secs(seconds as u64))
+    }
+}
 
 const YES_FLAG: &str = "--yes";
 
@@ -130,16 +149,24 @@ fn stdin_lines() -> &'static Mutex<mpsc::Receiver<LineOutcome>> {
     })
 }
 
-fn prompt_yes_no_with_timeout(message: &str, timeout: Duration) -> Confirmation {
+fn prompt_yes_no_with_timeout(message: &str, timeout: Option<Duration>) -> Confirmation {
     let receiver = stdin_lines().lock().unwrap();
     let started = std::time::Instant::now();
     loop {
         print!("{message} [{VALUE_Y}/{VALUE_YES}/{VALUE_N}/{VALUE_NO}]: ");
         io::stdout().flush().ok();
-        let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
-            return Confirmation::TimedOut;
+        let outcome = match timeout {
+            None => receiver
+                .recv()
+                .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+            Some(budget) => {
+                let Some(remaining) = budget.checked_sub(started.elapsed()) else {
+                    return Confirmation::TimedOut;
+                };
+                receiver.recv_timeout(remaining)
+            }
         };
-        match receiver.recv_timeout(remaining) {
+        match outcome {
             Ok(LineOutcome::Line(line)) => {
                 if let Some(answer) = parse_yes_no(line.trim()) {
                     return if answer {
@@ -166,16 +193,25 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
     loop {
         print!("Type the instance name '{name}' to confirm: ");
         io::stdout().flush().ok();
-        let Some(remaining) = PROMPT_TIMEOUT.checked_sub(started.elapsed()) else {
-            cerror!(
-                "This prompt was waiting for you to type the instance name, and \
-                 nothing was entered within {} seconds; the operation was \
-                 cancelled before it started, so it is safe to run again.",
-                PROMPT_TIMEOUT.as_secs()
-            );
-            return abort(ExitStatus::Aborted);
+        let outcome = match PROMPT_TIMEOUT {
+            None => receiver
+                .recv()
+                .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+            Some(budget) => {
+                let Some(remaining) = budget.checked_sub(started.elapsed()) else {
+                    cerror!(
+                        "This prompt was waiting for you to type the instance \
+                         name, and nothing was entered {}; the operation was \
+                         cancelled before it started, so it is safe to run \
+                         again.",
+                        budget_phrase(Some(budget))
+                    );
+                    return abort(ExitStatus::Aborted);
+                };
+                receiver.recv_timeout(remaining)
+            }
         };
-        match receiver.recv_timeout(remaining) {
+        match outcome {
             Ok(LineOutcome::Line(line)) => {
                 let answer = line.trim();
                 if answer == name {
@@ -187,10 +223,9 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 cerror!(
                     "This prompt was waiting for you to type the instance name, \
-                     and nothing was entered within {} seconds; the operation \
-                     was cancelled before it started, so it is safe to run \
-                     again.",
-                    PROMPT_TIMEOUT.as_secs()
+                     and nothing was entered {}; the operation was cancelled \
+                     before it started, so it is safe to run again.",
+                    budget_phrase(PROMPT_TIMEOUT)
                 );
                 return abort(ExitStatus::Aborted);
             }
@@ -229,9 +264,9 @@ pub async fn confirm_resume(what: &str, waited: Duration) -> bool {
         Ok(_) => {
             cerror!(
                 "This prompt was waiting for your answer about whether to keep \
-                 waiting, and nothing was entered within {} seconds; the \
-                 operation was cancelled.",
-                PROMPT_TIMEOUT.as_secs()
+                 waiting, and nothing was entered {}; the operation was \
+                 cancelled.",
+                budget_phrase(PROMPT_TIMEOUT)
             );
             false
         }
@@ -243,7 +278,7 @@ pub fn confirm_at_leisure(skip: bool, message: &str) -> CommandResult<bool> {
     confirm_within(skip, message, LONG_PROMPT_TIMEOUT)
 }
 
-fn confirm_within(skip: bool, message: &str, timeout: Duration) -> CommandResult<bool> {
+fn confirm_within(skip: bool, message: &str, timeout: Option<Duration>) -> CommandResult<bool> {
     if skip {
         return Ok(true);
     }
@@ -254,9 +289,9 @@ fn confirm_within(skip: bool, message: &str, timeout: Duration) -> CommandResult
         Confirmation::TimedOut => {
             cerror!(
                 "This prompt was waiting for your answer, and nothing was \
-                 entered within {} seconds; the operation was cancelled before \
-                 it started, so it is safe to run again.",
-                timeout.as_secs()
+                 entered {}; the operation was cancelled before it started, so \
+                 it is safe to run again.",
+                budget_phrase(timeout)
             );
             abort(ExitStatus::Aborted)
         }

@@ -172,3 +172,38 @@ fn skipping_bypasses_the_terminal_requirement() {
     assert!(confirm_name(true, "an-instance").unwrap());
     assert!(confirm_at_leisure(true, "should not prompt").unwrap());
 }
+
+#[test]
+fn a_negative_timeout_waits_for_ever() {
+    assert!(timeout_of(-1).is_none());
+    assert!(timeout_of(i64::MIN).is_none());
+}
+
+#[test]
+fn a_non_negative_timeout_keeps_its_budget() {
+    assert_eq!(timeout_of(0), Some(Duration::from_secs(0)));
+    assert_eq!(timeout_of(60), Some(Duration::from_secs(60)));
+}
+
+#[test]
+fn the_shipped_prompts_wait_for_ever() {
+    assert!(PROMPT_TIMEOUT.is_none());
+    assert!(LONG_PROMPT_TIMEOUT.is_none());
+}
+
+#[test]
+fn a_prompt_without_a_terminal_never_waits() {
+    assert!(!interactive());
+    assert!(confirm(false, "should not block").is_err());
+    assert!(confirm_name(false, "an-instance").is_err());
+    assert!(confirm_at_leisure(false, "should not block").is_err());
+}
+
+#[test]
+fn the_budget_phrase_reads_correctly_either_way() {
+    assert_eq!(
+        budget_phrase(Some(Duration::from_secs(60))),
+        "within 60 seconds"
+    );
+    assert_eq!(budget_phrase(None), "while waiting");
+}
