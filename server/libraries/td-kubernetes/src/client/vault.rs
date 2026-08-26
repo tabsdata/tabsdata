@@ -135,6 +135,8 @@ impl Vault {
     }
 
     fn save(&self) -> CommandResult {
+        Ok(())
+        /*
         let path = Self::file(&self.instance)?;
         let data = serde_json::to_string_pretty(self).map_err(|error| {
             TdError::from(CliError::FileSerializeFailed {
@@ -149,9 +151,11 @@ impl Vault {
             })
         })?;
         restrict(&path)
+        */
     }
 }
 
+#[allow(dead_code)]
 #[cfg(unix)]
 fn restrict(path: &Path) -> CommandResult {
     use std::os::unix::fs::PermissionsExt;
@@ -165,6 +169,7 @@ fn restrict(path: &Path) -> CommandResult {
     Ok(())
 }
 
+#[allow(dead_code)]
 #[cfg(not(unix))]
 fn restrict(_path: &Path) -> CommandResult {
     Ok(())
