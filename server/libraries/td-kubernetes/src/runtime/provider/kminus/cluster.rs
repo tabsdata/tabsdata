@@ -9,12 +9,19 @@ use std::time::Duration;
 
 use tokio::time::Instant as TokioInstant;
 
+use chrono::Utc;
 use kube::Client;
 use kube::config::{Config, KubeConfigOptions, Kubeconfig};
 use td_python::python::resolve_python_binary;
+use tracing::debug;
 
-use crate::base::constants::{DEFAULT_LOG_LEVEL, FOLDER_PROFILE, FOLDER_STAGING, LogLevel};
+use crate::base::constants::{
+    DEFAULT_LOG_LEVEL, FOLDER_PROFILE, FOLDER_STAGING, KM_IO_LOG_PREFIX, KM_IO_LOG_STAMP,
+    LOG_COUNT_WARNING, LOG_FOLDER, LogLevel,
+};
 use crate::base::error::provider::ProviderError;
+use crate::client::tdkserver::widgets::show_caution;
+use crate::core::system::capture;
 use crate::core::system::exit::CommandResult;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
@@ -232,6 +239,33 @@ impl KminusCluster {
             .join(KM_PIDS_FOLDER)
     }
 
+    fn warn_on_log_count(&self) {
+        let Some(root) = self.path.parent() else {
+            return;
+        };
+        let held = capture::log_file_count(root);
+        if held <= LOG_COUNT_WARNING {
+            return;
+        }
+        show_caution(
+            &format!(
+                "The instance log folder holds {held} files, beyond the \
+                 reasonable limit of {LOG_COUNT_WARNING}.\n\n{}\n\nDelete \
+                 the ones you no longer need.",
+                root.join(LOG_FOLDER).display()
+            ),
+            80,
+            true,
+            &[],
+        );
+    }
+
+    fn stdio_log_path(&self) -> Option<PathBuf> {
+        let root = self.path.parent()?;
+        let stamp = Utc::now().format(KM_IO_LOG_STAMP).to_string();
+        capture::stdio_log(root, KM_IO_LOG_PREFIX, &stamp)
+    }
+
     fn spawn_km(&self) -> CommandResult {
         let km = resolve_python_binary(KM_BINARY).map_err(|error| {
             ProviderError::BinaryNotFound(KM_BINARY.to_owned(), error.to_string())
@@ -248,18 +282,32 @@ impl KminusCluster {
         if let Some(loglevel) = self.loglevel {
             command.arg(KM_LOGLEVEL_ARGUMENT).arg(loglevel.as_str());
         }
-        if self.verbose {
-            command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
-        } else {
-            command.stdout(Stdio::null()).stderr(Stdio::null());
+        let stdio = self.stdio_log_path();
+        match stdio.as_deref().and_then(capture::writer_for) {
+            Some(file) => {
+                let duplicate = file.try_clone().ok();
+                command.stdout(Stdio::from(file));
+                match duplicate {
+                    Some(errors) => command.stderr(Stdio::from(errors)),
+                    None => command.stderr(Stdio::null()),
+                };
+            }
+            None => {
+                command.stdout(Stdio::null()).stderr(Stdio::null());
+            }
         }
         apply_subprocess_flags(&mut command);
-        command.spawn().map_err(|error| {
+        let mut child = command.spawn().map_err(|error| {
             ProviderError::KminusStartFailed(format!(
                 "spawn '{} {KM_START_SUBCOMMAND}': {error}",
                 km.display()
             ))
         })?;
+        if let Some(path) = stdio {
+            debug!("Kminus stdio is captured in '{}'.", path.display());
+            capture::relay(&path, KM_BINARY, &mut child, self.verbose);
+        }
+        self.warn_on_log_count();
         Ok(())
     }
 

@@ -35,6 +35,7 @@ use tracing::{Event, Level, Subscriber, debug, error, info, trace, warn};
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::fmt::FmtContext;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::format::DefaultFields;
 use tracing_subscriber::fmt::format::{FormatEvent, FormatFields, Writer};
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -211,7 +212,7 @@ where
             .boxed(),
         LogFormat::CompactColored => tracing_subscriber::fmt::layer()
             .event_format(CompactColoredFormat)
-            .with_ansi(true)
+            .with_ansi(log_with_ansi)
             .with_writer(writer)
             .with_filter(base_filter)
             .boxed(),
@@ -239,6 +240,7 @@ where
     match format.formatter() {
         LogFormat::Full => {
             let layer = tracing_subscriber::fmt::layer()
+                .fmt_fields(DefaultFields::new())
                 .with_ansi(log_with_ansi)
                 .with_writer(writer);
             if without_time {
@@ -407,7 +409,16 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
             },
         };
         let filter = build_sink_filter(&sink.directives);
-        let layer = build_sink_layer(writer, log_with_ansi, format, without_time);
+        let ansi = match sink.output {
+            LogSinkOutput::File => false,
+            LogSinkOutput::StdOut => log_with_ansi,
+        };
+        let layer = build_sink_layer(
+            writer,
+            ansi,
+            sink.format.unwrap_or(format),
+            sink.without_time.unwrap_or(without_time),
+        );
         sink_layers.push(SinkLayer { layer, filter });
     }
     let tabsdata_layers = MultiWriterLayer::new(base_layer, sink_layers);
@@ -510,6 +521,43 @@ pub fn start_with_config_file(config_path: &str) {
 // Start the logger with the given options.
 // Option 'with_tokio_console' enabled requires also binaries with feature 'tokio_console'.
 // Otherwise, flag will be ignored defaulting to standard behavior.
+pub fn start_with_profile(options: LoggingOptions, profile: LogProfile) {
+    let LoggingOptions {
+        max_level,
+        with_tokio_console,
+        enable_bootstrap_notice,
+        format,
+        ..
+    } = options;
+
+    BOOTSTRAP_NOTICE_ENABLED.get_or_init(|| enable_bootstrap_notice);
+
+    let log_dir = resolve_log_directory(PathBuf::from(CURRENT_DIR));
+    let writer = select_primary_writer(Some(&profile), log_dir.as_deref());
+    let effective_format = profile.format.unwrap_or(format);
+
+    LOGGER_PROVIDER.get_or_init(|| {
+        init(
+            LoggingOptions {
+                profile: None,
+                max_level,
+                format: effective_format,
+                with_tokio_console,
+                enable_bootstrap_notice,
+            },
+            LoggingStyle {
+                profile: Some(profile),
+                directives: vec![],
+                without_time: false,
+            },
+            LoggingEngine {
+                log_dir: log_dir.clone(),
+                writer,
+            },
+        )
+    });
+}
+
 pub fn start_with(options: LoggingOptions) {
     let LoggingOptions {
         max_level,
@@ -1064,6 +1112,10 @@ pub struct LogSinkConfig {
     pub directives: Vec<String>,
     #[serde(default)]
     pub output: LogSinkOutput,
+    #[serde(default)]
+    pub format: Option<LogFormat>,
+    #[serde(default)]
+    pub without_time: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]

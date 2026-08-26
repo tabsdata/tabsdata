@@ -252,7 +252,7 @@ async fn await_pod_condition_with(
     patience: AwaitPatience,
 ) -> Result<Option<Pod>, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_with_patience(api, name, condition, patience)
+    await_condition_with_patience(context, api, name, condition, patience)
         .await
         .map_err(|error| {
             KubePodError::AwaitFailed {

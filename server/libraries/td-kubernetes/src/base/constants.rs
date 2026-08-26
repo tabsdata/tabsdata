@@ -195,6 +195,11 @@ pub const FILE_KUBECONFIG: &str = "config";
 pub const LIBEXEC_TABSDATA: &str = "libexec/tabsdata";
 
 pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
+pub const HIDDEN_VALUE: &str = "*****";
+pub const UNDEFINED_FIELD: &str = "<undefined>";
+
+pub const SECRET_OPTIONS: &[&str] = &["--openai-key", "--anthropic-key"];
+
 pub const RESOURCE_KUPGRADE: &str = "resources/kupgrade";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -354,6 +359,18 @@ pub const EDIT_FOLDER: &str = "edit";
 pub const INPUT_FOLDER: &str = "input";
 pub const STAGE_FOLDER: &str = "stage";
 pub const TRASH_FOLDER: &str = "trash";
+pub const LOG_FOLDER: &str = "log";
+pub const TDKSERVER_LOG_FILE: &str = "tdkserver.log";
+pub const KM_IO_LOG_PREFIX: &str = "km.io";
+pub const KM_IO_LOG_STAMP: &str = "%Y%m%dT%H%M%S";
+pub const KM_IO_CAPTURE_TIMEOUT: Duration = Duration::from_secs(30);
+pub const KM_IO_CAPTURE_QUIET: Duration = Duration::from_secs(5);
+pub const KM_IO_CAPTURE_POLL: Duration = Duration::from_millis(200);
+pub const LOG_SIZE_WARNING: u64 = 16 * 1024 * 1024;
+pub const LOG_COUNT_WARNING: usize = 128;
+pub const VERBOSE_FLAG: &str = "--verbose";
+pub const WORKLOAD_LOG_TIMEOUT: Duration = Duration::from_secs(30);
+pub const WORKLOAD_LOG_WAIT: Duration = Duration::from_secs(10);
 pub const SETTINGS_FILE: &str = ".settings.json";
 pub const VAULT_FILE: &str = ".vault.json";
 pub const CLUSTER_FOLDER: &str = "cluster";

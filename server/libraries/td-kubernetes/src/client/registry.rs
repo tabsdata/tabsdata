@@ -17,7 +17,8 @@ use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::{
     CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, EDIT_FOLDER, FOLDER_KENVS, FOLDER_PYENV_FN,
     FOLDER_PYENV_TD, FOLDER_RUNTIMES, FOLDER_UV, INIT_FOLDER, INPUT_FOLDER, KUBE_FOLDER,
-    KUBECONFIG_FILE, LogLevel, SETTINGS_FILE, STAGE_FOLDER, TRASH_FOLDER, VENV_ACTIVATE_FILE,
+    KUBECONFIG_FILE, LogLevel, SETTINGS_FILE, STAGE_FOLDER, TDKSERVER_LOG_FILE, TRASH_FOLDER,
+    VENV_ACTIVATE_FILE,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
@@ -77,6 +78,14 @@ pub fn init_stage_folder_in(instance_root: &Path) -> PathBuf {
 
 pub fn instance_settings_file(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(SETTINGS_FILE))
+}
+
+pub fn tdkserver_log_file() -> CommandResult<PathBuf> {
+    let home = homedir::my_home()
+        .ok()
+        .flatten()
+        .ok_or(ProviderError::HomeDirNotFound)?;
+    Ok(home.join(TABSDATA_HOME_DIR).join(TDKSERVER_LOG_FILE))
 }
 
 pub fn instance_kube_folder(name: &str) -> CommandResult<PathBuf> {

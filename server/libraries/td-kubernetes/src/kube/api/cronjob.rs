@@ -161,7 +161,7 @@ async fn await_cronjob_condition_with(
     patience: AwaitPatience,
 ) -> Result<Option<CronJob>, KubernetesError> {
     let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_with_patience(api, name, condition, patience)
+    await_condition_with_patience(context, api, name, condition, patience)
         .await
         .map_err(|error| {
             KubeCronJobError::AwaitFailed {

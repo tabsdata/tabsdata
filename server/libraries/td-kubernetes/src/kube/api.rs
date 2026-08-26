@@ -31,6 +31,7 @@ pub mod companions;
 pub mod configmap;
 pub mod cronjob;
 pub mod deployment;
+pub mod diagnostics;
 pub mod disruption;
 pub mod helpers;
 pub mod job;
@@ -123,6 +124,23 @@ pub enum AwaitPatience {
 }
 
 pub async fn await_condition_with_patience<K>(
+    context: &KubeContext,
+    api: Api<K>,
+    name: &str,
+    condition: impl Condition<K> + Clone,
+    patience: AwaitPatience,
+) -> Result<Option<K>, WaitError>
+where
+    K: Clone + Debug + DeserializeOwned + KubeResource + Send + 'static,
+{
+    let settled = await_condition_inner(api, name, condition, patience).await;
+    if matches!(settled, Err(_) | Ok(None)) {
+        diagnostics::report_workload(context, name).await;
+    }
+    settled
+}
+
+async fn await_condition_inner<K>(
     api: Api<K>,
     name: &str,
     condition: impl Condition<K> + Clone,

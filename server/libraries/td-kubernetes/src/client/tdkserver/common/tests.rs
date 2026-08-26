@@ -205,5 +205,5 @@ fn the_budget_phrase_reads_correctly_either_way() {
         budget_phrase(Some(Duration::from_secs(60))),
         "within 60 seconds"
     );
-    assert_eq!(budget_phrase(None), "while waiting");
+    assert_eq!(budget_phrase(None), "while waiting forever");
 }

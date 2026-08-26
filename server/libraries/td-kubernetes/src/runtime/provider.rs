@@ -27,6 +27,7 @@ use crate::base::constants::LogLevel;
 use crate::base::constants::UvMode;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
+use crate::base::trace;
 use crate::client::registry::{ClusterViews, InstanceSettings, InstanceState};
 use crate::client::session::settings::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
@@ -716,6 +717,7 @@ async fn provider_for_instance_inner(
     require_version_match: bool,
 ) -> CommandResult<Box<dyn Provider>> {
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    trace::set_instance(&instance);
     let mut settings = if require_created {
         InstanceSettings::load_required(&instance, &[InstanceState::Created])?
     } else {

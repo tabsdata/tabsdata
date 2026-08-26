@@ -157,7 +157,7 @@ async fn await_deployment_condition_with(
     patience: AwaitPatience,
 ) -> Result<Option<Deployment>, KubernetesError> {
     let api: Api<Deployment> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_with_patience(api, name, condition, patience)
+    await_condition_with_patience(context, api, name, condition, patience)
         .await
         .map_err(|error| {
             KubeDeploymentError::AwaitFailed {

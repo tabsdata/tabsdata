@@ -27,6 +27,15 @@ const BODY_YELLOW: (u8, u8, u8) = (255, 215, 95);
 const BORDER_RED: (u8, u8, u8) = (225, 75, 75);
 const BODY_RED: (u8, u8, u8) = (255, 95, 95);
 
+pub fn show_standout(lines: &[String]) {
+    let (red, green, blue) = BODY_YELLOW;
+    println!();
+    for line in lines {
+        println!("{}", line.truecolor(red, green, blue).bold());
+    }
+    println!();
+}
+
 pub fn show_box(text: &str, min: usize, spaced: bool) {
     show_colored_box(
         text,

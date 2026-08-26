@@ -10,9 +10,11 @@ pub mod widgets;
 
 use crate::cerror;
 
-use crate::base::constants::ENV_TD_KUBE_UV_MODE;
+use crate::base::constants::{
+    ENV_TD_KUBE_UV_MODE, KM_IO_LOG_PREFIX, LOG_FOLDER, TDKSERVER_LOG_FILE, VERBOSE_FLAG,
+};
 use crate::client::tdkserver::arguments::{Commands, GlobalArguments, parse_arguments};
-use crate::client::tdkserver::widgets::{set_keep_progress, show_caution};
+use crate::client::tdkserver::widgets::{set_keep_progress, show_caution, show_standout};
 // use crate::client::tdkserver::commands::cluster::command_cluster;
 // use crate::client::tdkserver::commands::instance::command_instance;
 // use crate::client::tdkserver::commands::secret::command_secret;
@@ -45,6 +47,7 @@ use crate::client::tdkserver::commands::venvs::command_venv;
 // use crate::client::tdkserver::commands::template::command_template;
 use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use td_common::crypto::install_crypto_provider;
+use td_common::env::TABSDATA_HOME_DIR;
 use td_common::status::ExitStatus;
 
 pub struct TabsDataKubernetesClient;
@@ -151,9 +154,26 @@ fn report_command_termination(error: &CommandError, verbose: bool) {
                 tracing::info!("{}", render_error(source, verbose));
             }
         }
-        _ => match error.source() {
-            Some(source) => cerror!("Command aborted: {}", render_error(source, verbose)),
-            None => cerror!("Command aborted."),
-        },
+        _ => {
+            match error.source() {
+                Some(source) => cerror!("Command aborted: {}", render_error(source, verbose)),
+                None => cerror!("Command aborted."),
+            }
+            show_failure_hint(verbose);
+        }
     }
+}
+
+fn show_failure_hint(verbose: bool) {
+    let mut lines = vec!["For more detail on this failure:".to_owned()];
+    if !verbose {
+        lines.push(format!("  Run the command again with {VERBOSE_FLAG}."));
+    }
+    lines.push(format!(
+        "  Read {TDKSERVER_LOG_FILE} under {TABSDATA_HOME_DIR}."
+    ));
+    lines.push(format!(
+        "  Read the {KM_IO_LOG_PREFIX} files in the instance {LOG_FOLDER} folder."
+    ));
+    show_standout(&lines);
 }

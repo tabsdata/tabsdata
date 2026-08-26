@@ -8,7 +8,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, ProcessStatus, ProcessesToUpdate, System};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
+
+use crate::base::trace;
 
 pub fn run_with_timeout(
     command: &mut SystemCommand,
@@ -59,46 +61,34 @@ fn pump<R: Read + Send + 'static>(
 ) -> Option<thread::JoinHandle<Vec<u8>>> {
     pipe.map(|pipe| {
         let label = label.to_owned();
+        let carried = trace::carried();
         thread::spawn(move || {
-            if verbose {
-                stream_lines(pipe, &label, stream)
-            } else {
-                collect_lines(pipe)
-            }
+            let _entered = carried.enter();
+            stream_lines(pipe, &label, stream, verbose)
         })
     })
 }
 
-fn collect_lines<R: Read>(pipe: R) -> Vec<u8> {
-    let mut buffer = Vec::new();
-    let reader = BufReader::new(pipe);
-    for line in reader.lines() {
-        match line {
-            Ok(text) => {
-                buffer.extend_from_slice(text.as_bytes());
-                buffer.push(b'\n');
-            }
-            Err(_) => break,
-        }
-    }
-    buffer
-}
-
 pub fn run(command: &mut SystemCommand, label: &str, verbose: bool) -> io::Result<Output> {
-    if !verbose {
-        return command.output();
-    }
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn()?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let stdout_handle = stdout.map(|pipe| {
         let label = label.to_owned();
-        thread::spawn(move || stream_lines(pipe, &label, "stdout"))
+        let carried = trace::carried();
+        thread::spawn(move || {
+            let _entered = carried.enter();
+            stream_lines(pipe, &label, "stdout", verbose)
+        })
     });
     let stderr_handle = stderr.map(|pipe| {
         let label = label.to_owned();
-        thread::spawn(move || stream_lines(pipe, &label, "stderr"))
+        let carried = trace::carried();
+        thread::spawn(move || {
+            let _entered = carried.enter();
+            stream_lines(pipe, &label, "stderr", verbose)
+        })
     });
     let status = child.wait()?;
     let captured_stdout = stdout_handle
@@ -114,13 +104,17 @@ pub fn run(command: &mut SystemCommand, label: &str, verbose: bool) -> io::Resul
     })
 }
 
-fn stream_lines<R: Read>(pipe: R, label: &str, stream: &str) -> Vec<u8> {
+fn stream_lines<R: Read>(pipe: R, label: &str, stream: &str, verbose: bool) -> Vec<u8> {
     let mut buffer = Vec::new();
     let reader = BufReader::new(pipe);
     for line in reader.lines() {
         match line {
             Ok(text) => {
-                info!("  [{label} {stream}] {text}");
+                if verbose {
+                    info!("  [{label} {stream}] {text}");
+                } else {
+                    debug!("  [{label} {stream}] {text}");
+                }
                 buffer.extend_from_slice(text.as_bytes());
                 buffer.push(b'\n');
             }

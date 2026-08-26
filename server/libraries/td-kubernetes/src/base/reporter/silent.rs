@@ -19,8 +19,8 @@ impl Default for SilentReporter {
 }
 
 impl Reporter for SilentReporter {
-    fn step(&self, _message: &str) -> StepHandle {
-        StepHandle::new(Box::new(SilentStep))
+    fn step(&self, message: &str) -> StepHandle {
+        StepHandle::new(Box::new(SilentStep), message)
     }
 
     fn info(&self, _message: &str) {}

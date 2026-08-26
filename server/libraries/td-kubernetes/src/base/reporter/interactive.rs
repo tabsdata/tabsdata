@@ -31,11 +31,10 @@ impl Default for InteractiveReporter {
 
 impl Reporter for InteractiveReporter {
     fn step(&self, message: &str) -> StepHandle {
-        StepHandle::new(Box::new(InteractiveStep::new(
-            self.multi.clone(),
+        StepHandle::new(
+            Box::new(InteractiveStep::new(self.multi.clone(), message, 0)),
             message,
-            0,
-        )))
+        )
     }
 
     fn info(&self, message: &str) {

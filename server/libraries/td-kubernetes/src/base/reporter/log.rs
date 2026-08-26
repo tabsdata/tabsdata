@@ -25,10 +25,13 @@ impl Default for LogReporter {
 impl Reporter for LogReporter {
     fn step(&self, message: &str) -> StepHandle {
         info!("\u{2192} {message}");
-        StepHandle::new(Box::new(LogStep {
-            started_at: Instant::now(),
-            depth: 0,
-        }))
+        StepHandle::new(
+            Box::new(LogStep {
+                started_at: Instant::now(),
+                depth: 0,
+            }),
+            message,
+        )
     }
 
     fn info(&self, message: &str) {

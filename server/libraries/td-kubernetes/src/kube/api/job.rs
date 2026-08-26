@@ -169,7 +169,7 @@ async fn await_job_condition_with(
     patience: AwaitPatience,
 ) -> Result<Option<Job>, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_with_patience(api, name, condition, patience)
+    await_condition_with_patience(context, api, name, condition, patience)
         .await
         .map_err(|error| {
             KubeJobError::AwaitFailed {

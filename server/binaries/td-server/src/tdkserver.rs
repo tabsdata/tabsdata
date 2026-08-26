@@ -3,25 +3,36 @@
 //
 
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio, exit};
 use std::{env, fs};
 use td_build::version::TABSDATA_VERSION;
 use td_common::attach::attach;
 use td_common::env::{TABSDATA_HOME_DIR, get_home_dir};
 use td_common::logging;
-use td_common::logging::{CONSOLE_PROFILE, LogFormat, LoggingOptions};
+use td_common::logging::{
+    LogFormat, LogProfile, LogProfileOutput, LogSinkConfig, LogSinkOutput, LoggingOptions,
+};
 use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
+use td_kubernetes::base::constants::LOG_SIZE_WARNING;
+use td_kubernetes::base::privacy::mask_command_line;
+use td_kubernetes::base::trace;
+use td_kubernetes::client::registry::tdkserver_log_file;
 use td_kubernetes::client::tdkserver;
-use td_kubernetes::client::tdkserver::widgets::show_banner;
+use td_kubernetes::client::tdkserver::widgets::{show_banner, show_caution};
 use te_system::license::{
     ACCEPT_TERMS_ARGUMENT, ACCEPT_TERMS_N, ACCEPT_TERMS_NO, ACCEPT_TERMS_Y, ACCEPT_TERMS_YES,
     LicenseAcceptance, TabsdataLicense,
 };
 use tm_workspace::workspace_root;
 use tracing::Level;
+use tracing::debug;
 
 const ACK: &str = ".ack";
+
+const BANNER_WIDTH: usize = 100;
+const PROGRAM_TDKSERVER: &str = "tdkserver";
 
 const HELP_COMMAND: &str = "help";
 const HELP_FLAGS: [&str; 2] = ["--help", "-h"];
@@ -96,6 +107,69 @@ fn check_banner(accept_terms: Option<bool>) -> std::io::Result<bool> {
     Ok(false)
 }
 
+fn tdkserver_log_profile() -> LogProfile {
+    LogProfile {
+        level: Level::DEBUG.to_string(),
+        directives: Vec::new(),
+        output: LogProfileOutput::StdOut,
+        format: Some(LogFormat::CompactColoredSpinner),
+        sinks: vec![LogSinkConfig {
+            file: log_file_path(),
+            directives: vec![format!("{}", Level::DEBUG)],
+            output: LogSinkOutput::File,
+            format: Some(LogFormat::Full),
+            without_time: Some(false),
+        }],
+    }
+}
+
+fn log_file_path() -> Option<String> {
+    tdkserver_log_file()
+        .ok()
+        .map(|path| path.display().to_string())
+}
+
+fn log_command_banner() {
+    let mut arguments = env::args();
+    let program = arguments
+        .next()
+        .map(PathBuf::from)
+        .and_then(|path| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+        })
+        .unwrap_or_else(|| PROGRAM_TDKSERVER.to_owned());
+    let line = mask_command_line(std::iter::once(program).chain(arguments));
+    debug!("{}", "=".repeat(BANNER_WIDTH));
+    debug!("{line}");
+    debug!("{}", "=".repeat(BANNER_WIDTH));
+}
+
+fn warn_on_log_size() {
+    let Ok(path) = tdkserver_log_file() else {
+        return;
+    };
+    let Ok(metadata) = fs::metadata(&path) else {
+        return;
+    };
+    if metadata.len() <= LOG_SIZE_WARNING {
+        return;
+    }
+    let megabytes = metadata.len() / (1024 * 1024);
+    let limit = LOG_SIZE_WARNING / (1024 * 1024);
+    show_caution(
+        &format!(
+            "The tdkserver log has grown to {megabytes} MB, beyond the \
+             reasonable limit of {limit} MB.\n\n{}\n\nDelete it, or rename \
+             it, to start a fresh log.",
+            path.display()
+        ),
+        80,
+        true,
+        &[],
+    );
+}
+
 fn check_polars() {
     let mut python = Command::new("python")
         .arg("-")
@@ -126,13 +200,22 @@ async fn main() {
     unsafe {
         env::set_var(RUST_LOG, RUST_LOG_DIRECTIVES);
     }
-    logging::start_with(LoggingOptions {
-        max_level: Some(Level::INFO),
-        profile: Some(CONSOLE_PROFILE.to_string()),
-        enable_bootstrap_notice: false,
-        format: LogFormat::CompactColoredSpinner,
-        ..Default::default()
-    });
+    logging::start_with_profile(
+        LoggingOptions {
+            max_level: Some(Level::DEBUG),
+            profile: None,
+            enable_bootstrap_notice: false,
+            format: LogFormat::CompactColoredSpinner,
+            ..Default::default()
+        },
+        tdkserver_log_profile(),
+    );
+    trace::open();
+    if let Some(operation) = trace::operation_of(env::args()) {
+        trace::set_operation(&operation);
+    }
+    log_command_banner();
+    warn_on_log_size();
     unsafe {
         match previous_rust_log {
             Some(value) => env::set_var(RUST_LOG, value),

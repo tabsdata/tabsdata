@@ -8,4 +8,6 @@ pub mod error;
 pub mod labels;
 pub mod macros;
 pub mod naming;
+pub mod privacy;
 pub mod reporter;
+pub mod trace;
