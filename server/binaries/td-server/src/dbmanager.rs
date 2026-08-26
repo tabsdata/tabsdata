@@ -118,8 +118,11 @@ async fn create(
 ) -> Result<(), DbError> {
     with_server(server, async |admin| {
         info!("Creating database");
+        let before = dbm::inspect_all(components, admin).await?;
+        dbm::require_absent(&before)?;
         dbm::provision_all(components, admin).await?;
         dbm::upgrade_all(components).await?;
+        report_objects(&before, &dbm::inspect_all(components, admin).await?);
         Ok(())
     })
     .await?;
@@ -136,15 +139,62 @@ fn resolved_schemas(components: &DatabaseComponents) -> Result<Vec<String>, DbEr
         .collect()
 }
 
-/// Runs as each schema's owner (DDL on its own schema) — no privileged pool.
+/// The DDL runs as each schema's owner (on its own schema); the privileged pool
+/// is opened only to verify the target objects exist and to report their state.
 /// Seeds are idempotent full syncs, so re-running them here delivers the new
 /// release's baseline content to an existing database.
-async fn upgrade(components: &DatabaseComponents) -> Result<(), DbError> {
+async fn upgrade(
+    components: &DatabaseComponents,
+    server: Option<&ComponentConfig>,
+) -> Result<(), DbError> {
+    let before = with_server(server, async |admin| {
+        let found = dbm::inspect_all(components, admin).await?;
+        dbm::require_present(&found)?;
+        Ok(found)
+    })
+    .await?;
     info!("Upgrading database");
     dbm::upgrade_all(components).await?;
     dbm::seed_all(components).await?;
+    let after = with_server(server, async |admin| {
+        dbm::inspect_all(components, admin).await
+    })
+    .await?;
+    report_objects(&before, &after);
     info!("Database upgraded");
     Ok(())
+}
+
+fn report_objects(before: &[dbm::ComponentObjects], after: &[dbm::ComponentObjects]) {
+    for (was, is) in before.iter().zip(after.iter()) {
+        info!(
+            component = was.key,
+            schema = %is.schema,
+            state = state_of(was.schema_present, is.schema_present),
+            "schema"
+        );
+        info!(
+            component = was.key,
+            owner = %is.owner,
+            state = state_of(was.owner_present, is.owner_present),
+            "owner role"
+        );
+        info!(
+            component = was.key,
+            app_role = %is.app_role,
+            state = state_of(was.app_role_present, is.app_role_present),
+            "app role"
+        );
+    }
+}
+
+fn state_of(was_present: bool, is_present: bool) -> &'static str {
+    match (was_present, is_present) {
+        (true, true) => "pre-existent",
+        (false, true) => "created",
+        (true, false) => "dropped",
+        (false, false) => "missing",
+    }
 }
 
 /// The same correctness check the apiserver runs on its serving pools.
@@ -190,10 +240,10 @@ async fn ping(components: &DatabaseComponents) -> Result<(), DbError> {
 
 /// Run `op` against a freshly-opened privileged pool on the
 /// `database_server:` entry, closing it afterward.
-async fn with_server(
+async fn with_server<T>(
     server: Option<&ComponentConfig>,
-    op: impl AsyncFnOnce(&dbm::AdminPool) -> Result<(), DbError>,
-) -> Result<(), DbError> {
+    op: impl AsyncFnOnce(&dbm::AdminPool) -> Result<T, DbError>,
+) -> Result<T, DbError> {
     let server = server.ok_or(DbError::MissingServerEntry)?;
     let pool = dbm::connect_server(server).await?;
     let result = op(&pool).await;
@@ -253,7 +303,7 @@ fn run() {
                 },
                 Command::Db(command) => match command {
                     DbCommand::Create => create(components, server).await,
-                    DbCommand::Upgrade => upgrade(components).await,
+                    DbCommand::Upgrade => upgrade(components, server).await,
                     DbCommand::Check => check(components).await,
                     DbCommand::Status => status(components).await,
                     DbCommand::Drop { force: false } => {

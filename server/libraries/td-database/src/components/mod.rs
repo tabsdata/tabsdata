@@ -244,6 +244,85 @@ async fn serving_for(
     crate::db(&serving_config(components, component)?).await
 }
 
+/// The state of one component's top-level objects.
+#[derive(Debug, Clone)]
+pub struct ComponentObjects {
+    pub key: &'static str,
+    pub schema: String,
+    pub schema_present: bool,
+    pub owner: String,
+    pub owner_present: bool,
+    pub app_role: String,
+    pub app_role_present: bool,
+}
+
+/// Inspect every registered component's schema, owner role and app role.
+pub async fn inspect_all(
+    components: &DatabaseComponents,
+    admin: &AdminPool,
+) -> Result<Vec<ComponentObjects>, DbError> {
+    let mut found = Vec::new();
+    for component in registered() {
+        let entry = component_entry(components, component)?;
+        let (owner, _) = owner_credentials(entry, component)?;
+        let schema = schema_of(entry, component)?;
+        let app_role = entry.app_role()?.to_owned();
+        found.push(ComponentObjects {
+            key: component.key(),
+            schema_present: admin.schema_exists(&schema).await?,
+            owner_present: admin.role_exists(&owner).await?,
+            app_role_present: admin.role_exists(&app_role).await?,
+            schema,
+            owner,
+            app_role,
+        });
+    }
+    Ok(found)
+}
+
+/// Refuse to create when a schema or its owner is already present. App roles
+/// are cluster-global and shared, so their presence is reported, not fatal.
+pub fn require_absent(found: &[ComponentObjects]) -> Result<(), DbError> {
+    let present: Vec<String> = found
+        .iter()
+        .flat_map(|objects| {
+            let mut held = Vec::new();
+            if objects.schema_present {
+                held.push(format!("schema '{}'", objects.schema));
+            }
+            if objects.owner_present {
+                held.push(format!("owner role '{}'", objects.owner));
+            }
+            held
+        })
+        .collect();
+    if present.is_empty() {
+        return Ok(());
+    }
+    Err(DbError::CreatePreconditionFailed(present.join(", ")))
+}
+
+/// Refuse to upgrade when a schema or its owner is missing.
+pub fn require_present(found: &[ComponentObjects]) -> Result<(), DbError> {
+    let absent: Vec<String> = found
+        .iter()
+        .flat_map(|objects| {
+            let mut held = Vec::new();
+            if !objects.schema_present {
+                held.push(format!("schema '{}'", objects.schema));
+            }
+            if !objects.owner_present {
+                held.push(format!("owner role '{}'", objects.owner));
+            }
+            held
+        })
+        .collect();
+    if absent.is_empty() {
+        return Ok(());
+    }
+    Err(DbError::UpgradePreconditionFailed(absent.join(", ")))
+}
+
 /// Create every registered component's schema, owner role and app role on the
 /// privileged pool. Each component provisions its own entry's app role — not
 /// the privileged entry's — so serving `SET ROLE` targets what was created.

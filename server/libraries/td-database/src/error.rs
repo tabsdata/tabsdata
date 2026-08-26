@@ -85,6 +85,17 @@ pub enum DbError {
     )]
     MissingServerEntry = 5025,
     #[error(
+        "Cannot create the database: {0} already present. Create provisions a \
+         fresh database; run 'upgrade' to bring an existing one up to date, or \
+         'drop --force' to remove it first."
+    )]
+    CreatePreconditionFailed(String) = 5044,
+    #[error(
+        "Cannot upgrade the database: {0} missing. Upgrade works on an existing \
+         database; run 'create' to provision it first."
+    )]
+    UpgradePreconditionFailed(String) = 5045,
+    #[error(
         "No configuration entry for database component '{0}'. Every registered \
          component needs its own entry under `database:` with its backend \
          connection and credentials."

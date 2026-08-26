@@ -163,6 +163,35 @@ impl AdminPool {
         Ok(())
     }
 
+    pub async fn schema_exists(&self, schema: &str) -> Result<bool, DbError> {
+        self.object_exists("pg_namespace", "nspname", schema).await
+    }
+
+    pub async fn role_exists(&self, role: &str) -> Result<bool, DbError> {
+        self.object_exists("pg_roles", "rolname", role).await
+    }
+
+    async fn object_exists(
+        &self,
+        catalog: &str,
+        column: &str,
+        name: &str,
+    ) -> Result<bool, DbError> {
+        if !matches!(self.kind().into(), Backend::Postgres) {
+            return Ok(false);
+        }
+        let found: Option<bool> = Query::select()
+            .expr(Expr::cust_with_values(
+                format!("EXISTS (SELECT FROM {catalog} WHERE {column} = $1)"),
+                [name],
+            ))
+            .build_query_scalar()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::SqlError)?;
+        Ok(found.unwrap_or(false))
+    }
+
     /// Refuse a PostgreSQL server older than 15: the schema emits
     /// `security_invoker` views (15+); without them views would evaluate as
     /// their superuser owner and bypass project isolation.
