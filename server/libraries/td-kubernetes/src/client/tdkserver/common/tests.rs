@@ -166,3 +166,9 @@ fn parse_yes_no_rejects_other_strings() {
 fn confirm_short_circuits_when_skip_is_set() {
     assert!(confirm(true, "should not prompt").unwrap());
 }
+#[test]
+fn skipping_bypasses_the_terminal_requirement() {
+    assert!(confirm(true, "should not prompt").unwrap());
+    assert!(confirm_name(true, "an-instance").unwrap());
+    assert!(confirm_at_leisure(true, "should not prompt").unwrap());
+}

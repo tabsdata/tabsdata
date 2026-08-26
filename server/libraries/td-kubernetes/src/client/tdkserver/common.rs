@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, IsTerminal, Write};
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -19,6 +19,8 @@ pub const PROMPT_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub const LONG_PROMPT_TIMEOUT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
+const YES_FLAG: &str = "--yes";
+
 const MAX_INSTANCE_NAME_LENGTH: usize = 256;
 
 const FORBIDDEN_CHARACTERS: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
@@ -27,6 +29,22 @@ const RESERVED_WINDOWS_NAMES: &[&str] = &[
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
+
+pub fn interactive() -> bool {
+    io::stdin().is_terminal() && io::stdout().is_terminal()
+}
+
+fn require_interactive(what: &str) -> CommandResult<bool> {
+    if interactive() {
+        return Ok(true);
+    }
+    cerror!(
+        "This command needs to ask {what}, but it is not running in a \
+         terminal, so nothing can answer. Pass {YES_FLAG} to accept every \
+         prompt up front when running unattended."
+    );
+    abort(ExitStatus::Aborted)
+}
 
 pub fn validate_instance_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
@@ -142,6 +160,7 @@ pub fn confirm_name(skip: bool, name: &str) -> CommandResult<bool> {
     if skip {
         return Ok(true);
     }
+    require_interactive("you to type the instance name")?;
     let receiver = stdin_lines().lock().unwrap();
     let started = std::time::Instant::now();
     loop {
@@ -185,6 +204,14 @@ pub fn confirm(skip: bool, message: &str) -> CommandResult<bool> {
 }
 
 pub async fn confirm_resume(what: &str, waited: Duration) -> bool {
+    if !interactive() {
+        cerror!(
+            "The wait for {what} exceeded its budget and there is no terminal \
+             to ask whether to keep waiting. Pass {YES_FLAG} to keep waiting \
+             when running unattended."
+        );
+        return false;
+    }
     let message = format!(
         "The wait for {what} exceeded {}. Continue waiting?",
         format_duration(Duration::from_secs(waited.as_secs()))
@@ -220,6 +247,7 @@ fn confirm_within(skip: bool, message: &str, timeout: Duration) -> CommandResult
     if skip {
         return Ok(true);
     }
+    require_interactive("for confirmation")?;
     match prompt_yes_no_with_timeout(message, timeout) {
         Confirmation::Yes => Ok(true),
         Confirmation::No => Ok(false),
