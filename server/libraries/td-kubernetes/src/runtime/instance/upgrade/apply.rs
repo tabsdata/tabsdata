@@ -10,7 +10,7 @@ use regex::Regex;
 use tracing::info;
 
 use crate::base::constants::{
-    Family, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    FOREIGN_ASSETS, Family, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::upgrade::UpgradeError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
@@ -20,6 +20,7 @@ use crate::kube::api::configmap::{
 };
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::Manifest;
+use crate::runtime::instance::profile::resolve_foreign_path;
 use crate::runtime::instance::upgrade::catalog::read_content;
 use crate::runtime::instance::upgrade::plan::Step;
 use crate::runtime::instance::upgrade::spec::{
@@ -89,6 +90,41 @@ pub async fn apply_step(
             Ok(touched)
         }
     }
+}
+
+pub async fn apply_foreign_assets(
+    context: &KubeContext,
+    version: &str,
+    manifest: &mut Manifest,
+    verbose: bool,
+) -> CommandResult<usize> {
+    let family = &KPROFILE_ASSETS_FAMILY;
+    let mut applied = 0;
+    for foreign in FOREIGN_ASSETS {
+        let file = foreign.asset();
+        let source = resolve_foreign_path(*foreign, verbose)?;
+        let content = std::fs::read_to_string(&source).map_err(|error| {
+            UpgradeError::ForeignAssetReadFailed {
+                path: source.display().to_string(),
+                cause: error.to_string(),
+            }
+        })?;
+        let name = to_kube_resource_name(family.scope, id_from_file(file), family.kind, file)?;
+        write_configmap(context, &name, file, content, family, version).await?;
+        manifest.stamp_entry(
+            &format!("{}/{file}", family.folder),
+            version,
+            Utc::now(),
+            true,
+        );
+        applied += 1;
+        info!(
+            "  {}/{file} -> applied from {}",
+            family.folder,
+            source.display()
+        );
+    }
+    Ok(applied)
 }
 
 async fn write_configmap(

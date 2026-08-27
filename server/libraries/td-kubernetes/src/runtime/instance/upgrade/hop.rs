@@ -17,7 +17,7 @@ use crate::kube::api::{configmap as configmap_api, secret as secret_api};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::{MANIFEST_FILE, Manifest, serialize_manifest};
 use crate::runtime::instance::profile::bundle::Axis;
-use crate::runtime::instance::upgrade::apply::apply_step;
+use crate::runtime::instance::upgrade::apply::{apply_foreign_assets, apply_step};
 use crate::runtime::instance::upgrade::catalog::{load_spec, resolve_kupgrade_path};
 use crate::runtime::instance::upgrade::inventory::Hop;
 use crate::runtime::instance::upgrade::latch::verify;
@@ -68,7 +68,7 @@ pub async fn upgrade_resources(
     for hop in hops {
         verify(context, instance, lock).await?;
         let bar = reporter.step(&format!("Upgrading to {}", hop.to));
-        let walked = match walk(context, instance, &root, hop, axes, preferred).await {
+        let walked = match walk(context, instance, &root, hop, axes, preferred, verbose).await {
             Ok(walked) => walked,
             Err(error) => {
                 bar.fail();
@@ -92,6 +92,7 @@ pub async fn walk(
     hop: &Hop,
     axes: &[Axis],
     preferred: &[&'static str],
+    verbose: bool,
 ) -> CommandResult<Walked> {
     let mut read = require_manifest(context, instance).await?;
     let mut walked = Walked {
@@ -110,6 +111,8 @@ pub async fn walk(
             info!("  {} -> {:?}", step.entry, step.action);
         }
     }
+
+    walked.applied += apply_foreign_assets(context, &hop.to, &mut read.manifest, verbose).await?;
 
     for path in untouched(&read.manifest, &hop.to) {
         read.manifest.stamp_entry(&path, &hop.to, Utc::now(), false);

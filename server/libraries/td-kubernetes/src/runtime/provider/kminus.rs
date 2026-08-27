@@ -15,7 +15,7 @@ use indicatif::MultiProgress;
 use once_cell::sync::OnceCell;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::time::Duration;
-use td_common::os::{EXE_SUFFIX, name_program};
+use td_common::os::EXE_SUFFIX;
 use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 use td_error::TdError;
@@ -919,7 +919,9 @@ impl KminusProvider {
         reporter: &dyn Reporter,
     ) -> CommandResult {
         let (step_label, done_label) = subcommand.step_labels();
-        let dbmanager = name_program(&PathBuf::from(DBMANAGER_BINARY));
+        let dbmanager = resolve_python_binary(DBMANAGER_BINARY).map_err(|error| {
+            ProviderError::BinaryNotFound(DBMANAGER_BINARY.to_owned(), error.to_string())
+        })?;
         let command_label = format!("{} {}", dbmanager.display(), subcommand.args().join(" "));
         let step = reporter.step(step_label);
         let mut command = std::process::Command::new(&dbmanager);

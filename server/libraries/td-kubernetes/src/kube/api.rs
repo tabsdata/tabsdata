@@ -47,6 +47,7 @@ use std::future::Future;
 use std::pin::pin;
 use std::time::Duration;
 
+use crate::base::constants::{JOB_CONDITION_FAILED, JOB_CONDITION_STATUS_TRUE, POD_PHASE_FAILED};
 use humantime::format_duration;
 use k8s_openapi::Resource;
 use k8s_openapi::api::apps::v1::Deployment;
@@ -117,10 +118,55 @@ where
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AwaitGoal {
+    Presence,
+    Absence,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AwaitPatience {
     Bounded,
     Resumable,
     Forever,
+}
+
+pub trait Failable {
+    fn has_failed(&self) -> bool;
+}
+
+impl Failable for Job {
+    fn has_failed(&self) -> bool {
+        self.status
+            .as_ref()
+            .and_then(|status| status.conditions.as_ref())
+            .is_some_and(|conditions| {
+                conditions.iter().any(|condition| {
+                    condition.type_ == JOB_CONDITION_FAILED
+                        && condition.status == JOB_CONDITION_STATUS_TRUE
+                })
+            })
+    }
+}
+
+impl Failable for Pod {
+    fn has_failed(&self) -> bool {
+        self.status
+            .as_ref()
+            .and_then(|status| status.phase.as_deref())
+            == Some(POD_PHASE_FAILED)
+    }
+}
+
+impl Failable for Deployment {
+    fn has_failed(&self) -> bool {
+        false
+    }
+}
+
+impl Failable for CronJob {
+    fn has_failed(&self) -> bool {
+        false
+    }
 }
 
 pub async fn await_condition_with_patience<K>(
@@ -129,12 +175,19 @@ pub async fn await_condition_with_patience<K>(
     name: &str,
     condition: impl Condition<K> + Clone,
     patience: AwaitPatience,
+    goal: AwaitGoal,
 ) -> Result<Option<K>, WaitError>
 where
-    K: Clone + Debug + DeserializeOwned + KubeResource + Send + 'static,
+    K: Clone + Debug + DeserializeOwned + KubeResource + Failable + Send + 'static,
 {
     let settled = await_condition_inner(api, name, condition, patience).await;
-    if matches!(settled, Err(_) | Ok(None)) {
+    let failed = match (&settled, goal) {
+        (Err(_), _) => true,
+        (Ok(None), AwaitGoal::Presence) => true,
+        (Ok(None), AwaitGoal::Absence) => false,
+        (Ok(Some(resource)), _) => resource.has_failed(),
+    };
+    if failed {
         diagnostics::report_workload(context, name).await;
     }
     settled

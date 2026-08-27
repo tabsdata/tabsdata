@@ -17,3 +17,235 @@ pods:
       action: replace
     function-publisher_kminus.yaml:
       action: replace
+  cron-publisher.yaml:
+    cron-publisher_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    cron-publisher_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    cron-publisher_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    cron-publisher_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+  dbmanager.yaml:
+    dbmanager_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    dbmanager_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    dbmanager_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    dbmanager_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+  function-subscriber.yaml:
+    function-subscriber_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    function-subscriber_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    function-subscriber_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    function-subscriber_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+  function-transformer.yaml:
+    function-transformer_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    function-transformer_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    function-transformer_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    function-transformer_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+  inspector.yaml:
+    inspector_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    inspector_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    inspector_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    inspector_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+  pymanager.yaml:
+    pymanager_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    pymanager_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    pymanager_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    pymanager_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+  stream-publisher.yaml:
+    stream-publisher_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    stream-publisher_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    stream-publisher_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    stream-publisher_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+  venvloader.yaml:
+    venvloader_docker.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    venvloader_eks.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    venvloader_fargate.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600
+    venvloader_kminus.yaml:
+      action: modify
+      changes:
+        - op: modify-leaf-value-if
+          leaf: spec.ttlSecondsAfterFinished
+          from: 1800
+          to: 3600

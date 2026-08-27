@@ -13,7 +13,7 @@ use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeCronJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    AwaitPatience, await_condition_with_patience, label_tabsdata, owner_ref_for_cronjob,
+    AwaitGoal, AwaitPatience, await_condition_with_patience, label_tabsdata, owner_ref_for_cronjob,
     tabsdata_non_ephemeral_selector, tabsdata_selector, tabsdata_worker_selector,
 };
 use crate::kube::context::KubeContext;
@@ -143,7 +143,14 @@ pub async fn await_cronjob_condition(
     name: &str,
     condition: impl Condition<CronJob> + Clone + Send + Sync + 'static,
 ) -> Result<Option<CronJob>, KubernetesError> {
-    await_cronjob_condition_with(context, name, condition, AwaitPatience::Bounded).await
+    await_cronjob_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Bounded,
+        AwaitGoal::Presence,
+    )
+    .await
 }
 
 pub async fn await_cronjob_condition_resumable(
@@ -151,7 +158,29 @@ pub async fn await_cronjob_condition_resumable(
     name: &str,
     condition: impl Condition<CronJob> + Clone + Send + Sync + 'static,
 ) -> Result<Option<CronJob>, KubernetesError> {
-    await_cronjob_condition_with(context, name, condition, AwaitPatience::Resumable).await
+    await_cronjob_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Resumable,
+        AwaitGoal::Presence,
+    )
+    .await
+}
+
+pub async fn await_cronjob_absent_resumable(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<CronJob> + Clone + Send + Sync + 'static,
+) -> Result<Option<CronJob>, KubernetesError> {
+    await_cronjob_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Resumable,
+        AwaitGoal::Absence,
+    )
+    .await
 }
 
 async fn await_cronjob_condition_with(
@@ -159,9 +188,10 @@ async fn await_cronjob_condition_with(
     name: &str,
     condition: impl Condition<CronJob> + Clone + Send + Sync + 'static,
     patience: AwaitPatience,
+    goal: AwaitGoal,
 ) -> Result<Option<CronJob>, KubernetesError> {
     let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_with_patience(context, api, name, condition, patience)
+    await_condition_with_patience(context, api, name, condition, patience, goal)
         .await
         .map_err(|error| {
             KubeCronJobError::AwaitFailed {

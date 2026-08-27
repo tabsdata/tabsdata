@@ -41,6 +41,15 @@ const FULL_FLAG: &str = "--full";
 const RUST_LOG: &str = "RUST_LOG";
 const RUST_LOG_DIRECTIVES: &str = "info,kube_client::client::tls=error,td_common::os=error";
 
+const FILE_LOG_DIRECTIVES: &[&str] = &[
+    "debug",
+    "kube_client::client::builder=info",
+    "hyper_util=info",
+    "hyper_rustls=info",
+    "tower=info",
+    "rustls=info",
+];
+
 const COMPATIBILITY_PY: &str = include_str!(concat!(
     workspace_root!(),
     "/client/platform/src/main/python/tabsdata/_utils/compatibility.py"
@@ -115,7 +124,10 @@ fn tdkserver_log_profile() -> LogProfile {
         format: Some(LogFormat::CompactColoredSpinner),
         sinks: vec![LogSinkConfig {
             file: log_file_path(),
-            directives: vec![format!("{}", Level::DEBUG)],
+            directives: FILE_LOG_DIRECTIVES
+                .iter()
+                .map(|directive| (*directive).to_owned())
+                .collect(),
             output: LogSinkOutput::File,
             format: Some(LogFormat::Full),
             without_time: Some(false),

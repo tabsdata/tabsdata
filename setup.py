@@ -223,13 +223,14 @@ for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
     yaml_files_tabsdatak.append(str(relative_path))
 
 console_scripts: list[str] = [
-    "tdk = tabsdatak.cli.td.cli:cli",
     "td_apiready = tabsdatak.server._tdserver.workers.apiready:main",
     "td_conn_resources_extractor = "
     "tabsdatak.server._tdserver.workers.conn_resources_extractor:main",
     "td_dbready = tabsdatak.server._tdserver.workers.dbready:main",
-    "td_resource = tabsdatak.common._resources.reader:main",
     "td_pyvenv = tabsdatak.common._interpreter.python.pyvenv:main",
+    "td_resource = tabsdatak.common._resources.reader:main",
+    "td_tdinfo = tabsdatak.server._tdserver.workers.tdinfo:main",
+    "tdk = tabsdatak.cli.td.cli:cli",
     "tdk_check = tabsdatak.server._tdserver.render.check:main",
     "tdk_table = tabsdatak.server._tdserver.render.table:main",
     "tdk_yaml = tabsdatak.server._tdserver.render.yaml:main",

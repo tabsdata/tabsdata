@@ -166,3 +166,29 @@ def test_perform_records_failure_and_raises_when_icon_missing(tmp_path, monkeypa
     # Neither file is written for a connector whose icon could not be read.
     assert not (out / "tabsdatak-conn-broken-BrokenSrc.svg").exists()
     assert not (out / "tabsdatak-conn-broken-BrokenSrc.json").exists()
+
+
+# --- Registry invariants --------------------------------------------------
+
+
+def test_defs_sharing_a_conn_declare_the_same_icon():
+    """The UI resolves a collection's icon from its connection, which names
+    only the ``Conn`` class. Several defs may share one ``Conn`` (Salesforce's
+    SOSQL and report sources do), and the UI cannot tell them apart, so they
+    must agree on the icon for that resolution to be correct."""
+    icons: dict[type, set[str | None]] = {}
+    for definition in extractor.available_definitions():
+        conn = getattr(definition, "conn", None)
+        if conn is None:
+            continue
+        icons.setdefault(conn, set()).add(getattr(definition, "icon", None))
+
+    divergent = {
+        conn.__qualname__: sorted(str(icon) for icon in declared)
+        for conn, declared in icons.items()
+        if len(declared) > 1
+    }
+    assert not divergent, (
+        "connection classes whose defs declare different icons; the UI resolves "
+        f"one icon per connection and would show the wrong one: {divergent}"
+    )

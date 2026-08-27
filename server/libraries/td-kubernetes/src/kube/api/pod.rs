@@ -24,9 +24,9 @@ use crate::base::constants::{
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    AwaitPatience, LabelFilter, await_condition_with_patience, label_tabsdata, owner_ref_for_pod,
-    tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector, tabsdata_selector,
-    tabsdata_worker_selector,
+    AwaitGoal, AwaitPatience, LabelFilter, await_condition_with_patience, label_tabsdata,
+    owner_ref_for_pod, tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector,
+    tabsdata_selector, tabsdata_worker_selector,
 };
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
@@ -234,7 +234,14 @@ pub async fn await_pod_condition(
     name: &str,
     condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
 ) -> Result<Option<Pod>, KubernetesError> {
-    await_pod_condition_with(context, name, condition, AwaitPatience::Bounded).await
+    await_pod_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Bounded,
+        AwaitGoal::Presence,
+    )
+    .await
 }
 
 pub async fn await_pod_condition_resumable(
@@ -242,7 +249,29 @@ pub async fn await_pod_condition_resumable(
     name: &str,
     condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
 ) -> Result<Option<Pod>, KubernetesError> {
-    await_pod_condition_with(context, name, condition, AwaitPatience::Resumable).await
+    await_pod_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Resumable,
+        AwaitGoal::Presence,
+    )
+    .await
+}
+
+pub async fn await_pod_absent_resumable(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
+) -> Result<Option<Pod>, KubernetesError> {
+    await_pod_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Resumable,
+        AwaitGoal::Absence,
+    )
+    .await
 }
 
 async fn await_pod_condition_with(
@@ -250,9 +279,10 @@ async fn await_pod_condition_with(
     name: &str,
     condition: impl Condition<Pod> + Clone + Send + Sync + 'static,
     patience: AwaitPatience,
+    goal: AwaitGoal,
 ) -> Result<Option<Pod>, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_with_patience(context, api, name, condition, patience)
+    await_condition_with_patience(context, api, name, condition, patience, goal)
         .await
         .map_err(|error| {
             KubePodError::AwaitFailed {

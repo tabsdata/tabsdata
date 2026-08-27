@@ -3,6 +3,7 @@
 //
 
 use super::*;
+use crate::base::constants::TABSDATA_REQUIREMENTS_LOCK_ASSET;
 
 fn operation(leaf: &str, from: serde_yaml::Value, to: serde_yaml::Value) -> Operation {
     Operation::ModifyLeafValueIf(ModifyLeafValueIf {
@@ -672,5 +673,84 @@ fn an_addressed_scope_can_target_a_nested_anchor_over_the_first_one() {
             .and_then(|node| node.get("tabsdata.com/aiagent")),
         Some(&serde_yaml::Value::Bool(true)),
         "the addressed nested anchor must gain the sibling: {rendered}"
+    );
+}
+
+#[test]
+fn the_shipped_ttl_bump_rewrites_the_previous_retention() {
+    let spec = crate::runtime::instance::upgrade::spec::deserialize_spec(
+        "2.0.2",
+        include_str!(concat!(
+            tm_workspace::workspace_root!(),
+            "/variant/resources/kupgrade/upgrades/2.0.2.yaml"
+        )),
+    )
+    .expect("the shipped 2.0.2 spec parses");
+    let group = spec
+        .pods
+        .get("pymanager.yaml")
+        .expect("pymanager is covered by the ttl bump");
+    let action = group
+        .get("pymanager_kminus.yaml")
+        .expect("its kminus variant is covered");
+
+    let before = "apiVersion: batch/v1\nkind: Job\nspec:\n  backoffLimit: 0\n  \
+                  ttlSecondsAfterFinished: 1800\n";
+    let (after, touched) =
+        modify("2.0.2", "pods/pymanager.yaml", before, action.changes()).expect("modifies");
+    assert!(touched, "a 1800 retention must be rewritten");
+    assert!(
+        after.contains("ttlSecondsAfterFinished: 3600"),
+        "the retention must land on an hour: {after}"
+    );
+
+    let (again, retouched) =
+        modify("2.0.2", "pods/pymanager.yaml", &after, action.changes()).expect("modifies");
+    assert!(!retouched, "re-running the hop must be a no-op: {again}");
+}
+
+#[test]
+fn the_requirements_lock_is_a_foreign_asset_taken_from_the_installed_package() {
+    let foreign = FOREIGN_ASSETS
+        .iter()
+        .find(|foreign| foreign.asset() == TABSDATA_REQUIREMENTS_LOCK_ASSET)
+        .expect("the requirements lock travels with the installed package, not the upgrade");
+    assert!(matches!(
+        foreign.origin(),
+        crate::base::constants::ForeignAssetOrigin::TabsdataResource(_)
+    ));
+}
+
+#[test]
+fn a_foreign_asset_targets_the_configmap_the_pods_mount() {
+    let family = &KPROFILE_ASSETS_FAMILY;
+    let file = TABSDATA_REQUIREMENTS_LOCK_ASSET;
+    let name = to_kube_resource_name(family.scope, id_from_file(file), family.kind, file)
+        .expect("names the configmap");
+    assert_eq!(
+        name,
+        "td-app-tabsdata-requirements-asset-tabsdata-requirements.txt"
+    );
+}
+
+#[test]
+fn a_foreign_asset_is_stamped_under_the_assets_family() {
+    let entry = format!(
+        "{}/{}",
+        KPROFILE_ASSETS_FAMILY.folder, TABSDATA_REQUIREMENTS_LOCK_ASSET
+    );
+    let mut manifest = Manifest::initial_install(
+        "2.0.0",
+        Utc::now(),
+        [(entry.clone(), "kprofile".to_owned())],
+    );
+    manifest.stamp_entry(&entry, "2.0.1", Utc::now(), true);
+    assert_eq!(
+        manifest
+            .entries
+            .get(&entry)
+            .expect("the asset is tracked")
+            .version,
+        "2.0.1"
     );
 }

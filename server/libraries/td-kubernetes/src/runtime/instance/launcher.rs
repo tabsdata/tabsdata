@@ -32,6 +32,7 @@ use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::widgets::phase_spinner_in;
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
+use crate::kube::api::Failable;
 use crate::kube::api::deployment::is_deployment_available;
 #[cfg(feature = "enterprise")]
 use crate::kube::api::secret::get_secret;
@@ -560,15 +561,7 @@ fn is_job_settled() -> impl Condition<Job> + Clone {
 }
 
 fn has_failed_condition(job: &Job) -> bool {
-    let Some(status) = job.status.as_ref() else {
-        return false;
-    };
-    let Some(conditions) = status.conditions.as_ref() else {
-        return false;
-    };
-    conditions.iter().any(|condition| {
-        condition.type_ == JOB_CONDITION_FAILED && condition.status == JOB_CONDITION_STATUS_TRUE
-    })
+    job.has_failed()
 }
 
 fn validate_pod(key: &str, errors: Vec<ValidationError>) -> CommandResult {
@@ -1064,7 +1057,7 @@ async fn clear_settled_job(
         .into());
     }
     job_api::delete_job(context, name).await?;
-    job_api::await_job_condition_resumable(context, name, is_job_absent()).await?;
+    job_api::await_job_absent_resumable(context, name, is_job_absent()).await?;
     Ok(true)
 }
 
@@ -1195,7 +1188,7 @@ async fn await_database_workload_absent(
 ) -> CommandResult {
     match workload {
         ServerWorkload::Deployment(_) => {
-            deployment_api::await_deployment_condition_resumable(
+            deployment_api::await_deployment_absent_resumable(
                 context,
                 name,
                 is_deployment_absent(),
@@ -1203,7 +1196,7 @@ async fn await_database_workload_absent(
             .await?;
         }
         ServerWorkload::Pod(_) => {
-            pod_api::await_pod_condition_resumable(context, name, is_pod_absent()).await?;
+            pod_api::await_pod_absent_resumable(context, name, is_pod_absent()).await?;
         }
     }
     Ok(())
@@ -1410,10 +1403,7 @@ fn is_pod_settled() -> impl Condition<Pod> + Clone {
 }
 
 fn has_failed_phase(pod: &Pod) -> bool {
-    pod.status
-        .as_ref()
-        .and_then(|status| status.phase.as_deref())
-        == Some(POD_PHASE_FAILED)
+    pod.has_failed()
 }
 
 #[cfg(test)]

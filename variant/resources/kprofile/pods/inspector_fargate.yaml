@@ -21,7 +21,7 @@ metadata:
     tabsdata.com/sequence: "20"
 spec:
   backoffLimit: 0
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:

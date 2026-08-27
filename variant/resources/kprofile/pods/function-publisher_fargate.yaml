@@ -22,7 +22,7 @@ metadata:
     tabsdata.com/worker: function
 spec:
   backoffLimit: 0
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
@@ -717,9 +717,9 @@ spec:
             - name: work
               mountPath: /tabsdata/work
         - name: 0110-prep-upload-raw
-          image: function
+          image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_prep_upload_raw${{system:tdk_exe_suffix}}"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_upload_raw"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -778,9 +778,9 @@ spec:
             - name: shared
               mountPath: /tabsdata/shared
         - name: 0120-run-transporter-raw-upload
-          image: function
+          image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_transporter${{system:tdk_exe_suffix}}"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_transporter"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared

@@ -221,4 +221,6 @@ pub enum UpgradeError {
         path: String,
         cause: String,
     } = 5345,
+    #[error("Could not read the foreign asset at '{path}': {cause}.")]
+    ForeignAssetReadFailed { path: String, cause: String } = 5355,
 }

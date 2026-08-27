@@ -14,8 +14,8 @@ use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeDeploymentError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    AwaitPatience, await_condition_with_patience, label_tabsdata, owner_ref_for_deployment,
-    tabsdata_non_ephemeral_selector, tabsdata_selector,
+    AwaitGoal, AwaitPatience, await_condition_with_patience, label_tabsdata,
+    owner_ref_for_deployment, tabsdata_non_ephemeral_selector, tabsdata_selector,
 };
 use crate::kube::context::KubeContext;
 
@@ -139,7 +139,14 @@ pub async fn await_deployment_condition(
     name: &str,
     condition: impl Condition<Deployment> + Clone + Send + Sync + 'static,
 ) -> Result<Option<Deployment>, KubernetesError> {
-    await_deployment_condition_with(context, name, condition, AwaitPatience::Bounded).await
+    await_deployment_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Bounded,
+        AwaitGoal::Presence,
+    )
+    .await
 }
 
 pub async fn await_deployment_condition_resumable(
@@ -147,7 +154,29 @@ pub async fn await_deployment_condition_resumable(
     name: &str,
     condition: impl Condition<Deployment> + Clone + Send + Sync + 'static,
 ) -> Result<Option<Deployment>, KubernetesError> {
-    await_deployment_condition_with(context, name, condition, AwaitPatience::Resumable).await
+    await_deployment_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Resumable,
+        AwaitGoal::Presence,
+    )
+    .await
+}
+
+pub async fn await_deployment_absent_resumable(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Deployment> + Clone + Send + Sync + 'static,
+) -> Result<Option<Deployment>, KubernetesError> {
+    await_deployment_condition_with(
+        context,
+        name,
+        condition,
+        AwaitPatience::Resumable,
+        AwaitGoal::Absence,
+    )
+    .await
 }
 
 async fn await_deployment_condition_with(
@@ -155,9 +184,10 @@ async fn await_deployment_condition_with(
     name: &str,
     condition: impl Condition<Deployment> + Clone + Send + Sync + 'static,
     patience: AwaitPatience,
+    goal: AwaitGoal,
 ) -> Result<Option<Deployment>, KubernetesError> {
     let api: Api<Deployment> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition_with_patience(context, api, name, condition, patience)
+    await_condition_with_patience(context, api, name, condition, patience, goal)
         .await
         .map_err(|error| {
             KubeDeploymentError::AwaitFailed {
