@@ -16,7 +16,7 @@ pub async fn assert_current_password<P: Deref<Target = String>>(
 ) -> Result<(), TdError> {
     password::verify_password(password_hash.as_str(), password.deref())
         .then_some(())
-        .ok_or({
+        .ok_or_else(|| {
             error!("Authentication failed: invalid password");
             AuthError::AuthenticationFailed.into()
         })
