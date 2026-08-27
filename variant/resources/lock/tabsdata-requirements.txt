@@ -14,7 +14,7 @@ azure-storage-blob==12.28.0
 base32hex==1.0.2
 boto3==1.43.78
 boto3-stubs==1.43.78
-botocore==1.43.79
+botocore==1.43.81
 botocore-stubs==1.43.67
 build==1.5.0
 cachetools==6.2.6
@@ -46,8 +46,8 @@ google-cloud-core==2.7.0
 google-cloud-storage==3.10.0
 google-cloud-storage-control==1.10.0
 google-crc32c==1.8.0
-google-resumable-media==2.10.1
-googleapis-common-protos==1.75.1
+google-resumable-media==2.10.2
+googleapis-common-protos==1.75.2
 greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.5
 grpcio==1.83.0
@@ -68,7 +68,7 @@ lxml==6.1.2
 lz4==4.4.5
 markdown-it-py==4.2.0
 mdurl==0.1.2
-mmh3==5.2.1
+mmh3==5.3.0
 more-itertools==11.1.0
 mypy-boto3-glue==1.43.72
 mysql-replication==1.0.15
@@ -88,7 +88,7 @@ platformdirs==4.9.4
 polars==1.39.3
 polars-runtime-32==1.39.3
 prompt-toolkit==3.0.52
-proto-plus==1.28.3
+proto-plus==1.28.4
 protobuf==6.33.6
 py-cpuinfo==9.0.0
 pyarrow==23.0.1
