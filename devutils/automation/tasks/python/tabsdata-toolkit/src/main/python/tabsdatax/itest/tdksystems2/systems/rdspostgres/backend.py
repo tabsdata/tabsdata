@@ -14,7 +14,13 @@ The RDS master user is not a superuser, which shapes the domain DDL: it can only
 create a database owned by a role it is a member of, so the owner role is created
 and granted to the master *before* the database. The owner also gets
 ``CREATEROLE`` so a test can add roles of its own and grant them privileges on
-its database.
+its database. Those roles are the owner's to drop: it is the recorded grantor of
+the memberships it handed out, so (PostgreSQL 16+) it cannot be dropped while
+they exist -- deleting a domain drops the roles the owner administers between the
+database and the owner. A purge that died between those drops used to leave the
+owner behind with no database, invisible to a listing of ``pg_database``; owner
+roles the master is a member of are listed as domain entities too, so such a
+remnant is purged (and never collided with by a create) like any other domain.
 
 Every URL is TLS-verified (``sslmode=verify-full``). RDS server certificates
 chain to Amazon's own root CAs, which are not in the public trust store, so tdx's
@@ -189,3 +195,35 @@ class RdsPostgres(Postgres):
             f'CREATE DATABASE "{db}" OWNER "{user}"',
             f'GRANT ALL PRIVILEGES ON DATABASE "{db}" TO "{user}"',
         ]
+
+    def delete_domain_sql(self, name: str) -> list[str]:
+        # No '%' in any statement: the driver would read it as a placeholder.
+        user = self._login(name)
+        drop_administered_roles = (
+            "DO $$ DECLARE r text; BEGIN "
+            "FOR r IN "
+            "SELECT g.rolname FROM pg_auth_members m "
+            "JOIN pg_roles g ON g.oid = m.roleid "
+            "JOIN pg_roles o ON o.oid = m.member "
+            f"WHERE o.rolname = '{user}' AND m.admin_option "
+            "LOOP EXECUTE 'DROP ROLE ' || quote_ident(r); END LOOP; "
+            "END $$"
+        )
+        return [
+            f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)',
+            drop_administered_roles,
+            f'DROP USER IF EXISTS "{user}"',
+        ]
+
+    def list_schemas_sql(self) -> str:
+        return (
+            "SELECT datname FROM pg_database "
+            "WHERE datistemplate = false AND datname <> 'postgres' "
+            "UNION "
+            "SELECT r.rolname FROM pg_auth_members m "
+            "JOIN pg_roles r ON r.oid = m.roleid "
+            "WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = CURRENT_USER) "
+            "AND NOT starts_with(r.rolname, 'rds_') "
+            "AND NOT starts_with(r.rolname, 'pg_') "
+            "ORDER BY 1"
+        )

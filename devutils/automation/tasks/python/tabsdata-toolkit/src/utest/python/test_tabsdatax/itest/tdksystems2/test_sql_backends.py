@@ -95,6 +95,25 @@ def test_rdspostgres_creates_the_owner_before_the_database():
     assert create[2] == 'CREATE DATABASE "d_x" OWNER "d_x"'
 
 
+def test_rdspostgres_drops_the_roles_the_owner_created_before_the_owner():
+    # The owner is the grantor of the memberships among the roles it created
+    # with CREATEROLE, and PostgreSQL 16+ refuses to drop a grantor with grants
+    # outstanding. A '%' anywhere would be a driver placeholder.
+    delete = systems.get("rdspostgres").delete_domain_sql("d_x")
+    assert delete[0] == 'DROP DATABASE IF EXISTS "d_x" WITH (FORCE)'
+    assert delete[1].startswith("DO $$") and "m.admin_option" in delete[1]
+    assert "o.rolname = 'd_x'" in delete[1] and "DROP ROLE" in delete[1]
+    assert delete[2] == 'DROP USER IF EXISTS "d_x"'
+    assert not any("%" in st for st in delete)
+
+
+def test_rdspostgres_lists_owner_roles_that_outlived_their_database():
+    sql = systems.get("rdspostgres").list_schemas_sql()
+    assert "FROM pg_database" in sql and "UNION" in sql
+    assert "pg_auth_members" in sql and "CURRENT_USER" in sql
+    assert "%" not in sql
+
+
 _RDS_SSL = "sslmode=verify-full"
 _RDS_CA = "sslrootcert=%2Ftmp%2Fbundle.pem"
 
