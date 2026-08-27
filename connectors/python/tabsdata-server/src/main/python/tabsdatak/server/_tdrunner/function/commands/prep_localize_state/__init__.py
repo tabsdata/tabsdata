@@ -40,7 +40,7 @@ __all__ = [
     "main",
 ]
 
-VERSION = "0.1.0"
+VERSION = "2.0.2"
 INFO = (
     "prep-localize-state — generate the transporter request that pulls "
     "input + state-in tables to local, plus the inputs and state manifests"

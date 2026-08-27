@@ -7,6 +7,7 @@ use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::yaml::function::FunctionInfo;
+use td_objects::types::basic::Decorator;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 
@@ -54,6 +55,23 @@ pub(crate) fn build_function_info(
         .build()?;
     let (function_run_location, _) = build_external_location(storage, &path)?;
 
+    // Raw-data location — only publishers ingest, so only they get one. Keyed by
+    // the physical run so each attempt keeps its own copy and any data version
+    // resolves back to the ingested data through its physical_function_run_id.
+    let function_raw = match f.decorator {
+        Decorator::Publisher => {
+            let (path, _) = storage_location
+                .builder(&f.collection_base_path)
+                .collection(&f.collection_id)
+                .function_run(&f.id)
+                .raw()
+                .build()?;
+            let (location, _) = build_external_location(storage, &path)?;
+            Some(location)
+        }
+        Decorator::Transformer | Decorator::Subscriber => None,
+    };
+
     let info = FunctionInfo::builder()
         .project_id(f.project_id)
         .collection_id(f.collection_id)
@@ -69,6 +87,7 @@ pub(crate) fn build_function_info(
         .execution_id(&f.execution_id)
         .execution_name(f.execution.clone())
         .function_data(function_run_location)
+        .function_raw(function_raw)
         .build()?;
     Ok(info)
 }
@@ -153,6 +172,25 @@ mod tests {
         assert!(
             data.contains("/c/c/"),
             "function-run content path should carry collection_base_path '/c': {data}"
+        );
+
+        // Only publishers ingest, so only they are given a raw-data location.
+        assert!(
+            info.function_raw.is_none(),
+            "a transformer must not be given a raw-data location"
+        );
+        let publisher = PhysicalFunctionRunToExecute {
+            decorator: Decorator::Publisher,
+            ..f.clone()
+        };
+        let raw = build_function_info(&storage, &publisher)
+            .unwrap()
+            .function_raw
+            .expect("a publisher is given a raw-data location");
+        let raw = raw.uri.path();
+        assert!(
+            raw.contains(&format!("/w/{}/r", f.id)),
+            "raw data must hang off the physical run that ingested it: {raw}"
         );
 
         // No cross-wiring: the bundle/stage prefixes must not leak into other paths.

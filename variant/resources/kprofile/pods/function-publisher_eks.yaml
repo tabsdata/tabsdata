@@ -718,7 +718,129 @@ spec:
               mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
-        - name: 0110-run-function
+        - name: 0110-prep-upload-raw
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_prep_upload_raw${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --inputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/enriched-inputs-manifest.yaml
+            - --out
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/raw-upload.yaml
+            - --storage-config
+            - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-prep-upload-raw
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0120-run-transporter-raw-upload
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_transporter${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/raw-upload.yaml
+            - --report
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/raw-upload.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
+          volumeMounts:
+            - name: config-run-transporter-raw-upload
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0130-run-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_function"]
@@ -792,7 +914,7 @@ spec:
               mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
-        - name: 0120-prep-upload-state
+        - name: 0140-prep-upload-state
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_upload_state"]
@@ -862,7 +984,7 @@ spec:
               mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
-        - name: 0130-run-transporter-state-upload
+        - name: 0150-run-transporter-state-upload
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_transporter"]
@@ -932,7 +1054,7 @@ spec:
               mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
-        - name: 0140-prep-upload-tables
+        - name: 0160-prep-upload-tables
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_upload_tables"]
@@ -1002,7 +1124,7 @@ spec:
               mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
-        - name: 0150-run-transporter-tables-upload
+        - name: 0170-run-transporter-tables-upload
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_transporter"]
@@ -1223,6 +1345,24 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-prep-upload-raw
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+        - name: config-run-transporter-raw-upload
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
         - name: config-run-function
           projected:
             sources:

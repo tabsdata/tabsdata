@@ -35,7 +35,7 @@ from tabsdatak.server._tdrunner.function.commands.prep_upload_tables.runner impo
 
 __all__ = ["run", "main"]
 
-VERSION = "0.1.0"
+VERSION = "2.0.2"
 INFO = (
     "prep-upload-tables — generate the transporter request that pushes "
     "the user-function's output tables to their declared destinations"

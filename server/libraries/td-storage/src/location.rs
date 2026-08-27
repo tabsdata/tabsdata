@@ -5,8 +5,8 @@
 use crate::{SPath, StorageError};
 use std::fmt::Debug;
 use td_objects::types::basic::{
-    BasePath, BundleId, CollectionId, FunctionVersionId, Partition, PhysicalTableDataVersionId,
-    StageId, StorageVersion, TableId, TableVersionId, TransactionId,
+    BasePath, BundleId, CollectionId, FunctionVersionId, Partition, PhysicalFunctionRunId,
+    PhysicalTableDataVersionId, StageId, StorageVersion, TableId, TableVersionId, TransactionId,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -33,6 +33,7 @@ pub enum StorageLocation {
     /// * `/LOCATION`
     /// * `/LOCATION/c/COLLECTION`
     /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
+    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/IDX.t` (a publisher run's raw data)
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p`
     /// * `/LOCATION/bundles/c/COLLECTION/f/BUNDLE.tar.zst`
@@ -78,6 +79,8 @@ struct LocationBuilderInfo {
     data_version: Option<String>,
     transaction: Option<String>,
     function_version: Option<String>,
+    function_run: Option<String>,
+    raw: bool,
     table: Option<String>,
     table_version: Option<String>,
     partition: Option<String>,
@@ -332,6 +335,16 @@ impl CollectionBuilder {
         builder
     }
 
+    /// Return a [`FunctionRunBuilder`] based on the [`CollectionBuilder`]
+    pub fn function_run(self, function_run: &PhysicalFunctionRunId) -> FunctionRunBuilder {
+        let mut builder = FunctionRunBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.function_run(function_run);
+        builder
+    }
+
     /// Return a [`TransactionBuilder`] based on the [`CollectionBuilder`]
     pub fn transaction(self, transaction: &TransactionId) -> TransactionBuilder {
         let mut builder = TransactionBuilder {
@@ -420,6 +433,46 @@ impl FunctionVersionBuilder {
     }
 
     /// Build the meta collection location.
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
+        self.version_builder.build(
+            &self.info,
+            Some(format!("{}.meta", meta_name.into()).as_str()),
+        )
+    }
+}
+
+/// Builder for a function run's own content: the per-attempt home of what a
+/// run produced aside from its output tables.
+#[derive(Debug)]
+pub struct FunctionRunBuilder {
+    info: LocationBuilderInfo,
+    version_builder: Box<dyn VersionLocationBuilder>,
+}
+
+impl FunctionRunBuilder {
+    /// Set the function run for the function run location.
+    pub fn function_run(&mut self, function_run: &PhysicalFunctionRunId) -> &mut Self {
+        self.info.function_run = Some(function_run.to_string());
+        self
+    }
+
+    /// Address the run's raw data: what a publisher's source plugin ingested,
+    /// stamped with system columns, before the user function saw it. Callers
+    /// append the file name, one per ingested table index.
+    pub fn raw(&mut self) -> &mut Self {
+        self.info.raw = true;
+        self
+    }
+
+    /// Build the function run location.
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
+        self.version_builder.build(&self.info, None)
+    }
+
+    /// Build the meta function run location.
     pub fn build_meta(
         &self,
         meta_name: impl Into<String>,
@@ -554,6 +607,11 @@ impl VersionLocationBuilder for V1LocationBuilder {
                     } else {
                         path = path.child(&format!("{table_version}.t"))?;
                     }
+                }
+            } else if let Some(function_run) = &info.function_run {
+                path = path.child("w")?.child(function_run)?;
+                if info.raw {
+                    path = path.child("r")?;
                 }
             } else if let Some(transaction) = &info.transaction {
                 path = path.child("x")?.child(transaction)?;
@@ -857,6 +915,34 @@ mod tests {
         assert_eq!(
             builder.build_meta("foo")?.0,
             SPath::parse(format!("/checkpoints/c/{collection}/f/{function}-foo.meta"))?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_function_run_raw_builder_v1() -> Result<(), TdError> {
+        let data_location = BasePath::try_from("/L")?;
+        let collection = CollectionId::default();
+        let function_run = PhysicalFunctionRunId::new();
+        assert_eq!(
+            StorageLocation::V1
+                .builder(&data_location)
+                .collection(&collection)
+                .function_run(&function_run)
+                .build()?
+                .0,
+            SPath::parse(format!("/L/c/{collection}/w/{function_run}"))?
+        );
+        assert_eq!(
+            StorageLocation::V1
+                .builder(&data_location)
+                .collection(&collection)
+                .function_run(&function_run)
+                .raw()
+                .build()?
+                .0,
+            SPath::parse(format!("/L/c/{collection}/w/{function_run}/r"))?,
+            "raw data hangs off the run that ingested it, not the function version"
         );
         Ok(())
     }

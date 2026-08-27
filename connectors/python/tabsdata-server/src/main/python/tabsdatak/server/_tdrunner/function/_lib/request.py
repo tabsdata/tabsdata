@@ -57,6 +57,9 @@ class InvalidRequestError(ValueError):
     """The request.yaml is malformed or fails schema validation."""
 
 
+RAW_SUFFIX = ".t"
+
+
 class Location(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -126,6 +129,7 @@ class Info(BaseModel):
     execution_id: str | int
     execution_name: str | None = None
     function_data: Location
+    function_raw: Location | None = None
     scheduled_on: int
 
     @property

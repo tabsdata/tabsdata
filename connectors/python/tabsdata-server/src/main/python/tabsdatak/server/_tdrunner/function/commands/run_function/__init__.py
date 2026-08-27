@@ -60,7 +60,7 @@ __all__ = [
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
-VERSION = "0.1.0"
+VERSION = "2.0.2"
 INFO = (
     "run-function — invoke the decorated function on the prepared inputs "
     "and sink the returned tables to parquet"

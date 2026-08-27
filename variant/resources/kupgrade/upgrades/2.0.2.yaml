@@ -7,3 +7,13 @@ assets:
   venvbuilder.py:
     venvbuilder.py:
       action: replace
+pods:
+  function-publisher.yaml:
+    function-publisher_docker.yaml:
+      action: replace
+    function-publisher_eks.yaml:
+      action: replace
+    function-publisher_fargate.yaml:
+      action: replace
+    function-publisher_kminus.yaml:
+      action: replace

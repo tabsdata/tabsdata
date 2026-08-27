@@ -4,13 +4,14 @@
 
 """stamp-inputs command.
 
-Sits between `run-source-plugin` and `run-function` in the publisher
-chain. Reads the raw parquet files produced by `run-source-plugin`,
-stamps each one with the framework's system columns (per-row UUID
-identifier plus execution/transaction/version/timestamp metadata
-broadcast from the request envelope), and writes the enriched
-parquets under `--enriched-dir`. Emits an updated inputs-manifest at
-`--enriched-inputs-manifest` for `run-function` to consume.
+Follows `run-source-plugin` in the publisher chain. Reads the raw
+parquet files it produced, stamps each one with the framework's system
+columns (per-row UUID identifier plus execution/transaction/version/
+timestamp metadata broadcast from the request envelope), and writes the
+enriched parquets under `--enriched-dir`. Emits an updated
+inputs-manifest at `--enriched-inputs-manifest`, which `prep-upload-raw`
+uses to persist the stamped parquets and `run-function` to consume
+them.
 
 Legacy counterpart: `tabsdata._tabsserver.function.execution_utils.
 store_source_raw_data` — the legacy `_tabsserver` ran this in-process
@@ -37,7 +38,7 @@ __all__ = ["_stamp_file", "run", "main"]
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
-VERSION = "0.1.0"
+VERSION = "2.0.2"
 INFO = (
     "stamp-inputs — stamp framework system columns onto the parquets "
     "produced by run-source-plugin"

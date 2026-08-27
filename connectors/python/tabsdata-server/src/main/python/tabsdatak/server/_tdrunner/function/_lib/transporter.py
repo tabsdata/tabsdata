@@ -96,6 +96,23 @@ def build_upload_tables_request(
             raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
 
 
+def build_upload_raw_request(
+    request: Request,
+    raw_files: list[tuple[int, Path]],
+    storage_config_file: Path,
+) -> Any:
+    match TRANSPORTER_MODE:
+        case 1:
+            return transporter1.build_upload_raw_request(request, raw_files)
+        case 2:
+            option_keys = load_mount_option_keys(storage_config_file)
+            return transporter2.build_upload_raw_request(
+                request, raw_files, option_keys
+            )
+        case _:
+            raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
+
+
 def write_transporter_request(request: Any, path: Path) -> None:
     match TRANSPORTER_MODE:
         case 1:

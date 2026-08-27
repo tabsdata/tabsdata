@@ -19,7 +19,7 @@ from tabsdatak.server._tdrunner.function.commands.run_transporter.runner import 
 
 __all__ = ["run", "main"]
 
-VERSION = "0.1.0"
+VERSION = "2.0.2"
 INFO = "run-transporter — exec td_transporter with the given request YAML"
 MAN = (
     "run-transporter --request <PATH> --report <PATH> --liveness <PATH>\n\n"

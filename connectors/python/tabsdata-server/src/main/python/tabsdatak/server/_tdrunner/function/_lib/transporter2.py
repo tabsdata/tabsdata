@@ -19,6 +19,7 @@ from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_NAME_KEY,
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
+    RAW_SUFFIX,
     AnyRequest,
     InputTable,
     InputTableVersions,
@@ -146,6 +147,24 @@ def build_upload_tables_request(
             local_location(Path(source)),
             handler.location_for(table.location),
         ))
+    return handler.make_request(pairs)
+
+
+def build_upload_raw_request(
+    request: Request,
+    raw_files: list[tuple[int, Path]],
+    option_keys: dict[str, list[str]],
+) -> transporter2.CopyRequest:
+    handler = ServerTransporterHandler2(option_keys)
+    raw = request.info.function_raw
+    pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
+    if raw is not None:
+        base = raw.uri.rstrip("/")
+        for idx, source in raw_files:
+            target = Location(
+                uri=f"{base}/{idx}{RAW_SUFFIX}", env_prefix=raw.env_prefix
+            )
+            pairs.append((local_location(source), handler.location_for(target)))
     return handler.make_request(pairs)
 
 
