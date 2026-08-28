@@ -262,6 +262,8 @@ pub async fn command_quickstart(
         );
     }
 
+    let settings = SettingsContext::settings();
+
     #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
     let mut overrides: HashMap<String, String> = HashMap::new();
     #[cfg(feature = "enterprise")]
@@ -274,7 +276,7 @@ pub async fn command_quickstart(
         }
         if overrides.is_empty()
             && !confirm(
-                false,
+                resolved_yes(yes, &settings).value,
                 "No Anthropic or OpenAI key provided. Proceed with no aiagent keys?",
             )?
         {
@@ -282,7 +284,6 @@ pub async fn command_quickstart(
         }
     }
 
-    let settings = SettingsContext::settings();
     let name = resolved_instance(instance.clone(), &settings)
         .value
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
