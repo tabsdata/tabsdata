@@ -26,6 +26,7 @@ if pid == 0:
 os.waitpid(pid, 0)
 ";
 
+#[cfg(unix)]
 const SPAWN_DESCENDANT_IN_OWN_GROUP_GRACEFUL_ROOT: &str = "\
 import os, signal, sys, time
 marker = sys.argv[1]

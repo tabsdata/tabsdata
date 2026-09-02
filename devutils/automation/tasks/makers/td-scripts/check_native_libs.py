@@ -281,9 +281,9 @@ def check_pe(filepath: str) -> list[LibInfo]:
                     continue
                 if in_deps and stripped.lower().endswith(".dll"):
                     dll_names.add(stripped)
-                elif in_deps and stripped == "":
+                elif in_deps and stripped == "" and dll_names:
                     in_deps = False
-    except FileNotFoundError:
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
     # Fallback to objdump (MinGW)
@@ -304,8 +304,11 @@ def check_pe(filepath: str) -> list[LibInfo]:
                     dll_name = line.split("DLL Name:")[-1].strip()
                     if dll_name:
                         dll_names.add(dll_name)
-        except FileNotFoundError:
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+
+    if not dll_names:
+        logger.warning(f"Could not determine the dependencies of {filepath}")
 
     for dll in sorted(dll_names):
         dll_lower = dll.lower()

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -61,4 +62,5 @@ def stage_parquet(base: Path, name: str, when: datetime | None = None) -> Path:
 
 
 def _absolute(base_path: Path) -> str:
-    return "/" + str(base_path).strip("/")
+    text = Path(base_path).as_posix()
+    return text if re.match(r"[A-Za-z]:/", text) else "/" + text.strip("/")

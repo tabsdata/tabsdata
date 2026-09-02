@@ -154,7 +154,7 @@ def build(setup_file: str) -> None:
                 os.path.join(
                     descriptor.primary_manifest_path,
                     "LICENSE",
-                ),
+                ).replace(os.sep, "/"),
             ),
             python_requires=python_version_spec,
             install_requires=[],

@@ -26,7 +26,7 @@ use crate::core::system::exit::CommandResult;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
     self, apply_detached_flags, apply_subprocess_flags, force_terminate_process_tree,
-    is_alive as process_is_alive, terminate_single_process,
+    is_alive as process_is_alive, seal_own_stdio, terminate_single_process,
 };
 use crate::cwarn;
 use crate::runtime::provider::{Cluster, Transaction};
@@ -297,6 +297,7 @@ impl KminusCluster {
             }
         }
         apply_subprocess_flags(&mut command);
+        seal_own_stdio();
         let mut child = command.spawn().map_err(|error| {
             ProviderError::KminusStartFailed(format!(
                 "spawn '{} {KM_START_SUBCOMMAND}': {error}",

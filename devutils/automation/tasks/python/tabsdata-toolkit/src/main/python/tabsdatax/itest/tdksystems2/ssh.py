@@ -171,7 +171,7 @@ def open_tunnel(
 
 
 def tunnel_alive(pid: int) -> bool:
-    if os.name == "nt":
+    if sys.platform == "win32":
         cp = subprocess.run(
             ["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, encoding="utf-8"
         )
@@ -187,7 +187,7 @@ def close_tunnel(pid: int) -> None:
     """Stop the tunnel process. POSIX signals the whole process group (the ssh
     child was started in its own session); Windows uses ``taskkill /T`` to take
     the tree down. Best-effort — a stale/absent PID is not an error."""
-    if os.name == "nt":
+    if sys.platform == "win32":
         subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
         return
     try:

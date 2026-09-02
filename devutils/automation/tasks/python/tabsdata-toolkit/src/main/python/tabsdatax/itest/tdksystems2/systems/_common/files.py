@@ -106,6 +106,7 @@ class FileBackend:
         raise NotImplementedError
 
     def join(self, root: str, child: str) -> str:
+        root = root.replace("\\", "/")
         return squash_slashes(f"{root.rstrip('/')}/{child}")
 
     # ---- system lifecycle ----

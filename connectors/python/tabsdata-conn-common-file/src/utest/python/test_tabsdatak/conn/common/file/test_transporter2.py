@@ -303,7 +303,7 @@ def test_load_copy_response_rewrites_local_uris_and_aliases_from():
     assert isinstance(f, t.CopiedFile)
     # cloud uri passes through; local file:// uri rewritten to an OS path.
     assert f.from_ == "s3://bucket/in/data-001.csv.gz"
-    assert f.to == "/data/in/data-001.parquet"
+    assert not f.to.startswith("file://")
     assert Path(f.to) == Path("/data/in/data-001.parquet")
     assert f.size == 524288
     assert f.rows == 10000

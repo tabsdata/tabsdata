@@ -146,11 +146,10 @@ class GCSStorage(CloudStorage):
     def __init__(self, config: GCSConfig) -> None:
         self._config = config
 
-    def _client(self):
+    def _credentials(self):
         try:
             import json
 
-            from google.cloud import storage as gcs
             from google.oauth2 import service_account
         except ImportError as e:
             raise ImportError(
@@ -158,10 +157,20 @@ class GCSStorage(CloudStorage):
                 " storage. Install it with:"
                 " pip install google-cloud-storage"
             ) from e
-        creds = service_account.Credentials.from_service_account_info(
+        return service_account.Credentials.from_service_account_info(
             json.loads(self._config.service_account_json)
         )
-        return gcs.Client(credentials=creds)
+
+    def _client(self):
+        try:
+            from google.cloud import storage as gcs
+        except ImportError as e:
+            raise ImportError(
+                "google-cloud-storage is required for GCS cloud"
+                " storage. Install it with:"
+                " pip install google-cloud-storage"
+            ) from e
+        return gcs.Client(credentials=self._credentials())
 
     def upload(self, upload_id: str, local_paths: list[Path]) -> list[str]:
         bucket = self._client().bucket(self._config.bucket)
@@ -221,7 +230,9 @@ class GCSStorage(CloudStorage):
         except ImportError:
             return 0
 
-        sc_client = storage_control_v2.StorageControlClient()
+        sc_client = storage_control_v2.StorageControlClient(
+            credentials=self._credentials()
+        )
         count = 0
         for upload_id in upload_ids:
             folder_name = f"{prefix}{upload_id}".rstrip("/")

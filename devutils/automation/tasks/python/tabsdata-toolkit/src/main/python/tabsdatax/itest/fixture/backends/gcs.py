@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
@@ -19,7 +19,7 @@ class GCSSystem(System):
     system_type: ClassVar[str] = "gcs"
     name: str
     system_kind: str
-    sys_path: Path
+    sys_path: PurePosixPath
     bucket: str
     service_account_key: str
     # S3-interop HMAC keys (optional; present when the system carries S3-compat creds)
@@ -32,8 +32,8 @@ class GCSDomain(Domain):
     system_type: ClassVar[str] = "gcs"
     name: str
     system_kind: str
-    sys_path: Path
-    base_path: Path
+    sys_path: PurePosixPath
+    base_path: PurePosixPath
     prefix: str  # the domain's object-store prefix (== the entity container)
     bucket: str
     service_account_key: str

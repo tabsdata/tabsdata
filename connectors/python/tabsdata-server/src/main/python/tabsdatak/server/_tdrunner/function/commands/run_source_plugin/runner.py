@@ -114,7 +114,7 @@ def _build_manifest_stage_conn(function_stage: Location) -> SimpleNamespace:
     if parsed.scheme == "file":
         from tabsdatak.conn.localfile import LocalFileSrcConn
 
-        base_path = url2pathname(parsed.path)
+        base_path = Path(url2pathname(parsed.path)).as_posix()
         return SimpleNamespace(
             stage_backend=None,
             local=LocalFileSrcConn(base_path=base_path),

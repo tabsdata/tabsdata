@@ -139,7 +139,7 @@ def test_write_requirements_yaml_includes_local_packages(tmp_path):
         local_packages=[Path("/host/a"), Path("/host/b")],
     )
     data = yaml.safe_load(path.read_text())
-    assert data["localPackages"] == ["/host/a", "/host/b"]
+    assert [Path(p) for p in data["localPackages"]] == [Path("/host/a"), Path("/host/b")]
 
 
 def test_write_requirements_yaml_omits_local_packages_when_empty(tmp_path):
@@ -235,7 +235,7 @@ def _write_bundle(path: Path, members: dict[str, str]) -> None:
     for name, text in members.items():
         member = staging / name
         member.parent.mkdir(parents=True, exist_ok=True)
-        member.write_text(text, encoding="utf-8")
+        member.write_text(text, encoding="utf-8", newline="")
     compressor = zstandard.ZstdCompressor()
     with open(path, "wb") as raw:
         with compressor.stream_writer(raw, closefd=False) as stream:

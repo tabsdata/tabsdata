@@ -54,6 +54,20 @@ script = [
         end
     end
 
+    force = set "false"
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--force"
+            force = set "true"
+        end
+    end
+    if eq ${force} "true"
+        info "♻️️ Force enabled. All Rust crates will be reinstalled instead of updated."
+        force_token = set "--force"
+    else
+        force_token = set ""
+    end
+
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
@@ -70,7 +84,6 @@ script = [
         array_push ${crates_array} "cargo-edit"
         array_push ${crates_array} "cargo-license"
         array_push ${crates_array} "cargo-machete"
-        array_push ${crates_array} "cargo-make"
         array_push ${crates_array} "cargo-nextest"
         array_push ${crates_array} "cargo-outdated"
         # array_push ${crates_array} "cargo-pants"
@@ -90,8 +103,24 @@ script = [
         end
 
         exec --fail-on-error rustup component add %{components}
-        exec --fail-on-error cargo install --quiet --locked --jobs ${td_cargo_install_jobs} %{crates}
+        exec --fail-on-error cargo install --quiet --locked %{force_token} --jobs ${td_cargo_install_jobs} %{crates}
 
-        exec --fail-on-error cargo install --quiet --locked --git https://github.com/tabsdata/cargo-pants --branch main
+        os_family = os_family
+        is_windows = eq ${os_family} "windows"
+        if ${is_windows}
+            previous_rustflags = get_env RUSTFLAGS
+            set_env RUSTFLAGS "-C link-arg=/STACK:16777216"
+        end
+        exec --fail-on-error cargo install --quiet --locked %{force_token} --jobs ${td_cargo_install_jobs} cargo-make
+        if ${is_windows}
+            previous_rustflags_is_empty = is_empty ${previous_rustflags}
+            if ${previous_rustflags_is_empty}
+                unset_env RUSTFLAGS
+            else
+                set_env RUSTFLAGS ${previous_rustflags}
+            end
+        end
+
+        exec --fail-on-error cargo install --quiet --locked %{force_token} --git https://github.com/tabsdata/cargo-pants --branch main
     end
     ''']

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
@@ -25,7 +25,7 @@ class StarrocksSystem(System):
     port: str
     user: str
     password: str
-    sys_path: Path | None = None  # v2 loads via SQL, not a staging root
+    sys_path: PurePosixPath | None = None  # v2 loads via SQL, not a staging root
 
 
 @dataclass(frozen=True)

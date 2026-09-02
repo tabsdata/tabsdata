@@ -261,5 +261,6 @@ def stage_backend_from_location(location: Location) -> StageBackend:
     """
     parsed = urlparse(location.uri)
     if parsed.scheme == "file":
-        return _LocalStageBackend(LocalFileSrcConn(base_path=url2pathname(parsed.path)))
+        base_path = Path(url2pathname(parsed.path)).as_posix()
+        return _LocalStageBackend(LocalFileSrcConn(base_path=base_path))
     return _EndpointStageBackend(endpoint_from_location(location), location.env_prefix)

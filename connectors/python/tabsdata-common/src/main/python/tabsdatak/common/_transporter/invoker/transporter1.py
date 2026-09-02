@@ -52,7 +52,7 @@ def new_request_paths(work_dir: Path) -> tuple[Path, Path]:
 def path_to_file_uri(path: Path | str) -> str:
     p = Path(path)
     abs_str = str(p.resolve())
-    is_dir_marker = str(path).endswith(os.sep) or (p.exists() and p.is_dir())
+    is_dir_marker = str(path).endswith(("/", os.sep)) or (p.exists() and p.is_dir())
     uri = Path(abs_str).as_uri()
     if is_dir_marker and not uri.endswith("/"):
         uri += "/"

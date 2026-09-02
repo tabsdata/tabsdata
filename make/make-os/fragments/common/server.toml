@@ -220,6 +220,7 @@ script = [
     debug "🟢 After set..."
     cm_run_task __os__show_venv_env
 
+    profile = get_env profile
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -391,6 +392,7 @@ script = [
     debug "🟢 After set..."
     cm_run_task __os__show_venv_env
 
+    profile = get_env profile
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -548,6 +550,7 @@ script = [
 
     exec tdx-itest banner --color green "🚥 Status for supervisor instances (generation 1)"
 
+    profile = get_env profile
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -761,6 +764,7 @@ script = [
     debug "🟢 After set..."
     cm_run_task __os__show_venv_env
 
+    profile = get_env profile
     if is_empty ${profile}
         build-folder = set "debug"
     else

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
@@ -19,7 +19,7 @@ class S3System(System):
     system_type: ClassVar[str] = "s3"
     name: str
     system_kind: str
-    sys_path: Path
+    sys_path: PurePosixPath
     bucket: str
     region: str
     access_key: str
@@ -31,8 +31,8 @@ class S3Domain(Domain):
     system_type: ClassVar[str] = "s3"
     name: str
     system_kind: str
-    sys_path: Path
-    base_path: Path
+    sys_path: PurePosixPath
+    base_path: PurePosixPath
     prefix: str  # the domain's object-store prefix (== the entity container)
     bucket: str
     region: str

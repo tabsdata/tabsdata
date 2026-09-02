@@ -54,7 +54,7 @@ _TABSDATA_VERSION = "2.0.0-test"
 
 
 def _file_location(path: Path) -> Location:
-    return Location(uri=f"file://{path}")
+    return Location(uri=path.as_uri())
 
 
 def _local_backend(stage: Path) -> StageBackend:

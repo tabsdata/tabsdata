@@ -301,6 +301,14 @@ def bootstrap(tool: str, module: str) -> None:
         return
     ensure(env)
     py = _venv_python(venv)
+    if os.name == "nt":
+        # Windows has no exec. os.execv spawns the new interpreter and
+        # terminates this one, so a caller waiting on this process is released
+        # at once, with exit code 0, while the real work runs on unwaited: a
+        # `tdx-domain create` looks finished before it has created anything,
+        # and a failure downstream reports success. Wait for the child and
+        # return its code instead; POSIX keeps the cheaper exec.
+        raise SystemExit(subprocess.run([str(py), "-m", module, *argv]).returncode)
     os.execv(str(py), [str(py), "-m", module, *argv])
 
 

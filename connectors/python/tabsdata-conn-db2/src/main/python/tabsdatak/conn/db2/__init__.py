@@ -87,7 +87,7 @@ from tabsdatak.conn.common.types import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.db2 import _validation
+from tabsdatak.conn.db2 import _libraries, _validation  # noqa: F401
 from tabsdatak.conn.db2.error import Db2ErrorCode
 from tabsdatak.spi import Conn
 

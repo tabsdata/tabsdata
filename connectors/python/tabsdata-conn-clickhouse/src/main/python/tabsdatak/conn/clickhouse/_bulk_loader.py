@@ -324,4 +324,7 @@ class CloudStagedBulkLoader:
             self.cloud_storage.delete(self.upload_id)
             logger.info("Phase 4 complete.")
         except Exception:
-            logger.error("Cleanup failed (non-fatal, will be retried on next run)")
+            logger.warning(
+                "Cleanup failed (non-fatal, will be retried on next run)",
+                exc_info=True,
+            )

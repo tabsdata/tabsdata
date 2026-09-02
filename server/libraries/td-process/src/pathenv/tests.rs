@@ -9,8 +9,12 @@ fn value(text: &str) -> Option<OsString> {
     Some(OsString::from(text))
 }
 
-fn extended(path: &str, before: &str, after: &str) -> Vec<PathBuf> {
-    let result = extended_path(value(path), value(before), value(after));
+fn list(entries: &[&str]) -> Option<OsString> {
+    Some(join_paths(entries).expect("The entries were expected to be joinable"))
+}
+
+fn extended(path: &[&str], before: &[&str], after: &[&str]) -> Vec<PathBuf> {
+    let result = extended_path(list(path), list(before), list(after));
     split_paths(&result.expect("The path was expected to be extended")).collect()
 }
 
@@ -21,7 +25,7 @@ fn folders(entries: &[&str]) -> Vec<PathBuf> {
 #[test]
 fn test_before_is_prepended_and_after_is_appended() {
     assert_eq!(
-        extended("/usr/bin:/bin", "/venv/bin", "/opt/bin"),
+        extended(&["/usr/bin", "/bin"], &["/venv/bin"], &["/opt/bin"]),
         folders(&["/venv/bin", "/usr/bin", "/bin", "/opt/bin"])
     );
 }
@@ -29,7 +33,7 @@ fn test_before_is_prepended_and_after_is_appended() {
 #[test]
 fn test_empty_after_leaves_only_a_prefix() {
     assert_eq!(
-        extended("/usr/bin:/bin", "/venv/bin", ""),
+        extended(&["/usr/bin", "/bin"], &["/venv/bin"], &[]),
         folders(&["/venv/bin", "/usr/bin", "/bin"])
     );
 }
@@ -47,7 +51,7 @@ fn test_empty_variables_leave_the_path_untouched() {
 #[test]
 fn test_extending_twice_is_idempotent() {
     let once = extended_path(
-        value("/usr/bin:/bin"),
+        list(&["/usr/bin", "/bin"]),
         value("/venv/bin"),
         value("/opt/bin"),
     )
@@ -60,7 +64,7 @@ fn test_extending_twice_is_idempotent() {
 #[test]
 fn test_a_folder_already_present_is_not_duplicated() {
     assert_eq!(
-        extended("/venv/bin:/usr/bin", "/venv/bin", ""),
+        extended(&["/venv/bin", "/usr/bin"], &["/venv/bin"], &[]),
         folders(&["/venv/bin", "/usr/bin"])
     );
 }
@@ -78,7 +82,7 @@ fn test_an_absent_path_is_built_from_the_variables() {
 #[test]
 fn test_empty_entries_in_the_path_are_dropped() {
     assert_eq!(
-        extended("/usr/bin::/bin", "/venv/bin", ""),
+        extended(&["/usr/bin", "", "/bin"], &["/venv/bin"], &[]),
         folders(&["/venv/bin", "/usr/bin", "/bin"])
     );
 }
@@ -86,7 +90,11 @@ fn test_empty_entries_in_the_path_are_dropped() {
 #[test]
 fn test_several_folders_keep_their_declared_order() {
     assert_eq!(
-        extended("/usr/bin", "/venv/bin:/venv/extra", "/opt/one:/opt/two"),
+        extended(
+            &["/usr/bin"],
+            &["/venv/bin", "/venv/extra"],
+            &["/opt/one", "/opt/two"]
+        ),
         folders(&[
             "/venv/bin",
             "/venv/extra",

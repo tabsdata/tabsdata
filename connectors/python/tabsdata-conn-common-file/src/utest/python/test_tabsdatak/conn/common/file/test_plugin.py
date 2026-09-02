@@ -546,8 +546,8 @@ def test_run_read_in_per_slot_dir_and_parquet_collection(monkeypatch, tmp_path):
     assert len(out) == 2
     assert len(out[0]) == 1
     assert isinstance(out[0][0].file, Path)
-    assert str(out[0][0].file).endswith("slot0/out.parquet")
-    assert str(out[1][0].file).endswith("slot1/out.parquet")
+    assert Path(out[0][0].file).parts[-2:] == ("slot0", "out.parquet")
+    assert Path(out[1][0].file).parts[-2:] == ("slot1", "out.parquet")
     # import_one called per path with that slot's target_dir
     assert [c["target_dir"].name for c in calls] == ["slot0", "slot1"]
 
@@ -672,7 +672,7 @@ def test_run_read_in_skips_report_entries_without_to_field(monkeypatch, tmp_path
         errors=_RUN_ERRORS,
     )
     assert len(out[0]) == 1
-    assert str(out[0][0].file) == "/x/keep.parquet"
+    assert Path(out[0][0].file) == Path("/x/keep.parquet")
 
 
 def test_run_read_in_reports_source_path_as_metadata(monkeypatch, tmp_path):

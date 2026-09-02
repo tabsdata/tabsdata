@@ -642,10 +642,11 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
         "@td.file.seconds": 1.5,
         "@td.file.truncated": True,
     }
+    a, b = tmp_path / "a.parquet", tmp_path / "b.parquet"
     produced = [
         [
-            TableFileInput(file=Path("/tmp/a.parquet"), metadata=metadata),
-            TableFileInput(file=Path("/tmp/b.parquet")),
+            TableFileInput(file=a, metadata=metadata),
+            TableFileInput(file=b),
         ]
     ]
     _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
@@ -671,8 +672,8 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
                 "table_pos": 0,
                 "is_empty": False,
                 "tables": [
-                    _record("/tmp/a.parquet", metadata),
-                    _record("/tmp/b.parquet"),
+                    _record(a.as_posix(), metadata),
+                    _record(b.as_posix()),
                 ],
             }
         ],
@@ -732,16 +733,17 @@ def test_write_inputs_manifest_negative_cardinality_does_not_pad_when_matched(
     """When the dynamic source produced exactly the right number of
     slots, the manifest writes them verbatim — no padding needed."""
     out = tmp_path / "manifest.yaml"
+    a = tmp_path / "a.parquet"
     _write_inputs_manifest(
         fixture_publisher,
-        [[TableFileInput(file=Path("/tmp/a.parquet"))]],
+        [[TableFileInput(file=a)]],
         out,
         cardinality=-1,
     )
     data = yaml.safe_load(out.read_text())
     assert len(data["inputs"]) == 1
     assert data["inputs"][0]["name"] == "in_1"
-    assert [t["file"] for t in data["inputs"][0]["tables"]] == ["/tmp/a.parquet"]
+    assert [t["file"] for t in data["inputs"][0]["tables"]] == [a.as_posix()]
 
 
 def test_write_inputs_manifest_negative_cardinality_overproduction_raises(

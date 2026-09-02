@@ -14,7 +14,7 @@ azure-storage-blob==12.28.0
 base32hex==1.0.2
 boto3==1.43.78
 boto3-stubs==1.43.78
-botocore==1.43.82
+botocore==1.43.85
 botocore-stubs==1.43.67
 build==1.6.0
 cachetools==6.2.6
@@ -50,8 +50,8 @@ google-resumable-media==2.10.2
 googleapis-common-protos==1.75.2
 greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.5
-grpcio==1.83.0
-grpcio-status==1.83.0
+grpcio==1.83.1
+grpcio-status==1.83.1
 grpcio-tools==1.80.0
 humanize==4.15.0
 hvac==2.4.0
@@ -91,7 +91,7 @@ prompt-toolkit==3.0.52
 proto-plus==1.28.4
 protobuf==6.33.6
 py-cpuinfo==9.0.0
-pyarrow==23.0.1
+pyarrow==25.0.1
 pyasn1==0.6.4
 pyasn1-modules==0.4.2
 pybreaker==1.4.1
@@ -145,7 +145,7 @@ urllib3==2.7.0
 uuid-v7==1.0.0
 uuid6==2025.0.1
 uv==0.10.12
-wcwidth==0.8.2
+wcwidth==0.8.3
 wheel==0.48.0
 zeep==4.3.3
 zipp==4.1.0

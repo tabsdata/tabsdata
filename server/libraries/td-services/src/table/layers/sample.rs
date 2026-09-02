@@ -473,11 +473,18 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_table_sample_sql_rejects_file_read() -> Result<(), TdError> {
+        // The guard runs after `execute`, which resolves `read_csv` eagerly; a path
+        // missing on the running platform would fail as a read error beforehand.
+        let forbidden = td_common::tdtestdir!().join("forbidden.csv");
+        std::fs::write(&forbidden, "a,b\n1,2\n").unwrap();
+        let forbidden = forbidden.to_string_lossy().replace('\\', "/");
         let res = test_get_table_sample(
             0,
             SampleLen::MAX as usize,
             FileFormat::Csv,
-            Some(Sql::try_from("select * from read_csv('/etc/passwd')")?),
+            Some(Sql::try_from(
+                format!("select * from read_csv('{forbidden}')").as_str(),
+            )?),
         )
         .await;
         match res {

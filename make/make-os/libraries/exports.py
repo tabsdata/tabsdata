@@ -33,6 +33,7 @@ def main() -> int:
         shutil.rmtree(folder)
     folder.mkdir(parents=True)
 
+    exported = 0
     for line in rendered.stdout.splitlines():
         line = line.strip()
         if not line.startswith("export "):
@@ -49,6 +50,19 @@ def main() -> int:
             value = str(value)
         (folder / name).write_bytes(value.encode("utf-8"))
         print(name)
+        exported += 1
+
+    if not exported:
+        print(
+            f"{tool} info exported no variables for {manifest}.",
+            file=sys.stderr,
+        )
+        for stream, text in (("stdout", rendered.stdout), ("stderr", rendered.stderr)):
+            text = text.strip()
+            if text:
+                print(f"--- {stream} ---\n{text}", file=sys.stderr)
+        return 1
+
     return 0
 
 

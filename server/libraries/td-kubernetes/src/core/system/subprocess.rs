@@ -151,6 +151,27 @@ pub fn apply_subprocess_flags(command: &mut SystemCommand) {
     }
 }
 
+pub fn seal_own_stdio() {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::Foundation::{
+            HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation,
+        };
+        use windows_sys::Win32::System::Console::{
+            GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+        };
+
+        for id in [STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            unsafe {
+                let handle = GetStdHandle(id);
+                if !handle.is_null() && handle != INVALID_HANDLE_VALUE {
+                    SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+                }
+            }
+        }
+    }
+}
+
 pub fn is_alive(pid: u32) -> bool {
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);

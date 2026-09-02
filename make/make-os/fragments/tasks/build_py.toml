@@ -296,6 +296,7 @@ script = [
     virtual_env = get_env VIRTUAL_ENV
     debug "️🔸🔸🔸 Environment variable VIRTUAL_ENV: ${virtual_env}"
 
+    profile = get_env profile
     if is_empty ${profile}
         build-folder = set "debug"
     else

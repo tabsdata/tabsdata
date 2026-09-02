@@ -118,7 +118,8 @@ def test_stage_backend_from_file_location_is_not_object_store():
     assert backend.is_object_store is False
     loc = backend.build_location("files/x.parquet", HANDLER)
     assert isinstance(loc, transporter1.TransporterLocalFile)
-    assert loc.url == "file:///stage/files/x.parquet"
+    assert loc.url.startswith("file:///")
+    assert loc.url.endswith("/stage/files/x.parquet")
 
 
 def test_stage_backend_from_unknown_scheme_raises():

@@ -11,6 +11,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    profile = get_env profile
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -162,7 +163,12 @@ script = [
                 if not ${verbose}
                     spinner = spawn python ${SPINNER_SCRIPT} "Starting instance ${instance}..."
                     output = exec %{command}
-                    exec kill ${spinner}
+                    os = os_family
+                    if eq ${os} "windows"
+                        exec taskkill /F /PID ${spinner}
+                    else
+                        exec kill ${spinner}
+                    end
                     echo ""
                     quickstart_code = set ${output.code}
                     if not eq ${quickstart_code} 0
@@ -522,7 +528,12 @@ script = [
                     debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes"
                     spinner = spawn python ${SPINNER_SCRIPT} "Stopping instance ${instance}..."
                     output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes
-                    exec kill ${spinner}
+                    os = os_family
+                    if eq ${os} "windows"
+                        exec taskkill /F /PID ${spinner}
+                    else
+                        exec kill ${spinner}
+                    end
                     echo ""
                     if not eq ${output.code} 0
                         warn "⚠️ Stopping instance ${instance} reported exit code ${output.code}."
@@ -591,7 +602,12 @@ script = [
                     debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes"
                     spinner = spawn python ${SPINNER_SCRIPT} "Trashing instance ${instance}..."
                     output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes
-                    exec kill ${spinner}
+                    os = os_family
+                    if eq ${os} "windows"
+                        exec taskkill /F /PID ${spinner}
+                    else
+                        exec kill ${spinner}
+                    end
                     echo ""
                     if not eq ${output.code} 0
                         warn "⚠️ Trashing instance ${instance} reported exit code ${output.code}."

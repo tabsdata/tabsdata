@@ -19,13 +19,16 @@ Tables:
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
 
+import psutil
 import rich_click as click
 from rich.text import Text as RichText
 from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
@@ -73,10 +76,14 @@ from tabsdatax.pytesting.plugins.harvester.internal.database import (
 )
 from tabsdatax.pytesting.plugins.harvester.internal.schema import MetaState
 
-
 # ---------------------------------------------------------------------------
 # Stack frame / py-spy support
 # ---------------------------------------------------------------------------
+# Windows has no sudo credential cache: py-spy inherits elevation from the
+# terminal instead, so every sudo interaction here is POSIX-only.
+WINDOWS = os.name == "nt"
+
+
 @dataclass
 class StackFrame:
     function: str
@@ -104,17 +111,12 @@ class SpyDump:
     retry_error_callback=lambda _: None,
 )
 def run_py_spy(pid: int) -> SpyDump | None:
+    command = ["py-spy", "dump", "--json", "--nonblocking", "--pid", str(pid)]
+    if not WINDOWS:
+        command.insert(0, "sudo")
     try:
         result = subprocess.run(
-            [
-                "sudo",
-                "py-spy",
-                "dump",
-                "--json",
-                "--nonblocking",
-                "--pid",
-                str(pid),
-            ],
+            command,
             capture_output=True,
             text=True,
             timeout=5,
@@ -208,15 +210,11 @@ class TestRecord:
 
 
 def pid_exists(pid: int) -> bool:
+    # Not os.kill(pid, 0): on Windows that maps to TerminateProcess and would
+    # kill the worker it is meant to probe.
     if pid <= 0:
         return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
+    return psutil.pid_exists(pid)
 
 
 def row_to_record(row) -> TestRecord:
@@ -331,6 +329,13 @@ def has_py_spy() -> bool:
         return False
 
 
+def is_admin() -> bool:
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
 def start_sudo_refresh(interval: int = SUDO_REFRESH_INTERVAL_SECONDS) -> None:
     def run():
         while True:
@@ -370,9 +375,14 @@ class HarvesterDashboard(App):
 
         pid = self._meta.pid
         if pid and pid_exists(pid):
+            # Windows has no SIGKILL; os.kill maps SIGTERM to TerminateProcess.
+            if sys.platform == "win32":
+                sig = signal.SIGTERM
+            else:
+                sig = signal.SIGKILL
             try:
-                os.kill(pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
+                os.kill(pid, sig)
+            except (ProcessLookupError, PermissionError, OSError):
                 pass
 
     CSS = """
@@ -1269,7 +1279,8 @@ def main(
 
     \b
     Tips:
-      Initial sudo for py-spy: sudo -v && tdx-harvester-monitor
+      Initial sudo for py-spy: sudo -v && tdx-harvester-monitor  (Linux/macOS)
+      py-spy on Windows:       run from an elevated terminal
       Scrollable output:       tdx-harvester-monitor --nospy
     """
     harvester_folder = folder or os.environ.get(
@@ -1283,7 +1294,13 @@ def main(
         print(
             "py-spy not found — stack frames disabled. Install with: pip install py-spy"
         )
-    if use_py_spy:
+    if use_py_spy and WINDOWS:
+        if not is_admin():
+            print(
+                "py-spy needs Administrator on Windows — stack frames will be empty."
+                " Re-run this monitor from an elevated terminal."
+            )
+    elif use_py_spy:
         print("Authenticating for py-spy (sudo) ...")
         subprocess.run(["sudo", "-v"])
         start_sudo_refresh()

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
@@ -22,7 +22,7 @@ class BigQuerySystem(System):
     project: str
     service_account_key: str
     bucket: str
-    sys_path: Path
+    sys_path: PurePosixPath
 
 
 @dataclass(frozen=True)
@@ -33,9 +33,9 @@ class BigQueryDomain(Domain):
     project: str
     service_account_key: str
     bucket: str
-    sys_path: Path
+    sys_path: PurePosixPath
     dataset: str  # == the domain name
-    base_path: Path
+    base_path: PurePosixPath
 
 
 def bigquery_system(name: str):

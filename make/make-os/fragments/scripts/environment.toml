@@ -148,6 +148,7 @@ env_scripts = [
     if eq ${os_family} "windows"
         set_env RUSTFLAGS "-Clink-arg=/STACK:16777216"
     end
+    profile = get_env profile
     td-profile = set ${profile}
     if is_empty ${profile}
         build-folder = set "debug"
@@ -276,7 +277,8 @@ env_scripts = [
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
-            new_path_item = concat ${connector}/target/${build-folder} ${separator} ${connector}/target/pytest/build
+            # new_path_item = concat ${connector}/target/${build-folder} ${separator} ${connector}/target/pytest/build
+            new_path_item = set ${connector}/target/pytest/build
             new_path = concat ${new_path_item} ${separator} ${new_path}
         end
     end
@@ -293,7 +295,8 @@ env_scripts = [
         for connector in ${connectors}
             is_connector = is_dir ${connector}
             if ${is_connector}
-                new_path_item = concat ${connector}/target/${build-folder} ${separator} ${connector}/target/pytest/build
+                # new_path_item = concat ${connector}/target/${build-folder} ${separator} ${connector}/target/pytest/build
+                new_path_item = set ${connector}/target/pytest/build
                 new_path = concat ${new_path_item} ${separator} ${new_path}
             end
         end
@@ -456,18 +459,22 @@ env_scripts = [
     if ${is_windows}
         lib_path_var = set "PATH"
         old_lib_path = get_env PATH
+        python_base = exec --fail-on-error python -c "import sys; print(sys.base_prefix)"
+        python_base = trim ${python_base.stdout}
+        python_lib = concat ${python_venv}/Scripts ${separator} ${python_base}
     elseif ${is_mac}
         lib_path_var = set "DYLD_LIBRARY_PATH"
         old_lib_path = get_env DYLD_LIBRARY_PATH
+        python_lib = set ${python_venv}/lib
     elseif ${is_linux}
         lib_path_var = set "LD_LIBRARY_PATH"
         old_lib_path = get_env LD_LIBRARY_PATH
+        python_lib = set ${python_venv}/lib
     else
         trigger_error "Unsupported OS: ${os}. Only windows, mac, and linux are supported."
     end
 
-    new_lib_path = set ${old_lib_path}
-    new_lib_path = concat ${python_venv}/lib ${separator} ${old_lib_path}
+    new_lib_path = concat ${python_lib} ${separator} ${old_lib_path}
 
     debug "📚 Using library path (${lib_path_var}): '${new_lib_path}'"
 
