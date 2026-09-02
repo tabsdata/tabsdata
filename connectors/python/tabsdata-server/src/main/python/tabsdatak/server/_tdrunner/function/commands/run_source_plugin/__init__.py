@@ -57,7 +57,7 @@ __all__ = [
     "main",
 ]
 
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 INFO = (
     "run-source-plugin — invoke the publisher's source plugin to produce parquet files"
 )

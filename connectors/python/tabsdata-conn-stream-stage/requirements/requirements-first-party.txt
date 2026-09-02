@@ -2,10 +2,10 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-tabsdata-api==2.0.2
-tabsdata-conn-common==2.0.2
-tabsdata-conn-common-file==2.0.2
-tabsdata-conn-localfile==2.0.2
-tabsdata-conn-s3==2.0.2
-tabsdata-conn-gcs==2.0.2
-tabsdata-conn-azureblob==2.0.2
+tabsdata-api==2.1.0
+tabsdata-conn-common==2.1.0
+tabsdata-conn-common-file==2.1.0
+tabsdata-conn-localfile==2.1.0
+tabsdata-conn-s3==2.1.0
+tabsdata-conn-gcs==2.1.0
+tabsdata-conn-azureblob==2.1.0

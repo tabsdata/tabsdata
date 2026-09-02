@@ -39,7 +39,7 @@ from tabsdatak.server._tdrunner.function.commands.report_completion.runner impor
 
 __all__ = ["run", "main"]
 
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 INFO = "report-completion — report the function-run response to the API server"
 MAN = (
     "report-completion --request <PATH> --outputs-manifest <PATH> "

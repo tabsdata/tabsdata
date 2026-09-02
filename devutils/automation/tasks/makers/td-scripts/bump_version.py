@@ -108,6 +108,13 @@ def get_bump_files(root_folder) -> list[str]:
 
 
 def bump_version_in_file(path, old_version, new_version, bump_files, warnings):
+    if os.path.islink(path):
+        if not os.path.exists(path):
+            logger.warning(f"🔗 Skipping orphan symbolic link {path}")
+        else:
+            logger.debug(f"🔗 Skipping symbolic link {path}")
+        return
+
     if path in bump_files:
         try:
             with open(path, "r", encoding="utf-8") as file_r:
