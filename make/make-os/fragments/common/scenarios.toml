@@ -108,6 +108,11 @@ script = [
     cm_run_task __os__generate_assets
 
     with_compile = get_env TD_WITH_COMPILE
+    umbrella_build = get_env TD_UMBRELLA_BUILD
+    if not is_empty ${umbrella_build}
+        with_compile = set ${umbrella_build}
+        debug "🔅 Umbrella override for build: '${umbrella_build}'"
+    end
     if eq ${with_compile} "true"
         debug "🔷 _____ Building..."
         cm_run_task build
@@ -194,6 +199,11 @@ script = [
     cm_run_task __os__generate_assets
 
     with_compile = get_env TD_WITH_COMPILE
+    umbrella_build = get_env TD_UMBRELLA_BUILD
+    if not is_empty ${umbrella_build}
+        with_compile = set ${umbrella_build}
+        debug "🔅 Umbrella override for build: '${umbrella_build}'"
+    end
     if eq ${with_compile} "true"
         debug "🔷 _____ Building..."
         cm_run_task build

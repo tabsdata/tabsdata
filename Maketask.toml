@@ -645,18 +645,21 @@ script = [
     set_env TD_TESTS_CHAIN_PY "true"
     set_env TD_TESTS_CODE_PY 0
 
+    unset_env TD_UMBRELLA_BUILD
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     set_env TD_UMBRELLA_SERVER_STOP "false"
 
     cm_run_task utest_py
 
+    set_env TD_UMBRELLA_BUILD "false"
     set_env TD_UMBRELLA_SERVER_START "false"
     set_env TD_UMBRELLA_SERVER_STATUS "false"
     unset_env TD_UMBRELLA_SERVER_STOP
 
     cm_run_task itest_py
 
+    unset_env TD_UMBRELLA_BUILD
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     unset_env TD_UMBRELLA_SERVER_STOP
