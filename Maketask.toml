@@ -655,7 +655,7 @@ script = [
     set_env TD_UMBRELLA_BUILD "false"
     set_env TD_UMBRELLA_SERVER_START "false"
     set_env TD_UMBRELLA_SERVER_STATUS "false"
-    unset_env TD_UMBRELLA_SERVER_STOP
+    set_env TD_UMBRELLA_SERVER_STOP "true"
 
     cm_run_task itest_py
 
