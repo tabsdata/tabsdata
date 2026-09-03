@@ -47,6 +47,9 @@ opt-level = 0
 panic = "unwind"
 strip = "none"
 
+[profile.dev.package."*"]
+debug = false
+
 [profile.integration]
 inherits = "release"
 codegen-units = 16
