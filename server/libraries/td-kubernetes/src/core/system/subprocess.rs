@@ -304,7 +304,7 @@ fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool
     }
 }
 
-fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
+pub fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
         if !is_alive(pid) {
@@ -322,14 +322,19 @@ fn force_kill_process(pid: u32) {
     #[cfg(unix)]
     {
         unsafe {
-            libc::kill(pid as i32, libc::SIGKILL);
+            if libc::kill(pid as i32, libc::SIGKILL) != 0 {
+                warn!(pid, error = %io::Error::last_os_error(), "Cannot force-kill the process");
+            }
         }
     }
     #[cfg(target_os = "windows")]
     {
         let mut command = SystemCommand::new("taskkill.exe");
         apply_detached_flags(&mut command);
-        let _ = command.arg("/PID").arg(pid.to_string()).arg("/F").status();
+        report_taskkill(
+            command.arg("/PID").arg(pid.to_string()).arg("/F").output(),
+            pid,
+        );
     }
 }
 
@@ -344,10 +349,10 @@ fn force_kill_tree(root: u32, descendants: &[u32]) {
         }
         unsafe {
             for group in process_groups(root, &survivors) {
-                libc::kill(-group, libc::SIGKILL);
+                report_kill(libc::kill(-group, libc::SIGKILL), group as u32);
             }
             for pid in &survivors {
-                libc::kill(*pid as i32, libc::SIGKILL);
+                report_kill(libc::kill(*pid as i32, libc::SIGKILL), *pid);
             }
         }
     }
@@ -356,12 +361,40 @@ fn force_kill_tree(root: u32, descendants: &[u32]) {
         let _ = descendants;
         let mut command = SystemCommand::new("taskkill.exe");
         apply_detached_flags(&mut command);
-        let _ = command
-            .arg("/PID")
-            .arg(root.to_string())
-            .arg("/T")
-            .arg("/F")
-            .status();
+        report_taskkill(
+            command
+                .arg("/PID")
+                .arg(root.to_string())
+                .arg("/T")
+                .arg("/F")
+                .output(),
+            root,
+        );
+    }
+}
+
+#[cfg(unix)]
+fn report_kill(outcome: i32, pid: u32) {
+    if outcome == 0 {
+        return;
+    }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() == Some(libc::ESRCH) {
+        return;
+    }
+    warn!(pid, %error, "Cannot force-kill the process");
+}
+
+#[cfg(target_os = "windows")]
+fn report_taskkill(outcome: io::Result<Output>, pid: u32) {
+    match outcome {
+        Ok(output) if output.status.success() => {}
+        Ok(output) => {
+            let detail = String::from_utf8_lossy(&output.stderr);
+            let detail = detail.trim();
+            warn!(pid, status = %output.status, detail, "Cannot force-kill the process");
+        }
+        Err(error) => warn!(pid, %error, "Cannot run taskkill to force-kill the process"),
     }
 }
 

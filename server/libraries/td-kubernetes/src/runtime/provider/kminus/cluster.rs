@@ -23,10 +23,11 @@ use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::widgets::show_caution;
 use crate::core::system::capture;
 use crate::core::system::exit::CommandResult;
+use crate::core::system::stopevent;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
     self, apply_detached_flags, apply_subprocess_flags, force_terminate_process_tree,
-    is_alive as process_is_alive, seal_own_stdio, terminate_single_process,
+    is_alive as process_is_alive, seal_own_stdio, terminate_single_process, wait_for_exit,
 };
 use crate::cwarn;
 use crate::runtime::provider::{Cluster, Transaction};
@@ -384,6 +385,13 @@ impl KminusCluster {
         .is_ok()
     }
 
+    fn stop_through_event(&self, pid: u32) -> bool {
+        if !stopevent::signal_stop(&self.path().to_string_lossy()) {
+            return false;
+        }
+        wait_for_exit(pid, KM_GRACEFUL_TIMEOUT)
+    }
+
     fn stop_through_km(&self) -> bool {
         let Ok(km) = resolve_python_binary(KM_BINARY) else {
             cwarn!("Cannot locate the kminus binary. Signalling the process instead.");
@@ -488,6 +496,9 @@ impl Cluster for KminusCluster {
             return Ok(false);
         }
         if self.stop_through_km() {
+            return Ok(true);
+        }
+        if self.stop_through_event(pid) {
             return Ok(true);
         }
         if terminate_single_process(pid, KM_GRACEFUL_TIMEOUT) {
