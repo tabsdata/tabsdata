@@ -7,7 +7,7 @@ pub mod instance;
 
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use fslock::LockFile;
@@ -24,17 +24,18 @@ use tracing::{info, warn};
 
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DATABASE_NAME_POSTGRES,
-    DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, DbManagerMode, ENV_UV_PYTHON_INSTALL_DIR,
-    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS, FOLDER_PYENV_AG, FOLDER_PYENV_FN,
-    FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV,
-    FOREIGN_ASSETS, IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, RUNTIMES_LOCK_FILE, UvMode, VENVS_IMAGE,
-    YAML_NULL,
+    DATABASE_SSL_MODE_PREFER, DEFAULT_NAMESPACE, DbManagerMode, ENV_TD_KUBE_UV_MODE,
+    ENV_UV_PYTHON_INSTALL_DIR, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_KENVS,
+    FOLDER_PYENV_AG, FOLDER_PYENV_FN, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY,
+    FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV, FOREIGN_ASSETS, IndexReach, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, RUNTIMES_LOCK_FILE,
+    UV_MODE_LINKED, UV_MODE_LOCAL, UvMode, VENVS, VENVS_IMAGE, YAML_NULL,
 };
 use td_python::tabsdata::tabsdata_version;
 
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
+use crate::base::symlink::{is_symlink, relink};
 use crate::client::registry::{
     ClusterViews, InstanceSettings, init_stage_folder_in, instances_root,
 };
@@ -451,6 +452,7 @@ impl Provider for KminusProvider {
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
         match UvMode::from_environment().map_err(TdError::from)? {
+            UvMode::Linked => self.create_runtimes_as_proc(reporter).await,
             UvMode::Local => self.create_runtimes_as_proc(reporter).await,
             UvMode::Devpi => self.create_runtimes_as_pod(reporter).await,
             UvMode::Pypi => self.create_runtimes_as_pod(reporter).await,
@@ -781,6 +783,149 @@ impl KminusProvider {
             )
         })?;
         let _guard = claim_runtimes(&runtimes_folder)?;
+        let pyvenv = resolve_python_binary(PYVENV_BINARY).map_err(|error| {
+            ProviderError::BinaryNotFound(PYVENV_BINARY.to_owned(), error.to_string())
+        })?;
+        self.verify_host_environment(&pyvenv, reporter)?;
+        match UvMode::from_environment().map_err(TdError::from)? {
+            UvMode::Linked => self.link_runtimes(&pyvenv, &runtimes_kenvs, reporter),
+            UvMode::Local | UvMode::Devpi | UvMode::Pypi | UvMode::Unset => {
+                self.build_runtimes(&pyvenv, &runtimes_folder, &runtimes_kenvs, reporter)
+            }
+        }
+    }
+
+    fn verify_host_environment(&self, pyvenv: &Path, reporter: &dyn Reporter) -> CommandResult {
+        let step = reporter.step("Verifying the host Python environment");
+        let mut command = std::process::Command::new(pyvenv);
+        if self.verbose {
+            command.arg("--verbose");
+        }
+        command.arg("verify");
+        apply_detached_flags(&mut command);
+        let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
+            Ok(output) => output,
+            Err(error) => {
+                step.fail();
+                return Err(ProviderError::HostEnvironmentResolveFailed {
+                    cause: error.to_string(),
+                }
+                .into());
+            }
+        };
+        if !output.status.success() {
+            step.fail();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            let cause = if stderr.is_empty() { stdout } else { stderr };
+            return Err(ProviderError::HostEnvironmentIncomplete { cause }.into());
+        }
+        step.done("Host Python environment verified");
+        Ok(())
+    }
+
+    fn link_runtimes(
+        &self,
+        pyvenv: &Path,
+        runtimes_kenvs: &Path,
+        reporter: &dyn Reporter,
+    ) -> CommandResult {
+        let step = reporter.step("Linking the Python virtual environments");
+        let target = match self.host_environment_root(pyvenv) {
+            Ok(root) => root,
+            Err(error) => {
+                step.fail();
+                return Err(error);
+            }
+        };
+        for venv in VENVS {
+            let link = runtimes_kenvs.join(venv.as_str());
+            if let Err(error) = relink(&link, &target) {
+                step.fail();
+                return Err(ProviderError::PyvenvLinkFailed {
+                    link: link.display().to_string(),
+                    target: target.display().to_string(),
+                    cause: error,
+                }
+                .into());
+            }
+            info!(
+                "Linked the '{}' virtual environment to {}",
+                venv.as_str(),
+                target.display()
+            );
+        }
+        step.done("Python virtual environments linked");
+        self.compile_runtimes(pyvenv, &target, reporter);
+        Ok(())
+    }
+
+    fn compile_runtimes(&self, pyvenv: &Path, target: &Path, reporter: &dyn Reporter) {
+        let step = reporter.step("Compiling the Python virtual environments");
+        let mut command = std::process::Command::new(pyvenv);
+        if self.verbose {
+            command.arg("--verbose");
+        }
+        command.arg("compile").arg("--target").arg(target);
+        apply_detached_flags(&mut command);
+        match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
+            Ok(output) if output.status.success() => {
+                step.done("Python virtual environments compiled");
+                info!(
+                    "Compiled the Python virtual environment {}",
+                    target.display()
+                );
+            }
+            Ok(output) => {
+                step.done("Python virtual environments not compiled");
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+                warn!(
+                    "Precompiling {} failed ({stderr}); skipping",
+                    target.display()
+                );
+            }
+            Err(error) => {
+                step.done("Python virtual environments not compiled");
+                warn!(
+                    "Precompiling {} failed ({error}); skipping",
+                    target.display()
+                );
+            }
+        }
+    }
+
+    fn host_environment_root(&self, pyvenv: &Path) -> CommandResult<PathBuf> {
+        let mut command = std::process::Command::new(pyvenv);
+        command.arg("root");
+        apply_detached_flags(&mut command);
+        let output =
+            subprocess::run(&mut command, PYVENV_BINARY, self.verbose).map_err(|error| {
+                ProviderError::HostEnvironmentResolveFailed {
+                    cause: error.to_string(),
+                }
+            })?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(ProviderError::HostEnvironmentResolveFailed { cause: stderr }.into());
+        }
+        let root = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        if root.is_empty() {
+            return Err(ProviderError::HostEnvironmentResolveFailed {
+                cause: format!("'{PYVENV_BINARY} root' printed no path"),
+            }
+            .into());
+        }
+        Ok(PathBuf::from(root))
+    }
+
+    fn build_runtimes(
+        &self,
+        pyvenv: &Path,
+        runtimes_folder: &Path,
+        runtimes_kenvs: &Path,
+        reporter: &dyn Reporter,
+    ) -> CommandResult {
+        ensure_no_linked_venvs(runtimes_kenvs)?;
         let runtimes_python = runtimes_folder.join(FOLDER_UV).join(FOLDER_PYTHON);
         fs::create_dir_all(&runtimes_python).map_err(|error| {
             ProviderError::RuntimesFolderCreateFailed(
@@ -788,15 +933,12 @@ impl KminusProvider {
                 error.to_string(),
             )
         })?;
-        let pyvenv = resolve_python_binary(PYVENV_BINARY).map_err(|error| {
-            ProviderError::BinaryNotFound(PYVENV_BINARY.to_owned(), error.to_string())
-        })?;
         let step = reporter.step("Creating Python virtual environment templates");
-        let mut command = std::process::Command::new(&pyvenv);
+        let mut command = std::process::Command::new(pyvenv);
         if self.verbose {
             command.arg("--verbose");
         }
-        command.arg("create").arg("--target").arg(&runtimes_kenvs);
+        command.arg("create").arg("--target").arg(runtimes_kenvs);
         command.env(ENV_UV_PYTHON_INSTALL_DIR, &runtimes_python);
         apply_detached_flags(&mut command);
         let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
@@ -957,6 +1099,21 @@ impl KminusProvider {
         step.done(done_label);
         Ok(())
     }
+}
+
+fn ensure_no_linked_venvs(runtimes_kenvs: &Path) -> CommandResult {
+    for venv in VENVS {
+        if is_symlink(&runtimes_kenvs.join(venv.as_str())) {
+            return Err(ProviderError::RuntimesLinkedNotRebuildable {
+                folder: runtimes_kenvs.display().to_string(),
+                variable: ENV_TD_KUBE_UV_MODE.to_owned(),
+                linked: UV_MODE_LINKED.to_owned(),
+                local: UV_MODE_LOCAL.to_owned(),
+            }
+            .into());
+        }
+    }
+    Ok(())
 }
 
 fn claim_runtimes(runtimes_folder: &std::path::Path) -> CommandResult<LockFile> {

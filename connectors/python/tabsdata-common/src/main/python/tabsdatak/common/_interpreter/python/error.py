@@ -41,6 +41,12 @@ class BinaryNotFoundError(PyenvRuntimeException): ...
 class WheelFileMissingError(PyenvRuntimeException): ...
 
 
+class IncompleteEnvironmentError(PyenvRuntimeException): ...
+
+
+class UnusableEnvironmentError(PyenvRuntimeException): ...
+
+
 class PyenvErrorCode(ErrorCode):
     PYENV_1 = ErrorDef(
         UnsupportedInstallMethodError,
@@ -71,4 +77,16 @@ class PyenvErrorCode(ErrorCode):
         "(the host environment installed it from a wheel that has since been "
         "deleted). Reinstall {package!r} in the host environment to repopulate "
         "the wheel, or switch to an editable / registry install.",
+    )
+    PYENV_7 = ErrorDef(
+        IncompleteEnvironmentError,
+        "Environment {root} is incomplete: the {edition} edition expects "
+        "{expected} tabsdata package(s), and {missing_count} of them are not "
+        "installed ({missing}). Install them before using this environment as "
+        "the source of the instance virtual environments.",
+    )
+    PYENV_8 = ErrorDef(
+        UnusableEnvironmentError,
+        "Environment {root} cannot be used as the source of the instance "
+        "virtual environments: {detail}",
     )

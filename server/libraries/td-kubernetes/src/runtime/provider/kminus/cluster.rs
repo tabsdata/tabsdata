@@ -78,7 +78,7 @@ const KM_PIDS_FOLDER: &str = "pids";
 const KM_SYSCONFIG_FILE: &str = "kmsysconfig.yaml";
 const KM_KUBECONFIG_FILE: &str = "kubeconfig.yaml";
 
-const KM_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const KM_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 #[cfg(not(windows))]
 const KM_POLL_ALIVE_TIMEOUT: Duration = Duration::from_secs(300);

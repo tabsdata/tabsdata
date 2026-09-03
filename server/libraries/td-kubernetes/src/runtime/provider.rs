@@ -166,7 +166,9 @@ impl ClusterProvider {
 
     pub fn hosts_runtimes(self) -> Result<bool, TdError> {
         match self {
-            Self::Kminus => Ok(UvMode::from_environment().map_err(TdError::from)? == UvMode::Local),
+            Self::Kminus => Ok(UvMode::from_environment()
+                .map_err(TdError::from)?
+                .uses_host_environment()),
             Self::Docker | Self::Eks | Self::Fargate => Ok(false),
         }
     }

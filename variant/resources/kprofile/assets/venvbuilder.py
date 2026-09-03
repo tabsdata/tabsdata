@@ -700,6 +700,31 @@ def prune_virtual_environment(workspace: dict[str, str]) -> None:
     )
 
 
+def compile_one_virtual_environment(virtual_environment: str) -> None:
+    command = [
+        venv_python(virtual_environment),
+        "-m",
+        "compileall",
+        "-j",
+        "0",
+        "-q",
+        virtual_environment,
+    ]
+    started = time.monotonic()
+    trace(f"RUN {' '.join(command)}")
+    try:
+        subprocess.run(command, capture_output=True)
+    except Exception as error:
+        trace(f"Precompiling {virtual_environment} failed ({error}); skipping")
+        return
+    trace(f"Compiled {virtual_environment} in {time.monotonic() - started:.2f}s")
+
+
+def compile_virtual_environment(workspace: dict[str, str]) -> None:
+    compile_one_virtual_environment(workspace["virtual_environment_td"])
+    compile_one_virtual_environment(workspace["virtual_environment_fn"])
+
+
 def verify_image(workspace: dict[str, str]) -> None:
     for folder in (
         workspace["uv_python_home"],
@@ -831,6 +856,7 @@ def main() -> None:
     )
     step("Installing packages", install_packages, arguments, workspace)
     step("Pruning the virtual environments", prune_virtual_environment, workspace)
+    step("Compiling the virtual environments", compile_virtual_environment, workspace)
     step("Verifying the image", verify_image, workspace)
     step("Writing the image", write_image, arguments, workspace)
     step("Sending the image", send_image, arguments, workspace)

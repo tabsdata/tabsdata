@@ -328,5 +328,9 @@ script = [
             debug "✅ Successfully imported: tabsdatak.tableframe.TableFrame"
         end
 
+        debug "🔷 🔷 _____ Warming the native libraries of the hydrated packages..."
+        exec python ${WARMUP_SCRIPT}
+        debug "✅ Native libraries warmed"
+
     end
     ''']

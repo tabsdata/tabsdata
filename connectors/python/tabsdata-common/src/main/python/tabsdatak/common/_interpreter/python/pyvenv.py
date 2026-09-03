@@ -33,8 +33,11 @@ TABSDATA_CORE_PACKAGES: str = "Tabsdata Core Packages"
 
 COMMAND_RESOLVE: str = "resolve"
 COMMAND_CREATE: str = "create"
+COMMAND_VERIFY: str = "verify"
+COMMAND_ROOT: str = "root"
 COMMAND_PYTHON: str = "python"
 COMMAND_SCRIPTS: str = "scripts"
+COMMAND_COMPILE: str = "compile"
 
 VENV_TD: str = "td"
 VENV_AG: str = "ag"
@@ -47,8 +50,15 @@ def main() -> int:
         return python(arguments.target)
     if arguments.command == COMMAND_SCRIPTS:
         return scripts(arguments.target)
+    if arguments.command == COMMAND_COMPILE:
+        return compile_environment(arguments.target, verbose=arguments.verbose)
+    if arguments.command == COMMAND_ROOT:
+        print(Path(sys.prefix))
+        return 0
+    environment = PythonEnvironment(Path(sys.prefix))
+    verifies = arguments.command in (COMMAND_VERIFY, COMMAND_CREATE)
     try:
-        profile = PythonEnvironment(Path(sys.prefix)).resolve()
+        profile = environment.verify() if verifies else environment.resolve()
     except Exception as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
@@ -84,6 +94,14 @@ def scripts(target: Path) -> int:
     return 0
 
 
+def compile_environment(target: Path, *, verbose: bool = False) -> int:
+    try:
+        PythonEnvironment(target).compile(verbose=verbose)
+    except Exception as error:
+        print(f"Warning: precompilation skipped: {error}", file=sys.stderr)
+    return 0
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="td_pyvenv")
     parser.add_argument(
@@ -96,6 +114,17 @@ def parse_arguments() -> argparse.Namespace:
     subparsers.add_parser(
         COMMAND_RESOLVE,
         help="Print metadata of the current Python environment",
+    )
+    subparsers.add_parser(
+        COMMAND_VERIFY,
+        help=(
+            "Check that the current Python environment holds every tabsdata"
+            " package needed to back the instance virtual environments"
+        ),
+    )
+    subparsers.add_parser(
+        COMMAND_ROOT,
+        help="Print the root folder of the current Python environment",
     )
     create_parser = subparsers.add_parser(
         COMMAND_CREATE,
@@ -137,6 +166,19 @@ def parse_arguments() -> argparse.Namespace:
         ),
     )
     scripts_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Root folder of the Python virtual environment",
+    )
+    compile_parser = subparsers.add_parser(
+        COMMAND_COMPILE,
+        help=(
+            "Precompile to bytecode the Python virtual environment at <target>."
+            " Compilation failures are reported and ignored"
+        ),
+    )
+    compile_parser.add_argument(
         "--target",
         type=Path,
         required=True,

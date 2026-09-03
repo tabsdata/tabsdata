@@ -12,8 +12,11 @@ use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
 use tracing::info;
 
-use crate::base::constants::{KPROFILE_ASSETS_FAMILY, Venv};
+use crate::base::constants::{
+    ENV_TD_KUBE_UV_MODE, KPROFILE_ASSETS_FAMILY, UV_MODE_LINKED, UvMode, Venv,
+};
 use crate::base::error::cli::CliError;
+use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::session::settings::SettingsContext;
@@ -104,6 +107,15 @@ pub async fn command_venv_update(
 
     let contents = read_requirements(&requirements)?;
     validate_requirements(&requirements, &contents)?;
+
+    if UvMode::from_environment().map_err(TdError::from)? == UvMode::Linked {
+        return Err(ProviderError::VenvUpdateUnsupportedWhenLinked {
+            variable: ENV_TD_KUBE_UV_MODE.to_owned(),
+            linked: UV_MODE_LINKED.to_owned(),
+            requirements: requirements.display().to_string(),
+        }
+        .into());
+    }
 
     let settings = SettingsContext::settings();
     let instance = resolved_instance(instance, &settings);

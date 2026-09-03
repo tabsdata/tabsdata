@@ -15,7 +15,7 @@ use td_common::logging::{
 };
 use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
-use td_kubernetes::base::constants::{ENV_TD_KUBE_UV_MODE, LOG_SIZE_WARNING};
+use td_kubernetes::base::constants::{ENV_TD_KUBE_UV_MODE, LOG_SIZE_WARNING, UV_MODE_LINKED};
 use td_kubernetes::base::privacy::mask_command_line;
 use td_kubernetes::base::trace;
 use td_kubernetes::client::registry::tdkserver_log_file;
@@ -163,16 +163,26 @@ fn warn_on_uv_mode() {
     if value.is_empty() {
         return;
     }
+    let mut caution = format!(
+        "Caution: the environment variable {ENV_TD_KUBE_UV_MODE} is set to '{value}'. \
+         Depending on its value, tdkserver will build its Python environments from your \
+         current (hydrated) virtual environment or from a development package index, \
+         instead of resolving them from PyPI. This instance therefore reflects your \
+         development setup rather than what an end user installing tabsdata from PyPI \
+         gets, and it may behave differently. Unset the variable to restore the standard \
+         behaviour."
+    );
+    if value.eq_ignore_ascii_case(UV_MODE_LINKED) {
+        caution.push_str(&format!(
+            "\n\nWith '{UV_MODE_LINKED}' the instance does not get its own Python environments \
+             at all: every one of them is a symbolic link to the environment tdkserver runs \
+             from. Nothing isolates the environment running user functions from the one running \
+             the server, and any change to your environment reaches the instance immediately, \
+             including one that breaks it. Use it for development only."
+        ));
+    }
     show_caution(
-        &format!(
-            "Caution: the environment variable {ENV_TD_KUBE_UV_MODE} is set to '{value}'. \
-             Depending on its value, tdkserver will build its Python environments from your \
-             current (hydrated) virtual environment or from a development package index, \
-             instead of resolving them from PyPI. This instance therefore reflects your \
-             development setup rather than what an end user installing tabsdata from PyPI \
-             gets, and it may behave differently. Unset the variable to restore the standard \
-             behaviour."
-        ),
+        &caution,
         80,
         true,
         &[ENV_TD_KUBE_UV_MODE, &format!("'{value}'")],

@@ -108,6 +108,45 @@ pub enum ProviderError {
     #[error("Could not create Python virtual environment templates under '{folder}': {cause}.")]
     PyvenvCreateFailed { folder: String, cause: String } = 5108,
     #[error(
+        "The Python environment tabsdata is running from is not usable as the source of the \
+         instance virtual environments: {cause}"
+    )]
+    HostEnvironmentIncomplete { cause: String } = 5122,
+    #[error(
+        "Could not resolve the Python environment tabsdata is running from, needed to link the \
+         instance virtual environments: {cause}."
+    )]
+    HostEnvironmentResolveFailed { cause: String } = 5123,
+    #[error("Could not link '{link}' to the Python environment '{target}': {cause}.")]
+    PyvenvLinkFailed {
+        link: String,
+        target: String,
+        cause: String,
+    } = 5124,
+    #[error(
+        "Folder '{folder}' holds virtual environments linked to a host Python environment, \
+         created with {variable}='{linked}'. They cannot be rebuilt in place with \
+         {variable}='{local}'. Delete the instance and create it again, or switch back to \
+         '{linked}'."
+    )]
+    RuntimesLinkedNotRebuildable {
+        folder: String,
+        variable: String,
+        linked: String,
+        local: String,
+    } = 5125,
+    #[error(
+        "Virtual environments of this instance are linked to the host Python environment \
+         ({variable}='{linked}'), so their packages are whatever that environment holds. Install \
+         the packages of '{requirements}' there instead, or recreate the instance without \
+         '{linked}'."
+    )]
+    VenvUpdateUnsupportedWhenLinked {
+        variable: String,
+        linked: String,
+        requirements: String,
+    } = 5126,
+    #[error(
         "Another process is already building the Python virtual environments under \
          '{folder}'{holder}. Wait for it to finish before provisioning again."
     )]

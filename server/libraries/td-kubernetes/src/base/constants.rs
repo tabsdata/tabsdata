@@ -32,12 +32,14 @@ pub const PYPI_INDEX_URL: &str = "https://pypi.org/simple/";
 pub const UV_INDEX_STRATEGY_BEST_MATCH: &str = "unsafe-best-match";
 pub const UV_INDEX_STRATEGY_FIRST_INDEX: &str = "first-index";
 
+pub const UV_MODE_LINKED: &str = "linked";
 pub const UV_MODE_LOCAL: &str = "local";
 pub const UV_MODE_DEVPI: &str = "devpi";
 pub const UV_MODE_PYPI: &str = "pypi";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UvMode {
+    Linked,
     Local,
     Devpi,
     Pypi,
@@ -61,6 +63,7 @@ impl UvMode {
     pub fn from_environment() -> Result<Self, CliError> {
         let value = std::env::var(ENV_TD_KUBE_UV_MODE).unwrap_or_default();
         match value.trim().to_lowercase().as_str() {
+            UV_MODE_LINKED => Ok(Self::Linked),
             UV_MODE_LOCAL => Ok(Self::Local),
             UV_MODE_DEVPI => Ok(Self::Devpi),
             UV_MODE_PYPI => Ok(Self::Pypi),
@@ -68,13 +71,14 @@ impl UvMode {
             other => Err(CliError::UvModeUnsupported {
                 variable: ENV_TD_KUBE_UV_MODE.to_owned(),
                 value: other.to_owned(),
-                supported: [UV_MODE_LOCAL, UV_MODE_DEVPI, UV_MODE_PYPI].join(", "),
+                supported: [UV_MODE_LINKED, UV_MODE_LOCAL, UV_MODE_DEVPI, UV_MODE_PYPI].join(", "),
             }),
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Linked => UV_MODE_LINKED,
             Self::Local => UV_MODE_LOCAL,
             Self::Devpi => UV_MODE_DEVPI,
             Self::Pypi => UV_MODE_PYPI,
@@ -82,8 +86,19 @@ impl UvMode {
         }
     }
 
+    pub fn uses_host_environment(self) -> bool {
+        match self {
+            Self::Linked => true,
+            Self::Local => true,
+            Self::Devpi => false,
+            Self::Pypi => false,
+            Self::Unset => false,
+        }
+    }
+
     pub fn uv_default_index(self, reach: IndexReach) -> String {
         match self {
+            Self::Linked => String::new(),
             Self::Local => String::new(),
             Self::Devpi | Self::Pypi => PYPI_INDEX_URL.to_owned(),
             Self::Unset => {
@@ -99,6 +114,7 @@ impl UvMode {
 
     pub fn uv_index(self, reach: IndexReach) -> String {
         match self {
+            Self::Linked => String::new(),
             Self::Local => String::new(),
             Self::Devpi => match reach {
                 IndexReach::Host => DEVPI_INDEX_URL_HOST.to_owned(),
@@ -531,7 +547,7 @@ pub const KUBE_KIND_CRONJOB: &str = "CronJob";
 
 pub const LOG_POD_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
-pub const KMINUS_MIN_NOFILE: u64 = 65536;
+pub const KMINUS_MIN_NOFILE: u64 = 65535;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

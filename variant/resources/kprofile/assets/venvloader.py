@@ -58,7 +58,9 @@ ENV_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
 ENV_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
 
 ENV_UV_MODE = "TD_KUBE_UV_MODE"
+UV_MODE_LINKED = "linked"
 UV_MODE_LOCAL = "local"
+UV_MODES_HOST = (UV_MODE_LINKED, UV_MODE_LOCAL)
 
 TAR_EXECUTABLE = "tar"
 COPY_BLOCK_SIZE = 1 << 22
@@ -314,8 +316,9 @@ def extract_image(source: str, options: dict[str, str], uv_home: Path) -> None:
 
 def main() -> int:
     arguments = parse_arguments()
-    if os.environ.get(ENV_UV_MODE, "").strip().lower() == UV_MODE_LOCAL:
-        trace(f"Skipping the load; {ENV_UV_MODE} is {UV_MODE_LOCAL}")
+    mode = os.environ.get(ENV_UV_MODE, "").strip().lower()
+    if mode in UV_MODES_HOST:
+        trace(f"Skipping the load; {ENV_UV_MODE} is {mode}")
         return 0
     venvs = arguments.venvs
     if not venvs:

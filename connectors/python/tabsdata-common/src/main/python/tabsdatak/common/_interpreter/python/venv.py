@@ -26,6 +26,8 @@ from tabsdatak.common._interpreter.python.binary import SYSCONFIG_VAR_EXE
 from tabsdatak.common._interpreter.python.error import (
     BinaryNotFoundError,
     FeatureDetectionError,
+    IncompleteEnvironmentError,
+    UnusableEnvironmentError,
     VenvCreationError,
     WheelFileMissingError,
 )
@@ -110,6 +112,14 @@ ARCHIVE_LONG_DISTANCE_WINDOW_LOG = 27
 LIBEXEC_BUILD_RELATIVE_PATH = Path("target") / "python" / "libexec" / "tabsdata"
 LIBEXEC_INSTALL_RELATIVE_PATH = Path("libexec") / "tabsdata"
 
+PYTHON_BINARIES: tuple[str, ...] = ("tdk", "td_pyvenv", "td_resource")
+
+RUST_BINARIES: tuple[str, ...] = ("tdkserver", "td_apiserver")
+
+SHEBANG_PREFIX = "#!"
+SHEBANG_ENV = "/usr/bin/env"
+UV_LAUNCHER_EXEC_PREFIX = "'''exec' "
+
 
 @dataclass(frozen=True)
 class EnvironmentProfile:
@@ -131,6 +141,73 @@ class PythonEnvironment:
             edition=self.edition(packages),
             packages=packages,
         )
+
+    def verify(self) -> EnvironmentProfile:
+        profile = self.resolve()
+        expected = self.expected_packages(profile.edition)
+        installed = self.installed_packages()
+        missing = [
+            name for name in expected if canonicalize_name(name) not in installed
+        ]
+        if missing:
+            raise IncompleteEnvironmentError(
+                root=self.root,
+                edition=profile.edition.value,
+                expected=len(expected),
+                missing_count=len(missing),
+                missing=", ".join(missing),
+            )
+        self.verify_launchers()
+        return profile
+
+    @staticmethod
+    def expected_packages(edition: TabsdataEdition) -> tuple[str, ...]:
+        names = [TABSDATA_PACKAGE, TABSDATA_TOOLKIT_PACKAGE, *TABSDATA_CONNECTORS_NAMES]
+        if edition == TabsdataEdition.ENTERPRISE:
+            names.append(TABSDATA_AGENT_PACKAGE)
+        return tuple(sorted(set(names), key=str.casefold))
+
+    def verify_launchers(self) -> None:
+        python = self.python()
+        if not os.access(python, os.X_OK):
+            raise UnusableEnvironmentError(
+                root=self.root,
+                detail=(
+                    f"its interpreter '{python}' is missing or not executable. The"
+                    " environment was most likely moved or removed after it was"
+                    " created."
+                ),
+            )
+        for name, shebang in self.stale_launchers():
+            raise UnusableEnvironmentError(
+                root=self.root,
+                detail=(
+                    f"the console script '{name}' points at the interpreter"
+                    f" '{shebang}', which no longer exists. The environment was most"
+                    " likely created at a different path and then moved; recreate it"
+                    " at its current location."
+                ),
+            )
+        for name in (*PYTHON_BINARIES, *RUST_BINARIES):
+            try:
+                self.binary(name)
+            except BinaryNotFoundError as error:
+                raise UnusableEnvironmentError(
+                    root=self.root,
+                    detail=f"binary '{name}' is not installed in it.",
+                ) from error
+
+    def stale_launchers(self) -> list[tuple[str, str]]:
+        stale: list[tuple[str, str]] = []
+        scripts = self.scripts()
+        for name in PYTHON_BINARIES:
+            launcher = scripts / (name + sysconfig.get_config_var(SYSCONFIG_VAR_EXE))
+            if not launcher.is_file():
+                continue
+            interpreter = launcher_interpreter(launcher)
+            if interpreter is not None and not Path(interpreter).exists():
+                stale.append((name, interpreter))
+        return stale
 
     @staticmethod
     def version() -> str:
@@ -322,7 +399,7 @@ class PythonEnvironment:
             for binary in package.binaries:
                 binary.link(source_root, self.root)
         self.link_libexec_launchers(recipe.packages)
-        # self.compile(verbose=verbose)
+        self.compile(verbose=verbose)
 
     def link_libexec_launchers(self, packages: tuple[PackageRecipe, ...]) -> None:
         target = self.root / LIBEXEC_INSTALL_RELATIVE_PATH
@@ -507,16 +584,16 @@ class PythonEnvironment:
             str(self.python()),
             "-m",
             "compileall",
-            "-f",
             "-j",
             "0",
-            "--invalidation-mode",
-            "unchecked-hash",
         ]
         if not verbose:
             command.append("-q")
         command.append(str(self.lib()))
-        subprocess.run(command, capture_output=not verbose)
+        try:
+            subprocess.run(command, capture_output=not verbose)
+        except Exception as error:
+            logger.warning(f"Precompiling {self.root} failed ({error}); skipping")
 
     def binary(self, name: str) -> Path:
         scripts = self.scripts()
@@ -592,3 +669,30 @@ class PythonEnvironment:
                 ),
             )
         return result.stdout
+
+
+def launcher_interpreter(launcher: Path) -> str | None:
+    try:
+        with open(launcher, encoding="utf-8", errors="replace") as reader:
+            first = reader.readline().rstrip("\n")
+            second = reader.readline().rstrip("\n")
+    except OSError:
+        return None
+    if not first.startswith(SHEBANG_PREFIX):
+        return None
+    shebang = first[len(SHEBANG_PREFIX) :].strip()
+    if shebang.startswith(SHEBANG_ENV):
+        return None
+    if second.startswith(UV_LAUNCHER_EXEC_PREFIX):
+        return uv_launcher_interpreter(second)
+    return shebang or None
+
+
+def uv_launcher_interpreter(line: str) -> str | None:
+    remainder = line[len(UV_LAUNCHER_EXEC_PREFIX) :].lstrip()
+    if not remainder.startswith("'"):
+        return None
+    closing = remainder.find("'", 1)
+    if closing < 0:
+        return None
+    return remainder[1:closing] or None

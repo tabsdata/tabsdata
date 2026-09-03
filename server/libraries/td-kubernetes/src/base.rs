@@ -10,4 +10,5 @@ pub mod macros;
 pub mod naming;
 pub mod privacy;
 pub mod reporter;
+pub mod symlink;
 pub mod trace;

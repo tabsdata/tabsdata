@@ -31,6 +31,7 @@ fn with_environment<T>(entries: &[(&str, &str)], assertion: impl FnOnce() -> T) 
 #[serial]
 fn named_modes_are_recognized() {
     for (value, expected) in [
+        (UV_MODE_LINKED, UvMode::Linked),
         (UV_MODE_LOCAL, UvMode::Local),
         (UV_MODE_DEVPI, UvMode::Devpi),
         (UV_MODE_PYPI, UvMode::Pypi),
@@ -40,6 +41,15 @@ fn named_modes_are_recognized() {
         });
         assert_eq!(mode.unwrap(), expected);
     }
+}
+
+#[test]
+fn only_linked_and_local_use_the_host_environment() {
+    assert!(UvMode::Linked.uses_host_environment());
+    assert!(UvMode::Local.uses_host_environment());
+    assert!(!UvMode::Devpi.uses_host_environment());
+    assert!(!UvMode::Pypi.uses_host_environment());
+    assert!(!UvMode::Unset.uses_host_environment());
 }
 
 #[test]
@@ -84,6 +94,7 @@ fn named_modes_ignore_the_index_environment_variables() {
         (ENV_UV_INDEX_STRATEGY, "first-index"),
     ];
     for (mode, expected_default, expected_extra, expected_strategy) in [
+        (UvMode::Linked, "", "", UV_INDEX_STRATEGY_BEST_MATCH),
         (UvMode::Local, "", "", UV_INDEX_STRATEGY_BEST_MATCH),
         (
             UvMode::Devpi,
@@ -255,8 +266,8 @@ fn cluster_reach_always_uses_the_in_cluster_index() {
 
 #[test]
 #[serial]
-fn cluster_reach_stays_empty_for_local_and_pypi() {
-    for mode in [UvMode::Local, UvMode::Pypi] {
+fn cluster_reach_stays_empty_for_linked_local_and_pypi() {
+    for mode in [UvMode::Linked, UvMode::Local, UvMode::Pypi] {
         let resolved = with_environment(&[], || mode.uv_index(IndexReach::Cluster));
         assert_eq!(resolved, "", "mode {mode:?}");
     }
