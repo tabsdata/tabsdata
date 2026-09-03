@@ -491,7 +491,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    set_env TD_KUBE_UV_MODE local
+    set_env TD_KUBE_UV_MODE linked
     info "🐍 _____ Using kubernetes uv mode local: runtimes built from the local sources"
     ''']
 
