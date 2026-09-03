@@ -15,7 +15,7 @@ pub fn is_symlink(path: &Path) -> bool {
 pub fn relink(link: &Path, target: &Path) -> Result<(), String> {
     match fs::symlink_metadata(link) {
         Ok(metadata) if metadata.is_symlink() => {
-            fs::remove_file(link).map_err(|error| error.to_string())?;
+            remove_symlink(link, &metadata).map_err(|error| error.to_string())?;
         }
         Ok(metadata) if metadata.is_dir() => {
             fs::remove_dir_all(link).map_err(|error| error.to_string())?;
@@ -27,6 +27,22 @@ pub fn relink(link: &Path, target: &Path) -> Result<(), String> {
         Err(error) => return Err(error.to_string()),
     }
     symlink_folder(target, link).map_err(|error| error.to_string())
+}
+
+#[cfg(unix)]
+fn remove_symlink(link: &Path, _metadata: &fs::Metadata) -> std::io::Result<()> {
+    fs::remove_file(link)
+}
+
+#[cfg(windows)]
+fn remove_symlink(link: &Path, metadata: &fs::Metadata) -> std::io::Result<()> {
+    use std::os::windows::fs::FileTypeExt;
+
+    if metadata.file_type().is_symlink_dir() {
+        fs::remove_dir(link)
+    } else {
+        fs::remove_file(link)
+    }
 }
 
 #[cfg(unix)]
