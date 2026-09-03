@@ -9,13 +9,14 @@ agate-sql==0.7.3
 annotated-doc==0.0.5
 annotated-types==0.8.0
 ansi2html==1.9.2
-anyio==4.14.2
+anyio==4.14.2 ; python_full_version < '3.15'
+anyio==4.15.0 ; python_full_version >= '3.15'
 appdirs==1.4.4
 archspec==0.2.5
 argcomplete==3.7.2
 argon2-cffi==25.1.0
 argon2-cffi-bindings==26.1.0
-ast-serialize==0.8.0
+ast-serialize==0.9.0
 attrs==23.2.0
 azure-core==1.41.0
 azure-storage-blob==12.28.0
@@ -24,7 +25,7 @@ beautifulsoup4==4.15.0
 black==26.5.1
 boolean-py==5.0
 boto3==1.43.78
-botocore==1.43.86
+botocore==1.43.87
 build==1.4.0
 cachecontrol==0.14.4
 cattrs==24.1.3
