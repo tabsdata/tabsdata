@@ -17,7 +17,7 @@ use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_PYENV_AG_ROOT, CONTAINER_PYENV_FN_ROOT,
     CONTAINER_PYENV_SCRIPTS_FOLDER, CONTAINER_PYENV_TD_ROOT, CONTAINER_RUNTIMES_ROOT,
     CONTAINER_TABSDATA_ROOT, DATABASE_SSL_MODE_PREFER, FOLDER_REPOSITORY, FOLDER_STORAGE,
-    IndexReach, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, YAML_NULL,
+    IndexReach, YAML_NULL,
 };
 use td_python::tabsdata::tabsdata_version;
 
@@ -31,20 +31,15 @@ use crate::client::session::settings::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandResult, abort_with};
-use crate::kube::api::configmap::require_configmap;
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
-use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs};
-use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::{
-    CHECK_ONLY_PUBLISHED_PORTS_FILTER, NO_PATIENCE, apply_ports, ensure_ports_free,
+    CHECK_ONLY_PUBLISHED_PORTS_FILTER, NO_PATIENCE, ensure_ports_free,
 };
-use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
 use crate::runtime::instance::staging::promote_staged_profile;
 use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::provider::docker::cluster::DockerCluster;
@@ -101,48 +96,6 @@ impl DockerProvider {
             })?;
         }
         Ok(())
-    }
-
-    async fn runtimes_context(&self) -> CommandResult<(KubeContext, SystemValues, Profile)> {
-        let context = self.kube_context().await?;
-        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
-        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
-        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
-        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
-        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
-            return Err(ProviderError::ConfigmapEntryMissing(
-                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
-                MANIFEST_FILE.to_owned(),
-            )
-            .into());
-        };
-        let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
-
-        let mut system = self.system_values()?;
-        let settings = InstanceSettings::load(&self.name)?;
-        apply_ports(&mut system, &settings.ports);
-
-        Ok((context, system, profile))
-    }
-
-    async fn provision_database_as_pod(&self, mode: DbManagerMode) -> CommandResult {
-        let (context, system, profile) = self.runtimes_context().await?;
-        let multi = td_common::logging::multi_progress().unwrap_or_default();
-        provision_database(
-            &context,
-            self.cluster_provider(),
-            &system,
-            &profile,
-            &multi,
-            mode,
-        )
-        .await
-    }
-
-    async fn create_runtimes_as_pod(&self) -> CommandResult {
-        let (context, system, profile) = self.runtimes_context().await?;
-        let multi = td_common::logging::multi_progress().unwrap_or_default();
-        provision_pyvenvs(&context, self.cluster_provider(), &system, &profile, &multi).await
     }
 
     pub async fn build(
@@ -269,7 +222,7 @@ impl Provider for DockerProvider {
     }
 
     fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
-        Vec::new()
+        ContainerProvider::secret_generators(self)
     }
 
     fn summary(&self) -> Summary {
@@ -361,7 +314,7 @@ impl Provider for DockerProvider {
     }
 
     async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult<ImagesOutcome> {
-        Ok(ImagesOutcome::NotSupported)
+        ContainerProvider::create_images(self).await
     }
 
     async fn cluster_alive(&self) -> bool {
@@ -373,7 +326,7 @@ impl Provider for DockerProvider {
     }
 
     fn manages_cluster_lifecycle(&self) -> bool {
-        false
+        ContainerProvider::manages_cluster_lifecycle(self)
     }
 
     async fn start_cluster_hook(&self, _reporter: &dyn Reporter) -> CommandResult {
@@ -381,7 +334,7 @@ impl Provider for DockerProvider {
     }
 
     async fn stop_cluster(&self, _reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
-        Ok(ClusterStopOutcome::NotSupported)
+        ContainerProvider::stop_cluster(self).await
     }
 
     async fn ensure_startable_cluster(&self) -> CommandResult {
@@ -470,7 +423,11 @@ impl Provider for DockerProvider {
     }
 }
 
-impl ContainerProvider for DockerProvider {}
+impl ContainerProvider for DockerProvider {
+    fn instance_name(&self) -> &str {
+        &self.name
+    }
+}
 
 impl HostedProvider for DockerProvider {}
 

@@ -37,8 +37,8 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, Wor
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::sizing::{PodPlacement, apply_sizing};
 use crate::runtime::provider::ClusterProvider;
+use crate::runtime::provider::cloud::system_values_for as cloud_system_values_for;
 use crate::runtime::provider::docker::system_values_for as docker_system_values_for;
-use crate::runtime::provider::fargate::system_values_for as fargate_system_values_for;
 use crate::runtime::provider::kminus::system_values_for as kminus_system_values_for;
 
 fn unsupported(id: &str, action: &str) -> QueueError {
@@ -301,7 +301,7 @@ impl KubernetesOrchestratorMessageQueue {
                 docker_system_values_for(&settings.name, namespace, &settings.folder)
             }
             ClusterProvider::Eks | ClusterProvider::Fargate => {
-                fargate_system_values_for(&settings.name, namespace, cluster)
+                cloud_system_values_for(&settings.name, namespace, cluster)
             }
         }
         .map_err(|error| QueueError::BackendError {

@@ -16,7 +16,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{parse_from_configmaps, read_family_configmaps};
-use crate::runtime::provider::fargate::system_values_for;
+use crate::runtime::provider::cloud::system_values_for;
 use crate::runtime::provider::{ClusterProvider, Instance};
 use crate::runtime::reporting::build_kube_client;
 
@@ -28,15 +28,22 @@ use crate::base::error::provider::ProviderError;
 use crate::kube::api::require_configmap;
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 
-pub struct FargateInstance {
+pub struct CloudInstance {
+    provider: ClusterProvider,
     config: Config,
     folder: PathBuf,
     cluster_name: String,
 }
 
-impl FargateInstance {
-    pub fn new(config: Config, folder: impl Into<PathBuf>, cluster_name: String) -> Self {
+impl CloudInstance {
+    pub fn new(
+        provider: ClusterProvider,
+        config: Config,
+        folder: impl Into<PathBuf>,
+        cluster_name: String,
+    ) -> Self {
         Self {
+            provider,
             config,
             folder: folder.into(),
             cluster_name,
@@ -50,7 +57,7 @@ impl FargateInstance {
     }
 }
 
-impl Instance for FargateInstance {
+impl Instance for CloudInstance {
     async fn start(&self, multi: &MultiProgress) -> CommandResult {
         let context = self.kube_context().await?;
         let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
@@ -78,7 +85,7 @@ impl Instance for FargateInstance {
         )?;
         let settings = InstanceSettings::load(&instance_name)?;
         apply_ports(&mut system, &settings.ports);
-        start_workload(&context, ClusterProvider::Fargate, &system, &profile, multi).await
+        start_workload(&context, self.provider, &system, &profile, multi).await
     }
 
     async fn stop(&self, multi: &MultiProgress) -> CommandResult<bool> {

@@ -3,6 +3,7 @@
 //
 
 pub(crate) mod axes;
+pub mod cloud;
 pub mod docker;
 pub mod eks;
 pub mod fargate;
@@ -23,8 +24,12 @@ use td_common::settings::DEFAULT_INSTANCE;
 
 #[cfg(unix)]
 use crate::base::constants::KMINUS_MIN_NOFILE;
-use crate::base::constants::LogLevel;
 use crate::base::constants::UvMode;
+use crate::base::constants::{
+    CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY,
+};
+use crate::base::constants::{DbManagerMode, LogLevel};
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::base::trace;
@@ -40,16 +45,19 @@ use td_error::TdError;
 
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::core::system::exit::CommandResult;
+use crate::kube::api::configmap::require_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
+use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs};
+use crate::runtime::instance::manifest::MANIFEST_FILE;
+use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::bundle::Axis;
+use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
 use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::axes::{Lifecycle, Locality, Location, Platform, Workload};
 use crate::runtime::provider::docker::DockerProvider;
-use crate::runtime::provider::eks::EksProvider;
-use crate::runtime::provider::fargate::FargateProvider;
 use crate::runtime::provider::kminus::KminusProvider;
 use crate::runtime::provider::outcome::{
     ClusterRestartOutcome, ClusterStartOutcome, ClusterStopOutcome, ImagesOutcome,
@@ -570,8 +578,68 @@ pub(super) async fn handle_phase_secrets(
 #[allow(dead_code)]
 pub(crate) trait ProcessProvider: Provider {}
 
-#[allow(dead_code)]
-pub(crate) trait ContainerProvider: Provider {}
+#[async_trait]
+pub(crate) trait ContainerProvider: Provider {
+    fn instance_name(&self) -> &str;
+
+    fn manages_cluster_lifecycle(&self) -> bool {
+        false
+    }
+
+    async fn stop_cluster(&self) -> CommandResult<ClusterStopOutcome> {
+        Ok(ClusterStopOutcome::NotSupported)
+    }
+
+    async fn create_images(&self) -> CommandResult<ImagesOutcome> {
+        Ok(ImagesOutcome::NotSupported)
+    }
+
+    fn secret_generators(&self) -> Vec<Box<dyn SecretGenerator>> {
+        Vec::new()
+    }
+
+    async fn runtimes_context(&self) -> CommandResult<(KubeContext, SystemValues, Profile)> {
+        let context = self.kube_context().await?;
+        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
+        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
+        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
+            return Err(ProviderError::ConfigmapEntryMissing(
+                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
+                MANIFEST_FILE.to_owned(),
+            )
+            .into());
+        };
+        let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
+
+        let mut system = self.system_values()?;
+        let settings = InstanceSettings::load(self.instance_name())?;
+        apply_ports(&mut system, &settings.ports);
+
+        Ok((context, system, profile))
+    }
+
+    async fn provision_database_as_pod(&self, mode: DbManagerMode) -> CommandResult {
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_database(
+            &context,
+            self.cluster_provider(),
+            &system,
+            &profile,
+            &multi,
+            mode,
+        )
+        .await
+    }
+
+    async fn create_runtimes_as_pod(&self) -> CommandResult {
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_pyvenvs(&context, self.cluster_provider(), &system, &profile, &multi).await
+    }
+}
 
 #[allow(dead_code)]
 pub(crate) trait HostedProvider: Provider {}
@@ -609,11 +677,11 @@ pub async fn provider_for(
             Ok(Box::new(provider))
         }
         ClusterProvider::Eks => {
-            let provider = EksProvider::build(cluster, instance, verbose).await?;
+            let provider = eks::build(cluster, instance, verbose).await?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Fargate => {
-            let provider = FargateProvider::build(cluster, instance, verbose).await?;
+            let provider = fargate::build(cluster, instance, verbose).await?;
             Ok(Box::new(provider))
         }
     }

@@ -7,17 +7,17 @@ use kube::{Client, Config};
 use crate::core::system::exit::CommandResult;
 use crate::runtime::provider::Cluster;
 
-pub struct FargateCluster {
+pub struct CloudCluster {
     config: Config,
 }
 
-impl FargateCluster {
+impl CloudCluster {
     pub fn new(config: Config) -> Self {
         Self { config }
     }
 }
 
-impl Cluster for FargateCluster {
+impl Cluster for CloudCluster {
     fn create(&self) -> CommandResult {
         Ok(())
     }
