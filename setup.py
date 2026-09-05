@@ -231,6 +231,7 @@ console_scripts: list[str] = [
     "td_resource = tabsdatak.common._resources.reader:main",
     "td_tdinfo = tabsdatak.server._tdserver.workers.tdinfo:main",
     "tdk = tabsdatak.cli.td.cli:cli",
+    "tdk_assess = tabsdatak.server._tdserver.render.assess:main",
     "tdk_check = tabsdatak.server._tdserver.render.check:main",
     "tdk_table = tabsdatak.server._tdserver.render.table:main",
     "tdk_yaml = tabsdatak.server._tdserver.render.yaml:main",

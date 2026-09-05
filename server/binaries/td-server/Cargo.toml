@@ -50,6 +50,10 @@ name = "td_transporter2"
 path = "src/transporter2.rs"
 
 [[bin]]
+name = "tdk_kcheck"
+path = "src/tdkkcheck.rs"
+
+[[bin]]
 name = "tdkserver"
 path = "src/tdkserver.rs"
 
@@ -137,6 +141,7 @@ te-system = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 path-slash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 

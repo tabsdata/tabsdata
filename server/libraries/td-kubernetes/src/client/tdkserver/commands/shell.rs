@@ -23,6 +23,7 @@ use super::banner::command_banner;
 use super::config::{ConfigCommands, command_config};
 use super::help::{ShellHelpArguments, command_shell_help};
 use super::service::InstanceNameArguments;
+use super::service::assess::{AssessArguments, command_assess};
 use super::service::create::{CreateArguments, command_create};
 use super::service::delete::{DeleteArguments, command_delete};
 use super::service::info::{InfoCommands, command_info};
@@ -64,6 +65,8 @@ enum ShellCommand {
     Info(InfoCommands),
     #[command(about = "Initialize, create and start a tabsdata instance in one step")]
     Quickstart(QuickstartArguments),
+    #[command(about = "Check whether a tabsdata instance can be created")]
+    Assess(AssessArguments),
     #[command(about = "Produce an editable input config folder for a tabsdata instance")]
     Init(InitArguments),
     #[command(about = "Create a tabsdata instance")]
@@ -200,6 +203,9 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 }
                 ShellCommand::Quickstart(arguments) => {
                     let _ = command_quickstart(arguments, globals).await;
+                }
+                ShellCommand::Assess(arguments) => {
+                    let _ = command_assess(arguments, globals).await;
                 }
                 ShellCommand::Init(arguments) => {
                     let _ = command_init(arguments, globals).await;

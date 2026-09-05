@@ -14,7 +14,7 @@ azure-storage-blob==12.28.0
 base32hex==1.0.2
 boto3==1.43.78
 boto3-stubs==1.43.78
-botocore==1.43.87
+botocore==1.43.88
 botocore-stubs==1.43.67
 build==1.6.0
 cachetools==6.2.6
@@ -47,7 +47,7 @@ google-cloud-storage==3.10.0
 google-cloud-storage-control==1.10.0
 google-crc32c==1.8.0
 google-resumable-media==2.10.2
-googleapis-common-protos==1.75.2
+googleapis-common-protos==1.75.3
 greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.5
 grpcio==1.83.1

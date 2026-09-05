@@ -103,6 +103,7 @@ PRUNED_BIN_FILES=(
    "kmc"
    "td_about"
    "tdkserver"
+   "tdk_kcheck"
 )
 
 PRUNED_BIN_FILES_FN=(

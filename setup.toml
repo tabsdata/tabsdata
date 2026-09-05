@@ -31,6 +31,7 @@ names = [
   # "td_supervisor",
   # "td_transporter1",
     "tdkserver",
+    "tdk_kcheck",
   # "tdserver",
 ]
 

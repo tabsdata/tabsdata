@@ -15,7 +15,9 @@ use td_common::logging::{
 };
 use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
-use td_kubernetes::base::constants::{ENV_TD_KUBE_UV_MODE, LOG_SIZE_WARNING, UV_MODE_LINKED};
+use td_kubernetes::base::constants::{
+    ENV_TD_KUBE_UV_MODE, ENV_TD_KUBE_UV_MODE_NOWARN, LOG_SIZE_WARNING, UV_MODE_LINKED,
+};
 use td_kubernetes::base::privacy::mask_command_line;
 use td_kubernetes::base::trace;
 use td_kubernetes::client::registry::tdkserver_log_file;
@@ -157,7 +159,21 @@ fn log_command_banner() {
     debug!("{}", "=".repeat(BANNER_WIDTH));
 }
 
+fn cautions_muted() -> bool {
+    matches!(
+        env::var(ENV_TD_KUBE_UV_MODE_NOWARN)
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "true" | "1" | "yes" | "on"
+    )
+}
+
 fn warn_on_uv_mode() {
+    if cautions_muted() {
+        return;
+    }
     let value = env::var(ENV_TD_KUBE_UV_MODE).unwrap_or_default();
     let value = value.trim();
     if value.is_empty() {
@@ -190,6 +206,9 @@ fn warn_on_uv_mode() {
 }
 
 fn warn_on_log_size() {
+    if cautions_muted() {
+        return;
+    }
     let Ok(path) = tdkserver_log_file() else {
         return;
     };

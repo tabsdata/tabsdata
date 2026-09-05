@@ -95,6 +95,7 @@ PRUNED_BIN_FILES: list[str] = [
     "kmc",
     "td_about",
     "tdkserver",
+    "tdk_kcheck",
 ]
 
 PRUNED_BIN_FILES_FN: list[str] = PRUNED_BIN_FILES + [

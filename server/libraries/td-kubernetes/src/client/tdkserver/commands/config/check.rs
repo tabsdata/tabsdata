@@ -24,7 +24,7 @@ use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{Rule, placeholder_occurrences};
-use crate::runtime::instance::profile::load_profile;
+use crate::runtime::instance::profile::{Profile, load_profile};
 use crate::runtime::provider::provider_for_instance_any_state;
 
 const CONFIG_EXTENSION: &str = ".yaml";
@@ -152,6 +152,19 @@ fn notes(pending: &[CheckEntry]) -> Vec<String> {
 #[cfg(not(feature = "enterprise"))]
 fn notes(_pending: &[CheckEntry]) -> Vec<String> {
     Vec::new()
+}
+
+pub(crate) fn pending_mandatory_placeholders(
+    profile: &Profile,
+    configs: &Path,
+) -> CommandResult<Vec<CheckEntry>> {
+    let sources = placeholders_in_folder(configs)?;
+    let settled = settled_categories(&profile.configs, &sources);
+    Ok(collect_entries(sources)
+        .into_iter()
+        .filter(|entry| !settled.contains(&entry.category))
+        .filter(|entry| entry.rule == CheckRule::Mandatory)
+        .collect())
 }
 
 fn remaining(expected: Vec<CheckEntry>, pending: &[CheckEntry]) -> Vec<CheckEntry> {

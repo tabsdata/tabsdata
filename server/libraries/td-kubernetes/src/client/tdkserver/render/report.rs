@@ -3,4 +3,4 @@
 //
 
 pub mod component;
-pub(crate) mod helper;
+pub mod helper;

@@ -16,6 +16,7 @@ use clap_derive::{Args, Subcommand};
 use crate::client::tdkserver::commands::config::ConfigCommands;
 use crate::client::tdkserver::commands::help::HelpArguments;
 use crate::client::tdkserver::commands::service::InstanceNameArguments;
+use crate::client::tdkserver::commands::service::assess::AssessArguments;
 use crate::client::tdkserver::commands::service::create::CreateArguments;
 use crate::client::tdkserver::commands::service::delete::DeleteArguments;
 use crate::client::tdkserver::commands::service::info::InfoCommands;
@@ -157,6 +158,8 @@ pub enum Commands {
     Info(InfoCommands),
     #[command(about = "Initialize, create and start a tabsdata instance in one step")]
     Quickstart(QuickstartArguments),
+    #[command(about = "Check whether a tabsdata instance can be created")]
+    Assess(AssessArguments),
     #[command(about = "Produce an editable input config folder for a tabsdata instance")]
     Init(InitArguments),
     #[command(about = "Create a tabsdata instance")]

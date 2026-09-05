@@ -159,30 +159,6 @@ pub async fn init_instance(
     let loglevel =
         (provider == ClusterProvider::Kminus).then(|| loglevel.unwrap_or(DEFAULT_LOG_LEVEL));
 
-    if details.value {
-        preview::init_service(
-            &instance,
-            instance_in_settings,
-            instance_defaulted,
-            provider.as_str(),
-            cluster_in_settings.provider,
-            // provider_defaulted,
-            loglevel.map(|level| (level.as_str(), loglevel_defaulted)),
-        );
-    }
-    if !confirm(yes.value, "Proceed with the initialization?")? {
-        info!("Operation cancelled.");
-        return abort(Cancelled);
-    }
-
-    let folder = instance_folder(&instance)?;
-    if folder.exists() {
-        return abort_with(
-            NoAction,
-            ProviderError::InstanceFolderExists(folder.display().to_string()),
-        );
-    }
-
     let provided = ClusterProperties {
         context: cluster.context.clone(),
         kubeconfig: cluster.kubeconfig.clone(),
@@ -198,6 +174,33 @@ pub async fn init_instance(
         None,
     )
     .await?;
+
+    if details.value {
+        if provider == ClusterProvider::Kminus {
+            preview::init_service(
+                &instance,
+                instance_in_settings,
+                instance_defaulted,
+                provider.as_str(),
+                cluster_in_settings.provider,
+                loglevel.map(|level| (level.as_str(), loglevel_defaulted)),
+            );
+        } else {
+            preview::init_cluster_service(&built.summary());
+        }
+    }
+    if !confirm(yes.value, "Proceed with the initialization?")? {
+        info!("Operation cancelled.");
+        return abort(Cancelled);
+    }
+
+    let folder = instance_folder(&instance)?;
+    if folder.exists() {
+        return abort_with(
+            NoAction,
+            ProviderError::InstanceFolderExists(folder.display().to_string()),
+        );
+    }
 
     if provider != ClusterProvider::Kminus {
         let context = built.kube_context().await?;

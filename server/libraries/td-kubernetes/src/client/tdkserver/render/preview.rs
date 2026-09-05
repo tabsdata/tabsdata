@@ -97,6 +97,11 @@ pub fn init_service(
     }
 }
 
+pub fn init_cluster_service(summary: &Summary) {
+    info!("About to initialize tabsdata instance:");
+    render_summary_lines(summary);
+}
+
 fn origin_marker(in_settings: bool, defaulted: bool) -> &'static str {
     if in_settings {
         " (session)"

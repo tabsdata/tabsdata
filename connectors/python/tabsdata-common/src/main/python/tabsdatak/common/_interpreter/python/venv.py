@@ -114,7 +114,7 @@ LIBEXEC_INSTALL_RELATIVE_PATH = Path("libexec") / "tabsdata"
 
 PYTHON_BINARIES: tuple[str, ...] = ("tdk", "td_pyvenv", "td_resource")
 
-RUST_BINARIES: tuple[str, ...] = ("tdkserver", "td_apiserver")
+RUST_BINARIES: tuple[str, ...] = ("tdkserver", "tdk_kcheck", "td_apiserver")
 
 SHEBANG_PREFIX = "#!"
 SHEBANG_ENV = "/usr/bin/env"

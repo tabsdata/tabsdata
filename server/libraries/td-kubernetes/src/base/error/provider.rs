@@ -208,6 +208,8 @@ pub enum ProviderError {
     CommandNotImplemented(String) = 6001,
     #[error("Command '{command}' is not yet supported for the '{provider}' provider.")]
     CommandNotSupportedForProvider { command: String, provider: String } = 6007,
+    #[error("Could not run the assess checks: {0}")]
+    AssessFailed(String) = 6008,
     #[error("Could not determine the user home directory.")]
     HomeDirNotFound = 6002,
     #[error(

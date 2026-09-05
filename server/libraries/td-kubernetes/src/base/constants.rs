@@ -12,6 +12,7 @@ use crate::base::error::cli::CliError;
 
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
 pub const ENV_TD_KUBE_UV_MODE: &str = "TD_KUBE_UV_MODE";
+pub const ENV_TD_KUBE_UV_MODE_NOWARN: &str = "TD_KUBE_UV_MODE_NOWARN";
 
 pub const ENV_UV_DEFAULT_INDEX: &str = "UV_DEFAULT_INDEX";
 pub const ENV_UV_INDEX: &str = "UV_INDEX";

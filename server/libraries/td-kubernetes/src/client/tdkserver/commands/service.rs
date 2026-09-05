@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+pub mod assess;
 pub mod create;
 pub mod delete;
 pub mod info;
