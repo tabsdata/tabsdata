@@ -23,6 +23,7 @@ database_server:
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve");
 
@@ -77,6 +78,7 @@ database_server:
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("first");
     let second_outcome = resolve_config_file(
@@ -88,6 +90,7 @@ database_server:
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("second");
 
@@ -126,6 +129,7 @@ fn literal_same_category_reuses_value_across_configs() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("first");
     let second = resolve_config_file(
@@ -137,6 +141,7 @@ fn literal_same_category_reuses_value_across_configs() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("second");
 
@@ -172,6 +177,7 @@ fn literal_and_secret_of_same_category_do_not_share_stores() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("literal");
     let secret_outcome = resolve_config_file(
@@ -183,6 +189,7 @@ fn literal_and_secret_of_same_category_do_not_share_stores() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("secret");
 
@@ -219,6 +226,7 @@ database_server:
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve");
     assert_eq!(outcome.secrets[0].value, "from-auto");
@@ -244,6 +252,7 @@ database:
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve");
     assert!(outcome.rendered.contains("${embedded}"));
@@ -277,6 +286,7 @@ storage:
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve");
 
@@ -314,6 +324,7 @@ envFrom:
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("envFrom must resolve");
 
@@ -341,6 +352,7 @@ fn resolve(template: &str, init: &str) -> ResolveOutcome {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve")
 }
@@ -357,6 +369,7 @@ fn resolve_error(template: &str, init: &str) -> ResolverError {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     ) {
         Ok(_) => panic!("expected resolve error"),
         Err(error) => error,
@@ -450,6 +463,7 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve embedded");
     assert!(outcome.rendered.contains("0.0.0.0:2457"));
@@ -472,6 +486,7 @@ fn the_version_label_resolves_from_the_tabsdata_version() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve the version label");
     assert!(
@@ -499,6 +514,7 @@ fn the_dbmanager_mode_resolves_in_the_name_and_the_argument() {
             &RefCell::new(HashMap::new()),
             &RefCell::new(HashMap::new()),
             &RefCell::new(HashMap::new()),
+            None,
         )
         .expect("resolve the dbmanager mode");
         assert!(
@@ -529,6 +545,7 @@ fn venv_archive_name_splices_cluster_and_namespace() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve archive name");
     assert!(
@@ -556,6 +573,7 @@ fn non_editable_placeholder_modified_in_init_errors() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     ) {
         Ok(_) => panic!("modified system value must error"),
         Err(error) => error,
@@ -711,6 +729,7 @@ fn system_null_renders_as_a_yaml_null() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&outcome.rendered).expect("parse");
@@ -738,6 +757,7 @@ fn tabsdata_version_splices_into_a_pinned_requirement() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect("resolve version");
     assert!(outcome.rendered.contains("tabsdata[all]==2.0.0"));
@@ -752,11 +772,11 @@ fn resolve_pair(
     let literals = RefCell::new(HashMap::new());
     let values = RefCell::new(HashMap::new());
     let first_outcome = resolve_config_file(
-        first.0, first.1, first.2, &system, &auto, &vault, &literals, &values,
+        first.0, first.1, first.2, &system, &auto, &vault, &literals, &values, None,
     )
     .expect("first file");
     let second_outcome = resolve_config_file(
-        second.0, second.1, second.2, &system, &auto, &vault, &literals, &values,
+        second.0, second.1, second.2, &system, &auto, &vault, &literals, &values, None,
     )
     .expect("second file");
     (first_outcome, second_outcome)
@@ -806,6 +826,7 @@ fn a_mandatory_secret_missing_everywhere_still_fails() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect_err("must fail");
     assert!(matches!(error, ResolverError::MissingRequiredValue { .. }));
@@ -825,6 +846,7 @@ fn an_error_names_the_offending_file() {
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
         &RefCell::new(HashMap::new()),
+        None,
     )
     .expect_err("must fail");
     let message = error.to_string();
@@ -888,6 +910,7 @@ fn diverging_values_across_files_error() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("first file");
     let error = resolve_config_file(
@@ -899,6 +922,7 @@ fn diverging_values_across_files_error() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect_err("a second, different value must be rejected");
     assert!(matches!(
@@ -928,6 +952,7 @@ fn diverging_secret_values_across_files_error() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect("first file");
     let error = resolve_config_file(
@@ -939,6 +964,7 @@ fn diverging_secret_values_across_files_error() {
         &vault,
         &literals,
         &values,
+        None,
     )
     .expect_err("a second, different value must be rejected");
     assert!(matches!(
@@ -1006,4 +1032,77 @@ fn unqualified_literals_are_independent_of_each_other() {
     let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
     assert_eq!(value["a"], Value::String("one".to_owned()));
     assert_eq!(value["b"], Value::String("two".to_owned()));
+}
+
+#[test]
+fn an_optional_mapping_lets_the_initialization_omit_keys() {
+    let template = concat!(
+        "storage:\n",
+        "  mounts:\n",
+        "  - id: ROOT\n",
+        "    options:\n",
+        "      aws_region: ${{secret:storage_region}}\n",
+        "      google_service_account_key: ${{secret:storage_account_key}}\n",
+    );
+    let supplied = concat!(
+        "storage:\n",
+        "  mounts:\n",
+        "  - id: ROOT\n",
+        "    options:\n",
+        "      google_service_account_key: a-key\n",
+    );
+    let schema = Schema::parse(
+        "apiserver.storage.yaml",
+        "directives:\n  - at: storage.mounts[*].options\n    treat: optional\n",
+    )
+    .expect("schema");
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let outcome = resolve_config_file(
+        "apiserver.storage.yaml",
+        template,
+        supplied,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        Some(&schema),
+    )
+    .expect("resolve");
+    assert!(outcome.rendered.contains("google_service_account_key"));
+    assert!(
+        !outcome.rendered.contains("aws_region"),
+        "an omitted key must not be rendered"
+    );
+    assert!(
+        outcome.secrets.iter().any(|secret| secret.value == "a-key"),
+        "the supplied value must still be collected as a secret"
+    );
+}
+
+#[test]
+fn an_optional_mapping_still_rejects_a_missing_key_elsewhere() {
+    let template = "storage:\n  mounts:\n  - id: ROOT\n    uri: gs://bucket/\n";
+    let supplied = "storage:\n  mounts:\n  - id: ROOT\n";
+    let schema = Schema::parse(
+        "apiserver.storage.yaml",
+        "directives:\n  - at: storage.mounts[*].options\n    treat: optional\n",
+    )
+    .expect("schema");
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let error = resolve_config_file(
+        "apiserver.storage.yaml",
+        template,
+        supplied,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        Some(&schema),
+    )
+    .expect_err("uri is not covered by the directive");
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
 }

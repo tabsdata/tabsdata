@@ -79,7 +79,8 @@ pub fn merge(
             Some(values) => prefill_secrets(&input_content, values)?,
             None => input_content,
         };
-        let template = bake_schema_secrets(file, template, &profile.configs)?;
+        let schema = schema_of(file, &profile.configs)?;
+        let template = bake_schema_secrets(file, template, schema.as_ref())?;
         let outcome = resolve_config_file(
             file,
             &template,
@@ -89,6 +90,7 @@ pub fn merge(
             &vault,
             &literals,
             &values,
+            schema.as_ref(),
         )?;
         merged.push(MergedConfig {
             file: file.clone(),
@@ -325,7 +327,8 @@ fn resolve_configs_files(
                 cause: cause.to_string(),
             }
         })?;
-        let template = bake_schema_secrets(file, template, &profile.configs)?;
+        let schema = schema_of(file, &profile.configs)?;
+        let template = bake_schema_secrets(file, template, schema.as_ref())?;
         let outcome = resolve_config_file(
             file,
             &template,
@@ -335,6 +338,7 @@ fn resolve_configs_files(
             &vault,
             &literals,
             &values,
+            schema.as_ref(),
         )?;
         write_staged(&stage_configs.join(file), &outcome.rendered)?;
         by_file.push((file.clone(), outcome.secrets));
@@ -342,25 +346,29 @@ fn resolve_configs_files(
     Ok(FusedSecrets { by_file })
 }
 
-fn bake_schema_secrets(
-    file: &str,
-    config: &str,
-    configs: &RenderedConfigmap,
-) -> Result<String, ResolverError> {
+fn schema_of(file: &str, configs: &RenderedConfigmap) -> Result<Option<Schema>, ResolverError> {
     let Some(stem) = file.strip_suffix(CONFIG_EXTENSION) else {
-        return Ok(config.to_owned());
+        return Ok(None);
     };
     let Some(schema_text) = configs.get(&format!("{stem}{SCHEMA_EXTENSION}")) else {
-        return Ok(config.to_owned());
+        return Ok(None);
     };
     let schema =
         Schema::parse(file, schema_text).map_err(|cause| ResolverError::SchemaParseFailed {
             path: file.to_owned(),
             cause: cause.to_string(),
         })?;
-    if schema.is_empty() {
+    Ok((!schema.is_empty()).then_some(schema))
+}
+
+fn bake_schema_secrets(
+    file: &str,
+    config: &str,
+    schema: Option<&Schema>,
+) -> Result<String, ResolverError> {
+    let Some(schema) = schema else {
         return Ok(config.to_owned());
-    }
+    };
     let mut value: Value =
         serde_yaml::from_str(config).map_err(|cause| ResolverError::ParseFailed {
             path: file.to_owned(),

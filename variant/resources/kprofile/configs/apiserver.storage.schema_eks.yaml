@@ -7,3 +7,5 @@ directives:
     treat: secret
   - at: storage.mounts[*].options.*
     treat: secret
+  - at: storage.mounts[*].options
+    treat: optional

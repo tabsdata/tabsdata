@@ -12,6 +12,7 @@ const DIRECTIVES_KEY: &str = "directives";
 const AT_KEY: &str = "at";
 const TREAT_KEY: &str = "treat";
 const TREAT_SECRET: &str = "secret";
+const TREAT_OPTIONAL: &str = "optional";
 const PATTERN_SEPARATOR: char = '.';
 const WILDCARD_TOKEN: &str = "*";
 const LIST_WILDCARD_SUFFIX: &str = "[*]";
@@ -19,6 +20,7 @@ const LIST_WILDCARD_SUFFIX: &str = "[*]";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Treatment {
     Secret,
+    Optional,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +66,7 @@ impl Schema {
             }
             let treatment = match entry.get(TREAT_KEY).and_then(Value::as_str) {
                 Some(TREAT_SECRET) => Treatment::Secret,
+                Some(TREAT_OPTIONAL) => Treatment::Optional,
                 other => {
                     return Err(SchemaError::UnsupportedTreatment {
                         schema: schema.to_owned(),
@@ -87,6 +90,12 @@ impl Schema {
         self.rules
             .iter()
             .any(|rule| rule.treatment == Treatment::Secret && matches_full(&rule.segments, path))
+    }
+
+    pub fn optional_at(&self, path: &[String]) -> bool {
+        self.rules
+            .iter()
+            .any(|rule| rule.treatment == Treatment::Optional && matches_full(&rule.segments, path))
     }
 
     pub fn could_match_prefix(&self, path: &[String]) -> bool {

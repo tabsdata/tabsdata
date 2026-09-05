@@ -12,6 +12,7 @@ use crate::base::constants::YAML_NULL;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::{PlaceholderKind, Substitution};
 use crate::runtime::gateway::resolver::placeholder::{SystemValues, resolver_for};
+use crate::runtime::gateway::resolver::schema::Schema;
 use crate::runtime::gateway::resolver::walker::{
     LiteralOrigin, PATH_SEPARATOR, Phase, Placeholder, ResolveContext, SecretEntry,
     contains_placeholder, parse_bare_placeholder, placeholder_occurrences, splice_placeholders,
@@ -35,6 +36,7 @@ pub(super) fn resolve_config_file(
     vault: &RefCell<HashMap<String, String>>,
     literals: &RefCell<HashMap<String, LiteralOrigin>>,
     values: &RefCell<HashMap<String, String>>,
+    schema: Option<&Schema>,
 ) -> Result<ResolveOutcome, ResolverError> {
     let template_value: Value =
         serde_yaml::from_str(template).map_err(|cause| ResolverError::ParseFailed {
@@ -55,6 +57,7 @@ pub(super) fn resolve_config_file(
         literals,
         secrets: Vec::new(),
         values,
+        schema,
     };
     let mut path: Vec<String> = Vec::new();
     let rendered_value = session.resolve_node(&template_value, &init_value, &mut path)?;
@@ -81,6 +84,7 @@ struct ResolveSession<'a> {
     literals: &'a RefCell<HashMap<String, LiteralOrigin>>,
     secrets: Vec<SecretEntry>,
     values: &'a RefCell<HashMap<String, String>>,
+    schema: Option<&'a Schema>,
 }
 
 impl ResolveSession<'_> {
@@ -101,9 +105,13 @@ impl ResolveSession<'_> {
                     return Err(self.structure_mismatch(path));
                 };
                 let mut rendered = serde_yaml::Mapping::new();
+                let omittable = self.schema.is_some_and(|schema| schema.optional_at(path));
                 for (key, template_child) in template_map {
                     let segment = scalar_key(key);
                     let Some(init_child) = init_map.get(key) else {
+                        if omittable {
+                            continue;
+                        }
                         return Err(self.structure_mismatch_at(path, &segment));
                     };
                     path.push(segment);

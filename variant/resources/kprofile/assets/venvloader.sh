@@ -57,7 +57,13 @@ LOADER="$(cd "$(dirname "$0")" && pwd)/venvloader.py"
 PYTHON_BINARY="python3"
 UV_BINARY="uv"
 TAR_BINARY="tar"
-PIP_PACKAGES=("boto3" "pyyaml" "zstandard")
+PIP_PACKAGES=(
+   "azure-storage-blob"
+   "boto3"
+   "google-cloud-storage"
+   "pyyaml"
+   "zstandard"
+)
 
 show_usage() {
    echo "Usage: $0 [options]"

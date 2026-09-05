@@ -18,7 +18,14 @@ fn bake_schema_secrets_rewrites_matched_leaves_to_tokens() {
     let schema = "directives:\n  - at: options.token\n    treat: secret\n";
     let config = "options:\n  token: baked\n  other: keep\n";
     let configs = configs(&[("apiserver.yamls", schema)]);
-    let baked = bake_schema_secrets("apiserver.yaml", config, &configs).expect("bake");
+    let baked = bake_schema_secrets(
+        "apiserver.yaml",
+        config,
+        schema_of("apiserver.yaml", &configs)
+            .expect("schema")
+            .as_ref(),
+    )
+    .expect("bake");
     assert!(baked.contains("token: ${{secret}}"));
     assert!(baked.contains("other: keep"));
 }
@@ -27,7 +34,14 @@ fn bake_schema_secrets_rewrites_matched_leaves_to_tokens() {
 fn bake_schema_secrets_is_noop_without_schema_file() {
     let config = "options:\n  token: baked\n";
     let configs = configs(&[]);
-    let baked = bake_schema_secrets("apiserver.yaml", config, &configs).expect("bake");
+    let baked = bake_schema_secrets(
+        "apiserver.yaml",
+        config,
+        schema_of("apiserver.yaml", &configs)
+            .expect("schema")
+            .as_ref(),
+    )
+    .expect("bake");
     assert_eq!(baked, config);
 }
 
@@ -36,7 +50,14 @@ fn bake_schema_secrets_is_noop_for_empty_schema() {
     let schema = "other: 1\n";
     let config = "options:\n  token: baked\n";
     let configs = configs(&[("apiserver.yamls", schema)]);
-    let baked = bake_schema_secrets("apiserver.yaml", config, &configs).expect("bake");
+    let baked = bake_schema_secrets(
+        "apiserver.yaml",
+        config,
+        schema_of("apiserver.yaml", &configs)
+            .expect("schema")
+            .as_ref(),
+    )
+    .expect("bake");
     assert_eq!(baked, config);
 }
 
@@ -44,7 +65,12 @@ fn bake_schema_secrets_is_noop_for_empty_schema() {
 fn bake_schema_secrets_ignores_non_yaml_stem() {
     let config = "plain content";
     let configs = configs(&[]);
-    let baked = bake_schema_secrets("notes.txt", config, &configs).expect("bake");
+    let baked = bake_schema_secrets(
+        "notes.txt",
+        config,
+        schema_of("notes.txt", &configs).expect("schema").as_ref(),
+    )
+    .expect("bake");
     assert_eq!(baked, config);
 }
 

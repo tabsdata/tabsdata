@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -47,15 +48,23 @@ CLEAR_ATTEMPTS = 8
 CLEAR_DELAY = 1
 
 SCHEME_FILE = "file"
+SCHEME_AZS = "az"
+SCHEME_GCS = "gs"
 SCHEME_S3 = "s3"
 
-OPTION_REGION = "aws_region"
-OPTION_ACCESS_KEY_ID = "aws_access_key_id"
-OPTION_SECRET_ACCESS_KEY = "aws_secret_access_key"
+OPTION_AZS_ACCOUNT_NAME = "azure_storage_account_name"
+OPTION_AZS_ACCOUNT_KEY = "azure_storage_account_key"
+OPTION_GCS_SERVICE_ACCOUNT_KEY = "google_service_account_key"
+OPTION_S3_REGION = "aws_region"
+OPTION_S3_ACCESS_KEY_ID = "aws_access_key_id"
+OPTION_S3_SECRET_ACCESS_KEY = "aws_secret_access_key"
 
-ENV_REGION = "AWS_REGION"
-ENV_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
-ENV_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
+ENV_AZS_ACCOUNT_NAME = "AZURE_STORAGE_ACCOUNT_NAME"
+ENV_AZS_ACCOUNT_KEY = "AZURE_STORAGE_ACCOUNT_KEY"
+ENV_GCS_SERVICE_ACCOUNT_KEY = "GOOGLE_SERVICE_ACCOUNT_KEY"
+ENV_S3_REGION = "AWS_REGION"
+ENV_S3_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
+ENV_S3_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
 
 ENV_UV_MODE = "TD_KUBE_UV_MODE"
 UV_MODE_LINKED = "linked"
@@ -215,6 +224,94 @@ def open_file(source: str) -> Iterator[IO[bytes]]:
         yield reader
 
 
+class ChunkReader(io.RawIOBase):
+
+    def __init__(self, chunks: Iterator[bytes]) -> None:
+        self._chunks = chunks
+        self._buffer = b""
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, target) -> int:
+        while not self._buffer:
+            try:
+                self._buffer = next(self._chunks)
+            except StopIteration:
+                return 0
+        size = min(len(target), len(self._buffer))
+        target[:size] = self._buffer[:size]
+        self._buffer = self._buffer[size:]
+        return size
+
+
+@contextlib.contextmanager
+def open_azs(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
+    from azure.storage.blob import BlobServiceClient
+
+    parsed = urllib.parse.urlparse(source)
+    container = parsed.netloc
+    blob_name = parsed.path.lstrip("/")
+    if not container or not blob_name:
+        die("Downloading the image", f"Malformed az uri: {source}")
+    account = options.get(OPTION_AZS_ACCOUNT_NAME) or os.environ.get(ENV_AZS_ACCOUNT_NAME)
+    secret = options.get(OPTION_AZS_ACCOUNT_KEY) or os.environ.get(ENV_AZS_ACCOUNT_KEY)
+    if not account:
+        die("Downloading the image", f"No storage account for {source}")
+    client = BlobServiceClient(
+        account_url=f"https://{account}.blob.core.windows.net",
+        credential=secret,
+    )
+    trace(f"Downloading {source}")
+    blob = client.get_blob_client(container=container, blob=blob_name)
+    try:
+        download = blob.download_blob()
+    except Exception as error:
+        die("Downloading the image", f"{source}: {error}")
+    stream = io.BufferedReader(ChunkReader(download.chunks()))
+    try:
+        yield stream
+    finally:
+        stream.close()
+
+
+@contextlib.contextmanager
+def open_gcs(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
+    import json
+
+    from google.cloud import storage as gcs
+    from google.oauth2 import service_account
+
+    parsed = urllib.parse.urlparse(source)
+    bucket = parsed.netloc
+    blob_name = parsed.path.lstrip("/")
+    if not bucket or not blob_name:
+        die("Downloading the image", f"Malformed gs uri: {source}")
+    key = options.get(OPTION_GCS_SERVICE_ACCOUNT_KEY) or os.environ.get(
+        ENV_GCS_SERVICE_ACCOUNT_KEY
+    )
+    if key:
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(key)
+        )
+        client = gcs.Client(
+            credentials=credentials, project=credentials.project_id
+        )
+    else:
+        client = gcs.Client()
+    trace(f"Downloading {source}")
+    blob = client.bucket(bucket).blob(blob_name)
+    stream = None
+    try:
+        stream = blob.open("rb")
+        yield stream
+    except Exception as error:
+        die("Downloading the image", f"{source}: {error}")
+    finally:
+        if stream is not None:
+            stream.close()
+
+
 @contextlib.contextmanager
 def open_s3(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
     parsed = urllib.parse.urlparse(source)
@@ -224,11 +321,11 @@ def open_s3(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
         die("Downloading the image", f"Malformed s3 uri: {source}")
     client = boto3.client(
         "s3",
-        region_name=options.get(OPTION_REGION) or os.environ.get(ENV_REGION),
-        aws_access_key_id=options.get(OPTION_ACCESS_KEY_ID)
-        or os.environ.get(ENV_ACCESS_KEY_ID),
-        aws_secret_access_key=options.get(OPTION_SECRET_ACCESS_KEY)
-        or os.environ.get(ENV_SECRET_ACCESS_KEY),
+        region_name=options.get(OPTION_S3_REGION) or os.environ.get(ENV_S3_REGION),
+        aws_access_key_id=options.get(OPTION_S3_ACCESS_KEY_ID)
+        or os.environ.get(ENV_S3_ACCESS_KEY_ID),
+        aws_secret_access_key=options.get(OPTION_S3_SECRET_ACCESS_KEY)
+        or os.environ.get(ENV_S3_SECRET_ACCESS_KEY),
     )
     trace(f"Downloading {source}")
     try:
@@ -248,6 +345,12 @@ def open_image(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
     scheme = urllib.parse.urlparse(source).scheme or SCHEME_FILE
     if scheme == SCHEME_FILE:
         with open_file(source) as stream:
+            yield stream
+    elif scheme == SCHEME_AZS:
+        with open_azs(source, options) as stream:
+            yield stream
+    elif scheme == SCHEME_GCS:
+        with open_gcs(source, options) as stream:
             yield stream
     elif scheme == SCHEME_S3:
         with open_s3(source, options) as stream:
