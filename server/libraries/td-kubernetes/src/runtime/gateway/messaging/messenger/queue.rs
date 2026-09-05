@@ -300,7 +300,10 @@ impl KubernetesOrchestratorMessageQueue {
             ClusterProvider::Docker => {
                 docker_system_values_for(&settings.name, namespace, &settings.folder)
             }
-            ClusterProvider::Eks | ClusterProvider::Fargate => {
+            ClusterProvider::Eks
+            | ClusterProvider::Aks
+            | ClusterProvider::Gke
+            | ClusterProvider::Fargate => {
                 cloud_system_values_for(&settings.name, namespace, cluster)
             }
         }

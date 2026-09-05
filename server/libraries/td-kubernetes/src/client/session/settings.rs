@@ -43,6 +43,14 @@ pub struct EksInputs {}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AksInputs {}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GkeInputs {}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FargateInputs {}
 
 #[allow(dead_code)]
@@ -69,6 +77,14 @@ pub enum Session {
     Eks {
         #[serde(default)]
         inputs: EksInputs,
+    },
+    Aks {
+        #[serde(default)]
+        inputs: AksInputs,
+    },
+    Gke {
+        #[serde(default)]
+        inputs: GkeInputs,
     },
     Fargate {
         #[serde(default)]
@@ -390,6 +406,8 @@ impl Session {
             Session::Kminus { .. } => ClusterProvider::Kminus,
             Session::Docker { .. } => ClusterProvider::Docker,
             Session::Eks { .. } => ClusterProvider::Eks,
+            Session::Aks { .. } => ClusterProvider::Aks,
+            Session::Gke { .. } => ClusterProvider::Gke,
             Session::Fargate { .. } => ClusterProvider::Fargate,
         }
     }
@@ -404,6 +422,8 @@ impl Session {
                 context, namespace, ..
             } => format!("{}:{context}/{namespace}", ClusterProvider::Docker.as_str()),
             Session::Eks { .. } => ClusterProvider::Eks.as_str().to_string(),
+            Session::Aks { .. } => ClusterProvider::Aks.as_str().to_string(),
+            Session::Gke { .. } => ClusterProvider::Gke.as_str().to_string(),
             Session::Fargate { .. } => ClusterProvider::Fargate.as_str().to_string(),
         }
     }
@@ -447,6 +467,12 @@ impl Session {
             Session::Eks { .. } => {
                 info!("  - provider.....: {}", ClusterProvider::Eks.as_str());
             }
+            Session::Aks { .. } => {
+                info!("  - provider.....: {}", ClusterProvider::Aks.as_str());
+            }
+            Session::Gke { .. } => {
+                info!("  - provider.....: {}", ClusterProvider::Gke.as_str());
+            }
             Session::Fargate { .. } => {
                 info!("  - provider.....: {}", ClusterProvider::Fargate.as_str());
             }
@@ -482,6 +508,14 @@ impl Session {
             ),
             Session::Eks { .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Eks), None, None, false, None),
+                InstanceArguments::new(None),
+            ),
+            Session::Aks { .. } => (
+                ClusterArguments::new(Some(ClusterProvider::Aks), None, None, false, None),
+                InstanceArguments::new(None),
+            ),
+            Session::Gke { .. } => (
+                ClusterArguments::new(Some(ClusterProvider::Gke), None, None, false, None),
                 InstanceArguments::new(None),
             ),
             Session::Fargate { .. } => (

@@ -26,7 +26,7 @@ use crate::base::constants::DbManagerMode;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{ClusterViews, init_stage_folder_in, instances_root};
-use crate::client::session::settings::{EksInputs, FargateInputs, Session};
+use crate::client::session::settings::{AksInputs, EksInputs, FargateInputs, GkeInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandResult, abort_with};
@@ -181,6 +181,12 @@ fn session_for(provider: ClusterProvider) -> Session {
     match provider {
         ClusterProvider::Eks => Session::Eks {
             inputs: EksInputs {},
+        },
+        ClusterProvider::Aks => Session::Aks {
+            inputs: AksInputs {},
+        },
+        ClusterProvider::Gke => Session::Gke {
+            inputs: GkeInputs {},
         },
         ClusterProvider::Fargate => Session::Fargate {
             inputs: FargateInputs {},

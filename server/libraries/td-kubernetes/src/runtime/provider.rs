@@ -2,11 +2,13 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+pub mod aks;
 pub(crate) mod axes;
 pub mod cloud;
 pub mod docker;
 pub mod eks;
 pub mod fargate;
+pub mod gke;
 pub mod kminus;
 pub mod outcome;
 pub mod summary;
@@ -78,15 +80,24 @@ const PROVIDER_VALUES: &[&str] = &[
     ClusterProvider::Kminus.as_str(),
     ClusterProvider::Docker.as_str(),
     ClusterProvider::Eks.as_str(),
+    ClusterProvider::Aks.as_str(),
+    ClusterProvider::Gke.as_str(),
     ClusterProvider::Fargate.as_str(),
 ];
 
 const PREFERRED_KMINUS: &[&str] = &[ClusterProvider::Kminus.as_str()];
 const PREFERRED_DOCKER: &[&str] = &[ClusterProvider::Docker.as_str()];
 const PREFERRED_EKS: &[&str] = &[ClusterProvider::Eks.as_str()];
+const PREFERRED_AKS: &[&str] = &[ClusterProvider::Aks.as_str()];
+const PREFERRED_GKE: &[&str] = &[ClusterProvider::Gke.as_str()];
 const PREFERRED_FARGATE: &[&str] = &[ClusterProvider::Fargate.as_str()];
 
-const SUPPORTED_PROVIDERS: &[ClusterProvider] = &[ClusterProvider::Kminus, ClusterProvider::Eks];
+const SUPPORTED_PROVIDERS: &[ClusterProvider] = &[
+    ClusterProvider::Kminus,
+    ClusterProvider::Eks,
+    ClusterProvider::Aks,
+    ClusterProvider::Gke,
+];
 
 const AXES: &[Axis] = &[Axis {
     name: PROVIDER_AXIS_NAME,
@@ -99,6 +110,8 @@ pub enum ClusterProvider {
     Kminus,
     Docker,
     Eks,
+    Aks,
+    Gke,
     Fargate,
 }
 
@@ -119,6 +132,8 @@ impl ClusterProvider {
             Self::Kminus => "kminus",
             Self::Docker => "docker",
             Self::Eks => "eks",
+            Self::Aks => "aks",
+            Self::Gke => "gke",
             Self::Fargate => "fargate",
         }
     }
@@ -132,6 +147,8 @@ impl ClusterProvider {
             Self::Kminus => "a development kminus cluster",
             Self::Docker => "the Kubernetes cluster bundled with Docker Desktop on macOS/Windows",
             Self::Eks => "AWS EKS",
+            Self::Aks => "Azure AKS",
+            Self::Gke => "Google GKE",
             Self::Fargate => "AWS EKS-on-Fargate",
         }
     }
@@ -161,14 +178,14 @@ impl ClusterProvider {
     pub(crate) fn location(self) -> Location {
         match self {
             Self::Kminus | Self::Docker => Location::Local,
-            Self::Eks | Self::Fargate => Location::Cloud,
+            Self::Eks | Self::Aks | Self::Gke | Self::Fargate => Location::Cloud,
         }
     }
 
     pub fn locality(self) -> Locality {
         match self {
             Self::Kminus => Locality::Local,
-            Self::Docker | Self::Eks | Self::Fargate => Locality::Remote,
+            Self::Docker | Self::Eks | Self::Aks | Self::Gke | Self::Fargate => Locality::Remote,
         }
     }
 
@@ -177,14 +194,14 @@ impl ClusterProvider {
             Self::Kminus => Ok(UvMode::from_environment()
                 .map_err(TdError::from)?
                 .uses_host_environment()),
-            Self::Docker | Self::Eks | Self::Fargate => Ok(false),
+            Self::Docker | Self::Eks | Self::Aks | Self::Gke | Self::Fargate => Ok(false),
         }
     }
 
     pub fn hosts_database(self) -> bool {
         match self {
             Self::Kminus => true,
-            Self::Docker | Self::Eks | Self::Fargate => false,
+            Self::Docker | Self::Eks | Self::Aks | Self::Gke | Self::Fargate => false,
         }
     }
 
@@ -192,27 +209,29 @@ impl ClusterProvider {
         match self {
             Self::Kminus => Some(CHECK_ALL_PORTS_FILTER),
             Self::Docker => Some(CHECK_ONLY_PUBLISHED_PORTS_FILTER),
-            Self::Eks | Self::Fargate => None,
+            Self::Eks | Self::Aks | Self::Gke | Self::Fargate => None,
         }
     }
 
     pub fn ports_to_report(self) -> &'static [&'static str] {
         match self {
             Self::Kminus => REPORT_ALL_PORTS_FILTER,
-            Self::Docker | Self::Eks | Self::Fargate => REPORT_ONLY_SERVED_PORTS_FILTER,
+            Self::Docker | Self::Eks | Self::Aks | Self::Gke | Self::Fargate => {
+                REPORT_ONLY_SERVED_PORTS_FILTER
+            }
         }
     }
 
     pub(crate) fn workload(self) -> Workload {
         match self {
             Self::Kminus => Workload::Process,
-            Self::Docker | Self::Eks | Self::Fargate => Workload::Container,
+            Self::Docker | Self::Eks | Self::Aks | Self::Gke | Self::Fargate => Workload::Container,
         }
     }
 
     pub(crate) fn lifecycle(self) -> Lifecycle {
         match self {
-            Self::Kminus | Self::Docker | Self::Eks => Lifecycle::Hosted,
+            Self::Kminus | Self::Docker | Self::Eks | Self::Aks | Self::Gke => Lifecycle::Hosted,
             Self::Fargate => Lifecycle::Serverless,
         }
     }
@@ -220,7 +239,10 @@ impl ClusterProvider {
     pub(crate) fn platform(self) -> Platform {
         match self {
             Self::Kminus | Self::Docker => Platform::Host,
-            Self::Eks | Self::Fargate => Platform::Aws,
+            Self::Eks => Platform::Aws,
+            Self::Aks => Platform::Azure,
+            Self::Gke => Platform::Google,
+            Self::Fargate => Platform::Aws,
         }
     }
 
@@ -233,6 +255,8 @@ impl ClusterProvider {
             Self::Kminus => PREFERRED_KMINUS,
             Self::Docker => PREFERRED_DOCKER,
             Self::Eks => PREFERRED_EKS,
+            Self::Aks => PREFERRED_AKS,
+            Self::Gke => PREFERRED_GKE,
             Self::Fargate => PREFERRED_FARGATE,
         }
     }
@@ -678,6 +702,14 @@ pub async fn provider_for(
         }
         ClusterProvider::Eks => {
             let provider = eks::build(cluster, instance, verbose).await?;
+            Ok(Box::new(provider))
+        }
+        ClusterProvider::Aks => {
+            let provider = aks::build(cluster, instance, verbose).await?;
+            Ok(Box::new(provider))
+        }
+        ClusterProvider::Gke => {
+            let provider = gke::build(cluster, instance, verbose).await?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Fargate => {

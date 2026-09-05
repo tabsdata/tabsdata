@@ -3101,6 +3101,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "sysinfo 0.38.4",
+ "tinyvec",
  "tm-workspace",
  "toml",
  "vergen-gix",
