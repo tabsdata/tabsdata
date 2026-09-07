@@ -81,7 +81,10 @@ async fn create_collection(
         let mut trx = db.begin().await?;
         let conn = trx.get(grant);
         // FOR UPDATE + liveness check against project delete's emptiness guard.
-        let _: ActiveProjectDB = conn.for_update().fetch_one(&project).await?;
+        let _ = conn
+            .for_update()
+            .fetch_one::<ActiveProjectDB>(&project)
+            .await?;
         let read = insert_collection_with_connection(conn, &ctx, &plan).await?;
         trx.commit().await?;
         Ok::<_, TdError>(read)

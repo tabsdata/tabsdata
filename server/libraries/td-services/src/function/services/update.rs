@@ -41,19 +41,16 @@ async fn update_function(
 
     // Bare-table row lock (views with outer joins aren't lockable); the
     // active-view fetch is the liveness check, decided under the lock.
-    let locked: CollectionDB = conn
+    let (locked, at) = conn
         .for_update()
-        .fetch_one(&collection_param.collection)
+        .serialize_on::<CollectionDB>(&collection_param.collection)
         .await?;
     let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
-
-    let at = ctx.time;
 
     // Before-update ids: the function id does not change, the function
     // version id does.
     let current: FunctionDBWithNames = conn
         .scd2()
-        .as_of(&at)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
     assert_function_name_not_exists(conn, &collection.id, &current, &update).await?;
@@ -61,7 +58,7 @@ async fn update_function(
     let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
     let function = update.to_dao(&previous, &ctx)?;
     ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
-    conn.scd2().insert(&function).await?;
+    conn.scd2().open(&function, at).await?;
 
     // Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
     let bundle_registered = BundleStatusUpdateDB::registered();
@@ -69,11 +66,12 @@ async fn update_function(
         .await?;
 
     let previous_version_id = Some(current.base.base.id);
-    let state = FunctionState::load(conn, &function.function_id, &at).await?;
+    let state = FunctionState::load(conn, &function.function_id).await?;
     let spec = FunctionSpec::from(&update);
     register_version(
         conn,
         &ctx,
+        at,
         &collection,
         &function,
         &state,

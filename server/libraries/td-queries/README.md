@@ -172,7 +172,7 @@ The `#[ta_objects::Dao]` attribute macro (defined in `tm-objects`) generates:
    **`ProjectScoped`**, **`ReachableFrom`** and **`InsertableFrom`** the
    attribute and the field marks call for — and the **capabilities**
    `ops(...)` declares: **`SelectDao`**, **`InsertDao`** (or
-   **`Scd2InsertDao`** on an `scd2` relation), **`UpdateDao`**,
+   **`Scd2OpenDao`** on an `scd2` relation), **`UpdateDao`**,
    **`UpsertDao`**, **`DeleteDao`**.
 4. **`HasColumn<T>`** per field — the compile-time column resolution behind
    [conditions](#conditions) — and the addressing impls, in every argument
@@ -211,8 +211,9 @@ surface:
 Dao                — Iden, Db, RELATION, TABLE, columns(), order_by(), display_name()
   ├── HasColumn<T> — COL: the column of domain type T
   ├── PkDao        — Pk, PK: the row's addressing column
-  │    └── TimelineDao — Partition/PARTITION, VersionOrder/VERSION_ORDER
-  │         └── Scd2Dao    — VALID_TO: the [valid_from, valid_to) chain
+  │    └── Partitioned — Partition/PARTITION: per-entity histories
+  │         ├── Scd2Dao     — VALID_FROM/VALID_TO: the [valid_from, valid_to) chain
+  │         └── TimelineDao — VersionOrder/VERSION_ORDER: a readable version log
   ├── UnversionedDao — marker: one row per entity, no version log
   ├── RecursiveDao   — Key, UP, DOWN: the traversal edge
   └── TableDao       — marker: a base table, so writes are legal
@@ -220,7 +221,7 @@ Dao                — Iden, Db, RELATION, TABLE, columns(), order_by(), display
 SelectDao     (ops(select))         — marker: decodes a row; requires FromRow
 Insertable    (ops(insert))         — insert_values(), over a TableDao; the payload, not a capability
 ├── InsertDao                       — the plain insert: db.insert(..)
-└── Scd2InsertDao                   — the interval insert: db.scd2().insert(..); Insertable + Scd2Dao
+└── Scd2OpenDao                     — a new version: db.scd2().open(.., at); Insertable + Scd2Dao
 UpdateDao     (ops(update(RowDao))) — FilterBy, update_values(), over a TableDao
 DeleteDao     (ops(delete))         — marker, over an unversioned TableDao
 UpsertDao     (ops(upsert(A, B)))   — key_columns(), value_columns(); an unversioned Insertable
@@ -268,8 +269,9 @@ relation implements. On a versioned one they do not exist: reach for
 `scd2()` / `scd2().as_of(&t)` for the version visible at a time, or
 `timeline()` to read the version log on purpose. The wordless `insert` is the
 same: `InsertDao` is the plain insert, an `scd2` relation's `ops(insert)` DAO
-is an `Scd2InsertDao` instead and inserts through `scd2().insert(..)`, so the
-insert that closes a previous interval always says so at the call site.
+is an `Scd2OpenDao` instead and opens a version through
+`scd2().open(.., at)`, so the write that stamps `valid_from` and closes the
+previous interval always says so, and says when, at the call site.
 
 A `view = "..."` DAO gets no `TableDao`, so `insert`, `update` and `delete`
 do not typecheck for it. `SELECT ... FOR UPDATE` stays available: locking
@@ -330,22 +332,21 @@ Which single column plays which role is a **field mark**:
 
 | Mark | Role |
 |------|------|
-| `#[dao(flatten)]` | Embed a base DAO's columns (base first) |
+| `#[dao(flatten)]` | Embed a base DAO's columns (base first); on an `scd2` row DAO also the `Scd2Interval` projection |
 | `#[dao(immutable)]` | Set-once column in generated UPDATEs |
 | `#[dao(order_by)]` / `#[dao(order_by(asc|desc))]` | Default result ordering |
 | `#[dao(pk)]` | The primary key, the row's addressing column |
-| `#[dao(partition_by)]` | The partition of any versioned relation (`TimelineDao::PARTITION`) |
-| `#[dao(scd2(valid_from))]` | The SCD2 interval start, which is also the version order |
-| `#[dao(scd2(valid_to))]` | Names the projected column `Scd2Dao::VALID_TO` points at. Unmarked, the macro synthesizes the `ValidTo` `Iden` variant for a column the DAO does not project |
+| `#[dao(partition_by)]` | The partition of any versioned relation (`Partitioned::PARTITION`) |
 | `#[dao(timeline(version_by))]` | Timeline version order (non-SCD2) |
 | `#[dao(recursive(up))]`, `#[dao(recursive(down))]` | Traversal edge |
 
-A mark that only means something under one struct-level grain (`scd2`,
-`timeline`, `recursive`) nests under that grain's word, and the struct must
-declare the grain: `#[dao(scd2(valid_from))]` on a `timeline` DAO is an error
-at the mark. `partition_by` belongs to every versioned relation — an `scd2`
-relation is a timeline — so it stays flat, as do the grain-free `pk`,
-`order_by`, `immutable` and `flatten`. One attribute may carry several:
+A mark that only means something under one struct-level grain (`timeline`,
+`recursive`) nests under that grain's word, and the struct must declare the
+grain: `#[dao(timeline(version_by))]` on an `scd2` DAO is an error at the
+mark. `scd2` owns no field mark: its interval columns are always `valid_from`
+and `valid_to`, written by the doors, never by a payload. `partition_by`
+belongs to every versioned relation, so it stays flat, as do the grain-free
+`pk`, `order_by`, `immutable` and `flatten`. One attribute may carry several:
 `#[dao(pk, partition_by)]`.
 
 A `#[dao(flatten)]` DAO inherits only its base's `#[dao(pk)]`: row identity
@@ -400,20 +401,20 @@ pub struct DependencyInsertDB {
     pub table_function_id: OfTable<FunctionId>,
     #[dao(order_by)]
     pub dep_pos: DependencyPos,
-    #[dao(scd2(valid_from))]
-    pub defined_on: AtTime,
     ...
 }
 ```
 
 This implements `TableDao` / `Insertable` (it is a table and declares
-`insert`), `Scd2Dao` and `TimelineDao`, and `RecursiveDao`. Being `scd2`, it
-does **not** implement `UnversionedDao`, and its insert capability is
-`Scd2InsertDao`, not `InsertDao`: `db.insert(&dep)` does not compile,
-`db.scd2().insert(&dep)` does.
+`insert`), `Scd2Dao` and `RecursiveDao`. Being `scd2`, it does **not**
+implement `UnversionedDao`, and its insert capability is `Scd2OpenDao`, not
+`InsertDao`: `db.insert(&dep)` does not compile, `db.scd2().open(&dep, at)`
+does, `at` being the unit of work's `LockInstant`. The payload carries no
+`valid_from` / `valid_to`: a field of either name or type is an error, since
+`open` binds the start and the close-out trigger owns the end.
 
-The row DAO is its flatten plus the trigger-owned interval end, and it is the
-one that is read:
+The row DAO is its flatten plus the interval the doors wrote, and it is the
+one that is read; it alone implements `TimelineDao`:
 
 ```rust
 #[ta_objects::Dao]
@@ -421,8 +422,8 @@ one that is read:
 pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }
 ```
 
@@ -462,6 +463,11 @@ Two grains hang off the same level:
 
 - `for_update()` — the same reads holding row locks: `fetch_one`,
   `fetch_optional`, `fetch_all`, plus `claim_all` (`SKIP LOCKED`).
+  `serialize_on::<D>(cond)` is the locking read that also mints the unit of
+  work's `LockInstant`: the row the work serializes on, and the instant it
+  took its lock, which is what `scd2().open` and `close` stamp. An exclusive
+  (`XW`) transaction has its instant from the project lock instead:
+  `trx.locked_at()`.
 - `chunked()` — `insert(&[D])`, `fetch_all(values, extra)`,
   `update(dao, values)` over a slice too large for one statement's bind
   parameters: each chunk is one statement, the slice's conditions OR-joined
@@ -639,12 +645,19 @@ let function: FunctionDBWithNames = conn
     .fetch_one(and!(&collection_id, &function_name))
     .await?;
 
-// A new version: the trigger closes the previous open row of the partition.
-conn.scd2().insert(&function_version).await?;
+// The unit of work's instant: the row it serializes on, read FOR UPDATE.
+let (collection, at) = conn
+    .for_update()
+    .serialize_on::<CollectionDB>(&collection_id)
+    .await?;
+
+// A new version open from `at`: the trigger closes the previous open row of
+// the partition at that same instant.
+conn.scd2().open(&function_version, at).await?;
 
 // Deletion is the closed interval with no successor: after this the entity
 // is gone from `scd2()` and from `scd2().as_of(&t)` for any `t >= at`.
-conn.scd2().close::<FunctionDB>(&function_id, &ctx.time).await?;
+conn.scd2().close::<FunctionDB>(&function_id, at).await?;
 
 // Visible at a time, by condition — cost follows the condition.
 let in_collection: Vec<FunctionDB> = conn.scd2().as_of(&at).fetch_all(&collection_id).await?;

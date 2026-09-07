@@ -49,6 +49,7 @@ async fn execute_function_version(
 
     // Ensure the trigger function is the current active version (never allow
     // older versions to execute).
+    let at = trx.locked_at();
     let conn = trx.get(grant);
     let function: FunctionDBWithNames = conn
         .scd2()
@@ -65,6 +66,7 @@ async fn execute_function_version(
         msgs,
         &transaction_by,
         ctx,
+        at,
         execution_request,
         function,
         trigger_type,

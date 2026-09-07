@@ -4,6 +4,7 @@
 
 use crate::Queries;
 use crate::QueryExecutor;
+use td_common::datetime::Timestamp;
 use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
@@ -37,7 +38,7 @@ async fn _seed_execution(
         collection_id: function_version.base.collection_id,
         function_id: function_version.base.function_id,
         function_version_id: function_version.base.id.clone(),
-        triggered_on: TriggeredOn::now(),
+        triggered_on: TriggeredOn::asserted(Timestamp::default()),
         triggered_by_id: UserId::admin(),
         trigger_type,
         external_uid: None,
@@ -53,6 +54,7 @@ async fn _seed_execution(
 #[cfg(test)]
 mod tests {
     use crate::test_utils::SeedEntry;
+    use td_common::datetime::Timestamp;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::ReuseFrozen;
@@ -120,6 +122,6 @@ mod tests {
             **execution.base.triggered_by_id,
             **function_version.base.defined_by_id
         );
-        assert!(execution.base.triggered_on < TriggeredOn::now());
+        assert!(execution.base.triggered_on < TriggeredOn::asserted(Timestamp::default()));
     }
 }

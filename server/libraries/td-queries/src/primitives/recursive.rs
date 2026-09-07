@@ -151,7 +151,7 @@ pub(crate) fn versioned_visible_cte<T: Scd2Dao, V: SeaValue>(
     let query = Query::select()
         .expr(Expr::col((Rv, Asterisk)))
         .from_as(T::TABLE, Rv)
-        .cond_where(visible_at((Rv, T::VERSION_ORDER), (Rv, T::VALID_TO), on))
+        .cond_where(visible_at((Rv, T::VALID_FROM), (Rv, T::VALID_TO), on))
         .cond_where(reachable)
         .cond_where(state_cond)
         .take();
@@ -260,7 +260,7 @@ where
         .expr_as(Expr::col((Rv, recursion_ref)), PartitionId)
         .from_as(R::TABLE, Rv)
         .and_where(start.matches_in(Rv))
-        .and_where(Expr::col((Rv, R::VERSION_ORDER)).lte(on.as_sea_value()))
+        .and_where(Expr::col((Rv, R::VALID_FROM)).lte(on.as_sea_value()))
         .take();
 
     // Postgres rejects recursive references in the anchor term and multiple
@@ -301,7 +301,7 @@ where
         .expr_as(emit_col, PartitionId)
         .from_as(D::TABLE, Rcv)
         .join_as(JoinType::InnerJoin, Cte::Reachable, Fx, join_cond)
-        .and_where(Expr::col((Rcv, D::VERSION_ORDER)).lte(on.as_sea_value()))
+        .and_where(Expr::col((Rcv, D::VALID_FROM)).lte(on.as_sea_value()))
         .take();
 
     let combined = {

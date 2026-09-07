@@ -521,8 +521,8 @@ mod tests {
         assert_eq!(physical_table_data_versions.len(), 1);
         let physical_table_data_version = &physical_table_data_versions[0];
         assert_eq!(
-            physical_table_data_version.base.base.base.triggered_on,
-            physical_function_run.base.base.triggered_on
+            physical_table_data_version.base.base.interval.valid_from,
+            physical_function_run.base.interval.valid_from
         );
         assert_eq!(
             physical_table_data_version.base.triggered_by_id,
@@ -548,8 +548,8 @@ mod tests {
         assert_eq!(physical_table_data_versions.len(), 1);
         let physical_table_data_version = &physical_table_data_versions[0];
         assert_eq!(
-            physical_table_data_version.base.base.base.triggered_on,
-            physical_function_run.base.base.triggered_on
+            physical_table_data_version.base.base.interval.valid_from,
+            physical_function_run.base.interval.valid_from
         );
         assert_eq!(
             physical_table_data_version.base.triggered_by_id,
@@ -685,12 +685,12 @@ mod tests {
         let table_data_version_1 = &physical_table_data_versions[1];
 
         assert_eq!(
-            table_data_version_0.base.base.base.triggered_on,
-            function_run_0.base.base.triggered_on
+            table_data_version_0.base.base.interval.valid_from,
+            function_run_0.base.interval.valid_from
         );
         assert_eq!(
-            table_data_version_1.base.base.base.triggered_on,
-            function_run_1.base.base.triggered_on
+            table_data_version_1.base.base.interval.valid_from,
+            function_run_1.base.interval.valid_from
         );
         assert_eq!(
             table_data_version_0.base.triggered_by_id,
@@ -751,12 +751,12 @@ mod tests {
         let table_data_version_1 = &physical_table_data_versions[1];
 
         assert_eq!(
-            table_data_version_0.base.base.base.triggered_on,
-            function_run_0.base.base.triggered_on
+            table_data_version_0.base.base.interval.valid_from,
+            function_run_0.base.interval.valid_from
         );
         assert_eq!(
-            table_data_version_1.base.base.base.triggered_on,
-            function_run_1.base.base.triggered_on
+            table_data_version_1.base.base.interval.valid_from,
+            function_run_1.base.interval.valid_from
         );
         assert_eq!(
             table_data_version_0.base.triggered_by_id,

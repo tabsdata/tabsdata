@@ -8,7 +8,7 @@ create table test_table
     status     TEXT      not null,
     current    TEXT      not null,
     downstream TEXT      not null,
-    defined_on TIMESTAMP not null
+    valid_from TIMESTAMP not null
 );
 
 
@@ -57,7 +57,7 @@ create table test_table_reference
     id           TEXT primary key,
     reference_id TEXT      not null,
     status       TEXT      not null,
-    defined_on   TIMESTAMP not null
+    valid_from   TIMESTAMP not null
 );
 
 INSERT INTO test_table_reference

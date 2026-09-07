@@ -6,6 +6,7 @@ use crate::function::engine::FunctionState;
 use crate::function::register::RegisterFunctionError;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
+use td_database::access::LockInstant;
 use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
@@ -19,7 +20,7 @@ use td_objects::system::{
 };
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionId, ResetState, ReuseFrozen, System, TableId,
-    TableName, TableNameDto, TableStatus, TableType, TriggeredOn,
+    TableName, TableNameDto, TableStatus, TableType,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -110,7 +111,7 @@ pub async fn resolve<S: SeesProjectRows>(
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
     state: &FunctionState,
-    at: &AtTime,
+    at: LockInstant,
 ) -> Result<ResolvedSpec, TdError> {
     let user_tables = spec.tables.unwrap_or_default();
     let duplicates: Vec<TableName> = user_tables
@@ -126,7 +127,7 @@ pub async fn resolve<S: SeesProjectRows>(
     check_private_tables(&collection.name, spec.dependencies)?;
     check_private_tables(&collection.name, spec.triggers)?;
 
-    let tables = resolve_tables(conn, collection, function_id, spec, state, at).await?;
+    let tables = resolve_tables(conn, collection, function_id, spec, state).await?;
 
     let dependencies: Vec<TableDependency> = spec
         .dependencies
@@ -138,8 +139,7 @@ pub async fn resolve<S: SeesProjectRows>(
 
     // The function's own tables, system ones included, are addressable before
     // they are written: a dependency on the state table is resolved here.
-    let mut referenced =
-        referenced_rows(conn, &collection.name, &dependencies, &triggers, at).await?;
+    let mut referenced = referenced_rows(conn, &collection.name, &dependencies, &triggers).await?;
     for table in &tables {
         let row = ReferencedRow {
             collection_id: collection.id,
@@ -171,7 +171,7 @@ pub async fn resolve<S: SeesProjectRows>(
             .function_id(function_id)
             .table_id(&row.table_id)
             .versions(&dependency.versions)
-            .triggered_on(&TriggeredOn::try_from(at)?)
+            .triggered_on(&AtTime::from(at))
             .error_on_desc_range(true)
             .build()?
             .resolve(&mut *conn)
@@ -229,7 +229,6 @@ async fn resolve_tables<S: SeesProjectRows>(
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
     state: &FunctionState,
-    at: &AtTime,
 ) -> Result<Vec<ResolvedTable>, TdError> {
     let existing: HashMap<&TableName, _> = state.tables.iter().map(|t| (&t.base.name, t)).collect();
     let empty_types = HashMap::new();
@@ -266,12 +265,7 @@ async fn resolve_tables<S: SeesProjectRows>(
             .iter()
             .map(|name| and!(&collection.id, *name))
             .collect();
-        let taken: Vec<TableDBWithNames> = conn
-            .scd2()
-            .as_of(at)
-            .chunked()
-            .fetch_all(&lookups, ())
-            .await?;
+        let taken: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
         if !taken.is_empty() {
             let names: Vec<TableName> = taken.into_iter().map(|t| t.base.base.name).collect();
             Err(RegisterFunctionError::TableAlreadyExists(
@@ -336,7 +330,6 @@ async fn referenced_rows<S: SeesProjectRows>(
     collection: &CollectionName,
     dependencies: &[TableDependency],
     triggers: &[TableTrigger],
-    at: &AtTime,
 ) -> Result<HashMap<(CollectionName, TableName), ReferencedRow>, TdError> {
     let mut lookups = Vec::new();
     for d in dependencies {
@@ -345,12 +338,7 @@ async fn referenced_rows<S: SeesProjectRows>(
     for t in triggers {
         lookups.push(and!(t.collection.as_ref().unwrap_or(collection), &t.table));
     }
-    let rows: Vec<TableDBWithNames> = conn
-        .scd2()
-        .as_of(at)
-        .chunked()
-        .fetch_all(&lookups, ())
-        .await?;
+    let rows: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
     Ok(rows
         .into_iter()
         .map(|t| {

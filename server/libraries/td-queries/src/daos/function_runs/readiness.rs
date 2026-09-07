@@ -25,7 +25,7 @@ use td_objects::dxo::logical::{
 };
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
 use td_objects::types::basic::{
-    AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus, TriggeredOn,
+    AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
 };
 
 impl<E> LogicalRuns<E>
@@ -70,7 +70,7 @@ where
     pub async fn previous_for_function_at(
         self,
         function_id: &FunctionId,
-        before_time: &TriggeredOn,
+        before_time: &AtTime,
     ) -> Result<Option<LogicalFunctionRunDB>, SqlError> {
         previous_lfr_query(function_id, before_time)
             .build_query_as()
@@ -202,7 +202,7 @@ pub(crate) fn blocked_ids_query(execution_id: &ExecutionId, at: &AtTime) -> Sele
 
 pub(crate) fn previous_lfr_query(
     function_id: &FunctionId,
-    before_time: &TriggeredOn,
+    before_time: &AtTime,
 ) -> SelectStatement {
     Query::select()
         .columns(LogicalFunctionRunDB::columns())
@@ -399,7 +399,7 @@ mod tests {
         let sql = fetch_lfrs_to_execute_query(&at(), 50).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "logical_function_runs".* FROM "logical_function_runs" WHERE "logical_function_runs"."status" IN ('S', 'RS') AND (NOT EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."triggered_on" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" NOT IN ('D', 'C'))))) ORDER BY "logical_function_runs"."triggered_on" ASC LIMIT 50 FOR UPDATE OF "logical_function_runs" SKIP LOCKED"#
+            r#"SELECT "logical_function_runs".* FROM "logical_function_runs" WHERE "logical_function_runs"."status" IN ('S', 'RS') AND (NOT EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."valid_from" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" NOT IN ('D', 'C'))))) ORDER BY "logical_function_runs"."triggered_on" ASC LIMIT 50 FOR UPDATE OF "logical_function_runs" SKIP LOCKED"#
         );
     }
 
@@ -409,14 +409,14 @@ mod tests {
         let sql = blocked_ids_query(&eid, &at()).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT DISTINCT "id" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = 'ep20260101-0000000001' AND EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."triggered_on" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" IN ('F', 'H'))))"#
+            r#"SELECT DISTINCT "id" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = 'ep20260101-0000000001' AND EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."valid_from" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" IN ('F', 'H'))))"#
         );
     }
 
     #[test]
     fn test_previous_lfr_query() {
         let fid = FunctionId::try_from("00000000000000000000000f00").unwrap();
-        let before = TriggeredOn::try_from(at()).unwrap();
+        let before = at();
         let sql = previous_lfr_query(&fid, &before).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,

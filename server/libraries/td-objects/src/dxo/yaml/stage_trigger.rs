@@ -55,6 +55,7 @@ mod tests {
     use chrono::DateTime;
     use http::Method;
     use std::collections::HashMap;
+    use td_common::datetime::Timestamp;
     use url::Url;
 
     #[test]
@@ -65,7 +66,7 @@ mod tests {
         let scheduled_on = AtTime::default();
         let start = DateTime::default();
         let end = DateTime::default();
-        let defined_on = AtTime::default();
+        let defined_on = AtTime::from(Timestamp::default());
 
         let cfg = StageTriggerConfig {
             timeout_threshold_min: Default::default(),

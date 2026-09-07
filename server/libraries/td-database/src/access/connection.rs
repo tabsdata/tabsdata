@@ -16,8 +16,8 @@
 //! ([`ScopedBy`](crate::domain::ScopedBy)) — a domain whose tables carry no
 //! project cannot be spelled project-scoped.
 
-use super::{AccessMode, DbScope, EntersProject, Gated, Global, InProject, WriteMode};
-use crate::access::Grant;
+use super::{AccessMode, DbScope, EntersProject, Gated, Global, InProject, WriteMode, XW};
+use crate::access::{Grant, LockInstant};
 use crate::domain::{Apiserver, DomainConnection, ScopedBy};
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -28,13 +28,15 @@ use td_error::TdError;
 #[must_use = "a write is lost unless it is committed"]
 pub struct GatedConnection<M: AccessMode, S: DbScope = Global, D: ScopedBy<S> = Apiserver> {
     conn: DomainConnection<D, S>,
+    lock: M::Lock,
     _m: PhantomData<M>,
 }
 
 impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
-    pub(super) fn new(conn: DomainConnection<D, S>) -> Self {
+    pub(super) fn new(conn: DomainConnection<D, S>, lock: M::Lock) -> Self {
         Self {
             conn,
+            lock,
             _m: PhantomData,
         }
     }
@@ -65,7 +67,14 @@ impl<M: AccessMode, S: EntersProject, D: ScopedBy<S> + ScopedBy<InProject>>
         let scope = InProject::new(project);
         let mut conn = DomainConnection::<D, InProject>::new(self.conn.into_transaction());
         scope.apply(&mut conn).await?;
-        Ok(GatedConnection::new(conn))
+        Ok(GatedConnection::new(conn, self.lock))
+    }
+}
+
+impl<S: DbScope, D: ScopedBy<S>> GatedConnection<XW, S, D> {
+    /// The instant this unit of work took the project's lock.
+    pub fn locked_at(&self) -> LockInstant {
+        self.lock
     }
 }
 

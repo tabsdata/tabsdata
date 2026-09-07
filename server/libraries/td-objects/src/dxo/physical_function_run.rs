@@ -2,14 +2,16 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::worker::WorkerExecutionUpdate;
+use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
     ConnectionKind, Decorator, Dispatched, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek,
     EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx,
     LogicalFunctionRunId, OfExecution, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-    ProjectId, ProjectName, RowCount, Scd2ValidTo, StageId, Started, StorageVersion,
-    TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
+    ProjectId, ProjectName, RowCount, StageId, Started, StorageVersion, TableVersionCount,
+    TransactionId, Trigger, UserId, UserName,
 };
 use chrono::{DateTime, Utc};
 use ta_objects::FromDao;
@@ -32,8 +34,6 @@ pub struct PhysicalFunctionRunInsertDB {
     pub transaction_id: TransactionId,
     #[dao(partition_by)]
     pub logical_function_run_id: LogicalFunctionRunId,
-    #[dao(scd2(valid_from), order_by)]
-    pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
     pub trigger: Trigger,
     // The run's effective prefix (function-version override, else the
@@ -73,8 +73,8 @@ pub struct PhysicalFunctionRunDB {
     #[dao(flatten)]
     pub base: PhysicalFunctionRunInsertDB,
     pub project_id: ProjectId,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten, order_by)]
+    pub interval: Scd2Interval,
 }
 
 #[ta_objects::Dao]
@@ -124,8 +124,8 @@ pub struct PhysicalFunctionRun {
     pub execution_id: ExecutionId,
     #[dto(list(filter, filter_like, order_by))]
     pub transaction_id: TransactionId,
-    #[dto(list(filter, order_by))]
-    pub triggered_on: TriggeredOn,
+    #[dto(list(filter, order_by, col = Scd2ValidFrom))]
+    pub triggered_on: AtTime,
     pub trigger: Trigger,
     #[dto(list(filter))]
     pub started_on: Option<Started<AtTime>>,
@@ -160,7 +160,7 @@ impl FromDao for PhysicalFunctionRun {
             function_version_id: dao.base.base.function_version_id,
             execution_id: dao.base.base.execution_id,
             transaction_id: dao.base.base.transaction_id,
-            triggered_on: dao.base.base.triggered_on,
+            triggered_on: dao.base.interval.valid_from.into(),
             trigger: dao.base.base.trigger,
             started_on: dao.base.base.started_on,
             ended_on: dao.base.base.ended_on,

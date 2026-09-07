@@ -8,7 +8,8 @@ mod tests {
     use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 
     use crate::dxo::{
-        Dao, Insertable, PkDao, RecursiveDao, SelectDao, TimelineDao, UpdateDao, UpsertDao,
+        Dao, Insertable, Partitioned, PkDao, RecursiveDao, Scd2Dao, SelectDao, TimelineDao,
+        UpdateDao, UpsertDao,
     };
     use crate::unique::AddressesOneRow;
     use sea_query::{Iden, Order};
@@ -22,7 +23,28 @@ mod tests {
     struct Name(String);
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    #[typed(sealed)]
     struct DefinedOn(i64);
+
+    impl DefinedOn {
+        fn at(v: i64) -> Self {
+            Self(v)
+        }
+    }
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct ValidTo(i64);
+
+    #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+    struct Scd2Interval {
+        pub valid_from: DefinedOn,
+        pub valid_to: ValidTo,
+    }
+
+    impl crate::IntervalColumns for Scd2Interval {
+        type ValidFrom = DefinedOn;
+        type ValidTo = ValidTo;
+    }
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct OwnerName(String);
@@ -129,7 +151,7 @@ mod tests {
             base: WidgetDao {
                 id: WidgetId::try_from("w1").unwrap(),
                 name: Name::try_from("n").unwrap(),
-                defined_on: Some(DefinedOn::try_from(1i64).unwrap()),
+                defined_on: Some(DefinedOn::at(1)),
             },
             owner: OwnerName::try_from("o").unwrap(),
             renamed: RenamedName::try_from("r").unwrap(),
@@ -186,24 +208,27 @@ mod tests {
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(table = "scd2_widgets", ops(select, insert), scd2, recursive)]
-    struct Scd2WidgetDao {
+    #[dao(table = "scd2_widgets", ops(insert), scd2, recursive)]
+    struct Scd2WidgetInsertDao {
         #[dao(pk, recursive(down))]
         pub id: WidgetVersionId,
         #[dao(partition_by, recursive(up))]
         pub widget_id: WidgetId,
-        #[dao(scd2(valid_from))]
-        pub defined_on: DefinedOn,
     }
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(
-        table = "scd2_widgets__with_names",
-        ops(select, insert),
-        scd2,
-        recursive
-    )]
+    #[dao(table = "scd2_widgets", ops(select), scd2, recursive)]
+    struct Scd2WidgetDao {
+        #[dao(flatten)]
+        pub base: Scd2WidgetInsertDao,
+        #[dao(flatten)]
+        pub interval: Scd2Interval,
+    }
+
+    #[ta_objects::Dao]
+    #[derive(Eq, PartialEq)]
+    #[dao(view = "scd2_widgets__with_names", scd2, recursive)]
     struct Scd2WidgetDaoWithNames {
         #[dao(flatten)]
         pub base: Scd2WidgetDao,
@@ -219,7 +244,11 @@ mod tests {
         );
         assert_eq!(
             Iden::to_string(&Scd2WidgetDaoWithNames::VERSION_ORDER),
-            "defined_on"
+            "valid_from"
+        );
+        assert_eq!(
+            Iden::to_string(&Scd2WidgetDaoWithNames::VALID_TO),
+            "valid_to"
         );
     }
 

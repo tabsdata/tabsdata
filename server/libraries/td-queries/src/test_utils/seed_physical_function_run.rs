@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::QueryExecutor;
 use crate::test_utils::seed_logical_function_run::seed_logical_function_run;
-use td_database::access::InProject;
+use td_database::access::{InProject, LockInstant};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -44,7 +44,6 @@ pub(crate) async fn seed_physical_function_run(
         function_version_id: function_version.base.id.clone(),
         execution_id: execution.base.id.clone(),
         transaction_id: transaction.base.id.clone(),
-        triggered_on: transaction.base.triggered_on,
         triggered_by_id: transaction.base.triggered_by_id,
         trigger: Trigger::Manual,
         base_path: function_version
@@ -67,7 +66,14 @@ pub(crate) async fn seed_physical_function_run(
         logical_function_run_id: logical.base.id.clone(),
     };
 
-    executor.reuse().scd2().insert(&function_db).await?;
+    executor
+        .reuse()
+        .scd2()
+        .open(
+            &function_db,
+            LockInstant::asserted(*transaction.base.triggered_on),
+        )
+        .await?;
 
     Ok(executor
         .reuse()
@@ -170,8 +176,8 @@ mod tests {
             transaction.base.id
         );
         assert_eq!(
-            physical_function_run.base.triggered_on,
-            transaction.base.triggered_on
+            *physical_function_run.interval.valid_from,
+            *transaction.base.triggered_on
         );
         assert_eq!(physical_function_run.base.trigger, Trigger::Manual);
         // Status lives on the LFR; PhysicalFunctionRunDB no longer has it.

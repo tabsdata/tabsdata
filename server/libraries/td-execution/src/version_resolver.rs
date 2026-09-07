@@ -39,7 +39,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::DisplayVec;
 use td_error::{TdError, td_error};
 use td_objects::dxo::logical::ActiveLogicalTableDataVersionDB;
-use td_objects::types::basic::{FunctionId, LogicalTableDataVersionId, TableId, TriggeredOn};
+use td_objects::types::basic::{AtTime, FunctionId, LogicalTableDataVersionId, TableId};
 use td_objects::types::table_ref::{Version, Versions};
 use td_queries::Queries;
 
@@ -57,7 +57,7 @@ pub struct VersionResolver<'a> {
     function_id: &'a FunctionId,
     table_id: &'a TableId,
     versions: &'a Versions,
-    triggered_on: &'a TriggeredOn,
+    triggered_on: &'a AtTime,
     #[builder(default = "false")]
     error_on_desc_range: bool,
 }
@@ -400,6 +400,7 @@ mod tests {
     use td_objects::and;
     use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+    use td_objects::types::basic::{AtTime, TriggeredOn};
 
     use td_objects::dxo::logical::LogicalFunctionRunInsertDB;
 
@@ -511,7 +512,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_resolve_logical_none(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 1).await;
-        let triggered_on = TriggeredOn::now();
+        let triggered_on = AtTime::now();
 
         let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
         let found = VersionResolver::builder()
@@ -543,7 +544,7 @@ mod tests {
                 .function_id(&FunctionId::default())
                 .table_id(&table_id)
                 .versions(&Versions::Single(version))
-                .triggered_on(&TriggeredOn::now())
+                .triggered_on(&AtTime::now())
                 .build()?
                 .resolve(&mut conn)
                 .await?;
@@ -572,7 +573,7 @@ mod tests {
                 .function_id(&FunctionId::default())
                 .table_id(&table_id)
                 .versions(&Versions::Single(version))
-                .triggered_on(&TriggeredOn::now())
+                .triggered_on(&AtTime::now())
                 .build()?
                 .resolve(&mut conn)
                 .await?;
@@ -602,7 +603,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -626,7 +627,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -647,7 +648,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -665,7 +666,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -688,7 +689,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -708,7 +709,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&Versions::New)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -771,7 +772,7 @@ mod tests {
             .function_id(&consumer.base.function_id)
             .table_id(&table_id)
             .versions(&Versions::New)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -857,7 +858,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_a_id)
             .versions(&Versions::Range(Version::Initial(0), Version::Head(0)))
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -886,7 +887,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&Versions::Single(Version::Head(0)))
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -932,7 +933,7 @@ mod tests {
             function_id: function.base.function_id,
             function_version_id: function.base.id.clone(),
             trigger: Trigger::Manual,
-            triggered_on: TriggeredOn::now(),
+            triggered_on: TriggeredOn::asserted(*AtTime::now()),
             triggered_by_id: UserId::admin(),
             status: LogicalFunctionRunStatus::Canceled,
             group_id: collection.group_id,
@@ -973,7 +974,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&Versions::None)
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -1000,7 +1001,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&Versions::Single(Version::Fixed(good.id.clone())))
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await?;
@@ -1011,7 +1012,7 @@ mod tests {
             .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&Versions::Single(Version::Fixed(canceled_ltdv.id.clone())))
-            .triggered_on(&TriggeredOn::now())
+            .triggered_on(&AtTime::now())
             .build()?
             .resolve(&mut conn)
             .await

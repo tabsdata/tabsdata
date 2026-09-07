@@ -140,6 +140,7 @@ mod tests {
     use td_bridge::Orchestrator;
     use td_bridge::messaging::{CronRequest, OrchestratorMessagePayload, StageTriggerRequest};
     use td_bridge::test::{StaticWorkloadObserver, TestBridgeProvider};
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_execution::{DispatchGrace, StuckRequestedTimeout};
@@ -527,11 +528,13 @@ mod tests {
     ) -> Result<(), TdError> {
         let newer = FunctionInsertDB {
             id: FunctionVersionId::new(),
-            defined_on: AtTime::now(),
             defined_by_id: UserId::admin(),
             ..function.base.clone()
         };
-        db.scoped(project_id).scd2().insert(&newer).await?;
+        db.scoped(project_id)
+            .scd2()
+            .open(&newer, LockInstant::asserted(*AtTime::now()))
+            .await?;
         Ok(())
     }
 

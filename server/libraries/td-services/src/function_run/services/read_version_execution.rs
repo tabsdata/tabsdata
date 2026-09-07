@@ -46,11 +46,11 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
     use td_objects::dxo::function::{FunctionRegister, FunctionVersionParam};
-    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
         PhysicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, UserName,
     };
+    use td_objects::types::basic::{AtTime, ReuseFrozen};
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -139,7 +139,7 @@ mod tests {
         );
         assert_eq!(
             response.triggered_on,
-            physical_function_run.base.triggered_on
+            AtTime::from(physical_function_run.interval.valid_from)
         );
         assert_eq!(response.trigger, physical_function_run.base.trigger);
         assert_eq!(response.started_on, physical_function_run.base.started_on);

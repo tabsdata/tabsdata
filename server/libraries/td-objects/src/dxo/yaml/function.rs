@@ -8,7 +8,7 @@ use crate::types::basic::{
     ExecutionName, FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
     PartitionName, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, RowCount,
     SchemaHash, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
-    TriggeredOn, VersionPos,
+    VersionPos,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -50,7 +50,7 @@ pub struct FunctionInfo {
     pub function_run_id: PhysicalFunctionRunId,
     pub function_bundle: Location,
     pub function_stage: Location,
-    pub triggered_on: TriggeredOn,
+    pub triggered_on: AtTime,
     pub transaction_id: TransactionId,
     pub execution_id: ExecutionId,
     pub execution_name: Option<ExecutionName>,
@@ -241,6 +241,7 @@ mod tests {
     use crate::types::basic::{EnvPrefix, FunctionId};
     use itertools::Itertools;
     use std::collections::HashSet;
+    use td_common::datetime::Timestamp;
     use td_error::TdError;
     use url::Url;
 
@@ -252,11 +253,11 @@ mod tests {
         let table_id = TableId::default();
         let table_version_id = TableVersionId::default();
         let table_data_version_id = PhysicalTableDataVersionId::new();
-        let triggered_on = TriggeredOn::default();
+        let triggered_on = AtTime::from(Timestamp::default());
         let transaction_id = TransactionId::new();
         let execution_id = ExecutionId::new();
         let scheduled_on = AtTime::default();
-        let defined_on = AtTime::default();
+        let defined_on = AtTime::from(Timestamp::default());
 
         let project_id = ProjectId::default();
         let input = WorkerInput::Function(Box::new(FunctionInput {
@@ -806,12 +807,12 @@ output:
             collection_id: CollectionId::default(),
             collection: CollectionName::try_from("cn")?,
             function_version_id: FunctionVersionId::new(),
-            function_defined_on: AtTime::default(),
+            function_defined_on: AtTime::from(Timestamp::default()),
             function: FunctionName::try_from("fn")?,
             function_run_id: PhysicalFunctionRunId::new(),
             function_bundle: locations[8].clone(),
             function_stage: locations[0].clone(),
-            triggered_on: TriggeredOn::default(),
+            triggered_on: AtTime::from(Timestamp::default()),
             transaction_id: TransactionId::new(),
             execution_id: ExecutionId::new(),
             execution_name: Some(ExecutionName::try_from("en")?),

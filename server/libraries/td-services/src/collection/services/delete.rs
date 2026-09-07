@@ -64,7 +64,10 @@ async fn delete_collection(
     let conn = trx.get(grant);
     // Bare-table row lock (views with outer joins aren't lockable): a
     // registration landing mid-cascade would otherwise escape it.
-    let _: CollectionDB = conn.for_update().fetch_one(&collection.id).await?;
+    let (_, at) = conn
+        .for_update()
+        .serialize_on::<CollectionDB>(&collection.id)
+        .await?;
     // Liveness re-read under the lock: a raced delete loses with not-found
     // instead of silently re-renaming the already-deleted row.
     let collection: ActiveCollectionDB = conn.fetch_one(&collection.id).await?;
@@ -76,33 +79,27 @@ async fn delete_collection(
     let table_ids: Vec<TableId> = tables.iter().map(|x| x.base.table_id).collect();
     // Same-collection dependants are closed with the collection below; a
     // frozen version for them would be closed in the same instant.
-    let frozen: Vec<FunctionInsertDB> = dependants_of_tables(conn, &table_ids, &ctx.time)
+    let frozen: Vec<FunctionInsertDB> = dependants_of_tables(conn, &table_ids)
         .await?
         .iter()
         .filter(|f| f.base.collection_id != collection.id)
         .map(|f| f.frozen_version(&ctx))
         .collect();
-    conn.scd2().chunked().insert(&frozen).await?;
+    conn.scd2().chunked().open(&frozen, at).await?;
     conn.scd2()
         .chunked()
-        .close::<TriggerDB>(&table_ids, (), &ctx.time)
+        .close::<TriggerDB>(&table_ids, (), at)
         .await?;
-    conn.scd2()
-        .close::<TriggerDB>(&collection.id, &ctx.time)
-        .await?;
+    conn.scd2().close::<TriggerDB>(&collection.id, at).await?;
     conn.scd2()
         .chunked()
-        .close::<DependencyDB>(&table_ids, (), &ctx.time)
+        .close::<DependencyDB>(&table_ids, (), at)
         .await?;
     conn.scd2()
-        .close::<DependencyDB>(&collection.id, &ctx.time)
+        .close::<DependencyDB>(&collection.id, at)
         .await?;
-    conn.scd2()
-        .close::<TableDB>(&collection.id, &ctx.time)
-        .await?;
-    conn.scd2()
-        .close::<FunctionDB>(&collection.id, &ctx.time)
-        .await?;
+    conn.scd2().close::<TableDB>(&collection.id, at).await?;
+    conn.scd2().close::<FunctionDB>(&collection.id, at).await?;
     update_deleted_workers(conn, &collection.id).await?;
     trx.commit().await?;
 
@@ -340,19 +337,19 @@ mod tests {
             .fetch_all::<FunctionDB>(&collection.id)
             .await?;
         assert_eq!(versions.len(), 4);
-        assert!(versions.iter().all(|f| !f.valid_to.is_infinity()));
+        assert!(versions.iter().all(|f| !f.interval.valid_to.is_infinity()));
 
         let found = db.scd2().fetch_all::<TableDBWithNames>(()).await?;
         assert!(found.is_empty());
         let versions = db.timeline().fetch_all::<TableDB>(&collection.id).await?;
         assert_eq!(versions.len(), 4);
-        assert!(versions.iter().all(|t| !t.valid_to.is_infinity()));
+        assert!(versions.iter().all(|t| !t.interval.valid_to.is_infinity()));
 
         let found = db.scd2().fetch_all::<TriggerDBWithNames>(()).await?;
         assert!(found.is_empty());
         let versions = db.timeline().fetch_all::<TriggerDB>(&collection.id).await?;
         assert_eq!(versions.len(), 2);
-        assert!(versions.iter().all(|t| !t.valid_to.is_infinity()));
+        assert!(versions.iter().all(|t| !t.interval.valid_to.is_infinity()));
 
         let found = db.scd2().fetch_all::<DependencyDBWithNames>(()).await?;
         assert!(found.is_empty());
@@ -361,7 +358,7 @@ mod tests {
             .fetch_all::<DependencyDB>(&collection.id)
             .await?;
         assert_eq!(versions.len(), 1);
-        assert!(versions.iter().all(|d| !d.valid_to.is_infinity()));
+        assert!(versions.iter().all(|d| !d.interval.valid_to.is_infinity()));
 
         let found = db.fetch_all::<WorkerDB>(()).await?;
         assert_eq!(found.len(), 2);

@@ -16,7 +16,7 @@ enum TestTable {
     Status,
     Current,
     Downstream,
-    DefinedOn,
+    ValidFrom,
     ValidTo,
 }
 
@@ -26,7 +26,7 @@ enum TestTableReference {
     Id,
     ReferenceId,
     Status,
-    DefinedOn,
+    ValidFrom,
     ValidTo,
 }
 
@@ -55,7 +55,7 @@ impl SchemaSource for RecursiveVersionsSource {
                     .col(ColumnDef::new(TestTable::Current).text().not_null())
                     .col(ColumnDef::new(TestTable::Downstream).text().not_null())
                     .col(
-                        ColumnDef::new(TestTable::DefinedOn)
+                        ColumnDef::new(TestTable::ValidFrom)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
@@ -82,7 +82,7 @@ impl SchemaSource for RecursiveVersionsSource {
                     )
                     .col(ColumnDef::new(TestTableReference::Status).text().not_null())
                     .col(
-                        ColumnDef::new(TestTableReference::DefinedOn)
+                        ColumnDef::new(TestTableReference::ValidFrom)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
@@ -101,7 +101,7 @@ impl SchemaSource for RecursiveVersionsSource {
                 name: "test_table__scd2_close".to_string(),
                 source_table: TestTable::Table.into_iden(),
                 partition_col: TestTable::Id.into_iden(),
-                valid_from_col: TestTable::DefinedOn.into_iden(),
+                valid_from_col: TestTable::ValidFrom.into_iden(),
                 valid_to_col: TestTable::ValidTo.into_iden(),
                 pk_col: TestTable::Id.into_iden(),
             },
@@ -109,7 +109,7 @@ impl SchemaSource for RecursiveVersionsSource {
                 name: "test_table_reference__scd2_close".to_string(),
                 source_table: TestTableReference::Table.into_iden(),
                 partition_col: TestTableReference::ReferenceId.into_iden(),
-                valid_from_col: TestTableReference::DefinedOn.into_iden(),
+                valid_from_col: TestTableReference::ValidFrom.into_iden(),
                 valid_to_col: TestTableReference::ValidTo.into_iden(),
                 pk_col: TestTableReference::Id.into_iden(),
             },
@@ -124,7 +124,7 @@ impl SchemaSource for RecursiveVersionsSource {
     fn seeds(&self) -> Vec<String> {
         let mut stmts = Vec::new();
 
-        for (id, status, current, downstream, defined_on) in [
+        for (id, status, current, downstream, valid_from) in [
             (
                 "AAA",
                 "A",
@@ -169,20 +169,20 @@ impl SchemaSource for RecursiveVersionsSource {
                         TestTable::Status,
                         TestTable::Current,
                         TestTable::Downstream,
-                        TestTable::DefinedOn,
+                        TestTable::ValidFrom,
                     ])
                     .values_panic([
                         id.into(),
                         status.into(),
                         current.into(),
                         downstream.into(),
-                        defined_on.into(),
+                        valid_from.into(),
                     ])
                     .to_owned(),
             ));
         }
 
-        for (id, ref_id, status, defined_on) in [
+        for (id, ref_id, status, valid_from) in [
             ("MMM", "ref_0", "A", "2025-04-02T08:19:50.543+00:00"),
             ("NNN", "ref_1", "A", "2025-04-02T08:19:50.543+00:00"),
             ("OOO", "ref_2", "A", "2025-04-02T08:19:50.543+00:00"),
@@ -198,9 +198,9 @@ impl SchemaSource for RecursiveVersionsSource {
                         TestTableReference::Id,
                         TestTableReference::ReferenceId,
                         TestTableReference::Status,
-                        TestTableReference::DefinedOn,
+                        TestTableReference::ValidFrom,
                     ])
-                    .values_panic([id.into(), ref_id.into(), status.into(), defined_on.into()])
+                    .values_panic([id.into(), ref_id.into(), status.into(), valid_from.into()])
                     .to_owned(),
             ));
         }

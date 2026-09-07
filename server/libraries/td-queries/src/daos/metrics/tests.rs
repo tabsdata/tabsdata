@@ -6,6 +6,7 @@ use crate::Queries;
 use crate::test_utils::SeedEntry;
 use ta_objects::and;
 use td_common::datetime::Timestamp;
+use td_database::access::LockInstant;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDeleteDB};
@@ -28,7 +29,7 @@ use td_objects::types::basic::{
     EpochMs, HasData, InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId,
     ProjectName, ReuseFrozen, RowCount, TableFunctionParamPos, TableNameDto, TableVersionCount,
-    TransactionKey, TriggeredOn, UserId, VersionPos,
+    TransactionKey, UserId, VersionPos,
 };
 use td_objects::types::visible_projects::VisibleProjects;
 use td_security::ENCODED_ID_SYSTEM;
@@ -168,7 +169,6 @@ async fn bind_ptdv_with_magnitudes(
             .base
             .function_param_pos
             .unwrap_or(TableFunctionParamPos::try_from(0)?),
-        triggered_on: pfr.base.triggered_on,
         base_path: BasePath::default(),
         has_data: Some(HasData::TRUE),
         schema_changed: None,
@@ -180,7 +180,10 @@ async fn bind_ptdv_with_magnitudes(
         logical_table_data_version_id: ltdv.base.id.clone(),
     };
     let scoped = db.scoped(pfr.project_id);
-    (&scoped).scd2().insert(&ptdv).await?;
+    (&scoped)
+        .scd2()
+        .open(&ptdv, LockInstant::asserted(*pfr.interval.valid_from))
+        .await?;
     Ok((&scoped).timeline().fetch_one(&ptdv.id).await?)
 }
 
@@ -446,24 +449,21 @@ async fn test_nodes_out_magnitudes_follow_the_current_materialization(
         .timeline()
         .fetch_one(&current.base.physical_function_run_id)
         .await?;
-    let retried_on =
-        TriggeredOn::try_from(AtTime::from(Timestamp::try_from(4_102_444_800_000_i64)?))?;
+    let retried_on = LockInstant::asserted(Timestamp::try_from(4_102_444_800_000_i64)?);
     let retry = PhysicalFunctionRunInsertDB {
         id: PhysicalFunctionRunId::new(),
-        triggered_on: retried_on,
         ..producer.base
     };
-    db.scoped(p.id).scd2().insert(&retry).await?;
+    db.scoped(p.id).scd2().open(&retry, retried_on).await?;
     let empty = PhysicalTableDataVersionInsertDB {
         id: PhysicalTableDataVersionId::new(),
         physical_function_run_id: retry.id.clone(),
-        triggered_on: retried_on,
         has_data: None,
         row_count: None,
         data_bytes: None,
         ..current.base
     };
-    db.scoped(p.id).scd2().insert(&empty).await?;
+    db.scoped(p.id).scd2().open(&empty, retried_on).await?;
 
     let after = db
         .metrics()

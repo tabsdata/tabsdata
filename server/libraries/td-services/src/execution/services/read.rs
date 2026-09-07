@@ -52,7 +52,7 @@ async fn execution_read(
         .require::<Project, ViewProject>(&mut trx, &ctx, &project)
         .await?;
     let conn = trx.get(grant);
-    let at = AtTime::try_from(&execution.base.triggered_on)?;
+    let at = AtTime::from(execution.base.triggered_on);
 
     let function: FunctionDBWithNames = conn
         .timeline()

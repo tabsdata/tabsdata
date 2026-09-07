@@ -11,7 +11,7 @@ use std::time::Instant;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::types::basic::{AtTime, TriggeredOn};
+use td_objects::types::basic::AtTime;
 use td_queries::Queries;
 
 use crate::harness::{record, seed};
@@ -21,7 +21,7 @@ type Ptdv = PhysicalTableDataVersionDB;
 #[td_test::test(db)]
 async fn load_find_at_fetch_one_by_partition(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     let _row: Ptdv = db
         .scd2()
@@ -35,7 +35,7 @@ async fn load_find_at_fetch_one_by_partition(db: TdPool) -> Result<(), TdError> 
 #[td_test::test(db)]
 async fn load_find_at_fetch_optional_by_partition(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     let row = db
         .scd2()
@@ -56,7 +56,7 @@ async fn load_find_at_fetch_optional_by_partition(db: TdPool) -> Result<(), TdEr
 #[td_test::test(db)]
 async fn load_find_at_fetch_all_chunked_by_partition(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     let rows = db
         .scd2()
@@ -78,7 +78,7 @@ async fn load_find_at_fetch_all_chunked_by_partition(db: TdPool) -> Result<(), T
 #[td_test::test(db)]
 async fn load_find_at_fetch_one(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     let _row: Ptdv = db
         .scd2()
@@ -92,7 +92,7 @@ async fn load_find_at_fetch_one(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_find_at_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     let row = db
         .scd2()
@@ -113,7 +113,7 @@ async fn load_find_at_fetch_optional(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_find_at_fetch_all(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     // `()` matches all → latest row per partition across the whole log.
     let rows = db.scd2().as_of(&at).fetch_all::<Ptdv>(()).await?;
@@ -125,7 +125,7 @@ async fn load_find_at_fetch_all(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_find_at_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     let rows = db
         .scd2()

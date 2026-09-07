@@ -26,7 +26,7 @@ where
         function_id: &FunctionId,
         on: &AtTime,
     ) -> Result<Vec<DependencyDB>, SqlError> {
-        select_visible_at::<DependencyDB>(function_id, on)
+        select_visible_at::<DependencyDB, _>(function_id, on)
             .order_by_columns(DependencyDB::order_by())
             .build_query_as()
             .fetch_all(self.executor)
@@ -40,6 +40,7 @@ mod tests {
     use super::*;
     use chrono::{DateTime, Utc};
     use sea_query::PostgresQueryBuilder;
+    use td_objects::types::basic::AtTime;
 
     #[test]
     fn test_active_for_function_at_sql() {
@@ -49,12 +50,12 @@ mod tests {
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         );
-        let sql = select_visible_at::<DependencyDB>(&function_id, &on)
+        let sql = select_visible_at::<DependencyDB, _>(&function_id, &on)
             .order_by_columns(DependencyDB::order_by())
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "collection_id", "dependency_id", "function_id", "table_collection_id", "table_function_id", "table_id", "table_versions", "dep_pos", "defined_on", "defined_by_id", "system", "project_id", "valid_to" FROM "dependencies" WHERE "function_id" = '00000000000000000000000000' AND ("defined_on" <= '2026-01-01 00:00:10.000000 +00:00' AND "valid_to" > '2026-01-01 00:00:10.000000 +00:00') ORDER BY "dep_pos" DESC"#
+            r#"SELECT "id", "collection_id", "dependency_id", "function_id", "table_collection_id", "table_function_id", "table_id", "table_versions", "dep_pos", "defined_by_id", "system", "project_id", "valid_from", "valid_to" FROM "dependencies" WHERE "function_id" = '00000000000000000000000000' AND ("valid_from" <= '2026-01-01 00:00:10.000000 +00:00' AND "valid_to" > '2026-01-01 00:00:10.000000 +00:00') ORDER BY "dep_pos" DESC"#
         );
     }
 }

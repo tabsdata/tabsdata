@@ -42,7 +42,7 @@ pub enum Triggers {
     TriggerByFunctionId,
     TriggerByTableId,
     Status,
-    DefinedOn,
+    ValidFrom,
     DefinedById,
     System,
     ValidTo,
@@ -64,7 +64,7 @@ impl Entity for Defs {
                 .col(id_column(Triggers::TriggerByFunctionId).not_null())
                 .col(id_column(Triggers::TriggerByTableId).not_null())
                 .col(ColumnDef::new(Triggers::Status).text().not_null())
-                .col(ColumnDef::new(Triggers::DefinedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Triggers::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(id_column(Triggers::DefinedById).not_null())
                 .col(ColumnDef::new(Triggers::System).boolean().not_null())
                 .col(ColumnDef::new(Triggers::ValidTo).timestamp_with_time_zone().not_null())
@@ -110,10 +110,10 @@ impl Entity for Defs {
             Index::create().name("triggers___trigger_by_table_id___idx").table(Triggers::Table).col(Triggers::TriggerByTableId).to_owned(),
             Index::create().name("triggers___function_id___idx").table(Triggers::Table).col(Triggers::FunctionId).to_owned(),
             Index::create()
-                .name("triggers___trigger_id__defined_on__id___idx")
+                .name("triggers___trigger_id__valid_from__id___idx")
                 .table(Triggers::Table)
                 .col(Triggers::TriggerId)
-                .col(Triggers::DefinedOn)
+                .col(Triggers::ValidFrom)
                 .col(Triggers::Id)
                 .to_owned(),
             Index::create()
@@ -152,7 +152,7 @@ impl Entity for Defs {
                 name: format!("{}__scd2_close", Triggers::Table.to_string()),
                 source_table: Triggers::Table.into_iden(),
                 partition_col: Triggers::TriggerId.into_iden(),
-                valid_from_col: Triggers::DefinedOn.into_iden(),
+                valid_from_col: Triggers::ValidFrom.into_iden(),
                 valid_to_col: Triggers::ValidTo.into_iden(),
                 pk_col: Triggers::Id.into_iden(),
             }

@@ -8,6 +8,7 @@
 //! loop, and FR and TDV rows are bulk-inserted.
 
 use td_database::access::InProject;
+use td_database::access::LockInstant;
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head_batch};
 use crate::logical::mint::{build_function_run, build_output_table_data_versions};
@@ -42,7 +43,7 @@ pub struct MintedDispatch {
 pub async fn mint_function_runs_on_dispatch(
     conn: &mut DomainConnection<Apiserver, InProject>,
     ready_lfrs: &[LogicalFunctionRunDB],
-    at: &AtTime,
+    at: LockInstant,
 ) -> Result<Vec<MintedDispatch>, TdError> {
     if ready_lfrs.is_empty() {
         return Ok(Vec::new());
@@ -64,7 +65,8 @@ pub async fn mint_function_runs_on_dispatch(
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    let runnable_by_fvid = latest_patch_or_head_batch(&mut *conn, distinct_fvids, at).await?;
+    let runnable_by_fvid =
+        latest_patch_or_head_batch(&mut *conn, distinct_fvids, &AtTime::from(at)).await?;
 
     let distinct_head_fvids: Vec<FunctionVersionId> = runnable_by_fvid
         .values()
@@ -147,10 +149,10 @@ pub async fn mint_function_runs_on_dispatch(
     }
 
     if !frs.is_empty() {
-        conn.scd2().chunked().insert(&frs).await?;
+        conn.scd2().chunked().open(&frs, at).await?;
     }
     if !all_tdvs.is_empty() {
-        conn.scd2().chunked().insert(&all_tdvs).await?;
+        conn.scd2().chunked().open(&all_tdvs, at).await?;
     }
 
     let mut output = Vec::with_capacity(ready_lfrs.len());
@@ -193,6 +195,7 @@ mod tests {
     use super::*;
     use crate::tests::fixtures::register;
     use td_database::access::InProject;
+    use td_database::access::LockInstant;
     use td_database::connection::PgConnectionExt;
     use td_database::pool::TdPool;
     use td_objects::dxo::collection::ActiveCollectionDB;
@@ -252,8 +255,8 @@ mod tests {
         let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
         conn.scope_in_project(&p.id.to_string()).await.unwrap();
         let ready = vec![lfr.clone()];
-        let at = AtTime::now();
-        let minted = mint_function_runs_on_dispatch(&mut conn, &ready, &at).await?;
+        let at = LockInstant::asserted(*AtTime::now());
+        let minted = mint_function_runs_on_dispatch(&mut conn, &ready, at).await?;
 
         assert_eq!(minted.len(), 1, "the LFR is re-minted");
         assert_ne!(

@@ -7,6 +7,7 @@
 //! through the Seed API (each row's id feeds the next) while the high-volume
 //! run graph is built in memory and bulk-inserted via [`crate::bulk`].
 
+use td_database::access::LockInstant;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -31,7 +32,7 @@ use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 use td_security::ENCODED_ID_SYSTEM;
 
-use crate::bulk::bulk_insert;
+use crate::bulk::{bulk_insert, bulk_open};
 use crate::profile::{ChainKnobs, MetricsKnobs};
 
 /// Metrics window the generator stamps runs into; queries use the same bounds.
@@ -336,7 +337,7 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
         collection_id: collection_id.expect("chain_dataset requires units >= 1"),
         transaction_id: transaction_id.expect("chain_dataset requires units >= 1"),
         project_id: pid,
-        before_time: TriggeredOn::now(),
+        before_time: TriggeredOn::asserted(*AtTime::now()),
         at: AtTime::now(),
     })
 }
@@ -346,8 +347,8 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
 struct RunGraph {
     lfrs: Vec<LogicalFunctionRunInsertDB>,
     ltdvs: Vec<LogicalTableDataVersionInsertDB>,
-    pfrs: Vec<PhysicalFunctionRunInsertDB>,
-    ptdvs: Vec<PhysicalTableDataVersionInsertDB>,
+    pfrs: Vec<(PhysicalFunctionRunInsertDB, LockInstant)>,
+    ptdvs: Vec<(PhysicalTableDataVersionInsertDB, LockInstant)>,
     lfris: Vec<LogicalFunctionRunInputInsertDB>,
 }
 
@@ -360,8 +361,8 @@ impl RunGraph {
         let db = &scoped;
         bulk_insert(db, &self.lfrs).await?;
         bulk_insert(db, &self.ltdvs).await?;
-        bulk_insert(db, &self.pfrs).await?;
-        bulk_insert(db, &self.ptdvs).await?;
+        bulk_open(db, &self.pfrs).await?;
+        bulk_open(db, &self.ptdvs).await?;
         bulk_insert(db, &self.lfris).await?;
         Ok(())
     }
@@ -409,7 +410,6 @@ async fn build_unit(
         function_version_id: func.base.id.clone(),
         execution_id: exec.base.id.clone(),
         transaction_id: trx.base.id.clone(),
-        triggered_on: trx.base.triggered_on,
         triggered_by_id: trx.base.triggered_by_id,
         trigger: Trigger::Manual,
         base_path: collection.effective_base_path.clone(),
@@ -476,7 +476,6 @@ async fn build_unit(
             .base
             .function_param_pos
             .unwrap_or(TableFunctionParamPos::try_from(0)?),
-        triggered_on: pfr.triggered_on,
         base_path: BasePath::default(),
         has_data: Some(HasData::TRUE),
         schema_changed: None,
@@ -499,9 +498,10 @@ async fn build_unit(
         ptdv_id: ptdv.id.clone(),
     };
     graph.lfrs.push(lfr);
-    graph.pfrs.push(pfr);
+    let at = LockInstant::asserted(*trx.base.triggered_on);
+    graph.pfrs.push((pfr, at));
     graph.ltdvs.push(ltdv);
-    graph.ptdvs.push(ptdv);
+    graph.ptdvs.push((ptdv, at));
     Ok(unit)
 }
 

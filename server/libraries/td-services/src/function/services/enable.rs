@@ -36,9 +36,9 @@ async fn enable_function(
 
     // Bare-table row lock: the re-registration must not resurrect a function
     // inside a collection whose delete cascade is in flight.
-    let _: CollectionDB = conn
+    let (_, at) = conn
         .for_update()
-        .fetch_one(&collection_param.collection)
+        .serialize_on::<CollectionDB>(&collection_param.collection)
         .await?;
 
     // Before-update ids: the function id does not change, the function
@@ -50,7 +50,7 @@ async fn enable_function(
 
     let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
     let function = previous.re_registered(&ctx, enable.enabled);
-    conn.scd2().insert(&function).await?;
+    conn.scd2().open(&function, at).await?;
 
     let previous_version_id = Some(current.base.base.id);
     let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
@@ -85,8 +85,8 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, TableNameDto, UserId,
     };
+    use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_objects::types::basic::{BundleId, CollectionName, ReuseFrozen};
-    use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -242,7 +242,10 @@ mod tests {
         let response = response?;
 
         assert_ne!(response.id, created_function.base.id);
-        assert_ne!(response.defined_on, created_function.base.defined_on);
+        assert_ne!(
+            response.defined_on,
+            AtTime::from(created_function.interval.valid_from)
+        );
 
         assert_eq!(response.collection_id, created_function.base.collection_id);
         assert_eq!(response.name, created_function.base.name);

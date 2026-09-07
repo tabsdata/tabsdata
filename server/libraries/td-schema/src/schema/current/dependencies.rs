@@ -32,7 +32,7 @@ pub enum Dependencies {
     TableId,
     TableVersions,
     DepPos,
-    DefinedOn,
+    ValidFrom,
     DefinedById,
     System,
     ValidTo,
@@ -55,7 +55,7 @@ impl Entity for Defs {
                 .col(id_column(Dependencies::TableId).not_null())
                 .col(ColumnDef::new(Dependencies::TableVersions).text().not_null())
                 .col(ColumnDef::new(Dependencies::DepPos).integer().not_null())
-                .col(ColumnDef::new(Dependencies::DefinedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Dependencies::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(id_column(Dependencies::DefinedById).not_null())
                 .col(ColumnDef::new(Dependencies::System).boolean().not_null())
                 .col(ColumnDef::new(Dependencies::ValidTo).timestamp_with_time_zone().not_null())
@@ -99,10 +99,10 @@ impl Entity for Defs {
             // Register and collection delete resolve the dependencies on a set of tables.
             Index::create().name("dependencies___table_id___idx").table(Dependencies::Table).col(Dependencies::TableId).to_owned(),
             Index::create()
-                .name("dependencies___dependency_id__defined_on__id___idx")
+                .name("dependencies___dependency_id__valid_from__id___idx")
                 .table(Dependencies::Table)
                 .col(Dependencies::DependencyId)
-                .col(Dependencies::DefinedOn)
+                .col(Dependencies::ValidFrom)
                 .col(Dependencies::Id)
                 .to_owned(),
             // For recursive downstream graph traversal (recurse_down column)
@@ -159,7 +159,7 @@ impl Entity for Defs {
                 name: format!("{}__scd2_close", Dependencies::Table.to_string()),
                 source_table: Dependencies::Table.into_iden(),
                 partition_col: Dependencies::DependencyId.into_iden(),
-                valid_from_col: Dependencies::DefinedOn.into_iden(),
+                valid_from_col: Dependencies::ValidFrom.into_iden(),
                 valid_to_col: Dependencies::ValidTo.into_iden(),
                 pk_col: Dependencies::Id.into_iden(),
             }

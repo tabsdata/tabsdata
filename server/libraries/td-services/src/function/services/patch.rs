@@ -13,7 +13,7 @@ use td_error::TdError;
 use td_error::td_error;
 use td_objects::FromDao;
 use td_objects::dxo::bundle::BundleStatusUpdateDB;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{
     FunctionDB, FunctionParam, FunctionPatch, FunctionPatchDB, FunctionPatchInsertDB,
@@ -37,12 +37,16 @@ async fn create_function_patch(
     let conn = gated_trx.get(grant);
     let collection_id_name = collection_param.collection;
     let function_id_name = function_param.function;
-    let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
+    let (locked, at) = conn
+        .for_update()
+        .serialize_on::<CollectionDB>(&collection_id_name)
+        .await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
     let parent: FunctionDB = conn.timeline().fetch_one(&body.patch_of).await?;
     assert_patch_parent_matches_url(conn, &parent, &collection.id, &function_id_name).await?;
     let patch: FunctionPatchInsertDB = body.to_dao(parent, &ctx)?;
-    conn.scd2().insert(&patch).await?;
+    conn.scd2().open(&patch, at).await?;
 
     let bundle_registered = BundleStatusUpdateDB::registered();
     conn.update::<BundleStatusUpdateDB>(&bundle_registered, patch.bundle_id)
@@ -104,6 +108,7 @@ mod tests {
     use super::*;
     use crate::Services;
     use std::str::FromStr;
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
@@ -320,7 +325,7 @@ mod tests {
         let v0 = seed_function(&db, p.id, "c0", "f0").await;
         db.scoped(p.id)
             .scd2()
-            .close::<FunctionDB>(&v0.base.function_id, &AtTime::now())
+            .close::<FunctionDB>(&v0.base.function_id, LockInstant::asserted(*AtTime::now()))
             .await?;
 
         let response = Services::with_defaults(db.clone())
@@ -392,7 +397,7 @@ mod tests {
 
     /// Schema-level: the SCD2 close-out trigger keeps exactly one open
     /// `function_patches` row per `parent_function_version_id`
-    /// partition — the latest by `defined_on`. Catches a trigger
+    /// partition — the latest by `valid_from`. Catches a trigger
     /// regression where the open interval drifts from the partition's
     /// latest row.
     #[td_test::test(db)]
@@ -457,8 +462,8 @@ mod tests {
         assert_eq!(after_second.len(), 1, "one current row per parent");
         assert_eq!(after_second[0].base.id, second.id);
         assert!(
-            after_second[0].base.defined_on >= after_first[0].base.defined_on,
-            "current row must have the latest defined_on",
+            after_second[0].interval.valid_from >= after_first[0].interval.valid_from,
+            "current row must have the latest valid_from",
         );
 
         let all: Vec<FunctionPatchDB> = db

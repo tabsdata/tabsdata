@@ -3,7 +3,8 @@
 //
 
 use crate::dxo::crudl::RequestContext;
-use crate::types::basic::Scd2ValidTo;
+use crate::dxo::scd2_interval::Scd2Interval;
+use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, ConnectionKind,
     Connector, Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
@@ -65,7 +66,6 @@ impl FunctionRegister {
             storage_version: StorageVersion::default(),
             bundle_id: self.bundle_id,
             snippet: Snippet::try_from(self.snippet.clone())?,
-            defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             status: FunctionStatus::Active,
             enabled: self.enabled.unwrap_or_default(),
@@ -112,7 +112,6 @@ impl FunctionUpdate {
         let mut function = FunctionInsertDB {
             id: FunctionVersionId::new(),
             status: FunctionStatus::Active,
-            defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             storage_version: StorageVersion::default(),
             ..previous.base.clone()
@@ -191,7 +190,6 @@ impl FunctionPatch {
             bundle_id: self.bundle_id,
             runtime_values: self.runtime_values.unwrap_or(parent.base.runtime_values),
             description: self.description.unwrap_or(parent.base.description),
-            defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             status: FunctionStatus::Active,
         })
@@ -225,8 +223,6 @@ pub struct FunctionInsertDB {
     pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub snippet: Snippet,
-    #[dao(scd2(valid_from))]
-    pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
     pub enabled: Enabled,
@@ -239,8 +235,8 @@ pub struct FunctionDB {
     #[dao(flatten)]
     pub base: FunctionInsertDB,
     pub project_id: ProjectId,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }
 
 impl FunctionDB {
@@ -248,16 +244,10 @@ impl FunctionDB {
         FunctionStatus::Active
     }
 
-    /// Whether this version was the live one at `at`: `[defined_on, valid_to)`.
-    pub fn covers(&self, at: &AtTime) -> bool {
-        self.base.defined_on <= *at && self.valid_to.at().is_none_or(|end| **at < *end)
-    }
-
     pub fn frozen_version(&self, ctx: &RequestContext) -> FunctionInsertDB {
         FunctionInsertDB {
             id: FunctionVersionId::new(),
             status: FunctionStatus::Frozen,
-            defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             ..self.base.clone()
         }
@@ -266,7 +256,6 @@ impl FunctionDB {
     pub fn re_registered(&self, ctx: &RequestContext, enabled: Enabled) -> FunctionInsertDB {
         FunctionInsertDB {
             id: FunctionVersionId::new(),
-            defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             enabled,
             ..self.base.clone()
@@ -294,8 +283,6 @@ pub struct FunctionPatchInsertDB {
     pub bundle_id: BundleId,
     pub runtime_values: FunctionRuntimeValues,
     pub description: Description,
-    #[dao(scd2(valid_from), order_by)]
-    pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
 }
@@ -308,8 +295,8 @@ pub struct FunctionPatchDB {
     #[dao(flatten)]
     pub base: FunctionPatchInsertDB,
     pub project_id: ProjectId,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten, order_by)]
+    pub interval: Scd2Interval,
 }
 
 impl FunctionPatchDB {
@@ -334,7 +321,7 @@ pub struct FunctionPatchRecord {
     pub runtime_values: FunctionRuntimeValues,
     #[dto(list(filter, filter_like))]
     pub description: Description,
-    #[dto(list(filter, filter_like, order_by))]
+    #[dto(list(filter, filter_like, order_by, col = Scd2ValidFrom))]
     pub defined_on: AtTime,
     #[dto(list(filter, filter_like, order_by))]
     pub defined_by_id: UserId,
@@ -355,7 +342,7 @@ impl FromDao for FunctionPatchRecord {
             bundle_id: dao.base.bundle_id,
             runtime_values: dao.base.runtime_values,
             description: dao.base.description,
-            defined_on: dao.base.defined_on,
+            defined_on: dao.interval.valid_from.into(),
             defined_by_id: dao.base.defined_by_id,
             status: dao.base.status,
         })
@@ -413,7 +400,7 @@ pub struct FunctionVersionDBWithNames {
     pub bundle_id: BundleId,
     pub snippet: Snippet,
     #[dao(order_by, timeline(version_by))]
-    pub defined_on: AtTime,
+    pub valid_from: Scd2ValidFrom,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
     pub enabled: Enabled,
@@ -450,7 +437,7 @@ pub struct FunctionVersion {
     pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub snippet: Snippet,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, col = Scd2ValidFrom))]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     #[dto(list(filter, order_by))]
@@ -485,7 +472,7 @@ impl FromDao for FunctionVersion {
             storage_version: dao.storage_version,
             bundle_id: dao.bundle_id,
             snippet: dao.snippet,
-            defined_on: dao.defined_on,
+            defined_on: dao.valid_from.into(),
             defined_by_id: dao.defined_by_id,
             status: dao.status,
             enabled: dao.enabled,
@@ -532,7 +519,7 @@ pub struct Function {
     pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub snippet: Snippet,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, col = Scd2ValidFrom))]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     #[dto(list(filter, order_by))]
@@ -566,7 +553,7 @@ impl FromDao for Function {
             storage_version: dao.base.base.storage_version,
             bundle_id: dao.base.base.bundle_id,
             snippet: dao.base.base.snippet,
-            defined_on: dao.base.base.defined_on,
+            defined_on: dao.base.interval.valid_from.into(),
             defined_by_id: dao.base.base.defined_by_id,
             status: dao.base.base.status,
             enabled: dao.base.base.enabled,

@@ -163,6 +163,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Default,
         status: Status::Implemented,
     },
+    LoadCase {
+        name: "default::serialize_on",
+        covers: &["ForUpdate::serialize_on"],
+        family: Family::Default,
+        status: Status::Implemented,
+    },
     // generic/scd2.rs — open-interval (at-now) reads and the interval writes.
     LoadCase {
         name: "latest::fetch_one",
@@ -528,14 +534,14 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
-        name: "scd2::insert",
-        covers: &["Scd2::insert"],
+        name: "scd2::open",
+        covers: &["Scd2::open"],
         family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "scd2::insert_chunked",
-        covers: &["Scd2Chunked::insert"],
+        name: "scd2::open_chunked",
+        covers: &["Scd2Chunked::open"],
         family: Family::Latest,
         status: Status::Implemented,
     },

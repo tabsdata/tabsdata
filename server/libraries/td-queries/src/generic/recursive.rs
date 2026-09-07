@@ -9,12 +9,13 @@ use crate::primitives::recursive::{
     Cte, Start, build_and_execute_recursive, is_direction_enabled, reachable_partitions_cte,
     recursion_versions_cte, reference_state_cond, reference_versions_cte, versions_cte_current,
 };
+use crate::primitives::scd2::Instant;
 use sea_query::{Condition, WithClause};
 use std::marker::PhantomData;
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{Dao, HasColumn, RecursiveDao, Scd2Dao, SelectDao, TimelineDao};
+use ta_objects::{Dao, HasColumn, RecursiveDao, SameInner, Scd2Dao, SelectDao, TimelineDao};
 use td_objects::types::recursion::RecursionOptions;
 
 /// Recursion over open intervals: one row per partition, no time travel.
@@ -32,7 +33,7 @@ pub struct Scd2Recursive<'a, D, R: Dao, E> {
 pub struct AsOfRecursive<'a, D: TimelineDao, R: Dao, E> {
     recursion: RecursionOptions,
     start: Option<Start<'a, R>>,
-    on: &'a D::VersionOrder,
+    on: Instant,
     edges: Condition,
     nodes: Condition,
     start_filter: Option<Condition>,
@@ -65,9 +66,9 @@ where
     R: SelectDao + Scd2Dao + Dao<Db = D::Db> + HasColumn<D::Key>,
     E: Serves<D> + Serves<R>,
 {
-    pub fn start_at<V: SeaValue>(mut self, value: &'a V) -> Self
+    pub fn start_at<K: SeaValue>(mut self, value: &'a K) -> Self
     where
-        R: HasColumn<V>,
+        R: HasColumn<K>,
     {
         self.start = Some(Start::of(vec![value]));
         self
@@ -75,9 +76,9 @@ where
 
     /// The CTE anchors on `start_col IN (..)` and walks from every starting
     /// point in one query.
-    pub fn start_at_any<V: SeaValue>(mut self, values: Vec<&'a V>) -> Self
+    pub fn start_at_any<K: SeaValue>(mut self, values: Vec<&'a K>) -> Self
     where
-        R: HasColumn<V>,
+        R: HasColumn<K>,
     {
         self.start = Some(Start::of(values));
         self
@@ -138,13 +139,14 @@ impl<'a, E, V> AsOf<'a, E, V> {
     /// partitions.
     pub fn recursive<D, R>(self, recursion: RecursionOptions) -> AsOfRecursive<'a, D, R, E>
     where
-        D: SelectDao + Scd2Dao<VersionOrder = V> + RecursiveDao,
-        R: SelectDao + Scd2Dao<VersionOrder = V>,
+        D: SelectDao + Scd2Dao + TimelineDao + RecursiveDao,
+        R: SelectDao + Scd2Dao + TimelineDao<VersionOrder = D::VersionOrder>,
+        V: SameInner<D::VersionOrder>,
     {
         AsOfRecursive {
             recursion,
             start: None,
-            on: self.on,
+            on: Instant::of(self.on),
             edges: Condition::all(),
             nodes: Condition::all(),
             start_filter: None,
@@ -156,13 +158,17 @@ impl<'a, E, V> AsOf<'a, E, V> {
 
 impl<'a, D, R, E> AsOfRecursive<'a, D, R, E>
 where
-    D: SelectDao + Scd2Dao + RecursiveDao,
-    R: SelectDao + Scd2Dao<VersionOrder = D::VersionOrder> + Dao<Db = D::Db> + HasColumn<D::Key>,
+    D: SelectDao + Scd2Dao + TimelineDao + RecursiveDao,
+    R: SelectDao
+        + Scd2Dao
+        + TimelineDao<VersionOrder = D::VersionOrder>
+        + Dao<Db = D::Db>
+        + HasColumn<D::Key>,
     E: Serves<D> + Serves<R>,
 {
-    pub fn start_at<V: SeaValue>(mut self, value: &'a V) -> Self
+    pub fn start_at<K: SeaValue>(mut self, value: &'a K) -> Self
     where
-        R: HasColumn<V>,
+        R: HasColumn<K>,
     {
         self.start = Some(Start::of(vec![value]));
         self
@@ -170,9 +176,9 @@ where
 
     /// The CTE anchors on `start_col IN (..)` and walks from every starting
     /// point in one query.
-    pub fn start_at_any<V: SeaValue>(mut self, values: Vec<&'a V>) -> Self
+    pub fn start_at_any<K: SeaValue>(mut self, values: Vec<&'a K>) -> Self
     where
-        R: HasColumn<V>,
+        R: HasColumn<K>,
     {
         self.start = Some(Start::of(values));
         self
@@ -209,17 +215,17 @@ where
             .recursive(true)
             .cte(reachable_partitions_cte::<D, R, _>(
                 &start,
-                self.on,
+                &self.on,
                 up_enabled,
                 down_enabled,
             ))
             .cte(reference_versions_cte::<D, R, _>(
                 &start,
-                self.on,
+                &self.on,
                 &self.nodes,
                 self.start_filter.as_ref(),
             ))
-            .cte(recursion_versions_cte::<D, _>(self.on, &self.edges))
+            .cte(recursion_versions_cte::<D, _>(&self.on, &self.edges))
             .to_owned();
 
         build_and_execute_recursive::<D, R, _>(
@@ -246,13 +252,17 @@ mod tests {
     use sea_query::{Asterisk, Query, WithClause};
     use std::sync::LazyLock;
     use ta_objects::Dao;
-    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+    use ta_objects::{IntervalColumns, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+    use td_common::datetime::Timestamp;
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::dependency::{DependencyDB, DependencyDBWithNames};
     use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::trigger::{TriggerDB, TriggerDBWithNames};
-    use td_objects::types::basic::{AtTime, CollectionId, Depth, FunctionId};
+    use td_objects::types::basic::{
+        AtTime, CollectionId, Depth, FunctionId, Scd2ValidFrom, Scd2ValidTo,
+    };
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct TestId(String);
@@ -272,11 +282,22 @@ mod tests {
     #[typed(try_from = TestRecursion)]
     struct TestRecursionUp(String);
 
+    #[derive(Debug, Clone, Eq, PartialEq, sqlx::FromRow)]
+    struct Scd2Interval {
+        valid_from: Scd2ValidFrom,
+        valid_to: Scd2ValidTo,
+    }
+
+    impl IntervalColumns for Scd2Interval {
+        type ValidFrom = Scd2ValidFrom;
+        type ValidTo = Scd2ValidTo;
+    }
+
     // partitioning by id means there are no groups, each entry is independent
     #[Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(table = "test_table", ops(select, insert), scd2, recursive)]
-    struct TestDao {
+    #[dao(table = "test_table", ops(insert), scd2, recursive)]
+    struct TestInsertDao {
         #[dao(pk, partition_by)]
         id: TestId,
         status: TestStatus,
@@ -284,8 +305,16 @@ mod tests {
         current: TestRecursionUp,
         #[dao(recursive(down))]
         downstream: TestRecursion,
-        #[dao(scd2(valid_from))]
-        defined_on: AtTime,
+    }
+
+    #[Dao]
+    #[derive(Eq, PartialEq)]
+    #[dao(table = "test_table", ops(select), scd2, recursive)]
+    struct TestDao {
+        #[dao(flatten)]
+        base: TestInsertDao,
+        #[dao(flatten)]
+        interval: Scd2Interval,
     }
 
     impl TestDao {
@@ -295,15 +324,22 @@ mod tests {
     }
 
     #[Dao]
-    #[dao(table = "test_table_reference", ops(select, insert), scd2)]
-    struct RecursionReference {
+    #[dao(table = "test_table_reference", ops(insert), scd2)]
+    struct RecursionReferenceInsert {
         #[dao(pk)]
         id: TestId,
         #[dao(partition_by)]
         reference_id: TestRecursion,
         status: TestStatus,
-        #[dao(scd2(valid_from))]
-        defined_on: AtTime,
+    }
+
+    #[Dao]
+    #[dao(table = "test_table_reference", ops(select), scd2)]
+    struct RecursionReference {
+        #[dao(flatten)]
+        base: RecursionReferenceInsert,
+        #[dao(flatten)]
+        interval: Scd2Interval,
     }
 
     impl RecursionReference {
@@ -312,101 +348,93 @@ mod tests {
         }
     }
 
-    fn time(i: usize) -> AtTime {
-        AtTime::from(
+    fn time(i: usize) -> Timestamp {
+        Timestamp::from(
             format!("2025-04-02T08:19:5{i}.543+00:00")
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         )
     }
 
+    fn lock(i: usize) -> LockInstant {
+        LockInstant::asserted(time(i))
+    }
+
     /// Time later than any fixture or test insert — safe default for
     /// snapshot tests that don't care about the upper bound.
-    static LATER: LazyLock<AtTime> = LazyLock::new(|| time(9));
+    static LATER: LazyLock<AtTime> = LazyLock::new(|| AtTime::from(time(9)));
 
-    static FIXTURE_TEST_DAOS: LazyLock<Vec<TestDao>> = LazyLock::new(|| {
+    static FIXTURE_TEST_DAOS: LazyLock<Vec<TestInsertDao>> = LazyLock::new(|| {
         vec![
-            TestDao {
+            TestInsertDao {
                 id: TestId::try_from("AAA").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursionUp::try_from("ref_0").unwrap(),
                 downstream: TestRecursion::try_from("ref_1").unwrap(),
-                defined_on: time(0),
             },
-            TestDao {
+            TestInsertDao {
                 id: TestId::try_from("BBB").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursionUp::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_2").unwrap(),
-                defined_on: time(0),
             },
-            TestDao {
+            TestInsertDao {
                 id: TestId::try_from("CCC").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursionUp::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_3").unwrap(),
-                defined_on: time(1),
             },
-            TestDao {
+            TestInsertDao {
                 id: TestId::try_from("DDD").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursionUp::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_4").unwrap(),
-                defined_on: time(2),
             },
-            TestDao {
+            TestInsertDao {
                 id: TestId::try_from("EEE").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursionUp::try_from("ref_4").unwrap(),
                 downstream: TestRecursion::try_from("ref_5").unwrap(),
-                defined_on: time(3),
             },
         ]
     });
 
-    static _FIXTURE_RECURSION_REF: LazyLock<Vec<RecursionReference>> = LazyLock::new(|| {
+    static _FIXTURE_RECURSION_REF: LazyLock<Vec<RecursionReferenceInsert>> = LazyLock::new(|| {
         vec![
-            RecursionReference {
+            RecursionReferenceInsert {
                 id: TestId::try_from("MMM").unwrap(),
                 reference_id: TestRecursion::try_from("ref_0").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: time(0),
             },
-            RecursionReference {
+            RecursionReferenceInsert {
                 id: TestId::try_from("NNN").unwrap(),
                 reference_id: TestRecursion::try_from("ref_1").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: time(0),
             },
-            RecursionReference {
+            RecursionReferenceInsert {
                 id: TestId::try_from("OOO").unwrap(),
                 reference_id: TestRecursion::try_from("ref_2").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: time(0),
             },
-            RecursionReference {
+            RecursionReferenceInsert {
                 id: TestId::try_from("QQQ").unwrap(),
                 reference_id: TestRecursion::try_from("ref_3").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: time(1),
             },
-            RecursionReference {
+            RecursionReferenceInsert {
                 id: TestId::try_from("PPP").unwrap(),
                 reference_id: TestRecursion::try_from("ref_2").unwrap(),
                 status: TestStatus::try_from("D").unwrap(),
-                defined_on: time(2),
             },
-            RecursionReference {
+            RecursionReferenceInsert {
                 id: TestId::try_from("RRR").unwrap(),
                 reference_id: TestRecursion::try_from("ref_4").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: time(3),
             },
-            RecursionReference {
+            RecursionReferenceInsert {
                 id: TestId::try_from("SSS").unwrap(),
                 reference_id: TestRecursion::try_from("ref_5").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: time(3),
             },
         ]
     });
@@ -476,9 +504,9 @@ mod tests {
         // Upstream: DDD(ref_1→ref_4) → AAA(ref_0→ref_1)
         // Downstream: EEE(ref_4→ref_5)
         assert_eq!(result.len(), 3);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[4]); // EEE
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[3]); // DDD
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[0]); // AAA
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[4]); // EEE
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[3]); // DDD
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[0]); // AAA
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -499,11 +527,11 @@ mod tests {
         //                    DDD -> EEE
         assert_eq!(result.len(), 5);
         // (order by ID DESC)
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[4]);
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[3]);
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[2]);
-        assert_eq!(result[3], FIXTURE_TEST_DAOS[1]);
-        assert_eq!(result[4], FIXTURE_TEST_DAOS[0]);
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[4]);
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[3]);
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[2]);
+        assert_eq!(result[3].base, FIXTURE_TEST_DAOS[1]);
+        assert_eq!(result[4].base, FIXTURE_TEST_DAOS[0]);
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -523,9 +551,9 @@ mod tests {
         // SSS: EEE -> DDD -> AAA
         assert_eq!(result.len(), 3);
         // (order by ID DESC)
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[4]);
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[3]);
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[0]);
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[4]);
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[3]);
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[0]);
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -544,8 +572,8 @@ mod tests {
             .unwrap();
         // RRR → ref_4. Upstream: DDD (current=ref_1, downstream=ref_4) → AAA (current=ref_0, downstream=ref_1)
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[3]); // DDD
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[0]); // AAA
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[3]); // DDD
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[0]); // AAA
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -565,10 +593,10 @@ mod tests {
         // NNN → ref_1. Downstream: BBB(ref_1→ref_2), CCC(ref_1→ref_3), DDD(ref_1→ref_4)
         // Then DDD→EEE(ref_4→ref_5)
         assert_eq!(result.len(), 4);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[4]); // EEE
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[3]); // DDD
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[2]); // CCC
-        assert_eq!(result[3], FIXTURE_TEST_DAOS[1]); // BBB
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[4]); // EEE
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[3]); // DDD
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[2]); // CCC
+        assert_eq!(result[3].base, FIXTURE_TEST_DAOS[1]); // BBB
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -587,7 +615,7 @@ mod tests {
             .unwrap();
         // Depth 1: AAA only (base case from ref_0)
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[0]); // AAA
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[0]); // AAA
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -606,10 +634,10 @@ mod tests {
             .unwrap();
         // Depth 1: AAA. Depth 2: BBB, CCC, DDD. Depth 3 blocked.
         assert_eq!(result.len(), 4);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[3]); // DDD
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[2]); // CCC
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[1]); // BBB
-        assert_eq!(result[3], FIXTURE_TEST_DAOS[0]); // AAA
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[3]); // DDD
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[2]); // CCC
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[1]); // BBB
+        assert_eq!(result[3].base, FIXTURE_TEST_DAOS[0]); // AAA
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -628,8 +656,8 @@ mod tests {
             .unwrap();
         // Depth 1: EEE. Depth 2: DDD. Depth 3 blocked.
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[4]); // EEE
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[3]); // DDD
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[4]); // EEE
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[3]); // DDD
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -648,7 +676,7 @@ mod tests {
             .unwrap();
         // SSS: EEE (direct upstream)
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[4]);
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[4]);
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -668,10 +696,10 @@ mod tests {
         // Upstream depth=1: AAA (downstream=ref_1)
         // Downstream depth=1: BBB, CCC, DDD (current=ref_1)
         assert_eq!(result.len(), 4);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[3]); // DDD
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[2]); // CCC
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[1]); // BBB
-        assert_eq!(result[3], FIXTURE_TEST_DAOS[0]); // AAA
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[3]); // DDD
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[2]); // CCC
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[1]); // BBB
+        assert_eq!(result[3].base, FIXTURE_TEST_DAOS[0]); // AAA
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -693,16 +721,16 @@ mod tests {
         // Downstream depth=1: BBB, CCC, DDD (current=ref_1)
         // Downstream depth=2: EEE (current=ref_4, from DDD downstream=ref_4)
         assert_eq!(result.len(), 5);
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[4]); // EEE
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[3]); // DDD
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[2]); // CCC
-        assert_eq!(result[3], FIXTURE_TEST_DAOS[1]); // BBB
-        assert_eq!(result[4], FIXTURE_TEST_DAOS[0]); // AAA
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[4]); // EEE
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[3]); // DDD
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[2]); // CCC
+        assert_eq!(result[3].base, FIXTURE_TEST_DAOS[1]); // BBB
+        assert_eq!(result[4].base, FIXTURE_TEST_DAOS[0]); // AAA
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_at_time_fetch_all(db: TdPool) {
-        let at = time(1);
+        let at = AtTime::from(time(1));
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
             .scd2()
@@ -718,9 +746,9 @@ mod tests {
         // MMM: AAA -> BBB -> CCC (the rest didn't exist yet)
         assert_eq!(result.len(), 3);
         // (order by ID DESC)
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[2]);
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[1]);
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[0]);
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[2]);
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[1]);
+        assert_eq!(result[2].base, FIXTURE_TEST_DAOS[0]);
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -745,7 +773,7 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_break_downstream_by_status_ref(db: TdPool) {
-        let at = time(2);
+        let at = AtTime::from(time(2));
         let id = TestId::try_from("MMM").unwrap();
         // PPP is D at time 2, so it will stop the recursion
         let result: Vec<TestDao> = db
@@ -764,8 +792,8 @@ mod tests {
         // MMM: AAA -> CCC (as PPP is D, which should be pointing to BBB)
         assert_eq!(result.len(), 2);
         // (order by ID DESC)
-        assert_eq!(result[0], FIXTURE_TEST_DAOS[2]);
-        assert_eq!(result[1], FIXTURE_TEST_DAOS[0]);
+        assert_eq!(result[0].base, FIXTURE_TEST_DAOS[2]);
+        assert_eq!(result[1].base, FIXTURE_TEST_DAOS[0]);
     }
 
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
@@ -791,28 +819,25 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Deleted reference DEL → ref_del. Active filter excludes it.
-        let deleted_ref = RecursionReference {
+        let deleted_ref = RecursionReferenceInsert {
             id: TestId::try_from("DEL")?,
             reference_id: TestRecursion::try_from("ref_del")?,
             status: TestStatus::try_from("D")?,
-            defined_on: time(5),
         };
-        db.scd2().insert(&deleted_ref).await?;
-        let target_ref = RecursionReference {
+        db.scd2().open(&deleted_ref, lock(5)).await?;
+        let target_ref = RecursionReferenceInsert {
             id: TestId::try_from("TGT")?,
             reference_id: TestRecursion::try_from("ref_tgt")?,
             status: TestStatus::try_from("A")?,
-            defined_on: time(5),
         };
-        db.scd2().insert(&target_ref).await?;
-        let dao = TestDao {
+        db.scd2().open(&target_ref, lock(5)).await?;
+        let dao = TestInsertDao {
             id: TestId::try_from("OV1")?,
             status: TestStatus::try_from("A")?,
             current: TestRecursionUp::try_from("ref_del")?,
             downstream: TestRecursion::try_from("ref_tgt")?,
-            defined_on: time(5),
         };
-        db.scd2().insert(&dao).await?;
+        db.scd2().open(&dao, lock(5)).await?;
 
         let id = TestId::try_from("DEL")?;
         // Without start_filter: DEL is deleted, Active filter excludes it.
@@ -845,7 +870,7 @@ mod tests {
             .fetch_all()
             .await?;
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, TestId::try_from("OV1")?);
+        assert_eq!(result[0].base.id, TestId::try_from("OV1")?);
         Ok(())
     }
 
@@ -855,31 +880,28 @@ mod tests {
         // recursion_versions CTE filters on D-side state, not just R-side.
         // Chain: ref_ds0 → ref_ds1 → ref_ds2, but the DAO at ref_ds1 is deleted.
         for i in 0..3u32 {
-            let reference = RecursionReference {
+            let reference = RecursionReferenceInsert {
                 id: TestId::try_from(format!("DS{i}"))?,
                 reference_id: TestRecursion::try_from(format!("ref_ds{i}"))?,
                 status: TestStatus::try_from("A")?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&reference).await?;
+            db.scd2().open(&reference, lock(5)).await?;
         }
-        let dao_a = TestDao {
+        let dao_a = TestInsertDao {
             id: TestId::try_from("DSA")?,
             status: TestStatus::try_from("A")?,
             current: TestRecursionUp::try_from("ref_ds0")?,
             downstream: TestRecursion::try_from("ref_ds1")?,
-            defined_on: time(5),
         };
-        db.scd2().insert(&dao_a).await?;
+        db.scd2().open(&dao_a, lock(5)).await?;
         // This DAO is deleted — should be excluded by Active filter on D
-        let dao_b = TestDao {
+        let dao_b = TestInsertDao {
             id: TestId::try_from("DSB")?,
             status: TestStatus::try_from("D")?,
             current: TestRecursionUp::try_from("ref_ds1")?,
             downstream: TestRecursion::try_from("ref_ds2")?,
-            defined_on: time(5),
         };
-        db.scd2().insert(&dao_b).await?;
+        db.scd2().open(&dao_b, lock(5)).await?;
 
         let id = TestId::try_from("DS0")?;
         let result: Vec<TestDao> = db
@@ -896,7 +918,7 @@ mod tests {
             .await?;
         // DSA is active and found; DSB is deleted so the chain stops — ref_ds2 is never reached
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, TestId::try_from("DSA")?);
+        assert_eq!(result[0].base.id, TestId::try_from("DSA")?);
         Ok(())
     }
 
@@ -936,21 +958,19 @@ mod tests {
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_single_node_no_recursion_neighbors(db: TdPool) -> Result<(), TdError> {
         // Create an isolated node with no edges leading anywhere
-        let reference = RecursionReference {
+        let reference = RecursionReferenceInsert {
             id: TestId::try_from("ISO")?,
             reference_id: TestRecursion::try_from("ref_iso")?,
             status: TestStatus::try_from("A")?,
-            defined_on: time(5),
         };
-        db.scd2().insert(&reference).await?;
-        let dao = TestDao {
+        db.scd2().open(&reference, lock(5)).await?;
+        let dao = TestInsertDao {
             id: TestId::try_from("IF0")?,
             status: TestStatus::try_from("A")?,
             current: TestRecursionUp::try_from("ref_iso")?,
             downstream: TestRecursion::try_from("ref_nowhere")?,
-            defined_on: time(5),
         };
-        db.scd2().insert(&dao).await?;
+        db.scd2().open(&dao, lock(5)).await?;
 
         let id = TestId::try_from("ISO")?;
         let result: Vec<TestDao> = db
@@ -970,23 +990,21 @@ mod tests {
     async fn test_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // Create a 4-node cycle: CF0→CF1→CF2→CF3→(back to ref_c0)
         for i in 0..4u32 {
-            let reference = RecursionReference {
+            let reference = RecursionReferenceInsert {
                 id: TestId::try_from(format!("CC{i}"))?,
                 reference_id: TestRecursion::try_from(format!("ref_c{i}"))?,
                 status: TestStatus::try_from("A")?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&reference).await?;
+            db.scd2().open(&reference, lock(5)).await?;
         }
         for i in 0..4u32 {
-            let dao = TestDao {
+            let dao = TestInsertDao {
                 id: TestId::try_from(format!("CF{i}"))?,
                 status: TestStatus::try_from("A")?,
                 current: TestRecursionUp::try_from(format!("ref_c{i}"))?,
                 downstream: TestRecursion::try_from(format!("ref_c{}", (i + 1) % 4))?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&dao).await?;
+            db.scd2().open(&dao, lock(5)).await?;
         }
 
         let id = TestId::try_from("CC0")?;
@@ -1002,9 +1020,9 @@ mod tests {
             .await?;
         // CF0→CF1→CF2→CF3→(cycle back to ref_c0 blocked)
         assert_eq!(result.len(), 3);
-        assert_eq!(result[0].id, TestId::try_from("CF2")?);
-        assert_eq!(result[1].id, TestId::try_from("CF1")?);
-        assert_eq!(result[2].id, TestId::try_from("CF0")?);
+        assert_eq!(result[0].base.id, TestId::try_from("CF2")?);
+        assert_eq!(result[1].base.id, TestId::try_from("CF1")?);
+        assert_eq!(result[2].base.id, TestId::try_from("CF0")?);
         Ok(())
     }
 
@@ -1012,23 +1030,21 @@ mod tests {
     async fn test_upstream_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // Create 3-node cycle for upstream traversal
         for i in 0..3u32 {
-            let reference = RecursionReference {
+            let reference = RecursionReferenceInsert {
                 id: TestId::try_from(format!("UC{i}"))?,
                 reference_id: TestRecursion::try_from(format!("ref_uc{i}"))?,
                 status: TestStatus::try_from("A")?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&reference).await?;
+            db.scd2().open(&reference, lock(5)).await?;
         }
         for i in 0..3u32 {
-            let dao = TestDao {
+            let dao = TestInsertDao {
                 id: TestId::try_from(format!("UF{i}"))?,
                 status: TestStatus::try_from("A")?,
                 current: TestRecursionUp::try_from(format!("ref_uc{i}"))?,
                 downstream: TestRecursion::try_from(format!("ref_uc{}", (i + 1) % 3))?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&dao).await?;
+            db.scd2().open(&dao, lock(5)).await?;
         }
 
         let id = TestId::try_from("UC0")?;
@@ -1051,23 +1067,21 @@ mod tests {
     async fn test_bidirectional_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // 4-node cycle, query with both directions enabled
         for i in 0..4u32 {
-            let reference = RecursionReference {
+            let reference = RecursionReferenceInsert {
                 id: TestId::try_from(format!("BC{i}"))?,
                 reference_id: TestRecursion::try_from(format!("ref_bc{i}"))?,
                 status: TestStatus::try_from("A")?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&reference).await?;
+            db.scd2().open(&reference, lock(5)).await?;
         }
         for i in 0..4u32 {
-            let dao = TestDao {
+            let dao = TestInsertDao {
                 id: TestId::try_from(format!("BF{i}"))?,
                 status: TestStatus::try_from("A")?,
                 current: TestRecursionUp::try_from(format!("ref_bc{i}"))?,
                 downstream: TestRecursion::try_from(format!("ref_bc{}", (i + 1) % 4))?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&dao).await?;
+            db.scd2().open(&dao, lock(5)).await?;
         }
 
         let id = TestId::try_from("BC0")?;
@@ -1090,13 +1104,12 @@ mod tests {
     async fn test_diamond_deduplication(db: TdPool) -> Result<(), TdError> {
         // Create diamond: ref_d0 → ref_d1, ref_d0 → ref_d2, ref_d1 → ref_d3, ref_d2 → ref_d3, ref_d3 → ref_d4
         for i in 0..5u32 {
-            let reference = RecursionReference {
+            let reference = RecursionReferenceInsert {
                 id: TestId::try_from(format!("D0{i}"))?,
                 reference_id: TestRecursion::try_from(format!("ref_d{i}"))?,
                 status: TestStatus::try_from("A")?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&reference).await?;
+            db.scd2().open(&reference, lock(5)).await?;
         }
         let diamond_edges: Vec<(&str, &str, &str)> = vec![
             ("DA1", "ref_d0", "ref_d1"),
@@ -1106,14 +1119,13 @@ mod tests {
             ("DE1", "ref_d3", "ref_d4"),
         ];
         for (id, current, downstream) in &diamond_edges {
-            let dao = TestDao {
+            let dao = TestInsertDao {
                 id: TestId::try_from(*id)?,
                 status: TestStatus::try_from("A")?,
                 current: TestRecursionUp::try_from(*current)?,
                 downstream: TestRecursion::try_from(*downstream)?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&dao).await?;
+            db.scd2().open(&dao, lock(5)).await?;
         }
 
         let id = TestId::try_from("D00")?;
@@ -1129,11 +1141,11 @@ mod tests {
             .await?;
         // DE1 reached via two paths but DISTINCT deduplicates
         assert_eq!(result.len(), 5);
-        assert_eq!(result[0].id, TestId::try_from("DE1")?);
-        assert_eq!(result[1].id, TestId::try_from("DD1")?);
-        assert_eq!(result[2].id, TestId::try_from("DC1")?);
-        assert_eq!(result[3].id, TestId::try_from("DB1")?);
-        assert_eq!(result[4].id, TestId::try_from("DA1")?);
+        assert_eq!(result[0].base.id, TestId::try_from("DE1")?);
+        assert_eq!(result[1].base.id, TestId::try_from("DD1")?);
+        assert_eq!(result[2].base.id, TestId::try_from("DC1")?);
+        assert_eq!(result[3].base.id, TestId::try_from("DB1")?);
+        assert_eq!(result[4].base.id, TestId::try_from("DA1")?);
         Ok(())
     }
 
@@ -1150,12 +1162,14 @@ mod tests {
         ) -> Result<(), TdError>
         where
             D: SelectDao
-                + Scd2Dao<VersionOrder = AtTime>
+                + Scd2Dao
+                + TimelineDao<VersionOrder = Scd2ValidFrom>
                 + RecursiveDao
                 + Dao<Db = Apiserver>
                 + ReachableFrom<InProject>,
             R: SelectDao
-                + Scd2Dao<VersionOrder = AtTime>
+                + Scd2Dao
+                + TimelineDao<VersionOrder = Scd2ValidFrom>
                 + Dao<Db = Apiserver>
                 + ReachableFrom<InProject>
                 + HasColumn<D::Key>
@@ -1220,21 +1234,19 @@ mod tests {
         let mut daos = vec![];
         // we need size+1 so the recursion ref of 1000 is valid
         for i in 0..size + 1 {
-            let reference = RecursionReference {
+            let reference = RecursionReferenceInsert {
                 id: TestId::try_from(format!("YYY{i:04}"))?,
                 reference_id: TestRecursion::try_from(format!("x_ref_{i:04}"))?,
                 status: TestStatus::try_from("A")?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&reference).await?;
-            let dao = TestDao {
+            db.scd2().open(&reference, lock(5)).await?;
+            let dao = TestInsertDao {
                 id: TestId::try_from(format!("ZZZ{i:04}"))?,
                 status: TestStatus::try_from("A")?,
                 current: TestRecursionUp::try_from(format!("x_ref_{i:04}"))?,
                 downstream: TestRecursion::try_from(format!("x_ref_{:04}", i + 1))?,
-                defined_on: time(5),
             };
-            db.scd2().insert(&dao).await?;
+            db.scd2().open(&dao, lock(5)).await?;
             daos.push(dao);
         }
 
@@ -1251,7 +1263,7 @@ mod tests {
             .await?;
         assert_eq!(result.len(), size);
         for i in 0..size {
-            assert_eq!(result[i], daos[size - 1 - i]);
+            assert_eq!(result[i].base, daos[size - 1 - i]);
         }
         Ok(())
     }
@@ -1278,7 +1290,7 @@ mod tests {
                 .to_string(PostgresQueryBuilder);
             assert_eq!(
                 sql,
-                r#"WITH RECURSIVE "reachable" AS (SELECT "rv"."reference_id" AS "partition_id" FROM "test_table_reference" AS "rv" WHERE "rv"."id" IN ('MMM') AND "rv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00' UNION (SELECT (CASE WHEN ("rcv"."downstream" = "fx"."partition_id") THEN "rcv"."current" ELSE "rcv"."downstream" END) AS "partition_id" FROM "test_table" AS "rcv" INNER JOIN "reachable" AS "fx" ON "rcv"."downstream" = "fx"."partition_id" OR "rcv"."current" = "fx"."partition_id" WHERE "rcv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00')) SELECT * FROM "reachable""#
+                r#"WITH RECURSIVE "reachable" AS (SELECT "rv"."reference_id" AS "partition_id" FROM "test_table_reference" AS "rv" WHERE "rv"."id" IN ('MMM') AND "rv"."valid_from" <= '2025-04-02 08:19:59.543000 +00:00' UNION (SELECT (CASE WHEN ("rcv"."downstream" = "fx"."partition_id") THEN "rcv"."current" ELSE "rcv"."downstream" END) AS "partition_id" FROM "test_table" AS "rcv" INNER JOIN "reachable" AS "fx" ON "rcv"."downstream" = "fx"."partition_id" OR "rcv"."current" = "fx"."partition_id" WHERE "rcv"."valid_from" <= '2025-04-02 08:19:59.543000 +00:00')) SELECT * FROM "reachable""#
             );
         }
 
@@ -1299,7 +1311,7 @@ mod tests {
                 .to_string(PostgresQueryBuilder);
             assert_eq!(
                 sql,
-                r#"WITH RECURSIVE "reachable" AS (SELECT "rv"."reference_id" AS "partition_id" FROM "test_table_reference" AS "rv" WHERE "rv"."id" IN ('MMM') AND "rv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00' UNION (SELECT "rcv"."current" AS "partition_id" FROM "test_table" AS "rcv" INNER JOIN "reachable" AS "fx" ON "rcv"."downstream" = "fx"."partition_id" WHERE "rcv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00')) SELECT * FROM "reachable""#
+                r#"WITH RECURSIVE "reachable" AS (SELECT "rv"."reference_id" AS "partition_id" FROM "test_table_reference" AS "rv" WHERE "rv"."id" IN ('MMM') AND "rv"."valid_from" <= '2025-04-02 08:19:59.543000 +00:00' UNION (SELECT "rcv"."current" AS "partition_id" FROM "test_table" AS "rcv" INNER JOIN "reachable" AS "fx" ON "rcv"."downstream" = "fx"."partition_id" WHERE "rcv"."valid_from" <= '2025-04-02 08:19:59.543000 +00:00')) SELECT * FROM "reachable""#
             );
         }
 
@@ -1320,7 +1332,7 @@ mod tests {
                 .to_string(PostgresQueryBuilder);
             assert_eq!(
                 sql,
-                r#"WITH "reference_versions" AS (SELECT "rv".* FROM "test_table_reference" AS "rv" WHERE "rv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00' AND "rv"."valid_to" > '2025-04-02 08:19:59.543000 +00:00' AND "rv"."reference_id" IN (SELECT "partition_id" FROM "reachable")) SELECT * FROM "reference_versions""#
+                r#"WITH "reference_versions" AS (SELECT "rv".* FROM "test_table_reference" AS "rv" WHERE "rv"."valid_from" <= '2025-04-02 08:19:59.543000 +00:00' AND "rv"."valid_to" > '2025-04-02 08:19:59.543000 +00:00' AND "rv"."reference_id" IN (SELECT "partition_id" FROM "reachable")) SELECT * FROM "reference_versions""#
             );
         }
 
@@ -1340,7 +1352,7 @@ mod tests {
         }
 
         #[test]
-        fn test_versioned_visible_cte_with_defined_on() {
+        fn test_versioned_visible_cte_with_valid_from() {
             let state_cond =
                 ta_objects::sql_condition::SqlCondition::<TestDao>::resolve(&TestStatus::Active);
             let on = AtTime::from(
@@ -1362,7 +1374,7 @@ mod tests {
                 .to_string(PostgresQueryBuilder);
             assert_eq!(
                 sql,
-                r#"WITH "recursion_versions" AS (SELECT "rv".* FROM "test_table" AS "rv" WHERE "rv"."defined_on" <= '2025-04-02 08:19:50.543000 +00:00' AND "rv"."valid_to" > '2025-04-02 08:19:50.543000 +00:00' AND "status" = 'A') SELECT * FROM "recursion_versions""#
+                r#"WITH "recursion_versions" AS (SELECT "rv".* FROM "test_table" AS "rv" WHERE "rv"."valid_from" <= '2025-04-02 08:19:50.543000 +00:00' AND "rv"."valid_to" > '2025-04-02 08:19:50.543000 +00:00' AND "status" = 'A') SELECT * FROM "recursion_versions""#
             );
         }
 

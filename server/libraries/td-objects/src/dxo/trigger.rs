@@ -2,10 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::types::basic::Scd2ValidTo;
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, ProjectId, System, TableId, TriggerBy,
-    TriggerId, TriggerStatus, TriggerVersionId, UserId,
+    CollectionId, CollectionName, FunctionId, ProjectId, System, TableId, TriggerBy, TriggerId,
+    TriggerStatus, TriggerVersionId, UserId,
 };
 use ta_objects::sql_condition::SqlCondition;
 
@@ -24,8 +24,6 @@ pub struct TriggerInsertDB {
     pub trigger_by_function_id: TriggerBy<FunctionId>,
     pub trigger_by_table_id: TableId,
     pub status: TriggerStatus,
-    #[dao(scd2(valid_from))]
-    pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub system: System,
 }
@@ -36,8 +34,8 @@ pub struct TriggerDB {
     #[dao(flatten)]
     pub base: TriggerInsertDB,
     pub project_id: ProjectId,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }
 
 impl TriggerDB {

@@ -109,7 +109,7 @@ pub(crate) mod tests {
             // Defined by this version or by an earlier one it left unchanged.
             assert_eq!(found.base.function_id, function.base.function_id);
             assert!(found.base.function_param_pos.is_some());
-            assert!(found.base.defined_on <= function.base.defined_on);
+            assert!(found.interval.valid_from <= function.interval.valid_from);
             assert_eq!(found.base.defined_by_id, function.base.defined_by_id);
             assert_eq!(found.base.status, TableStatus::Active);
         }
@@ -145,7 +145,7 @@ pub(crate) mod tests {
                 *dependency.collection.as_ref().unwrap_or(&collection.name)
             );
             assert_eq!(*found.base.base.table_versions, dependency.versions);
-            assert!(found.base.base.defined_on <= function.base.defined_on);
+            assert!(found.base.interval.valid_from <= function.interval.valid_from);
             assert_eq!(found.base.base.defined_by_id, function.base.defined_by_id);
         }
 
@@ -206,7 +206,7 @@ pub(crate) mod tests {
             .await?;
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].base, created_function.base);
-        assert!(!functions[0].valid_to.is_infinity());
+        assert!(!functions[0].interval.valid_to.is_infinity());
 
         match &update.snippet {
             Some(snippet) => assert_eq!(*response.snippet, **snippet),
@@ -231,15 +231,15 @@ pub(crate) mod tests {
                 .expect("the created version of the table");
             if update.tables.as_deref().unwrap_or(&[]).contains(table_dto) {
                 assert_eq!(versions.len(), 1);
-                assert!(created.valid_to.is_infinity());
+                assert!(created.interval.valid_to.is_infinity());
             } else {
                 assert_eq!(versions.len(), 2);
-                assert!(!created.valid_to.is_infinity());
+                assert!(!created.interval.valid_to.is_infinity());
                 let frozen = versions
                     .iter()
                     .find(|v| v.base.status == TableStatus::Frozen)
                     .expect("the frozen successor");
-                assert!(frozen.valid_to.is_infinity());
+                assert!(frozen.interval.valid_to.is_infinity());
                 assert_eq!(frozen.base.table_id, created.base.table_id);
             }
         }
@@ -401,13 +401,17 @@ pub(crate) mod tests {
             .await?;
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].base, created_function.base);
-        assert!(!functions[0].valid_to.is_infinity());
+        assert!(!functions[0].interval.valid_to.is_infinity());
 
         let created_tables: Vec<TableDB> = db
             .timeline()
             .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
             .await?;
-        assert!(created_tables.iter().all(|t| !t.valid_to.is_infinity()));
+        assert!(
+            created_tables
+                .iter()
+                .all(|t| !t.interval.valid_to.is_infinity())
+        );
         let active: Vec<TableDB> = db
             .scd2()
             .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
@@ -441,17 +445,24 @@ pub(crate) mod tests {
             assert!(
                 !active
                     .expect("closed active version")
+                    .interval
                     .valid_to
                     .is_infinity()
             );
-            assert!(frozen.expect("frozen successor").valid_to.is_infinity());
+            assert!(
+                frozen
+                    .expect("frozen successor")
+                    .interval
+                    .valid_to
+                    .is_infinity()
+            );
         }
 
         for dependency in create.dependencies.as_deref().unwrap_or(&[]) {
             let dependency = &TableDependency::try_from(dependency)?;
             let table_dependency = db
                 .scd2()
-                .as_of(&created_function.base.defined_on)
+                .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
                         dependency
@@ -464,7 +475,7 @@ pub(crate) mod tests {
                 .await?;
             let old_version = db
                 .scd2()
-                .as_of(&created_function.base.defined_on)
+                .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_all::<DependencyDBWithNames>(and!(
                     table_dependency.base.base.table_id,
                     created_function.base.function_id
@@ -477,7 +488,7 @@ pub(crate) mod tests {
             let trigger = &TableTrigger::try_from(trigger_dto)?;
             let table_trigger = db
                 .scd2()
-                .as_of(&created_function.base.defined_on)
+                .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
                         trigger
@@ -490,7 +501,7 @@ pub(crate) mod tests {
                 .await?;
             let old_version = db
                 .scd2()
-                .as_of(&created_function.base.defined_on)
+                .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_all::<TriggerDBWithNames>(and!(
                     table_trigger.base.base.table_id,
                     created_function.base.function_id

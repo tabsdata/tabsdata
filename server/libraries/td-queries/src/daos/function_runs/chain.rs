@@ -53,7 +53,7 @@ pub(crate) fn materialization_of_ltdv<T: IntoIden>(
     let visible = match visibility {
         Visibility::Open => Condition::all().add(open_interval_at(valid_to)),
         Visibility::At(at) => visible_at(
-            (ptdv, PhysicalTableDataVersionDBIden::TriggeredOn),
+            (ptdv, PhysicalTableDataVersionDBIden::ValidFrom),
             valid_to,
             at,
         ),

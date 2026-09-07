@@ -5,16 +5,16 @@
 use crate::generic::as_of::AsOf;
 use crate::generic::chunked::Scd2Chunked;
 use crate::primitives::scd2::select_open;
-use crate::primitives::scd2::{close_query, update_open_query};
-use crate::primitives::table::insert_query;
+use crate::primitives::scd2::{close_query, open_query, update_open_query};
 use crate::{QueryExecutor, Serves};
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    AddressesOneVersion, Dao, InsertableFrom, ListDto, Scd2Dao, Scd2InsertDao, SelectDao, TableDao,
+    AddressesOneVersion, Dao, InsertableFrom, ListDto, Scd2Dao, Scd2OpenDao, SelectDao, TableDao,
     UpdateDao, single_row,
 };
+use td_database::access::LockInstant;
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
@@ -43,15 +43,17 @@ impl<E> Scd2<E> {
         }
     }
 
-    /// A new version: the trigger closes the partition's previous open row.
-    pub async fn insert<D: Scd2InsertDao + InsertableFrom<E::Scope>>(
+    /// A new version open from `at`, the unit of work's lock instant: the
+    /// trigger closes the partition's previous open row at the same instant.
+    pub async fn open<D: Scd2OpenDao + InsertableFrom<E::Scope>>(
         self,
         dao: &D,
+        at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D>,
     {
-        insert_query::<D>(dao)?
+        open_query::<D>(dao, at)?
             .build_query()
             .execute(self.executor)
             .await
@@ -80,7 +82,7 @@ impl<E> Scd2<E> {
     pub async fn close<D: TableDao + Scd2Dao>(
         self,
         condition: impl SqlCondition<D>,
-        at: &D::VersionOrder,
+        at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D>,
@@ -202,7 +204,7 @@ mod tests {
     use super::*;
     use sea_query::PostgresQueryBuilder;
     use ta_objects::Dao;
-    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+    use ta_objects::{IntervalColumns, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_objects::and;
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
@@ -218,18 +220,39 @@ mod tests {
     }
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-    struct TestDefinedOn(String);
+    struct TestValidFrom(String);
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestValidTo(String);
+
+    #[derive(Debug, Clone, sqlx::FromRow)]
+    struct Scd2Interval {
+        valid_from: TestValidFrom,
+        valid_to: TestValidTo,
+    }
+
+    impl IntervalColumns for Scd2Interval {
+        type ValidFrom = TestValidFrom;
+        type ValidTo = TestValidTo;
+    }
 
     #[Dao]
-    #[dao(table = "test_current_table", ops(select, insert), scd2)]
-    struct TestCurrentDao {
+    #[dao(table = "test_current_table", ops(insert), scd2)]
+    struct TestCurrentInsertDao {
         #[dao(pk)]
         id: TestId,
         #[dao(partition_by)]
         partition_id: TestPartition,
         status: TestStatus,
-        #[dao(scd2(valid_from))]
-        defined_on: TestDefinedOn,
+    }
+
+    #[Dao]
+    #[dao(table = "test_current_table", ops(select), scd2)]
+    struct TestCurrentDao {
+        #[dao(flatten)]
+        base: TestCurrentInsertDao,
+        #[dao(flatten)]
+        interval: Scd2Interval,
     }
 
     impl TestCurrentDao {
@@ -244,7 +267,7 @@ mod tests {
         let sql = select_open::<TestCurrentDao>(&id).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_current_table" WHERE "partition_id" = 'p1' AND "valid_to" = ('infinity'::timestamptz)"#
+            r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_current_table" WHERE "partition_id" = 'p1' AND "valid_to" = ('infinity'::timestamptz)"#
         );
     }
 
@@ -255,7 +278,7 @@ mod tests {
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_current_table" WHERE "partition_id" = 'p1' AND "status" = 'A' AND "valid_to" = ('infinity'::timestamptz)"#
+            r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_current_table" WHERE "partition_id" = 'p1' AND "status" = 'A' AND "valid_to" = ('infinity'::timestamptz)"#
         );
     }
 
@@ -264,7 +287,7 @@ mod tests {
         let sql = select_open::<TestCurrentDao>(()).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_current_table" WHERE TRUE AND "valid_to" = ('infinity'::timestamptz)"#
+            r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_current_table" WHERE TRUE AND "valid_to" = ('infinity'::timestamptz)"#
         );
     }
 }

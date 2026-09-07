@@ -73,7 +73,7 @@ pub(crate) async fn seed_logical_function_run(
     let tables: Vec<TableDB> = executor
         .reuse()
         .scd2()
-        .fetch_all::<TableDB>(&function_version.base.id)
+        .fetch_all::<TableDB>(&function_version.base.function_id)
         .await?;
     for t in &tables {
         let ltdv = LogicalTableDataVersionInsertDB {

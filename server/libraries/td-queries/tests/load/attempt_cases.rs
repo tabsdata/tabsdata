@@ -10,7 +10,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::types::basic::{AtTime, TriggeredOn};
+use td_objects::types::basic::AtTime;
 use td_queries::Queries;
 
 use crate::harness::{record, seed};
@@ -59,7 +59,7 @@ async fn load_attempts_current_version(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_attempts_version_at(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = TriggeredOn::try_from(AtTime::now())?;
+    let at = AtTime::now();
     let t = Instant::now();
     let row: Option<PhysicalTableDataVersionDB> = db
         .scd2()
@@ -83,7 +83,7 @@ async fn load_ltdv_latest_bound_tdv_with_data_for_table(db: TdPool) -> Result<()
     let t = Instant::now();
     let row = db
         .table_data_versions()
-        .latest_bound_tdv_with_data_for_table(&h.table_id, &h.before_time, false)
+        .latest_bound_tdv_with_data_for_table(&h.table_id, &AtTime::from(h.before_time), false)
         .await?;
     record(
         "ltdv::latest_bound_tdv_with_data_for_table",

@@ -54,7 +54,7 @@ pub enum PhysicalTableDataVersions {
     PhysicalFunctionRunId,
     FunctionParamPos,
     WithDataTableDataVersionId,
-    TriggeredOn,
+    ValidFrom,
     BasePath,
     LogicalTableDataVersionId,
     ValidTo,
@@ -96,12 +96,12 @@ impl Entity for Defs {
                 .col(id_column(PhysicalTableDataVersions::PhysicalFunctionRunId).not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::FunctionParamPos).integer().not_null())
                 .col(id_column(PhysicalTableDataVersions::WithDataTableDataVersionId).null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::TriggeredOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(PhysicalTableDataVersions::ValidFrom).timestamp_with_time_zone().not_null())
                 // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
                 // Self-describing: reads use this directly, never recompute, so data stays
                 // findable after the collection/function base_path later changes.
                 .col(ColumnDef::new(PhysicalTableDataVersions::BasePath).text().not_null())
-                // SCD2 partition: materializations version their logical version by `triggered_on`.
+                // SCD2 partition: materializations version their logical version by `valid_from`.
                 .col(id_column(PhysicalTableDataVersions::LogicalTableDataVersionId).not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
@@ -177,12 +177,12 @@ impl Entity for Defs {
                 .col(PhysicalTableDataVersions::ProjectId)
                 .col(PhysicalTableDataVersions::Id)
                 .to_owned(),
-            // At-time reads; `(triggered_on, id)` is the splice order.
+            // At-time reads; `(valid_from, id)` is the splice order.
             Index::create()
-                .name("ptdv___logical_table_data_version_id__triggered_on__id___idx")
+                .name("ptdv___logical_table_data_version_id__valid_from__id___idx")
                 .table(PhysicalTableDataVersions::Table)
                 .col(PhysicalTableDataVersions::LogicalTableDataVersionId)
-                .col(PhysicalTableDataVersions::TriggeredOn)
+                .col(PhysicalTableDataVersions::ValidFrom)
                 .col(PhysicalTableDataVersions::Id)
                 .to_owned(),
         ]
@@ -194,7 +194,7 @@ impl Entity for Defs {
                 name: format!("{}__scd2_close", PhysicalTableDataVersions::Table.to_string()),
                 source_table: PhysicalTableDataVersions::Table.into_iden(),
                 partition_col: PhysicalTableDataVersions::LogicalTableDataVersionId.into_iden(),
-                valid_from_col: PhysicalTableDataVersions::TriggeredOn.into_iden(),
+                valid_from_col: PhysicalTableDataVersions::ValidFrom.into_iden(),
                 valid_to_col: PhysicalTableDataVersions::ValidTo.into_iden(),
                 pk_col: PhysicalTableDataVersions::Id.into_iden(),
             }

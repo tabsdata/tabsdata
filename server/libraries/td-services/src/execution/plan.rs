@@ -34,7 +34,7 @@ use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
     AtTime, DependencyPos, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
     LogicalFunctionRunId, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
-    LogicalTableDataVersionId, OverrideDisabledTrigger, TableId, Trigger, TriggeredOn, VersionPos,
+    LogicalTableDataVersionId, OverrideDisabledTrigger, TableId, Trigger, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
@@ -228,7 +228,7 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows>(
     execution_plan: &ExecutionPlan,
 ) -> Result<ResolvedExecutionPlan, TdError> {
     let triggered_on = execution.triggered_on;
-    let at_time = AtTime::try_from(triggered_on)?;
+    let at_time = AtTime::from(triggered_on);
 
     // Per-edge metadata, in plan-iteration order; `cache_key` shares
     // resolved LTDV vectors across edges asking for the same (table, versions).
@@ -277,7 +277,7 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows>(
                 .function_id(&function.function_id)
                 .table_id(&table.table_id)
                 .versions(&lookup_versions)
-                .triggered_on(&triggered_on)
+                .triggered_on(&AtTime::from(triggered_on))
                 .build()?
                 .resolve(&mut *conn)
                 .await?;
@@ -306,7 +306,7 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows>(
         Vec::new()
     } else {
         conn.scd2()
-            .as_of(&TriggeredOn::try_from(at_time)?)
+            .as_of(&at_time)
             .chunked()
             .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&all_ftdv_ids, ())
             .await?
@@ -443,7 +443,7 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows>(
                 .function_id(&function.function_id)
                 .table_id(&table.table_id)
                 .versions(&lookup_versions)
-                .triggered_on(&triggered_on)
+                .triggered_on(&AtTime::from(triggered_on))
                 .build()?
                 .resolve(&mut *conn)
                 .await?;

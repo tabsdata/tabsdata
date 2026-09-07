@@ -42,6 +42,7 @@ async fn replay_logical_function_run(
         (project, grant)
     };
     let mut trx = db.in_project(&project).begin_exclusive().await?;
+    let locked_at = trx.locked_at();
     let conn = trx.get(grant);
     let lfr: LogicalFunctionRunDB = conn.fetch_one(&lfr_id).await?;
 
@@ -51,8 +52,8 @@ async fn replay_logical_function_run(
     let bound = load_current_function_run_id(conn, &lfr).await?;
     assert_no_concurrent_replay(conn, &lfr).await?;
     let runnable = resolve_replay_function_version_id(conn, &lfr, &at).await?;
-    let fr_new = mint_replay_function_run(conn, &lfr, &runnable, &at).await?;
-    mint_replay_table_data_versions(conn, &lfr, &runnable, &fr_new).await?;
+    let fr_new = mint_replay_function_run(conn, &lfr, &runnable, locked_at).await?;
+    mint_replay_table_data_versions(conn, &lfr, &runnable, &fr_new, locked_at).await?;
     let response = build_replay_response(&lfr, &bound, &fr_new, &runnable)?;
     trx.commit().await?;
 
@@ -66,6 +67,7 @@ async fn replay_logical_function_run(
 mod tests {
     use super::*;
     use crate::Services;
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::and;
@@ -83,7 +85,7 @@ mod tests {
         PhysicalFunctionRunStatus, ProjectId, RawSnippet, Snippet, TableNameDto, TransactionKey,
         UserId,
     };
-    use td_objects::types::basic::{LogicalFunctionRunId, Patch, ReuseFrozen};
+    use td_objects::types::basic::{AtTime, LogicalFunctionRunId, Patch, ReuseFrozen};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
@@ -175,11 +177,14 @@ mod tests {
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv-patch").unwrap(),
             description: Description::try_from("patch").unwrap(),
-            defined_on: td_objects::types::basic::AtTime::now(),
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(project_id).scd2().insert(&patch).await.unwrap();
+        db.scoped(project_id)
+            .scd2()
+            .open(&patch, LockInstant::asserted(*AtTime::now()))
+            .await
+            .unwrap();
         Ok(patch.id)
     }
 
@@ -275,7 +280,10 @@ mod tests {
             status: PhysicalFunctionRunStatus::Dispatched,
             ..fr.base.clone()
         };
-        db.scoped(p.id).scd2().insert(&dispatched).await?;
+        db.scoped(p.id)
+            .scd2()
+            .open(&dispatched, LockInstant::asserted(*AtTime::now()))
+            .await?;
 
         let result = Services::with_defaults(db.clone())
             .replay_logical_function_run(replay_request(&lfr.base.id))

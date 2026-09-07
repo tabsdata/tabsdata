@@ -7,8 +7,10 @@
 //! stay correct.
 
 use sea_query::Query;
-use ta_objects::Insertable;
 use ta_objects::errors::SqlError;
+use ta_objects::{Insertable, Scd2OpenDao, TypedInner};
+use td_common::datetime::Timestamp;
+use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_queries::QueryExecutor;
 
@@ -38,6 +40,38 @@ where
             .execute(executor)
             .await
             .map_err(|e| SqlError::on_write::<D>(e, &batch[0].column_display_values()))?;
+        total += result.rows_affected();
+    }
+    Ok(total)
+}
+
+/// `bulk_insert` for interval payloads: each row opens at its own instant.
+pub async fn bulk_open<D, E>(executor: E, rows: &[(D, LockInstant)]) -> Result<u64, SqlError>
+where
+    D: Scd2OpenDao,
+    E: QueryExecutor + Copy,
+{
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let ncols = D::columns().into_iter().count() + 1;
+    let chunk = (MAX_BIND_PARAMS / ncols).max(1);
+
+    let mut total = 0u64;
+    for batch in rows.chunks(chunk) {
+        let mut query = Query::insert();
+        query
+            .into_table(D::TABLE)
+            .columns(D::columns().into_iter().chain([D::VALID_FROM]));
+        for (dao, at) in batch {
+            let stamp = <Timestamp as TypedInner>::sea_value(&at.timestamp());
+            query.values(dao.insert_values().into_iter().chain([stamp.into()]))?;
+        }
+        let result = query
+            .build_query()
+            .execute(executor)
+            .await
+            .map_err(|e| SqlError::on_write::<D>(e, &batch[0].0.column_display_values()))?;
         total += result.rows_affected();
     }
     Ok(total)

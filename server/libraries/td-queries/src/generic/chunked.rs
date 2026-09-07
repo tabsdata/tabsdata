@@ -10,15 +10,16 @@ use crate::Serves;
 use crate::primitives::chunked::{
     MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_all_at_chunk_query,
     fetch_all_chunk_query, fetch_all_current_chunk_query, fetch_chunked, insert_vec_query,
-    update_chunk_query, update_open_chunk_query, warn_if_chunked,
+    open_vec_query, update_chunk_query, update_open_chunk_query, warn_if_chunked,
 };
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    InsertDao, InsertableFrom, Scd2Dao, Scd2InsertDao, SelectDao, TableDao, TimelineDao,
+    InsertDao, InsertableFrom, SameInner, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, TimelineDao,
     UnversionedDao, UpdateDao,
 };
+use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
 
 pub struct Chunked<E> {
@@ -101,7 +102,7 @@ impl<E> Scd2Chunked<E> {
         self,
         values: &[impl SqlCondition<D>],
         extra: impl SqlCondition<D>,
-        at: &D::VersionOrder,
+        at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D>,
@@ -145,9 +146,11 @@ impl<E> Scd2Chunked<E> {
         Ok(result)
     }
 
-    pub async fn insert<D: Scd2InsertDao + InsertableFrom<E::Scope>>(
+    /// New versions open from `at`, chunk by chunk.
+    pub async fn open<D: Scd2OpenDao + InsertableFrom<E::Scope>>(
         self,
         daos: &[D],
+        at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D>,
@@ -155,7 +158,7 @@ impl<E> Scd2Chunked<E> {
         let mut executor = self.executor;
         let mut result = PgQueryResult::default();
         for chunk in daos.chunks(MAX_INSERT_ROWS) {
-            let r = insert_vec_query::<D>(chunk)?
+            let r = open_vec_query::<D>(chunk, at)?
                 .build_query()
                 .execute(executor.reuse())
                 .await
@@ -193,17 +196,18 @@ pub struct AsOfChunked<'a, E, V> {
 }
 
 impl<E, V> AsOfChunked<'_, E, V> {
-    pub async fn fetch_all<D: SelectDao + Scd2Dao<VersionOrder = V>>(
+    pub async fn fetch_all<D: SelectDao + Scd2Dao + TimelineDao>(
         self,
         values: &[impl SqlCondition<D>],
         extra: impl SqlCondition<D>,
     ) -> Result<Vec<D>, SqlError>
     where
+        V: SameInner<D::VersionOrder>,
         E: Serves<D>,
     {
         let extra = extra.resolve();
         fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
-            fetch_all_at_chunk_query::<D>(chunk, self.on, &extra)
+            fetch_all_at_chunk_query::<D, V>(chunk, self.on, &extra)
         })
         .await
     }

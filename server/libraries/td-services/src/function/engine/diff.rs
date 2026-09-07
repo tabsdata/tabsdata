@@ -163,7 +163,6 @@ impl Changes {
                 table_id: dependency.table.table_id,
                 table_versions: dependency.versions.clone().into(),
                 dep_pos: DependencyPos::try_from(dependency.pos)?,
-                defined_on: ctx.time,
                 defined_by_id: ctx.user_id,
                 system: System::from(dependency.pos < 0),
             };
@@ -229,7 +228,6 @@ impl Changes {
                 trigger_by_function_id: trigger.table.function_id.into(),
                 trigger_by_table_id: trigger.table.table_id,
                 status,
-                defined_on: ctx.time,
                 defined_by_id: ctx.user_id,
                 system: trigger.table.system,
             });
@@ -257,7 +255,6 @@ fn desired_table(
         function_param_pos: Some(TableFunctionParamPos::try_from(table.pos)?),
         private: Private::from(table.name.is_private()),
         partitioned: Partitioned::FALSE,
-        defined_on: ctx.time,
         defined_by_id: ctx.user_id,
         status: TableStatus::Active,
         table_type: table.table_type.clone(),

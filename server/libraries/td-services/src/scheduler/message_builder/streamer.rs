@@ -62,7 +62,7 @@ pub(crate) async fn build_streamer_input<S: DbScope>(
         collection_id: worker.base.base.collection_id,
         collection: worker.collection,
         function_version_id: worker.base.base.function_version_id,
-        function_defined_on: f.base.base.defined_on,
+        function_defined_on: f.base.interval.valid_from.into(),
         function: worker.function,
         function_bundle,
         function_stage,

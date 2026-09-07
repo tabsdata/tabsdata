@@ -27,7 +27,10 @@ async fn delete_project(
     let id_name = param.project;
     // FOR UPDATE: the emptiness guard must not race collection create.
     let conn = trx.get(authz.none());
-    let current: ActiveProjectDB = conn.for_update().fetch_one(&id_name).await?;
+    let current = conn
+        .for_update()
+        .fetch_one::<ActiveProjectDB>(&id_name)
+        .await?;
     // Deleting a project requires `manage_project` on that project.
     let grant = authz
         .require::<Project, ManageProject>(conn, &ctx, &current.id)

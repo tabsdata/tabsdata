@@ -59,7 +59,7 @@ impl Entity for Defs {
             .expr(Expr::col((parent.clone(), Functions::StorageVersion)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::BundleId)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::Snippet)))
-            .expr(Expr::col((FunctionPatches::Table, FunctionPatches::DefinedOn)))
+            .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ValidFrom)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::DefinedById)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::Status)))
             .expr(Expr::col((parent.clone(), Functions::Connector)))

@@ -8,7 +8,10 @@ mod tests {
     use tm_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
     use crate::and;
-    use crate::dxo::{Dao, HasColumn, Insertable, PkDao, RecursiveDao, TimelineDao, UpdateDao};
+    use crate::dxo::{
+        Dao, HasColumn, Insertable, Partitioned, PkDao, RecursiveDao, Scd2Dao, TimelineDao,
+        UpdateDao,
+    };
     use crate::or;
     use crate::sql_condition::SqlCondition;
     use crate::unique::AddressesOneRow;
@@ -23,7 +26,22 @@ mod tests {
     struct Description(String);
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    #[typed(sealed)]
     struct DefinedOn(i64);
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct ValidTo(i64);
+
+    #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+    struct Scd2Interval {
+        pub valid_from: DefinedOn,
+        pub valid_to: ValidTo,
+    }
+
+    impl crate::IntervalColumns for Scd2Interval {
+        type ValidFrom = DefinedOn;
+        type ValidTo = ValidTo;
+    }
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct ItemId(String);
@@ -181,16 +199,24 @@ mod tests {
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(table = "scd2_items", ops(select, insert), scd2)]
-    struct Scd2ItemDao {
+    #[dao(table = "scd2_items", ops(insert), scd2)]
+    struct Scd2ItemInsertDao {
         #[dao(pk)]
         pub id: ItemId,
         #[dao(partition_by)]
         pub item_id: Name,
         pub status: ItemStatus,
         pub system: System,
-        #[dao(scd2(valid_from))]
-        pub defined_on: DefinedOn,
+    }
+
+    #[ta_objects::Dao]
+    #[derive(Eq, PartialEq)]
+    #[dao(table = "scd2_items", ops(select), scd2)]
+    struct Scd2ItemDao {
+        #[dao(flatten)]
+        pub base: Scd2ItemInsertDao,
+        #[dao(flatten)]
+        pub interval: Scd2Interval,
     }
 
     impl Scd2ItemDao {
@@ -209,9 +235,9 @@ mod tests {
 
     #[test]
     fn test_scd2_insert_is_an_interval_insert() {
-        fn interval<T: crate::Scd2InsertDao>() {}
+        fn interval<T: crate::Scd2OpenDao>() {}
         fn plain<T: crate::InsertDao>() {}
-        interval::<Scd2ItemDao>();
+        interval::<Scd2ItemInsertDao>();
         plain::<ItemDao>();
     }
 
@@ -232,13 +258,39 @@ mod tests {
     #[test]
     fn test_scd2_version_order() {
         let col = Scd2ItemDao::VERSION_ORDER;
-        assert_eq!(col.quoted(), "defined_on");
+        assert_eq!(col.quoted(), "valid_from");
     }
 
     #[test]
-    fn test_scd2_is_also_timeline() {
-        let col = <Scd2ItemDao as TimelineDao>::VERSION_ORDER;
-        assert_eq!(col.quoted(), "defined_on");
+    fn test_scd2_row_is_a_timeline_its_payload_is_not() {
+        fn timeline<T: TimelineDao>() {}
+        timeline::<Scd2ItemDao>();
+        assert_eq!(
+            <Scd2ItemDao as TimelineDao>::VERSION_ORDER.quoted(),
+            "valid_from"
+        );
+        assert_eq!(Scd2ItemInsertDao::VALID_FROM.quoted(), "valid_from");
+        assert_eq!(Scd2ItemInsertDao::VALID_TO.quoted(), "valid_to");
+        assert!(
+            !Scd2ItemInsertDao::columns()
+                .into_iter()
+                .any(|c| c.quoted() == "valid_from")
+        );
+        let row: Vec<String> = Scd2ItemDao::columns()
+            .into_iter()
+            .map(|c| c.quoted().into_owned())
+            .collect();
+        assert_eq!(
+            row,
+            [
+                "id",
+                "item_id",
+                "status",
+                "system",
+                "valid_from",
+                "valid_to"
+            ]
+        );
     }
 
     #[ta_objects::Dao]
@@ -315,7 +367,7 @@ mod tests {
     }
 
     #[ta_objects::Dao]
-    #[dao(table = "tree", ops(select, insert), scd2, recursive)]
+    #[dao(table = "tree", ops(select), scd2, recursive)]
     struct TreeDao {
         #[dao(pk)]
         pub id: ItemId,
@@ -326,8 +378,8 @@ mod tests {
         #[dao(recursive(down))]
         pub child: RecursionKey,
         pub status: ItemStatus,
-        #[dao(scd2(valid_from))]
-        pub defined_on: DefinedOn,
+        #[dao(flatten)]
+        pub interval: Scd2Interval,
     }
 
     #[test]

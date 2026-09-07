@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 
 use crate::function::topology::RunnableVersion;
+use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
@@ -21,7 +22,7 @@ use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
     AtTime, BasePath, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId,
-    TableFunctionParamPos, TableId, TriggeredOn,
+    TableFunctionParamPos, TableId,
 };
 use td_queries::Queries;
 
@@ -64,10 +65,9 @@ pub async fn resolve_output_base_path<S: SeesProjectRows>(
 pub fn build_function_run(
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
-    at: &AtTime,
+    _at: LockInstant,
     base_path: &BasePath,
 ) -> Result<PhysicalFunctionRunInsertDB, TdError> {
-    let triggered_on = TriggeredOn::try_from(at)?;
     // FR is born `Requested`: mint and run-request happen in the same
     // dispatch tx, and the per-attempt status mirrors that the worker
     // has been queued. Worker callbacks then advance Running → Done/Failed.
@@ -80,7 +80,6 @@ pub fn build_function_run(
         execution_id: lfr.base.execution_id.clone(),
         transaction_id: lfr.base.transaction_id.clone(),
         logical_function_run_id: lfr.base.id.clone(),
-        triggered_on,
         triggered_by_id: lfr.base.triggered_by_id,
         trigger: lfr.base.trigger.clone(),
         base_path: base_path.clone(),
@@ -103,13 +102,11 @@ pub async fn mint_function_run(
     conn: &mut DomainConnection<Apiserver, InProject>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
-    at: &AtTime,
+    at: LockInstant,
 ) -> Result<PhysicalFunctionRunInsertDB, TdError> {
     let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
     let fr = build_function_run(lfr, runnable, at, &base_path)?;
-    conn.scd2()
-        .insert::<PhysicalFunctionRunInsertDB>(&fr)
-        .await?;
+    conn.scd2().open(&fr, at).await?;
     Ok(fr)
 }
 
@@ -158,7 +155,6 @@ pub fn build_output_table_data_versions(
             physical_function_run_id: fr.id.clone(),
             logical_table_data_version_id,
             function_param_pos,
-            triggered_on: fr.triggered_on,
             base_path: base_path.clone(),
             has_data: None,
             schema_changed: None,
@@ -178,8 +174,9 @@ pub async fn mint_output_table_data_versions(
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     fr: &PhysicalFunctionRunInsertDB,
+    at: LockInstant,
 ) -> Result<Vec<PhysicalTableDataVersionInsertDB>, TdError> {
-    let planned_at = AtTime::try_from(&lfr.base.triggered_on)?;
+    let planned_at = AtTime::from(lfr.base.triggered_on);
     let tables: Vec<TableDB> = conn
         .scd2()
         .as_of(&planned_at)
@@ -196,7 +193,7 @@ pub async fn mint_output_table_data_versions(
         &logical_by_table,
     )?;
     if !tdvs.is_empty() {
-        conn.scd2().chunked().insert(&tdvs).await?;
+        conn.scd2().chunked().open(&tdvs, at).await?;
     }
     Ok(tdvs)
 }
@@ -204,6 +201,7 @@ pub async fn mint_output_table_data_versions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::table::TableInsertDB;
@@ -300,12 +298,14 @@ mod tests {
             function_param_pos: Some(TableFunctionParamPos::try_from(1)?),
             private: Private::TRUE,
             partitioned: Partitioned::FALSE,
-            defined_on: request_context.time,
             defined_by_id: request_context.user_id,
             status: TableStatus::Active,
             table_type: TableType::default(),
         };
-        db.scoped(p.id).scd2().insert(&private).await?;
+        db.scoped(p.id)
+            .scd2()
+            .open(&private, LockInstant::asserted(*AtTime::now()))
+            .await?;
 
         let tables: Vec<TableDB> = db.timeline().fetch_all::<TableDB>(&func.base.id).await?;
         let exec = db.scoped(p.id).seed().execution(&func).await?;
@@ -343,7 +343,12 @@ mod tests {
             function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: None,
         };
-        let built = build_function_run(&fx.lfr, &runnable, &AtTime::now(), &BasePath::default())?;
+        let built = build_function_run(
+            &fx.lfr,
+            &runnable,
+            LockInstant::asserted(*AtTime::now()),
+            &BasePath::default(),
+        )?;
 
         assert_eq!(built.collection_id, fx.lfr.base.collection_id);
         assert_eq!(built.execution_id, fx.lfr.base.execution_id);
@@ -363,7 +368,12 @@ mod tests {
             function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: Some(patch_id.clone().into()),
         };
-        let built = build_function_run(&fx.lfr, &runnable, &AtTime::now(), &BasePath::default())?;
+        let built = build_function_run(
+            &fx.lfr,
+            &runnable,
+            LockInstant::asserted(*AtTime::now()),
+            &BasePath::default(),
+        )?;
 
         assert_eq!(built.function_version_id, fx.func.base.id);
         assert_eq!(

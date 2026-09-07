@@ -7,9 +7,9 @@ use sea_query::{
     Alias, Asterisk, Condition, Expr, ExprTrait, Func, Order, Query, SelectStatement,
     SubQueryStatement,
 };
-use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::{HasColumn, SelectDao, TimelineDao, single_row};
+use ta_objects::{SameInner, SeaValue};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::types::basic::LogicalTableDataVersionId;
@@ -25,9 +25,10 @@ pub struct DataVersion<'a, E, V, P> {
     pub(crate) executor: E,
 }
 
-fn timeline_cond<D>(partition: &D::Partition, on: &D::VersionOrder) -> Condition
+fn timeline_cond<D, V>(partition: &D::Partition, on: &V) -> Condition
 where
     D: SelectDao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
 {
     Condition::all()
         .add(Expr::col(D::PARTITION).eq(partition.as_sea_value()))
@@ -55,21 +56,22 @@ where
         .order_by(D::PK, dir);
 }
 
-fn timeline_scan<D>(
+fn timeline_scan<D, V>(
     partition: &D::Partition,
-    on: &D::VersionOrder,
+    on: &V,
     newest_first: bool,
     offset: u64,
     limit: u64,
 ) -> SelectStatement
 where
     D: SelectDao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
 {
     let mut query = Query::select();
     query
         .columns(D::columns())
         .from(D::TABLE)
-        .cond_where(timeline_cond::<D>(partition, on));
+        .cond_where(timeline_cond::<D, V>(partition, on));
     order_timeline::<D>(&mut query, newest_first);
     query.offset(offset).limit(limit);
     query.take()
@@ -80,21 +82,17 @@ fn subquery_expr(query: SelectStatement) -> Expr {
 }
 
 /// Yields no row beyond the timeline, so comparisons against it match nothing.
-fn key_at<D>(
-    partition: &D::Partition,
-    on: &D::VersionOrder,
-    newest_first: bool,
-    offset: u64,
-) -> Expr
+fn key_at<D, V>(partition: &D::Partition, on: &V, newest_first: bool, offset: u64) -> Expr
 where
     D: SelectDao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
 {
     let mut probe = Query::select();
     probe
         .column(D::VERSION_ORDER)
         .column(D::PK)
         .from(D::TABLE)
-        .cond_where(timeline_cond::<D>(partition, on));
+        .cond_where(timeline_cond::<D, V>(partition, on));
     order_timeline::<D>(&mut probe, newest_first);
     probe.offset(offset).limit(1);
     subquery_expr(probe.take())
@@ -108,9 +106,10 @@ fn asc_offset(forward: isize) -> Option<u64> {
     u64::try_from(forward as i128).ok()
 }
 
-fn single_version_expr<D>(partition: &D::Partition, on: &D::VersionOrder, version: &Version) -> Expr
+fn single_version_expr<D, V>(partition: &D::Partition, on: &V, version: &Version) -> Expr
 where
     D: SelectDao + TimelineDao + HasColumn<LogicalTableDataVersionId>,
+    V: SameInner<D::VersionOrder>,
 {
     match version {
         Version::Fixed(id) => {
@@ -118,30 +117,33 @@ where
             Expr::col(col).eq(id.as_sea_value())
         }
         Version::Head(back) => match desc_offset(*back) {
-            Some(offset) => key_expr::<D>().eq(key_at::<D>(partition, on, true, offset)),
+            Some(offset) => key_expr::<D>().eq(key_at::<D, V>(partition, on, true, offset)),
             None => Expr::cust("1 = 0"),
         },
         Version::Initial(forward) => match asc_offset(*forward) {
-            Some(offset) => key_expr::<D>().eq(key_at::<D>(partition, on, false, offset)),
+            Some(offset) => key_expr::<D>().eq(key_at::<D, V>(partition, on, false, offset)),
             None => Expr::cust("1 = 0"),
         },
     }
 }
 
-fn version_condition<D>(
+fn version_condition<D, V>(
     partition: &D::Partition,
-    on: &D::VersionOrder,
+    on: &V,
     versions: &Versions,
 ) -> Result<Condition, SqlError>
 where
     D: SelectDao + TimelineDao + HasColumn<LogicalTableDataVersionId>,
+    V: SameInner<D::VersionOrder>,
 {
     match versions {
-        Versions::None => {
-            Ok(Condition::all().add(single_version_expr::<D>(partition, on, &Version::Head(0))))
-        }
+        Versions::None => Ok(Condition::all().add(single_version_expr::<D, V>(
+            partition,
+            on,
+            &Version::Head(0),
+        ))),
         Versions::Single(version) => {
-            Ok(Condition::all().add(single_version_expr::<D>(partition, on, version)))
+            Ok(Condition::all().add(single_version_expr::<D, V>(partition, on, version)))
         }
         Versions::List(versions) => {
             if versions.is_empty() {
@@ -149,7 +151,7 @@ where
             } else {
                 let mut cond = Condition::any();
                 for version in versions {
-                    cond = cond.add(single_version_expr::<D>(partition, on, version));
+                    cond = cond.add(single_version_expr::<D, V>(partition, on, version));
                 }
                 Ok(Condition::all().add(cond))
             }
@@ -202,20 +204,21 @@ fn initial_range_scan(from_forward: isize, to_forward: isize) -> Scan {
 }
 
 /// 1-based position from the newest end; 0 when `key` yields no row.
-async fn count_from_key<D, E>(
+async fn count_from_key<D, E, V>(
     executor: &mut E,
     partition: &D::Partition,
-    on: &D::VersionOrder,
+    on: &V,
     key: Expr,
 ) -> Result<i64, SqlError>
 where
     D: SelectDao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
     Query::select()
         .expr(Func::count(Expr::col(Asterisk)))
         .from(D::TABLE)
-        .cond_where(timeline_cond::<D>(partition, on).add(key_expr::<D>().gte(key)))
+        .cond_where(timeline_cond::<D, V>(partition, on).add(key_expr::<D>().gte(key)))
         .take()
         .build_query_scalar::<i64>()
         .fetch_one(executor.reuse())
@@ -223,19 +226,20 @@ where
         .map_err(SqlError::on_read::<D>)
 }
 
-async fn timeline_len<D, E>(
+async fn timeline_len<D, E, V>(
     executor: &mut E,
     partition: &D::Partition,
-    on: &D::VersionOrder,
+    on: &V,
 ) -> Result<i128, SqlError>
 where
     D: SelectDao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
     let len = Query::select()
         .expr(Func::count(Expr::col(Asterisk)))
         .from(D::TABLE)
-        .cond_where(timeline_cond::<D>(partition, on))
+        .cond_where(timeline_cond::<D, V>(partition, on))
         .take()
         .build_query_scalar::<i64>()
         .fetch_one(executor.reuse())
@@ -245,15 +249,16 @@ where
 }
 
 /// 0-based position from the oldest end; `None` for an absent Fixed id.
-async fn ascending_pos<D, E>(
+async fn ascending_pos<D, E, V>(
     executor: &mut E,
     partition: &D::Partition,
-    on: &D::VersionOrder,
+    on: &V,
     total: i128,
     version: &Version,
 ) -> Result<Option<i128>, SqlError>
 where
     D: SelectDao + TimelineDao + HasColumn<LogicalTableDataVersionId>,
+    V: SameInner<D::VersionOrder>,
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
     match version {
@@ -266,39 +271,40 @@ where
                 .column(D::VERSION_ORDER)
                 .column(D::PK)
                 .from(D::TABLE)
-                .cond_where(timeline_cond::<D>(partition, on))
+                .cond_where(timeline_cond::<D, V>(partition, on))
                 .and_where(Expr::col(col).eq(id.as_sea_value()))
                 .limit(1);
             let rn =
-                count_from_key::<D, E>(executor, partition, on, subquery_expr(key_probe.take()))
+                count_from_key::<D, E, V>(executor, partition, on, subquery_expr(key_probe.take()))
                     .await?;
             Ok((rn > 0).then(|| total - rn as i128))
         }
     }
 }
 
-async fn range_scan<D, E>(
+async fn range_scan<D, E, V>(
     executor: &mut E,
     partition: &D::Partition,
-    on: &D::VersionOrder,
+    on: &V,
     from: &Version,
     to: &Version,
 ) -> Result<Scan, SqlError>
 where
     D: SelectDao + TimelineDao + HasColumn<LogicalTableDataVersionId>,
+    V: SameInner<D::VersionOrder>,
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
     match (from, to) {
         (Version::Head(f), Version::Head(t)) => Ok(head_range_scan(*f, *t)),
         (Version::Initial(f), Version::Initial(t)) => Ok(initial_range_scan(*f, *t)),
         _ => {
-            let total = timeline_len::<D, E>(executor, partition, on).await?;
+            let total = timeline_len::<D, E, V>(executor, partition, on).await?;
             let Some(pos_from) =
-                ascending_pos::<D, E>(executor, partition, on, total, from).await?
+                ascending_pos::<D, E, V>(executor, partition, on, total, from).await?
             else {
                 return Ok(Scan::EMPTY);
             };
-            let Some(pos_to) = ascending_pos::<D, E>(executor, partition, on, total, to).await?
+            let Some(pos_to) = ascending_pos::<D, E, V>(executor, partition, on, total, to).await?
             else {
                 return Ok(Scan::EMPTY);
             };
@@ -316,11 +322,12 @@ where
     }
 }
 
-fn scan_select<D>(partition: &D::Partition, on: &D::VersionOrder, scan: &Scan) -> SelectStatement
+fn scan_select<D, V>(partition: &D::Partition, on: &V, scan: &Scan) -> SelectStatement
 where
     D: SelectDao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
 {
-    let inner = timeline_scan::<D>(partition, on, scan.newest_first, scan.offset, scan.limit);
+    let inner = timeline_scan::<D, V>(partition, on, scan.newest_first, scan.offset, scan.limit);
     let mut query = Query::select();
     query
         .columns(D::columns())
@@ -329,25 +336,26 @@ where
     query.take()
 }
 
-async fn select_for<D, E>(
+async fn select_for<D, E, V>(
     executor: &mut E,
     partition: &D::Partition,
-    on: &D::VersionOrder,
+    on: &V,
     versions: &Versions,
 ) -> Result<SelectStatement, SqlError>
 where
     D: SelectDao + TimelineDao + HasColumn<LogicalTableDataVersionId>,
+    V: SameInner<D::VersionOrder>,
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
     match versions {
         Versions::New => Err(SqlError::SelectVersionsNew),
         Versions::Range(from, to) => {
-            let scan = range_scan::<D, E>(executor, partition, on, from, to).await?;
-            Ok(scan_select::<D>(partition, on, &scan))
+            let scan = range_scan::<D, E, V>(executor, partition, on, from, to).await?;
+            Ok(scan_select::<D, V>(partition, on, &scan))
         }
         _ => {
-            let where_cond = timeline_cond::<D>(partition, on)
-                .add(version_condition::<D>(partition, on, versions)?);
+            let where_cond = timeline_cond::<D, V>(partition, on)
+                .add(version_condition::<D, V>(partition, on, versions)?);
             let mut query = Query::select();
             query
                 .columns(D::columns())
@@ -362,9 +370,8 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
     pub async fn fetch_one<D>(self, versions: &Versions) -> Result<D, SqlError>
     where
         E: Serves<D>,
-        D: SelectDao
-            + TimelineDao<VersionOrder = V, Partition = P>
-            + HasColumn<LogicalTableDataVersionId>,
+        D: SelectDao + TimelineDao<Partition = P> + HasColumn<LogicalTableDataVersionId>,
+        V: SameInner<D::VersionOrder>,
     {
         self.fetch_optional(versions)
             .await?
@@ -374,16 +381,15 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
     pub async fn fetch_optional<D>(self, versions: &Versions) -> Result<Option<D>, SqlError>
     where
         E: Serves<D>,
-        D: SelectDao
-            + TimelineDao<VersionOrder = V, Partition = P>
-            + HasColumn<LogicalTableDataVersionId>,
+        D: SelectDao + TimelineDao<Partition = P> + HasColumn<LogicalTableDataVersionId>,
+        V: SameInner<D::VersionOrder>,
     {
         let Self {
             on,
             partition,
             mut executor,
         } = self;
-        let mut query = select_for::<D, E>(&mut executor, partition, on, versions).await?;
+        let mut query = select_for::<D, E, V>(&mut executor, partition, on, versions).await?;
         query.limit(2);
         let rows = query
             .build_query_as()
@@ -397,16 +403,15 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
     pub async fn fetch_all<D>(self, versions: &Versions) -> Result<Vec<D>, SqlError>
     where
         E: Serves<D>,
-        D: SelectDao
-            + TimelineDao<VersionOrder = V, Partition = P>
-            + HasColumn<LogicalTableDataVersionId>,
+        D: SelectDao + TimelineDao<Partition = P> + HasColumn<LogicalTableDataVersionId>,
+        V: SameInner<D::VersionOrder>,
     {
         let Self {
             on,
             partition,
             mut executor,
         } = self;
-        let mut query = select_for::<D, E>(&mut executor, partition, on, versions).await?;
+        let mut query = select_for::<D, E, V>(&mut executor, partition, on, versions).await?;
         let r = query
             .build_query_as()
             .fetch_all(executor.reuse())
@@ -419,9 +424,8 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
     pub async fn fetch_relative_offset<D>(self, version: &Version) -> Result<Option<i64>, SqlError>
     where
         E: Serves<D>,
-        D: SelectDao
-            + TimelineDao<VersionOrder = V, Partition = P>
-            + HasColumn<LogicalTableDataVersionId>,
+        D: SelectDao + TimelineDao<Partition = P> + HasColumn<LogicalTableDataVersionId>,
+        V: SameInner<D::VersionOrder>,
     {
         let Self {
             on,
@@ -435,17 +439,17 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
                 query
                     .columns(D::columns())
                     .from(D::TABLE)
-                    .cond_where(timeline_cond::<D>(partition, on))
+                    .cond_where(timeline_cond::<D, V>(partition, on))
                     .and_where(Expr::col(col).eq(id.as_sea_value()))
                     .limit(1);
                 query.take()
             }
             Version::Head(back) => match desc_offset(*back) {
-                Some(offset) => timeline_scan::<D>(partition, on, true, offset, 1),
+                Some(offset) => timeline_scan::<D, V>(partition, on, true, offset, 1),
                 None => return Ok(None),
             },
             Version::Initial(forward) => match asc_offset(*forward) {
-                Some(offset) => timeline_scan::<D>(partition, on, false, offset, 1),
+                Some(offset) => timeline_scan::<D, V>(partition, on, false, offset, 1),
                 None => return Ok(None),
             },
         };
@@ -454,7 +458,7 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
             .column(D::VERSION_ORDER)
             .column(D::PK)
             .from_subquery(target, Alias::new("target"));
-        let rn = count_from_key::<D, E>(
+        let rn = count_from_key::<D, E, V>(
             &mut executor,
             partition,
             on,
@@ -477,6 +481,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::types::basic::AtTime;
+    use td_objects::types::basic::Scd2ValidFrom;
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct TestPartition(String);
@@ -499,7 +504,7 @@ mod tests {
         partition_id: TestPartition,
         status: TestStatus,
         #[dao(timeline(version_by))]
-        defined_on: AtTime,
+        defined_on: Scd2ValidFrom,
     }
 
     static P0: LazyLock<TestPartition> = LazyLock::new(|| TestPartition::try_from("p0").unwrap());
@@ -948,7 +953,7 @@ mod tests {
 
         #[test]
         fn test_timeline_scan_sql() {
-            let sql = timeline_scan::<TestDvDao>(P0.deref(), ON.deref(), true, 2, 1)
+            let sql = timeline_scan::<TestDvDao, _>(P0.deref(), ON.deref(), true, 2, 1)
                 .to_string(PostgresQueryBuilder);
             assert_eq!(
                 sql,
@@ -958,7 +963,7 @@ mod tests {
 
         #[test]
         fn test_version_condition_head_is_key_probe() {
-            let cond = version_condition::<TestDvDao>(
+            let cond = version_condition::<TestDvDao, _>(
                 P0.deref(),
                 ON.deref(),
                 &Versions::Single(Version::Head(-2)),
@@ -972,7 +977,7 @@ mod tests {
 
         #[test]
         fn test_version_condition_initial_scans_ascending() {
-            let cond = version_condition::<TestDvDao>(
+            let cond = version_condition::<TestDvDao, _>(
                 P0.deref(),
                 ON.deref(),
                 &Versions::Single(Version::Initial(1)),
@@ -987,7 +992,7 @@ mod tests {
         #[test]
         fn test_version_condition_single_fixed() {
             let dv = LogicalTableDataVersionId::try_from("dv20260101-0000000002").unwrap();
-            let cond = version_condition::<TestDvDao>(
+            let cond = version_condition::<TestDvDao, _>(
                 P0.deref(),
                 ON.deref(),
                 &Versions::Single(Version::Fixed(dv)),
@@ -1007,7 +1012,7 @@ mod tests {
                 Versions::List(vec![]),
             ] {
                 let cond =
-                    version_condition::<TestDvDao>(P0.deref(), ON.deref(), &versions).unwrap();
+                    version_condition::<TestDvDao, _>(P0.deref(), ON.deref(), &versions).unwrap();
                 assert_eq!(
                     where_sql(cond),
                     r#"SELECT * FROM "test_dv_table" WHERE 1 = 0"#
@@ -1017,7 +1022,7 @@ mod tests {
 
         #[test]
         fn test_version_condition_list_multiple() {
-            let cond = version_condition::<TestDvDao>(
+            let cond = version_condition::<TestDvDao, _>(
                 P0.deref(),
                 ON.deref(),
                 &Versions::List(vec![Version::Head(0), Version::Head(-1)]),
@@ -1031,14 +1036,14 @@ mod tests {
 
         #[test]
         fn test_version_condition_new_errors() {
-            let result = version_condition::<TestDvDao>(P0.deref(), ON.deref(), &Versions::New);
+            let result = version_condition::<TestDvDao, _>(P0.deref(), ON.deref(), &Versions::New);
             assert!(matches!(result, Err(SqlError::SelectVersionsNew)));
         }
 
         #[test]
         fn test_scan_select_sql() {
             let scan = head_range_scan(-2, 0);
-            let sql = scan_select::<TestDvDao>(P0.deref(), ON.deref(), &scan)
+            let sql = scan_select::<TestDvDao, _>(P0.deref(), ON.deref(), &scan)
                 .to_string(PostgresQueryBuilder);
             assert_eq!(
                 sql,
@@ -1048,7 +1053,7 @@ mod tests {
 
         #[test]
         fn test_empty_scan_renders_limit_zero() {
-            let sql = scan_select::<TestDvDao>(P0.deref(), ON.deref(), &Scan::EMPTY)
+            let sql = scan_select::<TestDvDao, _>(P0.deref(), ON.deref(), &Scan::EMPTY)
                 .to_string(PostgresQueryBuilder);
             assert_eq!(
                 sql,

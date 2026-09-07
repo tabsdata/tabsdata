@@ -2,13 +2,15 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::dxo::scd2_interval::Scd2Interval;
+use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
     AtTime, BasePath, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, Ended,
     ExecutionId, FunctionName, FunctionVersionId, HasData, LogicalTableDataVersionId, Patch,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId,
-    RowCount, Scd2ValidTo, SchemaChanged, SchemaDataChanged, SchemaHash, Started, StorageVersion,
-    TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
-    UserName, WithData,
+    RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started, StorageVersion,
+    TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, UserId, UserName,
+    WithData,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -40,8 +42,6 @@ pub struct PhysicalTableDataVersionInsertDB {
     #[dao(partition_by)]
     pub logical_table_data_version_id: LogicalTableDataVersionId,
     pub function_param_pos: TableFunctionParamPos,
-    #[dao(scd2(valid_from), order_by)]
-    pub triggered_on: TriggeredOn,
     // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
     // Reads use this directly (never recompute), so the data stays findable after
     // the collection/function base_path later changes.
@@ -76,8 +76,8 @@ pub struct PhysicalTableDataVersionDB {
     #[dao(flatten)]
     pub base: PhysicalTableDataVersionInsertDB,
     pub project_id: ProjectId,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten, order_by)]
+    pub interval: Scd2Interval,
 }
 
 #[ta_objects::Dao]
@@ -111,7 +111,7 @@ pub struct ExecutionTableDataVersionRead {
     pub transaction_id: TransactionId,
     pub physical_function_run_id: PhysicalFunctionRunId,
     pub function_param_pos: TableFunctionParamPos,
-    pub triggered_on: TriggeredOn,
+    pub triggered_on: AtTime,
     pub base_path: BasePath,
     pub has_data: Option<HasData>,
     pub schema_changed: Option<SchemaChanged>,
@@ -144,7 +144,7 @@ impl FromDao for ExecutionTableDataVersionRead {
             transaction_id: dao.base.base.base.transaction_id,
             physical_function_run_id: dao.base.base.base.physical_function_run_id,
             function_param_pos: dao.base.base.base.function_param_pos,
-            triggered_on: dao.base.base.base.triggered_on,
+            triggered_on: dao.base.base.interval.valid_from.into(),
             base_path: dao.base.base.base.base_path,
             has_data: dao.base.base.base.has_data,
             schema_changed: dao.base.base.base.schema_changed,
@@ -205,8 +205,8 @@ pub struct PhysicalTableDataVersion {
     #[dto(list(filter, order_by, col = TableFunctionParamPos))]
     pub function_param_pos: Option<TableFunctionParamPos>,
 
-    #[dto(list(filter, order_by))]
-    pub created_at: TriggeredOn,
+    #[dto(list(filter, order_by, col = Scd2ValidFrom))]
+    pub created_at: AtTime,
     #[dto(list(filter, order_by))]
     pub triggered_by_id: UserId,
     #[dto(list(filter, order_by))]
@@ -248,7 +248,7 @@ impl FromDao for PhysicalTableDataVersion {
             transaction_id: dao.base.base.base.transaction_id,
             physical_function_run_id: dao.base.base.base.physical_function_run_id,
             function_param_pos: dao.base.base.base.function_param_pos.into(),
-            created_at: dao.base.base.base.triggered_on,
+            created_at: dao.base.base.interval.valid_from.into(),
             triggered_by_id: dao.base.triggered_by_id,
             started_on: dao.base.started_on,
             ended_on: dao.base.ended_on,

@@ -181,7 +181,7 @@ pub(crate) fn stage_trigger_start_message(
             collection: stage_trigger_worker.collection.clone(),
             function_version_id: stage_trigger_worker.base.base.function_version_id.clone(),
             function: stage_trigger_worker.function.clone(),
-            function_defined_on: f.base.base.defined_on,
+            function_defined_on: f.base.interval.valid_from.into(),
             function_bundle,
             function_stage,
             function_checkpoint,

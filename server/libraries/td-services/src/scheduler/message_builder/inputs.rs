@@ -25,8 +25,8 @@ use td_objects::dxo::table::TableDB;
 use td_objects::dxo::yaml::function::{InputTable, InputTableVersion};
 use td_objects::types::basic::{
     AtTime, CollectionId, DependencyPos, ExecutionId, FunctionId, HasData, LogicalFunctionRunId,
-    LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, TableId,
-    TriggeredOn,
+    LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, Scd2ValidFrom,
+    TableId,
 };
 use td_queries::Queries;
 use td_storage::Storage;
@@ -141,7 +141,7 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows>(
         // never produced, or voided.
         let bound: Vec<PhysicalTableDataVersionDB> = conn
             .scd2()
-            .as_of(&TriggeredOn::try_from(at)?)
+            .as_of(at)
             .chunked()
             .fetch_all::<PhysicalTableDataVersionDB>(&input_ftdv_ids, ())
             .await?;
@@ -207,9 +207,9 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows>(
     let mut fallback_cache: Option<FallbackCache> = None;
 
     // Per-FR cache for the "chase the latest with-data row" lookup — slots
-    // sharing an upstream `(table_id, triggered_on)` reuse one query.
+    // sharing an upstream `(table_id, valid_from)` reuse one query.
     let mut latest_with_data_cache: HashMap<
-        (TableId, TriggeredOn),
+        (TableId, Scd2ValidFrom),
         Option<PhysicalTableDataVersionDBWithNames>,
     > = HashMap::new();
 
@@ -263,7 +263,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows>(
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
-                    let triggered_at = AtTime::try_from(f.base.base.base.triggered_on)?;
+                    let triggered_at = AtTime::from(f.base.base.interval.valid_from);
                     let tables: HashMap<TableId, TableDB> = if table_ids.is_empty() {
                         HashMap::new()
                     } else {
@@ -337,7 +337,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows>(
                 } else {
                     let key = (
                         found_data_version.base.base.base.table_id,
-                        found_data_version.base.base.base.triggered_on,
+                        found_data_version.base.base.interval.valid_from,
                     );
                     let res = if let Some(cached) = latest_with_data_cache.get(&key) {
                         cached.clone()
@@ -347,7 +347,11 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows>(
                         // time would actually see.
                         let r = conn
                             .table_data_versions()
-                            .latest_bound_tdv_with_data_for_table(&key.0, &key.1, false)
+                            .latest_bound_tdv_with_data_for_table(
+                                &key.0,
+                                &AtTime::from(key.1),
+                                false,
+                            )
                             .await?;
                         latest_with_data_cache.insert(key, r.clone());
                         r
@@ -390,8 +394,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows>(
                 .map(|v| v.base.base.base.physical_function_run_id.clone()),
             triggered_on: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.base.triggered_on.try_into())
-                .transpose()?,
+                .map(|v| AtTime::from(v.base.base.interval.valid_from)),
             table_data_version_id: found_data_version
                 .as_ref()
                 .map(|v| v.base.base.base.id.clone()),

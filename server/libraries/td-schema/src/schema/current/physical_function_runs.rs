@@ -38,7 +38,7 @@ pub enum PhysicalFunctionRuns {
     FunctionVersionPatchId,
     ExecutionId,
     TransactionId,
-    TriggeredOn,
+    ValidFrom,
     TriggeredById,
     Trigger,
     // The run's effective prefix (function-version override, else the
@@ -88,7 +88,7 @@ impl Entity for Defs {
                 .col(id_column(PhysicalFunctionRuns::FunctionVersionPatchId).null())
                 .col(id_column(PhysicalFunctionRuns::ExecutionId).not_null())
                 .col(id_column(PhysicalFunctionRuns::TransactionId).not_null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::TriggeredOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(id_column(PhysicalFunctionRuns::TriggeredById).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::Trigger).text().not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::DispatchedOn).timestamp_with_time_zone().null())
@@ -113,7 +113,7 @@ impl Entity for Defs {
                 // Declared last so the appending delta lands on the same attnum a
                 // fresh install does: the with-names view expands `*`.
                 .col(ColumnDef::new(PhysicalFunctionRuns::BasePath).text().not_null())
-                // SCD2 partition: attempts version their logical run by `triggered_on`.
+                // SCD2 partition: attempts version their logical run by `valid_from`.
                 .col(id_column(PhysicalFunctionRuns::LogicalFunctionRunId).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
@@ -157,16 +157,16 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // The dispatch tick: `status = 'Requested' ORDER BY triggered_on`,
+            // The dispatch tick: `status = 'Requested' ORDER BY valid_from`,
             // per project; recovery reconciliation reads the same status across
             // projects, so `project_id` sits after the shared prefix rather
             // than in front of it.
             Index::create()
-                .name("pfr___status__project_id__triggered_on___idx")
+                .name("pfr___status__project_id__valid_from___idx")
                 .table(PhysicalFunctionRuns::Table)
                 .col(PhysicalFunctionRuns::Status)
                 .col(PhysicalFunctionRuns::ProjectId)
-                .col(PhysicalFunctionRuns::TriggeredOn)
+                .col(PhysicalFunctionRuns::ValidFrom)
                 .to_owned(),
             // The stale-dispatch sweep: `status = 'Dispatched' AND
             // dispatched_on < cutoff`; `dispatched_on` is otherwise unindexed.
@@ -236,12 +236,12 @@ impl Entity for Defs {
                 .and_where(open_interval(PhysicalFunctionRuns::ValidTo))
                 .to_owned(),
             // At-time reads and the SCD2 close-out trigger's own lookup;
-            // `(triggered_on, id)` is the splice order.
+            // `(valid_from, id)` is the splice order.
             Index::create()
-                .name("pfr___logical_function_run_id__triggered_on__id___idx")
+                .name("pfr___logical_function_run_id__valid_from__id___idx")
                 .table(PhysicalFunctionRuns::Table)
                 .col(PhysicalFunctionRuns::LogicalFunctionRunId)
-                .col(PhysicalFunctionRuns::TriggeredOn)
+                .col(PhysicalFunctionRuns::ValidFrom)
                 .col(PhysicalFunctionRuns::Id)
                 .to_owned(),
         ]
@@ -253,7 +253,7 @@ impl Entity for Defs {
                 name: format!("{}__scd2_close", PhysicalFunctionRuns::Table.to_string()),
                 source_table: PhysicalFunctionRuns::Table.into_iden(),
                 partition_col: PhysicalFunctionRuns::LogicalFunctionRunId.into_iden(),
-                valid_from_col: PhysicalFunctionRuns::TriggeredOn.into_iden(),
+                valid_from_col: PhysicalFunctionRuns::ValidFrom.into_iden(),
                 valid_to_col: PhysicalFunctionRuns::ValidTo.into_iden(),
                 pk_col: PhysicalFunctionRuns::Id.into_iden(),
             }

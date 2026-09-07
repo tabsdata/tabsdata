@@ -5,7 +5,7 @@
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use crate::dxo::graph::GraphEdge;
-use crate::types::basic::Scd2ValidTo;
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
     FunctionVersionId, Partitioned, Private, ProjectId, SampleLen, SampleOffset, SchemaFieldName,
@@ -33,8 +33,6 @@ pub struct TableInsertDB {
     pub function_param_pos: Option<TableFunctionParamPos>,
     pub private: Private,
     pub partitioned: Partitioned,
-    #[dao(scd2(valid_from))]
-    pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: TableStatus,
     pub table_type: TableType,
@@ -46,8 +44,8 @@ pub struct TableDB {
     #[dao(flatten)]
     pub base: TableInsertDB,
     pub project_id: ProjectId,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }
 
 impl TableDB {
@@ -57,7 +55,6 @@ impl TableDB {
         TableInsertDB {
             id: TableVersionId::default(),
             status: TableStatus::Frozen,
-            defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             ..self.base.clone()
         }
@@ -147,7 +144,7 @@ impl FromDao for Table {
             function_param_pos: dao.base.base.function_param_pos,
             private: dao.base.base.private,
             partitioned: dao.base.base.partitioned,
-            defined_on: dao.base.base.defined_on,
+            defined_on: dao.base.interval.valid_from.into(),
             defined_by_id: dao.base.base.defined_by_id,
             status: dao.base.base.status,
             table_type: dao.base.base.table_type,

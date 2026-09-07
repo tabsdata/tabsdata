@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::QueryExecutor;
 use ta_objects::and;
-use td_database::access::InProject;
+use td_database::access::{InProject, LockInstant};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -33,6 +33,7 @@ pub(crate) async fn seed_function(
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
+    let at = LockInstant::asserted(*request_context.time);
 
     let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
@@ -50,13 +51,12 @@ pub(crate) async fn seed_function(
         storage_version: StorageVersion::default(),
         bundle_id: function_create.bundle_id,
         snippet: Snippet::try_from(&function_create.snippet)?,
-        defined_on: request_context.time,
         defined_by_id: request_context.user_id,
         status: FunctionStatus::Active,
         enabled: function_create.enabled.unwrap_or_default(),
     };
 
-    executor.reuse().scd2().insert(&function_db).await?;
+    executor.reuse().scd2().open(&function_db, at).await?;
 
     if let Some(tables) = &function_create.tables {
         for (pos, table_name) in tables.iter().enumerate() {
@@ -71,13 +71,12 @@ pub(crate) async fn seed_function(
                 function_version_id: function_db.id.clone(),
                 function_param_pos: Some(TableFunctionParamPos::try_from(pos as i32)?),
                 partitioned: Partitioned::FALSE,
-                defined_on: request_context.time,
                 defined_by_id: request_context.user_id,
                 status: TableStatus::Active,
                 table_type: TableType::default(),
             };
 
-            executor.reuse().scd2().insert(&table).await?;
+            executor.reuse().scd2().open(&table, at).await?;
         }
     }
 
@@ -111,12 +110,11 @@ pub(crate) async fn seed_function(
                 table_id: table_db.base.base.table_id,
                 table_versions: dependency_table.versions.clone().into(),
                 dep_pos: DependencyPos::try_from(pos as i32)?,
-                defined_on: request_context.time,
                 defined_by_id: request_context.user_id,
                 system: System::FALSE,
             };
 
-            executor.reuse().scd2().insert(&dependency).await?;
+            executor.reuse().scd2().open(&dependency, at).await?;
         }
     }
 
@@ -149,12 +147,11 @@ pub(crate) async fn seed_function(
                 trigger_by_function_id: table_db.base.base.function_id.into(),
                 trigger_by_table_id: table_db.base.base.table_id,
                 status: TriggerStatus::Active,
-                defined_on: request_context.time,
                 defined_by_id: request_context.user_id,
                 system: System::FALSE,
             };
 
-            executor.reuse().scd2().insert(&trigger).await?;
+            executor.reuse().scd2().open(&trigger, at).await?;
         }
     }
 
@@ -256,7 +253,7 @@ mod tests {
         assert_eq!(function.base.storage_version, found.base.storage_version);
         assert_eq!(function.base.bundle_id, found.base.bundle_id);
         assert_eq!(function.base.snippet, found.base.snippet);
-        assert_eq!(function.base.defined_on, found.base.defined_on);
+        assert_eq!(function.interval.valid_from, found.interval.valid_from);
         assert_eq!(function.base.defined_by_id, found.base.defined_by_id);
         assert_eq!(function.base.status, found.base.status);
         assert_eq!(function.base.enabled, found.base.enabled);

@@ -52,7 +52,7 @@ impl RunnableVersion {
 
 /// Resolve `fvid` to the head fvid + an optional patch id, pinned to
 /// time `at` (at most one row per head partition: the latest `Active`
-/// patch with `defined_on <= at`). Plan-build and replay each pass
+/// patch with `valid_from <= at`). Plan-build and replay each pass
 /// their own `at`, so patches registered later don't backfill into
 /// earlier mints.
 pub async fn latest_patch_or_head<S: SeesProjectRows>(
@@ -166,12 +166,13 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_database::access::InProject;
+    use td_database::access::{InProject, LockInstant};
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::FunctionPatchInsertDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+    use td_objects::types::basic::AtTime;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
@@ -232,11 +233,13 @@ mod tests {
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv")?,
             description: Description::try_from("d")?,
-            defined_on,
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(project_id).scd2().insert(&patch).await?;
+        db.scoped(project_id)
+            .scd2()
+            .open(&patch, LockInstant::asserted(*defined_on))
+            .await?;
         Ok(patch.id)
     }
 

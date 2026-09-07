@@ -10,7 +10,7 @@ use crate::function::topology::RunnableVersion;
 use crate::function_run::raw_data::raw_data_dir;
 use crate::logical::mint::{mint_function_run, resolve_output_base_path};
 use crate::tests::fixtures::{seed_ready_lfr, set_collection_base_path};
-use td_database::access::InProject;
+use td_database::access::{InProject, LockInstant};
 use td_database::connection::PgConnectionExt;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
@@ -125,7 +125,13 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
 
     let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
     conn.scope_in_project(&p.id.to_string()).await.unwrap();
-    let attempt_1 = mint_function_run(&mut conn, &lfr, &runnable, &AtTime::now()).await?;
+    let attempt_1 = mint_function_run(
+        &mut conn,
+        &lfr,
+        &runnable,
+        LockInstant::asserted(*AtTime::now()),
+    )
+    .await?;
     conn.commit().await.unwrap();
 
     let new = BasePath::try_from("/new")?;
@@ -133,7 +139,13 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
 
     let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
     conn.scope_in_project(&p.id.to_string()).await.unwrap();
-    let attempt_2 = mint_function_run(&mut conn, &lfr, &runnable, &AtTime::now()).await?;
+    let attempt_2 = mint_function_run(
+        &mut conn,
+        &lfr,
+        &runnable,
+        LockInstant::asserted(*AtTime::now()),
+    )
+    .await?;
     conn.commit().await.unwrap();
 
     assert_eq!(attempt_1.base_path, old);

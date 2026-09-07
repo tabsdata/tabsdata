@@ -136,7 +136,7 @@ mod tests {
             fetch_functions_with_bundle_base_path_query(&fvids()).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "functions"."id", "functions"."collection_id", "functions"."name", "functions"."description", "functions"."decorator", "functions"."connector", "functions"."connection", "functions"."runtime_values", "functions"."function_id", "functions"."base_path", "functions"."stage_id", "functions"."stage_base_path", "functions"."storage_version", "functions"."bundle_id", "functions"."snippet", "functions"."defined_on", "functions"."defined_by_id", "functions"."status", "functions"."enabled", "functions"."project_id", "functions"."valid_to", COALESCE("bundles"."base_path", "functions"."stage_base_path") AS "bundle_base_path" FROM "functions" LEFT JOIN "bundles" ON "bundles"."id" = "functions"."bundle_id" WHERE "functions"."id" IN ('fv20260101-0000000001')"#
+            r#"SELECT "functions"."id", "functions"."collection_id", "functions"."name", "functions"."description", "functions"."decorator", "functions"."connector", "functions"."connection", "functions"."runtime_values", "functions"."function_id", "functions"."base_path", "functions"."stage_id", "functions"."stage_base_path", "functions"."storage_version", "functions"."bundle_id", "functions"."snippet", "functions"."defined_by_id", "functions"."status", "functions"."enabled", "functions"."project_id", "functions"."valid_from", "functions"."valid_to", COALESCE("bundles"."base_path", "functions"."stage_base_path") AS "bundle_base_path" FROM "functions" LEFT JOIN "bundles" ON "bundles"."id" = "functions"."bundle_id" WHERE "functions"."id" IN ('fv20260101-0000000001')"#
         );
     }
 }

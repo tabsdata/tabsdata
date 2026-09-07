@@ -38,22 +38,23 @@ async fn register_function(
 
     // Bare-table row lock (views with outer joins aren't lockable); the
     // active-view fetch is the liveness check, decided under the lock.
-    let locked: CollectionDB = conn.for_update().fetch_one(&param.collection).await?;
+    let (locked, at) = conn
+        .for_update()
+        .serialize_on::<CollectionDB>(&param.collection)
+        .await?;
     let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    let at = ctx.time;
     // Stage/checkpoint storage prefix: the collection's effective base_path (its
     // own, else the project's — already resolved by the collections_active view).
     let base_path = collection.effective_base_path.clone();
 
     conn.scd2()
-        .as_of(&at)
         .assert_not_exists::<FunctionDBWithNames>(and!(&collection.id, &register.name))
         .await?;
 
     let function = register.to_dao(&ctx, collection.id, base_path.clone())?;
     ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
-    conn.scd2().insert(&function).await?;
+    conn.scd2().open(&function, at).await?;
 
     // Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
     let bundle_registered = BundleStatusUpdateDB::registered();
@@ -65,6 +66,7 @@ async fn register_function(
     register_version(
         conn,
         &ctx,
+        at,
         &collection,
         &function,
         &state,

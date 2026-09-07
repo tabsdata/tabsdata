@@ -19,6 +19,8 @@ use crate::profile::{ChainKnobs, MetricsKnobs};
 use crate::raw::delete_by_pk;
 use crate::scd2_cases::build_attempt;
 use std::collections::BTreeSet;
+use td_common::datetime::Timestamp;
+use td_database::access::LockInstant;
 use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -38,7 +40,7 @@ use td_objects::dxo::table::{Table, TableDB};
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
     AtTime, DependencyPos, Depth, InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
-    PhysicalFunctionRunStatus, TriggeredOn, VersionPos,
+    PhysicalFunctionRunStatus, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::visible_projects::VisibleProjects;
@@ -114,7 +116,7 @@ async fn time_chain_queries(
     let mut out: Vec<(&'static str, f64)> = Vec::new();
     let now = AtTime::now();
     let at = now;
-    let triggered_at = TriggeredOn::try_from(now)?;
+    let triggered_at = now;
     let exec_params = ListQueryParams::<Execution>::try_from(&ListParams::default())?;
 
     let _ = timed!(
@@ -131,7 +133,7 @@ async fn time_chain_queries(
         out,
         "lfr::previous_for_function_at",
         (db).logical_runs()
-            .previous_for_function_at(&h.consumer_function_id, &h.before_time)
+            .previous_for_function_at(&h.consumer_function_id, &AtTime::from(h.before_time))
             .await?
     );
     let _ = timed!(
@@ -207,7 +209,7 @@ async fn time_chain_queries(
         out,
         "ltdv::latest_bound_tdv_with_data_for_table",
         (db).table_data_versions()
-            .latest_bound_tdv_with_data_for_table(&h.table_id, &h.before_time, false)
+            .latest_bound_tdv_with_data_for_table(&h.table_id, &AtTime::from(h.before_time), false)
             .await?
     );
 
@@ -346,6 +348,16 @@ async fn time_chain_queries(
             "default::fetch_all_for_update",
             conn.for_update()
                 .fetch_all::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
+                .await?
+        );
+    }
+    {
+        let mut conn = db.begin().await.expect("write transaction");
+        let _ = timed!(
+            out,
+            "default::serialize_on",
+            conn.for_update()
+                .serialize_on::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
                 .await?
         );
     }
@@ -566,10 +578,11 @@ async fn time_chain_queries(
             (db).scd2().chunked().update(&update, &h.fr_ids).await?
         );
         let attempt = build_attempt(db, h).await?;
+        let at = LockInstant::asserted(Timestamp::default());
         timed_once!(
             out,
-            "scd2::insert",
-            (&scoped).scd2().insert(&attempt).await?
+            "scd2::open",
+            (&scoped).scd2().open(&attempt, at).await?
         );
         let mut attempts = Vec::with_capacity(8);
         for _ in 0..8 {
@@ -577,25 +590,26 @@ async fn time_chain_queries(
         }
         timed_once!(
             out,
-            "scd2::insert_chunked",
-            (&scoped).scd2().chunked().insert(&attempts).await?
+            "scd2::open_chunked",
+            (&scoped).scd2().chunked().open(&attempts, at).await?
         );
     }
     // Closes go last: they end the seeded table's open interval, which every
     // read above still expects to find.
     let table_ids = [h.table_id];
+    let locked_now = LockInstant::asserted(Timestamp::default());
     timed_once!(
         out,
         "chunked::close",
         (db).scd2()
             .chunked()
-            .close::<TableDB>(&table_ids, (), &now)
+            .close::<TableDB>(&table_ids, (), locked_now)
             .await?
     );
     timed_once!(
         out,
         "default::close",
-        db.scd2().close::<TableDB>(&h.table_id, &now).await?
+        db.scd2().close::<TableDB>(&h.table_id, locked_now).await?
     );
 
     Ok(out)

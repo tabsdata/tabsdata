@@ -42,9 +42,9 @@ async fn refresh(
 
     // find and lock the session by access token ID and refresh token ID; the
     // lock serializes concurrent refreshes so the token can be redeemed once
-    let session: SessionDB = conn
+    let session = conn
         .for_update()
-        .fetch_one(and!(&access_token_id, &refresh_token_id))
+        .fetch_one::<SessionDB>(and!(&access_token_id, &refresh_token_id))
         .await?;
     assert_session_active(&session)?;
     let user: UserDB = conn.fetch_one(&ctx.user_id).await?;

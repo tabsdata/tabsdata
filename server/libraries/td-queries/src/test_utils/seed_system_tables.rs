@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::QueryExecutor;
 use ta_objects::and;
-use td_database::access::InProject;
+use td_database::access::{InProject, LockInstant};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -31,6 +31,7 @@ pub(crate) async fn seed_system_tables(
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
+    let at = LockInstant::asserted(*request_context.time);
 
     // System tables
     let mut system_tables = vec![];
@@ -45,13 +46,12 @@ pub(crate) async fn seed_system_tables(
             function_param_pos: Some(TableFunctionParamPos::try_from(-(pos as i32 + 1))?),
             private: Private::FALSE,
             partitioned: Partitioned::FALSE,
-            defined_on: request_context.time,
             defined_by_id: request_context.user_id,
             status: TableStatus::Active,
             table_type: TableType::default(),
         };
 
-        executor.reuse().scd2().insert(&table).await?;
+        executor.reuse().scd2().open(&table, at).await?;
         system_tables.push(table);
     }
 
@@ -79,12 +79,11 @@ pub(crate) async fn seed_system_tables(
             table_id: table_db.base.base.table_id,
             table_versions: TableVersions::new(Versions::None),
             dep_pos: DependencyPos::try_from(-(pos as i32 + 1))?,
-            defined_on: request_context.time,
             defined_by_id: request_context.user_id,
             system: System::TRUE,
         };
 
-        executor.reuse().scd2().insert(&dependency).await?;
+        executor.reuse().scd2().open(&dependency, at).await?;
     }
 
     let ids: Vec<_> = system_tables.iter().map(|t| t.id).collect();
@@ -175,7 +174,7 @@ mod tests {
             assert_eq!(table.base.function_param_pos, found.base.function_param_pos);
             assert_eq!(table.base.private, found.base.private);
             assert_eq!(table.base.partitioned, found.base.partitioned);
-            assert_eq!(table.base.defined_on, found.base.defined_on);
+            assert_eq!(table.interval.valid_from, found.interval.valid_from);
             assert_eq!(table.base.defined_by_id, found.base.defined_by_id);
             assert_eq!(table.base.status, found.base.status);
         }

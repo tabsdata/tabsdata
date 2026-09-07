@@ -37,23 +37,21 @@ async fn delete_function(
 
     // Bare-table row lock (views with outer joins aren't lockable); the
     // active-view fetch is the liveness check, decided under the lock.
-    let locked: CollectionDB = conn
+    let (locked, at) = conn
         .for_update()
-        .fetch_one(&collection_param.collection)
+        .serialize_on::<CollectionDB>(&collection_param.collection)
         .await?;
     let _: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    let at = ctx.time;
     let current: FunctionDBWithNames = conn
         .scd2()
-        .as_of(&at)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
     let previous_version_id = Some(current.base.base.id.clone());
-    let state = FunctionState::load(conn, &current.base.base.function_id, &at).await?;
+    let state = FunctionState::load(conn, &current.base.base.function_id).await?;
     let changes = Changes::for_delete(&state, &ctx);
-    apply(conn, &changes, &at).await?;
+    apply(conn, &changes, at).await?;
     // An empty workers map so all the previous workers get deleted.
     let empty_workers = Some(HashMap::<WorkerTypeDto, WorkerConfig>::default());
     register_workers(
@@ -64,7 +62,7 @@ async fn delete_function(
     )
     .await?;
     conn.scd2()
-        .close::<FunctionDB>(&current.base.base.function_id, &at)
+        .close::<FunctionDB>(&current.base.base.function_id, at)
         .await?;
     gated_trx.commit().await?;
 

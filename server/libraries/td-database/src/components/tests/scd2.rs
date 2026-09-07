@@ -35,13 +35,13 @@ async fn seed_prelude(db: &TdPool) {
     .await;
 }
 
-fn insert_function_version(id: &str, function_id: &str, defined_on: &str) -> String {
+fn insert_function_version(id: &str, function_id: &str, valid_from: &str) -> String {
     format!(
         "INSERT INTO functions (id, project_id, collection_id, name, description, decorator, \
            runtime_values, function_id, stage_id, stage_base_path, storage_version, bundle_id, \
-           snippet, defined_on, defined_by_id, status) \
+           snippet, valid_from, defined_by_id, status) \
          VALUES ('{id}', 'p0', 'c0', 'f0', '', 'P', '', '{function_id}', 's0', '/s', 'V1', \
-           'b0', '', '{defined_on}', 'u0', 'A')"
+           'b0', '', '{valid_from}', 'u0', 'A')"
     )
 }
 
@@ -51,14 +51,14 @@ async fn interval_chain(db: &TdPool, function_id: &str) -> Vec<String> {
         &format!(
             "SELECT id || '=' || CASE WHEN valid_to = 'infinity' THEN 'infinity' \
            ELSE to_char(valid_to AT TIME ZONE 'UTC', 'YYYY-MM-DD') END \
-             FROM functions WHERE function_id = '{function_id}' ORDER BY defined_on, id"
+             FROM functions WHERE function_id = '{function_id}' ORDER BY valid_from, id"
         ),
     )
     .await
 }
 
 /// In-order inserts chain intervals: each insert closes its predecessor at
-/// the new `defined_on` and lands open; a same-instant pair leaves the
+/// the new `valid_from` and lands open; a same-instant pair leaves the
 /// lower-id row with a zero-length interval — invisible at every T.
 #[tokio::test]
 async fn scd2_close_out_chains_and_tie_breaks_postgres() {
@@ -87,7 +87,7 @@ async fn scd2_close_out_chains_and_tie_breaks_postgres() {
     let visible_at_tie = scalars(
         &db.serving,
         "SELECT id FROM functions WHERE function_id = 'f-a' \
-           AND defined_on <= '2026-01-03T00:00:00Z' AND valid_to > '2026-01-03T00:00:00Z'",
+           AND valid_from <= '2026-01-03T00:00:00Z' AND valid_to > '2026-01-03T00:00:00Z'",
     )
     .await;
     assert_eq!(
@@ -98,7 +98,7 @@ async fn scd2_close_out_chains_and_tie_breaks_postgres() {
 }
 
 /// An out-of-order insert splices into the chain: it closes the covering
-/// predecessor at its own `defined_on` and takes its successor's start as its
+/// predecessor at its own `valid_from` and takes its successor's start as its
 /// `valid_to` — the open row stays open.
 #[tokio::test]
 async fn scd2_close_out_splices_out_of_order_inserts_postgres() {
@@ -200,7 +200,7 @@ async fn scd2_immutable_guard_carves_out_valid_to_postgres() {
             &format!(
                 "INSERT INTO function_patches (id, project_id, parent_function_version_id, \
                    function_id, collection_id, snippet, bundle_id, runtime_values, description, \
-                   defined_on, defined_by_id, status) \
+                   valid_from, defined_by_id, status) \
                  VALUES ('{id}', 'p0', 'fv1', 'f-a', 'c0', '', 'b0', '', '', '{on}', 'u0', 'A')"
             ),
         )
@@ -261,12 +261,12 @@ async fn seed_run_prelude(db: &TdPool) {
     }
 }
 
-fn insert_attempt(id: &str, triggered_on: &str) -> String {
+fn insert_attempt(id: &str, valid_from: &str) -> String {
     format!(
         "INSERT INTO physical_function_runs (id, project_id, collection_id, \
-           function_version_id, execution_id, transaction_id, triggered_on, triggered_by_id, \
+           function_version_id, execution_id, transaction_id, valid_from, triggered_by_id, \
            trigger, function_id, status, base_path, logical_function_run_id) \
-         VALUES ('{id}', 'p0', 'c0', 'fv1', 'e0', 't0', '{triggered_on}', 'u0', 'M', \
+         VALUES ('{id}', 'p0', 'c0', 'fv1', 'e0', 't0', '{valid_from}', 'u0', 'M', \
            'f-a', 'D', '/p', 'lfr-a')"
     )
 }
@@ -282,7 +282,7 @@ async fn attempt_chain(db: &TdPool) -> Vec<String> {
 }
 
 #[tokio::test]
-async fn scd2_attempts_chain_on_triggered_on_postgres() {
+async fn scd2_attempts_chain_on_valid_from_postgres() {
     let db = crate::test_utils::postgres::pool().await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_run_prelude(&db.serving).await;
@@ -299,7 +299,7 @@ async fn scd2_attempts_chain_on_triggered_on_postgres() {
     let at_first = scalars(
         &db.serving,
         "SELECT id FROM physical_function_runs \
-           WHERE triggered_on <= '2026-01-01T01:30:00Z' AND valid_to > '2026-01-01T01:30:00Z'",
+           WHERE valid_from <= '2026-01-01T01:30:00Z' AND valid_to > '2026-01-01T01:30:00Z'",
     )
     .await;
     assert_eq!(at_first, ["pfr1"]);

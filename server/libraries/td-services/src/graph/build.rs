@@ -14,9 +14,9 @@ use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
 use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::{AtTime, FunctionId, TableId};
+use td_objects::types::basic::{AtTime, FunctionId, Scd2ValidFrom, TableId};
 use td_objects::types::recursion::RecursionOptions;
-use td_objects::{ReachableFrom, Scd2Dao, SelectDao};
+use td_objects::{ReachableFrom, Scd2Dao, SelectDao, TimelineDao};
 use td_queries::Queries;
 
 /// Pick `current()` or `find_at(at)` once at the call site, then run the
@@ -56,7 +56,10 @@ impl GraphBuilder {
     ) -> Result<Vec<D>, TdError>
     where
         S: SeesProjectRows,
-        D: SelectDao + Scd2Dao<Db = Apiserver, VersionOrder = AtTime> + ReachableFrom<S>,
+        D: SelectDao
+            + Scd2Dao<Db = Apiserver>
+            + TimelineDao<VersionOrder = Scd2ValidFrom>
+            + ReachableFrom<S>,
     {
         let rows = if self.config.historic {
             conn.scd2()

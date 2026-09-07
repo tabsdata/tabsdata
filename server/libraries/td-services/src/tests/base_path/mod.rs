@@ -26,7 +26,7 @@ mod reads;
 mod stamping;
 
 use crate::logical::dispatch_mint::{MintedDispatch, mint_function_runs_on_dispatch};
-use td_database::access::InProject;
+use td_database::access::{InProject, LockInstant};
 use td_database::connection::PgConnectionExt;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
@@ -47,7 +47,9 @@ async fn mint_committed(
             .await
             .unwrap();
     }
-    let minted = mint_function_runs_on_dispatch(&mut conn, ready, &AtTime::now()).await?;
+    let minted =
+        mint_function_runs_on_dispatch(&mut conn, ready, LockInstant::asserted(*AtTime::now()))
+            .await?;
     conn.commit().await.unwrap();
     Ok(minted)
 }

@@ -5,21 +5,22 @@
 use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames, DependencyInsertDB};
 use crate::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionInsertDB};
 use crate::dxo::graph::{FunctionNode, TableNode};
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
 use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames, TriggerInsertDB};
 use crate::graph::{TdGraph, TdGraphBuilder};
-use crate::types::basic::Scd2ValidTo;
+use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
-    AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId,
-    DependencyPos, DependencyVersionId, Description, Enabled, FunctionId, FunctionName,
-    FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Partitioned, Private,
-    ProjectId, RawSnippet, Snippet, StageId, StorageVersion, System, TableId, TableName,
-    TableStatus, TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId,
-    UserName,
+    BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId, DependencyPos,
+    DependencyVersionId, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
+    FunctionStatus, FunctionVersionId, GroupId, Partitioned, Private, ProjectId, RawSnippet,
+    Snippet, StageId, StorageVersion, System, TableId, TableName, TableStatus, TableType,
+    TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use td_common::datetime::Timestamp;
 
 static PROJECT_ID: LazyLock<ProjectId> = LazyLock::new(ProjectId::default);
 static COLLECTION_ID: LazyLock<CollectionId> = LazyLock::new(CollectionId::default);
@@ -189,13 +190,12 @@ pub fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
                 function_param_pos: None,
                 private: Private::FALSE,
                 partitioned: Partitioned::FALSE,
-                defined_on: AtTime::now(),
                 defined_by_id: UserId::default(),
                 status: TableStatus::Active,
                 table_type: TableType::Regular,
             },
             project_id: *PROJECT_ID,
-            valid_to: Scd2ValidTo::infinity(),
+            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
         },
         system: System::FALSE,
         defined_by: UserName::try_from("joaquin").unwrap(),
@@ -223,13 +223,12 @@ pub fn function(function: &FunctionName) -> FunctionDBWithNames {
                 storage_version: StorageVersion::default(),
                 bundle_id: BundleId::default(),
                 snippet: Snippet::try_from(RawSnippet::try_from("test").unwrap()).unwrap(),
-                defined_on: AtTime::now(),
                 defined_by_id: UserId::default(),
                 status: FunctionStatus::Active,
                 enabled: Enabled::TRUE,
             },
             project_id: *PROJECT_ID,
-            valid_to: Scd2ValidTo::infinity(),
+            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
         },
         collection: COLLECTION_NAME.clone(),
         group_id: *GROUP_ID,
@@ -255,12 +254,11 @@ pub fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWit
                 table_id: *TABLE_IDS.get(table).unwrap(),
                 table_versions: TableVersions::try_from("HEAD").unwrap(),
                 dep_pos: DependencyPos::default(),
-                defined_on: AtTime::now(),
                 defined_by_id: UserId::default(),
                 system: System::FALSE,
             },
             project_id: *PROJECT_ID,
-            valid_to: Scd2ValidTo::infinity(),
+            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
         },
         collection: COLLECTION_NAME.clone(),
         table_collection: COLLECTION_NAME.clone().into(),
@@ -284,12 +282,11 @@ pub fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames
                 trigger_by_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
                 trigger_by_table_id: *TABLE_IDS.get(table).unwrap(),
                 status: TriggerStatus::Active,
-                defined_on: AtTime::now(),
                 defined_by_id: UserId::default(),
                 system: System::FALSE,
             },
             project_id: *PROJECT_ID,
-            valid_to: Scd2ValidTo::infinity(),
+            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
         },
         collection: COLLECTION_NAME.clone(),
         trigger_by_collection: COLLECTION_NAME.clone().into(),

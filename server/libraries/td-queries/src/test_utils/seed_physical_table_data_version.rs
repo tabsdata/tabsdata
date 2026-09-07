@@ -4,7 +4,7 @@
 
 use crate::Queries;
 use crate::QueryExecutor;
-use td_database::access::InProject;
+use td_database::access::{InProject, LockInstant};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::and;
@@ -20,6 +20,7 @@ use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
     HasData, LogicalTableDataVersionId, PhysicalTableDataVersionId, TableFunctionParamPos,
+    TriggeredOn,
 };
 
 pub(crate) async fn seed_physical_table_data_version_with_data(
@@ -100,7 +101,7 @@ pub async fn _seed_physical_table_data_version(
                 producer_logical_function_run_id: Some(producer_lfr.base.id.clone()),
                 function_param_pos: Some(TableFunctionParamPos::try_from(0)?),
                 private: table.base.private,
-                triggered_on: physical_function_run.base.triggered_on,
+                triggered_on: TriggeredOn::asserted(*physical_function_run.interval.valid_from),
                 triggered_by_id: transaction.base.triggered_by_id,
                 group_id: producer_lfr.base.group_id,
             };
@@ -122,7 +123,6 @@ pub async fn _seed_physical_table_data_version(
         transaction_id: transaction.base.id.clone(),
         physical_function_run_id: physical_function_run.base.id.clone(),
         function_param_pos: TableFunctionParamPos::try_from(0)?,
-        triggered_on: physical_function_run.base.triggered_on,
         // Mirror the mint: an FR and its output TDVs stamp the same prefix.
         base_path: physical_function_run.base.base_path.clone(),
         has_data: has_data.cloned(),
@@ -137,7 +137,10 @@ pub async fn _seed_physical_table_data_version(
     executor
         .reuse()
         .scd2()
-        .insert(&table_data_version_db)
+        .open(
+            &table_data_version_db,
+            LockInstant::asserted(*physical_function_run.interval.valid_from),
+        )
         .await?;
     Ok(executor.reuse().timeline().fetch_one(&ptdv_id).await?)
 }

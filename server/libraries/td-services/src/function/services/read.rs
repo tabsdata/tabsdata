@@ -168,7 +168,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, TableNameDto,
         UserId, UserName, WorkerConfig,
     };
-    use td_objects::types::basic::{CollectionIdName, FunctionIdName};
+    use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
 
@@ -242,7 +242,10 @@ mod tests {
         );
         assert_eq!(function.base.bundle_id, response.function.bundle_id);
         assert_eq!(function.base.snippet, response.function.snippet);
-        assert_eq!(function.base.defined_on, response.function.defined_on);
+        assert_eq!(
+            AtTime::from(function.interval.valid_from),
+            response.function.defined_on
+        );
         assert_eq!(function.base.defined_by_id, response.function.defined_by_id);
         assert_eq!(function.base.status, response.function.status);
         assert_eq!(

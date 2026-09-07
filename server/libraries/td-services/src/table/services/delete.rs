@@ -42,13 +42,14 @@ async fn table_delete(
     let table_id_name = table_param.table;
     // Bare-table row lock: the freeze-dependents scan must not race
     // function register/update, which lock this row too.
-    let locked: CollectionDB = conn.for_update().fetch_one(&collection_id_name).await?;
+    let (locked, at) = conn
+        .for_update()
+        .serialize_on::<CollectionDB>(&collection_id_name)
+        .await?;
     let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    let at = ctx.time;
     let table: TableDBWithNames = conn
         .scd2()
-        .as_of(&at)
         .fetch_one(and!(
             &collection_id_name,
             &table_id_name,
@@ -57,11 +58,11 @@ async fn table_delete(
         .await?;
     let table_id = table.base.base.table_id;
 
-    let functions = dependants_of_tables(conn, &[table_id], &at).await?;
+    let functions = dependants_of_tables(conn, &[table_id]).await?;
     let frozen: Vec<FunctionInsertDB> = functions.iter().map(|f| f.frozen_version(&ctx)).collect();
-    conn.scd2().chunked().insert(&frozen).await?;
+    conn.scd2().chunked().open(&frozen, at).await?;
 
-    conn.scd2().close::<TriggerDB>(&table_id, &ctx.time).await?;
+    conn.scd2().close::<TriggerDB>(&table_id, at).await?;
 
     let previous: TableDB = conn.timeline().fetch_one(&table.base.base.id).await?;
     // Re-check on the live row: only frozen tables can be deleted.
@@ -72,7 +73,7 @@ async fn table_delete(
             previous.base.status.to_string(),
         ))?
     }
-    conn.scd2().close::<TableDB>(&table_id, &ctx.time).await?;
+    conn.scd2().close::<TableDB>(&table_id, at).await?;
     Ok(())
 }
 

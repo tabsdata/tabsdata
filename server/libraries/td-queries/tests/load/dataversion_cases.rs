@@ -15,11 +15,12 @@ use sea_query::{ColumnDef, Iden, Query, Table};
 use std::time::Instant;
 use ta_objects::Dao;
 use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+use td_common::datetime::Timestamp;
 use td_database::components::{SchemaComponent, SchemaSource};
 use td_database::pool::PoolKind;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::types::basic::{AtTime, LogicalTableDataVersionId};
+use td_objects::types::basic::{AtTime, LogicalTableDataVersionId, Scd2ValidFrom};
 use td_objects::types::table_ref::{Version, Versions};
 use td_queries::Queries;
 use td_schema::schema::render::{render_query, render_schema};
@@ -43,7 +44,7 @@ pub(crate) struct LoadDvDao {
     pub partition_id: DvPartition,
     pub status: DvStatus,
     #[dao(timeline(version_by))]
-    pub defined_on: AtTime,
+    pub defined_on: Scd2ValidFrom,
 }
 
 /// Keyed projection of the same `load_dv_table`, for the keyed write paths.
@@ -57,7 +58,7 @@ pub(crate) struct LoadDvKeyedDao {
     pub id: LogicalTableDataVersionId,
     pub partition_id: DvPartition,
     pub status: DvStatus,
-    pub defined_on: AtTime,
+    pub defined_on: Scd2ValidFrom,
 }
 
 /// `partitions` × `versions_per_partition` Active rows, sized by
@@ -284,11 +285,11 @@ async fn load_data_version_fetch_relative_offset(db: TdPool) -> Result<(), TdErr
 /// Keyed to the first seeded id, so `upsert` replaces it and
 /// `insert_or_ignore` hits the conflict path.
 fn keyed_row() -> Result<LoadDvKeyedDao, TdError> {
-    let defined_on = AtTime::from(
+    let defined_on = Scd2ValidFrom::asserted(Timestamp::from(
         dv_defined_on(0)
             .parse::<chrono::DateTime<chrono::Utc>>()
             .unwrap(),
-    );
+    ));
     Ok(LoadDvKeyedDao {
         id: LogicalTableDataVersionId::try_from("DV20260101.0000000001")?,
         partition_id: p0(),
@@ -321,11 +322,11 @@ pub(crate) fn dv_rows(start: usize, count: usize) -> Result<Vec<LoadDvDao>, TdEr
         .map(|v| {
             let id =
                 LogicalTableDataVersionId::try_from(format!("DV20260101.{:010}", v + 1).as_str())?;
-            let defined_on = AtTime::from(
+            let defined_on = Scd2ValidFrom::asserted(Timestamp::from(
                 dv_defined_on(v)
                     .parse::<chrono::DateTime<chrono::Utc>>()
                     .unwrap(),
-            );
+            ));
             Ok(LoadDvDao {
                 id,
                 partition_id: p0(),

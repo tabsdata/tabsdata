@@ -41,8 +41,11 @@ mod tests {
         let project = db.seed().test_project().await.unwrap();
 
         let mut holder = db.begin().await.unwrap();
-        let locked: Vec<LockedProjectDao> =
-            holder.for_update().fetch_all(&project.id).await.unwrap();
+        let locked = holder
+            .for_update()
+            .fetch_all::<LockedProjectDao>(&project.id)
+            .await
+            .unwrap();
         assert_eq!(locked.len(), 1, "the holder must have locked its row");
 
         // Reading the same row *without* the lock is served immediately, so the

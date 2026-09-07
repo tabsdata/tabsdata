@@ -87,7 +87,9 @@ mod tests {
     use super::*;
     use crate::test_utils::graph::{FUNCTION_NAMES, function_node};
     use crate::test_utils::transaction::TestTransactionBy;
+    use crate::types::basic::TriggeredOn;
     use crate::types::basic::{ExecutionId, FunctionVersionId, TriggerType};
+    use td_common::datetime::Timestamp;
 
     fn dummy_execution() -> ExecutionInsertDB {
         ExecutionInsertDB {
@@ -96,7 +98,7 @@ mod tests {
             collection_id: Default::default(),
             function_id: Default::default(),
             function_version_id: FunctionVersionId::new(),
-            triggered_on: Default::default(),
+            triggered_on: TriggeredOn::asserted(Timestamp::default()),
             triggered_by_id: Default::default(),
             recursion_options: Default::default(),
             trigger_type: TriggerType::Manual,

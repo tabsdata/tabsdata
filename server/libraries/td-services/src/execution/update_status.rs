@@ -452,7 +452,7 @@ pub async fn update_table_data_version_status<S: SeesProjectRows>(
                 .table_data_versions()
                 .latest_bound_tdv_with_data_for_table(
                     &data_version.base.base.base.table_id,
-                    &data_version.base.base.base.triggered_on,
+                    &AtTime::from(data_version.base.base.interval.valid_from),
                     false,
                 )
                 .await?;

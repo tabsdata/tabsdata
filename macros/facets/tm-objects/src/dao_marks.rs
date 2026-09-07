@@ -18,13 +18,11 @@ const MARKS: &[&str] = &[
     "flatten",
 ];
 
-/// Grain-owned marks nest under their grain's word; `scd2(valid_from)` is
-/// flattened to the role `valid_from`, the grain kept for the cross-check.
+/// Grain-owned marks nest under their grain's word; `timeline(version_by)`
+/// is flattened to the role `version_by`, the grain kept for the cross-check.
+/// `scd2` owns no field role: its interval is the `Scd2Interval` projection.
 const GRAINS: &[(&str, &[(&str, &str)])] = &[
-    (
-        "scd2",
-        &[("valid_from", "valid_from"), ("valid_to", "valid_to")],
-    ),
+    ("scd2", &[]),
     ("timeline", &[("version_by", "version_by")]),
     (
         "recursive",

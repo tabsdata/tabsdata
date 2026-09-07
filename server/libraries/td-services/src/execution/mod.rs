@@ -13,6 +13,7 @@ use crate::execution::plan::{
 };
 use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::ctx_service::ReqCtx;
+use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -23,7 +24,7 @@ use td_objects::dxo::execution::{
     ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse,
 };
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::types::basic::{ExecutionId, FunctionId, TriggerType, TriggeredOn};
+use td_objects::types::basic::{AtTime, ExecutionId, FunctionId, TriggerType, TriggeredOn};
 use td_objects::types::json::Json;
 use td_queries::Queries;
 
@@ -76,6 +77,7 @@ pub(crate) async fn execute(
     msgs: &mut ReqCtx,
     transaction_by: &TransactionBy,
     request_context: RequestContext,
+    at: LockInstant,
     request: ExecutionRequest,
     function: FunctionDBWithNames,
     trigger_type: TriggerType,
@@ -96,9 +98,15 @@ pub(crate) async fn execute(
     let entrypoint = FunctionOrTable::from(&function_id);
     let function_only = request.function_only;
     let recursion_options = with_recursion_options(&function_only, &override_disabled_trigger)?;
-    let at = request_context.time;
     let config = GraphConfig::defaults(FunctionDB::executable());
-    let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion_options).await?;
+    let graph = generate_td_graph(
+        conn,
+        config,
+        &AtTime::from(at),
+        &entrypoint,
+        &recursion_options,
+    )
+    .await?;
 
     let execution_plan = build_execution_plan(&graph, &function)?;
     validate_execution_plan(transaction_by, &execution_plan)?;
@@ -109,7 +117,7 @@ pub(crate) async fn execute(
         collection_id: function.base.base.collection_id,
         function_id: function.base.base.function_id,
         function_version_id: function.base.base.id,
-        triggered_on: TriggeredOn::try_from(&request_context.time)?,
+        triggered_on: TriggeredOn::from(at),
         triggered_by_id: request_context.user_id,
         trigger_type,
         external_uid: request.external_uid,
@@ -152,7 +160,7 @@ pub(crate) async fn execute(
     // Initial-OnHold: walks the logical chain (LFR_input -> LTDV ->
     // current TDV -> upstream FR.status) to flip consumers OnHold
     // when upstream is Failed/OnHold.
-    update_initial_function_run_status(conn, &execution, &at).await?;
+    update_initial_function_run_status(conn, &execution, &AtTime::from(at)).await?;
 
     build_response(
         transaction_by,

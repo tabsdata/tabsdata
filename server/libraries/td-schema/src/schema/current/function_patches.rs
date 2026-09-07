@@ -29,7 +29,7 @@ pub enum FunctionPatches {
     BundleId,
     RuntimeValues,
     Description,
-    DefinedOn,
+    ValidFrom,
     DefinedById,
     Status,
     ValidTo,
@@ -51,7 +51,7 @@ impl Entity for Defs {
                 .col(id_column(FunctionPatches::BundleId).not_null())
                 .col(ColumnDef::new(FunctionPatches::RuntimeValues).text().not_null())
                 .col(ColumnDef::new(FunctionPatches::Description).text().not_null())
-                .col(ColumnDef::new(FunctionPatches::DefinedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(FunctionPatches::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(id_column(FunctionPatches::DefinedById).not_null())
                 .col(ColumnDef::new(FunctionPatches::Status).text().not_null())
                 .col(ColumnDef::new(FunctionPatches::ValidTo).timestamp_with_time_zone().not_null())
@@ -68,20 +68,20 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // List-patches scans by `(function_id, defined_on DESC)`.
+            // List-patches scans by `(function_id, valid_from DESC)`.
             Index::create()
-                .name("function_patches___function_id__defined_on___idx")
+                .name("function_patches___function_id__valid_from___idx")
                 .table(FunctionPatches::Table)
                 .col(FunctionPatches::FunctionId)
-                .col(FunctionPatches::DefinedOn)
+                .col(FunctionPatches::ValidFrom)
                 .to_owned(),
             // Mint (plan build / replay) reads at-time within
             // `parent_function_version_id` partitions.
             Index::create()
-                .name("function_patches___parent_fv_id__defined_on__id___idx")
+                .name("function_patches___parent_fv_id__valid_from__id___idx")
                 .table(FunctionPatches::Table)
                 .col(FunctionPatches::ParentFunctionVersionId)
-                .col(FunctionPatches::DefinedOn)
+                .col(FunctionPatches::ValidFrom)
                 .col(FunctionPatches::Id)
                 .to_owned(),
             Index::create()
@@ -100,7 +100,7 @@ impl Entity for Defs {
                 name: format!("{}__scd2_close", FunctionPatches::Table.to_string()),
                 source_table: FunctionPatches::Table.into_iden(),
                 partition_col: FunctionPatches::ParentFunctionVersionId.into_iden(),
-                valid_from_col: FunctionPatches::DefinedOn.into_iden(),
+                valid_from_col: FunctionPatches::ValidFrom.into_iden(),
                 valid_to_col: FunctionPatches::ValidTo.into_iden(),
                 pk_col: FunctionPatches::Id.into_iden(),
             }

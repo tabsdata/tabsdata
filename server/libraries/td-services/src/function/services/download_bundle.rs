@@ -130,6 +130,7 @@ mod tests {
     use bytes::Bytes;
     use futures::StreamExt;
     use std::str::FromStr;
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{ApiError, TdError};
@@ -190,7 +191,7 @@ mod tests {
             .await?;
 
         // Upload bundle B and stamp v2 directly: same function_id, fresh
-        // version id, later defined_on, bundle B. Going through
+        // version id, later valid_from, bundle B. Going through
         // UpdateFunctionService would drag in trigger/dependency rebuilds
         // that are irrelevant to what we're asserting here.
         let payload_b = b"BUNDLE-PAYLOAD-B".to_vec();
@@ -200,10 +201,12 @@ mod tests {
         let v2 = FunctionInsertDB {
             id: FunctionVersionId::new(),
             bundle_id: bundle_b_id,
-            defined_on: AtTime::now(),
             ..v1.base.clone()
         };
-        db.scoped(p.id).scd2().insert(&v2).await?;
+        db.scoped(p.id)
+            .scd2()
+            .open(&v2, LockInstant::asserted(*AtTime::now()))
+            .await?;
 
         let service = context.clone();
 
@@ -251,11 +254,13 @@ mod tests {
             bundle_id: bundle_patch_id,
             runtime_values: "rv".try_into()?,
             description: "patched".try_into()?,
-            defined_on: AtTime::now(),
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).scd2().insert(&patch).await?;
+        db.scoped(p.id)
+            .scd2()
+            .open(&patch, LockInstant::asserted(*AtTime::now()))
+            .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionParam {
@@ -278,7 +283,7 @@ mod tests {
         // it (v1) — still readable in its own row — is no longer downloadable.
         db.scoped(p.id)
             .scd2()
-            .close::<FunctionDB>(&v2.function_id, &AtTime::now())
+            .close::<FunctionDB>(&v2.function_id, LockInstant::asserted(*AtTime::now()))
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
@@ -305,11 +310,13 @@ mod tests {
             bundle_id: bundle_patch_id,
             runtime_values: "rv".try_into()?,
             description: "orphan".try_into()?,
-            defined_on: AtTime::now(),
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).scd2().insert(&orphan).await?;
+        db.scoped(p.id)
+            .scd2()
+            .open(&orphan, LockInstant::asserted(*AtTime::now()))
+            .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionParam {

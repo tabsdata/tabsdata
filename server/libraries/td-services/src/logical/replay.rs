@@ -8,6 +8,7 @@
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head};
 use crate::logical::mint::{mint_function_run, mint_output_table_data_versions};
+use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
@@ -134,7 +135,7 @@ pub async fn mint_replay_function_run(
     conn: &mut DomainConnection<Apiserver, InProject>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
-    at: &AtTime,
+    at: LockInstant,
 ) -> Result<PhysicalFunctionRunInsertDB, TdError> {
     mint_function_run(&mut *conn, lfr, runnable, at).await
 }
@@ -145,8 +146,9 @@ pub async fn mint_replay_table_data_versions(
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     fr_new: &PhysicalFunctionRunInsertDB,
+    at: LockInstant,
 ) -> Result<(), TdError> {
-    mint_output_table_data_versions(&mut *conn, lfr, runnable, fr_new).await?;
+    mint_output_table_data_versions(&mut *conn, lfr, runnable, fr_new, at).await?;
     Ok(())
 }
 

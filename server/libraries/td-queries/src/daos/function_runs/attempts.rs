@@ -72,7 +72,7 @@ pub(crate) fn fetch_pfrs_to_dispatch_query(limit: u64) -> SelectStatement {
         .order_by(
             (
                 PhysicalFunctionRunDBIden::Table,
-                PhysicalFunctionRunDBIden::TriggeredOn,
+                PhysicalFunctionRunDBIden::ValidFrom,
             ),
             Order::Asc,
         )
@@ -105,7 +105,7 @@ mod tests {
         let sql = fetch_pfrs_to_dispatch_query(50).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "physical_function_runs"."id", "physical_function_runs"."collection_id", "physical_function_runs"."function_id", "physical_function_runs"."function_version_id", "physical_function_runs"."execution_id", "physical_function_runs"."transaction_id", "physical_function_runs"."logical_function_run_id", "physical_function_runs"."triggered_on", "physical_function_runs"."triggered_by_id", "physical_function_runs"."trigger", "physical_function_runs"."base_path", "physical_function_runs"."dispatched_on", "physical_function_runs"."started_on", "physical_function_runs"."ended_on", "physical_function_runs"."status", "physical_function_runs"."function_version_patch_id", "physical_function_runs"."ended_on_hour_ms", "physical_function_runs"."ended_on_day_ms", "physical_function_runs"."ended_on_week_ms", "physical_function_runs"."ended_on_month_ms", "physical_function_runs"."metric_table_versions", "physical_function_runs"."metric_rows", "physical_function_runs"."metric_data_bytes", "physical_function_runs"."project_id", "physical_function_runs"."valid_to" FROM "physical_function_runs" LEFT JOIN "workers" ON "workers"."physical_function_run_id" = "physical_function_runs"."id" WHERE "physical_function_runs"."status" = 'RR' AND "workers"."id" IS NULL ORDER BY "physical_function_runs"."triggered_on" ASC LIMIT 50 FOR UPDATE OF "physical_function_runs" SKIP LOCKED"#
+            r#"SELECT "physical_function_runs"."id", "physical_function_runs"."collection_id", "physical_function_runs"."function_id", "physical_function_runs"."function_version_id", "physical_function_runs"."execution_id", "physical_function_runs"."transaction_id", "physical_function_runs"."logical_function_run_id", "physical_function_runs"."triggered_by_id", "physical_function_runs"."trigger", "physical_function_runs"."base_path", "physical_function_runs"."dispatched_on", "physical_function_runs"."started_on", "physical_function_runs"."ended_on", "physical_function_runs"."status", "physical_function_runs"."function_version_patch_id", "physical_function_runs"."ended_on_hour_ms", "physical_function_runs"."ended_on_day_ms", "physical_function_runs"."ended_on_week_ms", "physical_function_runs"."ended_on_month_ms", "physical_function_runs"."metric_table_versions", "physical_function_runs"."metric_rows", "physical_function_runs"."metric_data_bytes", "physical_function_runs"."project_id", "physical_function_runs"."valid_from", "physical_function_runs"."valid_to" FROM "physical_function_runs" LEFT JOIN "workers" ON "workers"."physical_function_run_id" = "physical_function_runs"."id" WHERE "physical_function_runs"."status" = 'RR' AND "workers"."id" IS NULL ORDER BY "physical_function_runs"."valid_from" ASC LIMIT 50 FOR UPDATE OF "physical_function_runs" SKIP LOCKED"#
         );
     }
 
@@ -115,7 +115,7 @@ mod tests {
         let sql = dispatched_before_query(&cutoff).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "collection_id", "function_id", "function_version_id", "execution_id", "transaction_id", "logical_function_run_id", "triggered_on", "triggered_by_id", "trigger", "base_path", "dispatched_on", "started_on", "ended_on", "status", "function_version_patch_id", "ended_on_hour_ms", "ended_on_day_ms", "ended_on_week_ms", "ended_on_month_ms", "metric_table_versions", "metric_rows", "metric_data_bytes", "project_id", "valid_to" FROM "physical_function_runs" WHERE "status" = 'DP' AND "dispatched_on" < '2023-11-14 22:13:20.000000 +00:00' ORDER BY "dispatched_on" ASC"#
+            r#"SELECT "id", "collection_id", "function_id", "function_version_id", "execution_id", "transaction_id", "logical_function_run_id", "triggered_by_id", "trigger", "base_path", "dispatched_on", "started_on", "ended_on", "status", "function_version_patch_id", "ended_on_hour_ms", "ended_on_day_ms", "ended_on_week_ms", "ended_on_month_ms", "metric_table_versions", "metric_rows", "metric_data_bytes", "project_id", "valid_from", "valid_to" FROM "physical_function_runs" WHERE "status" = 'DP' AND "dispatched_on" < '2023-11-14 22:13:20.000000 +00:00' ORDER BY "dispatched_on" ASC"#
         );
     }
 }

@@ -46,6 +46,7 @@ pub struct StreamerInfo {
 mod tests {
     use super::*;
     use crate::dxo::yaml::WorkerInput;
+    use td_common::datetime::Timestamp;
     use url::Url;
 
     #[test]
@@ -56,7 +57,7 @@ mod tests {
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id: FunctionVersionId::new(),
-                function_defined_on: AtTime::default(),
+                function_defined_on: AtTime::from(Timestamp::default()),
                 function: FunctionName::try_from("function").unwrap(),
                 function_bundle: Location {
                     uri: Url::try_from("file:///bundle").unwrap(),

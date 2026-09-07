@@ -45,6 +45,7 @@ pub mod query_filters;
 pub mod role;
 pub mod run_metrics;
 pub mod runtime_info;
+pub mod scd2_interval;
 pub mod simple_permission;
 pub mod synchrotron;
 pub mod system;

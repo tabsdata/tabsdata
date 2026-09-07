@@ -18,7 +18,6 @@ use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::table::TableParam;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_objects::types::basic::TriggeredOn;
 use td_queries::Queries;
 
 #[service_factory]
@@ -37,7 +36,6 @@ async fn table_list_data_versions(
     let collection_id_name = collection_param.collection;
     let _collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
     let at = at_param.at;
-    let triggered_on = TriggeredOn::try_from(&at)?;
     let table_id_name = table_param.table;
     let table: TableDBWithNames = conn
         .scd2()
@@ -47,7 +45,7 @@ async fn table_list_data_versions(
     let query_params = ListQueryParams::<TableDataVersion>::try_from(&list_params)?;
     let rows = conn
         .timeline()
-        .list_until(&triggered_on, &table.base.base.table_id, &query_params)
+        .list_until(&at, &table.base.base.table_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }

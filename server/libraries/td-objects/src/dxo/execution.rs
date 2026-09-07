@@ -303,7 +303,7 @@ impl From<&PhysicalTableDataVersionDBWithFunction> for ExecutionTableDataVersion
             transaction_id: src.base.base.transaction_id.clone(),
             physical_function_run_id: src.base.base.physical_function_run_id.clone(),
             function_param_pos: src.base.base.function_param_pos,
-            triggered_on: src.base.base.triggered_on,
+            triggered_on: src.base.interval.valid_from.into(),
             base_path: src.base.base.base_path.clone(),
             has_data: src.base.base.has_data,
             schema_changed: src.base.base.schema_changed,

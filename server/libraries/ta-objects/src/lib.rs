@@ -17,6 +17,7 @@ pub mod serde_utils;
 pub mod sql_condition;
 mod tagged;
 pub mod typed;
+pub use typed::SameInner;
 mod unique;
 
 pub use {

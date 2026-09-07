@@ -289,7 +289,7 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
             sqlx::query(&format!(
                 "INSERT INTO functions \
                  (id, collection_id, name, description, decorator, runtime_values, function_id, \
-                  stage_id, stage_base_path, storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
+                  stage_id, stage_base_path, storage_version, bundle_id, snippet, valid_from, defined_by_id, status) \
                  VALUES ('{id}', 'col', 'f', 'd', 'dec', '{{}}', 'fid', 'stg', '/', '1', 'bun', 'snip', '{on}', 'u', 'active')",
             ))
             .execute(&mut *c)

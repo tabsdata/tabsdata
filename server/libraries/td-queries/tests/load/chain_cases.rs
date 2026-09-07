@@ -54,7 +54,7 @@ async fn load_lfr_previous_for_function_at(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let row = db
         .logical_runs()
-        .previous_for_function_at(&h.consumer_function_id, &h.before_time)
+        .previous_for_function_at(&h.consumer_function_id, &AtTime::from(h.before_time))
         .await?;
     record(
         "lfr::previous_for_function_at",

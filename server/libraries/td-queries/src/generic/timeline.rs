@@ -13,7 +13,7 @@ use crate::primitives::table::{select, select_last, select_unordered};
 use crate::{QueryExecutor, Serves};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{AddressesOneRow, Dao, ListDto, SelectDao, TimelineDao, single_row};
+use ta_objects::{AddressesOneRow, Dao, ListDto, SameInner, SelectDao, TimelineDao, single_row};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
@@ -143,11 +143,12 @@ impl<E> Timeline<E> {
     ) -> Result<Vec<T>, SqlError>
     where
         T: ListDto,
-        T::Dao: TimelineDao<VersionOrder = V>,
+        T::Dao: TimelineDao,
+        V: SameInner<<T::Dao as TimelineDao>::VersionOrder>,
         E: QueryExecutor + Domained<Domain = <T::Dao as Dao>::Db>,
     {
         let daos: Vec<T::Dao> = params
-            .apply_to(select_until::<T::Dao>(condition, on))
+            .apply_to(select_until::<T::Dao, V>(condition, on))
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -173,6 +174,7 @@ mod tests {
     struct TestPartition(String);
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    #[typed(sealed)]
     struct TestDefinedOn(String);
 
     #[Dao]

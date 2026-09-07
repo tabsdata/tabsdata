@@ -15,7 +15,7 @@ use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDBIden, PhysicalTableDataVersionDBWithNames,
     PhysicalTableDataVersionDBWithNamesIden,
 };
-use td_objects::types::basic::{HasData, LogicalFunctionRunStatus, TableId, TriggeredOn};
+use td_objects::types::basic::{AtTime, HasData, LogicalFunctionRunStatus, TableId};
 
 /// LTDV-rooted table-data-version queries.
 pub struct TableDataVersions<E> {
@@ -35,7 +35,7 @@ where
     pub async fn latest_bound_tdv_with_data_for_table(
         self,
         table_id: &TableId,
-        triggered_on: &TriggeredOn,
+        triggered_on: &AtTime,
         committed_only: bool,
     ) -> Result<Option<PhysicalTableDataVersionDBWithNames>, SqlError> {
         latest_with_data_query(table_id, triggered_on, committed_only)
@@ -48,7 +48,7 @@ where
 
 pub(crate) fn latest_with_data_query(
     table_id: &TableId,
-    triggered_on: &TriggeredOn,
+    triggered_on: &AtTime,
     committed_only: bool,
 ) -> SelectStatement {
     let ltdv_id = (
@@ -121,12 +121,9 @@ mod tests {
     use td_common::datetime::Timestamp;
     use td_objects::types::basic::AtTime;
 
-    fn args() -> (TableId, TriggeredOn) {
+    fn args() -> (TableId, AtTime) {
         let at = AtTime::from(Timestamp::try_from(1_700_000_000_000_i64).unwrap());
-        (
-            TableId::try_from("00000000000000000000000t00").unwrap(),
-            TriggeredOn::try_from(at).unwrap(),
-        )
+        (TableId::try_from("00000000000000000000000t00").unwrap(), at)
     }
 
     #[test]

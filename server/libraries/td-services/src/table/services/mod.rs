@@ -38,7 +38,7 @@ pub(crate) mod tests {
             assert_eq!(table_version.base.name, *table_name);
             assert_eq!(table_version.base.collection_id, collection.id);
             assert_eq!(table_version.base.defined_by_id, *user_id);
-            assert!(!table_version.valid_to.is_infinity());
+            assert!(!table_version.interval.valid_to.is_infinity());
         }
         assert_eq!(table_versions[0].base.status, TableStatus::Frozen);
         assert_eq!(table_versions[1].base.status, TableStatus::Active);

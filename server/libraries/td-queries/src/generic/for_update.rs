@@ -10,6 +10,7 @@ use crate::primitives::table::{select_claim, select_for_update};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{AddressesOneRow, SelectDao, UnversionedDao, single_row};
+use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
 
 pub struct ForUpdate<E> {
@@ -17,6 +18,21 @@ pub struct ForUpdate<E> {
 }
 
 impl<E> ForUpdate<E> {
+    /// The row this unit of work serializes on, and the instant it took its
+    /// lock: the read returning is the lock being held, so the instant follows
+    /// every writer that held the row before. The `XW` twin is
+    /// [`GatedConnection::locked_at`](td_database::access::GatedConnection::locked_at).
+    pub async fn serialize_on<D: SelectDao + UnversionedDao>(
+        self,
+        condition: impl AddressesOneRow<D, E::Scope>,
+    ) -> Result<(D, LockInstant), SqlError>
+    where
+        E: Serves<D>,
+    {
+        let row = self.fetch_one(condition).await?;
+        Ok((row, LockInstant::after_row_lock()))
+    }
+
     pub async fn fetch_one<D: SelectDao + UnversionedDao>(
         self,
         condition: impl AddressesOneRow<D, E::Scope>,

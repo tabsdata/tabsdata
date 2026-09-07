@@ -76,7 +76,7 @@ pub(crate) fn build_function_info(
         function_run_id: f.base.base.base.id.clone(),
         function_bundle: bundle_location,
         function_stage: stage_location,
-        triggered_on: f.base.base.base.triggered_on,
+        triggered_on: AtTime::from(f.base.base.interval.valid_from),
         transaction_id: f.base.base.base.transaction_id.clone(),
         execution_id: f.base.base.base.execution_id.clone(),
         execution_name: f.base.execution.clone(),
@@ -93,11 +93,13 @@ mod tests {
     use td_objects::dxo::physical_function_run::{
         PhysicalFunctionRunDB, PhysicalFunctionRunDBWithNames, PhysicalFunctionRunInsertDB,
     };
+    use td_objects::dxo::scd2_interval::Scd2Interval;
+    use td_objects::types::basic::Scd2ValidFrom;
     use td_objects::types::basic::{
         AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, ExecutionId,
         FunctionId, FunctionName, FunctionVersionId, LogicalFunctionRunId, PhysicalFunctionRunId,
-        PhysicalFunctionRunStatus, ProjectId, ProjectName, Scd2ValidTo, StageId, StorageVersion,
-        TransactionId, Trigger, TriggeredOn, UserId, UserName,
+        PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, StorageVersion, TransactionId,
+        Trigger, UserId, UserName,
     };
 
     /// Proves each stamped base_path on `PhysicalFunctionRunToExecute` is routed
@@ -121,7 +123,6 @@ mod tests {
                         function_version_id: FunctionVersionId::new(),
                         execution_id: ExecutionId::new(),
                         transaction_id: TransactionId::new(),
-                        triggered_on: TriggeredOn::now(),
                         triggered_by_id: UserId::admin(),
                         trigger: Trigger::Manual,
                         base_path: BasePath::try_from("/r").unwrap(),
@@ -140,7 +141,7 @@ mod tests {
                         logical_function_run_id: LogicalFunctionRunId::new(),
                     },
                     project_id: ProjectId::default(),
-                    valid_to: Scd2ValidTo::infinity(),
+                    interval: Scd2Interval::open(Scd2ValidFrom::asserted(*AtTime::now())),
                 },
                 name: FunctionName::try_from("fn0").unwrap(),
                 collection: CollectionName::try_from("c0").unwrap(),

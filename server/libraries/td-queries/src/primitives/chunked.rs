@@ -6,13 +6,16 @@
 //! slice may exceed the bind-parameter limit.
 
 use crate::QueryExecutor;
-use crate::primitives::scd2::{close_query, open_interval_cond, visible_at_cond};
+use crate::primitives::scd2::{close_query, open_interval_cond, stamp, visible_at_cond};
 use sea_query::{Condition, InsertStatement, Query, SelectStatement, UpdateStatement};
 use sqlx::FromRow;
 use sqlx::postgres::PgRow;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{Dao, Insertable, Scd2Dao, SelectDao, TableDao, UpdateDao};
+use ta_objects::{
+    Dao, Insertable, SameInner, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, TimelineDao, UpdateDao,
+};
+use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
 use tracing::warn;
 
@@ -72,10 +75,24 @@ pub(crate) fn insert_vec_query<D: Insertable>(daos: &[D]) -> Result<InsertStatem
     Ok(query)
 }
 
+pub(crate) fn open_vec_query<D: Scd2OpenDao>(
+    daos: &[D],
+    at: LockInstant,
+) -> Result<InsertStatement, SqlError> {
+    let mut query = Query::insert();
+    query
+        .into_table(D::TABLE)
+        .columns(D::columns().into_iter().chain([D::VALID_FROM]));
+    for dao in daos {
+        query.values(dao.insert_values().into_iter().chain([stamp(at).into()]))?;
+    }
+    Ok(query)
+}
+
 pub(crate) fn close_chunk_query<D: TableDao + Scd2Dao>(
     chunk: &[impl SqlCondition<D>],
     extra: &Condition,
-    at: &D::VersionOrder,
+    at: LockInstant,
 ) -> Result<UpdateStatement, SqlError> {
     close_query::<D>(
         ChunkCondition {
@@ -142,12 +159,15 @@ pub(crate) fn fetch_all_chunk_query<D: SelectDao>(
     select_chunk::<D>(chunk, extra.clone())
 }
 
-pub(crate) fn fetch_all_at_chunk_query<D: SelectDao + Scd2Dao>(
+pub(crate) fn fetch_all_at_chunk_query<
+    D: SelectDao + Scd2Dao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
+>(
     chunk: &[impl SqlCondition<D>],
-    on: &D::VersionOrder,
+    on: &V,
     extra: &Condition,
 ) -> SelectStatement {
-    select_chunk::<D>(chunk, visible_at_cond::<D>(on).add(extra.clone()))
+    select_chunk::<D>(chunk, visible_at_cond::<D, V>(on).add(extra.clone()))
 }
 
 pub(crate) fn fetch_all_current_chunk_query<D: SelectDao + Scd2Dao>(
@@ -166,7 +186,8 @@ pub(crate) fn fetch_all_current_chunk_query<D: SelectDao + Scd2Dao>(
 mod tests {
     use super::*;
     use sea_query::{Alias, Asterisk, PostgresQueryBuilder};
-    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+    use ta_objects::{IntervalColumns, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+    use td_common::datetime::Timestamp;
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
     struct TestId(String);
@@ -192,7 +213,25 @@ mod tests {
     struct TestPartition(String);
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-    struct TestDefinedOn(i64);
+    struct TestValidFrom(i64);
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestValidTo(i64);
+
+    #[derive(Debug, Clone, sqlx::FromRow)]
+    struct Scd2Interval {
+        valid_from: TestValidFrom,
+        valid_to: TestValidTo,
+    }
+
+    impl IntervalColumns for Scd2Interval {
+        type ValidFrom = TestValidFrom;
+        type ValidTo = TestValidTo;
+    }
+
+    fn lock_at(millis: i64) -> LockInstant {
+        LockInstant::asserted(Timestamp::try_from(millis).unwrap())
+    }
 
     #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
     enum TestVStatus {
@@ -201,27 +240,41 @@ mod tests {
     }
 
     #[ta_objects::Dao]
-    #[dao(table = "test_chunked_versioned", ops(select, insert), scd2)]
-    struct TestScd2Dao {
+    #[dao(table = "test_chunked_versioned", ops(insert), scd2)]
+    struct TestScd2InsertDao {
         #[dao(pk)]
         pub id: TestId,
         #[dao(partition_by)]
         pub partition_id: TestPartition,
         pub status: TestVStatus,
-        #[dao(scd2(valid_from))]
-        pub defined_on: TestDefinedOn,
     }
 
     #[ta_objects::Dao]
-    #[dao(table = "test_chunked_current_table", ops(select, insert), scd2)]
-    struct TestCurrentDao {
+    #[dao(table = "test_chunked_versioned", ops(select), scd2)]
+    struct TestScd2Dao {
+        #[dao(flatten)]
+        pub base: TestScd2InsertDao,
+        #[dao(flatten)]
+        pub interval: Scd2Interval,
+    }
+
+    #[ta_objects::Dao]
+    #[dao(table = "test_chunked_current_table", ops(insert), scd2)]
+    struct TestCurrentInsertDao {
         #[dao(pk)]
         pub id: TestId,
         #[dao(partition_by)]
         pub partition_id: TestPartition,
         pub status: TestVStatus,
-        #[dao(scd2(valid_from))]
-        pub defined_on: TestDefinedOn,
+    }
+
+    #[ta_objects::Dao]
+    #[dao(table = "test_chunked_current_table", ops(select), scd2)]
+    struct TestCurrentDao {
+        #[dao(flatten)]
+        pub base: TestCurrentInsertDao,
+        #[dao(flatten)]
+        pub interval: Scd2Interval,
     }
 
     #[test]
@@ -306,12 +359,48 @@ mod tests {
             TestPartition::try_from("p1").unwrap(),
             TestPartition::try_from("p2").unwrap(),
         ];
-        let on = TestDefinedOn::try_from(100i64).unwrap();
-        let sql = fetch_all_at_chunk_query::<TestScd2Dao>(&ids, &on, &Condition::all())
+        let on = TestValidFrom::try_from(100).unwrap();
+        let sql = fetch_all_at_chunk_query::<TestScd2Dao, _>(&ids, &on, &Condition::all())
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_chunked_versioned" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("defined_on" <= 100 AND "valid_to" > 100 AND TRUE) ORDER BY "id" DESC"#
+            r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_chunked_versioned" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("valid_from" <= 100 AND "valid_to" > 100 AND TRUE) ORDER BY "id" DESC"#
+        );
+    }
+
+    #[test]
+    fn test_open_vec_query() {
+        let dao1 = TestScd2InsertDao {
+            id: TestId::try_from("i1").unwrap(),
+            partition_id: TestPartition::try_from("p1").unwrap(),
+            status: TestVStatus::Active,
+        };
+        let dao2 = TestScd2InsertDao {
+            id: TestId::try_from("i2").unwrap(),
+            partition_id: TestPartition::try_from("p2").unwrap(),
+            status: TestVStatus::Active,
+        };
+        let sql = open_vec_query::<TestScd2InsertDao>(&[dao1, dao2], lock_at(100))
+            .unwrap()
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"INSERT INTO "test_chunked_versioned" ("id", "partition_id", "status", "valid_from") VALUES ('i1', 'p1', 'A', '1970-01-01 00:00:00.100000 +00:00'), ('i2', 'p2', 'A', '1970-01-01 00:00:00.100000 +00:00')"#
+        );
+    }
+
+    #[test]
+    fn test_close_chunk_query() {
+        let ids = vec![
+            TestPartition::try_from("p1").unwrap(),
+            TestPartition::try_from("p2").unwrap(),
+        ];
+        let sql = close_chunk_query::<TestScd2Dao>(&ids, &Condition::all(), lock_at(100))
+            .unwrap()
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"UPDATE "test_chunked_versioned" SET "valid_to" = '1970-01-01 00:00:00.100000 +00:00' WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND TRUE AND "valid_to" = ('infinity'::timestamptz)"#
         );
     }
 
@@ -347,7 +436,7 @@ mod tests {
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_chunked_current_table" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("valid_to" = ('infinity'::timestamptz) AND TRUE) ORDER BY "id" DESC"#
+            r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_chunked_current_table" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("valid_to" = ('infinity'::timestamptz) AND TRUE) ORDER BY "id" DESC"#
         );
     }
 }

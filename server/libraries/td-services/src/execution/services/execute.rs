@@ -41,6 +41,7 @@ async fn execute_function(
             .await?
     };
     let mut trx = db.begin_exclusive().await?;
+    let at = trx.locked_at();
     let conn = trx.get(grant);
     let function: FunctionDBWithNames = conn
         .scd2()
@@ -52,6 +53,7 @@ async fn execute_function(
         msgs,
         &transaction_by,
         ctx,
+        at,
         execution_request,
         function,
         TriggerType::Manual,
@@ -89,6 +91,7 @@ pub(crate) mod tests {
     };
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDBWithStatus;
+    use td_objects::types::basic::AtTime;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, AllowDisabled, BundleId, CollectionName, Decorator, Depth, Description,
@@ -800,7 +803,7 @@ pub(crate) mod tests {
                 response.name,
                 Some(ExecutionName::try_from("test_execution")?)
             );
-            assert!(response.triggered_on < TriggeredOn::now());
+            assert!(response.triggered_on < TriggeredOn::asserted(*AtTime::now()));
 
             let mut all_functions: Vec<_> =
                 response.all_functions.values().map(|t| &t.name).collect();
@@ -1221,7 +1224,7 @@ pub(crate) mod tests {
             response.name,
             Some(ExecutionName::try_from("test_execution")?)
         );
-        assert!(response.triggered_on < TriggeredOn::now());
+        assert!(response.triggered_on < TriggeredOn::asserted(*AtTime::now()));
 
         let manual_trigger = &response.all_functions[&response.manual_trigger];
         assert_eq!(manual_trigger.name, FUNCTION_NAMES[0]);

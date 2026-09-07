@@ -4,7 +4,7 @@
 
 use crate::function::engine::diff::{Changes, TableTransition};
 use std::collections::HashMap;
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{InProject, LockInstant, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
@@ -12,9 +12,7 @@ use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::{TriggerDB, TriggerInsertDB};
-use td_objects::types::basic::{
-    AtTime, FunctionId, TableId, TableStatus, TriggerStatus, TriggerVersionId,
-};
+use td_objects::types::basic::{FunctionId, TableId, TableStatus, TriggerStatus, TriggerVersionId};
 use td_queries::Queries;
 
 /// Land `changes`. Tables first, so the trigger flips their transitions imply
@@ -23,21 +21,24 @@ use td_queries::Queries;
 pub async fn apply(
     conn: &mut DomainConnection<Apiserver, InProject>,
     changes: &Changes,
-    at: &AtTime,
+    at: LockInstant,
 ) -> Result<(), TdError> {
-    conn.scd2().chunked().insert(&changes.tables).await?;
+    conn.scd2().chunked().open(&changes.tables, at).await?;
     conn.scd2()
         .chunked()
         .close::<TableDB>(&changes.close_tables, (), at)
         .await?;
-    let flips = trigger_flips(conn, &changes.table_transitions, at).await?;
-    conn.scd2().chunked().insert(&flips).await?;
-    conn.scd2().chunked().insert(&changes.dependencies).await?;
+    let flips = trigger_flips(conn, &changes.table_transitions).await?;
+    conn.scd2().chunked().open(&flips, at).await?;
+    conn.scd2()
+        .chunked()
+        .open(&changes.dependencies, at)
+        .await?;
     conn.scd2()
         .chunked()
         .close::<DependencyDB>(&changes.close_dependencies, (), at)
         .await?;
-    conn.scd2().chunked().insert(&changes.triggers).await?;
+    conn.scd2().chunked().open(&changes.triggers, at).await?;
     conn.scd2()
         .chunked()
         .close::<TriggerDB>(&changes.close_triggers, (), at)
@@ -48,18 +49,12 @@ pub async fn apply(
 async fn trigger_flips<S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S>,
     transitions: &[TableTransition],
-    at: &AtTime,
 ) -> Result<Vec<TriggerInsertDB>, TdError> {
     if transitions.is_empty() {
         return Ok(Vec::new());
     }
     let table_ids: Vec<TableId> = transitions.iter().map(|t| t.table_id).collect();
-    let triggers: Vec<TriggerDB> = conn
-        .scd2()
-        .as_of(at)
-        .chunked()
-        .fetch_all(&table_ids, ())
-        .await?;
+    let triggers: Vec<TriggerDB> = conn.scd2().chunked().fetch_all(&table_ids, ()).await?;
     let by_table: HashMap<TableId, &TableTransition> =
         transitions.iter().map(|t| (t.table_id, t)).collect();
     let mut flips = Vec::new();
@@ -71,14 +66,12 @@ async fn trigger_flips<S: SeesProjectRows>(
             (TableStatus::Frozen, TriggerStatus::Active) => flips.push(TriggerInsertDB {
                 id: TriggerVersionId::default(),
                 status: TriggerStatus::Frozen,
-                defined_on: *at,
                 ..trigger.base.clone()
             }),
             (TableStatus::Active, TriggerStatus::Frozen) => flips.push(TriggerInsertDB {
                 id: TriggerVersionId::default(),
                 trigger_by_function_id: transition.function_id.into(),
                 status: TriggerStatus::Active,
-                defined_on: *at,
                 ..trigger.base.clone()
             }),
             _ => {}
@@ -92,18 +85,11 @@ async fn trigger_flips<S: SeesProjectRows>(
 pub async fn dependants_of_tables<S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S>,
     table_ids: &[TableId],
-    at: &AtTime,
 ) -> Result<Vec<FunctionDB>, TdError> {
-    let dependencies: Vec<DependencyDB> = conn
-        .scd2()
-        .as_of(at)
-        .chunked()
-        .fetch_all(table_ids, ())
-        .await?;
+    let dependencies: Vec<DependencyDB> = conn.scd2().chunked().fetch_all(table_ids, ()).await?;
     let function_ids: Vec<FunctionId> = dependencies.iter().map(|d| d.base.function_id).collect();
     let functions = conn
         .scd2()
-        .as_of(at)
         .chunked()
         .fetch_all(&function_ids, and!(FunctionDB::active()))
         .await?;

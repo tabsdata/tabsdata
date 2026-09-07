@@ -37,7 +37,7 @@ async fn table_state_download(
     let mut trx = db.read().await?;
     let conn = trx.get(authz.none());
     let function: FunctionDBWithNames = conn.timeline().fetch_one(&function_version_id).await?;
-    if !function.base.covers(&at) {
+    if !function.base.interval.covers(&at) {
         return Err(api_error!(
             ApiError::NotFound,
             "Function version '{function_version_id}' was not live at '{at}'",

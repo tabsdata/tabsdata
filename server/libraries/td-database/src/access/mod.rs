@@ -30,6 +30,7 @@
 mod connection;
 mod extract;
 mod grant;
+mod lock_instant;
 mod mode;
 
 #[cfg(test)]
@@ -39,6 +40,7 @@ use crate::connection::PgConnectionExt;
 use crate::domain::{Apiserver, DomainConnection, DomainPools, ScopedBy, Supports};
 pub use connection::GatedConnection;
 pub use grant::{Gated, Grant};
+pub use lock_instant::LockInstant;
 pub use mode::{AccessMode, OpensIn, RO, RW, WriteMode, XW};
 use sqlx::postgres::PgConnection;
 use std::fmt::Display;
@@ -198,8 +200,8 @@ impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
             .map_err(ServiceDbError::CannotBeginTransaction)?;
         let mut conn = DomainConnection::<D, S>::new(conn);
         self.scope.apply(&mut conn).await?;
-        M::opened(&mut conn, &self.scope, pool).await?;
-        Ok(GatedConnection::new(conn))
+        let lock = M::opened(&mut conn, &self.scope, pool).await?;
+        Ok(GatedConnection::new(conn, lock))
     }
 }
 

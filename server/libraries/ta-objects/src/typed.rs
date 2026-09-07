@@ -26,6 +26,7 @@
 //! values — including rows read back from the database.
 
 use std::fmt::Display;
+use std::ops::Deref;
 use td_common::datetime::{IntervalEnd, Timestamp};
 use td_common::id::Id;
 use td_common::logic_id::{IdL, KeyId};
@@ -49,6 +50,17 @@ pub trait Typed: Sized {
     /// clone). Sound — a held value is valid, and extraction is not
     /// construction.
     fn into_inner(self) -> Self::Inner;
+}
+
+/// Wraps the same primitive as `O` (every newtype derefs to its inner): an
+/// instant of one newtype positioned against a column declared as another.
+pub trait SameInner<O: Deref>: crate::SeaValue {}
+
+impl<V, O> SameInner<O> for V
+where
+    V: Deref + crate::SeaValue,
+    O: Deref<Target = V::Target>,
+{
 }
 
 /// A primitive that a `#[derive(Typed)]` newtype can wrap.

@@ -2,10 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::types::basic::Scd2ValidTo;
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId,
-    FunctionId, OfTable, ProjectId, System, TableId, UserId,
+    CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
+    OfTable, ProjectId, System, TableId, UserId,
 };
 use crate::types::composed::TableVersions;
 use ta_objects::sql_condition::SqlCondition;
@@ -27,8 +27,6 @@ pub struct DependencyInsertDB {
     pub table_versions: TableVersions,
     #[dao(order_by)]
     pub dep_pos: DependencyPos,
-    #[dao(scd2(valid_from))]
-    pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub system: System,
 }
@@ -39,8 +37,8 @@ pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
     pub project_id: ProjectId,
-    #[dao(scd2(valid_to))]
-    pub valid_to: Scd2ValidTo,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }
 
 #[ta_objects::Dao]

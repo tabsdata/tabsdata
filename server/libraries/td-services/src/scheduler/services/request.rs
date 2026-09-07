@@ -106,6 +106,7 @@ async fn tick_project(
     saturated: &mut bool,
 ) -> Result<(), TdError> {
     let mut trx = db.in_project(project).begin_exclusive().await?;
+    let locked_at = trx.locked_at();
     let conn = trx.get(grant);
     let mut messages = WorkerMessages::default();
     let orchestrator = bridge.orchestrator();
@@ -113,7 +114,7 @@ async fn tick_project(
     // Initial dispatch path: Scheduled/ReScheduled LFRs — mint + bind +
     // flip LFR.status to Requested.
     let ready = fetch_lfr_to_dispatch(conn, at, config, saturated).await?;
-    let minted = mint_function_runs_on_dispatch(conn, &ready, at).await?;
+    let minted = mint_function_runs_on_dispatch(conn, &ready, locked_at).await?;
     let enriched = enrich_minted_dispatch(conn, &minted).await?;
     let workers = create_locked_function_runner_workers_start_request(
         orchestrator,
@@ -412,7 +413,10 @@ mod tests {
             info.function_bundle.env_prefix,
             Some(EnvPrefix::try_from(mount_def.id.as_str())?)
         );
-        assert_eq!(info.triggered_on, physical_function_run.base.triggered_on);
+        assert_eq!(
+            info.triggered_on,
+            AtTime::from(physical_function_run.interval.valid_from)
+        );
         assert!(*info.triggered_on < *info.scheduled_on);
         assert_eq!(info.execution_id, physical_function_run.base.execution_id);
         assert_eq!(

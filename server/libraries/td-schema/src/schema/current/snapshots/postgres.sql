@@ -21,15 +21,15 @@ CREATE TABLE "permissions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "role_i
 
 CREATE TABLE "bundles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "hash" text NOT NULL, "base_path" text NOT NULL, "status" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "functions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "decorator" text NOT NULL, "runtime_values" text NOT NULL, "function_id" text NOT NULL COLLATE "C", "base_path" text NULL, "stage_id" text NOT NULL COLLATE "C", "stage_base_path" text NOT NULL, "storage_version" text NOT NULL, "bundle_id" text NOT NULL COLLATE "C", "snippet" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "connector" text NULL, "connection" text NULL, "enabled" bool DEFAULT TRUE, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "functions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "decorator" text NOT NULL, "runtime_values" text NOT NULL, "function_id" text NOT NULL COLLATE "C", "base_path" text NULL, "stage_id" text NOT NULL COLLATE "C", "stage_base_path" text NOT NULL, "storage_version" text NOT NULL, "bundle_id" text NOT NULL COLLATE "C", "snippet" text NOT NULL, "valid_from" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "connector" text NULL, "connection" text NULL, "enabled" bool DEFAULT TRUE, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "function_patches" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "parent_function_version_id" text NOT NULL COLLATE "C", "function_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "snippet" text NOT NULL, "bundle_id" text NOT NULL COLLATE "C", "runtime_values" text NOT NULL, "description" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("parent_function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "function_patches" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "parent_function_version_id" text NOT NULL COLLATE "C", "function_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "snippet" text NOT NULL, "bundle_id" text NOT NULL COLLATE "C", "runtime_values" text NOT NULL, "description" text NOT NULL, "valid_from" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("parent_function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "tables" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "function_id" text NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "function_param_pos" integer NULL, "private" bool NOT NULL, "partitioned" bool NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "table_type" text NOT NULL DEFAULT 'R', "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "tables" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "function_id" text NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "function_param_pos" integer NULL, "private" bool NOT NULL, "partitioned" bool NULL, "valid_from" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "table_type" text NOT NULL DEFAULT 'R', "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "dependencies" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "dependency_id" text NOT NULL COLLATE "C", "function_id" text NOT NULL COLLATE "C", "table_collection_id" text NOT NULL COLLATE "C", "table_function_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "table_versions" text NOT NULL, "dep_pos" integer NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "system" bool NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "dependencies" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "dependency_id" text NOT NULL COLLATE "C", "function_id" text NOT NULL COLLATE "C", "table_collection_id" text NOT NULL COLLATE "C", "table_function_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "table_versions" text NOT NULL, "dep_pos" integer NOT NULL, "valid_from" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "system" bool NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "triggers" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "trigger_id" text NOT NULL COLLATE "C", "function_id" text NOT NULL COLLATE "C", "trigger_by_collection_id" text NOT NULL COLLATE "C", "trigger_by_function_id" text NOT NULL COLLATE "C", "trigger_by_table_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "system" bool NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "triggers" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "trigger_id" text NOT NULL COLLATE "C", "function_id" text NOT NULL COLLATE "C", "trigger_by_collection_id" text NOT NULL COLLATE "C", "trigger_by_function_id" text NOT NULL COLLATE "C", "trigger_by_table_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "valid_from" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "system" bool NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "executions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "name" text NULL, "collection_id" text NOT NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL COLLATE "C", "recursion_options" jsonb NULL, "function_id" text NOT NULL DEFAULT '' COLLATE "C", "trigger_type" text NOT NULL DEFAULT 'M', "external_uid" text NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
@@ -39,9 +39,9 @@ CREATE TABLE "logical_function_runs" ( "id" text NOT NULL PRIMARY KEY COLLATE "C
 
 CREATE TABLE "logical_table_data_versions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" text NOT NULL COLLATE "C", "transaction_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "producer_logical_function_run_id" text NULL COLLATE "C", "function_param_pos" integer NULL, "private" bool NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL COLLATE "C", "group_id" text NOT NULL COLLATE "C", FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("project_id", "group_id") REFERENCES "groups" ("project_id", "id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("producer_logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "physical_function_runs" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "function_version_patch_id" text NULL COLLATE "C", "execution_id" text NOT NULL COLLATE "C", "transaction_id" text NOT NULL COLLATE "C", "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL COLLATE "C", "trigger" text NOT NULL, "dispatched_on" timestamp with time zone NULL, "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, "function_id" text NOT NULL DEFAULT '' COLLATE "C", "status" text NOT NULL, "ended_on_hour_ms" bigint NULL, "ended_on_day_ms" bigint NULL, "ended_on_week_ms" bigint NULL, "ended_on_month_ms" bigint NULL, "metric_table_versions" bigint NULL, "metric_rows" bigint NULL, "metric_data_bytes" bigint NULL, "base_path" text NOT NULL, "logical_function_run_id" text NOT NULL COLLATE "C", "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "physical_function_runs" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "function_version_patch_id" text NULL COLLATE "C", "execution_id" text NOT NULL COLLATE "C", "transaction_id" text NOT NULL COLLATE "C", "valid_from" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL COLLATE "C", "trigger" text NOT NULL, "dispatched_on" timestamp with time zone NULL, "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, "function_id" text NOT NULL DEFAULT '' COLLATE "C", "status" text NOT NULL, "ended_on_hour_ms" bigint NULL, "ended_on_day_ms" bigint NULL, "ended_on_week_ms" bigint NULL, "ended_on_month_ms" bigint NULL, "metric_table_versions" bigint NULL, "metric_rows" bigint NULL, "metric_data_bytes" bigint NULL, "base_path" text NOT NULL, "logical_function_run_id" text NOT NULL COLLATE "C", "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "physical_table_data_versions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "table_version_id" text NOT NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "function_version_patch_id" text NULL COLLATE "C", "has_data" bool NULL, "schema_changed" bool NULL, "column_count" bigint NULL, "row_count" bigint NULL, "data_bytes" bigint NULL, "schema_hash" text NULL, "columnar_lineage" text NULL, "execution_id" text NOT NULL COLLATE "C", "transaction_id" text NOT NULL COLLATE "C", "physical_function_run_id" text NOT NULL COLLATE "C", "function_param_pos" integer NOT NULL, "with_data_table_data_version_id" text NULL COLLATE "C", "triggered_on" timestamp with time zone NOT NULL, "base_path" text NOT NULL, "logical_table_data_version_id" text NOT NULL COLLATE "C", "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("physical_function_run_id") REFERENCES "physical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "physical_table_data_versions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "table_version_id" text NOT NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "function_version_patch_id" text NULL COLLATE "C", "has_data" bool NULL, "schema_changed" bool NULL, "column_count" bigint NULL, "row_count" bigint NULL, "data_bytes" bigint NULL, "schema_hash" text NULL, "columnar_lineage" text NULL, "execution_id" text NOT NULL COLLATE "C", "transaction_id" text NOT NULL COLLATE "C", "physical_function_run_id" text NOT NULL COLLATE "C", "function_param_pos" integer NOT NULL, "with_data_table_data_version_id" text NULL COLLATE "C", "valid_from" timestamp with time zone NOT NULL, "base_path" text NOT NULL, "logical_table_data_version_id" text NOT NULL COLLATE "C", "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("physical_function_run_id") REFERENCES "physical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "table_partitions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "table_id" text NOT NULL COLLATE "C", "table_version_id" text NOT NULL COLLATE "C", "function_version_id" text NOT NULL COLLATE "C", "table_data_version_id" text NOT NULL COLLATE "C", "partition_key" text NULL, "partition_deleted" bool NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("table_data_version_id") REFERENCES "physical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
@@ -52,14 +52,14 @@ CREATE TABLE "logical_function_run_inputs" ( "id" text NOT NULL PRIMARY KEY COLL
 CREATE OR REPLACE FUNCTION functions__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('functions:' || NEW.function_id, 0));
-  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM functions
   WHERE function_id = NEW.function_id
-    AND (defined_on, id) > (NEW.defined_on, NEW.id);
-  UPDATE functions SET valid_to = NEW.defined_on
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE functions SET valid_to = NEW.valid_from
   WHERE function_id = NEW.function_id
-    AND (defined_on, id) < (NEW.defined_on, NEW.id)
-    AND valid_to > NEW.defined_on;
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -70,14 +70,14 @@ FOR EACH ROW EXECUTE FUNCTION functions__scd2_close_fn()
 CREATE OR REPLACE FUNCTION function_patches__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('function_patches:' || NEW.parent_function_version_id, 0));
-  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM function_patches
   WHERE parent_function_version_id = NEW.parent_function_version_id
-    AND (defined_on, id) > (NEW.defined_on, NEW.id);
-  UPDATE function_patches SET valid_to = NEW.defined_on
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE function_patches SET valid_to = NEW.valid_from
   WHERE parent_function_version_id = NEW.parent_function_version_id
-    AND (defined_on, id) < (NEW.defined_on, NEW.id)
-    AND valid_to > NEW.defined_on;
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -91,7 +91,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER function_patches__immutable_no_update BEFORE UPDATE OF id, project_id, parent_function_version_id, function_id, collection_id, snippet, bundle_id, runtime_values, description, defined_on, defined_by_id, status ON function_patches
+CREATE TRIGGER function_patches__immutable_no_update BEFORE UPDATE OF id, project_id, parent_function_version_id, function_id, collection_id, snippet, bundle_id, runtime_values, description, valid_from, defined_by_id, status ON function_patches
 FOR EACH ROW EXECUTE FUNCTION function_patches__immutable_fn()
 
 CREATE TRIGGER function_patches__immutable_no_delete BEFORE DELETE ON function_patches
@@ -100,14 +100,14 @@ FOR EACH ROW EXECUTE FUNCTION function_patches__immutable_fn()
 CREATE OR REPLACE FUNCTION tables__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('tables:' || NEW.table_id, 0));
-  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM tables
   WHERE table_id = NEW.table_id
-    AND (defined_on, id) > (NEW.defined_on, NEW.id);
-  UPDATE tables SET valid_to = NEW.defined_on
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE tables SET valid_to = NEW.valid_from
   WHERE table_id = NEW.table_id
-    AND (defined_on, id) < (NEW.defined_on, NEW.id)
-    AND valid_to > NEW.defined_on;
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -118,14 +118,14 @@ FOR EACH ROW EXECUTE FUNCTION tables__scd2_close_fn()
 CREATE OR REPLACE FUNCTION dependencies__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('dependencies:' || NEW.dependency_id, 0));
-  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM dependencies
   WHERE dependency_id = NEW.dependency_id
-    AND (defined_on, id) > (NEW.defined_on, NEW.id);
-  UPDATE dependencies SET valid_to = NEW.defined_on
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE dependencies SET valid_to = NEW.valid_from
   WHERE dependency_id = NEW.dependency_id
-    AND (defined_on, id) < (NEW.defined_on, NEW.id)
-    AND valid_to > NEW.defined_on;
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -136,14 +136,14 @@ FOR EACH ROW EXECUTE FUNCTION dependencies__scd2_close_fn()
 CREATE OR REPLACE FUNCTION triggers__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('triggers:' || NEW.trigger_id, 0));
-  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM triggers
   WHERE trigger_id = NEW.trigger_id
-    AND (defined_on, id) > (NEW.defined_on, NEW.id);
-  UPDATE triggers SET valid_to = NEW.defined_on
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE triggers SET valid_to = NEW.valid_from
   WHERE trigger_id = NEW.trigger_id
-    AND (defined_on, id) < (NEW.defined_on, NEW.id)
-    AND valid_to > NEW.defined_on;
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -166,14 +166,14 @@ FOR EACH ROW EXECUTE FUNCTION logical_function_runs__sticky_terminals_fn()
 CREATE OR REPLACE FUNCTION physical_function_runs__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('physical_function_runs:' || NEW.logical_function_run_id, 0));
-  SELECT COALESCE(MIN(triggered_on), 'infinity') INTO NEW.valid_to
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM physical_function_runs
   WHERE logical_function_run_id = NEW.logical_function_run_id
-    AND (triggered_on, id) > (NEW.triggered_on, NEW.id);
-  UPDATE physical_function_runs SET valid_to = NEW.triggered_on
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE physical_function_runs SET valid_to = NEW.valid_from
   WHERE logical_function_run_id = NEW.logical_function_run_id
-    AND (triggered_on, id) < (NEW.triggered_on, NEW.id)
-    AND valid_to > NEW.triggered_on;
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -184,14 +184,14 @@ FOR EACH ROW EXECUTE FUNCTION physical_function_runs__scd2_close_fn()
 CREATE OR REPLACE FUNCTION physical_table_data_versions__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('physical_table_data_versions:' || NEW.logical_table_data_version_id, 0));
-  SELECT COALESCE(MIN(triggered_on), 'infinity') INTO NEW.valid_to
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM physical_table_data_versions
   WHERE logical_table_data_version_id = NEW.logical_table_data_version_id
-    AND (triggered_on, id) > (NEW.triggered_on, NEW.id);
-  UPDATE physical_table_data_versions SET valid_to = NEW.triggered_on
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE physical_table_data_versions SET valid_to = NEW.valid_from
   WHERE logical_table_data_version_id = NEW.logical_table_data_version_id
-    AND (triggered_on, id) < (NEW.triggered_on, NEW.id)
-    AND valid_to > NEW.triggered_on;
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -225,7 +225,7 @@ CREATE VIEW permissions__with_names WITH (security_invoker = true) AS SELECT "pe
 
 CREATE VIEW functions__with_names WITH (security_invoker = true) AS SELECT "functions".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "collections_resolved"."group_id" AS "group_id", COALESCE(users.name, '[' || functions.defined_by_id || ']') AS "defined_by" FROM "functions" LEFT JOIN "collections_resolved" ON "functions"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "functions"."defined_by_id" = "users"."id"
 
-CREATE VIEW function_versions__with_names WITH (security_invoker = true) AS SELECT "functions".*, "collections_resolved"."name" AS "collection", COALESCE(users.name, '[' || functions.defined_by_id || ']') AS "defined_by", NULL AS "patch_of" FROM "functions" LEFT JOIN "collections_resolved" ON "functions"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "functions"."defined_by_id" = "users"."id" UNION ALL (SELECT "function_patches"."id", "function_patches"."project_id", "function_patches"."collection_id", "parent"."name", "function_patches"."description", "parent"."decorator", "function_patches"."runtime_values", "function_patches"."function_id", "parent"."base_path", "parent"."stage_id", "parent"."stage_base_path", "parent"."storage_version", "function_patches"."bundle_id", "function_patches"."snippet", "function_patches"."defined_on", "function_patches"."defined_by_id", "function_patches"."status", "parent"."connector", "parent"."connection", "parent"."enabled", "function_patches"."valid_to", "collections_resolved"."name", COALESCE(users.name, '[' || function_patches.defined_by_id || ']'), "function_patches"."parent_function_version_id" FROM "function_patches" INNER JOIN "functions" AS "parent" ON "function_patches"."parent_function_version_id" = "parent"."id" LEFT JOIN "collections_resolved" ON "function_patches"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "function_patches"."defined_by_id" = "users"."id")
+CREATE VIEW function_versions__with_names WITH (security_invoker = true) AS SELECT "functions".*, "collections_resolved"."name" AS "collection", COALESCE(users.name, '[' || functions.defined_by_id || ']') AS "defined_by", NULL AS "patch_of" FROM "functions" LEFT JOIN "collections_resolved" ON "functions"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "functions"."defined_by_id" = "users"."id" UNION ALL (SELECT "function_patches"."id", "function_patches"."project_id", "function_patches"."collection_id", "parent"."name", "function_patches"."description", "parent"."decorator", "function_patches"."runtime_values", "function_patches"."function_id", "parent"."base_path", "parent"."stage_id", "parent"."stage_base_path", "parent"."storage_version", "function_patches"."bundle_id", "function_patches"."snippet", "function_patches"."valid_from", "function_patches"."defined_by_id", "function_patches"."status", "parent"."connector", "parent"."connection", "parent"."enabled", "function_patches"."valid_to", "collections_resolved"."name", COALESCE(users.name, '[' || function_patches.defined_by_id || ']'), "function_patches"."parent_function_version_id" FROM "function_patches" INNER JOIN "functions" AS "parent" ON "function_patches"."parent_function_version_id" = "parent"."id" LEFT JOIN "collections_resolved" ON "function_patches"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "function_patches"."defined_by_id" = "users"."id")
 
 CREATE VIEW tables__with_names WITH (security_invoker = true) AS SELECT "tables".*, "tables"."function_param_pos" < 0 AS "system", COALESCE(users.name, '[' || tables.defined_by_id || ']') AS "defined_by", "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "functions"."name" AS "function" FROM "tables" LEFT JOIN "collections_resolved" ON "tables"."collection_id" = "collections_resolved"."id" LEFT JOIN "functions" ON "tables"."function_version_id" = "functions"."id" LEFT JOIN "users" ON "tables"."defined_by_id" = "users"."id"
 
@@ -301,13 +301,13 @@ CREATE INDEX "functions___project_id__status___current_idx" ON "functions" ("pro
 
 CREATE INDEX "functions___project_id__id___idx" ON "functions" ("project_id", "id")
 
-CREATE INDEX "functions___function_id__defined_on__id___idx" ON "functions" ("function_id", "defined_on", "id")
+CREATE INDEX "functions___function_id__valid_from__id___idx" ON "functions" ("function_id", "valid_from", "id")
 
 CREATE UNIQUE INDEX "functions___function_id___current_uidx" ON "functions" ("function_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "function_patches___function_id__defined_on___idx" ON "function_patches" ("function_id", "defined_on")
+CREATE INDEX "function_patches___function_id__valid_from___idx" ON "function_patches" ("function_id", "valid_from")
 
-CREATE INDEX "function_patches___parent_fv_id__defined_on__id___idx" ON "function_patches" ("parent_function_version_id", "defined_on", "id")
+CREATE INDEX "function_patches___parent_fv_id__valid_from__id___idx" ON "function_patches" ("parent_function_version_id", "valid_from", "id")
 
 CREATE UNIQUE INDEX "function_patches___parent_function_version_id___current_uidx" ON "function_patches" ("parent_function_version_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
@@ -323,7 +323,7 @@ CREATE INDEX "tables___function_version_id___idx" ON "tables" ("function_version
 
 CREATE INDEX "tables___function_id__status___idx" ON "tables" ("function_id", "status")
 
-CREATE INDEX "tables___table_id__defined_on__id___idx" ON "tables" ("table_id", "defined_on", "id")
+CREATE INDEX "tables___table_id__valid_from__id___idx" ON "tables" ("table_id", "valid_from", "id")
 
 CREATE UNIQUE INDEX "tables___table_id___current_uidx" ON "tables" ("table_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
@@ -337,7 +337,7 @@ CREATE INDEX "dependencies___table_id___current_idx" ON "dependencies" ("table_i
 
 CREATE INDEX "dependencies___table_id___idx" ON "dependencies" ("table_id")
 
-CREATE INDEX "dependencies___dependency_id__defined_on__id___idx" ON "dependencies" ("dependency_id", "defined_on", "id")
+CREATE INDEX "dependencies___dependency_id__valid_from__id___idx" ON "dependencies" ("dependency_id", "valid_from", "id")
 
 CREATE INDEX "dependencies___function_id___idx" ON "dependencies" ("function_id")
 
@@ -355,7 +355,7 @@ CREATE INDEX "triggers___trigger_by_table_id___idx" ON "triggers" ("trigger_by_t
 
 CREATE INDEX "triggers___function_id___idx" ON "triggers" ("function_id")
 
-CREATE INDEX "triggers___trigger_id__defined_on__id___idx" ON "triggers" ("trigger_id", "defined_on", "id")
+CREATE INDEX "triggers___trigger_id__valid_from__id___idx" ON "triggers" ("trigger_id", "valid_from", "id")
 
 CREATE UNIQUE INDEX "triggers___trigger_id___current_uidx" ON "triggers" ("trigger_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
@@ -403,7 +403,7 @@ CREATE INDEX "logical_table_data_versions___execution_id__table_id___idx" ON "lo
 
 CREATE INDEX "logical_table_data_versions___project_id__id___idx" ON "logical_table_data_versions" ("project_id", "id")
 
-CREATE INDEX "pfr___status__project_id__triggered_on___idx" ON "physical_function_runs" ("status", "project_id", "triggered_on")
+CREATE INDEX "pfr___status__project_id__valid_from___idx" ON "physical_function_runs" ("status", "project_id", "valid_from")
 
 CREATE INDEX "pfr___status__project_id__dispatched_on___idx" ON "physical_function_runs" ("status", "project_id", "dispatched_on")
 
@@ -421,7 +421,7 @@ CREATE INDEX "pfr___project_id__id___idx" ON "physical_function_runs" ("project_
 
 CREATE UNIQUE INDEX "pfr___logical_function_run_id___current_uidx" ON "physical_function_runs" ("logical_function_run_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "pfr___logical_function_run_id__triggered_on__id___idx" ON "physical_function_runs" ("logical_function_run_id", "triggered_on", "id")
+CREATE INDEX "pfr___logical_function_run_id__valid_from__id___idx" ON "physical_function_runs" ("logical_function_run_id", "valid_from", "id")
 
 CREATE UNIQUE INDEX "ptdv___physical_function_run_id__table_id___uidx" ON "physical_table_data_versions" ("physical_function_run_id", "table_id")
 
@@ -429,7 +429,7 @@ CREATE UNIQUE INDEX "ptdv___logical_table_data_version_id___current_uidx" ON "ph
 
 CREATE INDEX "ptdv___project_id__id___idx" ON "physical_table_data_versions" ("project_id", "id")
 
-CREATE INDEX "ptdv___logical_table_data_version_id__triggered_on__id___idx" ON "physical_table_data_versions" ("logical_table_data_version_id", "triggered_on", "id")
+CREATE INDEX "ptdv___logical_table_data_version_id__valid_from__id___idx" ON "physical_table_data_versions" ("logical_table_data_version_id", "valid_from", "id")
 
 CREATE INDEX "workers___collection_id___idx" ON "workers" ("collection_id")
 

@@ -204,6 +204,15 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
     let marks = FieldMarks::parse(fields)?;
     let flatten = flatten_info(&marks)?;
     let base_ty = flatten.as_ref().map(|fi| &fi.base_ty);
+    let interval = fields.iter().find(|f| type_names(&f.ty, "Scd2Interval"));
+    if let Some(f) = interval
+        && !marks.has(f, "flatten")
+    {
+        return Err(syn::Error::new_spanned(
+            f,
+            "the interval is a flattened projection: mark it #[dao(flatten)]",
+        ));
+    }
     let columns: Vec<Column> = fields
         .iter()
         .filter(|f| !is_sqlx_skip(f) && !marks.has(f, "flatten"))
@@ -266,6 +275,13 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             "`upsert` is a conflicting `insert`, so it needs one",
         ));
     }
+    if is_scd2 && ops.insert.is_present() && ops.select.is_present() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "an `scd2` relation has a payload (`ops(insert)`) and a row DAO (`ops(select)`) \
+             projecting the interval the doors wrote; one struct cannot be both",
+        ));
+    }
     if is_scd2 && is_timeline {
         return Err(syn::Error::new_spanned(
             ident,
@@ -286,7 +302,6 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
              unversioned relation",
         ));
     }
-    let version_mark = if is_scd2 { "valid_from" } else { "version_by" };
     let declared: Vec<&str> = [
         is_scd2.then_some("scd2"),
         is_timeline.then_some("timeline"),
@@ -309,32 +324,37 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         quote! { #table_iden::#variant }
     };
 
-    let valid_to_field = marks.marked_once("valid_to")?;
-    if let Some(f) = valid_to_field
-        && !type_names(&f.ty, "Scd2ValidTo")
+    if let Some(f) = interval
+        && !is_scd2
     {
         return Err(syn::Error::new_spanned(
             f,
-            "#[dao(scd2(valid_to))] marks the `Scd2ValidTo` column",
+            "`Scd2Interval` is the interval an `scd2` row DAO projects",
         ));
     }
-    if valid_to_field.is_none()
-        && let Some(c) = columns
-            .iter()
-            .find(|c| type_names(c.ty, "Scd2ValidTo") || c.name == "valid_to")
-    {
-        return Err(syn::Error::new_spanned(
-            c.name,
-            "the interval end must be marked #[dao(scd2(valid_to))]",
-        ));
+    if ops.insert.is_present() {
+        if let Some(f) = interval {
+            return Err(syn::Error::new_spanned(
+                f,
+                "a payload never carries the interval: `open(.., at)` binds `valid_from` and \
+                 the close-out trigger `valid_to`. Project it from the row DAO, which declares \
+                 `select` only",
+            ));
+        }
+        if let Some(c) = columns.iter().find(|c| {
+            type_names(c.ty, "Scd2ValidTo") || c.name == "valid_from" || c.name == "valid_to"
+        }) {
+            return Err(syn::Error::new_spanned(
+                c.name,
+                "a payload never carries the interval columns: `open(.., at)` binds \
+                 `valid_from` and the close-out trigger `valid_to`",
+            ));
+        }
     }
-    if ops.insert.is_present()
-        && let Some(f) = valid_to_field
-    {
+    if is_scd2 && !ops.insert.is_present() && interval.is_none() && base_ty.is_none() {
         return Err(syn::Error::new_spanned(
-            f,
-            "a write DAO cannot carry the interval end: the close-out trigger owns it. \
-             Project it from the row DAO, which declares `select` only",
+            ident,
+            "an `scd2` row DAO projects its interval: declare `pub interval: Scd2Interval`",
         ));
     }
     if parsed.project_scoped.is_some()
@@ -349,15 +369,24 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         ));
     }
 
-    let synthetic_valid_to = is_scd2 && valid_to_field.is_none() && base_ty.is_none();
-    let valid_to_col = match (valid_to_field, base_ty) {
-        (Some(f), _) => col_ref(f),
-        (None, Some(b)) => quote! { #table_iden::Base(<#b as ta_objects::Scd2Dao>::VALID_TO) },
-        (None, None) => quote! { #table_iden::ValidTo },
+    let own_interval_idens = is_scd2 && (interval.is_some() || base_ty.is_none());
+    let (valid_from_col, valid_to_col) = match (own_interval_idens, base_ty) {
+        (true, _) | (false, None) => (
+            quote! { #table_iden::ValidFrom },
+            quote! { #table_iden::ValidTo },
+        ),
+        (false, Some(b)) => (
+            quote! { #table_iden::Base(<#b as ta_objects::Scd2Dao>::VALID_FROM) },
+            quote! { #table_iden::Base(<#b as ta_objects::Scd2Dao>::VALID_TO) },
+        ),
     };
-    let synthetic_variant = synthetic_valid_to.then(|| quote! { ValidTo, });
-    let synthetic_from_str =
-        synthetic_valid_to.then(|| quote! { "valid_to" => Ok(Self::ValidTo), });
+    let synthetic_variant = own_interval_idens.then(|| quote! { ValidFrom, ValidTo, });
+    let synthetic_from_str = own_interval_idens.then(|| {
+        quote! {
+            "valid_from" => Ok(Self::ValidFrom),
+            "valid_to" => Ok(Self::ValidTo),
+        }
+    });
     let field_name_strs: Vec<String> = field_names.iter().map(|f| f.to_string()).collect();
     let iden_enum = match &flatten {
         None => quote! {
@@ -393,6 +422,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                     Table,
                     #[iden(flatten)]
                     Base(#base_iden),
+                    #synthetic_variant
                     #(#field_iden_variants,)*
                 }
                 impl std::str::FromStr for #table_iden {
@@ -400,6 +430,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                     fn from_str(s: &str) -> Result<Self, Self::Err> {
                         match s {
                             #relation => Ok(Self::Table),
+                            #synthetic_from_str
                             #(#field_name_strs => Ok(Self::#field_iden_variants),)*
                             _ => <#base_iden as std::str::FromStr>::from_str(s).map(Self::Base),
                         }
@@ -411,7 +442,10 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
 
     let order_by_items = match marks.order_by()? {
         Some((name, asc)) => {
-            let variant = iden_variant(name);
+            let variant = match interval {
+                Some(f) if field_ident(f) == name => format_ident!("ValidFrom"),
+                _ => iden_variant(name),
+            };
             let dir = if asc {
                 quote! { sea_query::Order::Asc }
             } else {
@@ -439,10 +473,21 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         Some(PathArg(path)) => quote! { #path },
         None => quote! { ta_objects::Apiserver },
     };
+    let interval_columns = interval
+        .map(|_| quote! { .into_iter().chain([#table_iden::ValidFrom, #table_iden::ValidTo]) });
+    let interval_values = interval.map(|f| {
+        let name = field_ident(f);
+        quote! {
+            __values.extend([
+                ("valid_from".to_string(), self.#name.valid_from.display_value()),
+                ("valid_to".to_string(), self.#name.valid_to.display_value()),
+            ]);
+        }
+    });
     let (display_values_base, columns_items, insert_items) = match &flatten {
         None => (
             quote! { let mut __values: Vec<(String, String)> = Vec::new(); },
-            quote! { [#(#table_iden::#field_iden_variants),*] },
+            quote! { [#(#table_iden::#field_iden_variants),*] #interval_columns },
             quote! { [#(self.#field_names.as_sea_value().into()),*] },
         ),
         Some(fi) => {
@@ -455,6 +500,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                         .into_iter()
                         .map(#table_iden::Base)
                         .chain([#(#table_iden::#field_iden_variants),*])
+                        #interval_columns
                 },
                 quote! {
                     ta_objects::Insertable::insert_values(&self.#bf)
@@ -491,6 +537,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                         ),
                     )*
                 ]);
+                #interval_values
                 __values
             }
         }
@@ -518,6 +565,24 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
     };
     let table_dao = is_table.then(|| quote! { impl ta_objects::TableDao for #ident {} });
 
+    let interval_has_columns = interval.map(|f| {
+        let ty = field_type(f);
+        quote! {
+            impl ta_objects::HasColumn<<#ty as ta_objects::IntervalColumns>::ValidFrom> for #ident {
+                const COL: Self::Iden = #table_iden::ValidFrom;
+            }
+            impl ta_objects::HasColumn<<#ty as ta_objects::IntervalColumns>::ValidTo> for #ident {
+                const COL: Self::Iden = #table_iden::ValidTo;
+            }
+        }
+    });
+    let interval_fields = interval.map(|f| {
+        let ty = field_type(f);
+        quote! {
+            [] { valid_from : <#ty as ta_objects::IntervalColumns>::ValidFrom }
+            [] { valid_to : <#ty as ta_objects::IntervalColumns>::ValidTo }
+        }
+    });
     let has_columns = match &flatten {
         None => {
             let mut seen: HashMap<String, &Ident> = HashMap::new();
@@ -560,6 +625,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                         const COL: Self::Iden = #table_iden::#nullable_variants;
                     }
                 )*
+                #interval_has_columns
             }
         }
         Some(fi) => {
@@ -572,12 +638,32 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                     ta_objects::__dao_has_columns => { #ident, #table_iden, #bans_project_id, #bans_valid_to }
                     [#base_iden]
                     #( [] { #field_names : #field_types } )*
+                    #interval_fields
                 }
             }
         }
     };
 
-    let pairs: Vec<(&Ident, &Type)> = columns.iter().map(|c| (c.name, c.ty)).collect();
+    let interval_pairs: Vec<(Ident, Type)> = interval
+        .map(|f| {
+            let ty = field_type(f);
+            vec![
+                (
+                    format_ident!("valid_from"),
+                    syn::parse_quote! { <#ty as ta_objects::IntervalColumns>::ValidFrom },
+                ),
+                (
+                    format_ident!("valid_to"),
+                    syn::parse_quote! { <#ty as ta_objects::IntervalColumns>::ValidTo },
+                ),
+            ]
+        })
+        .unwrap_or_default();
+    let pairs: Vec<(&Ident, &Type)> = columns
+        .iter()
+        .map(|c| (c.name, c.ty))
+        .chain(interval_pairs.iter().map(|(n, t)| (n, t)))
+        .collect();
     let fields_cb = fields_callback(
         ident,
         &pairs,
@@ -634,7 +720,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         .then(|| quote! { impl ta_objects::SelectDao for #ident {} });
     let insert_impl = ops.insert.is_present().then(|| {
         let capability = if is_scd2 {
-            quote! { impl ta_objects::Scd2InsertDao for #ident {} }
+            quote! { impl ta_objects::Scd2OpenDao for #ident {} }
         } else {
             quote! { impl ta_objects::InsertDao for #ident {} }
         };
@@ -724,8 +810,8 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         ));
     }
 
-    let partition = role("partition_by", "PARTITION", "Partition", "TimelineDao")?;
-    let version_order = role(version_mark, "VERSION_ORDER", "VersionOrder", "TimelineDao")?;
+    let partition = role("partition_by", "PARTITION", "Partition", "Partitioned")?;
+    let version_order = role("version_by", "VERSION_ORDER", "VersionOrder", "TimelineDao")?;
     let timeline_impl = is_versioned
         .then(|| {
             let kind = if is_scd2 { "scd2" } else { "timeline" };
@@ -735,27 +821,53 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                     format!("{kind}: mark the partition column with #[dao(partition_by)]"),
                 )
             })?;
-            let (version_col, version_ty) = version_order.clone().ok_or_else(|| {
-                syn::Error::new_spanned(
-                    ident,
-                    format!("{kind}: mark the version column with #[dao({kind}({version_mark}))]"),
-                )
-            })?;
+            let partitioned = quote! {
+                impl ta_objects::Partitioned for #ident {
+                    type Partition = #partition_ty;
+                    const PARTITION: Self::Iden = #partition_col;
+                }
+            };
+            let (version_col, version_ty) = if is_scd2 {
+                let version_ty = match (interval, base_ty) {
+                    (Some(f), _) => {
+                        let ty = field_type(f);
+                        quote! { <#ty as ta_objects::IntervalColumns>::ValidFrom }
+                    }
+                    (None, Some(b)) => quote! { <#b as ta_objects::TimelineDao>::VersionOrder },
+                    (None, None) => quote! {},
+                };
+                (valid_from_col.clone(), version_ty)
+            } else {
+                version_order.clone().ok_or_else(|| {
+                    syn::Error::new_spanned(
+                        ident,
+                        format!(
+                            "{kind}: mark the version column with #[dao(timeline(version_by))]"
+                        ),
+                    )
+                })?
+            };
             let scd2_impl = is_scd2.then(|| {
                 quote! {
                     impl ta_objects::Scd2Dao for #ident {
+                        const VALID_FROM: Self::Iden = #valid_from_col;
                         const VALID_TO: Self::Iden = #valid_to_col;
                     }
                 }
             });
-            Ok::<_, syn::Error>(quote! {
-                impl ta_objects::TimelineDao for #ident {
-                    type Partition = #partition_ty;
-                    const PARTITION: Self::Iden = #partition_col;
-                    type VersionOrder = #version_ty;
-                    const VERSION_ORDER: Self::Iden = #version_col;
+            let readable = !ops.insert.is_present() || !is_scd2;
+            let timeline = readable.then(|| {
+                quote! {
+                    impl ta_objects::TimelineDao for #ident {
+                        type VersionOrder = #version_ty;
+                        const VERSION_ORDER: Self::Iden = #version_col;
+                    }
                 }
+            });
+            Ok::<_, syn::Error>(quote! {
+                #partitioned
                 #scd2_impl
+                #timeline
             })
         })
         .transpose()?;
@@ -996,14 +1108,16 @@ impl FlattenInfo {
 }
 
 fn flatten_info(marks: &FieldMarks) -> syn::Result<Option<FlattenInfo>> {
-    let mut flattened = marks.fields_marked("flatten");
+    let mut flattened = marks
+        .fields_marked("flatten")
+        .filter(|f| !type_names(&f.ty, "Scd2Interval"));
     let Some(f) = flattened.next() else {
         return Ok(None);
     };
     if let Some(second) = flattened.next() {
         return Err(syn::Error::new_spanned(
             second,
-            "at most one #[dao(flatten)] field is supported",
+            "at most one #[dao(flatten)] base is supported (the interval aside)",
         ));
     }
     let Type::Path(tp) = &f.ty else {

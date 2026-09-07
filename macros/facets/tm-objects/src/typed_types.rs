@@ -152,6 +152,11 @@ struct TypedArgs {
     max: Option<Expr>,
     #[darling(multiple)]
     try_from: Vec<Ident>,
+    /// No construction door at all: no `Typed`, no `FromStr`, no `TryFrom`,
+    /// no `Default`. The type hand-writes its only constructors; the derive
+    /// gives it the facets a stored value needs.
+    #[darling(default)]
+    sealed: bool,
 }
 
 /// The wrapped primitive, detected from the single unnamed field's type.
@@ -241,6 +246,26 @@ fn validate_args(name: &Ident, kind: &Kind, args: &TypedArgs) -> syn::Result<()>
             format!("#[typed({what} = ...)] only applies to {allowed} newtypes"),
         ))
     };
+    if args.sealed {
+        let alone = !args.secret
+            && args.default.is_none()
+            && args.len.is_none()
+            && args.min_len.is_none()
+            && args.max_len.is_none()
+            && args.regex.is_none()
+            && args.parser.is_none()
+            && args.expected.is_none()
+            && args.min.is_none()
+            && args.max.is_none()
+            && args.try_from.is_empty();
+        if !alone || matches!(kind, Kind::Composed) {
+            return Err(syn::Error::new_spanned(
+                name,
+                "#[typed(sealed)] stands alone, on a primitive newtype",
+            ));
+        }
+        return Ok(());
+    }
     if !matches!(kind, Kind::Str) {
         if args.secret {
             return err("secret", "String");
@@ -375,6 +400,12 @@ fn expand_typed(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     } else {
         impl_compact_debug(name)
     };
+
+    if args.sealed {
+        let clone = impl_clone(name);
+        let body = expand_sealed(name, inner, &kind);
+        return Ok(quote! { #clone #debug #body });
+    }
 
     let gate = impl_gate(name, inner, &kind, &args);
     let body = match &kind {
@@ -609,6 +640,43 @@ fn expand_primitive(
     }
 }
 
+/// `#[typed(sealed)]`: the facets of a stored value — value, condition leaf,
+/// Deref, Display — and nothing that constructs one.
+fn expand_sealed(name: &Ident, inner: &Type, kind: &Kind) -> proc_macro2::TokenStream {
+    let copy = matches!(
+        kind,
+        Kind::Numeric | Kind::Bool | Kind::Id | Kind::Timestamp | Kind::IntervalEnd
+    )
+    .then(|| impl_copy(name));
+    let sea_value = impl_sea_value_typed(name, inner);
+    let sql_condition = match kind {
+        Kind::IntervalEnd => quote! {},
+        _ => impl_sql_condition(name),
+    };
+    quote! {
+        #copy
+        #sea_value
+        #sql_condition
+        impl std::ops::Deref for #name {
+            type Target = #inner;
+            fn deref(&self) -> &Self::Target { &self.0 }
+        }
+        impl std::fmt::Display for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl ta_objects::ListFilterStr for #name {
+            fn parse_filter_str(s: &str) -> Result<Self, td_error::TdError> {
+                Ok(Self(<#inner as ta_objects::TypedInner>::parse_str(s)?))
+            }
+            fn as_string(&self) -> String {
+                self.to_string()
+            }
+        }
+    }
+}
+
 fn expand_idl_appendix(name: &Ident, inner: &Type, key: &Ident) -> proc_macro2::TokenStream {
     let gen_var = format_ident!("{}_GENERATOR", name.to_string().to_uppercase());
     // The logical ID prefix is always lowercase, regardless of the key's struct-tag casing.
@@ -715,10 +783,24 @@ fn expand_composed(name: &Ident, inner: &Type) -> proc_macro2::TokenStream {
 
 fn expand_serde(
     name: &Ident,
-    _inner: &Type,
+    inner: &Type,
     kind: &Kind,
-    _args: &TypedArgs,
+    args: &TypedArgs,
 ) -> proc_macro2::TokenStream {
+    if args.sealed {
+        return quote! {
+            impl<'de> serde::Deserialize<'de> for #name {
+                fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+                    Ok(Self(<#inner as serde::Deserialize>::deserialize(d)?))
+                }
+            }
+            impl serde::Serialize for #name {
+                fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                    serde::Serialize::serialize(&self.0, s)
+                }
+            }
+        };
+    }
     if matches!(kind, Kind::Composed) {
         return quote! {
             impl<'de> serde::Deserialize<'de> for #name {
@@ -757,8 +839,13 @@ fn expand_sqlx(
     name: &Ident,
     inner: &Type,
     kind: &Kind,
-    _args: &TypedArgs,
+    args: &TypedArgs,
 ) -> proc_macro2::TokenStream {
+    let decode = if args.sealed {
+        quote! { Ok(Self(<#inner as sqlx::decode::Decode<'r, DB>>::decode(value)?)) }
+    } else {
+        quote! { ta_objects::typed::decode_typed::<DB, Self>(value) }
+    };
     if matches!(kind, Kind::Composed) {
         // String bridge: decode re-parses the composed string (gated).
         return quote! {
@@ -822,7 +909,7 @@ fn expand_sqlx(
             fn decode(
                 value: <DB as sqlx::Database>::ValueRef<'r>,
             ) -> Result<Self, sqlx::error::BoxDynError> {
-                ta_objects::typed::decode_typed::<DB, Self>(value)
+                #decode
             }
         }
         impl sqlx::postgres::PgHasArrayType for #name

@@ -7,7 +7,7 @@ use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-use td_objects::types::basic::{TableId, TriggeredOn, UncommittedStatus};
+use td_objects::types::basic::{AtTime, TableId, UncommittedStatus};
 use td_queries::Queries;
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
@@ -24,7 +24,7 @@ pub enum StorageServiceError {
 
 pub async fn resolve_table_location<S: DbScope>(
     conn: &mut DomainConnection<Apiserver, S>,
-    triggered_on: &TriggeredOn,
+    triggered_on: &AtTime,
     table_id: &TableId,
     uncommitted: &UncommittedStatus,
 ) -> Result<Option<SPath>, TdError> {
@@ -77,6 +77,7 @@ mod tests {
     use td_objects::dxo::project::ActiveProjectDB;
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDB;
+    use td_objects::types::basic::AtTime;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
@@ -472,7 +473,7 @@ mod tests {
             DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
         resolve_table_location(
             &mut connection,
-            &TriggeredOn::now(),
+            &AtTime::now(),
             &table_id,
             &if uncommitted {
                 UncommittedStatus::TRUE

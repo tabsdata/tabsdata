@@ -55,6 +55,7 @@ mod tests {
     use super::*;
     use crate::Services;
     use sea_query::{Expr, ExprTrait, Query};
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::sea_query::builder::SeaQueryExt;
     use td_error::TdError;
@@ -235,11 +236,13 @@ mod tests {
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv")?,
             description: Description::try_from("patch")?,
-            defined_on: AtTime::now(),
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).scd2().insert(&patch).await?;
+        db.scoped(p.id)
+            .scd2()
+            .open(&patch, LockInstant::asserted(*AtTime::now()))
+            .await?;
 
         let execution_3 = db
             .scoped(p.id)

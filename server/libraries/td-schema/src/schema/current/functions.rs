@@ -37,7 +37,7 @@ pub enum Functions {
     StorageVersion,
     BundleId,
     Snippet,
-    DefinedOn,
+    ValidFrom,
     DefinedById,
     Status,
     Connector,
@@ -73,7 +73,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Functions::StorageVersion).text().not_null())
                 .col(id_column(Functions::BundleId).not_null())
                 .col(ColumnDef::new(Functions::Snippet).text().not_null())
-                .col(ColumnDef::new(Functions::DefinedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Functions::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(id_column(Functions::DefinedById).not_null())
                 .col(ColumnDef::new(Functions::Status).text().not_null())
                 .col(ColumnDef::new(Functions::Connector).text().null())
@@ -127,10 +127,10 @@ impl Entity for Defs {
                 .col(Functions::Id)
                 .to_owned(),
             Index::create()
-                .name("functions___function_id__defined_on__id___idx")
+                .name("functions___function_id__valid_from__id___idx")
                 .table(Functions::Table)
                 .col(Functions::FunctionId)
-                .col(Functions::DefinedOn)
+                .col(Functions::ValidFrom)
                 .col(Functions::Id)
                 .to_owned(),
             // One open interval per partition — the SCD2 invariant, and the
@@ -177,7 +177,7 @@ impl Entity for Defs {
                 name: format!("{}__scd2_close", Functions::Table.to_string()),
                 source_table: Functions::Table.into_iden(),
                 partition_col: Functions::FunctionId.into_iden(),
-                valid_from_col: Functions::DefinedOn.into_iden(),
+                valid_from_col: Functions::ValidFrom.into_iden(),
                 valid_to_col: Functions::ValidTo.into_iden(),
                 pk_col: Functions::Id.into_iden(),
             }

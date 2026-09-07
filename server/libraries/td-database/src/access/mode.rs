@@ -18,6 +18,7 @@
 //! [`Supports`](crate::domain::Supports), so asking a domain for a mode whose
 //! pool it never registered does not compile.
 
+use crate::access::LockInstant;
 use crate::access::{DbScope, InProject, ServiceDbError};
 use crate::connection::PgConnectionExt;
 use crate::domain::{DbDomain, DomainConnection};
@@ -29,6 +30,10 @@ use tracing::warn;
 
 pub trait AccessMode: Send + Sync + 'static {
     const KIND: PoolKind;
+
+    /// What opening yields past the connection: the [`LockInstant`] for a
+    /// mode that serializes, nothing otherwise.
+    type Lock: Copy + Send + Sync + 'static;
 
     /// Begin this mode's unit of work on `pool`.
     fn open(
@@ -56,7 +61,7 @@ pub trait OpensIn<S: DbScope>: AccessMode {
         conn: &mut PgConnection,
         scope: &S,
         pool: &TdPool,
-    ) -> impl Future<Output = Result<(), TdError>> + Send;
+    ) -> impl Future<Output = Result<Self::Lock, TdError>> + Send;
 }
 
 /// A mode whose work can be committed, which is what
@@ -67,6 +72,7 @@ pub trait WriteMode: AccessMode {}
 pub struct RO;
 
 impl AccessMode for RO {
+    type Lock = ();
     const KIND: PoolKind = PoolKind::Regular;
 
     fn open(
@@ -98,6 +104,7 @@ impl<S: DbScope> OpensIn<S> for RO {
 pub struct RW;
 
 impl AccessMode for RW {
+    type Lock = ();
     const KIND: PoolKind = PoolKind::Regular;
 
     fn open(
@@ -127,6 +134,7 @@ impl<S: DbScope> OpensIn<S> for RW {
 pub struct XW;
 
 impl AccessMode for XW {
+    type Lock = LockInstant;
     const KIND: PoolKind = PoolKind::Exclusive;
 
     fn open(
@@ -148,7 +156,7 @@ impl OpensIn<InProject> for XW {
         conn: &mut PgConnection,
         scope: &InProject,
         pool: &TdPool,
-    ) -> Result<(), TdError> {
+    ) -> Result<LockInstant, TdError> {
         // Every component shares one advisory-lock space, and the wait is the
         // exclusive pool's own acquire timeout: queueing longer than it takes
         // to open a second connection is not a wait, it is a stall.
@@ -158,7 +166,7 @@ impl OpensIn<InProject> for XW {
             .await
             .map_err(ServiceDbError::CannotAcquireLock)?;
         if acquired {
-            return Ok(());
+            return Ok(LockInstant::now());
         }
         warn!(key = %key, "db.tx: gave up waiting for the lock");
         Err(ServiceDbError::LockBusy.into())

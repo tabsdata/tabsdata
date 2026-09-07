@@ -7,6 +7,8 @@
 
 use std::time::Instant;
 
+use td_common::datetime::Timestamp;
+use td_database::access::LockInstant;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunInsertDB};
@@ -28,28 +30,30 @@ pub(crate) async fn build_attempt(
 }
 
 #[td_test::test(db)]
-async fn load_scd2_insert(db: TdPool) -> Result<(), TdError> {
+async fn load_scd2_open(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let row = build_attempt(&db, &h).await?;
     let scoped = db.scoped(h.project_id);
+    let at = LockInstant::asserted(Timestamp::default());
     let t = Instant::now();
-    (&scoped).scd2().insert(&row).await?;
-    record("scd2::insert", profile, t, 1, seeded);
+    (&scoped).scd2().open(&row, at).await?;
+    record("scd2::open", profile, t, 1, seeded);
     Ok(())
 }
 
 #[td_test::test(db)]
-async fn load_scd2_insert_chunked(db: TdPool) -> Result<(), TdError> {
+async fn load_scd2_open_chunked(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let mut rows = Vec::with_capacity(8);
     for _ in 0..8 {
         rows.push(build_attempt(&db, &h).await?);
     }
     let scoped = db.scoped(h.project_id);
+    let at = LockInstant::asserted(Timestamp::default());
     let t = Instant::now();
-    let r = (&scoped).scd2().chunked().insert(&rows).await?;
+    let r = (&scoped).scd2().chunked().open(&rows, at).await?;
     record(
-        "scd2::insert_chunked",
+        "scd2::open_chunked",
         profile,
         t,
         r.rows_affected() as usize,

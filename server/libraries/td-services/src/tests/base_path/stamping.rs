@@ -9,7 +9,7 @@ use super::{fetch_run, mint_committed};
 use crate::function::topology::RunnableVersion;
 use crate::logical::mint::{mint_function_run, resolve_output_base_path};
 use crate::tests::fixtures::{seed_ready_lfr, set_collection_base_path};
-use td_database::access::InProject;
+use td_database::access::{InProject, LockInstant};
 use td_database::connection::PgConnectionExt;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
@@ -113,7 +113,13 @@ async fn test_replay_mint_resolves_same_ladder(db: TdPool) -> Result<(), TdError
             &resolve_output_base_path(&mut conn, &lfr.base.function_version_id).await?,
             expected,
         );
-        let fr = mint_function_run(&mut conn, lfr, &runnable, &AtTime::now()).await?;
+        let fr = mint_function_run(
+            &mut conn,
+            lfr,
+            &runnable,
+            LockInstant::asserted(*AtTime::now()),
+        )
+        .await?;
         conn.commit().await.unwrap();
         assert_eq!(&fr.base_path, expected);
         assert_eq!(&fetch_run(&db, &fr.id).await?.base.base.base_path, expected);

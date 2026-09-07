@@ -146,6 +146,7 @@ mod tests {
     use sea_query::ExprTrait;
     use sea_query::{Expr, Query};
     use ta_objects::and;
+    use td_database::access::LockInstant;
     use td_database::sea_query::builder::SeaQueryExt;
     use td_error::TdError;
     use td_objects::dxo::execution::ExecutionDBIden;
@@ -192,7 +193,7 @@ mod tests {
         use crate::Queries;
 
         use td_objects::types::basic::{
-            AtTime, Description, FunctionRuntimeValues, FunctionStatus, Snippet,
+            Description, FunctionRuntimeValues, FunctionStatus, Snippet,
         };
 
         let p = db.seed().test_project().await?;
@@ -236,11 +237,13 @@ mod tests {
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("V")?,
             description: Description::try_from("F")?,
-            defined_on: AtTime::now(),
             defined_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).scd2().insert(&patch).await?;
+        db.scoped(p.id)
+            .scd2()
+            .open(&patch, LockInstant::asserted(*function.interval.valid_from))
+            .await?;
 
         let head = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&db).await?;
         assert_eq!(head, Some(function.base.id));

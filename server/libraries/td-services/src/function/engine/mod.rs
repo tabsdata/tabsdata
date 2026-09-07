@@ -23,6 +23,7 @@ pub use state::FunctionState;
 use crate::function::workers::register_workers;
 use std::collections::HashMap;
 use td_database::access::InProject;
+use td_database::access::LockInstant;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -37,6 +38,7 @@ use td_objects::types::basic::{FunctionVersionId, WorkerConfig, WorkerTypeDto};
 pub async fn register_version(
     conn: &mut DomainConnection<Apiserver, InProject>,
     ctx: &RequestContext,
+    at: LockInstant,
     collection: &ActiveCollectionDB,
     function: &FunctionInsertDB,
     state: &FunctionState,
@@ -44,9 +46,8 @@ pub async fn register_version(
     previous_version_id: &Option<FunctionVersionId>,
     workers: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
 ) -> Result<(), TdError> {
-    let at = ctx.time;
-    let resolved = resolve(conn, collection, &function.function_id, spec, state, &at).await?;
+    let resolved = resolve(conn, collection, &function.function_id, spec, state, at).await?;
     let changes = Changes::for_spec(state, &resolved, function, ctx)?;
-    apply(conn, &changes, &at).await?;
+    apply(conn, &changes, at).await?;
     register_workers(conn, function, previous_version_id, workers).await
 }

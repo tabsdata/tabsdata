@@ -34,7 +34,7 @@ pub enum Tables {
     FunctionParamPos,
     Private,
     Partitioned,
-    DefinedOn,
+    ValidFrom,
     DefinedById,
     Status,
     TableType,
@@ -58,7 +58,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Tables::FunctionParamPos).integer().null())
                 .col(ColumnDef::new(Tables::Private).boolean().not_null())
                 .col(ColumnDef::new(Tables::Partitioned).boolean().null())
-                .col(ColumnDef::new(Tables::DefinedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Tables::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(id_column(Tables::DefinedById).not_null())
                 .col(ColumnDef::new(Tables::Status).text().not_null())
                 .col(ColumnDef::new(Tables::TableType).text().not_null().default("R"))
@@ -120,10 +120,10 @@ impl Entity for Defs {
                 .col(Tables::Status)
                 .to_owned(),
             Index::create()
-                .name("tables___table_id__defined_on__id___idx")
+                .name("tables___table_id__valid_from__id___idx")
                 .table(Tables::Table)
                 .col(Tables::TableId)
-                .col(Tables::DefinedOn)
+                .col(Tables::ValidFrom)
                 .col(Tables::Id)
                 .to_owned(),
             Index::create()
@@ -174,7 +174,7 @@ impl Entity for Defs {
                 name: format!("{}__scd2_close", Tables::Table.to_string()),
                 source_table: Tables::Table.into_iden(),
                 partition_col: Tables::TableId.into_iden(),
-                valid_from_col: Tables::DefinedOn.into_iden(),
+                valid_from_col: Tables::ValidFrom.into_iden(),
                 valid_to_col: Tables::ValidTo.into_iden(),
                 pk_col: Tables::Id.into_iden(),
             }

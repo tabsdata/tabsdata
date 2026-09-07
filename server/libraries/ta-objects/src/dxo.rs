@@ -4,6 +4,7 @@
 
 use crate::relation::TableDao;
 use crate::sea_value::SeaValue;
+use std::ops::Deref;
 
 /// The relation a DAO maps to and the columns it names.
 #[diagnostic::on_unimplemented(
@@ -78,7 +79,7 @@ pub trait UpdateDao: TableDao {
 pub trait SelectDao: Dao + for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Unpin {}
 
 /// The insert payload over a base table; not a capability. The query builders
-/// take it, the surfaces bound on [`InsertDao`] or [`Scd2InsertDao`], which
+/// take it, the surfaces bound on [`InsertDao`] or [`Scd2OpenDao`], which
 /// say where the insert may be issued from.
 pub trait Insertable: TableDao {
     /// In [`Dao::columns`] order.
@@ -89,18 +90,19 @@ pub trait Insertable: TableDao {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be inserted here",
     note = "declare `ops(insert)`; a view has no row to write back to, and an `scd2` \
-            relation inserts through `db.scd2().insert(..)`, which is what closes the \
-            partition's previous open interval"
+            relation opens a version through `db.scd2().open(.., at)`, which is what \
+            closes the partition's previous open interval"
 )]
 pub trait InsertDao: Insertable {}
 
-/// An interval insert: the trigger closes the partition's previous open row.
+/// The payload of a new version: `open(.., at)` binds `valid_from = at`, the
+/// trigger closes the partition's previous open row.
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` is not an interval-table insert",
-    note = "`db.scd2().insert(..)` takes an `ops(insert)` DAO declaring `scd2`; an \
+    message = "`{Self}` is not an interval-table payload",
+    note = "`db.scd2().open(.., at)` takes an `ops(insert)` DAO declaring `scd2`; an \
             unversioned row inserts through the wordless `db.insert(..)`"
 )]
-pub trait Scd2InsertDao: Insertable + Scd2Dao {}
+pub trait Scd2OpenDao: Insertable + Scd2Dao {}
 
 /// One row per entity, so a condition selects entities rather than versions.
 /// The open reads bind on it.
@@ -126,32 +128,46 @@ pub trait UpsertDao: UnversionedDao + Insertable {
     fn value_columns() -> impl IntoIterator<Item = Self::Iden>;
 }
 
+/// Rows grouped into per-entity histories.
+pub trait Partitioned: PkDao {
+    type Partition: SeaValue;
+    const PARTITION: Self::Iden;
+}
+
 /// Each row is live for `[valid_from, valid_to)`, one open row
-/// (`valid_to = 'infinity'`) per partition, closed out by a trigger. Column
-/// roles, so an insert DAO carries them and the row DAO inherits them.
+/// (`valid_to = 'infinity'`) per partition. Both columns are the doors':
+/// `open(.., at)` binds `valid_from`, the close-out trigger `valid_to`. A
+/// payload never carries them; a row DAO projects them as its
+/// `Scd2Interval`.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an interval table",
-    note = "declare `scd2` and mark `#[dao(scd2(valid_from))]`"
+    note = "declare `scd2` and mark `#[dao(partition_by)]`"
 )]
-pub trait Scd2Dao: TimelineDao {
-    /// Trigger-owned, so only a read-only DAO may project it.
+pub trait Scd2Dao: Partitioned {
+    const VALID_FROM: Self::Iden;
     const VALID_TO: Self::Iden;
 }
 
-/// `Pk` tie-breaks same-instant versions. No interval chain: that is what
-/// [`Scd2Dao`] adds.
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` is not versioned",
-    note = "declare `scd2` or `timeline`, and mark `#[dao(pk)]`, `#[dao(partition_by)]` and \
-            the grain's version order: `#[dao(scd2(valid_from))]` / `#[dao(timeline(version_by))]`"
-)]
-pub trait TimelineDao: PkDao {
-    /// Groups rows into per-entity histories.
-    type Partition: SeaValue;
-    const PARTITION: Self::Iden;
+/// The interval an SCD2 row DAO projects, `[valid_from, valid_to)`: the
+/// types of the two columns the doors wrote. The start is the row's version
+/// order.
+pub trait IntervalColumns {
+    type ValidFrom: SeaValue + Deref;
+    type ValidTo: SeaValue;
+}
 
-    /// Orders the versions within a partition.
-    type VersionOrder: SeaValue;
+/// A readable version log: `Pk` tie-breaks same-instant versions. An SCD2
+/// row DAO is one, ordered by `valid_from`; a `timeline` relation names its
+/// own order column.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a readable version log",
+    note = "declare `scd2` (projecting `interval: Scd2Interval`) or `timeline` (marking \
+            `#[dao(timeline(version_by))]`), with `#[dao(pk)]` and `#[dao(partition_by)]`; \
+            an `ops(insert)` payload is not one"
+)]
+pub trait TimelineDao: Partitioned {
+    /// Orders the versions within a partition: the instant reads compare at.
+    type VersionOrder: SeaValue + Deref;
     const VERSION_ORDER: Self::Iden;
 }
 
