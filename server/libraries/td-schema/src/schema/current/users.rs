@@ -136,7 +136,7 @@ impl Entity for Defs {
                     "00000000000000000000000004".into(),
                     "admin".into(),
                     "Administrator".into(),
-                    "-".into(),
+                    sea_query::Value::String(None).into(),
                     Keyword::CurrentTimestamp.into(),
                     "00000000000000000000000000".into(),
                     Keyword::CurrentTimestamp.into(),

@@ -10,10 +10,9 @@
 //! it existed at that version. Archives are used together with deltas to test
 //! the migration invariant: `archive(N) + delta(N→N+1) ≡ current(N+1)`.
 //!
-//! Tabsdata 2.0 resets the schema ladder: `current/` is the v1 baseline of the
-//! 2.x line and there are no archives yet. The first upgrade
-//! (`current::VERSION` bumped to 2) is the trigger to create `archive/v1/` —
-//! see the workflow below.
+//! Tabsdata 2.0 reset the schema ladder: `v1/` is the frozen 2.x baseline,
+//! archived when `current::VERSION` was bumped to 2. Follow the workflow
+//! below for each further bump.
 //!
 //! ## Creating an archive (on the first upgrade)
 //!
@@ -34,14 +33,16 @@
 
 use crate::schema::source::{SchemaSource, install_script};
 
+pub(crate) mod v1;
+
 /// The [`SchemaSource`] for an archived version.
 ///
 /// # Panics
 ///
 /// Panics if no archive exists for the given version.
-#[allow(clippy::match_single_binding)]
 pub fn source(version: usize) -> &'static dyn SchemaSource {
     match version {
+        1 => &v1::Source,
         _ => panic!("No archived schema for version {version}"),
     }
 }

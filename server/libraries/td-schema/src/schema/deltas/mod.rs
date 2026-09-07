@@ -30,7 +30,7 @@
 //!    `impl SchemaDelta`.
 //! 2. Add `pub(crate) mod vN_to_v{N+1};` to this file.
 //! 3. Add a match arm to `get()`:
-//!    `{N+1} => vN_to_v{N+1}::Migration::up(),`.
+//!    `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
 //! 4. Freeze its DDL snapshots under `snapshots/v{N}_to_v{N+1}/` by running
 //!    `test_delta_ddl_snapshots` with `TD_SNAPSHOT_UPDATE=1`.
 //!
@@ -42,15 +42,19 @@
 //!
 //! See the project README for a full guide and example.
 
+use crate::schema::version::SchemaDelta;
+
+pub(crate) mod v1_to_v2;
+
 /// Returns the SQL statements to upgrade from version `target_version - 1` to
 /// `target_version`.
 ///
 /// # Panics
 ///
 /// Panics if no delta exists for the given target version.
-#[allow(clippy::match_single_binding)]
 pub fn get(target_version: usize) -> Vec<String> {
     match target_version {
+        2 => v1_to_v2::Migration::up(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }
