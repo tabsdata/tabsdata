@@ -3,41 +3,40 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
-use td_objects::NoFilter;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, System, SystemEntity};
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::role::Role;
 use td_objects::list::params::ListQueryParams;
-use td_objects::tower_service::with::With;
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ListRoleService,
-    request = ListRequest<()>,
-    response = ListResponse<Role>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
-        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Role>, _>),
-        from_fn(By::<()>::list::<NoFilter, Role>),
-    )
+#[service_factory]
+async fn list_role(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest,
+) -> Result<ListResponse<Role>, TdError> {
+    let (ctx, _, list_params) = request.into_parts();
+    let grant = authz
+        .require::<System, (ManageAccess, OnAnyProject<ManageProject>)>(
+            gated_conn,
+            &ctx,
+            &SystemEntity,
+        )
+        .await?;
+    let conn = gated_conn.get(grant);
+    let query_params = ListQueryParams::<Role>::try_from(&list_params)?;
+    let rows = conn.live().list(&(), &query_params).await?;
+    build_list_response(&list_params, &query_params, rows)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
@@ -45,26 +44,6 @@ mod tests {
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_role(db: TdPool) {
-        use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
-        use td_tower::metadata::type_of_val;
-
-        ListRoleService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<()>, ListResponse<Role>>(&[
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
-                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Role>, _>),
-                type_of_val(&By::<()>::list::<NoFilter, Role>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_role(db: TdPool) -> Result<(), TdError> {
@@ -79,9 +58,9 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default());
 
-        let service = ListRoleService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.list_role(request).await;
+        let response = response?.data;
         assert_eq!(response.len, 4); // 3 default roles + 1
         let response = response.data;
         // Ordered ascending by id; the seeded roles sort ahead of the

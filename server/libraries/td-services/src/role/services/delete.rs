@@ -2,101 +2,67 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::role::layers::assert_not_fixed;
+use crate::role::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageRoles, Rbac, Scope, System};
-use td_authz::{AuthzContext, refresh_authz_context};
-use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageRoles, RbacSource, System, SystemEntity};
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::permission::PermissionDB;
+use td_objects::dxo::role::RoleParam;
 use td_objects::dxo::role::{RoleDB, RoleDBWithNames};
 use td_objects::dxo::user_role::UserRoleDB;
-use td_objects::rest_urls::RoleParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{RoleId, RoleIdName};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = DeleteRoleService,
-    request = DeleteRequest<RoleParam>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<DeleteRequest<RoleParam>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, ManageRoles>::check),
-        from_fn(With::<DeleteRequest<RoleParam>>::extract_name::<RoleParam>),
-        from_fn(With::<RoleParam>::extract::<RoleIdName>),
-        // Find role to delete
-        from_fn(By::<RoleIdName>::fetch_one::<RoleDBWithNames>),
-        from_fn(With::<RoleDBWithNames>::extract::<RoleId>),
-        // Assert role can be deleted
-        from_fn(assert_not_fixed),
-        // Delete all permissions with that role
-        from_fn(By::<RoleId>::delete::<PermissionDB>),
-        // Delete all user roles with that role
-        from_fn(By::<RoleId>::delete::<UserRoleDB>),
-        // Delete the role
-        from_fn(By::<RoleId>::delete::<RoleDB>),
-        // Dropped the role's permissions and memberships above; invalidate the
-        // cached authz grants.
-        from_fn(refresh_authz_context),
-    )
+#[service_factory]
+async fn delete_role(
+    authz: Ctx<AuthzContext>,
+    db: DbPool<Global>,
+    request: DeleteRequest<RoleParam>,
+) -> Result<(), TdError> {
+    let (ctx, param) = request.into_parts();
+    let mut trx = db.begin().await?;
+    let grant = authz
+        .require::<System, ManageRoles>(&mut trx, &ctx, &SystemEntity)
+        .await?;
+    let conn = trx.get(grant);
+
+    let role: RoleDBWithNames = conn.live().fetch_one(&param.role).await?;
+    assert_not_fixed(&role)?;
+
+    // Drop the role's permissions and memberships, then the role itself.
+    conn.live().delete::<PermissionDB>(role.base.id).await?;
+    conn.live().delete::<UserRoleDB>(role.base.id).await?;
+    conn.live().delete::<RoleDB>(role.base.id).await?;
+    trx.commit().await?;
+
+    // Dropped the role's permissions and memberships; with the transaction
+    // committed, invalidate the cached authz grants.
+    let mut conn = db.read().await?;
+    authz.refresh(conn.get(grant)).await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::role::RoleError;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::permission::PermissionDBWithNames;
     use td_objects::dxo::user_role::UserRoleDBWithNames;
+    use td_objects::types::basic::RoleIdName;
     use td_objects::types::basic::{
         AccessTokenId, Description, PermissionType, RoleName, UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_delete_role(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        DeleteRoleService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<DeleteRequest<RoleParam>, ()>(&[
-                type_of_val(&With::<DeleteRequest<RoleParam>>::extract::<RequestContext>),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, ManageRoles>::check),
-                type_of_val(&With::<DeleteRequest<RoleParam>>::extract_name::<RoleParam>),
-                type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-                // Find role to delete
-                type_of_val(&By::<RoleIdName>::fetch_one::<RoleDBWithNames>),
-                type_of_val(&With::<RoleDBWithNames>::extract::<RoleId>),
-                // Assert role can be deleted
-                type_of_val(&assert_not_fixed),
-                // Delete all permissions with that role
-                type_of_val(&By::<RoleId>::delete::<PermissionDB>),
-                // Delete all user roles with that role
-                type_of_val(&By::<RoleId>::delete::<UserRoleDB>),
-                // Delete the role
-                type_of_val(&By::<RoleId>::delete::<RoleDB>),
-                type_of_val(&refresh_authz_context),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_delete_role_by_id(db: TdPool) -> Result<(), TdError> {
@@ -111,17 +77,12 @@ mod tests {
     }
 
     async fn setup_roles(db: &TdPool) -> (RoleDB, RoleDB) {
-        // Users
         let user = db
             .seed()
-            .user(
-                &UserName::try_from("joaquin").unwrap(),
-                &UserEnabled::from(true),
-            )
+            .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::TRUE)
             .await
             .unwrap();
 
-        // Roles
         let hero_role = db
             .seed()
             .role(
@@ -139,7 +100,6 @@ mod tests {
             .await
             .unwrap();
 
-        // User Roles
         let _user_hero_role = db.seed().user_role(&user.id, &hero_role.id).await.unwrap();
         let _user_hero_role = db
             .seed()
@@ -147,7 +107,6 @@ mod tests {
             .await
             .unwrap();
 
-        // Permissions
         let _hero_permissions = db
             .seed()
             .permission(
@@ -173,10 +132,12 @@ mod tests {
     }
 
     async fn test_delete_role(db: &TdPool, role_id_name: RoleIdName) -> Result<(), TdError> {
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
-        let service = DeleteRoleService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(RoleParam {
+                role: role_id_name.clone(),
+            });
+        let service = Services::with_defaults(db.clone());
+        service.delete_role(request).await?.data;
 
         // Assert just one of the roles in the db got deleted
         let found = db.live().fetch_all::<RoleDB>(&role_id_name).await?;
@@ -207,13 +168,12 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_fixed_role(db: TdPool) -> Result<(), TdError> {
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
-            RoleParam::builder()
-                .role(RoleIdName::from_str(&RoleName::sys_admin().to_string())?)
-                .build()?,
-        );
-        let service = DeleteRoleService::with_defaults(db.clone()).service();
-        let res = service.raw_oneshot(request).await;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(RoleParam {
+                role: RoleIdName::from_str(&RoleName::sys_admin().to_string())?,
+            });
+        let service = Services::with_defaults(db.clone());
+        let res = service.delete_role(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();
         let err = err.domain_err::<RoleError>();

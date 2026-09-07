@@ -3,94 +3,56 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageRoles, Rbac, Scope, System};
-use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::dxo::role::{
-    Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,
-};
-use td_objects::rest_urls::RoleParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{RoleId, RoleIdName};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_authz::rbac::{ManageRoles, System, SystemEntity};
+use td_database::access::{GatedConnection, RW};
+use td_error::TdError;
+use td_objects::FromDao;
+use td_objects::dxo::crudl::UpdateRequest;
+use td_objects::dxo::role::{Role, RoleDB, RoleDBUpdate, RoleDBWithNames, RoleParam, RoleUpdate};
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = UpdateRoleService,
-    request = UpdateRequest<RoleParam, RoleUpdate>,
-    response = Role,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, ManageRoles>::check),
-        from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
-        from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
-        from_fn(With::<RoleUpdate>::try_convert_to::<RoleDBUpdateBuilder, _>),
-        from_fn(With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
-        from_fn(With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate>),
-        from_fn(With::<RoleParam>::extract::<RoleIdName>),
-        from_fn(By::<RoleIdName>::fetch_one::<RoleDBWithNames>),
-        from_fn(With::<RoleDBWithNames>::extract::<RoleId>),
-        from_fn(By::<RoleId>::update::<RoleDBUpdate, RoleDB>),
-        from_fn(By::<RoleId>::fetch_one::<RoleDBWithNames>),
-        from_fn(With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
-        from_fn(With::<RoleBuilder>::build::<Role>),
-    )
+#[service_factory]
+async fn update_role(
+    authz: Ctx<AuthzContext>,
+    gated_trx: &mut GatedConnection<RW>,
+    request: UpdateRequest<RoleUpdate, RoleParam>,
+) -> Result<Role, TdError> {
+    let (ctx, param, update) = request.into_parts();
+    let grant = authz
+        .require::<System, ManageRoles>(gated_trx, &ctx, &SystemEntity)
+        .await?;
+    let conn = gated_trx.get(grant);
+
+    let update_db = RoleDBUpdate {
+        name: update.name,
+        description: update.description,
+        modified_on: ctx.time,
+        modified_by_id: ctx.user_id,
+    };
+
+    let current: RoleDBWithNames = conn.live().fetch_one(&param.role).await?;
+    conn.live()
+        .update::<RoleDBUpdate, RoleDB>(&update_db, current.base.id)
+        .await?;
+
+    let with_names: RoleDBWithNames = conn.live().fetch_one(&current.base.id).await?;
+    let read = Role::from_dao(with_names)?;
+    Ok(read)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, RoleIdName, RoleName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_update_role(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        UpdateRoleService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<UpdateRequest<RoleParam, RoleUpdate>, Role>(&[
-                type_of_val(
-                    &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>,
-                ),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, ManageRoles>::check),
-                type_of_val(
-                    &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>,
-                ),
-                type_of_val(
-                    &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>,
-                ),
-                type_of_val(&With::<RoleUpdate>::try_convert_to::<RoleDBUpdateBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
-                type_of_val(&With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate>),
-                type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-                type_of_val(&By::<RoleIdName>::fetch_one::<RoleDBWithNames>),
-                type_of_val(&With::<RoleDBWithNames>::extract::<RoleId>),
-                type_of_val(&By::<RoleId>::update::<RoleDBUpdate, RoleDB>),
-                type_of_val(&By::<RoleId>::fetch_one::<RoleDBWithNames>),
-                type_of_val(&With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
-                type_of_val(&With::<RoleBuilder>::build::<Role>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_update_role(db: TdPool) -> Result<(), TdError> {
@@ -102,20 +64,20 @@ mod tests {
             )
             .await;
 
-        let update = RoleUpdate::builder()
-            .name(RoleName::try_from("not_joaquin_anymore")?)
-            .description(Description::try_from("new desc")?)
-            .build()?;
+        let update = RoleUpdate {
+            name: Some(RoleName::try_from("not_joaquin_anymore")?),
+            description: Some(Description::try_from("new desc")?),
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-            RoleParam::builder()
-                .role(RoleIdName::from_str("joaquin")?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str("joaquin")?,
+            },
             update,
         );
 
-        let service = UpdateRoleService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.update_role(request).await;
         let response = response?;
 
         let not_found = db

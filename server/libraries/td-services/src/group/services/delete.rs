@@ -2,61 +2,53 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::group::layers::assert_not_system;
+use crate::group::assert_not_system;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
-use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
-use td_objects::dxo::group::{GroupDB, GroupDBWithNames};
-use td_objects::rest_urls::GroupParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{GroupId, GroupIdName};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_authz::rbac::{ManageProject, Project};
+use td_database::access::{GatedConnection, InProject, RW};
+use td_error::TdError;
+use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
+use td_objects::dxo::group::{GroupDB, GroupDBWithNames, GroupParam};
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = DeleteGroupService,
-    request = DeleteRequest<GroupParam>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<DeleteRequest<GroupParam>>::extract::<RequestContext>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ManageProject>::check),
-        from_fn(With::<DeleteRequest<GroupParam>>::extract_name::<GroupParam>),
-        from_fn(With::<GroupParam>::extract::<GroupIdName>),
-        from_fn(By::<GroupIdName>::fetch_one::<GroupDBWithNames>),
-        // Reject deletion of the seeded system groups via the `system`
-        // flag — `default` / `source` / `destination` carry it and
-        // therefore cannot be deleted.
-        from_fn(assert_not_system),
-        from_fn(With::<GroupDBWithNames>::extract::<GroupId>),
-        from_fn(By::<GroupId>::delete::<GroupDB>),
-    )
+#[service_factory]
+async fn delete_group(
+    authz: Ctx<AuthzContext>,
+    gated_trx: &mut GatedConnection<RW, InProject>,
+    request: WithinProject<DeleteRequest<GroupParam>>,
+) -> Result<(), TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, param) = request.into_parts();
+    let grant = authz
+        .require::<Project, ManageProject>(gated_trx, &ctx, &project)
+        .await?;
+    let conn = gated_trx.get(grant);
+
+    let current: GroupDBWithNames = conn.live().fetch_one(&param.group).await?;
+    // Reject deletion of the seeded system groups via the `system`
+    // flag — `default` / `source` / `destination` carry it and
+    // therefore cannot be deleted.
+    assert_not_system(&current)?;
+    conn.live().delete::<GroupDB>(current.base.id).await?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::group::GroupError;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, GroupIdName, GroupName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_security::SOURCE_GROUP;
-    use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_delete_group(db: TdPool) -> Result<(), TdError> {
@@ -71,15 +63,13 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                GroupParam::builder()
-                    .group(GroupIdName::from_str(&format!("~{}", group.id))?)
-                    .build()?,
-            )
+            .delete(GroupParam {
+                group: GroupIdName::from_str(&format!("~{}", group.id))?,
+            })
             .in_project(p.id);
 
-        let service = DeleteGroupService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_group(request).await?.data;
 
         // The user-created group is gone; the seeded system rows remain.
         let gone = db
@@ -96,15 +86,13 @@ mod tests {
     async fn test_delete_system_group_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                GroupParam::builder()
-                    .group(GroupIdName::from_str(SOURCE_GROUP)?)
-                    .build()?,
-            )
+            .delete(GroupParam {
+                group: GroupIdName::from_str(SOURCE_GROUP)?,
+            })
             .in_project(p.id);
 
-        let service = DeleteGroupService::with_defaults(db.clone()).service();
-        let res = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let res = service.delete_group(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();
         let err = err.domain_err::<GroupError>();

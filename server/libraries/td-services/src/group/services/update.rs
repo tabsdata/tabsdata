@@ -2,74 +2,70 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::group::layers::{assert_group_rename_available, assert_not_system};
+use crate::group::{assert_group_rename_available, assert_not_system};
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
-use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_authz::rbac::{ManageProject, Project};
+use td_database::access::{GatedConnection, InProject, RW};
+use td_error::TdError;
+use td_objects::FromDao;
+use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::dxo::group::{
-    Group, GroupBuilder, GroupDB, GroupDBUpdate, GroupDBUpdateBuilder, GroupDBWithNames,
-    GroupUpdate,
+    Group, GroupDB, GroupDBUpdate, GroupDBWithNames, GroupParam, GroupUpdate,
 };
-use td_objects::rest_urls::GroupParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{GroupId, GroupIdName};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = UpdateGroupService,
-    request = UpdateRequest<GroupParam, GroupUpdate>,
-    response = Group,
-    connection = TransactionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<UpdateRequest<GroupParam, GroupUpdate>>::extract::<RequestContext>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ManageProject>::check),
-        from_fn(With::<UpdateRequest<GroupParam, GroupUpdate>>::extract_name::<GroupParam>),
-        from_fn(With::<UpdateRequest<GroupParam, GroupUpdate>>::extract_data::<GroupUpdate>),
-        from_fn(With::<GroupUpdate>::try_convert_to::<GroupDBUpdateBuilder, _>),
-        from_fn(With::<RequestContext>::update::<GroupDBUpdateBuilder, _>),
-        from_fn(With::<GroupDBUpdateBuilder>::build::<GroupDBUpdate>),
-        from_fn(With::<GroupParam>::extract::<GroupIdName>),
-        from_fn(By::<GroupIdName>::fetch_one::<GroupDBWithNames>),
-        // Reject mutation of the seeded system groups via the `system`
-        // flag — `default` / `source` / `destination` carry it.
-        from_fn(assert_not_system),
-        // A rename to a name already taken by another group in the project
-        // reports a clean "already exists" error instead of the raw
-        // unique-constraint violation from the update write.
-        from_fn(assert_group_rename_available),
-        from_fn(With::<GroupDBWithNames>::extract::<GroupId>),
-        from_fn(By::<GroupId>::update::<GroupDBUpdate, GroupDB>),
-        from_fn(By::<GroupId>::fetch_one::<GroupDBWithNames>),
-        from_fn(With::<GroupDBWithNames>::try_convert_to::<GroupBuilder, _>),
-        from_fn(With::<GroupBuilder>::build::<Group>),
-    )
+#[service_factory]
+async fn update_group(
+    authz: Ctx<AuthzContext>,
+    gated_trx: &mut GatedConnection<RW, InProject>,
+    request: WithinProject<UpdateRequest<GroupUpdate, GroupParam>>,
+) -> Result<Group, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, param, update) = request.into_parts();
+    let grant = authz
+        .require::<Project, ManageProject>(gated_trx, &ctx, &project)
+        .await?;
+    let conn = gated_trx.get(grant);
+
+    let update_db = GroupDBUpdate {
+        name: update.name.clone(),
+        description: update.description.clone(),
+        modified_on: ctx.time,
+        modified_by_id: ctx.user_id,
+    };
+
+    let current: GroupDBWithNames = conn.live().fetch_one(&param.group).await?;
+    // Reject mutation of the seeded system groups via the `system`
+    // flag — `default` / `source` / `destination` carry it.
+    assert_not_system(&current)?;
+    // A rename to a name already taken by another group in the project
+    // reports a clean "already exists" error instead of the raw
+    // unique-constraint violation from the update write.
+    assert_group_rename_available(conn, &update, &current).await?;
+
+    conn.live()
+        .update::<GroupDBUpdate, GroupDB>(&update_db, current.base.id)
+        .await?;
+    let with_names: GroupDBWithNames = conn.live().fetch_one(&current.base.id).await?;
+    let read = Group::from_dao(with_names)?;
+    Ok(read)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::group::GroupError;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
-    use td_error::TdError;
-    use td_error::assert_service_error;
-    use td_objects::Buildable;
+    use td_database::pool::scoped::ScopedExt as _;
+    use td_error::{TdError, assert_service_error};
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, GroupIdName, GroupName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_update_group(db: TdPool) -> Result<(), TdError> {
@@ -83,22 +79,22 @@ mod tests {
             )
             .await?;
 
-        let update = GroupUpdate::builder()
-            .name(GroupName::try_from("ml")?)
-            .description(Description::try_from("ML platform group")?)
-            .build()?;
+        let update = GroupUpdate {
+            name: Some(GroupName::try_from("ml")?),
+            description: Some(Description::try_from("ML platform group")?),
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                GroupParam::builder()
-                    .group(GroupIdName::from_str("analytics")?)
-                    .build()?,
+                GroupParam {
+                    group: GroupIdName::from_str("analytics")?,
+                },
                 update,
             )
             .in_project(p.id);
 
-        let service = UpdateGroupService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.update_group(request).await?.data;
 
         let found = db
             .live()
@@ -135,51 +131,46 @@ mod tests {
             )
             .await;
 
-        let update = GroupUpdate::builder()
-            .name(GroupName::try_from("ml").unwrap())
-            .description(None)
-            .build()
-            .unwrap();
+        let update = GroupUpdate {
+            name: Some(GroupName::try_from("ml").unwrap()),
+            description: None,
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                GroupParam::builder()
-                    .group(GroupIdName::from_str("analytics").unwrap())
-                    .build()
-                    .unwrap(),
+                GroupParam {
+                    group: GroupIdName::from_str("analytics").unwrap(),
+                },
                 update,
             )
             .in_project(p.id);
 
-        let service = UpdateGroupService::with_defaults(db.clone()).service();
-        assert_service_error(service, request, |err| match err {
+        let service = Services::with_defaults(db.clone());
+        assert_service_error(service.update_group(request).await, |err| match err {
             td_objects::errors::SqlError::EntityAlreadyExists(_, _) => {}
             other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
-        })
-        .await;
+        });
     }
 
     #[td_test::test(db)]
     async fn test_update_system_group_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let update = GroupUpdate::builder()
-            .name(None)
-            .description(Some(Description::try_from(
-                "trying to mutate a system row",
-            )?))
-            .build()?;
+        let update = GroupUpdate {
+            name: None,
+            description: Some(Description::try_from("trying to mutate a system row")?),
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                GroupParam::builder()
-                    .group(GroupIdName::from_str("default")?)
-                    .build()?,
+                GroupParam {
+                    group: GroupIdName::from_str("default")?,
+                },
                 update,
             )
             .in_project(p.id);
 
-        let service = UpdateGroupService::with_defaults(db.clone()).service();
-        let res = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let res = service.update_group(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();
         let err = err.domain_err::<GroupError>();
