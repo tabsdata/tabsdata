@@ -2,239 +2,162 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::recovery::layers::{
-    classify_divergence, execute_workload_removals, recreate_trigger_workloads,
+use crate::internal_api::InternalApi;
+use crate::project::active::active_project_ids;
+use crate::recovery::{
+    apply_recovery_actions, classify_divergence, execute_workload_removals,
+    recreate_trigger_workloads, sweep_stale_runs, take_recovery_snapshot,
 };
-use crate::recovery::services::apply::RecoveryApplyService;
-use crate::recovery::services::snapshot::RecoverySnapshotService;
-use crate::recovery::services::sweep::RecoverySweepService;
-use std::sync::Arc;
-use ta_services::factory::{FieldAccessor, ServiceFactory};
-use ta_services::service::TdService;
+use ta_services::ctx_service::ReqCtx;
+use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_bridge::BridgeProviderHandle;
-use td_common::jwt::JwtConfig;
-use td_database::pool::TdPool;
+use td_database::access::{DbPool, Global, Grant};
 use td_error::TdError;
 use td_execution::{RecoveryConfig, SchedulerNotify};
-use td_objects::types::addresses::InternalServerEndpoint;
+use td_objects::types::basic::AtTime;
 use td_storage::Storage;
-use td_tower::ctx_service::{CtxResponse, RawOneshot, ReqCtx};
-use td_tower::service_provider::TdBoxService;
-use tower::service_fn;
-use tower::util::BoxCloneSyncService;
-use tracing::warn;
+use tracing::{error, warn};
 
-/// The recovery tick, orchestrated over short DB phases so no connection is
-/// held during orchestrator calls: observe (no DB) → snapshot (read-only) →
-/// classify (pure) → workload removals (no DB) → apply (short TX) →
-/// recreates (no DB) → notify (post-commit by construction). Unobservable
-/// workloads degrade the tick to the time-based sweep (short TX). Every
-/// orchestrator action is idempotent, so an aborted tick converges on the
-/// next one.
-pub struct RecoveryService {
-    sweep: RecoverySweepService,
-    snapshot: RecoverySnapshotService,
-    apply: RecoveryApplyService,
-    storage: Arc<Storage>,
-    bridge: Arc<BridgeProviderHandle>,
-    internal_endpoint: Arc<InternalServerEndpoint>,
-    scheduler_notify: Arc<SchedulerNotify>,
-    jwt_config: Arc<JwtConfig>,
-    recovery_config: Arc<RecoveryConfig>,
-}
+/// The recovery tick, over short DB phases so no connection is held during
+/// orchestrator calls: observe (no DB) → snapshot (read-only) → classify
+/// (pure) → workload removals (no DB) → apply (short TX) → recreates (no DB)
+/// → notify (post-commit). Unobservable workloads degrade the tick to the
+/// time-based sweep (short TX). Every orchestrator action is idempotent, so an
+/// aborted tick converges on the next one.
+#[service_factory]
+async fn recovery(
+    storage: Ctx<Storage>,
+    bridge: Ctx<BridgeProviderHandle>,
+    internal_api: Ctx<InternalApi>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    config: Ctx<RecoveryConfig>,
+    msgs: &mut ReqCtx,
+    db: DbPool<Global>,
+    _request: (),
+) -> Result<(), TdError> {
+    let grant = Grant::asserted("recovery tick");
+    let at = AtTime::now();
 
-impl RecoveryService {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        db: TdPool,
-        storage: Arc<Storage>,
-        bridge: Arc<BridgeProviderHandle>,
-        internal_endpoint: Arc<InternalServerEndpoint>,
-        scheduler_notify: Arc<SchedulerNotify>,
-        jwt_config: Arc<JwtConfig>,
-        recovery_config: Arc<RecoveryConfig>,
-    ) -> Self {
-        Self {
-            sweep: RecoverySweepService::new(db.clone(), recovery_config.clone()),
-            snapshot: RecoverySnapshotService::new(db.clone()),
-            apply: RecoveryApplyService::new(db),
-            storage,
-            bridge,
-            internal_endpoint,
-            scheduler_notify,
-            jwt_config,
-            recovery_config,
+    let observer = bridge.workload_observer();
+    let observation = match observer {
+        None => None,
+        Some(observer) => match observer.observe().await {
+            Ok(observation) => Some(observation),
+            Err(e) => {
+                warn!(reason = ?e, "recovery.observe: workload observation failed");
+                None
+            }
+        },
+    };
+
+    match (observer, observation) {
+        (Some(observer), Some(observation)) => {
+            let snapshot = {
+                let mut conn = db.read().await?;
+                take_recovery_snapshot(conn.get(grant), &at).await?
+            };
+            let decisions = classify_divergence(&config, &observation, &snapshot);
+            let actions = execute_workload_removals(observer, &decisions).await;
+            for (project, actions) in actions.by_project() {
+                let mut trx = db.in_project(&project).begin_exclusive().await?;
+                match apply_recovery_actions(msgs, trx.get(grant), &at, &actions).await {
+                    Ok(()) => trx.commit().await?,
+                    Err(e) => error!(
+                        project_id = %project,
+                        "recovery.apply: project failed, continuing with the rest: {e:?}"
+                    ),
+                }
+            }
+            recreate_trigger_workloads(
+                &bridge,
+                &storage,
+                &internal_api,
+                &decisions,
+                &snapshot.stage_functions,
+            )
+            .await;
+        }
+        _ => {
+            for project in active_project_ids(&db, grant).await? {
+                let mut trx = db.in_project(&project).begin_exclusive().await?;
+                match sweep_stale_runs(msgs, trx.get(grant), &at, &config).await {
+                    Ok(()) => trx.commit().await?,
+                    Err(e) => error!(
+                        project_id = %project,
+                        "recovery.sweep: project failed, continuing with the rest: {e:?}"
+                    ),
+                }
+            }
         }
     }
-}
 
-impl<C> ServiceFactory<C> for RecoveryService
-where
-    TdPool: FieldAccessor<C>,
-    Arc<Storage>: FieldAccessor<C>,
-    Arc<BridgeProviderHandle>: FieldAccessor<C>,
-    Arc<InternalServerEndpoint>: FieldAccessor<C>,
-    Arc<SchedulerNotify>: FieldAccessor<C>,
-    Arc<JwtConfig>: FieldAccessor<C>,
-    Arc<RecoveryConfig>: FieldAccessor<C>,
-{
-    type Service = Self;
-
-    fn build(ctx: &C) -> Self {
-        Self::new(
-            TdPool::get_field(ctx),
-            Arc::<Storage>::get_field(ctx),
-            Arc::<BridgeProviderHandle>::get_field(ctx),
-            Arc::<InternalServerEndpoint>::get_field(ctx),
-            Arc::<SchedulerNotify>::get_field(ctx),
-            Arc::<JwtConfig>::get_field(ctx),
-            Arc::<RecoveryConfig>::get_field(ctx),
-        )
-    }
-}
-
-impl TdService for RecoveryService {
-    type Request = ();
-    type Response = ();
-    type Error = TdError;
-
-    fn service(&self) -> TdBoxService<Self::Request, Self::Response, Self::Error> {
-        let sweep = self.sweep.service();
-        let snapshot = self.snapshot.service();
-        let apply = self.apply.service();
-        let storage = self.storage.clone();
-        let bridge = self.bridge.clone();
-        let internal_endpoint = self.internal_endpoint.clone();
-        let notify = self.scheduler_notify.clone();
-        let jwt = self.jwt_config.clone();
-        let config = self.recovery_config.clone();
-        BoxCloneSyncService::new(service_fn(move |_: ()| {
-            let sweep = sweep.clone();
-            let snapshot = snapshot.clone();
-            let apply = apply.clone();
-            let storage = storage.clone();
-            let bridge = bridge.clone();
-            let internal_endpoint = internal_endpoint.clone();
-            let notify = notify.clone();
-            let jwt = jwt.clone();
-            let config = config.clone();
-            async move {
-                let observer = bridge.workload_observer();
-                let observation = match observer {
-                    None => None,
-                    Some(observer) => match observer.observe().await {
-                        Ok(observation) => Some(observation),
-                        Err(e) => {
-                            warn!(reason = ?e, "recovery.observe: workload observation failed");
-                            None
-                        }
-                    },
-                };
-                match (observer, observation) {
-                    (Some(observer), Some(observation)) => {
-                        let snapshot = snapshot.raw_oneshot(()).await?;
-                        let decisions = classify_divergence(&config, &observation, &snapshot);
-                        let actions = execute_workload_removals(observer, &decisions).await;
-                        apply.raw_oneshot(actions).await?;
-                        recreate_trigger_workloads(
-                            &bridge,
-                            &storage,
-                            &internal_endpoint,
-                            &jwt,
-                            &decisions,
-                            &snapshot.stage_functions,
-                        )
-                        .await;
-                    }
-                    _ => {
-                        sweep.raw_oneshot(()).await?;
-                    }
-                }
-                // Recovered LFRs re-dispatch on the next request tick; the
-                // apply/sweep transaction has already committed here.
-                notify.notify_scheduler();
-                Ok(CtxResponse::new((), ReqCtx::default()))
-            }
-        }))
-    }
-
-    #[cfg(feature = "test_tower_metadata")]
-    async fn metadata(&self) -> td_tower::metadata::Metadata {
-        self.snapshot.metadata().await
-    }
+    // Recovered LFRs re-dispatch on the next request tick; the apply/sweep
+    // transaction has already committed here.
+    scheduler_notify.notify_scheduler();
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::services::execute::ExecuteFunctionService;
-    use crate::recovery::services::RecoveryContext;
-    use crate::scheduler::services::FunctionSchedulerServices;
-    use crate::scheduler::services::SchedulerContext;
+    use crate::Services;
+    use crate::scheduler::test_wiring::dispatch_services;
     use std::str::FromStr;
     use std::time::Duration;
     use td_bridge::Orchestrator;
     use td_bridge::messaging::{CronRequest, OrchestratorMessagePayload, StageTriggerRequest};
     use td_bridge::test::{StaticWorkloadObserver, TestBridgeProvider};
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::TdPool;
+    use td_database::pool::scoped::ScopedExt;
     use td_execution::{DispatchGrace, StuckRequestedTimeout};
     use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionRequest;
-    use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder, FunctionRegister};
+    use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister};
     use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
     use td_objects::dxo::physical_function_run::{
         PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB,
     };
     use td_objects::dxo::worker::WorkerDB;
-    use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus,
-        PhysicalFunctionRunStatus, TableNameDto, UserId, WorkerMessageStatus, WorkerStatus,
-        WorkerType,
+        FunctionOnly, FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus,
+        OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId, ReuseFrozen, SkipIfRunning,
+        TableNameDto, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
-    use td_objects::{Buildable, TryUpdater};
-    use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use tower::ServiceExt;
+    use td_queries::{LiveEntry, VersionedEntry};
 
-    fn kubernetes_recovery_context(db: &TdPool, config: RecoveryConfig) -> RecoveryContext {
-        let mut context = RecoveryContext::with_defaults(db.clone());
-        context.recovery_config = Arc::new(config);
-        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
+    /// A recovery tick over an empty cluster observation, so every in-flight
+    /// workload reads as missing.
+    fn kubernetes_recovery_services(db: &TdPool, config: RecoveryConfig) -> Services {
+        let mut services = dispatch_services(db);
+        services.recovery_config = Ctx::new(config);
+        services.bridge = Ctx::new(BridgeProviderHandle::new(std::sync::Arc::new(
             TestBridgeProvider::default()
                 .with_orchestrator(Orchestrator::Kubernetes)
                 .with_workload_observer(StaticWorkloadObserver::default()),
         )));
-        context
+        services
     }
 
-    fn recovery_context(db: &TdPool, timeout: StuckRequestedTimeout) -> RecoveryContext {
-        let mut context = RecoveryContext::with_defaults(db.clone());
-        context.recovery_config = Arc::new(RecoveryConfig {
-            stuck_requested_timeout: timeout,
-            ..RecoveryConfig::default()
-        });
-        context
-    }
-
-    /// Returns the request tick's context so tests can inspect its queue.
+    /// The recovery tick sweeps, then a request tick re-dispatches what it
+    /// recovered. Returns the request tick's services so tests can inspect
+    /// its queue.
     async fn recovery_and_request_tick(
         db: &TdPool,
         timeout: StuckRequestedTimeout,
-    ) -> Result<SchedulerContext, TdError> {
-        let recovery = recovery_context(db, timeout);
-        RecoveryService::build(&recovery)
-            .service()
-            .oneshot(())
-            .await?;
-        let request = SchedulerContext::with_defaults(db.clone());
-        FunctionSchedulerServices::build(&request)
-            .request
-            .service()
-            .oneshot(())
-            .await?;
+    ) -> Result<Services, TdError> {
+        let mut recovery = dispatch_services(db);
+        recovery.recovery_config = Ctx::new(RecoveryConfig {
+            stuck_requested_timeout: timeout,
+            ..RecoveryConfig::default()
+        });
+        recovery.recovery(()).await?;
+        let request = dispatch_services(db);
+        request.clone().request(()).await?;
         Ok(request)
     }
 
@@ -249,18 +172,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("c_stuck")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f_stuck")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f_stuck".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _ = db
             .scoped(p.id)
             .seed()
@@ -268,24 +197,27 @@ mod tests {
             .await?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("f_stuck")?)
-                    .build()?,
-                ExecutionRequest::builder().name(None).build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("f_stuck")?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: None,
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(p.id);
-        let execution = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(request)
-            .await?;
+        let execution = dispatch_services(&db).execute_function(request).await?.data;
 
-        let context_1 = SchedulerContext::with_defaults(db.clone());
-        FunctionSchedulerServices::build(&context_1)
-            .request
-            .service()
-            .oneshot(())
-            .await?;
+        let context_1 = dispatch_services(&db);
+        context_1.clone().request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .live()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
@@ -322,8 +254,6 @@ mod tests {
                 .is_empty()
         );
 
-        // Past the timeout: the recovery tick fails the attempt and
-        // recovers the LFR; the next request tick re-dispatches it fresh.
         let context_2 =
             recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
@@ -362,7 +292,8 @@ mod tests {
             1
         );
 
-        let context_3 = recovery_and_request_tick(&db, StuckRequestedTimeout::default()).await?;
+        let context_3 = dispatch_services(&db);
+        context_3.clone().request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .live()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
@@ -387,12 +318,11 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_auto_recover_fails_stale_replay(db: TdPool) -> Result<(), TdError> {
-        use crate::logical::services::replay::ReplayLogicalFunctionRunService;
         use td_objects::and;
-        use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunPointerDB};
-        use td_objects::rest_urls::LogicalFunctionRunParam;
+        use td_objects::dxo::logical::{
+            LogicalFunctionRunDB, LogicalFunctionRunParam, LogicalFunctionRunPointerDB,
+        };
         use td_objects::types::basic::{AtTime, LogicalPointerStatus, TransactionKey};
-        use td_queries::VersionedEntry;
 
         let p = db.seed().test_project().await?;
         let collection = db
@@ -400,25 +330,31 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("c_stuck_rp")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f_stuck_rp")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f_stuck_rp".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
         let execution = db.scoped(p.id).seed().execution(&function).await?;
-        let txn = db
+        let trx = db
             .scoped(p.id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
@@ -430,7 +366,7 @@ mod tests {
                 &collection,
                 &function,
                 &execution,
-                &txn,
+                &trx,
                 &LogicalFunctionRunStatus::Committed,
             )
             .await?;
@@ -441,22 +377,18 @@ mod tests {
 
         let replay_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                LogicalFunctionRunParam::builder()
-                    .logical_function_run(lfr.id.clone())
-                    .build()?,
+                LogicalFunctionRunParam {
+                    logical_function_run: lfr.id.clone(),
+                },
                 (),
             );
-        let replay_response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(replay_request)
-            .await?;
+        let replay_response = dispatch_services(&db)
+            .replay_logical_function_run(replay_request)
+            .await?
+            .data;
 
-        let context_1 = SchedulerContext::with_defaults(db.clone());
-        FunctionSchedulerServices::build(&context_1)
-            .request
-            .service()
-            .oneshot(())
-            .await?;
+        let context_1 = dispatch_services(&db);
+        context_1.clone().request(()).await?;
         let pfr: PhysicalFunctionRunDB = db
             .live()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
@@ -464,8 +396,6 @@ mod tests {
         assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
         assert!(pfr.dispatched_on.is_some());
 
-        // The stale replay attempt is only terminalized (the LFR is
-        // sticky-Committed) and the next request tick dispatches nothing.
         let context_2 =
             recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
@@ -497,11 +427,15 @@ mod tests {
         Ok(())
     }
 
+    /// In kubernetes mode the request path emits the per-action
+    /// `FunctionRequest::Start` kind (not the flat request), carrying the
+    /// decorator + resolver, with no pre-resolved context. WorkerDB stays Locked.
+
     /// Seed a collection + function and an enabled trigger worker in
     /// `worker_status`.
     async fn seed_trigger_worker(
         db: &TdPool,
-        project_id: td_objects::types::basic::ProjectId,
+        project_id: ProjectId,
         collection_name: &str,
         worker_type: WorkerType,
         worker_status: WorkerStatus,
@@ -514,18 +448,24 @@ mod tests {
                 &UserId::admin(),
             )
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "function_1".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(project_id)
             .seed()
@@ -548,13 +488,15 @@ mod tests {
     /// Insert a newer version of `function`, making it non-current.
     async fn outdate_function_version(
         db: &TdPool,
-        project_id: td_objects::types::basic::ProjectId,
+        project_id: ProjectId,
         function: &FunctionDB,
     ) -> Result<(), TdError> {
-        let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
-        let mut builder = FunctionDBBuilder::try_from(function)?;
-        builder.id(FunctionVersionId::new());
-        let newer = builder.try_update_from(&request_context)?.build()?;
+        let newer = FunctionDB {
+            id: FunctionVersionId::new(),
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::admin(),
+            ..function.clone()
+        };
         db.scoped(project_id)
             .live()
             .insert::<FunctionDB>(&newer)
@@ -585,13 +527,10 @@ mod tests {
         )
         .await?;
 
-        let context = kubernetes_recovery_context(&db, RecoveryConfig::default());
-        RecoveryService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        let services = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        services.clone().recovery(()).await?;
 
-        let messages = context.bridge.message_queue().locked_messages().await;
+        let messages = services.bridge.message_queue().locked_messages().await;
         assert_eq!(messages.len(), 2);
         let cron_message = messages
             .iter()
@@ -614,9 +553,9 @@ mod tests {
             )
         ));
 
-        let cron_after: td_objects::dxo::worker::WorkerDB = db.live().fetch_one(&cron.id).await?;
+        let cron_after: WorkerDB = db.live().fetch_one(&cron.id).await?;
         assert_eq!(cron_after.status, WorkerStatus::Requested);
-        let stage_after: td_objects::dxo::worker::WorkerDB = db.live().fetch_one(&stage.id).await?;
+        let stage_after: WorkerDB = db.live().fetch_one(&stage.id).await?;
         assert_eq!(stage_after.status, WorkerStatus::Requested);
 
         Ok(())
@@ -638,18 +577,24 @@ mod tests {
                 &UserId::admin(),
             )
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f_run_missing")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f_run_missing".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _ = db
             .scoped(p.id)
             .seed()
@@ -657,23 +602,25 @@ mod tests {
             .await?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("f_run_missing")?)
-                    .build()?,
-                ExecutionRequest::builder().name(None).build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("f_run_missing")?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: None,
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(p.id);
-        let execution = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(request)
-            .await?;
-        let dispatch = SchedulerContext::with_defaults(db.clone());
-        FunctionSchedulerServices::build(&dispatch)
-            .request
-            .service()
-            .oneshot(())
-            .await?;
+        let execution = dispatch_services(&db).execute_function(request).await?.data;
+        dispatch_services(&db).request(()).await?;
 
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .live()
@@ -713,17 +660,14 @@ mod tests {
 
         // Empty cluster observation, no dispatch grace: the workload is
         // judged missing on the first tick.
-        let context = kubernetes_recovery_context(
+        let services = kubernetes_recovery_services(
             &db,
             RecoveryConfig {
                 dispatch_grace: DispatchGrace(Duration::ZERO),
                 ..RecoveryConfig::default()
             },
         );
-        RecoveryService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        services.recovery(()).await?;
 
         let pfr_failed: PhysicalFunctionRunDB = db
             .live()
@@ -735,12 +679,7 @@ mod tests {
             db.live().fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
         assert_eq!(lfr_recovered.status, LogicalFunctionRunStatus::ReScheduled);
 
-        let request_tick = SchedulerContext::with_defaults(db.clone());
-        FunctionSchedulerServices::build(&request_tick)
-            .request
-            .service()
-            .oneshot(())
-            .await?;
+        dispatch_services(&db).request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .live()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
@@ -779,13 +718,10 @@ mod tests {
         outdate_function_version(&db, p.id, &cron_fn).await?;
         outdate_function_version(&db, p.id, &stage_fn).await?;
 
-        let context = kubernetes_recovery_context(&db, RecoveryConfig::default());
-        RecoveryService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        let services = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        services.clone().recovery(()).await?;
 
-        let messages = context.bridge.message_queue().locked_messages().await;
+        let messages = services.bridge.message_queue().locked_messages().await;
         assert!(messages.is_empty());
 
         Ok(())
@@ -813,13 +749,10 @@ mod tests {
         )
         .await?;
 
-        let context = kubernetes_recovery_context(&db, RecoveryConfig::default());
-        RecoveryService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        let services = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        services.clone().recovery(()).await?;
 
-        let messages = context.bridge.message_queue().locked_messages().await;
+        let messages = services.bridge.message_queue().locked_messages().await;
         assert_eq!(messages.len(), 1);
         let cron_message = &messages[0];
         assert_eq!(cron_message.id, cron.id.to_string());

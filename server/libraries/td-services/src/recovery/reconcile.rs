@@ -2,16 +2,16 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::logical::layers::index_lfrs_by_exec_fn;
-use crate::scheduler::layers::request::{put_cron_trigger_start, put_stage_trigger_start};
+use crate::internal_api::InternalApi;
+use crate::logical::index_lfrs_by_exec_fn;
+use crate::scheduler::request::{put_cron_trigger_start, put_stage_trigger_start};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use td_bridge::BridgeProviderHandle;
 use td_bridge::observer::{
     ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadObserver, WorkloadPhase,
 };
-use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_common::jwt::JwtConfig;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -20,14 +20,12 @@ use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBWithNames};
 use td_objects::or;
-use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionVersionId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
-    PhysicalFunctionRunStatus, WorkerId, WorkerStatus,
+    PhysicalFunctionRunStatus, ProjectId, WorkerId, WorkerStatus,
 };
 use td_queries::{ChunkedQueries, CurrentEntry, LfrEntry, LiveEntry};
 use td_storage::Storage;
-use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument, warn};
 
 #[derive(Debug, Clone, Default)]
@@ -67,6 +65,7 @@ pub struct RecoverySnapshot {
 pub struct FnRecoveryAction {
     pub worker_id: Option<WorkerId>,
     pub pfr_id: PhysicalFunctionRunId,
+    pub project_id: ProjectId,
     pub lfr: Option<LogicalFunctionRunDB>,
     pub recover: bool,
     pub remove: Option<(WorkloadKind, String)>,
@@ -90,21 +89,33 @@ pub struct RecoveryActions {
     pub fn_actions: Vec<FnRecoveryAction>,
 }
 
-pub async fn cron_candidates(
-    workers: Ref<Vec<WorkerDBWithNames>>,
-) -> Result<CronCandidates, TdError> {
+impl RecoveryActions {
+    pub fn by_project(self) -> Vec<(ProjectId, Self)> {
+        let mut grouped: BTreeMap<ProjectId, Self> = BTreeMap::new();
+        for action in self.fn_actions {
+            grouped
+                .entry(action.project_id)
+                .or_default()
+                .fn_actions
+                .push(action);
+        }
+        grouped.into_iter().collect()
+    }
+}
+
+pub async fn cron_candidates(workers: &Vec<WorkerDBWithNames>) -> Result<CronCandidates, TdError> {
     Ok(CronCandidates((*workers).clone()))
 }
 
 pub async fn stage_candidates(
-    workers: Ref<Vec<WorkerDBWithNames>>,
+    workers: &Vec<WorkerDBWithNames>,
 ) -> Result<StageCandidates, TdError> {
     Ok(StageCandidates((*workers).clone()))
 }
 
 #[instrument(name = "recovery.fn_candidates", skip_all, level = "debug", err(Debug))]
 pub async fn fn_candidates(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
+    conn: &mut DomainConnection<Apiserver>,
 ) -> Result<FnCandidates, TdError> {
     let mut pfrs: Vec<PhysicalFunctionRunDB> = conn
         .live()
@@ -147,8 +158,8 @@ pub async fn fn_candidates(
 }
 
 pub async fn stage_trigger_functions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    stage: Ref<StageCandidates>,
+    conn: &mut DomainConnection<Apiserver>,
+    stage: &StageCandidates,
 ) -> Result<StageFunctions, TdError> {
     if stage.0.is_empty() {
         return Ok(StageFunctions::default());
@@ -156,14 +167,14 @@ pub async fn stage_trigger_functions(
     let fvids: Vec<FunctionVersionId> = stage
         .0
         .iter()
-        .map(|worker| worker.function_version_id.clone())
+        .map(|worker| worker.base.function_version_id.clone())
         .collect();
     let functions = conn
         .lfr()
         .with_bundle_base_path(&fvids)
         .await?
         .into_iter()
-        .map(|function| (function.id.clone(), function))
+        .map(|function| (function.base.id.clone(), function))
         .collect();
     Ok(StageFunctions(functions))
 }
@@ -173,15 +184,15 @@ pub async fn stage_trigger_functions(
 pub struct CurrentTriggerVersions(pub HashSet<FunctionVersionId>);
 
 pub async fn current_trigger_versions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    cron: Ref<CronCandidates>,
-    stage: Ref<StageCandidates>,
+    conn: &mut DomainConnection<Apiserver>,
+    cron: &CronCandidates,
+    stage: &StageCandidates,
 ) -> Result<CurrentTriggerVersions, TdError> {
     let fvids: Vec<FunctionVersionId> = cron
         .0
         .iter()
         .chain(stage.0.iter())
-        .map(|worker| worker.function_version_id.clone())
+        .map(|worker| worker.base.function_version_id.clone())
         .unique()
         .collect();
     if fvids.is_empty() {
@@ -197,17 +208,18 @@ pub async fn current_trigger_versions(
 }
 
 pub async fn build_recovery_snapshot(
-    at: Ref<AtTime>,
-    cron: Ref<CronCandidates>,
-    stage: Ref<StageCandidates>,
-    fn_attempts: Ref<FnCandidates>,
-    stage_functions: Ref<StageFunctions>,
-    current: Ref<CurrentTriggerVersions>,
+    at: &AtTime,
+    cron: &CronCandidates,
+    stage: &StageCandidates,
+    fn_attempts: &FnCandidates,
+    stage_functions: &StageFunctions,
+    current: &CurrentTriggerVersions,
 ) -> Result<RecoverySnapshot, TdError> {
     // Outdated-version trigger workers are not recovery's to maintain
     // (fn update/disable supersedes them; their leftover workloads fall to
     // the orphan pass).
-    let is_current = |worker: &&WorkerDBWithNames| current.0.contains(&worker.function_version_id);
+    let is_current =
+        |worker: &&WorkerDBWithNames| current.0.contains(&worker.base.function_version_id);
     Ok(RecoverySnapshot {
         at: *at,
         cron: cron.0.iter().filter(is_current).cloned().collect(),
@@ -360,6 +372,7 @@ pub fn classify_divergence(
             decisions.fn_actions.push(FnRecoveryAction {
                 worker_id: attempt.worker_id.clone(),
                 pfr_id: attempt.pfr.id.clone(),
+                project_id: attempt.pfr.project_id,
                 lfr: None,
                 recover,
                 remove: remove
@@ -371,13 +384,13 @@ pub fn classify_divergence(
     }
 
     for worker in &snapshot.cron {
-        if !workload_by_worker.contains_key(&worker.id) {
+        if !workload_by_worker.contains_key(&worker.base.id) {
             decisions.cron_recreates.push(worker.clone());
         }
     }
 
     for worker in &snapshot.stage {
-        match workload_by_worker.get(&worker.id) {
+        match workload_by_worker.get(&worker.base.id) {
             None => decisions.stage_recreates.push(worker.clone()),
             Some(w) => {
                 let restart = match w.phase {
@@ -390,7 +403,7 @@ pub fn classify_divergence(
                 if restart {
                     decisions
                         .stage_restarts
-                        .push((worker.id.clone(), w.kind, w.name.clone()));
+                        .push((worker.base.id.clone(), w.kind, w.name.clone()));
                 }
             }
         }
@@ -405,10 +418,10 @@ pub fn classify_divergence(
         }
     }
     for worker in &snapshot.cron {
-        expected.insert(&worker.id);
+        expected.insert(&worker.base.id);
     }
     for worker in &snapshot.stage {
-        expected.insert(&worker.id);
+        expected.insert(&worker.base.id);
     }
     for workload in &observation.workloads {
         let Some(worker_id) = &workload.worker_id else {
@@ -516,39 +529,27 @@ pub async fn execute_workload_removals(
 pub async fn recreate_trigger_workloads(
     bridge: &BridgeProviderHandle,
     storage: &Storage,
-    server_endpoint: &InternalServerEndpoint,
-    jwt: &JwtConfig,
+    internal_api: &InternalApi,
     decisions: &RecoveryDecisions,
     stage_functions: &HashMap<FunctionVersionId, FunctionDBWithBundleBasePath>,
 ) {
-    let kubernetes = matches!(bridge.orchestrator(), Orchestrator::Kubernetes);
     for worker in &decisions.cron_recreates {
-        warn!(worker_id = %worker.id, "recovery: recreating cron workload");
-        if let Err(e) =
-            put_cron_trigger_start(bridge, server_endpoint, jwt, kubernetes, worker).await
-        {
+        warn!(worker_id = %worker.base.id, "recovery: recreating cron workload");
+        if let Err(e) = put_cron_trigger_start(bridge, internal_api, worker).await {
             warn!(
-                worker_id = %worker.id,
+                worker_id = %worker.base.id,
                 reason = ?e,
                 "recovery: cron recreate failed; retrying next tick"
             );
         }
     }
     for worker in &decisions.stage_recreates {
-        warn!(worker_id = %worker.id, "recovery: recreating streamer workload");
-        if let Err(e) = put_stage_trigger_start(
-            bridge,
-            storage,
-            server_endpoint,
-            jwt,
-            stage_functions,
-            kubernetes,
-            worker,
-        )
-        .await
+        warn!(worker_id = %worker.base.id, "recovery: recreating streamer workload");
+        if let Err(e) =
+            put_stage_trigger_start(bridge, storage, internal_api, stage_functions, worker).await
         {
             warn!(
-                worker_id = %worker.id,
+                worker_id = %worker.base.id,
                 reason = ?e,
                 "recovery: streamer recreate failed; retrying next tick"
             );
@@ -566,8 +567,8 @@ pub async fn recreate_trigger_workloads(
     err(Debug)
 )]
 pub async fn finalize_recovery_actions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    actions: Ref<RecoveryActions>,
+    conn: &mut DomainConnection<Apiserver>,
+    actions: &RecoveryActions,
 ) -> Result<RecoveryActions, TdError> {
     if actions.fn_actions.is_empty() {
         return Ok((*actions).clone());
@@ -638,7 +639,7 @@ pub async fn finalize_recovery_actions(
     Ok(RecoveryActions { fn_actions })
 }
 
-pub async fn failed_worker_update(at: Ref<AtTime>) -> Result<UpdateWorkerDB, TdError> {
+pub async fn failed_worker_update(at: &AtTime) -> Result<UpdateWorkerDB, TdError> {
     Ok(UpdateWorkerDB {
         started_on: None,
         ended_on: Some(*at),
@@ -646,7 +647,7 @@ pub async fn failed_worker_update(at: Ref<AtTime>) -> Result<UpdateWorkerDB, TdE
     })
 }
 
-pub async fn failed_worker_ids(actions: Ref<RecoveryActions>) -> Result<Vec<WorkerId>, TdError> {
+pub async fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdError> {
     Ok(actions
         .fn_actions
         .iter()
@@ -663,9 +664,9 @@ pub async fn failed_worker_ids(actions: Ref<RecoveryActions>) -> Result<Vec<Work
     err(Debug)
 )]
 pub async fn fail_recovered_attempts(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    at: Ref<AtTime>,
-    actions: Ref<RecoveryActions>,
+    conn: &mut DomainConnection<Apiserver>,
+    at: &AtTime,
+    actions: &RecoveryActions,
 ) -> Result<(), TdError> {
     let pfr_ids: Vec<PhysicalFunctionRunId> = actions
         .fn_actions
@@ -686,7 +687,7 @@ pub async fn fail_recovered_attempts(
 /// legal transition, so these are failed first (same transaction) and then
 /// recovered as Failed.
 pub async fn fail_running_lfrs_for_recover(
-    actions: Ref<RecoveryActions>,
+    actions: &RecoveryActions,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     Ok(actions
         .fn_actions
@@ -699,7 +700,7 @@ pub async fn fail_running_lfrs_for_recover(
 }
 
 pub async fn recover_lfrs_from_actions(
-    actions: Ref<RecoveryActions>,
+    actions: &RecoveryActions,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     Ok(actions
         .fn_actions
@@ -726,7 +727,7 @@ pub async fn recover_lfrs_from_actions(
 }
 
 pub async fn fail_lfrs_from_actions(
-    actions: Ref<RecoveryActions>,
+    actions: &RecoveryActions,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     Ok(actions
         .fn_actions
