@@ -2,265 +2,105 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::execute;
-use crate::execution::layers::execution_version::assert_function_version;
+use crate::execution::execute;
+use crate::execution::execution_version::assert_function_version;
+use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::enter_project_scope;
-use td_execution::SchedulerNotify;
-use td_execution::TransactionBy;
+use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_execution::{SchedulerNotify, TransactionBy};
+use td_objects::StateFilter;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionRequestInternal, ExecutionResponse};
-use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::rest_urls::FunctionVersionIdParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    AtTime, CollectionId, FunctionId, FunctionVersionId, ProjectId, TriggerType,
-};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionIdParam};
+use td_queries::{HistoricEntry, LiveEntry};
 
-#[service_factory(
-    name = ExecuteFunctionVersionService,
-    request = CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>,
-    response = ExecutionResponse,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-    context = TransactionBy,
-    context = SchedulerNotify,
-)]
-fn service() {
-    layers!(
-        // Extract from request.
-        from_fn(
-            With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract::<
-                RequestContext,
-            >
-        ),
-        from_fn(
-            With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract_name::<
-                FunctionVersionIdParam,
-            >
-        ),
-        from_fn(
-            With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract_data::<
-                ExecutionRequestInternal,
-            >
-        ),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
-        // Select trigger function; pivot into its project's scope via the
-        // collection.
-        from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
-        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        // Ensure the trigger function is the current active version (never allow older versions to execute)
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        from_fn(
-            By::<FunctionId>::historic_fetch_one::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
-        ),
-        from_fn(assert_function_version),
-        // Extract Trigger type
-        from_fn(With::<ExecutionRequestInternal>::extract::<TriggerType>),
-        // Convert to the public request shape so the shared `execute` layer can read it.
-        from_fn(With::<ExecutionRequestInternal>::convert_to::<ExecutionRequest>),
-        // Run the trigger gates (425 if running / 409 on external_uid conflict), build the
-        // execution, notify the scheduler, and shape the response.
-        execute(),
+#[service_factory]
+async fn execute_function_version(
+    authz: Ctx<AuthzContext>,
+    transaction_by: Ctx<TransactionBy>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    msgs: &mut ReqCtx,
+    db: DbPool<Global>,
+    request: CreateRequest<ExecutionRequestInternal, FunctionVersionIdParam>,
+) -> Result<ExecutionResponse, TdError> {
+    let (ctx, param, internal_request) = request.into_parts();
+    let function_version_id = param.function_version_id;
+
+    let (requested, project, grant) = {
+        let mut trx = db.read().await?;
+        let conn = trx.get(authz.none());
+        let requested: FunctionDBWithNames = conn.live().fetch_one(&function_version_id).await?;
+        let collection: CollectionDB = conn.live().fetch_one(&requested.base.collection_id).await?;
+        let project = collection.base.project_id;
+        // the project is known now: authorize before any further read and
+        // before queueing on its exclusive lock
+        let grant = authz
+            .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
+            .await?;
+        (requested, project, grant)
+    };
+    let mut trx = db.in_project(&project).begin_exclusive().await?;
+
+    // Ensure the trigger function is the current active version (never allow
+    // older versions to execute).
+    let conn = trx.get(grant);
+    let function: FunctionDBWithNames = conn
+        .historic(&ctx.time)
+        .state(StateFilter::all())
+        .fetch_one(&requested.base.function_id)
+        .await?;
+    assert_function_version(&function_version_id, &function).await?;
+
+    let trigger_type = internal_request.trigger_type.clone();
+    let execution_request = ExecutionRequest::from(&internal_request);
+
+    let response = execute(
+        conn,
+        msgs,
+        &transaction_by,
+        ctx,
+        project,
+        execution_request,
+        function,
+        trigger_type,
     )
+    .await?;
+    trx.commit().await?;
+
+    scheduler_notify.notify_scheduler();
+    Ok(response)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::function::services::update::UpdateFunctionService;
+    use crate::Services;
     use std::collections::HashSet;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::{ApiError, TdError};
-    use td_objects::Buildable;
+    use td_objects::dxo::collection::CollectionParam;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
+    use td_objects::dxo::function::FunctionParam;
     use td_objects::dxo::function::{
         FunctionDB, FunctionDBWithNames, FunctionRegister, FunctionUpdate,
     };
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
-        ExternalUid, FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus,
-        ProjectId, SkipIfRunning, TableNameDto, TransactionKey, UserId,
+        ExternalUid, FunctionIdName, FunctionName, FunctionOnly, FunctionRuntimeValues,
+        LogicalFunctionRunStatus, ProjectId, SkipIfRunning, TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::types::basic::{FunctionVersionId, TriggerType};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_execute_version(db: TdPool) {
-        use crate::execution::layers::GraphOpts;
-        use crate::execution::layers::execution::{
-            assert_function_status, build_execution_plan, build_initial_mint_lfr_pointers,
-            build_initial_mint_ltdv_pointers, build_logical_function_run_inputs,
-            build_logical_function_runs, build_logical_table_data_versions, build_response,
-            build_transaction_map, build_transactions, resolve_execution_plan_versions,
-            update_initial_function_run_status, validate_execution_plan, with_recursion_options,
-        };
-        use crate::execution::layers::execution_version::{
-            dedup_lock, reject_if_external_uid_in_use, reject_if_running,
-        };
-        use crate::graph::layers::FunctionOrTable;
-        use crate::graph::layers::build::GraphBuilder;
-        use crate::scheduler::layers::request::notify_scheduler;
-        use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-        use td_objects::And;
-        use td_objects::dxo::collection::CollectionDB;
-        use td_objects::dxo::crudl::RequestContext;
-        use td_objects::dxo::execution::{
-            ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionRequestInternal,
-        };
-        use td_objects::dxo::function::FunctionDBWithNames;
-        use td_objects::dxo::logical::{
-            LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
-            LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
-        };
-        use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
-        use td_objects::tower_service::with::With;
-        use td_objects::types::basic::ProjectId;
-        use td_objects::types::basic::{
-            FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
-        };
-        use td_objects::types::recursion::RecursionOptions;
-        use td_queries::{insert, insert_vec};
-        use td_tower::metadata::type_of_val;
-
-        ExecuteFunctionVersionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>, ExecutionResponse>(&[
-                // Extract from request.
-                type_of_val(&
-                    With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract::<
-                        RequestContext,
-                    >
-                ),
-                type_of_val(&
-                    With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract_name::<
-                        FunctionVersionIdParam,
-                    >
-                ),
-                type_of_val(&
-                    With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract_data::<
-                        ExecutionRequestInternal,
-                    >
-                ),
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
-                // Select trigger function; pivot into its project's scope via the
-                // collection.
-                type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
-                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                // Ensure the trigger function is the current active version (never allow older versions to execute)
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                type_of_val(&
-                    By::<FunctionId>::historic_fetch_one::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
-                ),
-                type_of_val(&assert_function_version),
-                type_of_val(&With::<ExecutionRequestInternal>::extract::<TriggerType>),
-
-                // Convert to the public request shape so the shared trigger gates can read it.
-                type_of_val(&With::<ExecutionRequestInternal>::convert_to::<ExecutionRequest>),
-
-                // trigger_guards(): 425 Too Early gate
-                type_of_val(&
-                    By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>
-                ),
-                type_of_val(&With::<ExecutionRequest>::extract::<SkipIfRunning>),
-                type_of_val(&reject_if_running),
-
-                // trigger_guards(): 409 Conflict gate
-                type_of_val(&With::<ExecutionRequest>::extract::<Option<ExternalUid>>),
-                type_of_val(&dedup_lock),
-                type_of_val(&reject_if_external_uid_in_use),
-
-                // execute()
-                type_of_val(&With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
-                type_of_val(&assert_function_status),
-                // check requester can develop the current project (manage or develop)
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, DevelopProject>::check),
-                // Get recursion options
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
-                type_of_val(&With::<ExecutionRequest>::extract::<FunctionOnly>),
-                type_of_val(&with_recursion_options),
-                // Find td graph
-                // Find triggers
-                type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
-                // Find dependencies. For clarity, we always show the function, even if
-                // generating a table centered graph, the same way we show the tables of
-                // a function centered graph.
-                type_of_val(&GraphBuilder::<GraphOpts>::main_function_id),
-                type_of_val(&GraphBuilder::<GraphOpts>::unique_triggered_function_ids),
-                type_of_val(
-                    &GraphBuilder::<GraphOpts>::find_triggered_functions_dependency_graph,
-                ),
-                // Find output tables
-                type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
-                // Find all tables and functions
-                type_of_val(&GraphBuilder::<GraphOpts>::find_all_tables_map),
-                type_of_val(&GraphBuilder::<GraphOpts>::find_all_functions_map),
-                // Create td graph and validate it
-                type_of_val(&GraphBuilder::<GraphOpts>::build_td_graph),
-                // Build execution plan
-                type_of_val(&build_execution_plan),
-                type_of_val(&validate_execution_plan),
-                // Build execution
-                type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
-                type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
-                type_of_val(&With::<TriggerType>::set::<ExecutionDBBuilder>),
-                type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
-                type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB>),
-                type_of_val(&insert::<ExecutionDB>),
-                // Build transactions
-                type_of_val(&build_transaction_map),
-                type_of_val(&With::<ExecutionDB>::try_convert_to::<TransactionDBBuilder, _>),
-                type_of_val(&build_transactions),
-                type_of_val(&insert_vec::<TransactionDB>),
-                // Logical LFRs — identity rows + InitialMint pointer events.
-                type_of_val(&build_logical_function_runs),
-                type_of_val(&insert_vec::<LogicalFunctionRunDB>),
-                type_of_val(&build_initial_mint_lfr_pointers),
-                type_of_val(&insert_vec::<LogicalFunctionRunPointerDB>),
-                // Logical LTDVs — identity rows + InitialMint pointer events.
-                type_of_val(&build_logical_table_data_versions),
-                type_of_val(&insert_vec::<LogicalTableDataVersionDB>),
-                type_of_val(&build_initial_mint_ltdv_pointers),
-                type_of_val(&insert_vec::<LogicalTableDataVersionPointerDB>),
-                // Resolve plan-build response.
-                type_of_val(&resolve_execution_plan_versions),
-                // Logical dependency-binding rows.
-                type_of_val(&build_logical_function_run_inputs),
-                type_of_val(&insert_vec::<LogicalFunctionRunInputDB>),
-                // Initial-OnHold via logical chain.
-                type_of_val(&update_initial_function_run_status),
-                // Execution plan response
-                type_of_val(&build_response),
-
-                // Notify scheduler of new function runs.
-                type_of_val(&notify_scheduler),
-            ]);
-    }
 
     // Similar to tests in execute, but just testing that the functions are found properly.
     // Tests in execute assert the correctness of the execution.
@@ -325,7 +165,10 @@ mod tests {
             .live()
             .fetch_one::<FunctionDBWithNames>(&FunctionName::try_from("function_0")?)
             .await?;
-        let executions: Vec<ExecutionDB> = db.live().fetch_all::<ExecutionDB>(&function.id).await?;
+        let executions: Vec<ExecutionDB> = db
+            .live()
+            .fetch_all::<ExecutionDB>(&function.base.id)
+            .await?;
         assert_eq!(executions.len(), 1);
         Ok(())
     }
@@ -422,19 +265,24 @@ mod tests {
             .await?;
         let function_0 = FunctionName::try_from("function_0")?;
 
-        // Create function.
-        let create = FunctionRegister::builder()
-            .name(function_0.clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: function_0.clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(project_id)
             .seed()
@@ -472,20 +320,21 @@ mod tests {
                 .await?;
         }
 
-        // Trigger function
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             FunctionVersionIdParam {
                 function_version_id: function.id.clone(),
             },
-            ExecutionRequestInternal::builder()
-                .name(Some(ExecutionName::try_from("test_execution")?))
-                .skip_if_running(skip_if_running)
-                .trigger_type(TriggerType::CronTrigger)
-                .build()?,
+            ExecutionRequestInternal {
+                name: Some(ExecutionName::try_from("test_execution")?),
+                function_only: FunctionOnly::default(),
+                skip_if_running,
+                external_uid: None,
+                trigger_type: TriggerType::CronTrigger,
+            },
         );
 
-        let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.execute_function_version(request).await?.data;
         Ok((function, response))
     }
 
@@ -499,19 +348,24 @@ mod tests {
             .await?;
         let function_0 = FunctionName::try_from("function_0")?;
 
-        // Trigger function.
-        let create = FunctionRegister::builder()
-            .name(function_0.clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: function_0.clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(p.id)
             .seed()
@@ -519,39 +373,43 @@ mod tests {
             .await?;
 
         // Dummy update to create new version
-        let update = FunctionUpdate::builder().name(function_0).build()?;
+        let update = FunctionUpdate {
+            name: Some(function_0),
+            ..Default::default()
+        };
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!(
-                        "~{}",
-                        collection_0.id
-                    ))?)
-                    .function(FunctionIdName::from_str(&format!(
-                        "~{}",
-                        function.function_id
-                    ))?)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection_0.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(&format!("~{}", function.function_id))?,
+                    },
+                ),
                 update.clone(),
             )
             .in_project(p.id);
 
-        let service = UpdateFunctionService::with_defaults(db.clone()).service();
-        let updated = service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        let updated = service.update_function(request).await?.data;
 
         // Now, using function.id will fail
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             FunctionVersionIdParam {
                 function_version_id: function.id.clone(),
             },
-            ExecutionRequestInternal::builder()
-                .name(Some(ExecutionName::try_from("test_execution")?))
-                .trigger_type(TriggerType::CronTrigger)
-                .build()?,
+            ExecutionRequestInternal {
+                name: Some(ExecutionName::try_from("test_execution")?),
+                function_only: FunctionOnly::default(),
+                skip_if_running: SkipIfRunning::default(),
+                external_uid: None,
+                trigger_type: TriggerType::CronTrigger,
+            },
         );
 
-        let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.execute_function_version(request).await;
         let err = response.unwrap_err();
         assert!(err.to_string().contains("Function version missmatch."));
         assert!(err.to_string().contains(format!(
@@ -570,18 +428,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("dedup_coll")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .name(FunctionName::try_from("dedup_fn")?)
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FunctionName::try_from("dedup_fn")?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         db.scoped(project_id)
             .seed()
             .function(&collection, &create)
@@ -597,16 +461,18 @@ mod tests {
             FunctionVersionIdParam {
                 function_version_id: function_version_id.clone(),
             },
-            ExecutionRequestInternal::builder()
-                .name(Some(ExecutionName::try_from("test_execution")?))
-                .external_uid(external_uid)
-                .trigger_type(TriggerType::CronTrigger)
-                .build()?,
+            ExecutionRequestInternal {
+                name: Some(ExecutionName::try_from("test_execution")?),
+                function_only: FunctionOnly::default(),
+                skip_if_running: SkipIfRunning::default(),
+                external_uid,
+                trigger_type: TriggerType::CronTrigger,
+            },
         );
-        ExecuteFunctionVersionService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(request)
+        Services::with_defaults(db.clone())
+            .execute_function_version(request)
             .await
+            .map(|response| response.data)
     }
 
     #[td_test::test(db)]
@@ -648,23 +514,19 @@ mod tests {
     }
 
     /// Concurrent identical-`external_uid` triggers must not race into a 500:
-    /// `dedup_lock` serializes them so exactly one inserts (`Executed`) and the other is
-    /// rejected with `409 Conflict`, leaving a single execution row. Before the lock, both
-    /// could pass the conflict check and the INSERT loser would hit a constraint and surface
-    /// a 500. Postgres-only — SQLite/MySQL serialize writers and the advisory lock is a no-op.
+    /// the project's lock, which every exclusive connection holds for its whole
+    /// transaction, serializes them so exactly one inserts (`Executed`) and the
+    /// other is rejected with `409 Conflict`, leaving a single execution row.
+    /// Unserialized, both could pass the conflict check and the INSERT loser
+    /// would hit a constraint and surface a 500.
     #[td_test::test(db)]
     async fn test_execute_version_concurrent_external_uid_no_race(
         db: TdPool,
     ) -> Result<(), TdError> {
-        use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
-        if !matches!(db.kind(), DatabaseBackend::Postgres) {
-            return Ok(());
-        }
         let p = db.seed().test_project().await?;
         let function = seed_dedup_function(&db, p.id).await?;
         let uid = ExternalUid::try_from("uid-concurrent")?;
 
-        // Fire two identical triggers concurrently on the shared pool.
         let (a, b) = tokio::join!(
             trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
             trigger_with_external_uid(&db, &function.id, Some(uid.clone())),

@@ -2,112 +2,61 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::list::list_executions_by_tdv;
+use crate::execution::list::list_executions_by_tdv;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject, enter_project_scope};
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_authz::rbac::ViewProject;
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionParam;
 use td_objects::list::params::ListQueryParams;
-use td_objects::rest_urls::PhysicalTableDataVersionParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{PhysicalTableDataVersionId, ProjectId};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ExecutionListByPhysicalTableDataVersionService,
-    request = ListRequest<PhysicalTableDataVersionParam>,
-    response = ListResponse<Execution>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<RequestContext>),
-        // Extract PhysicalTableDataVersionId from request.
-        from_fn(
-            With::<ListRequest<PhysicalTableDataVersionParam>>::extract_name::<
-                PhysicalTableDataVersionParam,
-            >
-        ),
-        from_fn(With::<PhysicalTableDataVersionParam>::extract::<PhysicalTableDataVersionId>),
-        // Resolve the anchor's owning project; authorize the requester to
-        // view it.
-        from_fn(By::<PhysicalTableDataVersionId>::fetch_one::<PhysicalTableDataVersionDB>),
-        from_fn(With::<PhysicalTableDataVersionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // Wrap into Option to match the nullable column.
-        from_fn(With::<PhysicalTableDataVersionId>::some),
-        // List executions
-        from_fn(With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-        from_fn(list_executions_by_tdv),
-    )
+#[service_factory]
+async fn execution_list_by_physical_table_data_version(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest<PhysicalTableDataVersionParam>,
+) -> Result<ListResponse<Execution>, TdError> {
+    let (ctx, param, list_params) = request.into_parts();
+    let tdv_id = param.table_data_version;
+
+    let conn = gated_conn.get(authz.none());
+    let tdv: PhysicalTableDataVersionDB = conn.live().fetch_one(&tdv_id).await?;
+    let _grant = authz
+        .require_in_project::<ViewProject>(conn, &ctx, &tdv.project_id)
+        .await?;
+
+    let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
+    // Wrap into Option to match the nullable column.
+    list_executions_by_tdv(conn, &Some(tdv_id), &list_params, &query_params).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::and;
-    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TableNameDto,
         TransactionKey, UserId, VersionPos,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_executions_by_table_data_version(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ExecutionListByPhysicalTableDataVersionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<PhysicalTableDataVersionParam>, ListResponse<Execution>>(&[
-                type_of_val(&With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<RequestContext>),
-                // Extract PhysicalTableDataVersionId from request.
-                type_of_val(
-                    &With::<ListRequest<PhysicalTableDataVersionParam>>::extract_name::<
-                        PhysicalTableDataVersionParam,
-                    >,
-                ),
-                type_of_val(&With::<PhysicalTableDataVersionParam>::extract::<PhysicalTableDataVersionId>),
-                // Resolve the anchor's owning project; authorize the requester to
-                // view it.
-                type_of_val(&By::<PhysicalTableDataVersionId>::fetch_one::<PhysicalTableDataVersionDB>),
-                type_of_val(&With::<PhysicalTableDataVersionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // Wrap into Option to match the nullable column.
-                type_of_val(&With::<PhysicalTableDataVersionId>::some),
-                // List executions with pagination (single JOIN query).
-                type_of_val(&With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-                type_of_val(&list_executions_by_tdv),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_executions_by_table_data_version(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        // Create collection and function with an output table.
         let collection = db
             .scoped(p.id)
             .seed()
@@ -115,18 +64,24 @@ mod tests {
             .await?;
 
         let tables = vec![TableNameDto::try_from("output_table")?];
-        let create = FunctionRegister::builder()
-            .try_name("producer_fn")?
-            .try_description("produces data")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(tables.clone())
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "producer_fn".try_into()?,
+            description: "produces data".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -174,18 +129,24 @@ mod tests {
             .await?;
 
         // Create a second function that consumes the TDV.
-        let create_consumer = FunctionRegister::builder()
-            .try_name("consumer_fn")?
-            .try_description("consumes data")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create_consumer = FunctionRegister {
+            name: "consumer_fn".try_into()?,
+            description: "consumes data".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let consumer_function_version = db
             .scoped(p.id)
             .seed()
@@ -234,16 +195,17 @@ mod tests {
         // Create a third execution that does NOT reference the TDV.
         let _execution_3 = db.scoped(p.id).seed().execution(&function_version).await?;
 
-        // Call the service.
-        let service =
-            ExecutionListByPhysicalTableDataVersionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-            PhysicalTableDataVersionParam::builder()
-                .table_data_version(tdv.id.clone())
-                .build()?,
+            PhysicalTableDataVersionParam {
+                table_data_version: tdv.id.clone(),
+            },
             ListParams::default(),
         );
-        let response = service.raw_oneshot(request).await?;
+        let response = service
+            .execution_list_by_physical_table_data_version(request)
+            .await?
+            .data;
 
         // Only execution_2 should appear (it has the function requirement referencing the TDV).
         assert_eq!(response.len, 1);
@@ -263,18 +225,24 @@ mod tests {
             .await?;
 
         let tables = vec![TableNameDto::try_from("some_table")?];
-        let create = FunctionRegister::builder()
-            .try_name("some_fn")?
-            .try_description("description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(tables.clone())
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "some_fn".try_into()?,
+            description: "description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -321,15 +289,17 @@ mod tests {
             .await?;
 
         // No function requirements reference this TDV.
-        let service =
-            ExecutionListByPhysicalTableDataVersionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-            PhysicalTableDataVersionParam::builder()
-                .table_data_version(tdv.id.clone())
-                .build()?,
+            PhysicalTableDataVersionParam {
+                table_data_version: tdv.id.clone(),
+            },
             ListParams::default(),
         );
-        let response = service.raw_oneshot(request).await?;
+        let response = service
+            .execution_list_by_physical_table_data_version(request)
+            .await?
+            .data;
 
         assert_eq!(response.len, 0);
 

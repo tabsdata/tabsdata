@@ -2,111 +2,76 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::update_status::update_function_run_status;
-use crate::scheduler::layers::request::notify_scheduler;
+use crate::execution::update_status::update_function_run_status;
+use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
+use td_authz::rbac::DevelopProject;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
+use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
-use td_objects::rest_urls::ExecutionParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, ExecutionId, ProjectId};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ExecutionCancelService,
-    request = UpdateRequest<ExecutionParam, ()>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-    context = SchedulerNotify,
-)]
-fn service() {
-    layers!(
-        // Extract from request.
-        from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
-        from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
-        from_fn(With::<ExecutionParam>::extract::<ExecutionId>),
-        // Find execution and resolve its owning project via the collection.
-        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDB>),
-        from_fn(With::<ExecutionDB>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        // check requester can develop the project (manage or develop)
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, DevelopProject>::check),
-        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
-        // Set cancel status (on the LFR — FR has no status).
-        from_fn(UpdateLogicalFunctionRunDB::cancel),
-        // Update function requirements status
-        from_fn(update_function_run_status),
-        // Notify scheduler of status change.
-        from_fn(notify_scheduler),
-    )
+#[service_factory]
+async fn execution_cancel(
+    authz: Ctx<AuthzContext>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    msgs: &mut ReqCtx,
+    db: DbPool<Global>,
+    request: UpdateRequest<(), ExecutionParam>,
+) -> Result<(), TdError> {
+    let (ctx, param, _) = request.into_parts();
+    let execution_id = param.execution;
+
+    let (project, grant) = {
+        let mut trx = db.read().await?;
+        let conn = trx.get(authz.none());
+        let execution: ExecutionDB = conn.live().fetch_one(&execution_id).await?;
+        let collection: CollectionDB = conn.live().fetch_one(&execution.collection_id).await?;
+        let project = collection.base.project_id;
+        // before the exclusive lock: unauthorized callers must not queue on it
+        let grant = authz
+            .require_in_project::<DevelopProject>(&mut trx, &ctx, &project)
+            .await?;
+        (project, grant)
+    };
+    let mut trx = db.in_project(&project).begin_exclusive().await?;
+
+    let conn = trx.get(grant);
+    let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&execution_id).await?;
+    // Set cancel status (on the LFR — FR has no status), then cascade.
+    let update = UpdateLogicalFunctionRunDB::cancel();
+    update_function_run_status(msgs, conn, &lfrs, &update).await?;
+    trx.commit().await?;
+
+    scheduler_notify.notify_scheduler();
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::layers::update_status::tests::{
+    use crate::Services;
+    use crate::execution::update_status::tests::{
         TestExecution, TestFunction, TestTransaction, test_status_update,
     };
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::ExecutionId;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
         ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_cancel_execution(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ExecutionCancelService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
-                // Extract from request.
-                type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
-                type_of_val(
-                    &With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>,
-                ),
-                type_of_val(&With::<ExecutionParam>::extract::<ExecutionId>),
-                // Find execution and resolve its owning project via the collection.
-                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDB>),
-                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                // check requester can develop the project (manage or develop)
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, DevelopProject>::check),
-                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
-                // Set cancel status (on the LFR).
-                type_of_val(&UpdateLogicalFunctionRunDB::cancel),
-                // Update function requirements status
-                type_of_val(&update_function_run_status),
-                // Notify scheduler of status change.
-                type_of_val(&notify_scheduler),
-            ]);
-    }
 
     async fn test_cancel_execution(
         db: TdPool,
@@ -119,19 +84,18 @@ mod tests {
             let execution = e[&test_executions[cancel_on]].id.to_string();
 
             async move {
-                // Execute test
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(
-                        ExecutionParam::builder()
-                            .execution(ExecutionId::from_str(&execution)?)
-                            .build()?,
+                        ExecutionParam {
+                            execution: ExecutionId::from_str(&execution)?,
+                        },
                         (),
                     );
 
-                ExecutionCancelService::with_defaults(db.clone())
-                    .service()
-                    .raw_oneshot(request)
+                Services::with_defaults(db.clone())
+                    .execution_cancel(request)
                     .await
+                    .map(|response| response.data)
             }
         })
         .await
@@ -308,6 +272,49 @@ mod tests {
                             tables: vec![TableNameDto::try_from("t_1")?],
                             initial_status: LogicalFunctionRunStatus::Scheduled,
                             expected_status: LogicalFunctionRunStatus::Canceled,
+                        }],
+                    }],
+                },
+            ],
+            0,
+        )
+        .await
+    }
+
+    /// Demoting it would also hide its data: the active LTDV view excludes
+    /// rows whose producer was canceled.
+    #[td_test::test(db)]
+    async fn test_cancel_execution_downstream_committed_is_kept(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        test_cancel_execution(
+            db,
+            p.id,
+            vec![
+                TestExecution {
+                    expected_status: ExecutionStatus::Finished,
+                    transactions: vec![TestTransaction {
+                        expected_status: TransactionStatus::Canceled,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_0")?,
+                            dependencies: vec![],
+                            tables: vec![TableNameDto::try_from("t_0")?],
+                            initial_status: LogicalFunctionRunStatus::Running,
+                            expected_status: LogicalFunctionRunStatus::Canceled,
+                        }],
+                    }],
+                },
+                TestExecution {
+                    expected_status: ExecutionStatus::Finished,
+                    transactions: vec![TestTransaction {
+                        expected_status: TransactionStatus::Committed,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_1")?,
+                            dependencies: vec![TableDependencyDto::try_from("t_0")?],
+                            tables: vec![TableNameDto::try_from("t_1")?],
+                            initial_status: LogicalFunctionRunStatus::Committed,
+                            expected_status: LogicalFunctionRunStatus::Committed,
                         }],
                     }],
                 },

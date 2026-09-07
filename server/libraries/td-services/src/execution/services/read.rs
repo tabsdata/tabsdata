@@ -2,206 +2,114 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::execution::{
+use crate::execution::execution::{
     build_execution_plan, build_response, resolve_execution_plan_versions,
 };
-use crate::execution::layers::read::{
-    build_existing_transaction_map, with_existing_recursion_options,
-};
-use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
+use crate::execution::read::{build_existing_transaction_map, with_existing_recursion_options};
+use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject, enter_project_scope};
+use td_authz::rbac::ViewProject;
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
 use td_execution::TransactionBy;
-use td_objects::StateFilter;
-use td_objects::States;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
 use td_objects::dxo::transaction::TransactionDB;
-use td_objects::rest_urls::ExecutionParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    AtTime, CollectionId, ExecutionId, FunctionId, FunctionVersionId, ProjectId, TriggeredOn,
-};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::types::basic::{AllowDisabled, AtTime};
+use td_queries::LiveEntry;
 
-pub struct GraphOpts<const FUNCTION_STATE: u8>;
-impl<const FUNCTION_STATE: u8> GraphConfig for GraphOpts<FUNCTION_STATE>
-where
-    FunctionDB: States<FUNCTION_STATE>,
-{
-    fn function_state() -> StateFilter<FunctionDB> {
-        StateFilter::<FunctionDB>::from_states::<FUNCTION_STATE>()
-    }
+// Very similar to trigger, but without triggering. It selects entities needed
+// to build an execution plan.
+#[service_factory]
+async fn execution_read(
+    authz: Ctx<AuthzContext>,
+    transaction_by: Ctx<TransactionBy>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ReadRequest<(ExecutionParam, AllowDisabled)>,
+) -> Result<ExecutionResponse, TdError> {
+    let (ctx, (param, allow_disabled)) = request.into_parts();
+    let execution_id = param.execution;
 
-    fn include_dependency_functions() -> bool {
-        false
-    }
+    let conn = gated_conn.get(authz.none());
+    let execution: ExecutionDB = conn.live().fetch_one(&execution_id).await?;
+    let collection: CollectionDB = conn.live().fetch_one(&execution.collection_id).await?;
+    let _grant = authz
+        .require_in_project::<ViewProject>(conn, &ctx, &collection.base.project_id)
+        .await?;
+    let at = AtTime::try_from(&execution.triggered_on)?;
 
-    /// Plan-reading rebuilds the graph as it existed at the plan's
-    /// `TriggeredOn` — point-in-time SQL via ranked CTEs.
-    fn historic() -> bool {
-        true
-    }
-}
+    let function: FunctionDBWithNames = conn
+        .live()
+        .fetch_one(&execution.function_version_id)
+        .await?;
+    let function_id = function.base.function_id;
+    let entrypoint = FunctionOrTable::from(&function_id);
+    let recursion_options = with_existing_recursion_options(&execution).await?;
+    let function_state = if *allow_disabled {
+        FunctionDB::active()
+    } else {
+        FunctionDB::executable()
+    };
+    // Plan-reading rebuilds the graph as it existed at the plan's
+    // `TriggeredOn` — point-in-time SQL via ranked CTEs.
+    let config = GraphConfig {
+        historic: true,
+        ..GraphConfig::defaults(function_state)
+    };
+    let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion_options).await?;
 
-// Very similar to trigger, but without triggering. It selects entities needed to build an execution plan.
-#[service_factory(
-    name = ExecutionReadService,
-    request = ReadRequest<ExecutionParam>,
-    response = ExecutionResponse,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = TransactionBy,
-    context = AuthzContext,
-)]
-fn service<const FUNCTION_STATE: u8>()
-where
-    FunctionDB: States<FUNCTION_STATE>,
-{
-    layers!(
-        from_fn(With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
-        // Extract from request.
-        from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
-        // TODO: when ExecutionParam carries an AtParam, thread it as the
-        // pointer-read AtTime so logical bindings render at request time.
-        // Find Plan and its TriggeredOn (and convert to AtTime).
-        from_fn(With::<ExecutionParam>::extract::<ExecutionId>),
-        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDB>),
-        // Resolve the owning project via the collection; authorize the
-        // requester to view it.
-        from_fn(With::<ExecutionDB>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        from_fn(With::<ExecutionDB>::extract::<TriggeredOn>),
-        from_fn(With::<TriggeredOn>::try_convert_to::<AtTime, _>),
-        // Find function that triggered the plan.
-        from_fn(With::<ExecutionDB>::extract::<FunctionVersionId>),
-        from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
-        // Get recursion options
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        from_fn(With::<FunctionId>::convert_to::<FunctionOrTable>),
-        from_fn(with_existing_recursion_options),
-        // Find td graph
-        generate_td_graph(GraphOpts::<FUNCTION_STATE>),
-        // Build execution plan
-        from_fn(build_execution_plan),
-        // Get transactions
-        from_fn(By::<ExecutionId>::fetch_all::<TransactionDB>),
-        from_fn(build_existing_transaction_map),
-        // Create execution plan
-        from_fn(resolve_execution_plan_versions),
-        // Persisted logical rows — the response renders `input_idx` from
-        // them, so reads reproduce the plan-build assignment exactly.
-        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
-        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunInputDB>),
-        // Execution plan response
-        from_fn(build_response),
+    let execution_plan = build_execution_plan(&graph, &function).await?;
+    let transactions: Vec<TransactionDB> = conn.live().fetch_all(&execution_id).await?;
+    let transaction_map = build_existing_transaction_map(&transaction_by, &transactions)?;
+    let resolved_plan = resolve_execution_plan_versions(conn, &execution, &execution_plan).await?;
+
+    // Persisted logical rows — the response renders `input_idx` from
+    // them, so reads reproduce the plan-build assignment exactly.
+    let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&execution_id).await?;
+    let inputs: Vec<LogicalFunctionRunInputDB> = conn.live().fetch_all(&execution_id).await?;
+
+    build_response(
+        &transaction_by,
+        &transaction_map,
+        &execution,
+        &resolved_plan,
+        &lfrs,
+        &inputs,
     )
+    .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::execution::services::execute::tests::test_execute;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, UserId};
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_read_execution(db: TdPool) {
-        use crate::graph::layers::build::GraphBuilder;
-        use td_tower::metadata::type_of_val;
-
-        ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ReadRequest<ExecutionParam>, ExecutionResponse>(&[
-                type_of_val(&With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
-                // Extract from request.
-                type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
-                // Find Plan and its TriggeredOn (and convert to AtTime).
-                type_of_val(&With::<ExecutionParam>::extract::<ExecutionId>),
-                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDB>),
-                // Resolve the owning project via the collection; authorize the
-                // requester to view it.
-                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                type_of_val(&With::<ExecutionDB>::extract::<TriggeredOn>),
-                type_of_val(&With::<TriggeredOn>::try_convert_to::<AtTime, _>),
-                // Find function that triggered the plan.
-                type_of_val(&With::<ExecutionDB>::extract::<FunctionVersionId>),
-                type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
-                // Get recursion options
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
-                type_of_val(&with_existing_recursion_options),
-                // Find td graph
-                // Find triggers
-                type_of_val(&GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::find_recursive_trigger_graph),
-                // Find dependencies. For clarity, we always show the function, even if
-                // generating a table centered graph, the same way we show the tables of
-                // a function centered graph.
-                type_of_val(&GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::main_function_id),
-                type_of_val(&GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::unique_triggered_function_ids),
-                type_of_val(
-                    &GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::find_triggered_functions_dependency_graph,
-                ),
-                // Find output tables
-                type_of_val(&GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::find_functions_output_tables),
-                // Find all tables and functions
-                type_of_val(&GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::find_all_tables_map),
-                type_of_val(&GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::find_all_functions_map),
-                // Create td graph and validate it
-                type_of_val(&GraphBuilder::<GraphOpts<{ FunctionDB::Executable }>>::build_td_graph),
-                // Build execution plan
-                type_of_val(&build_execution_plan),
-                // Get transactions
-                type_of_val(&By::<ExecutionId>::fetch_all::<TransactionDB>),
-                type_of_val(&build_existing_transaction_map),
-                // Create execution plan
-                type_of_val(&resolve_execution_plan_versions),
-                // Persisted logical rows for response input_idx rendering.
-                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
-                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunInputDB>),
-                // Execution plan response
-                type_of_val(&build_response),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_read_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let execution = test_execute(db.clone(), p.id, false, false, false).await?;
 
-        let service =
-            ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            ExecutionParam::builder()
-                .execution(execution.id.clone())
-                .build()?,
-        );
+        let service = Services::with_defaults(db.clone());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+            ExecutionParam {
+                execution: execution.id.clone(),
+            },
+            AllowDisabled::FALSE,
+        ));
 
-        let response = service.raw_oneshot(request).await?;
+        let response = service.execution_read(request).await?.data;
         assert_eq!(execution.id, response.id);
         assert_eq!(execution.name, response.name);
         assert_eq!(execution.triggered_on, response.triggered_on);

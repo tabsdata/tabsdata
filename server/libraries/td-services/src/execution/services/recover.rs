@@ -2,77 +2,77 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::update_status::{
+use crate::execution::update_status::{
     abandon_requested_physical_runs, update_function_run_status,
 };
-use crate::scheduler::layers::request::notify_scheduler;
+use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
+use td_authz::rbac::DevelopProject;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
+use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
-use td_objects::rest_urls::ExecutionParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, CollectionId, ExecutionId, ProjectId};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ExecutionRecoverService,
-    request = UpdateRequest<ExecutionParam, ()>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-    context = SchedulerNotify,
-)]
-fn service() {
-    layers!(
-        // Extract from request.
-        from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
-        from_fn(With::<ExecutionParam>::extract::<ExecutionId>),
-        // Find execution and resolve its owning project via the collection.
-        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDB>),
-        from_fn(With::<ExecutionDB>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        // check requester can develop the project (manage or develop)
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, DevelopProject>::check),
-        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
-        // Terminalize the dead attempts of Requested LFRs before re-scheduling.
-        from_fn(abandon_requested_physical_runs),
-        // Set recover status (ReScheduled). Dispatch re-mints per LFR; already-run
-        // (Bound) LFRs rebind at redirect_pointers_at_finish, not at dispatch.
-        from_fn(UpdateLogicalFunctionRunDB::recover),
-        // Update function requirements status
-        from_fn(update_function_run_status),
-        // Notify scheduler of status change.
-        from_fn(notify_scheduler),
-    )
+#[service_factory]
+async fn execution_recover(
+    authz: Ctx<AuthzContext>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    msgs: &mut ReqCtx,
+    db: DbPool<Global>,
+    request: UpdateRequest<(), ExecutionParam>,
+) -> Result<(), TdError> {
+    let (ctx, param, _) = request.into_parts();
+    let at = ctx.time;
+    let execution_id = param.execution;
+
+    let (project, grant) = {
+        let mut trx = db.read().await?;
+        let conn = trx.get(authz.none());
+        let execution: ExecutionDB = conn.live().fetch_one(&execution_id).await?;
+        let collection: CollectionDB = conn.live().fetch_one(&execution.collection_id).await?;
+        let project = collection.base.project_id;
+        // before the exclusive lock: unauthorized callers must not queue on it
+        let grant = authz
+            .require_in_project::<DevelopProject>(&mut trx, &ctx, &project)
+            .await?;
+        (project, grant)
+    };
+    let mut trx = db.in_project(&project).begin_exclusive().await?;
+
+    let conn = trx.get(grant);
+    let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&execution_id).await?;
+    // Terminalize the dead attempts of Requested LFRs before re-scheduling.
+    abandon_requested_physical_runs(conn, &at, &lfrs).await?;
+    // Set recover status (ReScheduled). Dispatch re-mints per LFR; already-run
+    // (Bound) LFRs rebind at redirect_pointers_at_finish, not at dispatch.
+    let update = UpdateLogicalFunctionRunDB::recover();
+    update_function_run_status(msgs, conn, &lfrs, &update).await?;
+    trx.commit().await?;
+
+    scheduler_notify.notify_scheduler();
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::layers::update_status::tests::{
+    use crate::Services;
+    use crate::execution::update_status::tests::{
         TestExecution, TestFunction, TestTransaction, test_status_update,
     };
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+    use td_objects::types::basic::ExecutionId;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
         PhysicalFunctionRunStatus, ProjectId, TableNameDto, TransactionStatus, UserId,
@@ -80,44 +80,6 @@ mod tests {
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_recover_execution(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ExecutionRecoverService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
-                // Extract from request.
-                type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(
-                    &With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>,
-                ),
-                type_of_val(&With::<ExecutionParam>::extract::<ExecutionId>),
-                // Find execution and resolve its owning project via the collection.
-                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDB>),
-                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                // check requester can develop the project (manage or develop)
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, DevelopProject>::check),
-                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
-                // Terminalize the dead attempts of Requested LFRs before re-scheduling.
-                type_of_val(&abandon_requested_physical_runs),
-                // Set recover status
-                type_of_val(&UpdateLogicalFunctionRunDB::recover),
-                // Update function requirements status
-                type_of_val(&update_function_run_status),
-                // Notify scheduler of status change.
-                type_of_val(&notify_scheduler),
-            ]);
-    }
 
     async fn test_recover_execution(
         db: TdPool,
@@ -130,19 +92,18 @@ mod tests {
             let execution = e[&test_executions[recover_on]].id.to_string();
 
             async move {
-                // Execute test
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(
-                        ExecutionParam::builder()
-                            .execution(ExecutionId::from_str(&execution)?)
-                            .build()?,
+                        ExecutionParam {
+                            execution: ExecutionId::from_str(&execution)?,
+                        },
                         (),
                     );
 
-                ExecutionRecoverService::with_defaults(db.clone())
-                    .service()
-                    .raw_oneshot(request)
+                Services::with_defaults(db.clone())
+                    .execution_recover(request)
                     .await
+                    .map(|response| response.data)
             }
         })
         .await
@@ -533,15 +494,15 @@ mod tests {
             async move {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(
-                        ExecutionParam::builder()
-                            .execution(ExecutionId::from_str(&execution)?)
-                            .build()?,
+                        ExecutionParam {
+                            execution: ExecutionId::from_str(&execution)?,
+                        },
                         (),
                     );
-                ExecutionRecoverService::with_defaults(db.clone())
-                    .service()
-                    .raw_oneshot(request)
-                    .await?;
+                Services::with_defaults(db.clone())
+                    .execution_recover(request)
+                    .await?
+                    .data;
 
                 let pfr: PhysicalFunctionRunDB = db
                     .live()

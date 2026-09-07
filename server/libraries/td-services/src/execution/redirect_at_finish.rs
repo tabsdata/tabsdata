@@ -7,10 +7,9 @@
 //! output LTDV pointer log so downstream readers see the new outputs.
 //! Initial dispatches and non-`Done` outcomes are no-ops here.
 
-use crate::logical::layers::index_lfrs_by_exec_fn;
+use crate::logical::index_lfrs_by_exec_fn;
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::ops::Deref;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -20,7 +19,6 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::worker::UpdateWorkerExecution;
 use td_objects::types::basic::{AtTime, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId};
 use td_queries::{ChunkedQueries, LfrEntry, LtdvEntry, OutputRedirect, ReplayRedirect};
-use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
 #[instrument(
@@ -30,10 +28,10 @@ use tracing::{debug, instrument};
     err(Debug)
 )]
 pub async fn redirect_pointers_at_finish(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    physical_function_runs: Ref<Vec<PhysicalFunctionRunDB>>,
-    update: Ref<UpdateWorkerExecution>,
-    at: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    physical_function_runs: &Vec<PhysicalFunctionRunDB>,
+    update: &UpdateWorkerExecution,
+    at: &AtTime,
 ) -> Result<(), TdError> {
     if !matches!(update.status, WorkerCallbackStatus::Done) {
         return Ok(());
@@ -72,7 +70,7 @@ pub async fn redirect_pointers_at_finish(
     let redirected = conn
         .lfr()
         .pointers()
-        .redirect_replay_attempts(&lfr_items, at.deref())
+        .redirect_replay_attempts(&lfr_items, at)
         .await?;
     if redirected.is_empty() {
         return Ok(());
@@ -136,7 +134,7 @@ pub async fn redirect_pointers_at_finish(
     }
     conn.ltdv()
         .pointers()
-        .redirect_outputs(&ltdv_items, at.deref())
+        .redirect_outputs(&ltdv_items, at)
         .await?;
     Ok(())
 }

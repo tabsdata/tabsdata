@@ -3,17 +3,15 @@
 //
 
 use std::collections::HashMap;
-use std::ops::Deref;
 use td_error::TdError;
 use td_execution::{EXECUTION_GRAPH_OPTIONS, TransactionBy};
 use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::transaction::{TransactionDB, TransactionValueBuilder};
+use td_objects::dxo::transaction::{TransactionDB, TransactionValue};
 use td_objects::transaction::map::TransactionMap;
 use td_objects::types::recursion::RecursionOptions;
-use td_tower::extractors::Ref;
 
 pub async fn with_existing_recursion_options(
-    execution: Ref<ExecutionDB>,
+    execution: &ExecutionDB,
 ) -> Result<RecursionOptions, TdError> {
     // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
     let options = execution
@@ -25,17 +23,16 @@ pub async fn with_existing_recursion_options(
 }
 
 // Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
-pub async fn build_existing_transaction_map(
-    transaction_by: Ref<TransactionBy>,
-    transactions: Ref<Vec<TransactionDB>>,
+pub fn build_existing_transaction_map(
+    transaction_by: &TransactionBy,
+    transactions: &Vec<TransactionDB>,
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
-    // Map transactions to their keys.
     let mut mapped_transactions = HashMap::new();
     for transaction in transactions.iter() {
         if !mapped_transactions.contains_key(&transaction.transaction_key) {
             mapped_transactions.insert(
                 transaction.transaction_key.clone(),
-                TransactionValueBuilder::try_from(transaction)?.build()?,
+                TransactionValue::from(transaction),
             );
         }
     }
@@ -45,11 +42,9 @@ pub async fn build_existing_transaction_map(
     // This can happen when loading transactions from previous executions.
     let transaction_by_str = transactions.first().map(|t| t.transaction_by.clone());
     let transaction_by = if let Some(transaction_by_str) = transaction_by_str {
-        transaction_by_str
-            .parse()
-            .unwrap_or(transaction_by.deref().clone())
+        transaction_by_str.parse().unwrap_or(transaction_by.clone())
     } else {
-        transaction_by.deref().clone()
+        transaction_by.clone()
     };
     let transaction_map = TransactionMap::from_map(mapped_transactions, transaction_by);
     Ok(transaction_map)

@@ -2,28 +2,24 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::runtime_info::runtime_info;
+use crate::execution::runtime_info::runtime_info;
 use getset::Getters;
 use serde::de::DeserializeOwned;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_bridge::catalog::{EtcContent, ServerCatalog};
 use td_error::{TdError, td_error};
-use td_objects::Buildable;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::runtime_info::{PythonVersions, RuntimeInfo, ServerVersion};
 use td_objects::types::basic::{BuildManifest, TabsdataVersion};
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 use tracing::error;
 
-#[service_factory(
-    name = RuntimeInfoService,
-    request = ReadRequest<()>,
-    response = RuntimeInfo,
-    context = RuntimeContext,
-)]
-fn service() {
-    layers!(from_fn(runtime_info))
+#[service_factory]
+async fn runtime_info(
+    runtime_context: Ctx<RuntimeContext>,
+    _request: ReadRequest,
+) -> Result<RuntimeInfo, TdError> {
+    runtime_info(&runtime_context).await
 }
 
 #[derive(Debug, Getters)]
@@ -34,11 +30,11 @@ pub struct RuntimeContext {
 
 impl RuntimeContext {
     pub async fn new(catalog: &dyn ServerCatalog) -> Result<Self, TdError> {
-        let info = RuntimeInfo::builder()
-            .version(server_version(catalog).await?)
-            .build_manifest(build_manifest(catalog).await?)
-            .python_versions(valid_python_versions(catalog).await?.versions.clone())
-            .build()?;
+        let info = RuntimeInfo {
+            version: server_version(catalog).await?,
+            build_manifest: build_manifest(catalog).await?,
+            python_versions: valid_python_versions(catalog).await?.versions.clone(),
+        };
         Ok(Self { info })
     }
 }
@@ -47,12 +43,11 @@ impl RuntimeContext {
 impl Default for RuntimeContext {
     fn default() -> Self {
         RuntimeContext {
-            info: RuntimeInfo::builder()
-                .version(TabsdataVersion::try_from("-unknown-").unwrap())
-                .build_manifest(BuildManifest::default())
-                .python_versions(vec![])
-                .build()
-                .unwrap(),
+            info: RuntimeInfo {
+                version: TabsdataVersion::try_from("-unknown-").unwrap(),
+                build_manifest: BuildManifest::default(),
+                python_versions: vec![],
+            },
         }
     }
 }
@@ -122,22 +117,6 @@ async fn build_manifest(catalog: &dyn ServerCatalog) -> Result<BuildManifest, Td
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_runtime_info() {
-        use ta_services::service::TdService;
-
-        use td_tower::metadata::type_of_val;
-
-        RuntimeInfoService::with_defaults()
-            .metadata()
-            .await
-            .assert_service::<ReadRequest<()>, RuntimeInfo>(&[
-                // Extract from request.
-                type_of_val(&runtime_info),
-            ]);
-    }
 
     #[tokio::test]
     async fn test_runtime_info() {

@@ -6,43 +6,41 @@ use itertools::{Either, Itertools};
 use petgraph::prelude::EdgeRef;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
+use ta_services::api_message;
+use ta_services::ctx_service::ReqCtx;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::{
     EXECUTION_GRAPH_OPTIONS, ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy,
     VersionResolver,
 };
-use td_objects::Buildable;
 use td_objects::dxo::execution::{
-    ExecutionDB, ExecutionResponse, FunctionNodeResponseBuilder, ResolvedVersionResponse,
-    TableNodeResponseBuilder,
+    ExecutionDB, ExecutionResponse, FunctionNodeResponse, ResolvedVersionResponse,
+    TableNodeResponse,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::graph::{FunctionNodeBuilder, GraphEdge, GraphNode, ResolvedVersion};
+use td_objects::dxo::graph::FunctionNode;
+use td_objects::dxo::graph::{GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
     ActiveLogicalTableDataVersionDB, LogicalFunctionRunDB, LogicalFunctionRunInputDB,
     LogicalFunctionRunPointerDB, LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
     UpdateLogicalFunctionRunDB,
 };
-use td_objects::dxo::physical_table_data_version::{
-    ExecutionTableDataVersionReadBuilder, PhysicalTableDataVersionDBWithFunction,
-};
-use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
+use td_objects::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithFunction;
+use td_objects::dxo::transaction::TransactionDB;
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
     AtTime, DependencyPos, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
+    LogicalFunctionRunId, LogicalFunctionRunInputId, LogicalFunctionRunPointerId,
     LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
-    LogicalTableDataVersionId, OverrideDisabledTrigger, PhysicalTableDataVersionId, ProjectId,
-    TableId, Trigger, TriggerType, VersionPos,
+    LogicalTableDataVersionId, LogicalTableDataVersionPointerId, OverrideDisabledTrigger,
+    PhysicalTableDataVersionId, ProjectId, TableId, Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
 use td_queries::{ChunkedQueries, LfrEntry, VersionedEntry};
-use td_tower::api_message;
-use td_tower::ctx_service::ReqCtx;
-use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
 pub async fn trigger_type_manual() -> Result<TriggerType, TdError> {
@@ -50,29 +48,29 @@ pub async fn trigger_type_manual() -> Result<TriggerType, TdError> {
 }
 
 pub async fn assert_function_status(
-    mut ctx: MutRef<ReqCtx>,
-    function: Ref<FunctionDBWithNames>,
-    override_disabled_trigger: Ref<OverrideDisabledTrigger>,
+    msgs: &mut ReqCtx,
+    function: &FunctionDBWithNames,
+    override_disabled_trigger: &OverrideDisabledTrigger,
 ) -> Result<(), TdError> {
-    if !matches!(function.status, FunctionStatus::Active) {
+    if !matches!(function.base.status, FunctionStatus::Active) {
         Err(api_error!(
             ApiError::InputError,
             "Function '{}' must be in an active status to execute. Current status: '{}'",
-            function.name,
-            function.status
+            function.base.name,
+            function.base.status
         ))?
     }
-    if !*function.enabled {
+    if !*function.base.enabled {
         if **override_disabled_trigger {
-            ctx.notification(api_message!(
+            msgs.notification(api_message!(
                 "Trigger function '{}' is disabled but override_disabled_trigger is set to true",
-                function.name
+                function.base.name
             ));
         } else {
             Err(api_error!(
                 ApiError::InputError,
                 "Function '{}' must be enabled to be executed",
-                function.name,
+                function.base.name,
             ))?
         }
     }
@@ -80,8 +78,8 @@ pub async fn assert_function_status(
 }
 
 pub async fn with_recursion_options(
-    function_only: Ref<FunctionOnly>,
-    override_disabled_trigger: Ref<OverrideDisabledTrigger>,
+    function_only: &FunctionOnly,
+    override_disabled_trigger: &OverrideDisabledTrigger,
 ) -> Result<RecursionOptions, TdError> {
     let mut recursion_options = if **function_only {
         RecursionOptions::new(Some(Depth::ZERO), Some(Depth::ZERO))
@@ -93,58 +91,58 @@ pub async fn with_recursion_options(
 }
 
 pub async fn build_execution_plan(
-    td_graph: Ref<TdGraph>,
-    trigger_function: Ref<FunctionDBWithNames>,
+    td_graph: &TdGraph,
+    trigger_function: &FunctionDBWithNames,
 ) -> Result<ExecutionPlan, TdError> {
-    let trigger = FunctionNodeBuilder::try_from(&*trigger_function)?.build()?;
+    let trigger = FunctionNode::from(trigger_function);
     let execution_plan = td_graph.with_trigger(&trigger)?;
     Ok(execution_plan)
 }
 
-pub async fn validate_execution_plan(
-    transaction_by: Ref<TransactionBy>,
-    execution_plan: Ref<ExecutionPlan>,
+pub fn validate_execution_plan(
+    transaction_by: &TransactionBy,
+    execution_plan: &ExecutionPlan,
 ) -> Result<(), TdError> {
     execution_plan.validate_dag_trigger()?;
     execution_plan.validate_dag_dependency()?;
-    execution_plan.validate_dag_transaction(transaction_by.deref())?;
+    execution_plan.validate_dag_transaction(transaction_by)?;
     Ok(())
 }
 
 pub async fn build_transaction_map(
-    transaction_by: Ref<TransactionBy>,
-    execution: Ref<ExecutionDB>,
-    execution_plan: Ref<ExecutionPlan>,
+    transaction_by: &TransactionBy,
+    execution: &ExecutionDB,
+    execution_plan: &ExecutionPlan,
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
-    let mut transaction_map = TransactionMap::empty(transaction_by.deref().clone());
+    let mut transaction_map = TransactionMap::empty(transaction_by.clone());
 
     for function in execution_plan.triggered_functions() {
-        transaction_map.add(&execution, function)?;
+        transaction_map.add(execution, function)?;
     }
 
     Ok(transaction_map)
 }
 
-pub async fn build_transactions(
-    transaction_map: Ref<TransactionMap<TransactionBy>>,
-    transaction_builder: Ref<TransactionDBBuilder>,
+pub fn build_transactions(
+    transaction_map: &TransactionMap<TransactionBy>,
+    execution: &ExecutionDB,
 ) -> Result<Vec<TransactionDB>, TdError> {
     let transactions = transaction_map
         .iter()
         .map(|t| {
             let transaction = transaction_map.get(t)?;
-            transaction_builder
-                .deref()
-                .clone()
-                .id(transaction.id.clone())
-                .collection_id(transaction.collection_id)
-                .transaction_by(transaction.transaction_by.clone())
-                .transaction_key(transaction.transaction_key.clone())
-                .group_id(transaction.group_id)
-                .build()
-                .map_err(TdError::from)
+            Ok(TransactionDB {
+                id: transaction.id.clone(),
+                collection_id: transaction.collection_id,
+                execution_id: execution.id.clone(),
+                transaction_by: transaction.transaction_by.clone(),
+                transaction_key: transaction.transaction_key.clone(),
+                triggered_on: execution.triggered_on,
+                triggered_by_id: execution.triggered_by_id,
+                group_id: transaction.group_id,
+            })
         })
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<_, TdError>>()?;
 
     Ok(transactions)
 }
@@ -155,11 +153,11 @@ pub async fn build_transactions(
 /// At dispatch the pointer flips to the concrete `physical_function_runs` row that
 /// already lives alongside (the placeholder is the dispatch target).
 pub async fn build_logical_function_runs(
-    transaction_by: Ref<TransactionBy>,
-    transaction_map: Ref<TransactionMap<TransactionBy>>,
-    execution_plan: Ref<ExecutionPlan>,
-    execution: Ref<ExecutionDB>,
-    project_id: Ref<ProjectId>,
+    transaction_by: &TransactionBy,
+    transaction_map: &TransactionMap<TransactionBy>,
+    execution_plan: &ExecutionPlan,
+    execution: &ExecutionDB,
+    project_id: &ProjectId,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     let main_trigger = execution_plan.main_trigger();
     execution_plan
@@ -172,20 +170,20 @@ pub async fn build_logical_function_runs(
             } else {
                 Trigger::Dependency
             };
-            LogicalFunctionRunDB::builder()
-                // ProjectScopeProvider put the request's project on the handler.
-                .project_id(*project_id)
-                .collection_id(f.collection_id)
-                .execution_id(execution.id.clone())
-                .transaction_id(transaction.id.clone())
-                .function_id(f.function_id)
-                .function_version_id(f.function_version_id.clone())
-                .trigger(trigger)
-                .triggered_on(execution.triggered_on)
-                .triggered_by_id(execution.triggered_by_id)
-                .group_id(f.group_id)
-                .build()
-                .map_err(TdError::from)
+            Ok(LogicalFunctionRunDB {
+                id: LogicalFunctionRunId::new(),
+                project_id: *project_id,
+                collection_id: f.collection_id,
+                execution_id: execution.id.clone(),
+                transaction_id: transaction.id.clone(),
+                function_id: f.function_id,
+                function_version_id: f.function_version_id.clone(),
+                trigger,
+                triggered_on: execution.triggered_on,
+                triggered_by_id: execution.triggered_by_id,
+                status: LogicalFunctionRunStatus::Scheduled,
+                group_id: f.group_id,
+            })
         })
         .collect()
 }
@@ -198,19 +196,20 @@ pub async fn build_logical_function_runs(
 pub fn initial_mint_lfr_pointer(
     lfr: &LogicalFunctionRunDB,
 ) -> Result<LogicalFunctionRunPointerDB, TdError> {
-    Ok(LogicalFunctionRunPointerDB::builder()
-        .project_id(lfr.project_id)
-        .logical_function_run_id(lfr.id.clone())
-        .status(LogicalPointerStatus::Pending)
-        .physical_function_run_id(None)
-        .set_on(AtTime::try_from(lfr.triggered_on)?)
-        .set_by_id(lfr.triggered_by_id)
-        .reason(LogicalPointerReason::InitialMint)
-        .build()?)
+    Ok(LogicalFunctionRunPointerDB {
+        id: LogicalFunctionRunPointerId::default(),
+        project_id: lfr.project_id,
+        logical_function_run_id: lfr.id.clone(),
+        status: LogicalPointerStatus::Pending,
+        physical_function_run_id: None,
+        set_on: AtTime::try_from(lfr.triggered_on)?,
+        set_by_id: lfr.triggered_by_id,
+        reason: LogicalPointerReason::InitialMint,
+    })
 }
 
-pub async fn build_initial_mint_lfr_pointers(
-    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+pub fn build_initial_mint_lfr_pointers(
+    logical_function_runs: &Vec<LogicalFunctionRunDB>,
 ) -> Result<Vec<LogicalFunctionRunPointerDB>, TdError> {
     logical_function_runs
         .iter()
@@ -223,12 +222,12 @@ pub async fn build_initial_mint_lfr_pointers(
 /// One LTDV per declared output edge, born `Pending` with a NULL pointer.
 /// The producer is the LFR for the function on the source side of the
 /// output edge; LTDVs and LFRs are paired by `function_version_id`.
-pub async fn build_logical_table_data_versions(
-    transaction_by: Ref<TransactionBy>,
-    transaction_map: Ref<TransactionMap<TransactionBy>>,
-    execution_plan: Ref<ExecutionPlan>,
-    execution: Ref<ExecutionDB>,
-    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+pub fn build_logical_table_data_versions(
+    transaction_by: &TransactionBy,
+    transaction_map: &TransactionMap<TransactionBy>,
+    execution_plan: &ExecutionPlan,
+    execution: &ExecutionDB,
+    logical_function_runs: &Vec<LogicalFunctionRunDB>,
 ) -> Result<Vec<LogicalTableDataVersionDB>, TdError> {
     // Producer LFR lookup is keyed by function_id (logical identity), not
     // function_version_id — see `build_function_runs` for why. The map
@@ -257,20 +256,20 @@ pub async fn build_logical_table_data_versions(
                         f.function_id
                     )
                 })?;
-            LogicalTableDataVersionDB::builder()
-                .project_id(*project_id)
-                .collection_id(f.collection_id)
-                .execution_id(transaction.execution_id.clone())
-                .transaction_id(transaction.id.clone())
-                .table_id(t.table_id)
-                .producer_logical_function_run_id(Some(producer.clone()))
-                .function_param_pos(edge.output_pos().cloned())
-                .private(t.private)
-                .triggered_on(execution.triggered_on)
-                .triggered_by_id(execution.triggered_by_id)
-                .group_id(*group_id)
-                .build()
-                .map_err(TdError::from)
+            Ok(LogicalTableDataVersionDB {
+                id: LogicalTableDataVersionId::new(),
+                project_id: *project_id,
+                collection_id: f.collection_id,
+                execution_id: transaction.execution_id.clone(),
+                transaction_id: transaction.id.clone(),
+                table_id: t.table_id,
+                producer_logical_function_run_id: Some(producer.clone()),
+                function_param_pos: edge.output_pos().cloned(),
+                private: t.private,
+                triggered_on: execution.triggered_on,
+                triggered_by_id: execution.triggered_by_id,
+                group_id: *group_id,
+            })
         })
         .collect()
 }
@@ -279,19 +278,20 @@ pub async fn build_logical_table_data_versions(
 pub fn initial_mint_ltdv_pointer(
     ltdv: &LogicalTableDataVersionDB,
 ) -> Result<LogicalTableDataVersionPointerDB, TdError> {
-    Ok(LogicalTableDataVersionPointerDB::builder()
-        .project_id(ltdv.project_id)
-        .logical_table_data_version_id(ltdv.id.clone())
-        .status(LogicalPointerStatus::Pending)
-        .physical_table_data_version_id(None)
-        .set_on(AtTime::try_from(ltdv.triggered_on)?)
-        .set_by_id(ltdv.triggered_by_id)
-        .reason(LogicalPointerReason::InitialMint)
-        .build()?)
+    Ok(LogicalTableDataVersionPointerDB {
+        id: LogicalTableDataVersionPointerId::default(),
+        project_id: ltdv.project_id,
+        logical_table_data_version_id: ltdv.id.clone(),
+        status: LogicalPointerStatus::Pending,
+        physical_table_data_version_id: None,
+        set_on: AtTime::try_from(ltdv.triggered_on)?,
+        set_by_id: ltdv.triggered_by_id,
+        reason: LogicalPointerReason::InitialMint,
+    })
 }
 
-pub async fn build_initial_mint_ltdv_pointers(
-    logical_table_data_versions: Ref<Vec<LogicalTableDataVersionDB>>,
+pub fn build_initial_mint_ltdv_pointers(
+    logical_table_data_versions: &Vec<LogicalTableDataVersionDB>,
 ) -> Result<Vec<LogicalTableDataVersionPointerDB>, TdError> {
     logical_table_data_versions
         .iter()
@@ -300,9 +300,9 @@ pub async fn build_initial_mint_ltdv_pointers(
 }
 
 pub async fn resolve_execution_plan_versions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    execution: Ref<ExecutionDB>,
-    execution_plan: Ref<ExecutionPlan>,
+    conn: &mut DomainConnection<Apiserver>,
+    execution: &ExecutionDB,
+    execution_plan: &ExecutionPlan,
 ) -> Result<ResolvedExecutionPlan, TdError> {
     let triggered_on = execution.triggered_on;
     let at_time = AtTime::try_from(triggered_on)?;
@@ -358,7 +358,7 @@ pub async fn resolve_execution_plan_versions(
                 .versions(&lookup_versions)
                 .triggered_on(&triggered_on)
                 .build()?
-                .resolve(&mut conn)
+                .resolve(&mut *conn)
                 .await?;
             ltdv_cache.insert(cache_key.clone(), ltdvs);
         }
@@ -378,7 +378,7 @@ pub async fn resolve_execution_plan_versions(
         .flat_map(|ltdvs| {
             ltdvs
                 .iter()
-                .filter_map(|f| f.as_ref().map(|f| f.id.clone()))
+                .filter_map(|f| f.as_ref().map(|f| f.base.id.clone()))
         })
         .collect::<HashSet<_>>()
         .into_iter()
@@ -411,9 +411,8 @@ pub async fn resolve_execution_plan_versions(
             .await?
     };
     let tdv_by_id: HashMap<PhysicalTableDataVersionId, PhysicalTableDataVersionDBWithFunction> =
-        tdvs.into_iter().map(|t| (t.id.clone(), t)).collect();
+        tdvs.into_iter().map(|t| (t.base.id.clone(), t)).collect();
 
-    // Per-cache-key resolved TDV vector, computed once.
     let resolved_cache: HashMap<
         (TableId, Versions),
         Vec<Option<PhysicalTableDataVersionDBWithFunction>>,
@@ -425,7 +424,7 @@ pub async fn resolve_execution_plan_versions(
                 .map(
                     |ftdv_opt| -> Option<PhysicalTableDataVersionDBWithFunction> {
                         let ltdv = ftdv_opt?;
-                        let tdv_id = bound_tdv_id_by_ftdv.get(&ltdv.id)?;
+                        let tdv_id = bound_tdv_id_by_ftdv.get(&ltdv.base.id)?;
                         Some(tdv_by_id.get(tdv_id)?.clone())
                     },
                 )
@@ -442,18 +441,13 @@ pub async fn resolve_execution_plan_versions(
             .expect("cache populated for every edge in pass 1");
         let found = resolved
             .iter()
-            .map(|tdv_opt| {
-                tdv_opt
-                    .as_ref()
-                    .map(|tdv| ExecutionTableDataVersionReadBuilder::try_from(tdv)?.build())
-                    .transpose()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|tdv_opt| tdv_opt.as_ref().map(ExecutionTableDataVersionRead::from))
+            .collect::<Vec<_>>();
 
-        let resolved_version = ResolvedVersion::builder()
-            .inner(found)
-            .original(meta.versions_original)
-            .build()?;
+        let resolved_version = ResolvedVersion {
+            inner: found,
+            original: meta.versions_original.into(),
+        };
         edge_results.push(resolved_version);
     }
 
@@ -503,12 +497,12 @@ pub async fn resolve_execution_plan_versions(
 /// then the committed LTDV timeline. Every concrete TDV has an LTDV by
 /// construction, so resolution never falls off the end of the timeline.
 pub async fn build_logical_function_run_inputs(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    transaction_by: Ref<TransactionBy>,
-    transaction_map: Ref<TransactionMap<TransactionBy>>,
-    execution_plan: Ref<ExecutionPlan>,
-    execution: Ref<ExecutionDB>,
-    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+    conn: &mut DomainConnection<Apiserver>,
+    transaction_by: &TransactionBy,
+    transaction_map: &TransactionMap<TransactionBy>,
+    execution_plan: &ExecutionPlan,
+    execution: &ExecutionDB,
+    logical_function_runs: &Vec<LogicalFunctionRunDB>,
 ) -> Result<Vec<LogicalFunctionRunInputDB>, TdError> {
     let triggered_on = execution.triggered_on;
 
@@ -569,7 +563,7 @@ pub async fn build_logical_function_run_inputs(
                 .versions(&lookup_versions)
                 .triggered_on(&triggered_on)
                 .build()?
-                .resolve(&mut conn)
+                .resolve(&mut *conn)
                 .await?;
             resolve_cache.insert(cache_key, r.clone());
             r
@@ -581,18 +575,17 @@ pub async fn build_logical_function_run_inputs(
         // static dep info on those rows. Empty-Vec emits a single
         // `NO_VERSIONS` placeholder.
         if resolved.is_empty() {
-            rows.push(
-                LogicalFunctionRunInputDB::builder()
-                    .collection_id(function.collection_id)
-                    .execution_id(transaction.execution_id.clone())
-                    .transaction_id(transaction.id.clone())
-                    .logical_function_run_id(consumer_lfr_id.clone())
-                    .requirement_logical_table_data_version_id(None)
-                    .requirement_input_idx(dependency_pos.is_some().then_some(InputIdx::NO_DATA))
-                    .requirement_dependency_pos(dependency_pos)
-                    .requirement_version_pos(VersionPos::NO_VERSIONS)
-                    .build()?,
-            );
+            rows.push(LogicalFunctionRunInputDB {
+                id: LogicalFunctionRunInputId::default(),
+                collection_id: function.collection_id,
+                execution_id: transaction.execution_id.clone(),
+                transaction_id: transaction.id.clone(),
+                logical_function_run_id: consumer_lfr_id.clone(),
+                requirement_logical_table_data_version_id: None,
+                requirement_input_idx: dependency_pos.is_some().then_some(InputIdx::NO_DATA),
+                requirement_dependency_pos: dependency_pos,
+                requirement_version_pos: VersionPos::NO_VERSIONS,
+            });
             continue;
         }
 
@@ -612,20 +605,19 @@ pub async fn build_logical_function_run_inputs(
             } else {
                 Some(InputIdx::NO_DATA)
             };
-            rows.push(
-                LogicalFunctionRunInputDB::builder()
-                    .collection_id(function.collection_id)
-                    .execution_id(transaction.execution_id.clone())
-                    .transaction_id(transaction.id.clone())
-                    .logical_function_run_id(consumer_lfr_id.clone())
-                    .requirement_logical_table_data_version_id(
-                        ftdv_opt.as_ref().map(|f| f.id.clone()),
-                    )
-                    .requirement_input_idx(requirement_input_idx)
-                    .requirement_dependency_pos(dependency_pos)
-                    .requirement_version_pos(version_pos)
-                    .build()?,
-            );
+            rows.push(LogicalFunctionRunInputDB {
+                id: LogicalFunctionRunInputId::default(),
+                collection_id: function.collection_id,
+                execution_id: transaction.execution_id.clone(),
+                transaction_id: transaction.id.clone(),
+                logical_function_run_id: consumer_lfr_id.clone(),
+                requirement_logical_table_data_version_id: ftdv_opt
+                    .as_ref()
+                    .map(|f| f.base.id.clone()),
+                requirement_input_idx,
+                requirement_dependency_pos: dependency_pos,
+                requirement_version_pos: version_pos,
+            });
         }
     }
 
@@ -637,18 +629,18 @@ pub async fn build_logical_function_run_inputs(
 /// flips them to OnHold. The latest-pointer subquery is bounded by the
 /// plan's `at_time` for temporal consistency.
 #[instrument(
-    name = "execution.layer.update_initial_function_run_status",
+    name = "execution.update_initial_function_run_status",
     skip_all,
     fields(execution_id = %execution.id),
     level = "debug",
     err(Debug)
 )]
 pub async fn update_initial_function_run_status(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    execution: Ref<ExecutionDB>,
-    at_time: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    execution: &ExecutionDB,
+    at_time: &AtTime,
 ) -> Result<(), TdError> {
-    let lfr_ids = conn.lfr().blocked_ids(&execution.id, &at_time).await?;
+    let lfr_ids = conn.lfr().blocked_ids(&execution.id, at_time).await?;
 
     debug!(
         execution_id = %execution.id,
@@ -658,9 +650,9 @@ pub async fn update_initial_function_run_status(
     );
 
     if !lfr_ids.is_empty() {
-        let update = UpdateLogicalFunctionRunDB::builder()
-            .status(LogicalFunctionRunStatus::OnHold)
-            .build()?;
+        let update = UpdateLogicalFunctionRunDB {
+            status: LogicalFunctionRunStatus::OnHold,
+        };
         let _ = conn
             .update_chunked::<_, LogicalFunctionRunDB, _>(&update, &lfr_ids)
             .await?;
@@ -670,12 +662,12 @@ pub async fn update_initial_function_run_status(
 }
 
 pub async fn build_response(
-    transaction_by: Ref<TransactionBy>,
-    transaction_map: Ref<TransactionMap<TransactionBy>>,
-    execution: Ref<ExecutionDB>,
-    execution_plan: Ref<ResolvedExecutionPlan>,
-    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
-    logical_function_run_inputs: Ref<Vec<LogicalFunctionRunInputDB>>,
+    transaction_by: &TransactionBy,
+    transaction_map: &TransactionMap<TransactionBy>,
+    execution: &ExecutionDB,
+    execution_plan: &ResolvedExecutionPlan,
+    logical_function_runs: &Vec<LogicalFunctionRunDB>,
+    logical_function_run_inputs: &Vec<LogicalFunctionRunInputDB>,
 ) -> Result<ExecutionResponse, TdError> {
     let dot = Dot::try_from(execution_plan.dot().to_string())?;
 
@@ -698,7 +690,6 @@ pub async fn build_response(
             .collect();
     let idx_by_slot = &idx_by_slot;
 
-    // Transactions info
     let transactions = execution_plan
         .triggered_functions()
         .into_iter()
@@ -710,17 +701,14 @@ pub async fn build_response(
             Ok::<_, TdError>(acc)
         })?;
 
-    // Execution plan
     let execution_plan = execution_plan
         .map(
             |node| async move {
                 let response = match node {
-                    GraphNode::Function(function) => GraphNode::Function(
-                        FunctionNodeResponseBuilder::try_from(function)?.build()?,
-                    ),
-                    GraphNode::Table(table) => {
-                        GraphNode::Table(TableNodeResponseBuilder::try_from(table)?.build()?)
+                    GraphNode::Function(function) => {
+                        GraphNode::Function(FunctionNodeResponse::from(function))
                     }
+                    GraphNode::Table(table) => GraphNode::Table(TableNodeResponse::from(table)),
                 };
                 Ok::<_, TdError>(response)
             },
@@ -772,7 +760,6 @@ pub async fn build_response(
         )
         .await?;
 
-    // Relations
     let mut relations_info = HashMap::new();
     let relations = execution_plan
         .relations()
@@ -790,7 +777,6 @@ pub async fn build_response(
         .sorted()
         .collect();
 
-    // Functions info
     let all_functions = execution_plan
         .functions()
         .into_iter()
@@ -802,7 +788,6 @@ pub async fn build_response(
         .map(|f| f.function_version_id.clone())
         .collect();
 
-    // Tables info
     let all_tables_set = execution_plan.tables();
     let all_tables = all_tables_set
         .iter()

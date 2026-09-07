@@ -2,83 +2,88 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::execute;
-use crate::execution::layers::execution::trigger_type_manual;
+use crate::execution::execute;
+use crate::execution::execution::trigger_type_manual;
+use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_execution::SchedulerNotify;
-use td_execution::TransactionBy;
-use td_objects::And;
-use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::{DbPool, InProject};
+use td_error::TdError;
+use td_execution::{SchedulerNotify, TransactionBy};
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
-use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::rest_urls::FunctionParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    AtTime, CollectionIdName, FunctionId, FunctionIdName, FunctionVersionId,
-};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionParam};
+use td_objects::{StateFilter, and};
+use td_queries::HistoricEntry;
 
-#[service_factory(
-    name = ExecuteFunctionService,
-    request = CreateRequest<FunctionParam, ExecutionRequest>,
-    response = ExecutionResponse,
-    connection = TransactionProvider,
-    scope = "Project",
-    context = AuthzContext,
-    context = TransactionBy,
-    context = SchedulerNotify,
-)]
-fn service() {
-    layers!(
-        // Extract from request.
-        from_fn(With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<RequestContext>),
-        from_fn(
-            With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<FunctionParam>
-        ),
-        from_fn(
-            With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<ExecutionRequest>
-        ),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
-        from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-        // Select trigger function.
-        from_fn(
-            By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
-                { FunctionDBWithNames::All },
-                FunctionDBWithNames,
-            >
-        ),
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-        from_fn(trigger_type_manual),
-        // Run the trigger gates (425 if running / 409 on external_uid conflict), build the
-        // execution, notify the scheduler, and shape the response.
-        execute(),
+#[service_factory]
+async fn execute_function(
+    authz: Ctx<AuthzContext>,
+    transaction_by: Ctx<TransactionBy>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    msgs: &mut ReqCtx,
+    db: DbPool<InProject>,
+    request: WithinProject<CreateRequest<ExecutionRequest, (CollectionParam, FunctionParam)>>,
+) -> Result<ExecutionResponse, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection_param, function_param), execution_request) = request.into_parts();
+
+    // before any read (the 425/409 trigger-gate answers must not be
+    // observable unauthorized) and before the exclusive lock (unauthorized
+    // callers must not queue on it)
+    let grant = {
+        let mut conn = db.read().await?;
+        authz
+            .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
+            .await?
+    };
+    let mut trx = db.begin_exclusive().await?;
+    let conn = trx.get(grant);
+    let function: FunctionDBWithNames = conn
+        .historic(&ctx.time)
+        .state(StateFilter::all())
+        .fetch_one(and!(&collection_param.collection, &function_param.function))
+        .await?;
+    let trigger_type = trigger_type_manual().await?;
+
+    // Run the trigger gates (425 if running / 409 on external_uid conflict),
+    // build the execution, and shape the response.
+    let response = execute(
+        conn,
+        msgs,
+        &transaction_by,
+        ctx,
+        project,
+        execution_request,
+        function,
+        trigger_type,
     )
+    .await?;
+    trx.commit().await?;
+
+    scheduler_notify.notify_scheduler();
+    Ok(response)
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::Context;
-    use crate::collection::service::CollectionServices;
-    use crate::execution::services::read::ExecutionReadService;
+    use crate::Services;
     use std::collections::HashSet;
     use std::error::Error;
     use std::str::FromStr;
     use std::sync::LazyLock;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
-    use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
+    use td_database::pool::scoped::ScopedExt;
     use td_error::{ApiError, TdError};
     use td_execution::EXECUTION_GRAPH_OPTIONS;
+    use td_objects::and;
     use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::execution::ExecutionParam;
     use td_objects::dxo::execution::{
         ExecutionDB, ExecutionDBWithStatus, ExecutionResponse, ResolvedVersionResponse,
     };
@@ -90,170 +95,18 @@ pub(crate) mod tests {
     };
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDBWithStatus;
-    use td_objects::rest_urls::ExecutionParam;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
-        ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues, GroupId, InputIdx,
-        LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId, ProjectName, TableName,
-        TableNameDto, TransactionKey, TransactionStatus, TriggeredOn, UserId, VersionPos,
+        AccessTokenId, AllowDisabled, BundleId, CollectionName, Decorator, Depth, Description,
+        Enabled, ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
+        GroupId, GroupName, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
+        ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
+        TriggeredOn, UserId, VersionPos,
     };
+    use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_objects::{Buildable, and};
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LiveEntry};
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_execute(db: TdPool) {
-        use crate::execution::layers::GraphOpts;
-        use crate::execution::layers::execution::{
-            assert_function_status, build_execution_plan, build_initial_mint_lfr_pointers,
-            build_initial_mint_ltdv_pointers, build_logical_function_run_inputs,
-            build_logical_function_runs, build_logical_table_data_versions, build_response,
-            build_transaction_map, build_transactions, resolve_execution_plan_versions,
-            update_initial_function_run_status, validate_execution_plan, with_recursion_options,
-        };
-        use crate::execution::layers::execution_version::{
-            dedup_lock, reject_if_external_uid_in_use, reject_if_running,
-        };
-        use crate::graph::layers::FunctionOrTable;
-        use crate::graph::layers::build::GraphBuilder;
-        use crate::scheduler::layers::request::notify_scheduler;
-        use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-        use td_database::pool::scoped::Scoped;
-        use td_objects::dxo::crudl::RequestContext;
-        use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
-        use td_objects::dxo::function::FunctionDBWithNames;
-        use td_objects::dxo::logical::{
-            LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
-            LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
-        };
-        use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
-        use td_objects::tower_service::with::With;
-        use td_objects::types::basic::ProjectId;
-        use td_objects::types::basic::{
-            ExternalUid, FunctionId, FunctionOnly, SkipIfRunning, TriggerType,
-        };
-        use td_objects::types::recursion::RecursionOptions;
-        use td_queries::{insert, insert_vec};
-        use td_tower::metadata::type_of_val;
-
-        ExecuteFunctionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<CreateRequest<FunctionParam, ExecutionRequest>, ProjectId>, ExecutionResponse>(
-                &[
-                    // Extract from request.
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<
-                            RequestContext,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<
-                            FunctionParam,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<
-                            ExecutionRequest,
-                        >,
-                    ),
-                    type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                    type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
-                    type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-                    // Select trigger function.
-                    type_of_val(
-                        &By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
-                            { FunctionDBWithNames::All },
-                            FunctionDBWithNames,
-                        >,
-                    ),
-                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-                    type_of_val(&trigger_type_manual),
-                    // trigger_guards(): 425 Too Early gate
-                    type_of_val(
-                        &By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>,
-                    ),
-                    type_of_val(&With::<ExecutionRequest>::extract::<SkipIfRunning>),
-                    type_of_val(&reject_if_running),
-                    // trigger_guards(): 409 Conflict gate
-                    type_of_val(&With::<ExecutionRequest>::extract::<Option<ExternalUid>>),
-                    type_of_val(&dedup_lock),
-                    type_of_val(&reject_if_external_uid_in_use),
-                    // execute()
-                    type_of_val(&With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
-                    type_of_val(&assert_function_status),
-                    // check requester can develop the current project (manage or develop)
-                    type_of_val(&Scope::<Project>::set),
-                    type_of_val(&Rbac::<Project, DevelopProject>::check),
-                    // Get recursion options
-                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                    type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
-                    type_of_val(&With::<ExecutionRequest>::extract::<FunctionOnly>),
-                    type_of_val(&with_recursion_options),
-                    // Find td graph
-                    // Find triggers
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
-                    // Find dependencies. For clarity, we always show the function, even if
-                    // generating a table centered graph, the same way we show the tables of
-                    // a function centered graph.
-                    type_of_val(&GraphBuilder::<GraphOpts>::main_function_id),
-                    type_of_val(&GraphBuilder::<GraphOpts>::unique_triggered_function_ids),
-                    type_of_val(
-                        &GraphBuilder::<GraphOpts>::find_triggered_functions_dependency_graph,
-                    ),
-                    // Find output tables
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
-                    // Find all tables and functions
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_all_tables_map),
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_all_functions_map),
-                    // Create td graph and validate it
-                    type_of_val(&GraphBuilder::<GraphOpts>::build_td_graph),
-                    // Build execution plan
-                    type_of_val(&build_execution_plan),
-                    type_of_val(&validate_execution_plan),
-                    // Build execution
-                    type_of_val(
-                        &With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>,
-                    ),
-                    type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
-                    type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
-                    type_of_val(&With::<TriggerType>::set::<ExecutionDBBuilder>),
-                    type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
-                    type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB>),
-                    type_of_val(&insert::<ExecutionDB>),
-                    // Build transactions
-                    type_of_val(&build_transaction_map),
-                    type_of_val(&With::<ExecutionDB>::try_convert_to::<TransactionDBBuilder, _>),
-                    type_of_val(&build_transactions),
-                    type_of_val(&insert_vec::<TransactionDB>),
-                    // Logical LFRs — identity rows + InitialMint pointer events.
-                    type_of_val(&build_logical_function_runs),
-                    type_of_val(&insert_vec::<LogicalFunctionRunDB>),
-                    type_of_val(&build_initial_mint_lfr_pointers),
-                    type_of_val(&insert_vec::<LogicalFunctionRunPointerDB>),
-                    // Logical LTDVs — identity rows + InitialMint pointer events.
-                    type_of_val(&build_logical_table_data_versions),
-                    type_of_val(&insert_vec::<LogicalTableDataVersionDB>),
-                    type_of_val(&build_initial_mint_ltdv_pointers),
-                    type_of_val(&insert_vec::<LogicalTableDataVersionPointerDB>),
-                    // Resolve plan-build response.
-                    type_of_val(&resolve_execution_plan_versions),
-                    // Logical dependency-binding rows.
-                    type_of_val(&build_logical_function_run_inputs),
-                    type_of_val(&insert_vec::<LogicalFunctionRunInputDB>),
-                    // Initial-OnHold via logical chain.
-                    type_of_val(&update_initial_function_run_status),
-                    // Execution plan response
-                    type_of_val(&build_response),
-                    // Notify scheduler of new function runs.
-                    type_of_val(&notify_scheduler),
-                ],
-            );
-    }
 
     // Projects are silos with no inter-collection checks: triggering across
     // collections within the same project is always allowed for a
@@ -286,10 +139,6 @@ pub(crate) mod tests {
     /// identically-named group.
     #[td_test::test(db)]
     async fn test_execute_stamps_project_scoped_group(db: TdPool) -> Result<(), TdError> {
-        if !matches!(db.kind(), DatabaseBackend::Postgres) {
-            return Ok(());
-        }
-
         // A fresh project, seeded with its own system groups.
         let project = db
             .seed()
@@ -299,21 +148,25 @@ pub(crate) mod tests {
         // Create a collection in that project through the real service, which
         // resolves the `default` group within the project's scope.
         let collection_name = CollectionName::try_from("grp_coll")?;
-        CollectionServices::build(&Context::with_defaults(db.clone()))
-            .create
-            .service()
-            .raw_oneshot(
+        Services::with_defaults(db.clone())
+            .create_collection(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(
                         (),
-                        CollectionCreate::builder()
-                            .name(&collection_name)
-                            .description(&Description::try_from("c")?)
-                            .build()?,
+                        CollectionCreate {
+                            name: collection_name.clone(),
+                            description: Description::try_from("c")?,
+                            group: GroupName::default_group(),
+                            base_path: None,
+                            connection: None,
+                            secrets: None,
+                            vars: None,
+                        },
                     )
                     .in_project(project.id),
             )
-            .await?;
+            .await?
+            .data;
 
         let collection: ActiveCollectionDB = db
             .scoped(project.id)
@@ -331,19 +184,24 @@ pub(crate) mod tests {
         // Register a publisher function in that collection and seed a run
         // chain on it — every run-level row must inherit the project's group,
         // never the global default.
-        let create = FunctionRegister::builder()
-            .name(FunctionName::try_from("grp_fn")?)
-            .try_description("grp fn")?
-            .bundle_id(BundleId::default())
-            .try_snippet("grp snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("grp_table")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
-            .reuse_frozen_tables(false)
-            .build()?;
-        // Seed the run chain in the project the collection belongs to.
+        let create = FunctionRegister {
+            name: FunctionName::try_from("grp_fn")?,
+            description: "grp fn".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "grp snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("grp_table")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rt")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let p = &project.id;
         let function = db.scoped(p).seed().function(&collection, &create).await?;
         let execution = db.scoped(p).seed().execution(&function).await?;
@@ -394,23 +252,29 @@ pub(crate) mod tests {
             .collection(&CollectionName::try_from("range_coll")?, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FunctionName::try_from("producer")?)
-            .try_description("producer")?
-            .bundle_id(BundleId::default())
-            .try_snippet("producer snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(
+        let create = FunctionRegister {
+            name: FunctionName::try_from("producer")?,
+            description: "producer".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "producer snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(
                 tables
                     .iter()
                     .map(|t| TableNameDto::try_from(*t))
                     .collect::<Result<Vec<_>, _>>()?,
-            )
-            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rt")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let producer = db.scoped(p).seed().function(&collection, &create).await?;
         let table: TableDB = db
             .current()
@@ -460,48 +324,58 @@ pub(crate) mod tests {
         dependencies: &[&str],
         trigger: Option<&str>,
     ) -> Result<ExecutionResponse, TdError> {
-        let create = FunctionRegister::builder()
-            .name(FunctionName::try_from("consumer")?)
-            .try_description("consumer")?
-            .bundle_id(BundleId::default())
-            .try_snippet("consumer snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(
+        let create = FunctionRegister {
+            name: FunctionName::try_from("consumer")?,
+            description: "consumer".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "consumer snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(
                 dependencies
                     .iter()
                     .map(|d| TableDependencyDto::try_from(*d))
                     .collect::<Result<Vec<_>, _>>()?,
-            )
-            .triggers(
-                trigger
-                    .map(|t| Ok::<_, TdError>(vec![TableTriggerDto::try_from(t)?]))
-                    .transpose()?,
-            )
-            .tables(vec![TableNameDto::try_from("table_c")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ),
+            triggers: trigger
+                .map(|t| Ok::<_, TdError>(vec![TableTriggerDto::try_from(t)?]))
+                .transpose()?,
+            tables: vec![TableNameDto::try_from("table_c")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rt")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _ = db.scoped(p).seed().function(collection, &create).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                    .function(FunctionIdName::from_str("consumer")?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("range_dep_execution")?))
-                    .function_only(false)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("consumer")?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: Some(ExecutionName::try_from("range_dep_execution")?),
+                    function_only: FunctionOnly::FALSE,
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(p);
-        ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(request)
+        Services::with_defaults(db.clone())
+            .execute_function(request)
             .await
+            .map(|response| response.data)
     }
 
-    /// LFRI row for a `(dep_pos, version_pos)` slot of the execution.
     fn lfri_slot(
         rows: &[LogicalFunctionRunInputDB],
         dep_pos: i32,
@@ -515,7 +389,6 @@ pub(crate) mod tests {
             .unwrap_or_else(|| panic!("missing LFRI row dep {dep_pos} pos {version_pos}"))
     }
 
-    /// The resolved versions of the response's dependency edge at `dep_pos`.
     fn dep_edge(response: &ExecutionResponse, dep_pos: i32) -> &ResolvedVersionResponse {
         response
             .relations
@@ -602,17 +475,20 @@ pub(crate) mod tests {
         }
 
         // Read path reproduces them.
-        let read_service =
-            ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
+        let read_service = Services::with_defaults(db.clone());
         let read_request = || {
-            RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-                ExecutionParam::builder()
-                    .execution(response.id.clone())
-                    .build()
-                    .unwrap(),
-            )
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+                ExecutionParam {
+                    execution: response.id.clone(),
+                },
+                AllowDisabled::FALSE,
+            ))
         };
-        let read_response = read_service.clone().raw_oneshot(read_request()).await?;
+        let read_response = read_service
+            .clone()
+            .execution_read(read_request())
+            .await?
+            .data;
         assert_eq!(idxs(dep_edge(&read_response, 0)), vec![0, 1, 2]);
         assert_eq!(idxs(dep_edge(&read_response, 1)), vec![3]);
 
@@ -623,15 +499,15 @@ pub(crate) mod tests {
             .live()
             .fetch_one(and!(&producer_executions[1].id, &producer.function_id))
             .await?;
-        let update = UpdateLogicalFunctionRunDB::builder()
-            .status(LogicalFunctionRunStatus::Canceled)
-            .build()?;
+        let update = UpdateLogicalFunctionRunDB {
+            status: LogicalFunctionRunStatus::Canceled,
+        };
         db.scoped(p)
             .live()
             .update::<_, LogicalFunctionRunDB>(&update, &middle_lfr.id)
             .await?;
 
-        let drifted = read_service.raw_oneshot(read_request()).await?;
+        let drifted = read_service.execution_read(read_request()).await?.data;
         assert_eq!(idxs(dep_edge(&drifted, 0)), vec![0, 1, 2]);
         assert_eq!(idxs(dep_edge(&drifted, 1)), vec![3]);
 
@@ -647,18 +523,24 @@ pub(crate) mod tests {
         let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
 
         // `table_q` belongs to a publisher that never ran: no LTDV timeline.
-        let create = FunctionRegister::builder()
-            .name(FunctionName::try_from("producer_q")?)
-            .try_description("producer_q")?
-            .bundle_id(BundleId::default())
-            .try_snippet("producer_q snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_q")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FunctionName::try_from("producer_q")?,
+            description: "producer_q".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "producer_q snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_q")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rt")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _ = db.scoped(p).seed().function(&collection, &create).await?;
 
         // `table_p` has one version (range over three slots resolves two
@@ -749,18 +631,24 @@ pub(crate) mod tests {
 
         // Trigger function without permission restrictions (collection_0), which triggers function_1
         // and function_2. These will trigger function_3, depending on the test.
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[0].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(project_id)
@@ -768,24 +656,32 @@ pub(crate) mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[1].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(vec![TableTriggerDto::try_from(format!(
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[1].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: vec![TableTriggerDto::try_from(format!(
                 "{}/table_0",
                 COLLECTION_NAMES[0],
-            ))?])
-            .tables(vec![
+            ))?]
+            .into(),
+            tables: vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
-            ])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]
+            .into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(project_id)
@@ -794,24 +690,31 @@ pub(crate) mod tests {
             .await?;
 
         let bundle_id = BundleId::default();
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[2].clone())
-            .try_description("function_3 description")?
-            .bundle_id(bundle_id)
-            .try_snippet("function_3 snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(vec![TableTriggerDto::try_from(format!(
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[2].clone(),
+            description: "function_3 description".try_into()?,
+            bundle_id,
+            snippet: "function_3 snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: vec![TableTriggerDto::try_from(format!(
                 "{}/table_0",
                 COLLECTION_NAMES[0],
-            ))?])
-            .tables(Some(vec![
+            ))?]
+            .into(),
+            tables: Some(vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
-            ]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(project_id)
@@ -830,27 +733,36 @@ pub(crate) mod tests {
             &COLLECTION_NAMES[2]
         };
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[3].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(vec![
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[3].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: vec![
                 TableDependencyDto::try_from(format!("{deps_collection}/table_1"))?,
                 TableDependencyDto::try_from(format!("{deps_collection}/table_2"))?,
                 TableDependencyDto::try_from("table_3")?,
-            ])
-            .triggers(vec![TableTriggerDto::try_from(format!(
+            ]
+            .into(),
+            triggers: vec![TableTriggerDto::try_from(format!(
                 "{triggers_collection}/table_1"
-            ))?])
-            .tables(vec![
+            ))?]
+            .into(),
+            tables: vec![
                 TableNameDto::try_from("table_3")?,
                 TableNameDto::try_from("table_4")?,
-            ])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]
+            .into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(project_id)
@@ -860,21 +772,27 @@ pub(crate) mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
-                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .function_only(single_function)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection_0.name.to_string())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: Some(ExecutionName::try_from("test_execution")?),
+                    function_only: single_function.into(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(project_id);
 
-        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.execute_function(request).await;
 
-        // Test assertions
         let expected_all_functions = match graph_depth {
             Some(depth) => FUNCTION_NAMES
                 .iter()
@@ -886,9 +804,8 @@ pub(crate) mod tests {
         // Projects are silos: cross-collection triggering within the project
         // is always allowed, so every trigger succeeds.
         {
-            let response = response?;
+            let response = response?.data;
 
-            // Check the response
             assert_eq!(
                 response.name,
                 Some(ExecutionName::try_from("test_execution")?)
@@ -963,23 +880,19 @@ pub(crate) mod tests {
             created_tables.sort();
             assert_eq!(expected_created_tables, created_tables);
 
-            // Asser db
-
-            // Execution
             let executions: Vec<ExecutionDBWithStatus> =
                 db.live().fetch_all::<ExecutionDBWithStatus>(()).await?;
             assert_eq!(executions.len(), 1);
-            assert_eq!(executions[0].id, response.id);
-            assert_eq!(executions[0].name, response.name);
-            assert_eq!(executions[0].collection_id, collection_0.id);
+            assert_eq!(executions[0].base.base.id, response.id);
+            assert_eq!(executions[0].base.base.name, response.name);
+            assert_eq!(executions[0].base.base.collection_id, collection_0.id);
             assert_eq!(executions[0].status, ExecutionStatus::Scheduled);
 
-            // Transaction
             let transactions: Vec<TransactionDBWithStatus> =
                 db.live().fetch_all::<TransactionDBWithStatus>(()).await?;
             assert!(transactions.len() == 1 || transactions.len() == 3);
             for transaction in transactions {
-                assert_eq!(&transaction.execution_id, &response.id);
+                assert_eq!(&transaction.base.execution_id, &response.id);
                 assert_eq!(transaction.status, TransactionStatus::Scheduled);
             }
 
@@ -990,7 +903,7 @@ pub(crate) mod tests {
                 .await?;
             let lfrs: Vec<LogicalFunctionRunDB> = db
                 .live()
-                .fetch_all::<LogicalFunctionRunDB>(&function.function_id)
+                .fetch_all::<LogicalFunctionRunDB>(&function.base.function_id)
                 .await?;
             assert_eq!(lfrs.len(), 1);
             assert_eq!(lfrs[0].collection_id, collection_0.id);
@@ -1003,7 +916,7 @@ pub(crate) mod tests {
                 .await?;
             let lfrs: Vec<LogicalFunctionRunDB> = db
                 .live()
-                .fetch_all::<LogicalFunctionRunDB>(&function.function_id)
+                .fetch_all::<LogicalFunctionRunDB>(&function.base.function_id)
                 .await?;
             for lfr in lfrs {
                 assert_eq!(&lfr.execution_id, &response.id);
@@ -1069,18 +982,24 @@ pub(crate) mod tests {
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[0].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_0 = db
             .scoped(project_id)
@@ -1088,18 +1007,24 @@ pub(crate) mod tests {
             .function(&collection, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[1].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_1")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[1].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_1 = db
             .scoped(project_id)
@@ -1107,24 +1032,32 @@ pub(crate) mod tests {
             .function(&collection, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[2].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(vec![
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[2].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: vec![
                 TableDependencyDto::try_from("table_0")?,
                 TableDependencyDto::try_from("table_1")?,
-            ])
-            .triggers(vec![
+            ]
+            .into(),
+            triggers: vec![
                 TableTriggerDto::try_from("table_0")?,
                 TableTriggerDto::try_from("table_1")?,
-            ])
-            .tables(vec![TableNameDto::try_from("table_2")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]
+            .into(),
+            tables: vec![TableNameDto::try_from("table_2")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _function_2 = db
             .scoped(project_id)
@@ -1132,7 +1065,6 @@ pub(crate) mod tests {
             .function(&collection, &create)
             .await?;
 
-        // seed a physical_function_run for function_0, with OnHold status
         let execution = db.scoped(project_id).seed().execution(&function_0).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
@@ -1168,7 +1100,6 @@ pub(crate) mod tests {
             )
             .await?;
 
-        // seed a physical_function_run for function_1, with Done status
         let execution = db.scoped(project_id).seed().execution(&function_1).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
@@ -1204,21 +1135,28 @@ pub(crate) mod tests {
             )
             .await?;
 
-        // And then run function_2
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: Some(ExecutionName::try_from("test_execution")?),
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(project_id);
 
-        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        let _response = service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        let _response = service.execute_function(request).await?.data;
 
         // there should only be one LFR for function_2 (concrete FRs are
         // minted at dispatch).
@@ -1228,7 +1166,7 @@ pub(crate) mod tests {
             .await?;
         let lfrs: Vec<LogicalFunctionRunDB> = db
             .live()
-            .fetch_all::<LogicalFunctionRunDB>(&function_2.function_id)
+            .fetch_all::<LogicalFunctionRunDB>(&function_2.base.function_id)
             .await?;
         assert_eq!(lfrs.len(), 1);
 
@@ -1318,37 +1256,48 @@ pub(crate) mod tests {
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[0].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .enabled(Enabled::FALSE)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: Some(Enabled::FALSE),
+            workers: None,
+        };
         let _function_0 = db
             .scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[1].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependencyDto::try_from("table_0")?])
-            .triggers(vec![TableTriggerDto::try_from("table_0")?])
-            .tables(vec![TableNameDto::try_from("table_1")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[1].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: vec![TableDependencyDto::try_from("table_0")?].into(),
+            triggers: vec![TableTriggerDto::try_from("table_0")?].into(),
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _function_1 = db
             .scoped(project_id)
             .seed()
@@ -1357,20 +1306,30 @@ pub(crate) mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .override_disabled_trigger(override_disabled_trigger)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: Some(ExecutionName::try_from("test_execution")?),
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger,
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(project_id);
 
-        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
 
-        Ok(service.raw_oneshot(request).await)
+        Ok(service
+            .execute_function(request)
+            .await
+            .map(|response| response.data))
     }
 
     #[td_test::test(db)]
@@ -1383,46 +1342,63 @@ pub(crate) mod tests {
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[0].clone())
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _function = db.scoped(p).seed().function(&collection, &create).await?;
 
         let trigger = |external_uid: Option<ExternalUid>| {
             RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
-                    FunctionParam::builder()
-                        .collection(
-                            CollectionIdName::from_str(&collection.name.to_string()).unwrap(),
-                        )
-                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string()).unwrap())
-                        .build()
-                        .unwrap(),
-                    ExecutionRequest::builder()
-                        .name(Some(ExecutionName::try_from("test_execution").unwrap()))
-                        .external_uid(external_uid)
-                        .build()
-                        .unwrap(),
+                    (
+                        CollectionParam {
+                            collection: CollectionIdName::from_str(&collection.name.to_string())
+                                .unwrap(),
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())
+                                .unwrap(),
+                        },
+                    ),
+                    ExecutionRequest {
+                        name: Some(ExecutionName::try_from("test_execution").unwrap()),
+                        function_only: FunctionOnly::default(),
+                        override_disabled_trigger: OverrideDisabledTrigger::default(),
+                        skip_if_running: SkipIfRunning::default(),
+                        external_uid,
+                    },
                 )
                 .in_project(p)
         };
 
         let uid = ExternalUid::try_from("uid-abc")?;
-        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(trigger(Some(uid.clone()))).await?;
+        let service = Services::with_defaults(db.clone());
+        service
+            .execute_function(trigger(Some(uid.clone())))
+            .await?
+            .data;
 
         // Same external_uid on a still-live execution -> 409 Conflict.
-        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        let err = service.raw_oneshot(trigger(Some(uid))).await.unwrap_err();
+        let service = Services::with_defaults(db.clone());
+        let err = service
+            .execute_function(trigger(Some(uid)))
+            .await
+            .unwrap_err();
         assert_eq!(err.api_error(), ApiError::Any(409));
         Ok(())
     }

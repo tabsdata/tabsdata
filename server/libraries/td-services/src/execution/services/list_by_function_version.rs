@@ -1,66 +1,54 @@
 //
-// Copyright 2026 Tabsdata Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::list::list_executions_by_fv;
+use crate::execution::list::list_executions_by_fv;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject, enter_project_scope};
+use td_authz::rbac::ViewProject;
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::function::FunctionVersionDBWithNames;
+use td_objects::dxo::function::FunctionVersionIdParam;
 use td_objects::list::params::ListQueryParams;
-use td_objects::rest_urls::FunctionVersionIdParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, FunctionVersionId, ProjectId};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ExecutionListByFunctionVersionService,
-    request = ListRequest<FunctionVersionIdParam>,
-    response = ListResponse<Execution>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<FunctionVersionIdParam>>::extract::<RequestContext>),
-        // Extract FunctionVersionId from request.
-        from_fn(
-            With::<ListRequest<FunctionVersionIdParam>>::extract_name::<FunctionVersionIdParam>
-        ),
-        from_fn(With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
-        // Resolve the anchor — a head version or a patch, the union view
-        // serves both — into its owning project via its collection;
-        // authorize the requester to view it.
-        from_fn(By::<FunctionVersionId>::fetch_one::<FunctionVersionDBWithNames>),
-        from_fn(With::<FunctionVersionDBWithNames>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // List executions
-        from_fn(With::<ListRequest<FunctionVersionIdParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-        from_fn(list_executions_by_fv),
-    )
+#[service_factory]
+async fn execution_list_by_function_version(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest<FunctionVersionIdParam>,
+) -> Result<ListResponse<Execution>, TdError> {
+    let (ctx, param, list_params) = request.into_parts();
+    let function_version_id = param.function_version_id;
+
+    // Resolve the anchor — a head version or a patch, the union view
+    // serves both — into its owning project via its collection;
+    // authorize the requester to view it.
+    let conn = gated_conn.get(authz.none());
+    let version: FunctionVersionDBWithNames = conn.live().fetch_one(&function_version_id).await?;
+    let collection: CollectionDB = conn.live().fetch_one(&version.collection_id).await?;
+    let _grant = authz
+        .require_in_project::<ViewProject>(conn, &ctx, &collection.base.project_id)
+        .await?;
+
+    let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
+    list_executions_by_fv(conn, &function_version_id, &list_params, &query_params).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use sea_query::{Expr, ExprTrait, Query};
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_database::sea_query::builder::SeaQueryExt;
     use td_error::TdError;
-    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::{FunctionPatchDB, FunctionRegister};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
     use td_objects::dxo::table::TableDB;
@@ -69,46 +57,10 @@ mod tests {
         FunctionRuntimeValues, FunctionStatus, LogicalFunctionRunStatus, Snippet, TableNameDto,
         TransactionKey, UserId, VersionPos,
     };
-    use td_objects::{Buildable, SeaValue, and};
+    use td_objects::types::basic::{FunctionVersionId, ReuseFrozen};
+    use td_objects::{SeaValue, and};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_executions_by_function_version(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ExecutionListByFunctionVersionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<FunctionVersionIdParam>, ListResponse<Execution>>(&[
-                type_of_val(
-                    &With::<ListRequest<FunctionVersionIdParam>>::extract::<RequestContext>,
-                ),
-                // Extract FunctionVersionId from request.
-                type_of_val(
-                    &With::<ListRequest<FunctionVersionIdParam>>::extract_name::<
-                        FunctionVersionIdParam,
-                    >,
-                ),
-                type_of_val(&With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
-                // Resolve the anchor — a head version or a patch, the union view
-                // serves both — into its owning project via its collection;
-                // authorize the requester to view it.
-                type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionVersionDBWithNames>),
-                type_of_val(&With::<FunctionVersionDBWithNames>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // List executions with pagination (single JOIN query).
-                type_of_val(&With::<ListRequest<FunctionVersionIdParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-                type_of_val(&list_executions_by_fv),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_executions_by_function_version(db: TdPool) -> Result<(), TdError> {
@@ -120,18 +72,24 @@ mod tests {
             .await?;
 
         let tables = vec![TableNameDto::try_from("output_table")?];
-        let create = FunctionRegister::builder()
-            .try_name("fn_a")?
-            .try_description("function A")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(tables.clone())
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "fn_a".try_into()?,
+            description: "function A".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version_a = db
             .scoped(p.id)
             .seed()
@@ -199,18 +157,24 @@ mod tests {
             .await?;
 
         // Create a second function and execution that does NOT use function_version_a.
-        let create_b = FunctionRegister::builder()
-            .try_name("fn_b")?
-            .try_description("function B")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create_b = FunctionRegister {
+            name: "fn_b".try_into()?,
+            description: "function B".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version_b = db
             .scoped(p.id)
             .seed()
@@ -255,18 +219,19 @@ mod tests {
             .await?;
 
         // A third execution of function_version_a whose attempt ran a patch.
-        let patch = FunctionPatchDB::builder()
-            .parent_function_version_id(function_version_a.id.clone())
-            .function_id(function_version_a.function_id)
-            .collection_id(function_version_a.collection_id)
-            .snippet(Snippet::try_from("patched")?)
-            .bundle_id(BundleId::default())
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .description(Description::try_from("patch")?)
-            .defined_on(AtTime::now())
-            .defined_by_id(UserId::admin())
-            .status(FunctionStatus::Active)
-            .build()?;
+        let patch = FunctionPatchDB {
+            id: FunctionVersionId::new(),
+            parent_function_version_id: function_version_a.id.clone(),
+            function_id: function_version_a.function_id,
+            collection_id: function_version_a.collection_id,
+            snippet: Snippet::try_from("patched")?,
+            bundle_id: BundleId::default(),
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            description: Description::try_from("patch")?,
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::admin(),
+            status: FunctionStatus::Active,
+        };
         db.scoped(p.id).live().insert(&patch).await?;
 
         let execution_3 = db
@@ -304,15 +269,19 @@ mod tests {
             .await
             .unwrap();
 
-        let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let list = async |fvid: &FunctionVersionId| -> Result<ListResponse<Execution>, TdError> {
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-                FunctionVersionIdParam::builder()
-                    .function_version_id(fvid.clone())
-                    .build()?,
+                FunctionVersionIdParam {
+                    function_version_id: fvid.clone(),
+                },
                 ListParams::default(),
             );
-            service.clone().raw_oneshot(request).await
+            service
+                .clone()
+                .execution_list_by_function_version(request)
+                .await
+                .map(|response| response.data)
         };
 
         // The head fvid matches every execution that ran the version,
@@ -342,18 +311,24 @@ mod tests {
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .try_name("some_fn")?
-            .try_description("description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "some_fn".try_into()?,
+            description: "description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -361,14 +336,17 @@ mod tests {
             .await?;
 
         // No function requirements exist for this function version.
-        let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-            FunctionVersionIdParam::builder()
-                .function_version_id(function_version.id.clone())
-                .build()?,
+            FunctionVersionIdParam {
+                function_version_id: function_version.id.clone(),
+            },
             ListParams::default(),
         );
-        let response = service.raw_oneshot(request).await?;
+        let response = service
+            .execution_list_by_function_version(request)
+            .await?
+            .data;
 
         assert_eq!(response.len, 0);
 
