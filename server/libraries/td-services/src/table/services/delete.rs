@@ -21,8 +21,8 @@ use td_queries::Queries;
 
 #[td_error]
 enum DeleteTableError {
-    #[error("Table '{0}' exists in collection '{1}' but it is not in frozen state: {2}")]
-    TableNotFrozen(TableName, CollectionName, String) = 0,
+    #[error("Table '{0}' in collection '{1}' is not frozen; only a frozen table can be deleted")]
+    TableNotFrozen(TableName, CollectionName) = 0,
 }
 
 #[service_factory]
@@ -56,7 +56,6 @@ async fn table_delete(
         Err(DeleteTableError::TableNotFrozen(
             table.base.base.name.clone(),
             collection.name.clone(),
-            table.base.base.status.to_string(),
         ))?
     }
     let table_id = table.base.base.table_id;
