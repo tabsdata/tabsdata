@@ -59,7 +59,6 @@ members = [
     "server/libraries/td-supervisor",
     "server/libraries/td-tableframe",
     "server/libraries/td-test",
-    "server/libraries/td-tower",
     "extensions/rust/te-apiserver",
     "extensions/rust/te-authz",
     "extensions/rust/te-database",
@@ -79,7 +78,6 @@ exclude = [
     "macros/facets/tm-pyo3",
     "macros/facets/tm-services",
     "macros/facets/tm-test",
-    "macros/facets/tm-tower",
     "macros/facets/tm-workspace",
 ]
 
@@ -105,11 +103,6 @@ test-utils = []
 # an isolated process. Use command "cargo test --features test_logging -- test_logging" to run the logging tests.
 # All logging tests' name must start with "test-logging", as shown in the Makefile command.
 test_logging = []
-
-# Tower metadata tests skip actual logic execution, and therefore need its own feature. Use command
-# "cargo test --features test_tower_metadata -- test_tower_metadata" to run the tower metadata tests. All tower
-# metadata tests' name must start with "test_tower_metadata", as shown in the Makefile command.
-test_tower_metadata = []
 
 # Enable this feature to generate binaries where you can track Tokio tasks using tokio console, with the steps:
 #   cargo install --locked tokio-console
@@ -176,9 +169,6 @@ path = "macros/facets/tm-services"
 
 [workspace.dependencies.tm-test]
 path = "macros/facets/tm-test"
-
-[workspace.dependencies.tm-tower]
-path = "macros/facets/tm-tower"
 
 [workspace.dependencies.tm-workspace]
 path = "macros/facets/tm-workspace"
@@ -280,9 +270,6 @@ path = "server/libraries/td-tableframe"
 
 [workspace.dependencies.td-test]
 path = "server/libraries/td-test"
-
-[workspace.dependencies.td-tower]
-path = "server/libraries/td-tower"
 
 [workspace.dependencies.te-apiserver]
 path = "extensions/rust/te-apiserver"
@@ -686,13 +673,6 @@ version = "1.20.0"
 [workspace.dependencies.terminal_size]
 version = "0.4.3"
 
-[workspace.dependencies.testcontainers]
-version = "0.27.3"
-
-[workspace.dependencies.testcontainers-modules]
-version = "0.15.0"
-features = ["mysql"]
-
 [workspace.dependencies.textwrap]
 version = "0.16.2"
 
@@ -723,12 +703,6 @@ features = ["make", "util"]
 [workspace.dependencies.tower-http]
 version = "0.6.8"
 features = ["cors", "timeout", "trace"]
-
-[workspace.dependencies.tower-layer]
-version = "0.3.3"
-
-[workspace.dependencies.tower-service]
-version = "0.3.3"
 
 [workspace.dependencies.tracing]
 version = "0.1.44"

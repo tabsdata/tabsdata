@@ -96,11 +96,10 @@ td-test = [
 dummy = []
 mock-env = []
 test_logging = []
-test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "paste", "td-server", "td-tower", "toml", "utoipa", "utoipa-axum", "windows"]
+ignored = ["openssl", "paste", "td-server", "toml", "utoipa", "utoipa-axum", "windows"]
 
 # Build dependencies
 
