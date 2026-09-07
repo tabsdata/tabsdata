@@ -12,7 +12,8 @@ per-package conftest. The plain helpers (``run_function``, ``wait_for_completion
 
 A test declares ``@tabsdata_instance(consumer=...)`` (for ``server``) and, via
 ``collection_factory``, creates source/destination collections carrying any
-connector's ``Conn``; file-specific helpers live in :mod:`.files`.
+connector's ``Conn`` -- and connection-less data factory collections, the only
+place a transformer may be registered; file-specific helpers live in :mod:`.files`.
 """
 
 from __future__ import annotations
@@ -38,9 +39,10 @@ from tabsdatax.itest.fixture.instances.tabsdata import Instance
 POLL_INTERVAL_SECONDS = 2
 POLL_TIMEOUT_SECONDS = 300
 
-# Creates a collection in a given group ("sources" / "destinations") with the
-# given connection -- named explicitly, or generated when the name does not
-# matter -- and returns the created ``Collection``.
+# Creates a collection in a given group ("sources" / "destinations" / "default")
+# carrying the given connection -- omitted for a "default" (data factory)
+# collection, which carries none -- named explicitly, or generated when the name
+# does not matter, and returns the created ``Collection``.
 CollectionFactory = Callable[..., Collection]
 
 
@@ -116,7 +118,9 @@ def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
     state: dict[str, str | None] = {"project": None}
     created: list[str] = []
 
-    def make(group: str, conn: Conn, name: str | None = None) -> Collection:
+    def make(
+        group: str, conn: Conn | None = None, name: str | None = None
+    ) -> Collection:
         if state["project"] is None:
             project = f"e2e_{uuid.uuid4().hex[:8]}_proj"
             server.create_project(project, description="e2e test project")
@@ -126,7 +130,9 @@ def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
         # the collection named at authoring time; the project around it is still
         # per-test, so a fixed name collides with nothing.
         name = name or f"e2e_{group}_{uuid.uuid4().hex[:8]}"
-        document, secrets = _connection_document(conn)
+        document, secrets = (
+            _connection_document(conn) if conn is not None else (None, None)
+        )
         collection = Collection(
             connection=server.connection,
             name=name,
