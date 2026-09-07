@@ -11,19 +11,21 @@ use std::collections::HashMap;
 use td_bridge::messaging::{FunctionRequest, FunctionStartRequest, OrchestratorMessagePayload};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::SchedulerConfig;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunToExecute};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::dxo::worker::WorkerDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
+use td_objects::dxo::worker::WorkerInsertDB;
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::types::basic::{
     AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId,
     WorkerMessageStatus, WorkerStatus, WorkerType,
 };
-use td_queries::{ChunkedQueries, LfrEntry, PfrEntry};
+use td_queries::Queries;
 use td_storage::Storage;
 use tracing::{debug, info, instrument, warn};
 
@@ -35,14 +37,14 @@ use tracing::{debug, info, instrument, warn};
     level = "debug",
     err(Debug)
 )]
-pub async fn fetch_lfr_to_dispatch(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn fetch_lfr_to_dispatch<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     at: &AtTime,
     config: &SchedulerConfig,
     saturated: &mut bool,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     let limit = config.max_functions_per_tick.0;
-    let result = conn.lfr().to_execute(at, limit).await?;
+    let result = conn.logical_runs().to_execute(at, limit).await?;
     if result.is_empty() {
         debug!("scheduler.dispatch_tick: 0 LFRs ready");
     } else {
@@ -74,13 +76,13 @@ pub async fn fetch_lfr_to_dispatch(
     level = "debug",
     err(Debug)
 )]
-pub async fn fetch_pfrs_to_dispatch(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn fetch_pfrs_to_dispatch<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     config: &SchedulerConfig,
     saturated: &mut bool,
 ) -> Result<Vec<PhysicalFunctionRunDB>, TdError> {
     let limit = config.max_functions_per_tick.0;
-    let result = conn.pfr().to_dispatch(limit).await?;
+    let result = conn.physical_runs().to_dispatch(limit).await?;
     if result.is_empty() {
         debug!("scheduler.dispatch_tick: 0 replay PFRs ready");
     } else {
@@ -110,61 +112,64 @@ pub async fn fetch_pfrs_to_dispatch(
     level = "debug",
     err(Debug)
 )]
-pub async fn materialize_replay_dispatch(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn materialize_replay_dispatch<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     pfrs: &[PhysicalFunctionRunDB],
 ) -> Result<Vec<MintedDispatch>, TdError> {
     if pfrs.is_empty() {
         return Ok(Vec::new());
     }
 
-    let pfr_ids: Vec<PhysicalFunctionRunId> = pfrs.iter().map(|p| p.id.clone()).collect();
+    let pfr_ids: Vec<PhysicalFunctionRunId> = pfrs.iter().map(|p| p.base.id.clone()).collect();
 
     let exec_ids: Vec<ExecutionId> = pfrs
         .iter()
-        .map(|p| p.execution_id.clone())
+        .map(|p| p.base.execution_id.clone())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
     let all_lfrs: Vec<LogicalFunctionRunDB> = conn
-        .fetch_all_chunked::<LogicalFunctionRunDB, ExecutionId>(&exec_ids)
+        .chunked()
+        .fetch_all::<LogicalFunctionRunDB>(&exec_ids, ())
         .await?;
     let lfr_by_exec_fn = index_lfrs_by_exec_fn(all_lfrs);
 
     let tdvs: Vec<PhysicalTableDataVersionDB> = conn
-        .fetch_all_chunked::<PhysicalTableDataVersionDB, PhysicalFunctionRunId>(&pfr_ids)
+        .history()
+        .chunked()
+        .fetch_all::<PhysicalTableDataVersionDB>(&pfr_ids, ())
         .await?;
-    let mut tdvs_by_fr: HashMap<PhysicalFunctionRunId, Vec<PhysicalTableDataVersionDB>> =
+    let mut tdvs_by_fr: HashMap<PhysicalFunctionRunId, Vec<PhysicalTableDataVersionInsertDB>> =
         HashMap::new();
     for t in tdvs {
         tdvs_by_fr
-            .entry(t.physical_function_run_id.clone())
+            .entry(t.base.physical_function_run_id.clone())
             .or_default()
-            .push(t);
+            .push(t.base);
     }
 
     let mut output = Vec::with_capacity(pfrs.len());
     for pfr in pfrs.iter() {
         let Some(lfr) = lfr_by_exec_fn
-            .get(&pfr.execution_id)
-            .and_then(|inner| inner.get(&pfr.function_id))
+            .get(&pfr.base.execution_id)
+            .and_then(|inner| inner.get(&pfr.base.function_id))
         else {
             return Err(api_error!(
                 ApiError::InternalError,
                 "replay-dispatch: no LFR for PFR {} via (execution_id={}, function_id={})",
-                pfr.id,
-                pfr.execution_id,
-                pfr.function_id,
+                pfr.base.id,
+                pfr.base.execution_id,
+                pfr.base.function_id,
             ));
         };
         let runnable = RunnableVersion {
-            function_version_id: pfr.function_version_id.clone(),
-            function_version_patch_id: pfr.function_version_patch_id.clone(),
+            function_version_id: pfr.base.function_version_id.clone(),
+            function_version_patch_id: pfr.base.function_version_patch_id.clone(),
         };
-        let tdvs = tdvs_by_fr.remove(&pfr.id).unwrap_or_default();
+        let tdvs = tdvs_by_fr.remove(&pfr.base.id).unwrap_or_default();
         output.push(MintedDispatch {
             lfr: lfr.clone(),
-            fr: pfr.clone(),
+            fr: pfr.base.clone(),
             runnable,
             tdvs,
         });
@@ -186,15 +191,15 @@ pub async fn materialize_replay_dispatch(
     level = "debug",
     err(Debug)
 )]
-pub async fn enrich_minted_dispatch(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn enrich_minted_dispatch<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     minted: &[MintedDispatch],
 ) -> Result<Vec<PhysicalFunctionRunToExecute>, TdError> {
     if minted.is_empty() {
         return Ok(Vec::new());
     }
     let fr_ids: Vec<PhysicalFunctionRunId> = minted.iter().map(|m| m.fr.id.clone()).collect();
-    let result = conn.lfr().for_dispatch(&fr_ids).await?;
+    let result = conn.logical_runs().for_dispatch(&fr_ids).await?;
     Ok(result)
 }
 
@@ -203,7 +208,7 @@ pub async fn enrich_minted_dispatch(
 pub fn lfr_ids_from_minted_dispatch(
     minted: &[MintedDispatch],
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
-    Ok(minted.iter().map(|m| m.lfr.id.clone()).collect())
+    Ok(minted.iter().map(|m| m.lfr.base.id.clone()).collect())
 }
 
 /// Extract the PFR ids from the successfully dispatched workers so the
@@ -212,7 +217,7 @@ pub fn lfr_ids_from_minted_dispatch(
 /// is re-picked by the replay-side readiness next tick. Used by both initial
 /// and replay pipelines after WorkerDB insert.
 pub fn pfr_ids_from_dispatched_workers(
-    workers: &[WorkerDB],
+    workers: &[WorkerInsertDB],
 ) -> Result<Vec<PhysicalFunctionRunId>, TdError> {
     Ok(workers
         .iter()
@@ -249,15 +254,15 @@ pub async fn put_worker_messages(bridge: &BridgeProviderHandle, messages: Worker
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_function_runner_workers_start_request(
+pub async fn create_locked_function_runner_workers_start_request<S: SeesProjectRows>(
     orchestrator: Orchestrator,
     storage: &Storage,
     internal_api: &InternalApi,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
     at: &AtTime,
     physical_function_runs: &Vec<PhysicalFunctionRunToExecute>,
     messages: &mut WorkerMessages,
-) -> Result<Vec<WorkerDB>, TdError> {
+) -> Result<Vec<WorkerInsertDB>, TdError> {
     // Supervisor resolves the message eagerly at the dispatch tick; the
     // kubernetes path defers resolution to the resolve endpoint (the pod
     // pulls its message), so it skips the tick-wide prefetch + build and
@@ -278,7 +283,8 @@ pub async fn create_locked_function_runner_workers_start_request(
             let worker_id = WorkerId::new();
 
             // Responder: where the worker POSTs its status back (both paths).
-            let responder = internal_api.function_run_responder(&f.base.base.id, &worker_id)?;
+            let responder =
+                internal_api.function_run_responder(&f.base.base.base.id, &worker_id)?;
 
             // The message kind differs by orchestrator: supervisor ships a flat
             // request carrying the fully-resolved Function context; kubernetes
@@ -318,11 +324,11 @@ pub async fn create_locked_function_runner_workers_start_request(
                             responder,
                             project_id: f.base.base.project_id,
                             project: f.base.project.clone(),
-                            collection_id: f.base.base.collection_id,
+                            collection_id: f.base.base.base.collection_id,
                             collection: f.base.collection.clone(),
                             connection_id: f.connection_id,
                             connection: f.base.connection.clone(),
-                            function_id: f.base.base.function_id,
+                            function_id: f.base.base.base.function_id,
                             function: f.base.name.clone(),
                         }),
                     )
@@ -331,14 +337,13 @@ pub async fn create_locked_function_runner_workers_start_request(
 
             // Create worker message. The worker inherits the function-run's
             // project so its callbacks land in the right RLS scope.
-            let message = WorkerDB {
+            let message = WorkerInsertDB {
                 id: worker_id,
-                project_id: f.base.base.project_id,
-                collection_id: f.base.base.collection_id,
-                execution_id: Some(f.base.base.execution_id.clone()),
-                transaction_id: Some(f.base.base.transaction_id.clone()),
-                physical_function_run_id: Some(f.base.base.id.clone()),
-                function_version_id: f.base.base.function_version_id.clone(),
+                collection_id: f.base.base.base.collection_id,
+                execution_id: Some(f.base.base.base.execution_id.clone()),
+                transaction_id: Some(f.base.base.base.transaction_id.clone()),
+                physical_function_run_id: Some(f.base.base.base.id.clone()),
+                function_version_id: f.base.base.base.function_version_id.clone(),
                 message_status: WorkerMessageStatus::Locked,
                 started_on: None,
                 ended_on: None,
@@ -348,9 +353,13 @@ pub async fn create_locked_function_runner_workers_start_request(
                 worker_config: None,
             };
 
-            Ok::<(WorkerDB, OrchestratorMessagePayload<serde_yaml::Value>), TdError>((
-                message, payload,
-            ))
+            Ok::<
+                (
+                    WorkerInsertDB,
+                    OrchestratorMessagePayload<serde_yaml::Value>,
+                ),
+                TdError,
+            >((message, payload))
         }
         .await;
         match result {
@@ -359,7 +368,7 @@ pub async fn create_locked_function_runner_workers_start_request(
                 results.push(message);
             }
             Err(e) => warn!(
-                pfr_id = %f.base.base.id,
+                pfr_id = %f.base.base.base.id,
                 reason = ?e,
                 "request: skipping function-run dispatch; will retry next tick"
             ),

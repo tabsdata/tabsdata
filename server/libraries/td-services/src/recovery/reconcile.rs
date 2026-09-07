@@ -12,19 +12,21 @@ use td_bridge::BridgeProviderHandle;
 use td_bridge::observer::{
     ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadObserver, WorkloadPhase,
 };
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithBundleBasePath};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
-use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
+use td_objects::dxo::logical::LogicalFunctionRunInsertDB;
+use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerUpdateDB};
 use td_objects::or;
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionVersionId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
     PhysicalFunctionRunStatus, ProjectId, WorkerId, WorkerStatus,
 };
-use td_queries::{ChunkedQueries, CurrentEntry, LfrEntry, LiveEntry};
+use td_queries::Queries;
 use td_storage::Storage;
 use tracing::{debug, instrument, warn};
 
@@ -114,12 +116,12 @@ pub async fn stage_candidates(
 }
 
 #[instrument(name = "recovery.fn_candidates", skip_all, level = "debug", err(Debug))]
-pub async fn fn_candidates(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn fn_candidates<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
 ) -> Result<FnCandidates, TdError> {
     let mut pfrs: Vec<PhysicalFunctionRunDB> = conn
-        .live()
-        .fetch_all(or!(
+        .history()
+        .fetch_all::<PhysicalFunctionRunDB>(or!(
             PhysicalFunctionRunStatus::Dispatched,
             PhysicalFunctionRunStatus::Running
         ))
@@ -128,19 +130,18 @@ pub async fn fn_candidates(
         return Ok(FnCandidates::default());
     }
     // Oldest-dispatched first, so the per-tick cap never starves a run.
-    pfrs.sort_by_key(|a| a.dispatched_on);
+    pfrs.sort_by_key(|a| a.base.dispatched_on);
 
     // Condition columns resolve by exact field type: the nullable worker
     // column needs `Option`-wrapped keys.
     let pfr_ids: Vec<Option<PhysicalFunctionRunId>> =
-        pfrs.iter().map(|pfr| Some(pfr.id.clone())).collect();
-    let workers: Vec<WorkerDB> = conn
-        .fetch_all_chunked::<WorkerDB, Option<PhysicalFunctionRunId>>(&pfr_ids)
-        .await?;
+        pfrs.iter().map(|pfr| Some(pfr.base.id.clone())).collect();
+    let workers: Vec<WorkerDB> = conn.chunked().fetch_all::<WorkerDB>(&pfr_ids, ()).await?;
     let worker_by_pfr: HashMap<&PhysicalFunctionRunId, &WorkerDB> = workers
         .iter()
         .filter_map(|worker| {
             worker
+                .base
                 .physical_function_run_id
                 .as_ref()
                 .map(|pfr_id| (pfr_id, worker))
@@ -150,15 +151,17 @@ pub async fn fn_candidates(
     let attempts = pfrs
         .iter()
         .map(|pfr| FnAttempt {
-            worker_id: worker_by_pfr.get(&pfr.id).map(|worker| worker.id.clone()),
+            worker_id: worker_by_pfr
+                .get(&pfr.base.id)
+                .map(|worker| worker.base.id.clone()),
             pfr: pfr.clone(),
         })
         .collect();
     Ok(FnCandidates(attempts))
 }
 
-pub async fn stage_trigger_functions(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn stage_trigger_functions<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     stage: &StageCandidates,
 ) -> Result<StageFunctions, TdError> {
     if stage.0.is_empty() {
@@ -167,14 +170,14 @@ pub async fn stage_trigger_functions(
     let fvids: Vec<FunctionVersionId> = stage
         .0
         .iter()
-        .map(|worker| worker.base.function_version_id.clone())
+        .map(|worker| worker.base.base.function_version_id.clone())
         .collect();
     let functions = conn
-        .lfr()
+        .logical_runs()
         .with_bundle_base_path(&fvids)
         .await?
         .into_iter()
-        .map(|function| (function.base.id.clone(), function))
+        .map(|function| (function.base.base.id.clone(), function))
         .collect();
     Ok(StageFunctions(functions))
 }
@@ -183,8 +186,8 @@ pub async fn stage_trigger_functions(
 #[derive(Debug, Clone, Default)]
 pub struct CurrentTriggerVersions(pub HashSet<FunctionVersionId>);
 
-pub async fn current_trigger_versions(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn current_trigger_versions<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     cron: &CronCandidates,
     stage: &StageCandidates,
 ) -> Result<CurrentTriggerVersions, TdError> {
@@ -192,18 +195,22 @@ pub async fn current_trigger_versions(
         .0
         .iter()
         .chain(stage.0.iter())
-        .map(|worker| worker.base.function_version_id.clone())
+        .map(|worker| worker.base.base.function_version_id.clone())
         .unique()
         .collect();
     if fvids.is_empty() {
         return Ok(CurrentTriggerVersions::default());
     }
     let current: Vec<FunctionDB> = conn
-        .current()
-        .fetch_all_chunked::<FunctionDB, FunctionVersionId>(&fvids)
+        .latest()
+        .chunked()
+        .fetch_all::<FunctionDB>(&fvids, ())
         .await?;
     Ok(CurrentTriggerVersions(
-        current.into_iter().map(|function| function.id).collect(),
+        current
+            .into_iter()
+            .map(|function| function.base.id)
+            .collect(),
     ))
 }
 
@@ -219,7 +226,7 @@ pub async fn build_recovery_snapshot(
     // (fn update/disable supersedes them; their leftover workloads fall to
     // the orphan pass).
     let is_current =
-        |worker: &&WorkerDBWithNames| current.0.contains(&worker.base.function_version_id);
+        |worker: &&WorkerDBWithNames| current.0.contains(&worker.base.base.function_version_id);
     Ok(RecoverySnapshot {
         at: *at,
         cron: cron.0.iter().filter(is_current).cloned().collect(),
@@ -287,7 +294,7 @@ pub fn classify_divergence(
             .worker_id
             .as_ref()
             .and_then(|worker_id| workload_by_worker.get(worker_id).copied());
-        let dispatched_old = before(&attempt.pfr.dispatched_on.map(|d| *d), &grace_cutoff);
+        let dispatched_old = before(&attempt.pfr.base.dispatched_on.map(|d| *d), &grace_cutoff);
 
         // (remove workload?, recover policy?, reason)
         let outcome: Option<(bool, bool, String)> = match workload {
@@ -295,14 +302,14 @@ pub fn classify_divergence(
             None => None,
             Some(w) => match w.phase {
                 WorkloadPhase::Pending => {
-                    if attempt.pfr.status == PhysicalFunctionRunStatus::Dispatched
+                    if attempt.pfr.base.status == PhysicalFunctionRunStatus::Dispatched
                         && before_or_undated(&w.phase_since, &prerun_cutoff)
                         && dispatched_old
                     {
                         Some((true, true, "exceeded max pre-running time".to_string()))
-                    } else if attempt.pfr.status == PhysicalFunctionRunStatus::Running
+                    } else if attempt.pfr.base.status == PhysicalFunctionRunStatus::Running
                         && running_cutoff
-                            .map(|cutoff| before(&attempt.pfr.started_on.map(|s| *s), &cutoff))
+                            .map(|cutoff| before(&attempt.pfr.base.started_on.map(|s| *s), &cutoff))
                             .unwrap_or(false)
                     {
                         Some((true, false, "exceeded max running time".to_string()))
@@ -324,7 +331,10 @@ pub fn classify_divergence(
                     // callback may still be retrying through an outage.
                     let finished_old = match &w.finished_at {
                         Some(finished) => dt(finished) < completion_cutoff,
-                        None => before(&attempt.pfr.dispatched_on.map(|d| *d), &completion_cutoff),
+                        None => before(
+                            &attempt.pfr.base.dispatched_on.map(|d| *d),
+                            &completion_cutoff,
+                        ),
                     };
                     if finished_old {
                         // Outputs never bound; a fresh attempt is the only
@@ -371,7 +381,7 @@ pub fn classify_divergence(
         if let Some((remove, recover, reason)) = outcome {
             decisions.fn_actions.push(FnRecoveryAction {
                 worker_id: attempt.worker_id.clone(),
-                pfr_id: attempt.pfr.id.clone(),
+                pfr_id: attempt.pfr.base.id.clone(),
                 project_id: attempt.pfr.project_id,
                 lfr: None,
                 recover,
@@ -384,13 +394,13 @@ pub fn classify_divergence(
     }
 
     for worker in &snapshot.cron {
-        if !workload_by_worker.contains_key(&worker.base.id) {
+        if !workload_by_worker.contains_key(&worker.base.base.id) {
             decisions.cron_recreates.push(worker.clone());
         }
     }
 
     for worker in &snapshot.stage {
-        match workload_by_worker.get(&worker.base.id) {
+        match workload_by_worker.get(&worker.base.base.id) {
             None => decisions.stage_recreates.push(worker.clone()),
             Some(w) => {
                 let restart = match w.phase {
@@ -401,9 +411,11 @@ pub fn classify_divergence(
                     WorkloadPhase::Unknown => before(&w.phase_since, &grace_cutoff),
                 };
                 if restart {
-                    decisions
-                        .stage_restarts
-                        .push((worker.base.id.clone(), w.kind, w.name.clone()));
+                    decisions.stage_restarts.push((
+                        worker.base.base.id.clone(),
+                        w.kind,
+                        w.name.clone(),
+                    ));
                 }
             }
         }
@@ -418,10 +430,10 @@ pub fn classify_divergence(
         }
     }
     for worker in &snapshot.cron {
-        expected.insert(&worker.base.id);
+        expected.insert(&worker.base.base.id);
     }
     for worker in &snapshot.stage {
-        expected.insert(&worker.base.id);
+        expected.insert(&worker.base.base.id);
     }
     for workload in &observation.workloads {
         let Some(worker_id) = &workload.worker_id else {
@@ -534,22 +546,22 @@ pub async fn recreate_trigger_workloads(
     stage_functions: &HashMap<FunctionVersionId, FunctionDBWithBundleBasePath>,
 ) {
     for worker in &decisions.cron_recreates {
-        warn!(worker_id = %worker.base.id, "recovery: recreating cron workload");
+        warn!(worker_id = %worker.base.base.id, "recovery: recreating cron workload");
         if let Err(e) = put_cron_trigger_start(bridge, internal_api, worker).await {
             warn!(
-                worker_id = %worker.base.id,
+                worker_id = %worker.base.base.id,
                 reason = ?e,
                 "recovery: cron recreate failed; retrying next tick"
             );
         }
     }
     for worker in &decisions.stage_recreates {
-        warn!(worker_id = %worker.base.id, "recovery: recreating streamer workload");
+        warn!(worker_id = %worker.base.base.id, "recovery: recreating streamer workload");
         if let Err(e) =
             put_stage_trigger_start(bridge, storage, internal_api, stage_functions, worker).await
         {
             warn!(
-                worker_id = %worker.base.id,
+                worker_id = %worker.base.base.id,
                 reason = ?e,
                 "recovery: streamer recreate failed; retrying next tick"
             );
@@ -566,8 +578,8 @@ pub async fn recreate_trigger_workloads(
     level = "debug",
     err(Debug)
 )]
-pub async fn finalize_recovery_actions(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn finalize_recovery_actions<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     actions: &RecoveryActions,
 ) -> Result<RecoveryActions, TdError> {
     if actions.fn_actions.is_empty() {
@@ -581,18 +593,21 @@ pub async fn finalize_recovery_actions(
         .unique()
         .collect();
     let current_pfrs: Vec<PhysicalFunctionRunDB> = conn
-        .fetch_all_chunked::<PhysicalFunctionRunDB, PhysicalFunctionRunId>(&pfr_ids)
+        .history()
+        .chunked()
+        .fetch_all::<PhysicalFunctionRunDB>(&pfr_ids, ())
         .await?;
     let pfr_by_id: HashMap<&PhysicalFunctionRunId, &PhysicalFunctionRunDB> =
-        current_pfrs.iter().map(|pfr| (&pfr.id, pfr)).collect();
+        current_pfrs.iter().map(|pfr| (&pfr.base.id, pfr)).collect();
 
     let execution_ids: Vec<ExecutionId> = current_pfrs
         .iter()
-        .map(|pfr| pfr.execution_id.clone())
+        .map(|pfr| pfr.base.execution_id.clone())
         .unique()
         .collect();
     let lfrs: Vec<LogicalFunctionRunDB> = conn
-        .fetch_all_chunked::<LogicalFunctionRunDB, ExecutionId>(&execution_ids)
+        .chunked()
+        .fetch_all::<LogicalFunctionRunDB>(&execution_ids, ())
         .await?;
     let lfr_by_exec_fn = index_lfrs_by_exec_fn(lfrs);
 
@@ -601,7 +616,7 @@ pub async fn finalize_recovery_actions(
         let Some(pfr) = pfr_by_id.get(&action.pfr_id) else {
             continue;
         };
-        if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status) {
+        if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status) {
             debug!(
                 function_run_id = %action.pfr_id,
                 "recovery: attempt terminalized concurrently; its callback wins"
@@ -609,14 +624,14 @@ pub async fn finalize_recovery_actions(
             continue;
         }
         let lfr = lfr_by_exec_fn
-            .get(&pfr.execution_id)
-            .and_then(|by_fn| by_fn.get(&pfr.function_id))
+            .get(&pfr.base.execution_id)
+            .and_then(|by_fn| by_fn.get(&pfr.base.function_id))
             .cloned();
         let lfr_recoverable = lfr
             .as_ref()
             .map(|lfr| {
                 matches!(
-                    lfr.status,
+                    lfr.base.status,
                     LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running
                 )
             })
@@ -663,8 +678,8 @@ pub async fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId
     level = "debug",
     err(Debug)
 )]
-pub async fn fail_recovered_attempts(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn fail_recovered_attempts<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {
@@ -677,9 +692,8 @@ pub async fn fail_recovered_attempts(
     if pfr_ids.is_empty() {
         return Ok(());
     }
-    let update = UpdatePhysicalFunctionRunDB::failed_at(at)?;
-    conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&update, &pfr_ids)
-        .await?;
+    let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
+    conn.chunked().update(&update, &pfr_ids).await?;
     Ok(())
 }
 
@@ -694,8 +708,8 @@ pub async fn fail_running_lfrs_for_recover(
         .iter()
         .filter(|action| action.recover)
         .filter_map(|action| action.lfr.clone())
-        .filter(|lfr| lfr.status == LogicalFunctionRunStatus::Running)
-        .unique_by(|lfr| lfr.id.clone())
+        .filter(|lfr| lfr.base.status == LogicalFunctionRunStatus::Running)
+        .unique_by(|lfr| lfr.base.id.clone())
         .collect())
 }
 
@@ -709,20 +723,23 @@ pub async fn recover_lfrs_from_actions(
         .filter_map(|action| action.lfr.clone())
         .filter(|lfr| {
             matches!(
-                lfr.status,
+                lfr.base.status,
                 LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running
             )
         })
         // Running rows were failed just above in this transaction; the
         // status validator reads the in-memory row, so reflect that here.
-        .map(|lfr| match lfr.status {
+        .map(|lfr| match lfr.base.status {
             LogicalFunctionRunStatus::Running => LogicalFunctionRunDB {
-                status: LogicalFunctionRunStatus::Failed,
+                base: LogicalFunctionRunInsertDB {
+                    status: LogicalFunctionRunStatus::Failed,
+                    ..lfr.base
+                },
                 ..lfr
             },
             _ => lfr,
         })
-        .unique_by(|lfr| lfr.id.clone())
+        .unique_by(|lfr| lfr.base.id.clone())
         .collect())
 }
 
@@ -736,10 +753,10 @@ pub async fn fail_lfrs_from_actions(
         .filter_map(|action| action.lfr.clone())
         .filter(|lfr| {
             matches!(
-                lfr.status,
+                lfr.base.status,
                 LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running
             )
         })
-        .unique_by(|lfr| lfr.id.clone())
+        .unique_by(|lfr| lfr.base.id.clone())
         .collect())
 }

@@ -11,29 +11,30 @@ use crate::logical::index_lfrs_by_exec_fn;
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::dependency::DependencyDB;
-use td_objects::dxo::logical::{
-    LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalTableDataVersionPointerDB,
-};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
+use td_objects::dxo::physical_table_data_version::{
+    PhysicalTableDataVersionDB, PhysicalTableDataVersionDBWithNames,
+};
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::yaml::function::{InputTable, InputTableVersion};
 use td_objects::types::basic::{
     AtTime, CollectionId, DependencyPos, ExecutionId, FunctionId, HasData, LogicalFunctionRunId,
-    LogicalPointerStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,
-    PhysicalTableDataVersionId, TableId, TriggeredOn,
+    LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, TableId,
+    TriggeredOn,
 };
-use td_queries::{ChunkedQueries, DependenciesEntry, LtdvEntry, VersionedEntry};
+use td_queries::Queries;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 
 /// Tick-wide batches the per-FR input/output build reads from: the LFR
 /// index (for `(execution_id, function_id) → LFR`), output PTDVs, LFR
-/// input rows, the latest LTDV pointer events at `at`, and the bound TDVs.
+/// input rows, and the input TDVs current at `at`.
 ///
 /// Resolved once per dispatch (a batch for the supervisor request stage,
 /// a batch-of-one for the resolve endpoint) so the per-FR loop is pure
@@ -49,9 +50,9 @@ pub(crate) struct DispatchPrefetch {
 impl DispatchPrefetch {
     fn lfr_id_for(&self, f: &PhysicalFunctionRunToExecute) -> Option<LogicalFunctionRunId> {
         self.lfr_by_fr_key
-            .get(&f.base.base.execution_id)
-            .and_then(|m| m.get(&f.base.base.function_id))
-            .map(|l| l.id.clone())
+            .get(&f.base.base.base.execution_id)
+            .and_then(|m| m.get(&f.base.base.base.function_id))
+            .map(|l| l.base.id.clone())
     }
 
     /// The minted output PTDVs for one FR (empty if none).
@@ -67,28 +68,26 @@ impl DispatchPrefetch {
 }
 
 /// Pre-fetch the tick-wide batches the per-FR builder reads from.
-pub(crate) async fn prefetch_dispatch(
-    conn: &mut DomainConnection<Apiserver>,
+pub(crate) async fn prefetch_dispatch<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     physical_function_runs: &[PhysicalFunctionRunToExecute],
     at: &AtTime,
 ) -> Result<DispatchPrefetch, TdError> {
     let fr_ids: Vec<PhysicalFunctionRunId> = physical_function_runs
         .iter()
-        .map(|f| f.base.base.id.clone())
+        .map(|f| f.base.base.base.id.clone())
         .collect();
-    // Derive each FR's LFR via (execution_id, function_id). Fetch all
-    // LFRs for the tick's executions in one chunked query and index
-    // them by (execution_id, function_id).
     let exec_ids: Vec<ExecutionId> = physical_function_runs
         .iter()
-        .map(|f| f.base.base.execution_id.clone())
+        .map(|f| f.base.base.base.execution_id.clone())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
     let all_lfrs: Vec<LogicalFunctionRunDB> = if exec_ids.is_empty() {
         Vec::new()
     } else {
-        conn.fetch_all_chunked::<LogicalFunctionRunDB, ExecutionId>(&exec_ids)
+        conn.chunked()
+            .fetch_all::<LogicalFunctionRunDB>(&exec_ids, ())
             .await?
     };
     let lfr_by_fr_key = index_lfrs_by_exec_fn(all_lfrs);
@@ -96,60 +95,60 @@ pub(crate) async fn prefetch_dispatch(
         .iter()
         .filter_map(|f| {
             lfr_by_fr_key
-                .get(&f.base.base.execution_id)
-                .and_then(|m| m.get(&f.base.base.function_id))
-                .map(|l| l.id.clone())
+                .get(&f.base.base.base.execution_id)
+                .and_then(|m| m.get(&f.base.base.base.function_id))
+                .map(|l| l.base.id.clone())
         })
         .collect();
 
     let all_output_tables: Vec<PhysicalTableDataVersionDBWithNames> = if fr_ids.is_empty() {
         Vec::new()
     } else {
-        conn.fetch_all_chunked::<PhysicalTableDataVersionDBWithNames, PhysicalFunctionRunId>(
-            &fr_ids,
-        )
-        .await?
+        conn.history()
+            .chunked()
+            .fetch_all::<PhysicalTableDataVersionDBWithNames>(&fr_ids, ())
+            .await?
     };
     let output_tables_by_fr: HashMap<
         PhysicalFunctionRunId,
         Vec<PhysicalTableDataVersionDBWithNames>,
     > = all_output_tables
         .into_iter()
-        .into_group_map_by(|t| t.base.base.physical_function_run_id.clone());
+        .into_group_map_by(|t| t.base.base.base.physical_function_run_id.clone());
 
     let all_lfr_inputs: Vec<LogicalFunctionRunInputDB> = if lfr_ids.is_empty() {
         Vec::new()
     } else {
-        conn.fetch_all_chunked::<LogicalFunctionRunInputDB, LogicalFunctionRunId>(&lfr_ids)
+        conn.chunked()
+            .fetch_all::<LogicalFunctionRunInputDB>(&lfr_ids, ())
             .await?
     };
     let input_ftdv_ids: Vec<LogicalTableDataVersionId> = all_lfr_inputs
         .iter()
-        .filter_map(|i| i.requirement_logical_table_data_version_id.clone())
+        .filter_map(|i| i.base.requirement_logical_table_data_version_id.clone())
         .collect();
     let lfr_inputs_by_lfr: HashMap<LogicalFunctionRunId, Vec<LogicalFunctionRunInputDB>> =
         all_lfr_inputs
             .into_iter()
-            .into_group_map_by(|inp| inp.logical_function_run_id.clone());
+            .into_group_map_by(|inp| inp.base.logical_function_run_id.clone());
 
     let mut bound_tdv_id_by_ftdv: HashMap<
         LogicalTableDataVersionId,
         Option<PhysicalTableDataVersionId>,
     > = input_ftdv_ids.iter().map(|id| (id.clone(), None)).collect();
     if !input_ftdv_ids.is_empty() {
-        let latest_pointers: Vec<LogicalTableDataVersionPointerDB> = conn
-            .versioned(at)
-            .fetch_all_chunked::<LogicalTableDataVersionPointerDB>(&input_ftdv_ids)
+        // An input with no materialization visible at `at` stays `None`:
+        // never produced, or voided.
+        let bound: Vec<PhysicalTableDataVersionDB> = conn
+            .as_of(&TriggeredOn::try_from(at)?)
+            .chunked()
+            .fetch_all::<PhysicalTableDataVersionDB>(&input_ftdv_ids, ())
             .await?;
-        for p in latest_pointers {
-            // Only Bound events carry the canonical concrete; Pending /
-            // Voided events have a NULL concrete by construction, but
-            // filter explicitly so the contract reads from the code.
-            if !matches!(p.status, LogicalPointerStatus::Bound) {
-                continue;
-            }
-            if let Some(slot) = bound_tdv_id_by_ftdv.get_mut(&p.logical_table_data_version_id) {
-                *slot = p.physical_table_data_version_id;
+        for tdv in bound {
+            if let Some(slot) =
+                bound_tdv_id_by_ftdv.get_mut(&tdv.base.logical_table_data_version_id)
+            {
+                *slot = Some(tdv.base.id);
             }
         }
     }
@@ -161,11 +160,13 @@ pub(crate) async fn prefetch_dispatch(
         if bound_tdv_ids.is_empty() {
             HashMap::new()
         } else {
-            conn.fetch_all_chunked::<PhysicalTableDataVersionDBWithNames, PhysicalTableDataVersionId>(&bound_tdv_ids)
-            .await?
-            .into_iter()
-            .map(|t| (t.base.base.id.clone(), t))
-            .collect()
+            conn.history()
+                .chunked()
+                .fetch_all::<PhysicalTableDataVersionDBWithNames>(&bound_tdv_ids, ())
+                .await?
+                .into_iter()
+                .map(|t| (t.base.base.base.id.clone(), t))
+                .collect()
         };
 
     Ok(DispatchPrefetch {
@@ -179,8 +180,8 @@ pub(crate) async fn prefetch_dispatch(
 
 /// Resolve one FR's input tables to physical versions + locations,
 /// partitioned into (system, user) by dependency position.
-pub(crate) async fn resolve_input_tables(
-    conn: &mut DomainConnection<Apiserver>,
+pub(crate) async fn resolve_input_tables<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     storage: &Storage,
     f: &PhysicalFunctionRunToExecute,
     prefetch: &DispatchPrefetch,
@@ -194,23 +195,18 @@ pub(crate) async fn resolve_input_tables(
         .and_then(|id| prefetch.lfr_inputs_by_lfr.get(id))
         .unwrap_or(&empty_inputs);
 
-    // Dep-fallback is used only when an input slot has no bound TDV;
-    // skip the fetch until the first miss. On the first miss we
-    // resolve the function's dependencies once, then batch-fetch
-    // every dep's `TableDB` and `CollectionDB` in two chunked
-    // queries — collapsing a per-slot pair of round-trips into a
-    // per-FR pair.
+    // Dep-fallback is used only when an input slot has no bound TDV: on the
+    // first miss resolve the function's deps once and batch-fetch their
+    // `TableDB`/`ResolvedCollectionDB` rows.
     struct FallbackCache {
         deps: HashMap<DependencyPos, DependencyDB>,
         tables: HashMap<TableId, TableDB>,
-        colls: HashMap<CollectionId, CollectionDB>,
+        colls: HashMap<CollectionId, ResolvedCollectionDB>,
     }
     let mut fallback_cache: Option<FallbackCache> = None;
 
-    // Per-FR cache for the "chase the latest with-data row" lookup
-    // fired when a bound TDV has `has_data = FALSE`. Two slots
-    // pointing at the same upstream `(table_id, triggered_on)` would
-    // otherwise issue the same `fetch_latest_before` twice.
+    // Per-FR cache for the "chase the latest with-data row" lookup — slots
+    // sharing an upstream `(table_id, triggered_on)` reuse one query.
     let mut latest_with_data_cache: HashMap<
         (TableId, TriggeredOn),
         Option<PhysicalTableDataVersionDBWithNames>,
@@ -220,13 +216,14 @@ pub(crate) async fn resolve_input_tables(
     for lfri in lfr_inputs.iter() {
         // Skip NO_VERSIONS placeholders (NULL idx/dep_pos).
         let (Some(input_idx), Some(dependency_pos)) = (
-            lfri.requirement_input_idx.as_ref(),
-            lfri.requirement_dependency_pos.as_ref(),
+            lfri.base.requirement_input_idx.as_ref(),
+            lfri.base.requirement_dependency_pos.as_ref(),
         ) else {
             continue;
         };
 
         let bound_tdv: Option<&PhysicalTableDataVersionDBWithNames> = lfri
+            .base
             .requirement_logical_table_data_version_id
             .as_ref()
             .and_then(|ltdv_id| prefetch.bound_tdv_id_by_ftdv.get(ltdv_id))
@@ -238,48 +235,51 @@ pub(crate) async fn resolve_input_tables(
         // version when no TDV is bound.
         let (name, collection_id, collection, table_id, table_version_id) = match bound_tdv {
             Some(tdv) => (
-                tdv.base.base.name.clone(),
-                tdv.base.base.collection_id,
+                tdv.base.base.base.name.clone(),
+                tdv.base.base.base.collection_id,
                 tdv.collection.clone(),
-                tdv.base.base.table_id,
-                tdv.base.base.table_version_id,
+                tdv.base.base.base.table_id,
+                tdv.base.base.base.table_version_id,
             ),
             None => {
                 if fallback_cache.is_none() {
                     let deps: HashMap<DependencyPos, DependencyDB> = conn
                         .dependencies()
-                        .active_for_function_at(&f.base.base.function_id, &f.defined_on)
+                        .active_for_function_at(&f.base.base.base.function_id, &f.defined_on)
                         .await?
                         .into_iter()
-                        .map(|d| (d.dep_pos, d))
+                        .map(|d| (d.base.dep_pos, d))
                         .collect();
                     let table_ids: Vec<TableId> = deps
                         .values()
-                        .map(|d| d.table_id)
+                        .map(|d| d.base.table_id)
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
                     let coll_ids: Vec<CollectionId> = deps
                         .values()
-                        .map(|d| *d.table_collection_id)
+                        .map(|d| *d.base.table_collection_id)
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
-                    let triggered_at = AtTime::try_from(f.base.base.triggered_on)?;
+                    let triggered_at = AtTime::try_from(f.base.base.base.triggered_on)?;
                     let tables: HashMap<TableId, TableDB> = if table_ids.is_empty() {
                         HashMap::new()
                     } else {
-                        conn.versioned(&triggered_at)
-                            .fetch_all_chunked::<TableDB>(&table_ids)
+                        conn.as_of(&triggered_at)
+                            .chunked()
+                            .fetch_all::<TableDB>(&table_ids, ())
                             .await?
                             .into_iter()
-                            .map(|t| (t.table_id, t))
+                            .map(|t| (t.base.table_id, t))
                             .collect()
                     };
-                    let colls: HashMap<CollectionId, CollectionDB> = if coll_ids.is_empty() {
+                    let colls: HashMap<CollectionId, ResolvedCollectionDB> = if coll_ids.is_empty()
+                    {
                         HashMap::new()
                     } else {
-                        conn.fetch_all_chunked::<CollectionDB, CollectionId>(&coll_ids)
+                        conn.chunked()
+                            .fetch_all::<ResolvedCollectionDB>(&coll_ids, ())
                             .await?
                             .into_iter()
                             .map(|c| (c.base.id, c))
@@ -298,26 +298,26 @@ pub(crate) async fn resolve_input_tables(
                         "LFR_input dep_pos {dependency_pos} not found in function_version's deps"
                     )
                 })?;
-                let table = cache.tables.get(&dep.table_id).ok_or_else(|| {
+                let table = cache.tables.get(&dep.base.table_id).ok_or_else(|| {
                     api_error!(
                         ApiError::InternalError,
                         "TableDB not found for dep table_id {} during fallback",
-                        dep.table_id
+                        dep.base.table_id
                     )
                 })?;
-                let coll = cache.colls.get(&*dep.table_collection_id).ok_or_else(|| {
+                let coll = cache.colls.get(&*dep.base.table_collection_id).ok_or_else(|| {
                     api_error!(
                         ApiError::InternalError,
-                        "CollectionDB not found for dep table_collection_id {} during fallback",
-                        dep.table_collection_id
+                        "ResolvedCollectionDB not found for dep table_collection_id {} during fallback",
+                        dep.base.table_collection_id
                     )
                 })?;
                 (
-                    table.name.clone(),
-                    *dep.table_collection_id,
+                    table.base.name.clone(),
+                    *dep.base.table_collection_id,
                     coll.base.name.clone(),
-                    dep.table_id,
-                    table.id,
+                    dep.base.table_id,
+                    table.base.id,
                 )
             }
         };
@@ -327,40 +327,40 @@ pub(crate) async fn resolve_input_tables(
         let (found_data_version, location) = match bound_tdv {
             None => (None, None),
             Some(found_data_version) => {
-                let data_version_with_data =
-                    if matches!(found_data_version.base.base.has_data, Some(HasData::TRUE)) {
-                        Some(Cow::Borrowed(found_data_version))
+                let data_version_with_data = if matches!(
+                    found_data_version.base.base.base.has_data,
+                    Some(HasData::TRUE)
+                ) {
+                    Some(Cow::Borrowed(found_data_version))
+                } else {
+                    let key = (
+                        found_data_version.base.base.base.table_id,
+                        found_data_version.base.base.base.triggered_on,
+                    );
+                    let res = if let Some(cached) = latest_with_data_cache.get(&key) {
+                        cached.clone()
                     } else {
-                        let key = (
-                            found_data_version.base.base.table_id,
-                            found_data_version.base.base.triggered_on,
-                        );
-                        let res = if let Some(cached) = latest_with_data_cache.get(&key) {
-                            cached.clone()
-                        } else {
-                            // Pointer-walk through LTDV history for this
-                            // table at or before key.1 (triggered_on),
-                            // returning the latest canonically-bound TDV
-                            // with data — the same row a downstream reader
-                            // at that time would actually see.
-                            let r = conn
-                                .ltdv()
-                                .latest_bound_tdv_with_data_for_table(&key.0, &key.1, false)
-                                .await?;
-                            latest_with_data_cache.insert(key, r.clone());
-                            r
-                        };
-                        res.map(Cow::Owned)
+                        // Latest canonically-bound TDV with data at or
+                        // before triggered_on — what a reader at that
+                        // time would actually see.
+                        let r = conn
+                            .table_data_versions()
+                            .latest_bound_tdv_with_data_for_table(&key.0, &key.1, false)
+                            .await?;
+                        latest_with_data_cache.insert(key, r.clone());
+                        r
                     };
+                    res.map(Cow::Owned)
+                };
 
                 if let Some(data_version_with_data) = data_version_with_data.as_ref() {
                     let (path, _) = storage_location
-                        .builder(&data_version_with_data.base.base.base_path)
-                        .collection(&data_version_with_data.base.base.collection_id)
-                        .data(&data_version_with_data.base.base.id)
+                        .builder(&data_version_with_data.base.base.base.base_path)
+                        .collection(&data_version_with_data.base.base.base.collection_id)
+                        .data(&data_version_with_data.base.base.base.id)
                         .table(
-                            &data_version_with_data.base.base.table_id,
-                            &data_version_with_data.base.base.table_version_id,
+                            &data_version_with_data.base.base.base.table_id,
+                            &data_version_with_data.base.base.base.table_version_id,
                         )
                         .build()?;
                     let (location, _) = build_external_location(storage, &path)?;
@@ -379,22 +379,24 @@ pub(crate) async fn resolve_input_tables(
             table_version_id,
             execution_id: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.execution_id.clone()),
+                .map(|v| v.base.base.base.execution_id.clone()),
             transaction_id: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.transaction_id.clone()),
+                .map(|v| v.base.base.base.transaction_id.clone()),
             function_run_id: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.physical_function_run_id.clone()),
+                .map(|v| v.base.base.base.physical_function_run_id.clone()),
             triggered_on: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.triggered_on.try_into())
+                .map(|v| v.base.base.base.triggered_on.try_into())
                 .transpose()?,
-            table_data_version_id: found_data_version.as_ref().map(|v| v.base.base.id.clone()),
+            table_data_version_id: found_data_version
+                .as_ref()
+                .map(|v| v.base.base.base.id.clone()),
             location,
             input_idx: *input_idx,
             table_pos: *dependency_pos,
-            version_pos: lfri.requirement_version_pos,
+            version_pos: lfri.base.requirement_version_pos,
         };
 
         input_tables_map

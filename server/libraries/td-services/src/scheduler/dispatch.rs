@@ -13,18 +13,18 @@ use td_bridge::messaging::{
     OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
 };
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerName};
-use td_database::access::{DbPool, Global, Grant};
+use td_database::access::{AcrossProjects, DbPool, Grant, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{WorkerDB, WorkerMessageStatusUpdateDB};
 use td_objects::dxo::yaml::function::FunctionInput;
 use td_objects::types::basic::{
     LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId, ProjectId, WorkerId,
 };
-use td_queries::{ChunkedQueries, LiveEntry};
+use td_queries::Queries;
 use tracing::{debug, error, instrument, warn};
 
 #[instrument(
@@ -35,7 +35,7 @@ use tracing::{debug, error, instrument, warn};
 )]
 pub async fn unlock_workers_request(
     bridge: &BridgeProviderHandle,
-    db: &DbPool<Global>,
+    db: &DbPool<AcrossProjects>,
     grant: Grant,
 ) -> Result<(), TdError> {
     let message_queue = bridge.message_queue();
@@ -93,7 +93,7 @@ type GroupedMessages = (
 );
 
 async fn messages_by_project(
-    db: &DbPool<Global>,
+    db: &DbPool<AcrossProjects>,
     grant: Grant,
     messages: &[OrchestratorMessage<Value>],
 ) -> Result<GroupedMessages, TdError> {
@@ -104,10 +104,13 @@ async fn messages_by_project(
     let mut conn = db.read().await?;
     let workers: Vec<WorkerDB> = conn
         .get(grant)
-        .fetch_all_chunked::<WorkerDB, WorkerId>(&worker_ids)
+        .chunked()
+        .fetch_all::<WorkerDB>(&worker_ids, ())
         .await?;
-    let project_of: HashMap<&WorkerId, &ProjectId> =
-        workers.iter().map(|w| (&w.id, &w.project_id)).collect();
+    let project_of: HashMap<&WorkerId, &ProjectId> = workers
+        .iter()
+        .map(|w| (&w.base.id, &w.project_id))
+        .collect();
 
     let mut grouped: BTreeMap<ProjectId, Vec<OrchestratorMessage<Value>>> = BTreeMap::new();
     let mut unresolved = Vec::new();
@@ -123,9 +126,9 @@ async fn messages_by_project(
     Ok((grouped.into_iter().collect(), unresolved))
 }
 
-async fn unlock_workers_request_infallible(
+async fn unlock_workers_request_infallible<S: SeesProjectRows>(
     message_queue: &dyn OrchestratorMessageQueue,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
     messages: Vec<OrchestratorMessage<Value>>,
 ) -> Vec<OrchestratorMessage<Value>> {
     let message_count = messages.len();
@@ -207,8 +210,8 @@ async fn unlock_workers_request_infallible(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_function_runner_worker(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn unlock_function_runner_worker<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -239,16 +242,14 @@ pub async fn unlock_function_runner_worker(
     // in flight; sticky-terminal = replay dispatch (LFR is canonical
     // and doesn't move during a replay).
     let pfr: PhysicalFunctionRunDB = conn
-        .live()
         .fetch_one::<PhysicalFunctionRunDB>(&context.info.function_run_id)
         .await?;
     // The branch below is decided from `lfr.status` and the rollback writes it.
     let lfr: LogicalFunctionRunDB = conn
-        .live()
-        .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
+        .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
         .await?;
 
-    let branch = match &lfr.status {
+    let branch = match &lfr.base.status {
         LogicalFunctionRunStatus::Requested => DispatchBranch::Initial,
         LogicalFunctionRunStatus::Committed
         | LogicalFunctionRunStatus::Canceled
@@ -258,9 +259,9 @@ pub async fn unlock_function_runner_worker(
         _ => {
             warn!(
                 worker_id = %worker_id,
-                physical_function_run_id = %pfr.id,
-                lfr_id = %lfr.id,
-                lfr_status = %lfr.status,
+                physical_function_run_id = %pfr.base.id,
+                lfr_id = %lfr.base.id,
+                lfr_status = %lfr.base.status,
                 "dispatch: LFR in unexpected state for dispatch"
             );
             // No rollback: every status reaching this arm is one that must not
@@ -270,8 +271,8 @@ pub async fn unlock_function_runner_worker(
                 ApiError::InternalError,
                 "Start function locked message [{}] for LFR [{}] in unexpected state: {}",
                 worker_id,
-                lfr.id,
-                lfr.status,
+                lfr.base.id,
+                lfr.base.status,
             ));
         }
     };
@@ -281,8 +282,8 @@ pub async fn unlock_function_runner_worker(
         message_queue,
         message,
         &worker_id,
-        &lfr.id,
-        &pfr.id,
+        &lfr.base.id,
+        &pfr.base.id,
         branch,
     )
     .await
@@ -306,8 +307,8 @@ impl DispatchBranch {
     }
 }
 
-async fn commit_unlock(
-    conn: &mut DomainConnection<Apiserver>,
+async fn commit_unlock<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: &WorkerId,
@@ -317,8 +318,7 @@ async fn commit_unlock(
 ) -> Result<(), TdError> {
     let update = WorkerMessageStatusUpdateDB::unlocked();
     let outcome: Result<(), String> = async {
-        conn.live()
-            .update::<_, WorkerDB>(&update, worker_id)
+        conn.update(&update, worker_id)
             .await
             .map_err(|e| e.to_string())?;
         message_queue
@@ -342,8 +342,8 @@ async fn commit_unlock(
             if matches!(branch, DispatchBranch::Initial) {
                 rollback_initial_function_run(conn, worker_id, lfr_id).await;
             }
-            // Replay path: queue-only retry; no PFR or pointer mutation
-            // here. The PFR stays at `Dispatched`; operator recover
+            // Replay path: queue-only retry; no PFR mutation here. The
+            // PFR stays at `Dispatched`; operator recover
             // (PFR.status Failed→Requested) is the only path that
             // re-enters `to_dispatch`.
             Err(api_error!(
@@ -357,20 +357,16 @@ async fn commit_unlock(
     }
 }
 
-async fn rollback_initial_function_run(
-    conn: &mut DomainConnection<Apiserver>,
+async fn rollback_initial_function_run<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     message_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
 ) {
     // Conditional on `Requested`: the read feeding this was unlocked, and
     // forcing a run that has since moved on back to Scheduled would re-run it.
-    let update = LogicalFunctionRunUpdateDB::scheduled();
+    let update = LogicalFunctionRunStatusUpdateDB::scheduled();
     match conn
-        .live()
-        .update::<_, LogicalFunctionRunDB>(
-            &update,
-            and!(lfr_id, LogicalFunctionRunStatus::Requested),
-        )
+        .update(&update, and!(lfr_id, LogicalFunctionRunStatus::Requested))
         .await
     {
         Ok(result) if result.rows_affected() == 0 => {
@@ -402,8 +398,8 @@ async fn rollback_initial_function_run(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_cron_trigger_workers(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn unlock_cron_trigger_workers<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -427,8 +423,8 @@ pub async fn unlock_cron_trigger_workers(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_stage_trigger_workers(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn unlock_stage_trigger_workers<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -445,8 +441,8 @@ pub async fn unlock_stage_trigger_workers(
     .await
 }
 
-async fn unlock_simple_worker(
-    conn: &mut DomainConnection<Apiserver>,
+async fn unlock_simple_worker<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -454,15 +450,12 @@ async fn unlock_simple_worker(
     log_kind: &str,
 ) -> Result<(), TdError> {
     let update = WorkerMessageStatusUpdateDB::unlocked();
-    conn.live()
-        .update::<_, WorkerDB>(&update, &worker_id)
-        .await
-        .map_err(|e| {
-            api_error!(
-                ApiError::InternalError,
-                "{error_label} locked message [{worker_id}] dispatch failed: {e}"
-            )
-        })?;
+    conn.update(&update, &worker_id).await.map_err(|e| {
+        api_error!(
+            ApiError::InternalError,
+            "{error_label} locked message [{worker_id}] dispatch failed: {e}"
+        )
+    })?;
     message_queue.commit(message).await.map_err(|e| {
         api_error!(
             ApiError::InternalError,

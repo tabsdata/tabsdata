@@ -24,7 +24,7 @@ pub(crate) fn build_function_info(
     // Bundle location — the effective bundle's stamped base_path (from the to_execute join).
     let (path, _) = storage_location
         .builder(&f.bundle_base_path)
-        .collection(&f.base.base.collection_id)
+        .collection(&f.base.base.base.collection_id)
         .function(&f.bundle_id)
         .build()?;
     let (bundle_location, _) = build_external_location(storage, &path)?;
@@ -33,7 +33,7 @@ pub(crate) fn build_function_info(
     // not relocate when the collection base_path later changes.
     let (path, _) = storage_location
         .builder(&f.stage_base_path)
-        .collection(&f.base.base.collection_id)
+        .collection(&f.base.base.base.collection_id)
         .stage(&f.stage_id)
         .build()?;
     let (stage_location, _) = build_external_location(storage, &path)?;
@@ -41,16 +41,16 @@ pub(crate) fn build_function_info(
     // Patch if resolved, otherwise head — drives the worker's data uri
     // and the yaml `function_version_id` so reads/writes go under the
     // patched identity.
-    let effective_fvid = match &f.base.base.function_version_patch_id {
+    let effective_fvid = match &f.base.base.base.function_version_patch_id {
         Some(patch) => (**patch).clone(),
-        None => f.base.base.function_version_id.clone(),
+        None => f.base.base.base.function_version_id.clone(),
     };
 
     // Function run content location — the prefix stamped on the run at mint.
     let (path, _) = storage_location
-        .builder(&f.base.base.base_path)
-        .collection(&f.base.base.collection_id)
-        .transaction(&f.base.base.transaction_id)
+        .builder(&f.base.base.base.base_path)
+        .collection(&f.base.base.base.collection_id)
+        .transaction(&f.base.base.base.transaction_id)
         .function_version(&effective_fvid)
         .build()?;
     let (function_run_location, _) = build_external_location(storage, &path)?;
@@ -68,17 +68,17 @@ pub(crate) fn build_function_info(
 
     let info = FunctionInfo {
         project_id: f.base.base.project_id,
-        collection_id: f.base.base.collection_id,
+        collection_id: f.base.base.base.collection_id,
         collection: f.base.collection.clone(),
         function_version_id: effective_fvid.clone(),
         function_defined_on: f.defined_on,
         function: f.base.name.clone(),
-        function_run_id: f.base.base.id.clone(),
+        function_run_id: f.base.base.base.id.clone(),
         function_bundle: bundle_location,
         function_stage: stage_location,
-        triggered_on: f.base.base.triggered_on,
-        transaction_id: f.base.base.transaction_id.clone(),
-        execution_id: f.base.base.execution_id.clone(),
+        triggered_on: f.base.base.base.triggered_on,
+        transaction_id: f.base.base.base.transaction_id.clone(),
+        execution_id: f.base.base.base.execution_id.clone(),
         execution_name: f.base.execution.clone(),
         function_data: function_run_location,
         function_raw,
@@ -91,13 +91,13 @@ pub(crate) fn build_function_info(
 mod tests {
     use super::*;
     use td_objects::dxo::physical_function_run::{
-        PhysicalFunctionRunDB, PhysicalFunctionRunDBWithNames,
+        PhysicalFunctionRunDB, PhysicalFunctionRunDBWithNames, PhysicalFunctionRunInsertDB,
     };
     use td_objects::types::basic::{
         AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, ExecutionId,
-        FunctionId, FunctionName, FunctionVersionId, PhysicalFunctionRunId,
+        FunctionId, FunctionName, FunctionVersionId, LogicalFunctionRunId, PhysicalFunctionRunId,
         PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, StorageVersion, TransactionId,
-        Trigger, TriggeredOn, UserId, UserName,
+        Trigger, TriggeredOn, UserId, UserName, ValidTo,
     };
 
     /// Proves each stamped base_path on `PhysicalFunctionRunToExecute` is routed
@@ -114,29 +114,33 @@ mod tests {
         let f = PhysicalFunctionRunToExecute {
             base: PhysicalFunctionRunDBWithNames {
                 base: PhysicalFunctionRunDB {
-                    id: PhysicalFunctionRunId::new(),
+                    base: PhysicalFunctionRunInsertDB {
+                        id: PhysicalFunctionRunId::new(),
+                        collection_id: CollectionId::default(),
+                        function_id: FunctionId::default(),
+                        function_version_id: FunctionVersionId::new(),
+                        execution_id: ExecutionId::new(),
+                        transaction_id: TransactionId::new(),
+                        triggered_on: TriggeredOn::now(),
+                        triggered_by_id: UserId::admin(),
+                        trigger: Trigger::Manual,
+                        base_path: BasePath::try_from("/r").unwrap(),
+                        dispatched_on: None,
+                        started_on: None,
+                        ended_on: None,
+                        status: PhysicalFunctionRunStatus::Requested,
+                        function_version_patch_id: None,
+                        ended_on_hour_ms: None,
+                        ended_on_day_ms: None,
+                        ended_on_week_ms: None,
+                        ended_on_month_ms: None,
+                        metric_table_versions: None,
+                        metric_rows: None,
+                        metric_data_bytes: None,
+                        logical_function_run_id: LogicalFunctionRunId::new(),
+                    },
                     project_id: ProjectId::default(),
-                    collection_id: CollectionId::default(),
-                    function_id: FunctionId::default(),
-                    function_version_id: FunctionVersionId::new(),
-                    execution_id: ExecutionId::new(),
-                    transaction_id: TransactionId::new(),
-                    triggered_on: TriggeredOn::now(),
-                    triggered_by_id: UserId::admin(),
-                    trigger: Trigger::Manual,
-                    base_path: BasePath::try_from("/r").unwrap(),
-                    dispatched_on: None,
-                    started_on: None,
-                    ended_on: None,
-                    status: PhysicalFunctionRunStatus::Requested,
-                    function_version_patch_id: None,
-                    ended_on_hour_ms: None,
-                    ended_on_day_ms: None,
-                    ended_on_week_ms: None,
-                    ended_on_month_ms: None,
-                    metric_table_versions: None,
-                    metric_rows: None,
-                    metric_data_bytes: None,
+                    valid_to: ValidTo::infinity(),
                 },
                 name: FunctionName::try_from("fn0").unwrap(),
                 collection: CollectionName::try_from("c0").unwrap(),
@@ -193,7 +197,7 @@ mod tests {
         assert!(
             raw.contains(&format!(
                 "/r/c/{}/w/{}/r",
-                f.base.base.collection_id, f.base.base.id
+                f.base.base.base.collection_id, f.base.base.base.id
             )),
             "raw data must hang off the physical run that ingested it, under the \
              prefix stamped on that run: {raw}"

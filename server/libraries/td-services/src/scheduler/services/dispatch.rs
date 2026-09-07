@@ -6,13 +6,13 @@ use crate::scheduler::dispatch::unlock_workers_request;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{DbPool, Global, Grant};
+use td_database::access::{AcrossProjects, DbPool, Grant};
 use td_error::TdError;
 
 #[service_factory]
 async fn dispatch(
     bridge: Ctx<BridgeProviderHandle>,
-    db: DbPool<Global>,
+    db: DbPool<AcrossProjects>,
     _request: (),
 ) -> Result<(), TdError> {
     let grant = Grant::asserted("scheduler message dispatch");
@@ -49,7 +49,7 @@ mod tests {
         SkipIfRunning, TableNameDto, UserId, WorkerId, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -146,10 +146,9 @@ mod tests {
         assert_eq!(created_message.payload, unlocked_message.payload);
 
         let message: WorkerDB = db
-            .live()
             .fetch_one::<WorkerDB>(&WorkerId::try_from(created_message.id.as_str())?)
             .await?;
-        assert_eq!(message.message_status, WorkerMessageStatus::Unlocked);
+        assert_eq!(message.base.message_status, WorkerMessageStatus::Unlocked);
 
         Ok(())
     }

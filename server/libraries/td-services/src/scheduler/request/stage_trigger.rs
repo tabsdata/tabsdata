@@ -13,6 +13,7 @@ use td_bridge::messaging::{
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::id;
 use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
+use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::function::FunctionDBWithBundleBasePath;
@@ -20,7 +21,7 @@ use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::dxo::yaml::stage_trigger::StageTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, stage_trigger};
 use td_objects::types::basic::{AtTime, FunctionVersionId, WorkerConfig};
-use td_queries::LfrEntry;
+use td_queries::Queries;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use tracing::{instrument, warn};
@@ -31,11 +32,11 @@ use tracing::{instrument, warn};
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_stage_trigger_workers_start_request(
+pub async fn create_locked_stage_trigger_workers_start_request<S: DbScope>(
     orchestrator: Orchestrator,
     storage: &Storage,
     internal_api: &InternalApi,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
     stage_trigger_workers: Vec<WorkerDBWithNames>,
     messages: &mut WorkerMessages,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
@@ -50,14 +51,14 @@ pub async fn create_locked_stage_trigger_workers_start_request(
     // carrying just the callbacks, the locations, and the worker-row identity.
     let fvids: Vec<FunctionVersionId> = stage_trigger_workers
         .iter()
-        .map(|w| w.base.function_version_id.clone())
+        .map(|w| w.base.base.function_version_id.clone())
         .collect();
     let function_by_fvid: HashMap<FunctionVersionId, FunctionDBWithBundleBasePath> = conn
-        .lfr()
+        .logical_runs()
         .with_bundle_base_path(&fvids)
         .await?
         .into_iter()
-        .map(|f| (f.base.id.clone(), f))
+        .map(|f| (f.base.base.id.clone(), f))
         .collect();
 
     let kubernetes = matches!(orchestrator, Orchestrator::Kubernetes);
@@ -79,7 +80,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
                 kept.push(stage_trigger_worker);
             }
             Err(e) => warn!(
-                worker_id = %stage_trigger_worker.base.id,
+                worker_id = %stage_trigger_worker.base.base.id,
                 reason = ?e,
                 "request: skipping stage-trigger start; will retry next tick"
             ),
@@ -95,10 +96,10 @@ pub(crate) fn stage_trigger_start_message(
     kubernetes: bool,
     stage_trigger_worker: &WorkerDBWithNames,
 ) -> Result<(String, OrchestratorMessagePayload<serde_yaml::Value>), TdError> {
-    let worker_id = stage_trigger_worker.base.id.to_string();
-    let callback = internal_api.worker_responder(&stage_trigger_worker.base.id)?;
+    let worker_id = stage_trigger_worker.base.base.id.to_string();
+    let callback = internal_api.worker_responder(&stage_trigger_worker.base.base.id)?;
 
-    let function_version_id = &stage_trigger_worker.base.function_version_id;
+    let function_version_id = &stage_trigger_worker.base.base.function_version_id;
 
     // POST endpoint to trigger the function (tokenized). Needed by both
     // orchestrators (supervisor embeds it in the resolved message; the
@@ -106,12 +107,12 @@ pub(crate) fn stage_trigger_start_message(
     let fn_trigger = internal_api.function_version_execute(function_version_id, HashMap::new())?;
 
     let f = function_by_fvid
-        .get(&stage_trigger_worker.base.function_version_id)
+        .get(&stage_trigger_worker.base.base.function_version_id)
         .ok_or_else(|| {
             api_error!(
                 ApiError::InternalError,
                 "stage trigger worker references unknown function_version_id {}",
-                stage_trigger_worker.base.function_version_id
+                stage_trigger_worker.base.base.function_version_id
             )
         })?;
 
@@ -119,22 +120,22 @@ pub(crate) fn stage_trigger_start_message(
         // Kubernetes: lean request carrying the worker-lifecycle
         // callbacks + worker-row identity. The pod fetches its
         // request.yaml from the worker-scoped resolver endpoint.
-        let resolver = internal_api.worker_resolver(&stage_trigger_worker.base.id)?;
+        let resolver = internal_api.worker_resolver(&stage_trigger_worker.base.base.id)?;
         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
             StageTriggerRequest::Start(StageTriggerStartRequest {
                 worker: WorkerName::StageTrigger,
-                worker_id: stage_trigger_worker.base.id.clone(),
-                decorator: f.base.decorator.to_message(),
+                worker_id: stage_trigger_worker.base.base.id.clone(),
+                decorator: f.base.base.decorator.to_message(),
                 resolver,
                 trigger: Callback::Http(fn_trigger),
                 responder: callback,
                 project_id: stage_trigger_worker.base.project_id,
                 project: stage_trigger_worker.project.clone(),
-                collection_id: stage_trigger_worker.base.collection_id,
+                collection_id: stage_trigger_worker.base.base.collection_id,
                 collection: stage_trigger_worker.collection.clone(),
                 connection_id: stage_trigger_worker.connection_id,
                 connection: stage_trigger_worker.connection.clone(),
-                function_version_id: stage_trigger_worker.base.function_version_id.clone(),
+                function_version_id: stage_trigger_worker.base.base.function_version_id.clone(),
                 function: stage_trigger_worker.function.clone(),
             }),
         )
@@ -143,29 +144,29 @@ pub(crate) fn stage_trigger_start_message(
         // external locations the k8s path leaves to the resolve endpoint.
         // fn_state / fn_status are only embedded in the eagerly-resolved
         // message.
-        let storage_location = StorageLocation::from(&f.base.storage_version);
+        let storage_location = StorageLocation::from(&f.base.base.storage_version);
         // Bundle: stamped base_path on the durable bundle row, joined onto
         // the function row in `with_bundle_base_path`.
         let bundle_base_path = f.bundle_base_path.clone();
 
         let (path, _) = storage_location
             .builder(&bundle_base_path)
-            .collection(&f.base.collection_id)
-            .function(&f.base.bundle_id)
+            .collection(&f.base.base.collection_id)
+            .function(&f.base.base.bundle_id)
             .build()?;
         let (function_bundle, _) = build_external_location(storage, &path)?;
 
         let (path, _) = storage_location
-            .builder(&f.base.stage_base_path)
-            .collection(&f.base.collection_id)
-            .stage(&f.base.stage_id)
+            .builder(&f.base.base.stage_base_path)
+            .collection(&f.base.base.collection_id)
+            .stage(&f.base.base.stage_id)
             .build()?;
         let (function_stage, _) = build_external_location(storage, &path)?;
 
         let (path, _) = storage_location
-            .builder(&f.base.stage_base_path)
-            .collection(&f.base.collection_id)
-            .checkpoint(&f.base.stage_id)
+            .builder(&f.base.base.stage_base_path)
+            .collection(&f.base.base.collection_id)
+            .checkpoint(&f.base.base.stage_id)
             .build()?;
         let (function_checkpoint, _) = build_external_location(storage, &path)?;
 
@@ -174,20 +175,20 @@ pub(crate) fn stage_trigger_start_message(
 
         // TODO Urls are wrong as of now
         let info = stage_trigger::Info {
-            worker_id: stage_trigger_worker.base.id.clone(),
+            worker_id: stage_trigger_worker.base.base.id.clone(),
             project_id: stage_trigger_worker.base.project_id,
-            collection_id: stage_trigger_worker.base.collection_id,
+            collection_id: stage_trigger_worker.base.base.collection_id,
             collection: stage_trigger_worker.collection.clone(),
-            function_version_id: stage_trigger_worker.base.function_version_id.clone(),
+            function_version_id: stage_trigger_worker.base.base.function_version_id.clone(),
             function: stage_trigger_worker.function.clone(),
-            function_defined_on: f.base.defined_on,
+            function_defined_on: f.base.base.defined_on,
             function_bundle,
             function_stage,
             function_checkpoint,
             scheduled_on: AtTime::now(),
             fn_trigger,
             fn_state,
-            config: WorkerConfig::serialize(&stage_trigger_worker.base.worker_config)?,
+            config: WorkerConfig::serialize(&stage_trigger_worker.base.base.worker_config)?,
             fn_status,
         };
         let stage_trigger_input = StageTriggerInput { info };
@@ -253,8 +254,8 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
     let mut kept = Vec::with_capacity(stage_trigger_workers.len());
     for stage_trigger_worker in stage_trigger_workers {
         let built = (|| {
-            let worker_id = stage_trigger_worker.base.id.to_string();
-            let callback = internal_api.worker_responder(&stage_trigger_worker.base.id)?;
+            let worker_id = stage_trigger_worker.base.base.id.to_string();
+            let callback = internal_api.worker_responder(&stage_trigger_worker.base.base.id)?;
 
             // Kubernetes ships a lean Stop keyed by the worker id (so the
             // gateway can derive the pod to delete); supervisor ships a flat
@@ -265,7 +266,7 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
                     OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
                         StageTriggerRequest::Stop(StageTriggerStopRequest {
                             worker: WorkerName::StageTrigger,
-                            worker_id: stage_trigger_worker.base.id.clone(),
+                            worker_id: stage_trigger_worker.base.base.id.clone(),
                             responder: callback,
                         }),
                     ),
@@ -294,7 +295,7 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
                 kept.push(stage_trigger_worker);
             }
             Err(e) => warn!(
-                worker_id = %stage_trigger_worker.base.id,
+                worker_id = %stage_trigger_worker.base.base.id,
                 reason = ?e,
                 "request: skipping stage-trigger stop; will retry next tick"
             ),

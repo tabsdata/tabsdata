@@ -18,18 +18,18 @@ use crate::scheduler::request::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_database::access::{DbPool, Global, Grant};
+use td_database::access::{DbPool, Global, Grant, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{SchedulerConfig, SchedulerNotify};
-use td_objects::StateFilter;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
-use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
+use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunUpdateDB;
 use td_objects::dxo::worker::{
     WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB, WorkerUpdateDB,
 };
+use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::{AtTime, ProjectId, WorkerId, WorkerType};
-use td_queries::{ChunkedQueries, LiveEntry};
+use td_queries::Queries;
 use td_storage::Storage;
 use tracing::{debug, error};
 
@@ -54,8 +54,7 @@ async fn request(
     let mut saturated = false;
 
     // One transaction per project, each holding only that project's write
-    // lock. A project whose dispatch fails — a rejected job, a poisoned
-    // worker — no longer aborts every other project's tick with it.
+    // lock: a failing project's dispatch doesn't abort the other projects'.
     for project in projects_to_tick(&db, grant).await? {
         if let Err(e) = tick_project(
             &project,
@@ -111,9 +110,8 @@ async fn tick_project(
     let mut messages = WorkerMessages::default();
     let orchestrator = bridge.orchestrator();
 
-    // Request function runners that need to be started — initial dispatch
-    // path (Scheduled/ReScheduled LFRs, mint + bind + flip LFR.status to
-    // Requested).
+    // Initial dispatch path: Scheduled/ReScheduled LFRs — mint + bind +
+    // flip LFR.status to Requested.
     let ready = fetch_lfr_to_dispatch(conn, at, config, saturated).await?;
     let minted = mint_function_runs_on_dispatch(conn, &ready, at).await?;
     let enriched = enrich_minted_dispatch(conn, &minted).await?;
@@ -127,22 +125,18 @@ async fn tick_project(
         &mut messages,
     )
     .await?;
-    conn.insert_vec::<WorkerDB>(&workers).await?;
-    // Flip LFR.status Scheduled/ReScheduled -> Requested.
+    conn.chunked().insert(&workers).await?;
     let lfr_ids = lfr_ids_from_minted_dispatch(&minted)?;
-    let requested = LogicalFunctionRunUpdateDB::requested();
-    conn.update_chunked::<_, LogicalFunctionRunDB, _>(&requested, &lfr_ids)
-        .await?;
+    let requested = LogicalFunctionRunStatusUpdateDB::requested();
+    conn.chunked().update(&requested, &lfr_ids).await?;
     // Flip PFR.status Requested -> Dispatched so the replay-side readiness
     // query excludes these PFRs from the next tick.
     let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-    let dispatched = UpdatePhysicalFunctionRunDB::dispatched(at);
-    conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&dispatched, &pfr_ids)
-        .await?;
+    let dispatched = PhysicalFunctionRunUpdateDB::dispatched(at);
+    conn.chunked().update(&dispatched, &pfr_ids).await?;
 
-    // Request function runners for replay attempts — sticky LFRs whose
-    // pointer was flipped to Requested by the replay endpoint. No mint, no
-    // bind, no LFR.status flip.
+    // Replay dispatch path: PFRs minted by the replay endpoint (status
+    // Requested, no worker). No mint, no bind, no LFR.status flip.
     let replay_pfrs = fetch_pfrs_to_dispatch(conn, config, saturated).await?;
     let minted = materialize_replay_dispatch(conn, &replay_pfrs).await?;
     let enriched = enrich_minted_dispatch(conn, &minted).await?;
@@ -156,10 +150,9 @@ async fn tick_project(
         &mut messages,
     )
     .await?;
-    conn.insert_vec::<WorkerDB>(&workers).await?;
+    conn.chunked().insert(&workers).await?;
     let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-    conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&dispatched, &pfr_ids)
-        .await?;
+    conn.chunked().update(&dispatched, &pfr_ids).await?;
 
     let to_stop =
         claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::CronTrigger)).await?;
@@ -225,41 +218,40 @@ async fn tick_project(
 /// collection and function deletes — so the claim skips a worker one of them
 /// is mutating rather than enqueuing for it, and keeps the tick from blocking
 /// on it while holding the lock.
-async fn claim_trigger_workers(
-    conn: &mut DomainConnection<Apiserver>,
-    readiness: StateFilter<WorkerDB>,
+async fn claim_trigger_workers<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    readiness: impl SqlCondition<WorkerDB>,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
-    let claimed: Vec<WorkerDB> = conn.live().claim_all_in::<WorkerDB>(readiness, &()).await?;
+    let claimed: Vec<WorkerDB> = conn.for_update().claim_all::<WorkerDB>(readiness).await?;
     if claimed.is_empty() {
         return Ok(Vec::new());
     }
-    let ids: Vec<WorkerId> = claimed.into_iter().map(|w| w.id).collect();
+    let ids: Vec<WorkerId> = claimed.into_iter().map(|w| w.base.id).collect();
     let workers = conn
-        .fetch_all_chunked::<WorkerDBWithNames, WorkerId>(&ids)
+        .chunked()
+        .fetch_all::<WorkerDBWithNames>(&ids, ())
         .await?;
     Ok(workers)
 }
 
 /// Flip the trigger workers' status (Requested, or the orchestrator-specific
 /// stop status) and mark their messages Locked.
-async fn update_worker_message_statuses(
-    conn: &mut DomainConnection<Apiserver>,
+async fn update_worker_message_statuses<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     orchestrator: Orchestrator,
     at: &AtTime,
     workers: &[WorkerDBWithNames],
     stopping: bool,
 ) -> Result<(), TdError> {
-    let worker_ids: Vec<WorkerId> = workers.iter().map(|x| x.base.id.clone()).collect();
+    let worker_ids: Vec<WorkerId> = workers.iter().map(|x| x.base.base.id.clone()).collect();
     let status_update: WorkerUpdateDB = if stopping {
         stop_worker_update(orchestrator, at).await?
     } else {
         WorkerUpdateDB::requested()
     };
-    conn.update_chunked::<_, WorkerDB, _>(&status_update, &worker_ids)
-        .await?;
+    conn.chunked().update(&status_update, &worker_ids).await?;
     let locked = WorkerMessageStatusUpdateDB::locked();
-    conn.update_chunked::<_, WorkerDB, _>(&locked, &worker_ids)
-        .await?;
+    conn.chunked().update(&locked, &worker_ids).await?;
     Ok(())
 }
 
@@ -304,8 +296,8 @@ mod tests {
         TableName, TableNameDto, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::TableDependencyDto;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
-    use td_queries::{LiveEntry, VersionedEntry};
     use td_storage::SPath;
 
     #[td_test::test(db)]
@@ -398,7 +390,7 @@ mod tests {
 
         let info = &message.info;
         let physical_function_runs: Vec<PhysicalFunctionRunDB> = db
-            .live()
+            .history()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(physical_function_runs.len(), 1);
@@ -408,10 +400,10 @@ mod tests {
         assert_eq!(info.collection, collection.name);
         assert_eq!(
             info.function_version_id,
-            physical_function_run.function_version_id
+            physical_function_run.base.function_version_id
         );
         assert_eq!(info.function_version_id, execution.manual_trigger);
-        assert_eq!(info.function_run_id, physical_function_run.id);
+        assert_eq!(info.function_run_id, physical_function_run.base.id);
 
         let function_path = SPath::parse(format!(
             "/bundles/c/{}/f/{}.tar.zst",
@@ -423,9 +415,9 @@ mod tests {
             info.function_bundle.env_prefix,
             Some(EnvPrefix::try_from(mount_def.id.as_str())?)
         );
-        assert_eq!(info.triggered_on, physical_function_run.triggered_on);
+        assert_eq!(info.triggered_on, physical_function_run.base.triggered_on);
         assert!(*info.triggered_on < *info.scheduled_on);
-        assert_eq!(info.execution_id, physical_function_run.execution_id);
+        assert_eq!(info.execution_id, physical_function_run.base.execution_id);
         assert_eq!(
             info.execution_name,
             Some(ExecutionName::try_from("test_execution")?)
@@ -434,8 +426,8 @@ mod tests {
         let function_data_path = SPath::parse(format!(
             "/c/{}/x/{}/f/{}",
             collection.id,
-            physical_function_run.transaction_id,
-            physical_function_run.function_version_id
+            physical_function_run.base.transaction_id,
+            physical_function_run.base.function_version_id
         ))?;
         let (uri, mount_def) = context.storage.to_external_uri(&function_data_path)?;
         assert_eq!(info.function_data.uri, uri);
@@ -464,34 +456,33 @@ mod tests {
             match output_table {
                 OutputTable::Table(output) => {
                     let physical_table_data_version: PhysicalTableDataVersionDBWithNames = db
-                        .live()
                         .fetch_one::<PhysicalTableDataVersionDBWithNames>(
                             &(output.table_data_version_id),
                         )
                         .await?;
 
-                    assert_eq!(output.name, physical_table_data_version.base.base.name);
+                    assert_eq!(output.name, physical_table_data_version.base.base.base.name);
                     assert_eq!(output.collection_id, collection.id);
                     assert_eq!(output.collection, collection.name);
                     assert_eq!(
                         output.table_id,
-                        physical_table_data_version.base.base.table_id
+                        physical_table_data_version.base.base.base.table_id
                     );
                     assert_eq!(
                         output.table_version_id,
-                        physical_table_data_version.base.base.table_version_id
+                        physical_table_data_version.base.base.base.table_version_id
                     );
                     assert_eq!(
                         output.table_data_version_id,
-                        physical_table_data_version.base.base.id
+                        physical_table_data_version.base.base.base.id
                     );
 
                     let table_path = SPath::parse(format!(
                         "/c/{}/d/{}/t/{}/{}.t",
                         collection.id,
-                        physical_table_data_version.base.base.id,
-                        physical_table_data_version.base.base.table_id,
-                        physical_table_data_version.base.base.table_version_id,
+                        physical_table_data_version.base.base.base.id,
+                        physical_table_data_version.base.base.base.table_id,
+                        physical_table_data_version.base.base.base.table_version_id,
                     ))?;
                     let (uri, mount_def) = context.storage.to_external_uri(&table_path)?;
 
@@ -507,47 +498,39 @@ mod tests {
         }
 
         let message: WorkerDB = db
-            .live()
-            .fetch_one::<WorkerDB>(&Some(physical_function_run.id.clone()))
-            .await?;
-        assert_eq!(message.collection_id, collection.id);
-        assert_eq!(message.execution_id, Some(execution.id));
+            .fetch_first::<WorkerDB>(&Some(physical_function_run.base.id.clone()))
+            .await?
+            .expect("worker for the run");
+        assert_eq!(message.base.collection_id, collection.id);
+        assert_eq!(message.base.execution_id, Some(execution.id));
         assert_eq!(
-            message.physical_function_run_id,
-            Some(physical_function_run.id.clone())
+            message.base.physical_function_run_id,
+            Some(physical_function_run.base.id.clone())
         );
         assert_eq!(
-            message.function_version_id,
-            physical_function_run.function_version_id
+            message.base.function_version_id,
+            physical_function_run.base.function_version_id
         );
-        assert_eq!(message.message_status, WorkerMessageStatus::Locked);
+        assert_eq!(message.base.message_status, WorkerMessageStatus::Locked);
 
         Ok(())
     }
 
-    /// End-to-end: seed a sticky-Committed LFR + its initial FR/LTDV
-    /// rows, call the replay service to mint a new PFR + Requested
-    /// pointer event, then run `RequestService` and verify it picks
-    /// the Requested pointer up and creates a worker message for the
-    /// fresh PFR. LFR.status must remain Committed; PFR count must be
-    /// two (the seeded one + the replay one).
+    /// End-to-end: seed a sticky-Committed LFR + its initial FR/LTDV rows,
+    /// call the replay service to mint a new PFR, then run the request tick
+    /// and verify it dispatches a worker message for the fresh PFR.
+    /// LFR.status must remain Committed; PFR count must be two.
     #[td_test::test(db)]
     async fn test_schedule_request_replay(db: TdPool) -> Result<(), TdError> {
         use td_objects::and;
-        use td_objects::dxo::logical::{
-            LogicalFunctionRunDB, LogicalFunctionRunParam, LogicalFunctionRunPointerDB,
-        };
+        use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunParam};
         use td_objects::types::basic::{
-            LogicalFunctionRunStatus, LogicalPointerStatus, PhysicalFunctionRunStatus,
-            TransactionKey,
+            LogicalFunctionRunStatus, PhysicalFunctionRunStatus, TransactionKey,
         };
 
         let p = db.seed().test_project().await?;
 
-        // Seed a Committed function run by hand (mirrors a previously-
-        // dispatched, committed execution). seed_physical_function_run
-        // also seeds the LTDV identity rows + InitialMint Pending
-        // pointer events the append-Requested layer relies on.
+        // seed_physical_function_run also seeds the LTDV identity rows.
         let collection = db
             .scoped(p.id)
             .seed()
@@ -594,12 +577,13 @@ mod tests {
             )
             .await?;
         let lfr: LogicalFunctionRunDB = db
-            .live()
-            .fetch_one::<LogicalFunctionRunDB>(and!(&fr_old.execution_id, &fr_old.function_id))
+            .fetch_one::<LogicalFunctionRunDB>(and!(
+                &fr_old.base.execution_id,
+                &fr_old.base.function_id
+            ))
             .await?;
-        let lfr_id = lfr.id.clone();
+        let lfr_id = lfr.base.id.clone();
 
-        // Call replay — mints FR_new + Requested(FR_new) pointer event.
         let replay_param = LogicalFunctionRunParam {
             logical_function_run: lfr_id.clone(),
         };
@@ -609,19 +593,14 @@ mod tests {
             .replay_logical_function_run(replay_request)
             .await?
             .data;
-        assert_ne!(replay_response.new_function_run_id, fr_old.id);
+        assert_ne!(replay_response.new_function_run_id, fr_old.base.id);
 
-        // After replay-mint, two FRs exist under the LFR; LFR.status
-        // is still Committed; the latest pointer is Requested(FR_new).
         let frs: Vec<PhysicalFunctionRunDB> = db
-            .live()
-            .fetch_all::<PhysicalFunctionRunDB>(and!(&lfr.execution_id, &lfr.function_id))
+            .history()
+            .fetch_all::<PhysicalFunctionRunDB>(and!(&lfr.base.execution_id, &lfr.base.function_id))
             .await?;
         assert_eq!(frs.len(), 2);
 
-        // Run the scheduler request service. It should pick up the
-        // Requested pointer and create a locked worker message for
-        // the new PFR. No status flip on the LFR.
         let context = dispatch_services(&db);
         context.clone().request(()).await?;
 
@@ -649,35 +628,29 @@ mod tests {
         );
 
         let worker: WorkerDB = db
-            .live()
-            .fetch_one::<WorkerDB>(&Some(replay_response.new_function_run_id.clone()))
-            .await?;
-        assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
+            .fetch_first::<WorkerDB>(&Some(replay_response.new_function_run_id.clone()))
+            .await?
+            .expect("worker for the run");
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
         assert_eq!(
-            worker.physical_function_run_id,
+            worker.base.physical_function_run_id,
             Some(replay_response.new_function_run_id.clone())
         );
 
-        // LFR.status untouched.
-        let lfr_after = db.live().fetch_one::<LogicalFunctionRunDB>(&lfr_id).await?;
-        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Committed);
+        let lfr_after = db.fetch_one::<LogicalFunctionRunDB>(&lfr_id).await?;
+        assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Committed);
 
-        // Pointer log untouched by the replay endpoint — the only
-        // events under this LFR are the seed's InitialMint + Bound,
-        // both still pointing at the original PFR. Pointer redirect
-        // only happens at worker finish via `redirect_at_finish`.
-        let latest = db
-            .versioned(&td_objects::types::basic::AtTime::now())
-            .fetch_one::<LogicalFunctionRunPointerDB>(&lfr_id)
+        // The replay attempt is the run's current version from mint.
+        let current = db
+            .latest()
+            .fetch_one::<PhysicalFunctionRunDB>(&lfr_id)
             .await?;
-        assert!(matches!(latest.status, LogicalPointerStatus::Bound));
-        assert_eq!(latest.physical_function_run_id, Some(fr_old.id.clone()));
+        assert_eq!(current.base.id, replay_response.new_function_run_id);
 
         let pfr_new = db
-            .live()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
             .await?;
-        assert_eq!(pfr_new.status, PhysicalFunctionRunStatus::Dispatched);
+        assert_eq!(pfr_new.base.status, PhysicalFunctionRunStatus::Dispatched);
 
         // Idempotency: a second tick must not create another worker
         // message — `to_dispatch` filters on PFR.status=Requested,
@@ -771,8 +744,8 @@ mod tests {
         assert_eq!(responder.method, Method::POST);
 
         let worker_id = WorkerId::try_from(created[0].id.as_str())?;
-        let worker: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker_id).await?;
-        assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
+        let worker: WorkerDB = db.fetch_one::<WorkerDB>(&worker_id).await?;
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
 
         // The resolver carries a valid internal token bound to this exact
         // request: GET, the /message scope, and the worker id (the
@@ -867,7 +840,7 @@ mod tests {
         );
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
-                .live()
+                .history()
                 .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
                 .await?;
             assert_eq!(pfrs.len(), 1, "each project must dispatch its own run");
@@ -1082,20 +1055,20 @@ mod tests {
         )
         .await?;
 
-        let queue = FailPutQueue::failing_ids([poisoned.id.to_string()]);
+        let queue = FailPutQueue::failing_ids([poisoned.base.id.to_string()]);
         let context = kubernetes_scheduler_context_with_queue(&db, queue);
         context.clone().request(()).await?;
 
-        for id in [&poisoned.id, &healthy.id] {
-            let stopped: WorkerDB = db.live().fetch_one::<WorkerDB>(id).await?;
-            assert_eq!(stopped.status, WorkerStatus::Stopped);
-            assert!(stopped.ended_on.is_some());
-            assert_eq!(stopped.message_status, WorkerMessageStatus::Locked);
+        for id in [&poisoned.base.id, &healthy.base.id] {
+            let stopped: WorkerDB = db.fetch_one::<WorkerDB>(id).await?;
+            assert_eq!(stopped.base.status, WorkerStatus::Stopped);
+            assert!(stopped.base.ended_on.is_some());
+            assert_eq!(stopped.base.message_status, WorkerMessageStatus::Locked);
         }
 
         let created = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created.len(), 1);
-        assert_eq!(created[0].id, healthy.id.to_string());
+        assert_eq!(created[0].id, healthy.base.id.to_string());
         Ok(())
     }
 
@@ -1118,9 +1091,9 @@ mod tests {
         let context = dispatch_services(&db);
         context.clone().request(()).await?;
 
-        let updated: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker.id).await?;
-        assert_eq!(updated.status, WorkerStatus::StopRequested);
-        assert!(updated.ended_on.is_none());
+        let updated: WorkerDB = db.fetch_one::<WorkerDB>(&worker.base.id).await?;
+        assert_eq!(updated.base.status, WorkerStatus::StopRequested);
+        assert!(updated.base.ended_on.is_none());
         Ok(())
     }
 
@@ -1201,16 +1174,16 @@ mod tests {
         assert_eq!(created.len(), 1);
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
-                .live()
+                .history()
                 .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
                 .await?;
             assert_eq!(pfrs.len(), 1);
-            assert_eq!(pfrs[0].status, PhysicalFunctionRunStatus::Dispatched);
+            assert_eq!(pfrs[0].base.status, PhysicalFunctionRunStatus::Dispatched);
             let worker: WorkerDB = db
-                .live()
-                .fetch_one::<WorkerDB>(&Some(pfrs[0].id.clone()))
-                .await?;
-            assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
+                .fetch_first::<WorkerDB>(&Some(pfrs[0].base.id.clone()))
+                .await?
+                .expect("worker for the run");
+            assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
         }
 
         // The run with the lost put is NOT re-picked by the readiness
@@ -1239,17 +1212,17 @@ mod tests {
         context.clone().request(()).await?;
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
-                .live()
+                .history()
                 .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
                 .await?;
             assert_eq!(pfrs.len(), 2);
             let failed = pfrs
                 .iter()
-                .filter(|pfr| pfr.status == PhysicalFunctionRunStatus::Failed)
+                .filter(|pfr| pfr.base.status == PhysicalFunctionRunStatus::Failed)
                 .count();
             let dispatched = pfrs
                 .iter()
-                .filter(|pfr| pfr.status == PhysicalFunctionRunStatus::Dispatched)
+                .filter(|pfr| pfr.base.status == PhysicalFunctionRunStatus::Dispatched)
                 .count();
             assert_eq!((failed, dispatched), (1, 1));
         }
@@ -1342,12 +1315,12 @@ mod tests {
             1
         );
         let pfrs_oldest: Vec<PhysicalFunctionRunDB> = db
-            .live()
+            .history()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[0].manual_trigger))
             .await?;
         assert_eq!(pfrs_oldest.len(), 1);
         let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
-            .live()
+            .history()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
             .await?;
         assert!(pfrs_newest.is_empty());
@@ -1366,7 +1339,7 @@ mod tests {
             2
         );
         let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
-            .live()
+            .history()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
             .await?;
         assert_eq!(pfrs_newest.len(), 1);
@@ -1418,14 +1391,14 @@ mod tests {
         };
         assert_eq!(start.worker, WorkerName::StageTrigger);
         assert_eq!(start.decorator, MessageDecorator::Publisher);
-        assert_eq!(start.function_version_id, worker.function_version_id);
-        assert_eq!(start.collection_id, worker.collection_id);
+        assert_eq!(start.function_version_id, worker.base.function_version_id);
+        assert_eq!(start.collection_id, worker.base.collection_id);
 
         assert_http_post(&start.trigger);
         assert_http_post(&start.responder);
 
-        // The lean k8s message no longer embeds external locations; the pod
-        // fetches its request.yaml from the resolver (a tokenized HTTP GET).
+        // The lean k8s message embeds no external locations; the pod fetches
+        // its request.yaml from the resolver (a tokenized HTTP GET).
         let Callback::Http(resolver) = &start.resolver;
         assert_eq!(resolver.method, Method::GET);
 
@@ -1454,7 +1427,7 @@ mod tests {
         };
         assert_eq!(stop.worker, WorkerName::StageTrigger);
         assert_http_post(&stop.responder);
-        assert_eq!(id, worker.id.to_string());
+        assert_eq!(id, worker.base.id.to_string());
 
         Ok(())
     }
@@ -1481,8 +1454,8 @@ mod tests {
             panic!("expected a CronRequest::Start payload");
         };
         assert_eq!(start.worker, WorkerName::CronTrigger);
-        assert_eq!(start.function_version_id, worker.function_version_id);
-        assert_eq!(start.collection_id, worker.collection_id);
+        assert_eq!(start.function_version_id, worker.base.function_version_id);
+        assert_eq!(start.collection_id, worker.base.collection_id);
         // The CronJob schedule mask travels in the start request, read from
         // the worker's serialized config.
         assert_eq!(start.schedule, CronMask::try_from("* * * * *")?);
@@ -1515,7 +1488,7 @@ mod tests {
         };
         assert_eq!(stop.worker, WorkerName::CronTrigger);
         assert_http_post(&stop.responder);
-        assert_eq!(id, worker.id.to_string());
+        assert_eq!(id, worker.base.id.to_string());
 
         Ok(())
     }

@@ -11,12 +11,12 @@ use crate::recovery::{
     finalize_recovery_actions, recover_lfrs_from_actions,
 };
 use ta_services::ctx_service::ReqCtx;
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::logical::LogicalFunctionRunUpdateDB;
-use td_objects::dxo::worker::WorkerDB;
+use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
 use td_objects::types::basic::AtTime;
-use td_queries::ChunkedQueries;
+use td_queries::Queries;
 use tracing::instrument;
 
 /// One short write transaction for the surviving function actions: finalize
@@ -24,9 +24,9 @@ use tracing::instrument;
 /// callback wins), then worker rows → Failed, attempts → Failed, and the LFRs
 /// recover or fail.
 #[instrument(name = "recovery.apply", skip_all, level = "debug", err(Debug))]
-pub async fn apply_recovery_actions(
+pub async fn apply_recovery_actions<S: SeesProjectRows>(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {
@@ -35,8 +35,7 @@ pub async fn apply_recovery_actions(
     // Worker rows → Failed (informational record).
     let worker_update = failed_worker_update(at).await?;
     let worker_ids = failed_worker_ids(&actions).await?;
-    conn.update_chunked::<_, WorkerDB, _>(&worker_update, &worker_ids)
-        .await?;
+    conn.chunked().update(&worker_update, &worker_ids).await?;
 
     // Attempts → Failed; late callbacks drop at the in-flight filter.
     fail_recovered_attempts(conn, at, &actions).await?;
@@ -44,13 +43,13 @@ pub async fn apply_recovery_actions(
     // Running LFRs with a recover verdict → Failed first; ReScheduled is only
     // reachable from Failed/OnHold/Requested.
     let running = fail_running_lfrs_for_recover(&actions).await?;
-    let failed = LogicalFunctionRunUpdateDB::failed();
+    let failed = LogicalFunctionRunStatusUpdateDB::failed();
     update_function_run_status(msgs, conn, &running, &failed).await?;
 
     // Requested and just-failed LFRs with a recover verdict → ReScheduled.
     let to_recover = recover_lfrs_from_actions(&actions).await?;
     abandon_requested_physical_runs(conn, at, &to_recover).await?;
-    let recover = LogicalFunctionRunUpdateDB::recover();
+    let recover = LogicalFunctionRunStatusUpdateDB::recover();
     update_function_run_status(msgs, conn, &to_recover, &recover).await?;
 
     // The rest → Failed, with the downstream on-hold cascade.

@@ -5,6 +5,7 @@
 use super::info::build_function_info;
 use super::inputs::{DispatchPrefetch, resolve_input_tables};
 use super::outputs::build_output_tables;
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
@@ -16,8 +17,8 @@ use td_storage::Storage;
 /// tables. The single assembler shared by the supervisor request layer
 /// (at = dispatch tick) and the kubernetes resolve endpoint (at = now()),
 /// so the two paths can't drift.
-pub(crate) async fn build_function_v2(
-    conn: &mut DomainConnection<Apiserver>,
+pub(crate) async fn build_function_v2<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     storage: &Storage,
     f: &PhysicalFunctionRunToExecute,
     prefetch: &DispatchPrefetch,
@@ -27,7 +28,7 @@ pub(crate) async fn build_function_v2(
     let info = build_function_info(storage, f)?;
     let (system_input, input) = resolve_input_tables(conn, storage, f, prefetch).await?;
     let (system_output, output) =
-        build_output_tables(storage, f, prefetch.output_tables_for(&f.base.base.id))?;
+        build_output_tables(storage, f, prefetch.output_tables_for(&f.base.base.base.id))?;
 
     let function_input_v2 = FunctionInput {
         info,
