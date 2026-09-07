@@ -17,14 +17,14 @@ use std::net::IpAddr;
 /// The superuser the embedded boot always bakes in.
 pub const DEFAULT_SUPERUSER: &str = "postgres";
 
-/// Shape rules for the server entry: no home schema, no app role.
+/// Shape rules for the server entry: no home schema, no RLS roles.
 /// Returns the entry's postgres options as the evidence.
 pub fn validate_server(server: &ComponentConfig) -> Result<&PostgresConfig, DbError> {
     if server.schema.is_some() {
         return Err(DbError::ServerSchemaNotAllowed);
     }
-    if server.app_role.is_some() {
-        return Err(DbError::ServerAppRoleNotAllowed);
+    if server.in_project_role.is_some() || server.across_projects_role.is_some() {
+        return Err(DbError::ServerRlsRolesNotAllowed);
     }
     Ok(&server.postgres)
 }
@@ -75,11 +75,11 @@ pub fn server_connectable(server: &ComponentConfig) -> Result<DatabaseConfig, Db
             username,
             password,
         },
-        // The privileged pool never serves and never provisions an app role of
-        // its own — each component's entry carries the app role it needs, and
-        // `validate_server` rejects the key on this entry.
+        // The privileged pool never serves and never provisions RLS roles of
+        // its own — each component's entry carries the roles it needs, and
+        // `validate_server` rejects the keys on this entry.
         schema: None,
-        app_role: None,
+        roles: None,
         pool: server.pool.clone(),
     })
 }
@@ -160,12 +160,12 @@ schema: td_system
             "
 postgres:
   host: localhost
-app_role: td_app_i1
+in_project_role: ip_i1
 ",
         );
         assert!(matches!(
             validate_server(&entry),
-            Err(DbError::ServerAppRoleNotAllowed)
+            Err(DbError::ServerRlsRolesNotAllowed)
         ));
     }
 

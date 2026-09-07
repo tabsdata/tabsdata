@@ -8,7 +8,7 @@
 use crate::components::SchemaComponent;
 use crate::components::admin_pool::AdminPool;
 use crate::components::plan::{UpgradeAction, upgrade_action};
-use crate::components::sql::grant_app_role_privileges_sql;
+use crate::components::sql::grant_rls_role_privileges_sql;
 use crate::connection::PgConnectionExt;
 use crate::error::DbError;
 use crate::pool::state::{db_version, edition};
@@ -26,15 +26,25 @@ use tracing::{debug, info, warn};
 impl AdminPool {
     /// Bring `component`'s schema to its current version as **one** transaction:
     /// the delta ladder, the derived-object drop and rebuild around it, the
-    /// version and edition rows, and the app-role grants either all commit or
-    /// all roll back. Read-only gates and the cluster-global app role run
-    /// first, outside it.
+    /// version and edition rows, and the RLS grants either all commit or
+    /// all roll back. Read-only gates run first, outside it.
+    ///
+    /// The cluster-global roles are not this pool's job: it connects as the
+    /// schema owner, which holds no `CREATEROLE`. `db upgrade` ensures them on
+    /// the privileged server entry first
+    /// ([`AdminPool::ensure_rls_roles_for`]); here they are only checked.
+    /// The membership gate is keyed on the schema declaring any RLS rather
+    /// than left to each component's `preflight`, so a component that grows
+    /// policies cannot forget it and one without them is never asked for a
+    /// membership it does not use.
     pub async fn upgrade(
         &self,
         component: &dyn SchemaComponent,
     ) -> Result<Option<UpgradeAction>, DbError> {
         component.preflight(self).await?;
-        self.ensure_app_role().await?;
+        if !component.schema_source().rls().is_empty() {
+            self.check_across_projects_memberships().await?;
+        }
         let mut tx = self.begin_upgrade().await?;
         component.upgrade(&mut tx).await?;
         let action = tx.action.clone();
@@ -47,15 +57,21 @@ impl AdminPool {
     ///
     /// The transaction runs outside project scope: an upgrade is cross-tenant
     /// work, and it connects as the schema owner, whom `FORCE ROW LEVEL
-    /// SECURITY` binds like anyone else. Without this a data delta over a
+    /// SECURITY` binds like anyone else. Without that, a data delta over a
     /// project-scoped table would match no rows and still report success.
+    ///
+    /// Two mechanisms, because a ladder spans both policy shapes: the
+    /// `across_projects` membership [`Self::ensure_rls_roles`] grants the
+    /// connected role covers v4 onwards, and the legacy GUC covers the
+    /// archived rungs it starts from. The owner cannot switch roles instead —
+    /// the DDL needs its own privileges.
     pub async fn begin_upgrade(&self) -> Result<UpgradeTransaction<'_>, DbError> {
         let mut conn = self
             .pool
             .begin()
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-        conn.bypass_project_scope()
+        conn.admit_legacy_project_scope()
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         Ok(UpgradeTransaction {
@@ -69,10 +85,10 @@ impl AdminPool {
     /// it — the archive-ladder and fixture-schema tests.
     #[cfg(any(test, feature = "test-utils"))]
     pub async fn upgrade_source(&self, source: &dyn SchemaSource) -> Result<(), DbError> {
-        self.ensure_app_role().await?;
+        self.ensure_rls_roles().await?;
         let mut tx = self.begin_upgrade().await?;
         tx.upgrade_db_version(source).await?;
-        tx.grant_app_role_privileges().await?;
+        tx.grant_rls_role_privileges().await?;
         tx.commit().await
     }
 }
@@ -123,15 +139,23 @@ impl UpgradeTransaction<'_> {
             }
             UpgradeAction::Ladder { from, to, targets } => {
                 info!(schema, from, to, deltas = targets.len(), "Upgrading schema");
-                let (drop, create) = derived_scripts(source);
+                let rungs: Vec<_> = targets.iter().map(|target| source.delta(*target)).collect();
+                let (own, create) = derived_scripts(source);
+                // Retirements first, newest rung first: a retired view can
+                // depend on one the target keeps, and on an earlier rung's.
+                let mut drop: Vec<String> = rungs
+                    .iter()
+                    .rev()
+                    .flat_map(|rung| rung.retired.clone())
+                    .collect();
+                drop.extend(own);
                 if !drop.is_empty() {
                     self.execute_batch(&drop).await?;
                     debug!(count = drop.len(), "Derived objects dropped");
                 }
-                for target in targets {
-                    let stmts = source.delta(*target);
-                    self.execute_batch(&stmts).await?;
-                    info!(target, statements = stmts.len(), "Schema delta applied");
+                for (target, rung) in targets.iter().zip(&rungs) {
+                    self.execute_batch(&rung.up).await?;
+                    info!(target, statements = rung.up.len(), "Schema delta applied");
                 }
                 self.set_db_version(current).await?;
                 if !create.is_empty() {
@@ -234,16 +258,24 @@ impl UpgradeTransaction<'_> {
         }
     }
 
-    /// Grant the RLS app role its schema and table privileges, once the tables
+    /// Grant both RLS roles their schema and table privileges, once the tables
     /// exist. `ALTER DEFAULT PRIVILEGES` auto-grants future tables, so a later
-    /// migration cannot silently leave the app role without access. The role
-    /// itself is created before the transaction ([`AdminPool::ensure_app_role`]).
-    pub async fn grant_app_role_privileges(&mut self) -> Result<(), DbError> {
-        let stmts = grant_app_role_privileges_sql(self.admin.schema(), &self.admin.app_role);
+    /// migration cannot silently leave a role without access. The roles
+    /// themselves are created before the transaction
+    /// ([`AdminPool::ensure_rls_roles`]).
+    pub async fn grant_rls_role_privileges(&mut self) -> Result<(), DbError> {
+        let mut stmts: Vec<String> =
+            grant_rls_role_privileges_sql(self.admin.schema(), &self.admin.roles().in_project)
+                .into();
+        stmts.extend(grant_rls_role_privileges_sql(
+            self.admin.schema(),
+            &self.admin.roles().across_projects,
+        ));
         self.execute_batch(&stmts).await?;
         debug!(
-            role = self.admin.app_role,
-            "Granted RLS app role privileges"
+            in_project = self.admin.roles().in_project,
+            across_projects = self.admin.roles().across_projects,
+            "Granted RLS role privileges"
         );
         Ok(())
     }
@@ -289,7 +321,6 @@ impl UpgradeTransaction<'_> {
         Ok(())
     }
 
-    /// Commit the upgrade.
     pub async fn commit(self) -> Result<(), DbError> {
         self.conn
             .commit()

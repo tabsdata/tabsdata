@@ -81,9 +81,11 @@ fn base_settings(cfg: &BootConfig) -> Settings {
         .configuration
         .insert("max_connections".to_string(), "500".to_string());
     // Each test upgrades its own schema (many tables/indexes) in a single
-    // transaction; with hundreds running concurrently the default per-
-    // transaction lock allotment (64) exhausts the shared lock table
-    // ("out of shared memory" / 53200). Size it for a full schema upgrade.
+    // transaction, and every versioned-row insert takes an advisory lock held
+    // to commit; with hundreds running concurrently the default per-transaction
+    // lock allotment (64) exhausts the shared lock table ("out of shared
+    // memory" / 53200). Size it for a full schema upgrade — and keep it at or
+    // above the floor `check_pg_lock_capacity` enforces.
     settings
         .configuration
         .insert("max_locks_per_transaction".to_string(), "1024".to_string());

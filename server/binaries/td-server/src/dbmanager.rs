@@ -5,7 +5,8 @@
 //! Standalone database-administration CLI, two command groups that never mix
 //! configs: `server start|serve|stop` reads only the `database_server:` entry,
 //! `db create|upgrade|check|status|drop|ping` reads the `database:` map
-//! (`create`/`drop` also need the server entry for the privileged pool).
+//! (`create`/`upgrade`/`drop` also need the server entry for the privileged
+//! pool).
 //!
 //! Import rule: registry-dependent operations go through `te_database` (the
 //! edition facade, aliased `dbm`); server lifecycle and config types come
@@ -145,10 +146,12 @@ fn resolved_schemas(components: &DatabaseComponents) -> Result<Vec<String>, DbEr
         .collect()
 }
 
-/// The DDL runs as each schema's owner (on its own schema); the privileged pool
-/// is opened only to verify the target objects exist and to report their state.
-/// Seeds are idempotent full syncs, so re-running them here delivers the new
-/// release's baseline content to an existing database.
+/// The DDL runs as each schema's owner (on its own schema). The privileged
+/// pool verifies the target objects exist, ensures the cluster-global roles a
+/// newer schema version may depend on (the owner cannot `CREATE ROLE`), and
+/// reports the resulting state. Seeds are idempotent full syncs, so re-running
+/// them here delivers the new release's baseline content to an existing
+/// database.
 async fn upgrade(
     components: &DatabaseComponents,
     server: Option<&ComponentConfig>,
@@ -157,6 +160,7 @@ async fn upgrade(
     let before = with_server(server, async |admin| {
         let found = dbm::inspect_all(components, admin).await?;
         dbm::require_present(&found)?;
+        dbm::ensure_roles_all(components, admin).await?;
         Ok(found)
     })
     .await?;
@@ -221,9 +225,10 @@ fn report_objects(before: &[dbm::ComponentObjects], after: &[dbm::ComponentObjec
         );
         info!(
             component = was.key,
-            app_role = %is.app_role,
-            state = state_of(was.app_role_present, is.app_role_present),
-            "app role"
+            in_project = %is.roles.in_project,
+            across_projects = %is.roles.across_projects,
+            state = state_of(was.roles_present, is.roles_present),
+            "RLS roles"
         );
     }
 }

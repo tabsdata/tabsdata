@@ -7,19 +7,37 @@
 use crate::components::ProvisionSpec;
 use crate::components::sql::execute_batch_tx;
 #[cfg(any(test, feature = "test-utils"))]
-use crate::components::sql::grant_app_role_maintain_sql;
+use crate::components::sql::grant_rls_role_maintain_sql;
 use crate::components::sql::{
-    OWNER_PASSWORD_GUC, create_app_role_sql, create_owner_role_sql, create_schema_sql,
-    drop_app_role_sql, execute_batch_tx_with_secrets, grant_app_role_membership_sql,
-    grant_app_role_self_membership_sql,
+    OWNER_PASSWORD_GUC, create_across_projects_marker_sql, create_owner_role_sql,
+    create_rls_role_sql, create_schema_sql, drop_rls_role_sql, execute_batch_tx_with_secrets,
+    grant_across_projects_membership_sql, grant_across_projects_self_membership_sql,
+    grant_rls_role_membership_sql, grant_rls_role_self_membership_sql,
 };
-use crate::config::{DatabaseConfig, Schema};
+use crate::config::{DatabaseConfig, RlsRoles, Schema};
 use crate::error::DbError;
 use crate::pool::state::db_version;
 use crate::sea_query::builder::SeaQueryExt;
 use sea_query::{Expr, Query};
 use sqlx::PgPool;
+use td_schema::ACROSS_PROJECTS_ROLE;
 use tracing::{debug, info, instrument};
+
+/// The RLS roles a component's serving connections switch between, the
+/// marker the `across_projects` policy names, and the owner's memberships in
+/// all three. Every statement is a no-op when its object already holds.
+fn rls_role_statements(owner: &str, roles: &RlsRoles) -> Vec<String> {
+    let (tenant, across) = (&roles.in_project, &roles.across_projects);
+    vec![
+        create_across_projects_marker_sql(),
+        create_rls_role_sql(tenant),
+        create_rls_role_sql(across),
+        grant_across_projects_membership_sql(across),
+        grant_across_projects_membership_sql(owner),
+        grant_rls_role_membership_sql(owner, tenant),
+        grant_rls_role_membership_sql(owner, across),
+    ]
+}
 
 /// The privileged pool used to provision, upgrade and check schemas. On
 /// It keeps the DDL rights the serving `TdPool` gives up: the
@@ -31,9 +49,8 @@ pub struct AdminPool {
     // Stored (not passed) to stay in lock-step with the connection's
     // `search_path`. `None` on the privileged system entry, which has none.
     schema: Option<Schema>,
-    // The RLS app role this pool provisions/grants: `td_app` in production, a
-    // per-test role in tests.
-    pub(super) app_role: String,
+    // `None` on the privileged system entry, which never serves.
+    roles: Option<RlsRoles>,
 }
 
 impl AdminPool {
@@ -42,19 +59,31 @@ impl AdminPool {
     #[instrument(name = "db.admin_pool.connect", skip_all, level = "info", err(Debug))]
     pub async fn connect(config: &DatabaseConfig) -> Result<Self, DbError> {
         info!("db.admin_pool.connect: opening admin pool");
-        let app_role = config.app_role().to_owned();
+        let roles = config.roles.clone();
         let out = config.connect_admin().await?;
         debug!("Connected to admin pool: {:#?}", out.pool);
-        Ok(Self::from_parts(out.pool, out.schema, app_role))
+        Ok(Self::from_parts(out.pool, out.schema, roles))
     }
 
     /// Build from an already-opened admin connection.
-    pub(crate) fn from_parts(pool: PgPool, schema: Option<Schema>, app_role: String) -> Self {
+    pub(crate) fn from_parts(
+        pool: PgPool,
+        schema: Option<Schema>,
+        roles: Option<RlsRoles>,
+    ) -> Self {
         Self {
             pool,
             schema,
-            app_role,
+            roles,
         }
+    }
+
+    /// The RLS roles this pool provisions and grants. Panics on the
+    /// privileged system entry, which has none.
+    pub(super) fn roles(&self) -> &RlsRoles {
+        self.roles
+            .as_ref()
+            .expect("No RLS roles configured: the privileged system entry has none")
     }
 
     /// The schema this pool's `search_path` is pinned to. Panics on the
@@ -66,24 +95,26 @@ impl AdminPool {
     }
 
     /// Provision a component: the login-capable owner role, the schema it
-    /// owns, the entry's RLS app role, and the owner's membership in it.
-    /// Idempotent. Table grants come later ([`Self::ensure_app_role`]), once
-    /// tables exist. The app role comes from the spec — the component entry's
-    /// own — not from this (privileged, server-entry) pool's config.
+    /// owns, the entry's two RLS roles, and the owner's membership in both.
+    /// Idempotent. Table grants come later
+    /// ([`UpgradeTransaction::grant_rls_role_privileges`]), once tables exist.
+    /// The roles come from the spec — the component entry's own — not from
+    /// this (privileged, server-entry) pool's config.
     pub(crate) async fn provision_schema(&self, spec: &ProvisionSpec<'_>) -> Result<(), DbError> {
         {
+            let (tenant, across) = (&spec.roles.in_project, &spec.roles.across_projects);
             debug!(
                 owner = spec.owner,
                 schema = spec.schema,
-                role = spec.app_role,
-                "Provisioning schema, owner and app role"
+                in_project = tenant,
+                across_projects = across,
+                "Provisioning schema, owner and RLS roles"
             );
-            let stmts = vec![
+            let mut stmts = vec![
                 create_owner_role_sql(spec.owner),
                 create_schema_sql(spec.schema, spec.owner),
-                create_app_role_sql(spec.app_role),
-                grant_app_role_membership_sql(spec.owner, spec.app_role),
             ];
+            stmts.extend(rls_role_statements(spec.owner, spec.roles));
             execute_batch_tx_with_secrets(
                 &self.pool,
                 &[(OWNER_PASSWORD_GUC, spec.password)],
@@ -93,10 +124,34 @@ impl AdminPool {
             info!(
                 owner = spec.owner,
                 schema = spec.schema,
-                role = spec.app_role,
-                "Provisioned schema, owner and app role"
+                in_project = tenant,
+                across_projects = across,
+                "Provisioned schema, owner and RLS roles"
             );
         }
+        Ok(())
+    }
+
+    /// The cluster-global half of a component's provisioning, on its own: the
+    /// RLS roles, the marker, and the owner's memberships, all idempotent.
+    /// `db upgrade` runs it on the privileged server entry before the owner
+    /// opens its ladder, so a schema version that introduces a role (v4's
+    /// `across_projects`) never asks the owner for a `CREATE ROLE` it cannot
+    /// run. Cluster-global, so it stays outside the upgrade transaction:
+    /// holding a `pg_authid` lock for a whole upgrade would block every
+    /// concurrent provision of the same role.
+    pub(crate) async fn ensure_rls_roles_for(
+        &self,
+        owner: &str,
+        roles: &RlsRoles,
+    ) -> Result<(), DbError> {
+        execute_batch_tx(&self.pool, &rls_role_statements(owner, roles)).await?;
+        debug!(
+            owner,
+            in_project = roles.in_project,
+            across_projects = roles.across_projects,
+            "Ensured RLS roles and owner memberships"
+        );
         Ok(())
     }
 
@@ -132,12 +187,14 @@ impl AdminPool {
         Ok(())
     }
 
-    /// Drop an instance-scoped app role at `db drop` (tolerant — see
-    /// [`drop_app_role_sql`]). Runs after every component's schema is gone.
-    pub async fn drop_app_role(&self, app_role: &str) -> Result<(), DbError> {
+    /// Drop an instance-scoped RLS role at `db drop` (tolerant — see
+    /// [`drop_rls_role_sql`]). Runs after every component's schema is gone.
+    /// Never the `across_projects` marker: it is cluster-global and named by
+    /// every deployment's policies.
+    pub async fn drop_rls_role(&self, role: &str) -> Result<(), DbError> {
         {
-            execute_batch_tx(&self.pool, &[drop_app_role_sql(app_role)]).await?;
-            debug!(role = app_role, "Dropped app role");
+            execute_batch_tx(&self.pool, &[drop_rls_role_sql(role)]).await?;
+            debug!(role, "Dropped RLS role");
         }
         Ok(())
     }
@@ -175,6 +232,12 @@ impl AdminPool {
         crate::pool::state::check_pg_min_version(&self.pool).await
     }
 
+    /// Refuse a server whose `max_locks_per_transaction` cannot hold the
+    /// per-row locks a bulk write into a versioned table takes.
+    pub(crate) async fn check_pg_lock_capacity(&self) -> Result<(), DbError> {
+        crate::pool::state::check_pg_lock_capacity(&self.pool).await
+    }
+
     /// Verify the upgrader role has CREATE on the application schema — caught
     /// up front instead of failing mid-upgrade with an opaque error.
     pub(crate) async fn check_upgrader_permissions(&self) -> Result<(), DbError> {
@@ -196,39 +259,109 @@ impl AdminPool {
         Ok(())
     }
 
-    /// Create the RLS app role and acquire `SET` on it. Cluster-global, so it
-    /// stays **outside** the upgrade transaction: holding a `pg_authid` lock
-    /// for a whole upgrade would block every concurrent provision of the same
-    /// role. Idempotent; the schema/table grants run inside the transaction
-    /// ([`UpgradeTransaction::grant_app_role_privileges`]), once the tables exist.
-    pub async fn ensure_app_role(&self) -> Result<(), DbError> {
+    /// The roles and `across_projects` memberships the schema's policies rely
+    /// on, before the ladder opens. `db upgrade` ensures them on the
+    /// privileged entry first ([`Self::ensure_rls_roles_for`]), but a
+    /// non-superuser provisioner holds no `ADMIN` on a marker somebody else
+    /// created, so that grant is warned rather than fatal — and without it
+    /// cross-project reads return nothing and a data delta rewrites no rows.
+    /// The error carries the statements a DBA has to run.
+    pub(crate) async fn check_across_projects_memberships(&self) -> Result<(), DbError> {
+        let (tenant, across) = (&self.roles().in_project, &self.roles().across_projects);
+        let exists = |role: &str| format!("EXISTS (SELECT FROM pg_roles WHERE rolname = '{role}')");
+        let (marker, has_tenant, has_across) =
+            (exists(ACROSS_PROJECTS_ROLE), exists(tenant), exists(across));
+        let missing: Option<String> = Query::select()
+            .expr(Expr::cust(format!(
+                "trim(both ' ' from \
+                   CASE WHEN NOT {has_tenant} \
+                     THEN 'CREATE ROLE \"{tenant}\" NOBYPASSRLS; ' ELSE '' END \
+                || CASE WHEN NOT {has_across} \
+                     THEN 'CREATE ROLE \"{across}\" NOBYPASSRLS; ' ELSE '' END \
+                || CASE WHEN NOT {marker} \
+                     THEN 'CREATE ROLE \"{ACROSS_PROJECTS_ROLE}\" NOBYPASSRLS NOLOGIN; ' \
+                     ELSE '' END \
+                || CASE WHEN NOT ({marker} AND {has_across}) \
+                        OR NOT pg_has_role('{across}', '{ACROSS_PROJECTS_ROLE}', 'USAGE') \
+                     THEN 'GRANT \"{ACROSS_PROJECTS_ROLE}\" TO \"{across}\"; ' \
+                     ELSE '' END \
+                || CASE WHEN NOT {marker} \
+                        OR NOT pg_has_role(current_user, '{ACROSS_PROJECTS_ROLE}', 'USAGE') \
+                     THEN 'GRANT \"{ACROSS_PROJECTS_ROLE}\" TO CURRENT_USER; ' \
+                     ELSE '' END)"
+            )))
+            .build_query_scalar()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::SqlError)?;
+        match missing.as_deref() {
+            Some("") | None => {
+                debug!("db.pool.check: across-projects memberships OK");
+                Ok(())
+            }
+            Some(sql) => Err(DbError::MissingAcrossProjectsMembership(sql.to_owned())),
+        }
+    }
+
+    /// [`Self::ensure_rls_roles_for`] for the connected role's own entry —
+    /// the test factories' and [`Self::upgrade_source`]'s path, where the
+    /// connected role is the superuser and there is no owner to grant to;
+    /// the memberships go to the connected role itself. Idempotent.
+    pub async fn ensure_rls_roles(&self) -> Result<(), DbError> {
         {
-            // Role + membership (no-ops when they hold), so `db upgrade`
-            // self-heals a changed/dropped app role when the connected role
-            // can, and otherwise fails at the actual cause, not the grant.
+            let (tenant, across) = (&self.roles().in_project, &self.roles().across_projects);
             let stmts = vec![
-                create_app_role_sql(&self.app_role),
-                grant_app_role_self_membership_sql(&self.app_role),
+                create_across_projects_marker_sql(),
+                create_rls_role_sql(tenant),
+                create_rls_role_sql(across),
+                grant_across_projects_membership_sql(across),
+                grant_across_projects_self_membership_sql(),
+                grant_rls_role_self_membership_sql(tenant),
+                grant_rls_role_self_membership_sql(across),
             ];
             execute_batch_tx(&self.pool, &stmts).await?;
-            debug!(role = self.app_role, "Ensured RLS app role");
+            debug!(
+                in_project = tenant,
+                across_projects = across,
+                "Ensured RLS roles"
+            );
         }
         Ok(())
     }
 
-    /// Grant the app role `MAINTAIN` on `schema`'s tables so its `ANALYZE`
+    /// Grant both RLS roles USAGE on a bare test schema, before any serving
+    /// pool connects. A role whose `search_path` names a schema it cannot use
+    /// resolves to no schema at all, so the session-level `SET ROLE` has to
+    /// find the grant already in place.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub async fn grant_rls_role_schema_usage(&self, schema: &str) -> Result<(), DbError> {
+        let (tenant, across) = (&self.roles().in_project, &self.roles().across_projects);
+        execute_batch_tx(
+            &self.pool,
+            &[
+                format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{tenant}\""),
+                format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{across}\""),
+            ],
+        )
+        .await
+    }
+
+    /// Grant both RLS roles `MAINTAIN` on `schema`'s tables so their `ANALYZE`
     /// takes effect. Test-only — the test factories keep the schema
-    /// superuser-owned, and the app role owns nothing. Runs after the tables
+    /// superuser-owned, and the RLS roles own nothing. Runs after the tables
     /// exist, i.e. after [`Self::upgrade`].
     #[cfg(any(test, feature = "test-utils"))]
-    pub async fn grant_app_role_maintain(&self, schema: &str) -> Result<(), DbError> {
+    pub async fn grant_rls_role_maintain(&self, schema: &str) -> Result<(), DbError> {
         {
             execute_batch_tx(
                 &self.pool,
-                &[grant_app_role_maintain_sql(schema, &self.app_role)],
+                &[
+                    grant_rls_role_maintain_sql(schema, &self.roles().in_project),
+                    grant_rls_role_maintain_sql(schema, &self.roles().across_projects),
+                ],
             )
             .await?;
-            debug!(role = self.app_role, schema, "Granted app role MAINTAIN");
+            debug!(schema, "Granted RLS roles MAINTAIN");
         }
         Ok(())
     }
