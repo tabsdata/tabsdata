@@ -999,6 +999,22 @@ class APIServer:
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def function_run_raw_data(
+        self,
+        collection_name: str,
+        function_run_id: str,
+        input_idx: int,
+        raise_for_status: bool = True,
+    ):
+        # A publisher run stamps one raw-data file per input it ingested;
+        # `input_idx` selects among them. Returns the file as parquet bytes.
+        endpoint = self._scoped(
+            f"/collections/{collection_name}/function-runs/{function_run_id}"
+            f"/inputs/{input_idx}/raw-data"
+        )
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def logical_function_run_replay(
         self,
         logical_function_run_id: str,
