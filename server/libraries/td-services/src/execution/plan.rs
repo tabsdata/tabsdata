@@ -503,8 +503,7 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows>(
     Ok(rows)
 }
 
-/// Flips to OnHold the plan's LFRs whose upstream inputs are Failed/OnHold,
-/// evaluated at the plan's `at_time` for temporal consistency.
+/// Flips to OnHold the plan's LFRs whose upstream inputs are Failed/OnHold.
 #[instrument(
     name = "execution.update_initial_function_run_status",
     skip_all,
@@ -515,12 +514,8 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows>(
 pub async fn update_initial_function_run_status<S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S>,
     execution: &ExecutionInsertDB,
-    at_time: &AtTime,
 ) -> Result<(), TdError> {
-    let lfr_ids = conn
-        .logical_runs()
-        .blocked_ids(&execution.id, at_time)
-        .await?;
+    let lfr_ids = conn.logical_runs().blocked_ids(&execution.id).await?;
 
     debug!(
         execution_id = %execution.id,

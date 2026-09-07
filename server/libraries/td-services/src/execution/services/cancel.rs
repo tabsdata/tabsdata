@@ -326,6 +326,82 @@ mod tests {
     }
 
     #[td_test::test(db)]
+    async fn test_cancel_execution_partially_committed(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        test_cancel_execution(
+            db,
+            p.id,
+            vec![TestExecution {
+                expected_status: ExecutionStatus::Finished,
+                transactions: vec![
+                    TestTransaction {
+                        expected_status: TransactionStatus::Committed,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_0")?,
+                            dependencies: vec![],
+                            tables: vec![TableNameDto::try_from("t_0")?],
+                            initial_status: LogicalFunctionRunStatus::Committed,
+                            expected_status: LogicalFunctionRunStatus::Committed,
+                        }],
+                    },
+                    TestTransaction {
+                        expected_status: TransactionStatus::Canceled,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_1")?,
+                            dependencies: vec![TableDependencyDto::try_from("t_0")?],
+                            tables: vec![TableNameDto::try_from("t_1")?],
+                            initial_status: LogicalFunctionRunStatus::Running,
+                            expected_status: LogicalFunctionRunStatus::Canceled,
+                        }],
+                    },
+                ],
+            }],
+            0,
+        )
+        .await
+    }
+
+    #[td_test::test(db)]
+    async fn test_cancel_execution_partially_yanked(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        test_cancel_execution(
+            db,
+            p.id,
+            vec![TestExecution {
+                expected_status: ExecutionStatus::Finished,
+                transactions: vec![
+                    TestTransaction {
+                        expected_status: TransactionStatus::Yanked,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_0")?,
+                            dependencies: vec![],
+                            tables: vec![TableNameDto::try_from("t_0")?],
+                            initial_status: LogicalFunctionRunStatus::Yanked,
+                            expected_status: LogicalFunctionRunStatus::Yanked,
+                        }],
+                    },
+                    TestTransaction {
+                        expected_status: TransactionStatus::Canceled,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_1")?,
+                            dependencies: vec![TableDependencyDto::try_from("t_0")?],
+                            tables: vec![TableNameDto::try_from("t_1")?],
+                            initial_status: LogicalFunctionRunStatus::Running,
+                            expected_status: LogicalFunctionRunStatus::Canceled,
+                        }],
+                    },
+                ],
+            }],
+            0,
+        )
+        .await
+    }
+
+    #[td_test::test(db)]
     async fn test_cancel_execution_different_collection(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
@@ -443,17 +519,6 @@ mod tests {
                 .await
                 .is_ok()
         );
-        assert!(
-            cancel_transition_for(LogicalFunctionRunStatus::Committed)
-                .await
-                .is_err()
-        );
-        assert!(
-            cancel_transition_for(LogicalFunctionRunStatus::Yanked)
-                .await
-                .is_err()
-        );
-
         Ok(())
     }
 }

@@ -104,8 +104,8 @@ impl Changes {
             let desired = desired_table(table, function, ctx)?;
             match existing.get(&table.name) {
                 Some(current) if same_table(&current.base, &desired) => {}
-                Some(current) => {
-                    if current.base.status == TableStatus::Frozen {
+                _ => {
+                    if table.adopted_frozen {
                         self.table_transitions.push(TableTransition {
                             table_id: desired.table_id,
                             status: TableStatus::Active,
@@ -114,7 +114,6 @@ impl Changes {
                     }
                     self.tables.push(desired);
                 }
-                None => self.tables.push(desired),
             }
         }
         for table in &state.tables {

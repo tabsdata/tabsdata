@@ -20,15 +20,14 @@
 //! | `Range` / `List`      | composed from the single-version cases                                      |
 //! | `New`                 | LTDVs minted after the requesting function's last execution                 |
 //!
-//! ### Voided LTDVs are visible; Canceled/Yanked-produced ones disappear
+//! ### Canceled/Yanked-produced LTDVs disappear
 //!
-//! Voided is a pointer-layer state and stays visible: the planner pins the
-//! latest LTDV regardless of pointer status, and the dispatch gate handles
-//! voided inputs. A Canceled/Yanked *producer* produced no data, so its
-//! LTDV disappears: all reads go through
-//! `logical_table_data_versions__active`, so `Head(0)` falls back to the
-//! previous live version and a `Fixed` pin to such an LTDV resolves to
-//! `FixedTableDataVersionsNotFound`.
+//! The planner pins the latest LTDV whatever its producer's status; the
+//! scheduler's readiness and initial-status queries judge what that status
+//! means. A Canceled/Yanked *producer* produced no data, so its LTDV
+//! disappears: all reads go through `logical_table_data_versions__active`, so
+//! `Head(0)` falls back to the previous live version and a `Fixed` pin to
+//! such an LTDV resolves to `FixedTableDataVersionsNotFound`.
 
 use td_database::access::SeesProjectRows;
 

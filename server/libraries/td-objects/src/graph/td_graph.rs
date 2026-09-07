@@ -124,10 +124,11 @@ impl<'a> TdGraphBuilder<'a> {
             let function_idx = self.add_if_absent(function_node);
             let table_idx = self.add_if_absent(table_node);
 
+            // A table keeps the version that defined it: producer identity is the function.
             let graph_dep = GraphDependency {
                 dep_pos: dep.base.base.dep_pos,
                 self_dependency: SelfDependency::from(
-                    function.base.base.id == table.base.base.function_version_id,
+                    function.base.base.function_id == table.base.base.function_id,
                 ),
             };
 
@@ -389,9 +390,11 @@ mod tests {
     use super::*;
     use crate::graph::MapGraph;
     use crate::test_utils::graph::{
-        FUNCTION_NAMES, TABLE_NAMES, function_node, table_node, test_graph,
+        FUNCTION_NAMES, TABLE_NAMES, dependency, function, function_node, table, table_node,
+        test_graph,
     };
     use crate::test_utils::transaction::TestTransactionBy;
+    use crate::types::basic::FunctionVersionId;
     use itertools::Itertools;
     use std::collections::HashSet;
 
@@ -618,6 +621,41 @@ mod tests {
         assert_eq!(source.name, TABLE_NAMES[1]);
         let target = dependency_graph.inner[edge.target()];
         assert_eq!(target.name, TABLE_NAMES[3]);
+    }
+
+    /// An updated function carries a new version id while its tables keep the
+    /// version that defined them; its dependency on its own output is still a
+    /// self dependency, so the dependency DAG stays acyclic.
+    #[tokio::test]
+    async fn test_dependency_graph_self_dependency_across_versions() {
+        let mut updated = function(&FUNCTION_NAMES[0]);
+        updated.base.base.id = FunctionVersionId::new();
+        let all_tables = vec![table(&FUNCTION_NAMES[0], &TABLE_NAMES[0])];
+        let all_tables_map = all_tables
+            .iter()
+            .map(|t| (t.base.base.table_id, t.clone()))
+            .collect();
+        let all_functions_map = [(updated.base.base.function_id, updated.clone())]
+            .into_iter()
+            .collect();
+        let dependencies = vec![dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0])];
+        let graph = TdGraphBuilder::new(&all_tables_map, &all_functions_map)
+            .with_dependencies(&dependencies)
+            .unwrap()
+            .with_outputs(&all_tables)
+            .unwrap()
+            .build();
+
+        let self_dependencies = graph
+            .inner
+            .edge_references()
+            .filter(|e| e.weight().is_self_dependency())
+            .count();
+        assert_eq!(self_dependencies, 1);
+
+        let dependency_graph = PartialGraph::dependency_graph(&graph, true).unwrap();
+        assert_eq!(dependency_graph.inner.node_count(), 1);
+        assert_eq!(dependency_graph.inner.edge_count(), 0);
     }
 
     #[tokio::test]

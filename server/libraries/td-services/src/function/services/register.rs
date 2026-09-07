@@ -103,14 +103,16 @@ mod tests {
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::collection::CollectionUpdate;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::FunctionDB;
+    use td_objects::dxo::function::{FunctionDB, FunctionParam};
     use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleStatus, CollectionType, ConnectionKind, Decorator,
-        FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, SNIPPET_MAX_LEN,
-        UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId,
+        SNIPPET_MAX_LEN, TableName, TableStatus, TriggerStatus, UserId, WorkerMessageStatus,
+        WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{
         BundleId, CollectionIdName, CollectionName, ReuseFrozen, TableNameDto, WorkerConfig,
@@ -416,6 +418,145 @@ mod tests {
         let response = response?.data;
 
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_adopts_frozen_table_of_deleted_function(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let producer = FunctionRegister {
+            name: "producer".try_into()?,
+            description: "producer description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "producer snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("table_foo")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        db.scoped(p.id)
+            .seed()
+            .function(&collection, &producer)
+            .await?;
+
+        let consumer = FunctionRegister {
+            name: "consumer".try_into()?,
+            description: "consumer description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "consumer snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("table_foo")?]),
+            triggers: Some(vec![TableTriggerDto::try_from("table_foo")?]),
+            tables: None,
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let consumer_function = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &consumer)
+            .await?;
+
+        let service = Services::with_defaults(db.clone());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection_name.as_str())?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("producer")?,
+                },
+            ))
+            .in_project(p.id);
+        service.delete_function(request).await?;
+
+        let frozen: Vec<TableDB> = db
+            .scd2()
+            .fetch_all::<TableDB>(and!(TableName::try_from("table_foo")?, TableStatus::Frozen))
+            .await?;
+        assert_eq!(frozen.len(), 1);
+        let table_id = frozen[0].base.table_id;
+
+        let triggers: Vec<TriggerDB> = db
+            .scd2()
+            .fetch_all::<TriggerDB>(&consumer_function.base.function_id)
+            .await?;
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(triggers[0].base.status, TriggerStatus::Frozen);
+
+        let successor = FunctionRegister {
+            name: "successor".try_into()?,
+            ..producer.clone()
+        };
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection_name.as_str())?,
+                },
+                successor.clone(),
+            )
+            .in_project(p.id);
+        let error = service.register_function(request).await.unwrap_err();
+        assert!(matches!(
+            error.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::FrozenTableAlreadyExists(..)
+        ));
+
+        let successor = FunctionRegister {
+            reuse_frozen_tables: ReuseFrozen::TRUE,
+            ..successor
+        };
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection_name.as_str())?,
+                },
+                successor.clone(),
+            )
+            .in_project(p.id);
+        let registered = service.register_function(request).await?.data;
+
+        let tables: Vec<TableDB> = db
+            .scd2()
+            .fetch_all::<TableDB>(and!(TableName::try_from("table_foo")?, TableStatus::Active))
+            .await?;
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].base.table_id, table_id);
+        assert_eq!(tables[0].base.function_id, registered.function_id);
+
+        let triggers: Vec<TriggerDB> = db
+            .scd2()
+            .fetch_all::<TriggerDB>(&consumer_function.base.function_id)
+            .await?;
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(triggers[0].base.status, TriggerStatus::Active);
+        assert_eq!(
+            *triggers[0].base.trigger_by_function_id,
+            registered.function_id
+        );
+        Ok(())
     }
 
     #[td_test::test(db)]

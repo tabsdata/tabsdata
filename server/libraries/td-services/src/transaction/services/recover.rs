@@ -378,21 +378,6 @@ mod tests {
                 .await
                 .is_ok()
         );
-        assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Canceled)
-                .await
-                .is_err()
-        );
-        assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Committed)
-                .await
-                .is_err()
-        );
-        assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Yanked)
-                .await
-                .is_err()
-        );
 
         Ok(())
     }
@@ -457,6 +442,21 @@ mod tests {
         );
         assert!(
             recover_transition_for(LogicalFunctionRunStatus::Error)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Committed)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Canceled)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Yanked)
                 .await
                 .is_ok()
         );

@@ -2705,4 +2705,134 @@ mod tests {
         ));
         Ok(())
     }
+
+    /// What an update keeps and what it moves. Equal across a code-only
+    /// update: the function id, every table's `table_id`, its version row and
+    /// the `function_version_id` on it (the version that defined it). Moved:
+    /// the function version. Only a table whose definition changed gets a new
+    /// row, stamped with the version that changed it.
+    #[td_test::test(db)]
+    async fn test_update_table_versions_follow_definitions_not_code(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&CollectionName::try_from("defs_coll")?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister {
+            name: "defs_fn".try_into()?,
+            description: "desc".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t_a")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let collection_param = || CollectionParam {
+            collection: CollectionIdName::from_str(&format!("~{}", collection.id)).unwrap(),
+        };
+        let service = Services::with_defaults(db.clone());
+        service
+            .register_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(collection_param(), create)
+                    .in_project(p.id),
+            )
+            .await?;
+        let current_function = async |db: &TdPool| -> Result<FunctionDB, TdError> {
+            let functions: Vec<FunctionDB> =
+                db.scd2().fetch_all::<FunctionDB>(&collection.id).await?;
+            Ok(functions.into_iter().next().expect("one function"))
+        };
+        let current_tables = async |db: &TdPool, function_id| -> Result<Vec<TableDB>, TdError> {
+            let mut tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&function_id).await?;
+            tables.sort_by(|a, b| a.base.name.cmp(&b.base.name));
+            Ok(tables)
+        };
+        let update_with = |update: FunctionUpdate| {
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .update(
+                    (
+                        collection_param(),
+                        FunctionParam {
+                            function: FunctionIdName::from_str("defs_fn").unwrap(),
+                        },
+                    ),
+                    update,
+                )
+                .in_project(p.id)
+        };
+
+        let v1 = current_function(&db).await?;
+        let tables_v1 = current_tables(&db, v1.base.function_id).await?;
+        assert_eq!(tables_v1.len(), 2, "t_a and the state table");
+        for t in &tables_v1 {
+            assert_eq!(t.base.function_id, v1.base.function_id);
+            assert_eq!(t.base.function_version_id, v1.base.id);
+        }
+
+        service
+            .update_function(update_with(FunctionUpdate {
+                snippet: Some("snippet 2".try_into()?),
+                tables: Some(vec![TableNameDto::try_from("t_a")?]),
+                ..Default::default()
+            }))
+            .await?;
+        let v2 = current_function(&db).await?;
+        assert_ne!(v2.base.id, v1.base.id);
+        assert_eq!(v2.base.function_id, v1.base.function_id);
+        let tables_v2 = current_tables(&db, v2.base.function_id).await?;
+        assert_eq!(tables_v2.len(), tables_v1.len());
+        for (before, after) in tables_v1.iter().zip(&tables_v2) {
+            assert_eq!(after.base.id, before.base.id, "same version row");
+            assert_eq!(after.base.table_id, before.base.table_id);
+            assert_eq!(
+                after.base.function_id, v2.base.function_id,
+                "always the producer"
+            );
+            assert_eq!(
+                after.base.function_version_id, v1.base.id,
+                "the defining version, which is no longer the current one"
+            );
+            assert_ne!(after.base.function_version_id, v2.base.id);
+        }
+
+        service
+            .update_function(update_with(FunctionUpdate {
+                tables: Some(vec![
+                    TableNameDto::try_from("t_a")?,
+                    TableNameDto::try_from("t_b")?,
+                ]),
+                ..Default::default()
+            }))
+            .await?;
+        let v3 = current_function(&db).await?;
+        let tables_v3 = current_tables(&db, v3.base.function_id).await?;
+        assert_eq!(tables_v3.len(), 3);
+        for t in &tables_v3 {
+            assert_eq!(t.base.function_id, v3.base.function_id);
+            let expected_defining = if *t.base.name == "t_b" {
+                v3.base.id.clone()
+            } else {
+                v1.base.id.clone()
+            };
+            assert_eq!(
+                t.base.function_version_id, expected_defining,
+                "{}",
+                t.base.name
+            );
+        }
+        Ok(())
+    }
 }

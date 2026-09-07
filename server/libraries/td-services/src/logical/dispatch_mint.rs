@@ -12,14 +12,14 @@ use td_database::access::LockInstant;
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head_batch};
 use crate::logical::mint::{build_function_run, build_output_table_data_versions};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunInsertDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
 use td_objects::dxo::table::TableDB;
-use td_objects::types::basic::{AtTime, FunctionVersionId, LogicalFunctionRunId};
+use td_objects::types::basic::{AtTime, FunctionId, FunctionVersionId, LogicalFunctionRunId};
 use td_queries::Queries;
 use tracing::{debug, instrument};
 
@@ -74,20 +74,29 @@ pub async fn mint_function_runs_on_dispatch(
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    let all_tables: Vec<TableDB> = if distinct_head_fvids.is_empty() {
-        Vec::new()
-    } else {
-        conn.timeline()
-            .chunked()
-            .fetch_all::<TableDB>(&distinct_head_fvids, ())
-            .await?
-    };
-    let mut tables_by_head_fvid: HashMap<FunctionVersionId, Vec<TableDB>> = HashMap::new();
-    for t in all_tables {
-        tables_by_head_fvid
-            .entry(t.base.function_version_id.clone())
+    // As of the plan: a table dropped since planning still gets the version its LTDV promises.
+    let mut function_ids_by_planned_at: HashMap<AtTime, HashSet<FunctionId>> = HashMap::new();
+    for lfr in ready_lfrs {
+        function_ids_by_planned_at
+            .entry(AtTime::from(lfr.base.triggered_on))
             .or_default()
-            .push(t);
+            .insert(lfr.base.function_id);
+    }
+    let mut tables_by_run: HashMap<(AtTime, FunctionId), Vec<TableDB>> = HashMap::new();
+    for (planned_at, function_ids) in &function_ids_by_planned_at {
+        let function_ids: Vec<FunctionId> = function_ids.iter().copied().collect();
+        let tables: Vec<TableDB> = conn
+            .scd2()
+            .as_of(planned_at)
+            .chunked()
+            .fetch_all::<TableDB>(&function_ids, ())
+            .await?;
+        for t in tables {
+            tables_by_run
+                .entry((*planned_at, t.base.function_id))
+                .or_default()
+                .push(t);
+        }
     }
 
     // Effective output base_path per run: function-version override
@@ -126,8 +135,8 @@ pub async fn mint_function_runs_on_dispatch(
             .unwrap_or_default();
         let fr = build_function_run(lfr, runnable, at, &base_path)?;
         let empty = Vec::new();
-        let tables = tables_by_head_fvid
-            .get(&runnable.function_version_id)
+        let tables = tables_by_run
+            .get(&(AtTime::from(lfr.base.triggered_on), lfr.base.function_id))
             .unwrap_or(&empty);
         let logical_by_table: HashMap<_, _> = ltdvs_all
             .iter()
@@ -193,15 +202,20 @@ pub async fn mint_function_runs_on_dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::tests::fixtures::register;
+    use std::str::FromStr;
     use td_database::access::InProject;
     use td_database::access::LockInstant;
     use td_database::connection::PgConnectionExt;
     use td_database::pool::TdPool;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_database::pool::scoped::ScopedExt;
+    use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionUpdate};
     use td_objects::types::basic::{
-        CollectionName, LogicalFunctionRunStatus, PhysicalFunctionRunId, ProjectId, TransactionKey,
-        UserId,
+        AccessTokenId, CollectionIdName, CollectionName, FunctionIdName, LogicalFunctionRunStatus,
+        PhysicalFunctionRunId, ProjectId, TransactionKey, UserId,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -239,6 +253,95 @@ mod tests {
             .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
             .await?;
         Ok((lfr, pfr.base.id))
+    }
+
+    /// A code-only update leaves the output tables on the version that
+    /// defined them; dispatch must still mint a TDV for every output.
+    #[td_test::test(db)]
+    async fn test_dispatch_mints_tdvs_after_function_update(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let coll = db
+            .scoped(p.id)
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let services = Services::with_defaults(db.clone());
+        let collection_param = || CollectionParam {
+            collection: CollectionIdName::from_str(&format!("~{}", coll.id)).unwrap(),
+        };
+        services
+            .register_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(collection_param(), register("fr", None))
+                    .in_project(p.id),
+            )
+            .await?;
+        let update = FunctionUpdate {
+            snippet: Some("s2".try_into()?),
+            ..Default::default()
+        };
+        services
+            .update_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        (
+                            collection_param(),
+                            FunctionParam {
+                                function: FunctionIdName::from_str("fr")?,
+                            },
+                        ),
+                        update,
+                    )
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let functions: Vec<FunctionDB> = db.scd2().fetch_all::<FunctionDB>(&coll.id).await?;
+        let func = &functions[0];
+        let tables: Vec<TableDB> = db
+            .scd2()
+            .fetch_all::<TableDB>(&func.base.function_id)
+            .await?;
+        assert_eq!(tables.len(), 2, "the user table and the state table");
+        assert!(
+            tables
+                .iter()
+                .all(|t| t.base.function_version_id != func.base.id),
+            "an unchanged table keeps the version that defined it"
+        );
+
+        let exec = db.scoped(p.id).seed().execution(func).await?;
+        let trx = db
+            .scoped(p.id)
+            .seed()
+            .transaction(&exec, &TransactionKey::try_from("ANY")?)
+            .await?;
+        let pfr = db
+            .scoped(p.id)
+            .seed()
+            .physical_function_run(
+                &coll,
+                func,
+                &exec,
+                &trx,
+                &LogicalFunctionRunStatus::Scheduled,
+            )
+            .await?;
+        let lfr = db
+            .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
+            .await?;
+
+        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        conn.scope_in_project(&p.id.to_string()).await.unwrap();
+        let minted = mint_function_runs_on_dispatch(
+            &mut conn,
+            &[lfr],
+            LockInstant::asserted(*AtTime::now()),
+        )
+        .await?;
+        assert_eq!(minted.len(), 1);
+        assert_eq!(minted[0].tdvs.len(), tables.len());
+        Ok(())
     }
 
     /// Recover re-run of a run that already has an attempt mints a new one.

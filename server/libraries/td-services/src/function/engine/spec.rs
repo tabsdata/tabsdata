@@ -2,7 +2,6 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::function::engine::FunctionState;
 use crate::function::register::RegisterFunctionError;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
@@ -14,7 +13,7 @@ use td_execution::VersionResolver;
 use td_objects::and;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
-use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::table::{TableDBWithNames, TableInsertDB};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
@@ -67,11 +66,14 @@ impl<'a> From<&'a FunctionUpdate> for FunctionSpec<'a> {
 }
 
 /// A table the function will produce, with the id it keeps or gets.
+/// `adopted_frozen` says the id comes from a frozen table, so the triggers
+/// reading it thaw onto this function.
 pub struct ResolvedTable {
     pub pos: i32,
     pub name: TableName,
     pub table_type: TableType,
     pub table_id: TableId,
+    pub adopted_frozen: bool,
 }
 
 /// A table another relation points at, as the request named it.
@@ -101,7 +103,7 @@ pub struct ResolvedSpec {
     pub triggers: Vec<ResolvedTrigger>,
 }
 
-/// Resolve `spec` against the collection and the function's current state:
+/// Resolve `spec` against the collection:
 /// duplicate and private-table rules, table ownership, the reuse of existing
 /// and frozen table ids, the tables dependencies and triggers reference (one
 /// batched lookup), self-triggers, and the version selectors.
@@ -110,7 +112,6 @@ pub async fn resolve<S: SeesProjectRows>(
     collection: &ActiveCollectionDB,
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
-    state: &FunctionState,
     at: LockInstant,
 ) -> Result<ResolvedSpec, TdError> {
     let user_tables = spec.tables.unwrap_or_default();
@@ -127,7 +128,7 @@ pub async fn resolve<S: SeesProjectRows>(
     check_private_tables(&collection.name, spec.dependencies)?;
     check_private_tables(&collection.name, spec.triggers)?;
 
-    let tables = resolve_tables(conn, collection, function_id, spec, state).await?;
+    let tables = resolve_tables(conn, collection, function_id, spec).await?;
 
     let dependencies: Vec<TableDependency> = spec
         .dependencies
@@ -228,9 +229,7 @@ async fn resolve_tables<S: SeesProjectRows>(
     collection: &ActiveCollectionDB,
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
-    state: &FunctionState,
 ) -> Result<Vec<ResolvedTable>, TdError> {
-    let existing: HashMap<&TableName, _> = state.tables.iter().map(|t| (&t.base.name, t)).collect();
     let empty_types = HashMap::new();
     let table_types = spec.table_types.unwrap_or(&empty_types);
 
@@ -255,47 +254,48 @@ async fn resolve_tables<S: SeesProjectRows>(
         })
         .try_collect()?;
 
-    let new_names: Vec<&TableName> = user_tables
-        .iter()
-        .map(|(name, _)| name)
-        .filter(|name| !existing.contains_key(name))
+    let lookups: Vec<_> = positioned(&user_tables, &system_tables)
+        .map(|(_, (name, _))| and!(&collection.id, name))
         .collect();
-    if !new_names.is_empty() {
-        let lookups: Vec<_> = new_names
-            .iter()
-            .map(|name| and!(&collection.id, *name))
-            .collect();
-        let taken: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
-        if !taken.is_empty() {
-            let names: Vec<TableName> = taken.into_iter().map(|t| t.base.base.name).collect();
-            Err(RegisterFunctionError::TableAlreadyExists(
-                names.into(),
-                collection.name.clone(),
-            ))?
-        }
-    }
+    let current: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
+    let current: HashMap<&TableName, &TableInsertDB> = current
+        .iter()
+        .map(|t| (&t.base.base.name, &t.base.base))
+        .collect();
 
+    let mut owned_elsewhere = Vec::new();
     let mut tables = Vec::new();
     for (pos, (name, table_type)) in positioned(&user_tables, &system_tables) {
         let reset_fn_state = *spec.reset_state && name.starts_with(TD_FN_STATE_PREFIX);
-        let table_id = match existing.get(name) {
-            _ if reset_fn_state => TableId::default(),
-            None => TableId::default(),
-            Some(current) => match current.base.status {
-                TableStatus::Active => current.base.table_id,
-                TableStatus::Frozen if *spec.reuse_frozen => current.base.table_id,
-                TableStatus::Frozen => Err(RegisterFunctionError::FrozenTableAlreadyExists(
+        let (table_id, adopted_frozen) = match current.get(name) {
+            None => (TableId::default(), false),
+            Some(_) if reset_fn_state => (TableId::default(), false),
+            Some(t) if t.status == TableStatus::Frozen && *spec.reuse_frozen => (t.table_id, true),
+            Some(t) if t.status == TableStatus::Frozen => {
+                Err(RegisterFunctionError::FrozenTableAlreadyExists(
                     name.clone(),
                     collection.name.clone(),
-                ))?,
-            },
+                ))?
+            }
+            Some(t) if t.function_id == *function_id => (t.table_id, false),
+            Some(_) => {
+                owned_elsewhere.push(name.clone());
+                continue;
+            }
         };
         tables.push(ResolvedTable {
             pos,
             name: name.clone(),
             table_type: table_type.clone(),
             table_id,
+            adopted_frozen,
         });
+    }
+    if !owned_elsewhere.is_empty() {
+        Err(RegisterFunctionError::TableAlreadyExists(
+            owned_elsewhere.into(),
+            collection.name.clone(),
+        ))?
     }
     Ok(tables)
 }

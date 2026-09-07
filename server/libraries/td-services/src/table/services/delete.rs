@@ -50,12 +50,15 @@ async fn table_delete(
 
     let table: TableDBWithNames = conn
         .scd2()
-        .fetch_one(and!(
-            &collection_id_name,
-            &table_id_name,
-            TableDBWithNames::frozen()
-        ))
+        .fetch_one(and!(&collection_id_name, &table_id_name))
         .await?;
+    if !matches!(table.base.base.status, TableStatus::Frozen) {
+        Err(DeleteTableError::TableNotFrozen(
+            table.base.base.name.clone(),
+            collection.name.clone(),
+            table.base.base.status.to_string(),
+        ))?
+    }
     let table_id = table.base.base.table_id;
 
     let functions = dependants_of_tables(conn, &[table_id]).await?;
@@ -64,15 +67,6 @@ async fn table_delete(
 
     conn.scd2().close::<TriggerDB>(&table_id, at).await?;
 
-    let previous: TableDB = conn.timeline().fetch_one(&table.base.base.id).await?;
-    // Re-check on the live row: only frozen tables can be deleted.
-    if !matches!(previous.base.status, TableStatus::Frozen) {
-        Err(DeleteTableError::TableNotFrozen(
-            previous.base.name.clone(),
-            collection.name.clone(),
-            previous.base.status.to_string(),
-        ))?
-    }
     conn.scd2().close::<TableDB>(&table_id, at).await?;
     Ok(())
 }
@@ -179,6 +173,68 @@ mod tests {
         service.table_delete(request).await?;
 
         assert_delete(
+            &db,
+            &UserId::admin(),
+            &collection,
+            &TableName::try_from("super_table")?,
+        )
+        .await
+    }
+
+    #[td_test::test(db)]
+    async fn test_delete_active_table_not_frozen(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("super_table")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+
+        let _ = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                },
+                TableParam {
+                    table: TableIdName::from_str("super_table")?,
+                },
+            ))
+            .in_project(p.id);
+
+        let service = Services::with_defaults(db.clone());
+        let error = service.table_delete(request).await.unwrap_err();
+        assert!(matches!(
+            error.domain_err::<DeleteTableError>(),
+            DeleteTableError::TableNotFrozen(..)
+        ));
+
+        assert_not_deleted(
             &db,
             &UserId::admin(),
             &collection,

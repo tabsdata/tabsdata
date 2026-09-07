@@ -23,7 +23,7 @@ use td_objects::types::basic::{AtTime, LogicalFunctionRunStatus};
 pub(crate) struct ProducerLfr;
 
 /// Alias of the LEFT-joined materialization of an input version; NULL when
-/// there is none, which is what blocks a consumer.
+/// there is none. See [`unmaterialized`].
 #[derive(Iden, Clone, Copy)]
 pub(crate) struct CurrentPtdv;
 
@@ -65,6 +65,13 @@ fn producer_id() -> Expr {
     Expr::col((ProducerLfr, LogicalFunctionRunDBIden::Id))
 }
 
+/// The input version has no materialization the chain can see. Readiness and
+/// commit block on it; the initial status must not — at plan-build time no
+/// in-plan output is materialized yet.
+pub(crate) fn unmaterialized() -> SimpleExpr {
+    Expr::col((CurrentPtdv, PhysicalTableDataVersionDBIden::Id)).is_null()
+}
+
 fn producer_status() -> Expr {
     Expr::col((ProducerLfr, LogicalFunctionRunDBIden::Status))
 }
@@ -102,57 +109,67 @@ pub(crate) fn producer_status_in_or_lazy(statuses: &[LogicalFunctionRunStatus]) 
 /// The materialization hop is a fenced lateral (`LIMIT 1 OFFSET 0`), never
 /// `JOIN ON id = (subquery)`: RLS quals blind the planner to ~1-row
 /// estimates, and a subquery equality demotes the probe into a join filter
-/// over inputs × versions. LEFT, so an unmaterialized input blocks its
-/// consumer instead of vanishing from the chain.
+/// over inputs × versions. LEFT, so an unmaterialized input stays on the
+/// chain for the caller to judge instead of vanishing from it.
 pub(crate) fn build_chain(visibility: Visibility<'_>) -> SelectStatement {
-    let current_ptdv = Query::select()
-        .column(PhysicalTableDataVersionDBIden::Id)
-        .from(PhysicalTableDataVersionDBIden::Table)
-        .cond_where(materialization_of_ltdv(
-            PhysicalTableDataVersionDBIden::Table,
-            visibility,
-        ))
-        .limit(1)
-        .offset(0)
-        .take();
+    chain(Some(visibility))
+}
 
+/// [`build_chain`] without the materialization hop: the producer's status is
+/// all the caller judges, and that is not versioned, so no `at` applies.
+pub(crate) fn producer_chain() -> SelectStatement {
+    chain(None)
+}
+
+fn chain(materialization: Option<Visibility<'_>>) -> SelectStatement {
     let producer = (
         LogicalTableDataVersionDBIden::Table,
         LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
     );
-    Query::select()
-        .from(LogicalFunctionRunInputDBIden::Table)
-        .join(
-            JoinType::InnerJoin,
+    let mut stmt = Query::select();
+    stmt.from(LogicalFunctionRunInputDBIden::Table).join(
+        JoinType::InnerJoin,
+        LogicalTableDataVersionDBIden::Table,
+        Expr::col((
             LogicalTableDataVersionDBIden::Table,
-            Expr::col((
-                LogicalTableDataVersionDBIden::Table,
-                LogicalTableDataVersionDBIden::Id,
+            LogicalTableDataVersionDBIden::Id,
+        ))
+        .equals((
+            LogicalFunctionRunInputDBIden::Table,
+            LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+        )),
+    );
+    if let Some(visibility) = materialization {
+        let current_ptdv = Query::select()
+            .column(PhysicalTableDataVersionDBIden::Id)
+            .from(PhysicalTableDataVersionDBIden::Table)
+            .cond_where(materialization_of_ltdv(
+                PhysicalTableDataVersionDBIden::Table,
+                visibility,
             ))
-            .equals((
-                LogicalFunctionRunInputDBIden::Table,
-                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
-            )),
-        )
-        .join_lateral(
+            .limit(1)
+            .offset(0)
+            .take();
+        stmt.join_lateral(
             JoinType::LeftJoin,
             current_ptdv,
             CurrentPtdv,
             Expr::val(true),
-        )
-        .join_as(
-            JoinType::LeftJoin,
-            LogicalFunctionRunDBIden::Table,
-            ProducerLfr,
-            Expr::col(producer).equals((ProducerLfr, LogicalFunctionRunDBIden::Id)),
-        )
-        .and_where(
-            Expr::col(producer)
-                .is_null()
-                .or(Expr::col(producer).ne(Expr::col((
-                    LogicalFunctionRunInputDBIden::Table,
-                    LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
-                )))),
-        )
-        .take()
+        );
+    }
+    stmt.join_as(
+        JoinType::LeftJoin,
+        LogicalFunctionRunDBIden::Table,
+        ProducerLfr,
+        Expr::col(producer).equals((ProducerLfr, LogicalFunctionRunDBIden::Id)),
+    )
+    .and_where(
+        Expr::col(producer)
+            .is_null()
+            .or(Expr::col(producer).ne(Expr::col((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
+            )))),
+    )
+    .take()
 }

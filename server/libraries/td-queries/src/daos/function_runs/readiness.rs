@@ -8,7 +8,8 @@
 use crate::QueryExecutor;
 use crate::daos::function_runs::LogicalRuns;
 use crate::daos::function_runs::chain::{
-    CurrentPtdv, Visibility, build_chain, producer_status_in_strict, producer_status_not_in,
+    Visibility, build_chain, producer_chain, producer_status_in_strict, producer_status_not_in,
+    unmaterialized,
 };
 use crate::primitives::table::claim;
 use sea_query::{
@@ -23,7 +24,6 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden,
     LogicalTableDataVersionDBIden,
 };
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
 };
@@ -79,14 +79,13 @@ where
             .map_err(SqlError::on_read::<LogicalFunctionRunDB>)
     }
 
-    /// LFR ids in `execution_id` with an unmaterialized input or an upstream
-    /// LFR that is Failed or OnHold.
+    /// LFR ids in `execution_id` with an upstream LFR that is Failed or
+    /// OnHold.
     pub async fn blocked_ids(
         self,
         execution_id: &ExecutionId,
-        at: &AtTime,
     ) -> Result<Vec<LogicalFunctionRunId>, SqlError> {
-        blocked_ids_query(execution_id, at)
+        blocked_ids_query(execution_id)
             .build_query_scalar()
             .fetch_all(self.executor)
             .await
@@ -150,10 +149,9 @@ pub(crate) fn downstream_one_hop_query(
 }
 
 fn correlated_chain(
-    visibility: Visibility<'_>,
+    mut chain: SelectStatement,
     blocking: sea_query::SimpleExpr,
 ) -> SelectStatement {
-    let mut chain = build_chain(visibility);
     chain
         .column((
             LogicalFunctionRunInputDBIden::Table,
@@ -169,17 +167,16 @@ fn correlated_chain(
                 LogicalFunctionRunDBIden::Id,
             )),
         )
-        .and_where(
-            Expr::col((CurrentPtdv, PhysicalTableDataVersionDBIden::Id))
-                .is_null()
-                .or(blocking),
-        );
+        .and_where(blocking);
     chain
 }
 
-pub(crate) fn blocked_ids_query(execution_id: &ExecutionId, at: &AtTime) -> SelectStatement {
+/// Only an upstream that is already Failed or OnHold blocks: an input with no
+/// materialization yet is the normal plan-build state of every in-plan
+/// dependency, and blocking on it would start the whole downstream OnHold.
+pub(crate) fn blocked_ids_query(execution_id: &ExecutionId) -> SelectStatement {
     let chain = correlated_chain(
-        Visibility::At(at),
+        producer_chain(),
         producer_status_in_strict(&[
             LogicalFunctionRunStatus::Failed,
             LogicalFunctionRunStatus::OnHold,
@@ -277,11 +274,7 @@ pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQu
             ))
             .is_in(exec_values),
         )
-        .and_where(
-            Expr::col((CurrentPtdv, PhysicalTableDataVersionDBIden::Id))
-                .is_null()
-                .or(not_done_or_committed()),
-        );
+        .and_where(unmaterialized().or(not_done_or_committed()));
 
     let with_clause = WithClause::new()
         .cte(
@@ -343,7 +336,10 @@ pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQu
 
 /// Patch-agnostic: patch resolution happens at mint time, not here.
 pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> SelectStatement {
-    let pending_input = correlated_chain(Visibility::At(at), not_done_or_committed());
+    let pending_input = correlated_chain(
+        build_chain(Visibility::At(at)),
+        unmaterialized().or(not_done_or_committed()),
+    );
     let mut query = Query::select()
         .expr(Expr::col((LogicalFunctionRunDBIden::Table, Asterisk)))
         .from(LogicalFunctionRunDBIden::Table)
@@ -374,8 +370,150 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> SelectStat
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Queries;
+    use crate::test_utils::SeedEntry;
     use sea_query::PostgresQueryBuilder;
     use td_common::datetime::Timestamp;
+    use td_database::pool::TdPool;
+    use td_error::TdError;
+    use td_objects::and;
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::logical::{
+        LogicalFunctionRunInputInsertDB, LogicalFunctionRunStatusUpdateDB,
+        LogicalTableDataVersionInsertDB,
+    };
+    use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::{
+        BundleId, CollectionName, Decorator, DependencyPos, LogicalFunctionRunInputId,
+        LogicalTableDataVersionId, ReuseFrozen, TableNameDto, TransactionKey, UserId, VersionPos,
+    };
+    use td_objects::types::composed::TableDependencyDto;
+
+    /// A two-run plan whose consumer requires the producer's in-plan output
+    /// before anything has materialized. That is not a block; the producer
+    /// failing is.
+    #[td_test::test(db)]
+    async fn test_blocked_ids_same_plan_unmaterialized_input(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
+            .await?;
+        let register = |name: &str, dependencies, tables| -> Result<FunctionRegister, TdError> {
+            Ok(FunctionRegister {
+                name: name.try_into()?,
+                description: "d".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into()?,
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies,
+                triggers: None,
+                tables,
+                table_types: None,
+                runtime_values: "r".try_into()?,
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            })
+        };
+        let producer = db
+            .scoped(p.id)
+            .seed()
+            .function(
+                &collection,
+                &register("producer", None, Some(vec![TableNameDto::try_from("t_0")?]))?,
+            )
+            .await?;
+        let consumer = db
+            .scoped(p.id)
+            .seed()
+            .function(
+                &collection,
+                &register(
+                    "consumer",
+                    Some(vec![TableDependencyDto::try_from("t_0")?]),
+                    Some(vec![TableNameDto::try_from("t_1")?]),
+                )?,
+            )
+            .await?;
+
+        let execution = db.scoped(p.id).seed().execution(&producer).await?;
+        let transaction = db
+            .scoped(p.id)
+            .seed()
+            .transaction(&execution, &TransactionKey::try_from("ANY")?)
+            .await?;
+        for function in [&producer, &consumer] {
+            db.scoped(p.id)
+                .seed()
+                .physical_function_run(
+                    &collection,
+                    function,
+                    &execution,
+                    &transaction,
+                    &LogicalFunctionRunStatus::Scheduled,
+                )
+                .await?;
+        }
+        let producer_lfr: LogicalFunctionRunDB = db
+            .fetch_one(and!(&execution.base.id, &producer.base.function_id))
+            .await?;
+        let consumer_lfr: LogicalFunctionRunDB = db
+            .fetch_one(and!(&execution.base.id, &consumer.base.function_id))
+            .await?;
+        let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&producer.base.id).await?;
+        let table = &tables[0];
+
+        let ltdv = LogicalTableDataVersionInsertDB {
+            id: LogicalTableDataVersionId::new(),
+            collection_id: collection.id,
+            execution_id: execution.base.id.clone(),
+            transaction_id: transaction.base.id.clone(),
+            table_id: table.base.table_id,
+            producer_logical_function_run_id: Some(producer_lfr.base.id.clone()),
+            function_param_pos: None,
+            private: table.base.private,
+            triggered_on: execution.base.triggered_on,
+            triggered_by_id: execution.base.triggered_by_id,
+            group_id: producer_lfr.base.group_id,
+        };
+        db.scoped(p.id)
+            .chunked()
+            .insert(std::slice::from_ref(&ltdv))
+            .await?;
+        let input = LogicalFunctionRunInputInsertDB {
+            id: LogicalFunctionRunInputId::default(),
+            collection_id: collection.id,
+            execution_id: execution.base.id.clone(),
+            transaction_id: transaction.base.id.clone(),
+            logical_function_run_id: consumer_lfr.base.id.clone(),
+            requirement_logical_table_data_version_id: Some(ltdv.id.clone()),
+            requirement_input_idx: None,
+            requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+            requirement_version_pos: VersionPos::try_from(0)?,
+        };
+        db.scoped(p.id).insert(&input).await?;
+
+        let blocked = db.logical_runs().blocked_ids(&execution.base.id).await?;
+        assert!(
+            blocked.is_empty(),
+            "unmaterialized in-plan input must not block"
+        );
+
+        let failed = LogicalFunctionRunStatusUpdateDB {
+            status: LogicalFunctionRunStatus::Failed,
+        };
+        db.chunked()
+            .update(&failed, std::slice::from_ref(&producer_lfr.base.id))
+            .await?;
+        let blocked = db.logical_runs().blocked_ids(&execution.base.id).await?;
+        assert_eq!(blocked, vec![consumer_lfr.base.id]);
+        Ok(())
+    }
 
     fn at() -> AtTime {
         AtTime::from(Timestamp::try_from(1_700_000_000_000_i64).unwrap())
@@ -406,10 +544,10 @@ mod tests {
     #[test]
     fn test_blocked_ids_query() {
         let eid = ExecutionId::try_from("ep20260101-0000000001").unwrap();
-        let sql = blocked_ids_query(&eid, &at()).to_string(PostgresQueryBuilder);
+        let sql = blocked_ids_query(&eid).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT DISTINCT "id" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = 'ep20260101-0000000001' AND EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."valid_from" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" IN ('F', 'H'))))"#
+            r#"SELECT DISTINCT "id" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = 'ep20260101-0000000001' AND EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" IN ('F', 'H')))"#
         );
     }
 

@@ -83,7 +83,7 @@ async fn load_lfr_blocked_ids(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = db.logical_runs().blocked_ids(&h.execs[0], &h.at).await?;
+    let rows = db.logical_runs().blocked_ids(&h.execs[0]).await?;
     record("lfr::blocked_ids", profile, t, rows.len(), seeded);
     Ok(())
 }

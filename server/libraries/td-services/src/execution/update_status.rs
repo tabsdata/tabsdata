@@ -125,9 +125,19 @@ enum Transition {
 }
 
 /// Arm order is load-bearing: the sticky-final arms come first, so a Committed
-/// LFR is never demoted by a later arm.
+/// LFR is never demoted by a later arm. `ReScheduled` and `Canceled` are the
+/// two targets that have to precede them — recover and cancel name a whole
+/// plan or transaction, whose terminal runs are simply not part of the
+/// operation.
 fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus) -> Transition {
     match (&current.base.status, target) {
+        (
+            LogicalFunctionRunStatus::Committed
+            | LogicalFunctionRunStatus::Canceled
+            | LogicalFunctionRunStatus::Yanked,
+            LogicalFunctionRunStatus::ReScheduled | LogicalFunctionRunStatus::Canceled,
+        ) => Transition::Skip,
+
         // Sticky-final terminals (Committed, Canceled). Worker callbacks
         // for an in-flight replay attempt (Running, Done, Error, Failed)
         // absorb — the replay attempt is the run's current version and
@@ -145,13 +155,12 @@ fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus)
             *s,
         )),
         (s @ LogicalFunctionRunStatus::Yanked, LogicalFunctionRunStatus::Yanked)
-        | (
-            s @ (LogicalFunctionRunStatus::Committed | LogicalFunctionRunStatus::Canceled),
-            LogicalFunctionRunStatus::Committed | LogicalFunctionRunStatus::Canceled,
-        ) if s == target => Transition::Absorb(UpdateStatusRunError::StickyFinalStatus(
-            current.base.id.clone(),
-            *s,
-        )),
+        | (s @ LogicalFunctionRunStatus::Committed, LogicalFunctionRunStatus::Committed) => {
+            Transition::Absorb(UpdateStatusRunError::StickyFinalStatus(
+                current.base.id.clone(),
+                *s,
+            ))
+        }
         (
             s @ (LogicalFunctionRunStatus::Committed
             | LogicalFunctionRunStatus::Canceled

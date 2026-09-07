@@ -1425,12 +1425,16 @@ class Function:
             next_step = data.get("next")
             raw_functions = data.get("data") or []
             for raw_function in raw_functions:
+                version_data = dict(raw_function)
                 # See list_functions: set `connection` to the APIServer so the
                 # server's `connection` (Conn FQN) field doesn't collide with
                 # the positional when splatting.
                 raw_function["connection"] = self.connection
                 raw_function["collection"] = self.collection
                 built_function = Function(**raw_function)
+                # Each row is a past version; without its own payload `_data`
+                # would lazily fetch the current one.
+                built_function._data = version_data
                 yield built_function
             first_page = False
 

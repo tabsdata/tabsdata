@@ -144,7 +144,7 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "lfr::blocked_ids",
-        (db).logical_runs().blocked_ids(&h.execs[0], &at).await?
+        (db).logical_runs().blocked_ids(&h.execs[0]).await?
     );
     let _ = timed!(
         out,

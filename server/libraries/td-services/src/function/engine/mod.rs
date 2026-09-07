@@ -46,7 +46,7 @@ pub async fn register_version(
     previous_version_id: &Option<FunctionVersionId>,
     workers: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
 ) -> Result<(), TdError> {
-    let resolved = resolve(conn, collection, &function.function_id, spec, state, at).await?;
+    let resolved = resolve(conn, collection, &function.function_id, spec, at).await?;
     let changes = Changes::for_spec(state, &resolved, function, ctx)?;
     apply(conn, &changes, at).await?;
     register_workers(conn, function, previous_version_id, workers).await

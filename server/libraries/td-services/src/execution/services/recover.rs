@@ -208,6 +208,47 @@ mod tests {
         .await
     }
 
+    /// The shape every real recover has: the upstream transaction committed
+    /// and a downstream one did not. Recover names the whole plan, so the
+    /// committed run must be skipped rather than refuse the request.
+    #[td_test::test(db)]
+    async fn test_recover_execution_partially_committed(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        test_recover_execution(
+            db,
+            p.id,
+            vec![TestExecution {
+                expected_status: ExecutionStatus::Running,
+                transactions: vec![
+                    TestTransaction {
+                        expected_status: TransactionStatus::Committed,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_0")?,
+                            dependencies: vec![],
+                            tables: vec![TableNameDto::try_from("t_0")?],
+                            initial_status: LogicalFunctionRunStatus::Committed,
+                            expected_status: LogicalFunctionRunStatus::Committed,
+                        }],
+                    },
+                    TestTransaction {
+                        expected_status: TransactionStatus::Running,
+                        functions: vec![TestFunction {
+                            collection: CollectionName::try_from("c_0")?,
+                            name: FunctionName::try_from("f_1")?,
+                            dependencies: vec![TableDependencyDto::try_from("t_0")?],
+                            tables: vec![TableNameDto::try_from("t_1")?],
+                            initial_status: LogicalFunctionRunStatus::OnHold,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
+                        }],
+                    },
+                ],
+            }],
+            0,
+        )
+        .await
+    }
+
     #[td_test::test(db)]
     async fn test_recover_execution_multiple_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -378,21 +419,6 @@ mod tests {
                 .await
                 .is_ok()
         );
-        assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Canceled)
-                .await
-                .is_err()
-        );
-        assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Committed)
-                .await
-                .is_err()
-        );
-        assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Yanked)
-                .await
-                .is_err()
-        );
 
         Ok(())
     }
@@ -457,6 +483,21 @@ mod tests {
         );
         assert!(
             recover_transition_for(LogicalFunctionRunStatus::Error)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Committed)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Canceled)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Yanked)
                 .await
                 .is_ok()
         );

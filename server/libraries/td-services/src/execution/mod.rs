@@ -160,7 +160,7 @@ pub(crate) async fn execute(
     // Initial-OnHold: walks the logical chain (LFR_input -> LTDV ->
     // current TDV -> upstream FR.status) to flip consumers OnHold
     // when upstream is Failed/OnHold.
-    update_initial_function_run_status(conn, &execution, &AtTime::from(at)).await?;
+    update_initial_function_run_status(conn, &execution).await?;
 
     build_response(
         transaction_by,
