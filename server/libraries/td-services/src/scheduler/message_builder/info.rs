@@ -3,6 +3,7 @@
 //
 
 use super::build_external_location;
+use crate::function_run::raw_data::raw_data_dir;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::yaml::function::FunctionInfo;
@@ -61,13 +62,7 @@ pub(crate) fn build_function_info(
     // resolves back to the ingested data through its physical_function_run_id.
     let function_raw = match f.decorator {
         Decorator::Publisher => {
-            let (path, _) = storage_location
-                .builder(&f.base.base.base_path)
-                .collection(&f.base.base.collection_id)
-                .function_run(&f.base.base.id)
-                .raw()
-                .build()?;
-            let (location, _) = build_external_location(storage, &path)?;
+            let (location, _) = build_external_location(storage, &raw_data_dir(&f.base)?)?;
             Some(location)
         }
         Decorator::Transformer | Decorator::Subscriber => None,

@@ -7,6 +7,7 @@
 
 use super::{fetch_run, mint_committed};
 use crate::function::topology::RunnableVersion;
+use crate::function_run::raw_data::raw_data_dir;
 use crate::logical::mint::{mint_function_run, resolve_output_base_path};
 use crate::tests::fixtures::{seed_ready_lfr, set_collection_base_path};
 use td_database::domain::DomainConnection;
@@ -95,7 +96,7 @@ async fn test_collection_clear_falls_back_to_project(db: TdPool) -> Result<(), T
 }
 
 /// Two attempts of ONE logical run across a move: each attempt freezes the
-/// prefix current at its own mint, so each attempt's own content stays at the
+/// prefix current at its own mint, so each attempt's raw data stays at the
 /// location its worker actually wrote.
 #[td_test::test(db)]
 async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdError> {
@@ -126,7 +127,11 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
 
     assert_eq!(attempt_1.base_path, old);
     assert_eq!(attempt_2.base_path, new);
-    assert_eq!(fetch_run(&db, &attempt_1.id).await?.base.base_path, old);
-    assert_eq!(fetch_run(&db, &attempt_2.id).await?.base.base_path, new);
+
+    // Each attempt's raw-data home is rebuilt from ITS stamped prefix.
+    let dir_1 = raw_data_dir(&fetch_run(&db, &attempt_1.id).await?)?;
+    let dir_2 = raw_data_dir(&fetch_run(&db, &attempt_2.id).await?)?;
+    assert!(dir_1.to_string().starts_with("/old/"), "{dir_1}");
+    assert!(dir_2.to_string().starts_with("/new/"), "{dir_2}");
     Ok(())
 }

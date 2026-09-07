@@ -3,11 +3,13 @@
 //
 
 //! The download endpoints after a collection `base_path` move: bytes written
-//! under the stamped prefix keep being served — the drift the frozen columns
-//! prevent.
+//! under the stamped prefix keep being served, and the moved (live) prefix
+//! provably points somewhere else — the drift the frozen columns prevent.
 
+use super::fetch_run;
 use crate::Services;
-use crate::tests::fixtures::{register, set_collection_base_path};
+use crate::function_run::raw_data::raw_data_file;
+use crate::tests::fixtures::{register, seed_ready_lfr, set_collection_base_path};
 use bytes::Bytes;
 use futures::StreamExt;
 use std::str::FromStr;
@@ -16,11 +18,13 @@ use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
+use td_objects::dxo::physical_function_run::{FunctionRunIdParam, InputIdxParam};
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::table::{TableDB, TableParam, UncommittedParam};
 use td_objects::types::basic::{
-    AccessTokenId, AtTime, BasePath, CollectionIdName, CollectionName, LogicalFunctionRunStatus,
-    StorageVersion, TableIdName, TransactionKey, UncommittedStatus, UserId,
+    AccessTokenId, AtTime, BasePath, CollectionIdName, CollectionName, InputIdx,
+    LogicalFunctionRunStatus, PhysicalFunctionRunId, StorageVersion, TableIdName, TransactionKey,
+    UncommittedStatus, UserId,
 };
 use td_objects::types::stream::BoxedSyncStream;
 use td_queries::LiveEntry;
@@ -35,6 +39,30 @@ async fn collect(stream: BoxedSyncStream) -> Result<Bytes, TdError> {
         Some(bytes) => Ok(bytes?),
         None => Ok(Bytes::new()),
     }
+}
+
+async fn get_raw_data(
+    services: &Services,
+    p: &ActiveProjectDB,
+    collection: &ActiveCollectionDB,
+    run_id: &PhysicalFunctionRunId,
+    input_idx: &InputIdx,
+) -> Result<Bytes, TdError> {
+    let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+        .read((
+            CollectionParam {
+                collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+            },
+            FunctionRunIdParam {
+                function_run_id: run_id.clone(),
+            },
+            InputIdxParam {
+                input_idx: *input_idx,
+            },
+        ))
+        .in_project(p.id);
+    let stream = services.clone().function_run_raw_data(request).await?.data;
+    collect(stream).await
 }
 
 async fn get_table_download(
@@ -59,6 +87,46 @@ async fn get_table_download(
         .in_project(p.id);
     let stream = services.clone().table_download(request).await?.data;
     collect(stream).await
+}
+
+/// Raw data written under the prefix stamped on the run keeps downloading
+/// after the collection moves; the moved prefix provably holds nothing.
+#[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let services = Services::with_defaults(db.clone());
+    let coll = db
+        .scoped(p.id)
+        .seed()
+        .collection(&CollectionName::try_from("c0")?, &UserId::admin())
+        .await?;
+    let old = BasePath::try_from("/old")?;
+    let coll = set_collection_base_path(&db, p.id, &coll, Some(&old)).await?;
+
+    let (_, pfr) = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
+    assert_eq!(pfr.base_path, old);
+    let idx = InputIdx::try_from(0)?;
+    let run = fetch_run(&db, &pfr.id).await?;
+    let stamped_path = raw_data_file(&run, &idx)?;
+    services
+        .storage
+        .write(&stamped_path, BYTES.to_vec())
+        .await?;
+
+    let coll =
+        set_collection_base_path(&db, p.id, &coll, Some(&BasePath::try_from("/new")?)).await?;
+
+    let bytes = get_raw_data(&services, &p, &coll, &pfr.id, &idx).await?;
+    assert_eq!(bytes, Bytes::from_static(BYTES));
+
+    // Control: a live-resolved path would look under the moved prefix, where
+    // nothing exists — proving the read really came off the stamped one.
+    let mut live_run = run;
+    live_run.base.base_path = coll.effective_base_path.clone();
+    let live_path = raw_data_file(&live_run, &idx)?;
+    assert_ne!(live_path, stamped_path);
+    assert!(!services.storage.exists(&live_path).await?);
+    Ok(())
 }
 
 /// Table data written under the prefix stamped on its data version keeps

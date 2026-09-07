@@ -6,8 +6,8 @@ use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
     ConnectionKind, Decorator, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
-    FunctionVersionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, ProjectName,
-    RowCount, StageId, StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn,
+    FunctionVersionId, InputIdx, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId,
+    ProjectName, RowCount, StageId, StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn,
     UserId, UserName,
 };
 use chrono::{DateTime, Utc};
@@ -260,6 +260,13 @@ impl TryFrom<&WorkerExecutionUpdate> for UpdatePhysicalFunctionRunDB {
 #[ta_objects::UrlParam]
 pub struct FunctionRunIdParam {
     pub function_run_id: PhysicalFunctionRunId,
+}
+
+/// Names one stamped raw-data file of a run. The runner assigns the index as a
+/// counter over every file it ingested, so it is not a parameter position.
+#[ta_objects::UrlParam]
+pub struct InputIdxParam {
+    pub input_idx: InputIdx,
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+pub mod raw_data;
 pub mod services;
 
 use td_database::domain::{Apiserver, DomainConnection};

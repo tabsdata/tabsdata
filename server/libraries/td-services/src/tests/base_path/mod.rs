@@ -18,8 +18,8 @@
 //!   ladder, FR ≡ TDV symmetry, dispatch batch and replay paths.
 //! - [`drift`] — a `base_path` move after mint: frozen rows, fresh
 //!   re-resolution for new mints and new attempts.
-//! - [`reads`] — table download keeps serving pre-move data (the failure the
-//!   frozen column exists to prevent).
+//! - [`reads`] — the download endpoints keep serving pre-move data (the
+//!   failure the frozen column exists to prevent).
 
 mod drift;
 mod reads;
