@@ -6,6 +6,7 @@ use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table, TableCreat
 
 use super::collections::Collections;
 use crate::schema::Entity;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Bundles {
@@ -27,9 +28,9 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Bundles::Table)
-                .col(ColumnDef::new(Bundles::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Bundles::ProjectId).text().not_null())
-                .col(ColumnDef::new(Bundles::CollectionId).text().not_null())
+                .col(id_column(Bundles::Id).not_null().primary_key())
+                .col(id_column(Bundles::ProjectId).not_null())
+                .col(id_column(Bundles::CollectionId).not_null())
                 .col(ColumnDef::new(Bundles::Hash).text().not_null())
                 // Storage prefix frozen at upload = collection.base_path. The bundle
                 // row is durable (kept, marked on claim), so it self-locates its .tar.zst.
@@ -38,7 +39,7 @@ impl Entity for Defs {
                 // function register/update/patch). Rows are never deleted.
                 .col(ColumnDef::new(Bundles::Status).text().not_null())
                 .col(ColumnDef::new(Bundles::CreatedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Bundles::CreatedById).text().not_null())
+                .col(id_column(Bundles::CreatedById).not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Bundles::Table, Bundles::CollectionId)

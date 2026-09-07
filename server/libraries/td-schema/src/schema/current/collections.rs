@@ -14,6 +14,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Collections {
@@ -50,19 +51,19 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Collections::Table)
-                .col(ColumnDef::new(Collections::Id).text().not_null().primary_key())
+                .col(id_column(Collections::Id).not_null().primary_key())
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
-                .col(ColumnDef::new(Collections::ProjectId).text().not_null())
+                .col(id_column(Collections::ProjectId).not_null())
                 .col(ColumnDef::new(Collections::Name).text().not_null())
                 .col(ColumnDef::new(Collections::Description).text().not_null())
                 .col(ColumnDef::new(Collections::CreatedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Collections::CreatedById).text().not_null())
+                .col(id_column(Collections::CreatedById).not_null())
                 .col(ColumnDef::new(Collections::ModifiedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Collections::ModifiedById).text().not_null())
+                .col(id_column(Collections::ModifiedById).not_null())
                 .col(ColumnDef::new(Collections::NameWhenDeleted).text().null())
-                .col(ColumnDef::new(Collections::GroupId).text().not_null())
+                .col(id_column(Collections::GroupId).not_null())
                 // Logical storage prefix for the collection's artifacts. Optional:
                 // NULL means "inherit the owning project's base_path" (resolved at
                 // stamp time via COALESCE(function, collection, project)). Mutable;
@@ -73,7 +74,7 @@ impl Entity for Defs {
                 // The collection's connection (source/destination only); set on the
                 // first connection upsert. Connection ids are only unique per
                 // project, hence the composite FK.
-                .col(ColumnDef::new(Collections::ConnectionId).text().null())
+                .col(id_column(Collections::ConnectionId).null())
                 // Group ids are only unique per project (same pattern as the
                 // composite FKs on transactions/LTDV/LFR).
                 .foreign_key(

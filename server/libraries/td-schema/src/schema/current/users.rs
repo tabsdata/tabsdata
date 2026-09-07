@@ -9,6 +9,7 @@ use sea_query::{
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "users__with_names"]
@@ -39,14 +40,14 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Users::Table)
-                .col(ColumnDef::new(Users::Id).text().not_null().primary_key())
+                .col(id_column(Users::Id).not_null().primary_key())
                 .col(ColumnDef::new(Users::Name).text().not_null().unique_key())
                 .col(ColumnDef::new(Users::FullName).text().not_null())
                 .col(ColumnDef::new(Users::Email).text().unique_key().null())
                 .col(ColumnDef::new(Users::CreatedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Users::CreatedById).text().not_null())
+                .col(id_column(Users::CreatedById).not_null())
                 .col(ColumnDef::new(Users::ModifiedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Users::ModifiedById).text().not_null())
+                .col(id_column(Users::ModifiedById).not_null())
                 .col(ColumnDef::new(Users::PasswordHash).text().not_null())
                 .col(ColumnDef::new(Users::PasswordSetOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Users::PasswordMustChange).boolean().not_null())

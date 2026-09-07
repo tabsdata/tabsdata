@@ -18,6 +18,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
@@ -75,25 +76,25 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(PhysicalFunctionRuns::Table)
-                .col(ColumnDef::new(PhysicalFunctionRuns::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(PhysicalFunctionRuns::ProjectId).text().not_null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::CollectionId).text().not_null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::FunctionVersionId).text().not_null())
+                .col(id_column(PhysicalFunctionRuns::Id).not_null().primary_key())
+                .col(id_column(PhysicalFunctionRuns::ProjectId).not_null())
+                .col(id_column(PhysicalFunctionRuns::CollectionId).not_null())
+                .col(id_column(PhysicalFunctionRuns::FunctionVersionId).not_null())
                 // Patch id used at this attempt, if any. NULL → the head
                 // fvid in `function_version_id` ran verbatim; non-NULL → the
                 // patch's bundle_id/snippet ran (head's table topology is
                 // preserved, since patches don't redefine tables). FK to
                 // `function_patches(id)`.
-                .col(ColumnDef::new(PhysicalFunctionRuns::FunctionVersionPatchId).text().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::ExecutionId).text().not_null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::TransactionId).text().not_null())
+                .col(id_column(PhysicalFunctionRuns::FunctionVersionPatchId).null())
+                .col(id_column(PhysicalFunctionRuns::ExecutionId).not_null())
+                .col(id_column(PhysicalFunctionRuns::TransactionId).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::TriggeredOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::TriggeredById).text().not_null())
+                .col(id_column(PhysicalFunctionRuns::TriggeredById).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::Trigger).text().not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::DispatchedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::StartedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::EndedOn).timestamp_with_time_zone().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::FunctionId).text().not_null().default(""))
+                .col(id_column(PhysicalFunctionRuns::FunctionId).not_null().default(""))
                 // Per-attempt audit status. Worker callbacks write this on
                 // every transition. The LFR row carries the canonical
                 // (sticky-Committed) flow-control status — independent.
@@ -113,7 +114,7 @@ impl Entity for Defs {
                 // fresh install does: the with-names view expands `*`.
                 .col(ColumnDef::new(PhysicalFunctionRuns::BasePath).text().not_null())
                 // SCD2 partition: attempts version their logical run by `triggered_on`.
-                .col(ColumnDef::new(PhysicalFunctionRuns::LogicalFunctionRunId).text().not_null())
+                .col(id_column(PhysicalFunctionRuns::LogicalFunctionRunId).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()

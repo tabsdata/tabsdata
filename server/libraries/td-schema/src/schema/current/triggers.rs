@@ -16,6 +16,7 @@ use super::collections::{Collections, CollectionsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
@@ -54,17 +55,17 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Triggers::Table)
-                .col(ColumnDef::new(Triggers::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Triggers::ProjectId).text().not_null())
-                .col(ColumnDef::new(Triggers::CollectionId).text().not_null())
-                .col(ColumnDef::new(Triggers::TriggerId).text().not_null())
-                .col(ColumnDef::new(Triggers::FunctionId).text().not_null())
-                .col(ColumnDef::new(Triggers::TriggerByCollectionId).text().not_null())
-                .col(ColumnDef::new(Triggers::TriggerByFunctionId).text().not_null())
-                .col(ColumnDef::new(Triggers::TriggerByTableId).text().not_null())
+                .col(id_column(Triggers::Id).not_null().primary_key())
+                .col(id_column(Triggers::ProjectId).not_null())
+                .col(id_column(Triggers::CollectionId).not_null())
+                .col(id_column(Triggers::TriggerId).not_null())
+                .col(id_column(Triggers::FunctionId).not_null())
+                .col(id_column(Triggers::TriggerByCollectionId).not_null())
+                .col(id_column(Triggers::TriggerByFunctionId).not_null())
+                .col(id_column(Triggers::TriggerByTableId).not_null())
                 .col(ColumnDef::new(Triggers::Status).text().not_null())
                 .col(ColumnDef::new(Triggers::DefinedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Triggers::DefinedById).text().not_null())
+                .col(id_column(Triggers::DefinedById).not_null())
                 .col(ColumnDef::new(Triggers::System).boolean().not_null())
                 .col(ColumnDef::new(Triggers::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(

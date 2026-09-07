@@ -13,6 +13,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "permissions__with_names"]
@@ -41,12 +42,12 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Permissions::Table)
-                .col(ColumnDef::new(Permissions::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Permissions::RoleId).text().not_null())
+                .col(id_column(Permissions::Id).not_null().primary_key())
+                .col(id_column(Permissions::RoleId).not_null())
                 .col(ColumnDef::new(Permissions::PermissionType).text().not_null())
                 .col(ColumnDef::new(Permissions::EntityType).text().not_null())
-                .col(ColumnDef::new(Permissions::EntityId).text().not_null())
-                .col(ColumnDef::new(Permissions::GrantedById).text().not_null())
+                .col(id_column(Permissions::EntityId).not_null())
+                .col(id_column(Permissions::GrantedById).not_null())
                 .col(ColumnDef::new(Permissions::GrantedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Permissions::Fixed).boolean().not_null())
                 .foreign_key(

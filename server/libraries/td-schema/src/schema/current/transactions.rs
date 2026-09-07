@@ -15,6 +15,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 /// `transactions__with_names` view name. Re-used cross-file by
 /// `with_status_views` to build `transactions__with_status`.
@@ -43,15 +44,15 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Transactions::Table)
-                .col(ColumnDef::new(Transactions::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Transactions::ProjectId).text().not_null())
-                .col(ColumnDef::new(Transactions::CollectionId).text().not_null())
-                .col(ColumnDef::new(Transactions::ExecutionId).text().not_null())
+                .col(id_column(Transactions::Id).not_null().primary_key())
+                .col(id_column(Transactions::ProjectId).not_null())
+                .col(id_column(Transactions::CollectionId).not_null())
+                .col(id_column(Transactions::ExecutionId).not_null())
                 .col(ColumnDef::new(Transactions::TransactionBy).text().not_null())
                 .col(ColumnDef::new(Transactions::TransactionKey).text().not_null())
                 .col(ColumnDef::new(Transactions::TriggeredOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Transactions::TriggeredById).text().not_null())
-                .col(ColumnDef::new(Transactions::GroupId).text().not_null())
+                .col(id_column(Transactions::TriggeredById).not_null())
+                .col(id_column(Transactions::GroupId).not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Transactions::Table, Transactions::CollectionId)

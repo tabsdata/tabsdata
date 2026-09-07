@@ -40,7 +40,7 @@ use sea_query::{DynIden, IntoIden};
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
-pub const VERSION: usize = 4;
+pub const VERSION: usize = 5;
 
 /// FK-safe ordering of every entity in the current schema.
 ///

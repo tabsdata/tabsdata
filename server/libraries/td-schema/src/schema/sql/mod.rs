@@ -14,8 +14,29 @@ pub(crate) mod view;
 pub(crate) use trigger::{ImmutableColumnsTriggerDef, Scd2TriggerDef, StickyTerminalsTriggerDef};
 pub(crate) use view::ViewDef;
 
-use sea_query::{DynIden, Iden, IntoIden};
+use crate::ID_COLLATION;
+use sea_query::{ColumnDef, DynIden, Iden, IntoIden, TableCreateStatement, TableName, TableRef};
 use strum::IntoEnumIterator;
+
+/// An id column: `text` compared and ordered as bytes. See [`ID_COLLATION`].
+pub fn id_column<T: IntoIden>(name: T) -> ColumnDef {
+    let mut column = ColumnDef::new(name);
+    column.text().extra(ID_COLLATION);
+    column
+}
+
+/// The naming rule behind [`id_column`]: `id`, or a `*_id` reference.
+pub(crate) fn is_id_column(name: &str) -> bool {
+    name == "id" || name.ends_with("_id")
+}
+
+/// The table a `CREATE TABLE` statement creates.
+pub(crate) fn created_table(stmt: &TableCreateStatement) -> String {
+    match stmt.get_table_name() {
+        Some(TableRef::Table(TableName(_, table), _)) => table.to_string(),
+        other => panic!("CREATE TABLE on an unexpected table reference: {other:?}"),
+    }
+}
 
 /// Collect every non-`Table` variant of a column [`Iden`] enum as a list of
 /// [`DynIden`], in declaration order. Convention: the first variant of every

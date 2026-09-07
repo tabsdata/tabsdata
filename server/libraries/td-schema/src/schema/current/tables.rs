@@ -13,6 +13,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
@@ -47,18 +48,18 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Tables::Table)
-                .col(ColumnDef::new(Tables::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Tables::ProjectId).text().not_null())
-                .col(ColumnDef::new(Tables::CollectionId).text().not_null())
-                .col(ColumnDef::new(Tables::TableId).text().not_null())
+                .col(id_column(Tables::Id).not_null().primary_key())
+                .col(id_column(Tables::ProjectId).not_null())
+                .col(id_column(Tables::CollectionId).not_null())
+                .col(id_column(Tables::TableId).not_null())
                 .col(ColumnDef::new(Tables::Name).text().not_null())
-                .col(ColumnDef::new(Tables::FunctionId).text().null())
-                .col(ColumnDef::new(Tables::FunctionVersionId).text().not_null())
+                .col(id_column(Tables::FunctionId).null())
+                .col(id_column(Tables::FunctionVersionId).not_null())
                 .col(ColumnDef::new(Tables::FunctionParamPos).integer().null())
                 .col(ColumnDef::new(Tables::Private).boolean().not_null())
                 .col(ColumnDef::new(Tables::Partitioned).boolean().null())
                 .col(ColumnDef::new(Tables::DefinedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Tables::DefinedById).text().not_null())
+                .col(id_column(Tables::DefinedById).not_null())
                 .col(ColumnDef::new(Tables::Status).text().not_null())
                 .col(ColumnDef::new(Tables::TableType).text().not_null().default("R"))
                 .col(ColumnDef::new(Tables::ValidTo).timestamp_with_time_zone().not_null())

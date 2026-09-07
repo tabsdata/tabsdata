@@ -9,6 +9,7 @@ use sea_query::{
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "sessions__with_names"]
@@ -33,9 +34,9 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Sessions::Table)
-                .col(ColumnDef::new(Sessions::AccessTokenId).text().not_null().primary_key())
-                .col(ColumnDef::new(Sessions::RefreshTokenId).text().not_null().unique_key())
-                .col(ColumnDef::new(Sessions::UserId).text().not_null())
+                .col(id_column(Sessions::AccessTokenId).not_null().primary_key())
+                .col(id_column(Sessions::RefreshTokenId).not_null().unique_key())
+                .col(id_column(Sessions::UserId).not_null())
                 .col(ColumnDef::new(Sessions::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Sessions::ExpiresOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Sessions::StatusChangeOn).timestamp_with_time_zone().not_null())

@@ -12,6 +12,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "users_roles__with_names"]
@@ -38,11 +39,11 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(UsersRoles::Table)
-                .col(ColumnDef::new(UsersRoles::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(UsersRoles::UserId).text().not_null())
-                .col(ColumnDef::new(UsersRoles::RoleId).text().not_null())
+                .col(id_column(UsersRoles::Id).not_null().primary_key())
+                .col(id_column(UsersRoles::UserId).not_null())
+                .col(id_column(UsersRoles::RoleId).not_null())
                 .col(ColumnDef::new(UsersRoles::AddedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(UsersRoles::AddedById).text().not_null())
+                .col(id_column(UsersRoles::AddedById).not_null())
                 .col(ColumnDef::new(UsersRoles::Fixed).boolean().not_null())
                 .foreign_key(
                     ForeignKey::create()

@@ -1,0 +1,113 @@
+//
+// Copyright 2026 Tabsdata Inc.
+//
+
+use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
+
+use super::users::Users;
+use crate::schema::Entity;
+use crate::schema::render::name_or_id;
+use crate::schema::sql::ViewDef;
+
+#[derive(Iden, Clone, Copy)]
+#[iden = "groups__with_names"]
+pub struct GroupsWithNames;
+
+#[derive(Iden, Clone, Copy, strum::EnumIter)]
+pub enum Groups {
+    Table,
+    Id,
+    ProjectId,
+    Name,
+    Description,
+    CreatedOn,
+    CreatedById,
+    ModifiedOn,
+    ModifiedById,
+    System,
+}
+
+pub(super) struct Defs;
+
+impl Entity for Defs {
+    fn create_tables(&self) -> Vec<TableCreateStatement> {
+        vec![
+            Table::create()
+                .table(Groups::Table)
+                // Composite PK (project_id, id): system groups share the same
+                // well-known id in every project. Joins on groups.id from
+                // project-scoped tables must also match project_id.
+                .col(ColumnDef::new(Groups::Id).text().not_null())
+                // Tenant tag. No base default — fail-closed on every backend: a
+                // write that omits it hits NOT NULL. On postgres the RLS phase
+                // sets the column default to read `app.project_id` (the request's
+                .col(ColumnDef::new(Groups::ProjectId).text().not_null())
+                .primary_key(Index::create().col(Groups::ProjectId).col(Groups::Id))
+                .col(ColumnDef::new(Groups::Name).text().not_null())
+                .col(ColumnDef::new(Groups::Description).text().not_null())
+                .col(ColumnDef::new(Groups::CreatedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Groups::CreatedById).text().not_null())
+                .col(ColumnDef::new(Groups::ModifiedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Groups::ModifiedById).text().not_null())
+                .col(ColumnDef::new(Groups::System).boolean().not_null())
+                .to_owned(),
+        ]
+    }
+
+    fn create_indices(&self) -> Vec<IndexCreateStatement> {
+        // Leads with project_id so it serves the RLS predicate; unique makes
+        // group names unique within a project, not globally.
+        vec![
+            // The primary key is `(project_id, id)` and the unique index
+            // `(project_id, name)`; RLS supplies `project_id` through an OR, so
+            // neither leading column is ever an index qual. Reads by name or id
+            // need their own.
+            Index::create().name("groups___name___idx").table(Groups::Table).col(Groups::Name).to_owned(),
+            Index::create().name("groups___id___idx").table(Groups::Table).col(Groups::Id).to_owned(),
+            Index::create()
+                .name("groups___project_id__name___idx")
+                .table(Groups::Table)
+                .col(Groups::ProjectId)
+                .col(Groups::Name)
+                .unique()
+                .to_owned(),
+        ]
+    }
+
+    fn create_views(&self) -> Vec<ViewDef> {
+        let created_by_user = Alias::new("created_by_user");
+        let modified_by_user = Alias::new("modified_by_user");
+        vec![ViewDef::new(
+            GroupsWithNames,
+            Query::select()
+                .expr(Expr::col((Groups::Table, Groups::Id)))
+                .expr(Expr::col((Groups::Table, Groups::ProjectId)))
+                .expr(Expr::col((Groups::Table, Groups::Name)))
+                .expr(Expr::col((Groups::Table, Groups::Description)))
+                .expr(Expr::col((Groups::Table, Groups::CreatedOn)))
+                .expr(Expr::col((Groups::Table, Groups::CreatedById)))
+                .expr_as(name_or_id((created_by_user.clone(), Users::Name), (Groups::Table, Groups::CreatedById)), Alias::new("created_by"))
+                .expr(Expr::col((Groups::Table, Groups::ModifiedOn)))
+                .expr(Expr::col((Groups::Table, Groups::ModifiedById)))
+                .expr_as(
+                    name_or_id((modified_by_user.clone(), Users::Name), (Groups::Table, Groups::ModifiedById)),
+                    Alias::new("modified_by"),
+                )
+                .expr(Expr::col((Groups::Table, Groups::System)))
+                .from(Groups::Table)
+                .join_as(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    created_by_user.clone(),
+                    Expr::col((Groups::Table, Groups::CreatedById)).equals((created_by_user, Users::Id)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    modified_by_user.clone(),
+                    Expr::col((Groups::Table, Groups::ModifiedById)).equals((modified_by_user, Users::Id)),
+                )
+                .to_owned(),
+        )]
+    }
+}

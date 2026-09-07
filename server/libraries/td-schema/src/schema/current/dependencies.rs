@@ -11,6 +11,7 @@ use super::collections::{Collections, CollectionsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
@@ -44,18 +45,18 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Dependencies::Table)
-                .col(ColumnDef::new(Dependencies::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Dependencies::ProjectId).text().not_null())
-                .col(ColumnDef::new(Dependencies::CollectionId).text().not_null())
-                .col(ColumnDef::new(Dependencies::DependencyId).text().not_null())
-                .col(ColumnDef::new(Dependencies::FunctionId).text().not_null())
-                .col(ColumnDef::new(Dependencies::TableCollectionId).text().not_null())
-                .col(ColumnDef::new(Dependencies::TableFunctionId).text().not_null())
-                .col(ColumnDef::new(Dependencies::TableId).text().not_null())
+                .col(id_column(Dependencies::Id).not_null().primary_key())
+                .col(id_column(Dependencies::ProjectId).not_null())
+                .col(id_column(Dependencies::CollectionId).not_null())
+                .col(id_column(Dependencies::DependencyId).not_null())
+                .col(id_column(Dependencies::FunctionId).not_null())
+                .col(id_column(Dependencies::TableCollectionId).not_null())
+                .col(id_column(Dependencies::TableFunctionId).not_null())
+                .col(id_column(Dependencies::TableId).not_null())
                 .col(ColumnDef::new(Dependencies::TableVersions).text().not_null())
                 .col(ColumnDef::new(Dependencies::DepPos).integer().not_null())
                 .col(ColumnDef::new(Dependencies::DefinedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Dependencies::DefinedById).text().not_null())
+                .col(id_column(Dependencies::DefinedById).not_null())
                 .col(ColumnDef::new(Dependencies::System).boolean().not_null())
                 .col(ColumnDef::new(Dependencies::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(

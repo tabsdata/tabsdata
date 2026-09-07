@@ -36,6 +36,17 @@ hold no archived versions yet — the 2.x line starts at `current::VERSION = 1` 
 there is nothing to archive against until the first in-major bump. See
 **Changing the schema within a major** below for the workflow that fills them.
 
+## Id columns
+
+Every column holding an id (`id`, `*_id`) is declared with `sql::id_column`,
+which renders `text COLLATE "C"` (`ID_COLLATION`). Ids are fixed-width,
+zero-padded and ASCII, so byte order is their chronological order; the database
+default collation would only add a locale comparison to every index probe and
+sort over them. `test_id_columns_are_byte_collated` checks the rule on the
+column definitions. Note for deltas: PostgreSQL refuses to alter a column an RLS
+policy reads, so a delta touching `project_id` drops and re-creates the table's
+policies around the `ALTER`.
+
 ## Major versions and upgradeability
 
 Tabsdata 2.0 is **not** in-place upgradeable from any earlier release. A 2.0

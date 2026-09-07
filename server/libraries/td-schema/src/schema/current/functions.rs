@@ -12,6 +12,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
@@ -52,14 +53,14 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Functions::Table)
-                .col(ColumnDef::new(Functions::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Functions::ProjectId).text().not_null())
-                .col(ColumnDef::new(Functions::CollectionId).text().not_null())
+                .col(id_column(Functions::Id).not_null().primary_key())
+                .col(id_column(Functions::ProjectId).not_null())
+                .col(id_column(Functions::CollectionId).not_null())
                 .col(ColumnDef::new(Functions::Name).text().not_null())
                 .col(ColumnDef::new(Functions::Description).text().not_null())
                 .col(ColumnDef::new(Functions::Decorator).text().not_null())
                 .col(ColumnDef::new(Functions::RuntimeValues).text().not_null())
-                .col(ColumnDef::new(Functions::FunctionId).text().not_null())
+                .col(id_column(Functions::FunctionId).not_null())
                 // Optional storage-prefix override for this function version's output
                 // table data. NULL → inherit the collection base_path at mint time.
                 .col(ColumnDef::new(Functions::BasePath).text().null())
@@ -67,13 +68,13 @@ impl Entity for Defs {
                 // (prefix = collection base_path then), carried forward across updates
                 // so a function's accumulating state stays put when the collection
                 // base_path later changes; stage_id is regenerated on --reset-stage.
-                .col(ColumnDef::new(Functions::StageId).text().not_null())
+                .col(id_column(Functions::StageId).not_null())
                 .col(ColumnDef::new(Functions::StageBasePath).text().not_null())
                 .col(ColumnDef::new(Functions::StorageVersion).text().not_null())
-                .col(ColumnDef::new(Functions::BundleId).text().not_null())
+                .col(id_column(Functions::BundleId).not_null())
                 .col(ColumnDef::new(Functions::Snippet).text().not_null())
                 .col(ColumnDef::new(Functions::DefinedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Functions::DefinedById).text().not_null())
+                .col(id_column(Functions::DefinedById).not_null())
                 .col(ColumnDef::new(Functions::Status).text().not_null())
                 .col(ColumnDef::new(Functions::Connector).text().null())
                 .col(ColumnDef::new(Functions::Connection).text().null())

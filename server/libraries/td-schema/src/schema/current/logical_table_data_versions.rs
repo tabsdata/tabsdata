@@ -26,6 +26,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 
 #[derive(Iden, Clone, Copy)]
@@ -66,22 +67,22 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(LogicalTableDataVersions::Table)
-                .col(ColumnDef::new(LogicalTableDataVersions::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(LogicalTableDataVersions::ProjectId).text().not_null())
-                .col(ColumnDef::new(LogicalTableDataVersions::CollectionId).text().not_null())
-                .col(ColumnDef::new(LogicalTableDataVersions::ExecutionId).text().not_null())
-                .col(ColumnDef::new(LogicalTableDataVersions::TransactionId).text().not_null())
-                .col(ColumnDef::new(LogicalTableDataVersions::TableId).text().not_null())
+                .col(id_column(LogicalTableDataVersions::Id).not_null().primary_key())
+                .col(id_column(LogicalTableDataVersions::ProjectId).not_null())
+                .col(id_column(LogicalTableDataVersions::CollectionId).not_null())
+                .col(id_column(LogicalTableDataVersions::ExecutionId).not_null())
+                .col(id_column(LogicalTableDataVersions::TransactionId).not_null())
+                .col(id_column(LogicalTableDataVersions::TableId).not_null())
                 // Nullable: NULL when the LTDV is a lazy-mint over a V1-born
                 // physical_table_data_versions row whose producer pre-dates the logic
                 // layer, so no LFR exists for the producer.
-                .col(ColumnDef::new(LogicalTableDataVersions::ProducerLogicalFunctionRunId).text().null())
+                .col(id_column(LogicalTableDataVersions::ProducerLogicalFunctionRunId).null())
                 // Nullable for the same reason as ProducerLogicalFunctionRunId.
                 .col(ColumnDef::new(LogicalTableDataVersions::FunctionParamPos).integer().null())
                 .col(ColumnDef::new(LogicalTableDataVersions::Private).boolean().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::TriggeredOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(LogicalTableDataVersions::TriggeredById).text().not_null())
-                .col(ColumnDef::new(LogicalTableDataVersions::GroupId).text().not_null())
+                .col(id_column(LogicalTableDataVersions::TriggeredById).not_null())
+                .col(id_column(LogicalTableDataVersions::GroupId).not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId)

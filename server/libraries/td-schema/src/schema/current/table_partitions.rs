@@ -8,6 +8,7 @@ use super::collections::Collections;
 use super::functions::Functions;
 use super::physical_table_data_versions::PhysicalTableDataVersions;
 use crate::schema::Entity;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum TablePartitions {
@@ -30,13 +31,13 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(TablePartitions::Table)
-                .col(ColumnDef::new(TablePartitions::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(TablePartitions::ProjectId).text().not_null())
-                .col(ColumnDef::new(TablePartitions::CollectionId).text().not_null())
-                .col(ColumnDef::new(TablePartitions::TableId).text().not_null())
-                .col(ColumnDef::new(TablePartitions::TableVersionId).text().not_null())
-                .col(ColumnDef::new(TablePartitions::FunctionVersionId).text().not_null())
-                .col(ColumnDef::new(TablePartitions::TableDataVersionId).text().not_null())
+                .col(id_column(TablePartitions::Id).not_null().primary_key())
+                .col(id_column(TablePartitions::ProjectId).not_null())
+                .col(id_column(TablePartitions::CollectionId).not_null())
+                .col(id_column(TablePartitions::TableId).not_null())
+                .col(id_column(TablePartitions::TableVersionId).not_null())
+                .col(id_column(TablePartitions::FunctionVersionId).not_null())
+                .col(id_column(TablePartitions::TableDataVersionId).not_null())
                 .col(ColumnDef::new(TablePartitions::PartitionKey).text().null())
                 .col(ColumnDef::new(TablePartitions::PartitionDeleted).boolean().null())
                 .foreign_key(

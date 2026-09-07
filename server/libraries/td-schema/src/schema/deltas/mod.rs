@@ -48,6 +48,7 @@ use crate::schema::version::SchemaDelta;
 pub(crate) mod v1_to_v2;
 pub(crate) mod v2_to_v3;
 pub(crate) mod v3_to_v4;
+pub(crate) mod v4_to_v5;
 
 /// The rung upgrading from version `target_version - 1` to `target_version`.
 ///
@@ -65,6 +66,7 @@ pub fn get(target_version: usize) -> Delta {
         2 => rung::<v1_to_v2::Migration>(),
         3 => rung::<v2_to_v3::Migration>(),
         4 => rung::<v3_to_v4::Migration>(),
+        5 => rung::<v4_to_v5::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

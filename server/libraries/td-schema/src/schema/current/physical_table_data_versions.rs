@@ -17,6 +17,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
@@ -66,17 +67,17 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(PhysicalTableDataVersions::Table)
-                .col(ColumnDef::new(PhysicalTableDataVersions::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(PhysicalTableDataVersions::ProjectId).text().not_null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::CollectionId).text().not_null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::TableId).text().not_null())
+                .col(id_column(PhysicalTableDataVersions::Id).not_null().primary_key())
+                .col(id_column(PhysicalTableDataVersions::ProjectId).not_null())
+                .col(id_column(PhysicalTableDataVersions::CollectionId).not_null())
+                .col(id_column(PhysicalTableDataVersions::TableId).not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::Name).text().not_null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::TableVersionId).text().not_null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::FunctionVersionId).text().not_null())
+                .col(id_column(PhysicalTableDataVersions::TableVersionId).not_null())
+                .col(id_column(PhysicalTableDataVersions::FunctionVersionId).not_null())
                 // Patch id used at the producer attempt, if any. NULL → no
                 // patch. FK to `function_patches(id)`. Mirrors
                 // `physical_function_runs.function_version_patch_id`.
-                .col(ColumnDef::new(PhysicalTableDataVersions::FunctionVersionPatchId).text().null())
+                .col(id_column(PhysicalTableDataVersions::FunctionVersionPatchId).null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::HasData).boolean().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::SchemaChanged).boolean().null())
                 // i64 Rust types (`ColumnCount`, `RowCount`); sqlx encodes as BIGINT,
@@ -90,18 +91,18 @@ impl Entity for Defs {
                 .col(ColumnDef::new(PhysicalTableDataVersions::DataBytes).big_integer().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::SchemaHash).text().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::ColumnarLineage).text().null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::ExecutionId).text().not_null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::TransactionId).text().not_null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::PhysicalFunctionRunId).text().not_null())
+                .col(id_column(PhysicalTableDataVersions::ExecutionId).not_null())
+                .col(id_column(PhysicalTableDataVersions::TransactionId).not_null())
+                .col(id_column(PhysicalTableDataVersions::PhysicalFunctionRunId).not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::FunctionParamPos).integer().not_null())
-                .col(ColumnDef::new(PhysicalTableDataVersions::WithDataTableDataVersionId).text().null())
+                .col(id_column(PhysicalTableDataVersions::WithDataTableDataVersionId).null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::TriggeredOn).timestamp_with_time_zone().not_null())
                 // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
                 // Self-describing: reads use this directly, never recompute, so data stays
                 // findable after the collection/function base_path later changes.
                 .col(ColumnDef::new(PhysicalTableDataVersions::BasePath).text().not_null())
                 // SCD2 partition: materializations version their logical version by `triggered_on`.
-                .col(ColumnDef::new(PhysicalTableDataVersions::LogicalTableDataVersionId).text().not_null())
+                .col(id_column(PhysicalTableDataVersions::LogicalTableDataVersionId).not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()

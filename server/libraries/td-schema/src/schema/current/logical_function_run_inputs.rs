@@ -12,6 +12,7 @@ use super::logical_function_runs::LogicalFunctionRuns;
 use super::logical_table_data_versions::LogicalTableDataVersions;
 use super::transactions::Transactions;
 use crate::schema::Entity;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalFunctionRunInputs {
@@ -36,18 +37,18 @@ impl Entity for Defs {
             // logical_function_run_inputs — V2 binding rows (one per input/version-pos)
             Table::create()
                 .table(LogicalFunctionRunInputs::Table)
-                .col(ColumnDef::new(LogicalFunctionRunInputs::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(LogicalFunctionRunInputs::ProjectId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRunInputs::CollectionId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRunInputs::ExecutionId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRunInputs::TransactionId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRunInputs::LogicalFunctionRunId).text().not_null())
+                .col(id_column(LogicalFunctionRunInputs::Id).not_null().primary_key())
+                .col(id_column(LogicalFunctionRunInputs::ProjectId).not_null())
+                .col(id_column(LogicalFunctionRunInputs::CollectionId).not_null())
+                .col(id_column(LogicalFunctionRunInputs::ExecutionId).not_null())
+                .col(id_column(LogicalFunctionRunInputs::TransactionId).not_null())
+                .col(id_column(LogicalFunctionRunInputs::LogicalFunctionRunId).not_null())
                 // Nullable: a dependency edge that didn't resolve to any LTDV
                 // at plan-build (e.g. self-dep on first execution, no prior
                 // upstream) still emits an FFR_input row so the worker yaml
                 // can render the input slot. Worker-yaml falls back to
                 // `DependencyDB` for the static dep-declaration info.
-                .col(ColumnDef::new(LogicalFunctionRunInputs::RequirementLogicalTableDataVersionId).text().null())
+                .col(id_column(LogicalFunctionRunInputs::RequirementLogicalTableDataVersionId).null())
                 // Nullable for trigger-edge rows (no dependency_pos / input_idx).
                 .col(ColumnDef::new(LogicalFunctionRunInputs::RequirementInputIdx).integer().null())
                 .col(ColumnDef::new(LogicalFunctionRunInputs::RequirementDependencyPos).integer().null())

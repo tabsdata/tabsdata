@@ -12,6 +12,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "roles__with_names"]
@@ -41,15 +42,15 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Roles::Table)
-                .col(ColumnDef::new(Roles::Id).text().not_null().primary_key())
+                .col(id_column(Roles::Id).not_null().primary_key())
                 .col(ColumnDef::new(Roles::Name).text().not_null().unique_key())
                 .col(ColumnDef::new(Roles::Description).text().not_null())
                 .col(ColumnDef::new(Roles::CreatedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Roles::CreatedById).text().not_null())
+                .col(id_column(Roles::CreatedById).not_null())
                 .col(ColumnDef::new(Roles::ModifiedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Roles::ModifiedById).text().not_null())
+                .col(id_column(Roles::ModifiedById).not_null())
                 .col(ColumnDef::new(Roles::Kind).text().not_null())
-                .col(ColumnDef::new(Roles::ProjectId).text().null())
+                .col(id_column(Roles::ProjectId).null())
                 .col(ColumnDef::new(Roles::Fixed).boolean().not_null())
                 .foreign_key(
                     ForeignKey::create()

@@ -23,6 +23,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Projects {
@@ -55,7 +56,7 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Projects::Table)
-                .col(ColumnDef::new(Projects::Id).text().not_null().primary_key())
+                .col(id_column(Projects::Id).not_null().primary_key())
                 .col(ColumnDef::new(Projects::Name).text().not_null().unique_key())
                 .col(ColumnDef::new(Projects::Description).text().not_null())
                 // Logical storage prefix for the project's artifacts and the
@@ -65,9 +66,9 @@ impl Entity for Defs {
                 // now (project "move" deferred); physical backend selected by mounts.
                 .col(ColumnDef::new(Projects::BasePath).text().not_null())
                 .col(ColumnDef::new(Projects::CreatedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Projects::CreatedById).text().not_null())
+                .col(id_column(Projects::CreatedById).not_null())
                 .col(ColumnDef::new(Projects::ModifiedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Projects::ModifiedById).text().not_null())
+                .col(id_column(Projects::ModifiedById).not_null())
                 .col(ColumnDef::new(Projects::NameWhenDeleted).text().null())
                 .to_owned(),
         ]

@@ -8,6 +8,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::id_column;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "groups__with_names"]
@@ -37,18 +38,18 @@ impl Entity for Defs {
                 // Composite PK (project_id, id): system groups share the same
                 // well-known id in every project. Joins on groups.id from
                 // project-scoped tables must also match project_id.
-                .col(ColumnDef::new(Groups::Id).text().not_null())
+                .col(id_column(Groups::Id).not_null())
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
-                .col(ColumnDef::new(Groups::ProjectId).text().not_null())
+                .col(id_column(Groups::ProjectId).not_null())
                 .primary_key(Index::create().col(Groups::ProjectId).col(Groups::Id))
                 .col(ColumnDef::new(Groups::Name).text().not_null())
                 .col(ColumnDef::new(Groups::Description).text().not_null())
                 .col(ColumnDef::new(Groups::CreatedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Groups::CreatedById).text().not_null())
+                .col(id_column(Groups::CreatedById).not_null())
                 .col(ColumnDef::new(Groups::ModifiedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(Groups::ModifiedById).text().not_null())
+                .col(id_column(Groups::ModifiedById).not_null())
                 .col(ColumnDef::new(Groups::System).boolean().not_null())
                 .to_owned(),
         ]

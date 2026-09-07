@@ -32,6 +32,7 @@ fn postgres_fingerprint() -> Vec<SelectStatement> {
         Query::select()
             .expr(Expr::cust(
                 "'column ' || table_name || '.' || column_name || ':' || data_type \
+                 || ':collation=' || COALESCE(collation_name, '') \
                  || ':nullable=' || is_nullable || ':default=' || COALESCE(column_default, '')",
             ))
             .from((Alias::new("information_schema"), Alias::new("columns")))

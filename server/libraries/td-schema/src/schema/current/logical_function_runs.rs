@@ -30,6 +30,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::{json_object_agg, name_or_id};
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{StickyTerminalsTriggerDef, ViewDef};
 
@@ -79,20 +80,20 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(LogicalFunctionRuns::Table)
-                .col(ColumnDef::new(LogicalFunctionRuns::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(LogicalFunctionRuns::ProjectId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRuns::CollectionId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRuns::ExecutionId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRuns::TransactionId).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRuns::FunctionId).text().not_null())
+                .col(id_column(LogicalFunctionRuns::Id).not_null().primary_key())
+                .col(id_column(LogicalFunctionRuns::ProjectId).not_null())
+                .col(id_column(LogicalFunctionRuns::CollectionId).not_null())
+                .col(id_column(LogicalFunctionRuns::ExecutionId).not_null())
+                .col(id_column(LogicalFunctionRuns::TransactionId).not_null())
+                .col(id_column(LogicalFunctionRuns::FunctionId).not_null())
                 // Plan-time fvid the LFR was minted against; topology
                 // reference for primitives. Set once at plan-build.
-                .col(ColumnDef::new(LogicalFunctionRuns::FunctionVersionId).text().not_null().default(""))
+                .col(id_column(LogicalFunctionRuns::FunctionVersionId).not_null().default(""))
                 .col(ColumnDef::new(LogicalFunctionRuns::Trigger).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRuns::TriggeredOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(LogicalFunctionRuns::TriggeredById).text().not_null())
+                .col(id_column(LogicalFunctionRuns::TriggeredById).not_null())
                 .col(ColumnDef::new(LogicalFunctionRuns::Status).text().not_null())
-                .col(ColumnDef::new(LogicalFunctionRuns::GroupId).text().not_null())
+                .col(id_column(LogicalFunctionRuns::GroupId).not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId)

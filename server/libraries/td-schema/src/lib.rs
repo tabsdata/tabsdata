@@ -33,6 +33,12 @@ pub const DB_EDITION_NAME: &str = "edition";
 /// reads it must name it identically.
 pub const PROJECT_ID_GUC: &str = "app.project_id";
 
+/// Collation of every id column. Ids are fixed-width, zero-padded and ASCII
+/// (`Id`: 26 base32hex chars; `IdL`: `<key><YYYYMMDD>-<10 digits>`), so byte
+/// order is their chronological order; the database default collation would
+/// only add a locale comparison to every index probe and sort over them.
+pub const ID_COLLATION: &str = "COLLATE \"C\"";
+
 /// Grantee of the `across_projects` policy; deployments grant their own
 /// cross-project role membership in it. A constant, not a configured name:
 /// policies are emitted only on install, so a configured name baked into one

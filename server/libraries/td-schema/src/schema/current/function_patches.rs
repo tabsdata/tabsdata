@@ -9,6 +9,7 @@ use sea_query::{
 use super::functions::Functions;
 use crate::schema::Entity;
 use crate::schema::source::Derived;
+use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, cols_of_except};
 
@@ -41,17 +42,17 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(FunctionPatches::Table)
-                .col(ColumnDef::new(FunctionPatches::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(FunctionPatches::ProjectId).text().not_null())
-                .col(ColumnDef::new(FunctionPatches::ParentFunctionVersionId).text().not_null())
-                .col(ColumnDef::new(FunctionPatches::FunctionId).text().not_null())
-                .col(ColumnDef::new(FunctionPatches::CollectionId).text().not_null())
+                .col(id_column(FunctionPatches::Id).not_null().primary_key())
+                .col(id_column(FunctionPatches::ProjectId).not_null())
+                .col(id_column(FunctionPatches::ParentFunctionVersionId).not_null())
+                .col(id_column(FunctionPatches::FunctionId).not_null())
+                .col(id_column(FunctionPatches::CollectionId).not_null())
                 .col(ColumnDef::new(FunctionPatches::Snippet).text().not_null())
-                .col(ColumnDef::new(FunctionPatches::BundleId).text().not_null())
+                .col(id_column(FunctionPatches::BundleId).not_null())
                 .col(ColumnDef::new(FunctionPatches::RuntimeValues).text().not_null())
                 .col(ColumnDef::new(FunctionPatches::Description).text().not_null())
                 .col(ColumnDef::new(FunctionPatches::DefinedOn).timestamp_with_time_zone().not_null())
-                .col(ColumnDef::new(FunctionPatches::DefinedById).text().not_null())
+                .col(id_column(FunctionPatches::DefinedById).not_null())
                 .col(ColumnDef::new(FunctionPatches::Status).text().not_null())
                 .col(ColumnDef::new(FunctionPatches::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
