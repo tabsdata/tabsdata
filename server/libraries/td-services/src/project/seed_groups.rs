@@ -37,10 +37,10 @@ pub async fn seed_default_groups(
             id: GroupId::try_from(id)?,
             name: group_create.name,
             description: group_create.description,
-            created_on: context.time,
-            created_by_id: context.user_id,
-            modified_on: context.time,
-            modified_by_id: context.user_id,
+            created_on: context.time.into(),
+            created_by_id: context.user_id.into(),
+            modified_on: context.time.into(),
+            modified_by_id: context.user_id.into(),
             system: System::TRUE,
         };
         rows.push(group);

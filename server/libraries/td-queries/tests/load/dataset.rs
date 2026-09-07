@@ -20,8 +20,8 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, BasePath, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, EpochMs,
-    FunctionId, FunctionVersionId, HasData, InputIdx, LogicalFunctionRunId,
+    AtTime, BasePath, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, Ended,
+    EpochMs, FunctionId, FunctionVersionId, HasData, InputIdx, LogicalFunctionRunId,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalPointerReason,
     LogicalPointerStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,
     PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private, ProjectId, ProjectName,
@@ -153,14 +153,14 @@ async fn seed_project_runs(
 /// PFR window/metric stamp applied to seeded runs so they land inside the
 /// `/metrics` window with non-zero out-magnitudes.
 struct MetricsStamp {
-    ended_on: AtTime,
-    bucket: EpochMs,
+    ended_on: Ended<AtTime>,
+    bucket: i64,
 }
 
 fn metrics_stamp() -> Result<MetricsStamp, TdError> {
     Ok(MetricsStamp {
-        ended_on: AtTime::from(td_common::datetime::Timestamp::try_from(IN_WINDOW_MS)?),
-        bucket: EpochMs::try_from(IN_WINDOW_MS)?,
+        ended_on: AtTime::from(td_common::datetime::Timestamp::try_from(IN_WINDOW_MS)?).into(),
+        bucket: IN_WINDOW_MS,
     })
 }
 
@@ -438,10 +438,10 @@ async fn build_unit(
     // leave them NULL.
     if let Some(s) = stamp {
         pfr.ended_on = Some(s.ended_on);
-        pfr.ended_on_hour_ms = Some(s.bucket);
-        pfr.ended_on_day_ms = Some(s.bucket);
-        pfr.ended_on_week_ms = Some(s.bucket);
-        pfr.ended_on_month_ms = Some(s.bucket);
+        pfr.ended_on_hour_ms = Some(EpochMs::try_from(s.bucket)?.into());
+        pfr.ended_on_day_ms = Some(EpochMs::try_from(s.bucket)?.into());
+        pfr.ended_on_week_ms = Some(EpochMs::try_from(s.bucket)?.into());
+        pfr.ended_on_month_ms = Some(EpochMs::try_from(s.bucket)?.into());
         pfr.metric_table_versions = Some(TableVersionCount::try_from(1)?);
         pfr.metric_rows = Some(RowCount::try_from(10)?);
         pfr.metric_data_bytes = Some(ByteCount::try_from(100)?);

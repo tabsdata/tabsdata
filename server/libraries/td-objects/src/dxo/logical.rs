@@ -48,7 +48,7 @@ pub trait LogicalPointerDao:
     + Sized
 {
     /// The logical identity column's value type (e.g. `LogicalFunctionRunId`).
-    type LogicalId: SeaValue + SqlCondition + Clone + Send + Sync + std::fmt::Display;
+    type LogicalId: SeaValue + SqlCondition<Self> + Clone + Send + Sync + std::fmt::Display;
 
     /// The concrete-binding column's value type when present (e.g.
     /// `PhysicalFunctionRunId` / `PhysicalTableDataVersionId`). The column itself is
@@ -104,15 +104,15 @@ pub trait LogicalPointerDao:
 use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
-    DataChanged, DependencyPos, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
-    FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
-    LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
-    LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
-    LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-    PhysicalTableDataVersionId, Private, ProjectId, ProjectName, RowCount, SchemaChanged,
-    SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
-    TableVersionCount, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName,
-    VersionPos,
+    DataChanged, DependencyPos, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek, EpochMs,
+    ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, GroupId, GroupName,
+    HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunInputId,
+    LogicalFunctionRunPointerId, LogicalFunctionRunStatus, LogicalPointerReason,
+    LogicalPointerStatus, LogicalTableDataVersionId, LogicalTableDataVersionPointerId, Patch,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
+    ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started,
+    StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount, TableVersionId,
+    TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos, WithData,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -209,20 +209,20 @@ pub struct FunctionRunDBWithNames {
     // PFR id currently bound to this LFR (resolved from the pointer
     // event log); NULL while Pending/Voided.
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
     // Per-attempt audit status from the bound PFR. The canonical
     // sticky-Committed `status` field lives on the LFR side
     // (inherited via `LogicalFunctionRunDB`).
     pub physical_status: Option<PhysicalFunctionRunStatus>,
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
     // Bucket floors / aggregated metrics from the bound PFR. NULL
     // until the attempt terminates; metric_* additionally NULL for
     // non-output statuses (E/F/X/Y).
-    pub ended_on_hour_ms: Option<EpochMs>,
-    pub ended_on_day_ms: Option<EpochMs>,
-    pub ended_on_week_ms: Option<EpochMs>,
-    pub ended_on_month_ms: Option<EpochMs>,
+    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
+    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
+    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
+    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
     pub metric_table_versions: Option<TableVersionCount>,
     pub metric_rows: Option<RowCount>,
     pub metric_data_bytes: Option<ByteCount>,
@@ -275,16 +275,16 @@ pub struct FunctionRun {
     #[dto(list(filter, order_by))]
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     #[dto(list(filter, order_by))]
-    pub started_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter, order_by))]
-    pub ended_on: Option<AtTime>,
+    pub ended_on: Option<Ended<AtTime>>,
     // PFR-side per-attempt status (Running, Done, …). The canonical
     // LFR status — what callers use for committed-only filters —
     // lives in the `status` field above.
     #[dto(list(filter, order_by))]
     pub physical_status: Option<PhysicalFunctionRunStatus>,
     #[dto(list(filter, order_by))]
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
 }
 
 impl FromDao for FunctionRun {
@@ -492,17 +492,17 @@ pub struct TableDataVersionDBWithNames {
     pub name: Option<TableName>,
     pub table_version_id: Option<TableVersionId>,
     pub function_version_id: Option<FunctionVersionId>,
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
     pub has_data: Option<HasData>,
     pub schema_changed: Option<SchemaChanged>,
     pub column_count: Option<ColumnCount>,
     pub row_count: Option<RowCount>,
     pub data_bytes: Option<ByteCount>,
     pub schema_hash: Option<SchemaHash>,
-    pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
+    pub with_data_table_data_version_id: Option<WithData<PhysicalTableDataVersionId>>,
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
     // Canonical (sticky-Committed) status from the LTDV's producer
     // LFR. Use this for committed-only filters.
     pub status: Option<LogicalFunctionRunStatus>,
@@ -556,7 +556,7 @@ pub struct TableDataVersion {
     #[dto(list(filter, filter_like, order_by))]
     pub function_version_id: Option<FunctionVersionId>,
     #[dto(list(filter, order_by))]
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
     #[dto(list(filter, col = "has_data"))]
     pub data_changed: DataChanged,
     #[dto(list(filter, col = "schema_changed"))]
@@ -566,13 +566,13 @@ pub struct TableDataVersion {
     pub data_bytes: Option<ByteCount>,
     #[dto(list(filter))]
     pub schema_hash: Option<SchemaHash>,
-    pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
+    pub with_data_table_data_version_id: Option<WithData<PhysicalTableDataVersionId>>,
     #[dto(list(filter, order_by))]
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     #[dto(list(filter, order_by))]
-    pub started_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter, order_by))]
-    pub ended_on: Option<AtTime>,
+    pub ended_on: Option<Ended<AtTime>>,
     // Canonical LFR-level status (sticky-Committed). Filter on this
     // for committed-only.
     #[dto(list(filter, order_by))]

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::dxo_fields::dlo_dto_flat_machinery;
 use crate::type_builder::parse_input_item_struct;
 use proc_macro::TokenStream;
 use quote::quote;
@@ -28,8 +29,14 @@ pub fn dlo_type(input: TokenStream) -> TokenStream {
     let ident = &item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
 
+    let flat_machinery = match dlo_dto_flat_machinery(&item) {
+        Ok(ts) => ts,
+        Err(e) => return e.to_compile_error().into(),
+    };
+
     quote! {
     impl #impl_generics ta_objects::Dlo for #ident #ty_generics #where_clause {}
+    #flat_machinery
     }
     .into()
 }

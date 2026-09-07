@@ -16,7 +16,7 @@ use sea_query::{
 use ta_objects::SeaValue;
 use ta_objects::VersionedDao;
 use ta_objects::errors::SqlError;
-use ta_objects::sql_condition::{SqlCondition, resolve_condition};
+use ta_objects::sql_condition::SqlCondition;
 
 #[derive(Iden)]
 pub(crate) enum Cte {
@@ -25,7 +25,7 @@ pub(crate) enum Cte {
 }
 
 pub(crate) fn select_at<D>(
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
     on: &D::VersionOrder,
     state_cond: Option<&Condition>,
 ) -> Result<SelectStatement, SqlError>
@@ -33,7 +33,7 @@ where
     D: VersionedDao,
 {
     let mut where_cond = Condition::all()
-        .add(resolve_condition::<D>(condition)?)
+        .add(condition.resolve())
         .add(Expr::col(D::version_order_col()).lte(on.as_sea_value()));
     if let Some(s) = state_cond {
         where_cond = where_cond.add(s.clone());
@@ -65,7 +65,7 @@ where
 /// function directly, so they cannot mistakenly pass a non-stable
 /// column.
 pub(crate) fn partition_stable_ranked_cte<D>(
-    stable_filter: impl SqlCondition,
+    stable_filter: impl SqlCondition<D>,
     on: &D::VersionOrder,
 ) -> Result<WithClause, SqlError>
 where
@@ -82,7 +82,7 @@ where
         .from(D::table())
         .cond_where(
             Condition::all()
-                .add(resolve_condition::<D>(stable_filter)?)
+                .add(stable_filter.resolve())
                 .add(Expr::col(D::version_order_col()).lte(on.as_sea_value())),
         )
         .expr_window_as(
@@ -206,7 +206,7 @@ where
 /// by condition and state. Common outer query for the [`crate::Historic`]
 /// surface.
 pub(crate) fn select_latest_from_cte<D>(
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
     state_cond: Option<&Condition>,
 ) -> Result<SelectStatement, SqlError>
 where
@@ -216,7 +216,7 @@ where
         .columns(D::columns())
         .from(Cte::Ranked)
         .and_where(Expr::col(Cte::Rn).eq(1_i64))
-        .cond_where(resolve_condition::<D>(condition)?)
+        .cond_where(condition.resolve())
         .take();
     if let Some(s) = state_cond {
         q.cond_where(s.clone());

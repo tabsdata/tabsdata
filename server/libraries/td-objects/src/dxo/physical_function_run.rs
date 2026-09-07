@@ -5,10 +5,11 @@
 use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
-    ConnectionKind, Decorator, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
-    FunctionVersionId, InputIdx, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId,
-    ProjectName, RowCount, StageId, StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn,
-    UserId, UserName,
+    ConnectionKind, Decorator, Dispatched, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek,
+    EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx,
+    OfExecution, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, ProjectName,
+    RowCount, StageId, Started, StorageVersion, TableVersionCount, TransactionId, Trigger,
+    TriggeredOn, UserId, UserName,
 };
 use chrono::{DateTime, Utc};
 use ta_objects::FromDao;
@@ -42,23 +43,23 @@ pub struct PhysicalFunctionRunDB {
     // later base_path move. Same resolution its output TDVs stamp.
     pub base_path: BasePath,
     // Stamped at dispatch; basis for the stuck-run sweep.
-    pub dispatched_on: Option<AtTime>,
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub dispatched_on: Option<Dispatched<AtTime>>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
 
     // Per-attempt audit status. Canonical flow-control status lives
     // on the LFR (sticky-Committed).
     pub status: PhysicalFunctionRunStatus,
     // Patch resolved at mint, if any. NULL → head ran verbatim.
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
 
     // UTC epoch-ms bucket floors derived from `ended_on` at
     // terminalization. Written atomically with `status` + `ended_on`
     // by the worker callback. NULL until the attempt terminates.
-    pub ended_on_hour_ms: Option<EpochMs>,
-    pub ended_on_day_ms: Option<EpochMs>,
-    pub ended_on_week_ms: Option<EpochMs>,
-    pub ended_on_month_ms: Option<EpochMs>,
+    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
+    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
+    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
+    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
 
     // Aggregated per-attempt outcome from the worker callback's
     // `RunMetrics`. Populated only on `Done` terminalization;
@@ -78,7 +79,7 @@ pub struct PhysicalFunctionRunDBWithNames {
     pub project: Option<ProjectName>,
     pub connection: Option<ConnectionKind>,
     pub execution: Option<ExecutionName>,
-    pub execution_function_version_id: FunctionVersionId,
+    pub execution_function_version_id: OfExecution<FunctionVersionId>,
     pub storage_version: StorageVersion,
     pub triggered_by: UserName,
 }
@@ -119,9 +120,9 @@ pub struct PhysicalFunctionRun {
     pub triggered_on: TriggeredOn,
     pub trigger: Trigger,
     #[dto(list(filter))]
-    pub started_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter))]
-    pub ended_on: Option<AtTime>,
+    pub ended_on: Option<Ended<AtTime>>,
     #[dto(list(filter, order_by))]
     pub status: PhysicalFunctionRunStatus,
 
@@ -132,7 +133,7 @@ pub struct PhysicalFunctionRun {
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, order_by))]
-    pub execution_function_version_id: FunctionVersionId,
+    pub execution_function_version_id: OfExecution<FunctionVersionId>,
     pub triggered_by: UserName,
     // TODO exception info
     // pub kind: Option<String>,
@@ -178,16 +179,16 @@ impl FromDao for PhysicalFunctionRun {
 #[ta_objects::Dao]
 #[dao(update, sql_table = "physical_function_runs")]
 pub struct UpdatePhysicalFunctionRunDB {
-    pub dispatched_on: Option<AtTime>,
+    pub dispatched_on: Option<Dispatched<AtTime>>,
     #[dao(immutable)]
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
     pub status: PhysicalFunctionRunStatus,
 
-    pub ended_on_hour_ms: Option<EpochMs>,
-    pub ended_on_day_ms: Option<EpochMs>,
-    pub ended_on_week_ms: Option<EpochMs>,
-    pub ended_on_month_ms: Option<EpochMs>,
+    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
+    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
+    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
+    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
 
     pub metric_table_versions: Option<TableVersionCount>,
     pub metric_rows: Option<RowCount>,
@@ -201,7 +202,7 @@ impl UpdatePhysicalFunctionRunDB {
     /// WorkerDB exists) makes the PFR ineligible for the readiness query.
     pub fn dispatched(at: &AtTime) -> Self {
         Self {
-            dispatched_on: Some(*at),
+            dispatched_on: Some((*at).into()),
             started_on: None,
             ended_on: None,
             status: PhysicalFunctionRunStatus::Dispatched,
@@ -225,12 +226,12 @@ impl UpdatePhysicalFunctionRunDB {
         Ok(Self {
             dispatched_on: None,
             started_on: None,
-            ended_on: Some(*ended_on),
+            ended_on: Some((*ended_on).into()),
             status: PhysicalFunctionRunStatus::Failed,
-            ended_on_hour_ms: Some(EpochMs::try_from(floors.hour_ms)?),
-            ended_on_day_ms: Some(EpochMs::try_from(floors.day_ms)?),
-            ended_on_week_ms: Some(EpochMs::try_from(floors.week_ms)?),
-            ended_on_month_ms: Some(EpochMs::try_from(floors.month_ms)?),
+            ended_on_hour_ms: Some(EpochMs::try_from(floors.hour_ms)?.into()),
+            ended_on_day_ms: Some(EpochMs::try_from(floors.day_ms)?.into()),
+            ended_on_week_ms: Some(EpochMs::try_from(floors.week_ms)?.into()),
+            ended_on_month_ms: Some(EpochMs::try_from(floors.month_ms)?.into()),
             metric_table_versions: None,
             metric_rows: None,
             metric_data_bytes: None,
@@ -279,7 +280,7 @@ mod tests {
         let at = AtTime::now();
         let update = UpdatePhysicalFunctionRunDB::dispatched(&at);
         assert_eq!(update.status, PhysicalFunctionRunStatus::Dispatched);
-        assert_eq!(update.dispatched_on, Some(at));
+        assert_eq!(update.dispatched_on, Some(Dispatched::from(at)));
         assert!(update.started_on.is_none());
         assert!(update.ended_on.is_none());
     }

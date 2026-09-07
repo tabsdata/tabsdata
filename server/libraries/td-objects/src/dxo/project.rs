@@ -8,8 +8,8 @@
 
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, BasePath, Description, ProjectId, ProjectIdName, ProjectName, ProjectWhenDeleted,
-    UserId, UserName,
+    AtTime, BasePath, Created, Description, Modified, ProjectId, ProjectIdName, ProjectName,
+    ProjectWhenDeleted, UserId, UserName, WhenDeleted,
 };
 use ta_objects::FromDao;
 use td_common::id::Id;
@@ -23,11 +23,11 @@ pub struct ProjectCreateDB {
     pub description: Description,
     // Logical storage prefix, mapped from `ProjectCreate::base_path` (defaults `/`).
     pub base_path: BasePath,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
-    pub name_when_deleted: Option<ProjectName>,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
+    pub name_when_deleted: Option<WhenDeleted<ProjectName>>,
 }
 
 #[ta_objects::Dao]
@@ -37,10 +37,10 @@ pub struct ActiveProjectDB {
     pub name: ProjectName,
     pub description: Description,
     pub base_path: BasePath,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
 }
 
 impl ActiveProjectDB {
@@ -49,9 +49,9 @@ impl ActiveProjectDB {
     pub fn to_delete_dao(&self, ctx: &RequestContext) -> ProjectDeleteDB {
         ProjectDeleteDB {
             name: generate_deleted_name(),
-            modified_on: ctx.time,
-            modified_by_id: ctx.user_id,
-            name_when_deleted: self.name.clone(),
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
+            name_when_deleted: self.name.clone().into(),
         }
     }
 }
@@ -71,10 +71,10 @@ pub struct ProjectDB {
 pub struct ProjectDeleteDB {
     pub name: ProjectName,
 
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
 
-    pub name_when_deleted: ProjectName,
+    pub name_when_deleted: WhenDeleted<ProjectName>,
 }
 
 pub fn generate_deleted_name() -> ProjectName {
@@ -86,8 +86,8 @@ pub fn generate_deleted_name() -> ProjectName {
 pub struct ActiveProjectDBWithNames {
     #[dao(flatten)]
     pub base: ActiveProjectDB,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 #[ta_objects::Dto]
@@ -107,10 +107,10 @@ impl ProjectCreate {
             name: self.name,
             description: self.description,
             base_path: self.base_path,
-            created_on: ctx.time,
-            created_by_id: ctx.user_id,
-            modified_on: ctx.time,
-            modified_by_id: ctx.user_id,
+            created_on: ctx.time.into(),
+            created_by_id: ctx.user_id.into(),
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
             name_when_deleted: None,
         }
     }
@@ -127,8 +127,8 @@ pub struct ProjectUpdate {
 pub struct ProjectUpdateDB {
     pub name: ProjectName,
     pub description: Description,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
 }
 
 #[ta_objects::Dto]
@@ -142,12 +142,12 @@ pub struct ProjectRead {
     pub description: Description,
     #[dto(list(filter, filter_like, order_by))]
     pub base_path: BasePath,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 impl FromDao for ProjectRead {

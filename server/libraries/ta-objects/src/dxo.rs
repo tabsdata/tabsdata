@@ -11,12 +11,10 @@ pub enum DxoMappingError {
 }
 
 /// Maps Rust domain types to Sea Query column references.
-/// Used by `resolve_condition` to construct WHERE clauses from typed values.
 ///
-/// ## Constraint
-/// Each domain type must appear at most once as a field type in the struct.
-/// Two fields of the same domain type are ambiguous — use explicit column
-/// refs for those fields instead.
+/// Each domain type appears at most once as a field type in a DAO struct —
+/// the `#[Dao]` macro rejects duplicates (two fields of the same type would
+/// make type-keyed column resolution ambiguous).
 pub trait TypedColumns {
     type Iden: sea_query::Iden
         + std::str::FromStr<Err = td_error::TdError>
@@ -24,6 +22,10 @@ pub trait TypedColumns {
         + Send
         + Sync
         + std::fmt::Debug;
+
+    /// Runtime type-to-column lookup, for the type-erased paths
+    /// (`&dyn SeaValue` recursive references). Statically-typed conditions
+    /// resolve through [`HasColumn`] instead.
     fn col_for_type(type_id: std::any::TypeId) -> Option<Self::Iden>;
 }
 
@@ -40,6 +42,77 @@ pub trait DaoCore: TypedColumns + Send + Sync + std::fmt::Debug {
 
     /// Column name → display value pairs for error messages.
     fn column_display_values(&self) -> Vec<(String, String)>;
+}
+
+/// The DAO's column of domain type `T`, one impl per field from the `#[Dao]`
+/// macro — the compile-time column resolution behind [`SqlCondition`](crate::sql_condition::SqlCondition).
+///
+/// ```compile_fail
+/// use ta_objects::{StateFilter, Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+///
+/// #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+/// pub struct ItemName(String);
+///
+/// #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+/// pub struct OtherName(String);
+///
+/// #[ta_objects::Dao]
+/// #[dao(sql_table = "items")]
+/// pub struct ItemDao {
+///     pub name: ItemName,
+/// }
+///
+/// let _ = StateFilter::<ItemDao>::of(OtherName::try_from("x").unwrap());
+/// ```
+///
+/// Duplicate field types are ambiguous, so the macro bans them:
+///
+/// ```compile_fail
+/// use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+///
+/// #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+/// pub struct ItemName(String);
+///
+/// #[ta_objects::Dao]
+/// #[dao(sql_table = "items")]
+/// pub struct ItemDao {
+///     pub name: ItemName,
+///     pub alias: ItemName,
+/// }
+/// ```
+///
+/// The bans see through `#[dao(flatten)]`, including field *names* (a
+/// re-declared name would alias on decode / duplicate serde keys):
+///
+/// ```compile_fail
+/// use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+///
+/// #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+/// pub struct ItemName(String);
+///
+/// #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+/// pub struct OwnerName(String);
+///
+/// #[ta_objects::Dao]
+/// #[dao(sql_table = "items")]
+/// pub struct ItemDao {
+///     pub name: ItemName,
+/// }
+///
+/// #[ta_objects::Dao]
+/// #[dao(sql_table = "items__with_names")]
+/// pub struct ItemDaoWithNames {
+///     #[dao(flatten)]
+///     pub base: ItemDao,
+///     pub name: OwnerName,
+/// }
+/// ```
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` has no column of type `{T}`",
+    note = "conditions may only use the field types of the queried DAO"
+)]
+pub trait HasColumn<T>: DaoCore {
+    const COL: Self::Iden;
 }
 
 /// Update capability. Implemented by update-only DAOs (`#[DaoUpdate]`) and
@@ -172,13 +245,9 @@ impl<D> StateFilter<D> {
 }
 
 impl<D: DaoCore> StateFilter<D> {
-    /// Resolve `condition` against `D`'s columns into a state filter. For
-    /// the static conditions of DAO state fns, where a column mismatch is a
-    /// programming error.
-    pub fn of(condition: impl crate::sql_condition::SqlCondition) -> Self {
-        let resolved = crate::sql_condition::resolve_condition::<D>(condition)
-            .expect("static state condition must resolve");
-        Self::new(sea_query::Condition::all().add(resolved))
+    /// Resolve `condition` against `D`'s columns into a state filter.
+    pub fn of(condition: impl crate::sql_condition::SqlCondition<D>) -> Self {
+        Self::new(sea_query::Condition::all().add(condition.resolve()))
     }
 }
 

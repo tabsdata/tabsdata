@@ -69,11 +69,11 @@ mod tests {
 
         assert_eq!(created.name, name);
         assert_eq!(created.description, Description::default());
-        assert!(created.created_on >= before);
-        assert_eq!(created.created_by_id, UserId::admin());
-        assert_eq!(created.created_by, UserName::admin());
-        assert_eq!(created.modified_on, created.created_on);
-        assert_eq!(created.modified_by_id, UserId::admin());
-        assert_eq!(created.modified_by, UserName::admin());
+        assert!(*created.created_on >= before);
+        assert_eq!(*created.created_by_id, UserId::admin());
+        assert_eq!(*created.created_by, UserName::admin());
+        assert_eq!(*created.modified_on, *created.created_on);
+        assert_eq!(*created.modified_by_id, UserId::admin());
+        assert_eq!(*created.modified_by, UserName::admin());
     }
 }

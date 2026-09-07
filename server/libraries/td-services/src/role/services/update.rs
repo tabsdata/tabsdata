@@ -28,8 +28,8 @@ async fn update_role(
     let update_db = RoleDBUpdate {
         name: update.name,
         description: update.description,
-        modified_on: ctx.time,
-        modified_by_id: ctx.user_id,
+        modified_on: ctx.time.into(),
+        modified_by_id: ctx.user_id.into(),
     };
 
     let current: RoleDBWithNames = conn.live().fetch_one(&param.role).await?;

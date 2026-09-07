@@ -46,7 +46,7 @@ pub trait ChunkedQueries {
     /// Fetch every row matching any of `values`, OR'd together. Splits
     /// `values` into chunks to stay within bind-parameter limits and
     /// issues one query per chunk.
-    fn fetch_all_chunked<D: Dao, V: SqlCondition>(
+    fn fetch_all_chunked<D: Dao, V: SqlCondition<D>>(
         self,
         values: &[V],
     ) -> impl Future<Output = Result<Vec<D>, SqlError>>
@@ -55,7 +55,7 @@ pub trait ChunkedQueries {
 
     /// Apply `dao` as the update to every row matching any of `values`.
     /// Chunked like [`fetch_all_chunked`].
-    fn update_chunked<U: DaoUpdate, D: DaoCore, V: SqlCondition>(
+    fn update_chunked<U: DaoUpdate, D: DaoCore, V: SqlCondition<D>>(
         self,
         dao: &U,
         values: &[V],
@@ -65,7 +65,7 @@ pub trait ChunkedQueries {
 
     /// Delete every row matching any of `values`. Chunked like
     /// [`fetch_all_chunked`].
-    fn delete_chunked<D: DaoCore, V: SqlCondition>(
+    fn delete_chunked<D: DaoCore, V: SqlCondition<D>>(
         self,
         values: &[V],
     ) -> impl Future<Output = Result<PgQueryResult, SqlError>>
@@ -93,7 +93,7 @@ where
         Ok(result)
     }
 
-    async fn fetch_all_chunked<D: Dao, V: SqlCondition>(
+    async fn fetch_all_chunked<D: Dao, V: SqlCondition<D>>(
         mut self,
         values: &[V],
     ) -> Result<Vec<D>, SqlError>
@@ -113,7 +113,7 @@ where
         Ok(results)
     }
 
-    async fn update_chunked<U: DaoUpdate, D: DaoCore, V: SqlCondition>(
+    async fn update_chunked<U: DaoUpdate, D: DaoCore, V: SqlCondition<D>>(
         mut self,
         dao: &U,
         values: &[V],
@@ -134,7 +134,7 @@ where
         Ok(result)
     }
 
-    async fn delete_chunked<D: DaoCore, V: SqlCondition>(
+    async fn delete_chunked<D: DaoCore, V: SqlCondition<D>>(
         mut self,
         values: &[V],
     ) -> Result<PgQueryResult, SqlError>

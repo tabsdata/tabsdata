@@ -89,7 +89,7 @@ mod tests {
         LogicalPointerStatus, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId,
         RawSnippet, Snippet, TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::types::basic::{LogicalFunctionRunId, ReuseFrozen};
+    use td_objects::types::basic::{LogicalFunctionRunId, Patch, ReuseFrozen};
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
 
@@ -173,10 +173,10 @@ mod tests {
         db: &TdPool,
         project_id: ProjectId,
         head: &td_objects::dxo::function::FunctionDB,
-    ) -> FunctionVersionId {
+    ) -> Result<FunctionVersionId, TdError> {
         let patch = FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: head.id.clone(),
+            parent_function_version_id: head.id.clone().into(),
             function_id: head.function_id,
             collection_id: head.collection_id,
             snippet: Snippet::try_from(RawSnippet::try_from("patched").unwrap()).unwrap(),
@@ -188,7 +188,7 @@ mod tests {
             status: FunctionStatus::Active,
         };
         db.scoped(project_id).live().insert(&patch).await.unwrap();
-        patch.id
+        Ok(patch.id)
     }
 
     /// Replay against a Committed LFR — happy path. Asserts: a new
@@ -367,7 +367,7 @@ mod tests {
         let lfr_id = lfr_old.id.clone();
 
         // Register a patch of the head fvid AFTER the LFR is committed.
-        let patch_id = seed_patch(&db, p.id, &head).await;
+        let patch_id = seed_patch(&db, p.id, &head).await?;
 
         // Replay: the minted FR_new must run the patch, not the head.
         let response = Services::with_defaults(db.clone())
@@ -385,7 +385,10 @@ mod tests {
         // FR.function_version_id stays at the head fvid (FK valid);
         // the patch id is recorded on the dedicated column.
         assert_eq!(fr_new.function_version_id, head.id);
-        assert_eq!(fr_new.function_version_patch_id, Some(patch_id.clone()));
+        assert_eq!(
+            fr_new.function_version_patch_id,
+            Some(Patch::from(patch_id.clone()))
+        );
 
         // The minted TDV mirrors the FR's split: head fvid in the bare
         // column, patch id on the dedicated column.
@@ -395,7 +398,10 @@ mod tests {
             .await?;
         assert_eq!(tdvs.len(), 1);
         assert_eq!(tdvs[0].function_version_id, head.id);
-        assert_eq!(tdvs[0].function_version_patch_id, Some(patch_id));
+        assert_eq!(
+            tdvs[0].function_version_patch_id,
+            Some(Patch::from(patch_id.clone()))
+        );
 
         Ok(())
     }

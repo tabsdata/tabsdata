@@ -139,7 +139,7 @@ pub(crate) mod tests {
             assert_eq!(found.base.collection_id, function.collection_id);
             assert_eq!(found.base.function_id, function.function_id);
             assert_eq!(
-                found.table_collection,
+                *found.table_collection,
                 *dependency.collection.as_ref().unwrap_or(&collection.name)
             );
             assert_eq!(*found.base.table_versions, dependency.versions);
@@ -170,7 +170,7 @@ pub(crate) mod tests {
             assert_eq!(found.base.collection_id, function.collection_id);
             assert_eq!(found.base.function_id, function.function_id);
             assert_eq!(
-                found.trigger_by_collection,
+                *found.trigger_by_collection,
                 *trigger.collection.as_ref().unwrap_or(&collection.name)
             );
             assert_eq!(found.base.status, TriggerStatus::Active);

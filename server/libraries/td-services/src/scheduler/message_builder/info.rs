@@ -41,19 +41,17 @@ pub(crate) fn build_function_info(
     // Patch if resolved, otherwise head — drives the worker's data uri
     // and the yaml `function_version_id` so reads/writes go under the
     // patched identity.
-    let effective_fvid = f
-        .base
-        .base
-        .function_version_patch_id
-        .as_ref()
-        .unwrap_or(&f.base.base.function_version_id);
+    let effective_fvid = match &f.base.base.function_version_patch_id {
+        Some(patch) => (**patch).clone(),
+        None => f.base.base.function_version_id.clone(),
+    };
 
     // Function run content location — the prefix stamped on the run at mint.
     let (path, _) = storage_location
         .builder(&f.base.base.base_path)
         .collection(&f.base.base.collection_id)
         .transaction(&f.base.base.transaction_id)
-        .function_version(effective_fvid)
+        .function_version(&effective_fvid)
         .build()?;
     let (function_run_location, _) = build_external_location(storage, &path)?;
 
@@ -144,7 +142,7 @@ mod tests {
                 collection: CollectionName::try_from("c0").unwrap(),
                 project: Some(ProjectName::try_from("p0").unwrap()),
                 execution: None,
-                execution_function_version_id: FunctionVersionId::new(),
+                execution_function_version_id: FunctionVersionId::new().into(),
                 storage_version: StorageVersion::V1,
                 triggered_by: UserName::try_from("u0").unwrap(),
                 connection: None,

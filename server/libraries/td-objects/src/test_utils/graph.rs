@@ -244,8 +244,8 @@ pub async fn dependency(table: &TableName, function: &FunctionName) -> Dependenc
             collection_id: *COLLECTION_ID,
             dependency_id: DependencyId::default(),
             function_id: *FUNCTION_IDS.get(function).unwrap(),
-            table_collection_id: *COLLECTION_ID,
-            table_function_id: *FUNCTION_IDS.get(table_function).unwrap(),
+            table_collection_id: (*COLLECTION_ID).into(),
+            table_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
             table_id: *TABLE_IDS.get(table).unwrap(),
             table_versions: TableVersions::try_from("HEAD").unwrap(),
             dep_pos: DependencyPos::default(),
@@ -255,7 +255,7 @@ pub async fn dependency(table: &TableName, function: &FunctionName) -> Dependenc
             system: System::FALSE,
         },
         collection: COLLECTION_NAME.clone(),
-        table_collection: COLLECTION_NAME.clone(),
+        table_collection: COLLECTION_NAME.clone().into(),
     }
 }
 
@@ -271,8 +271,8 @@ pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWit
             collection_id: *COLLECTION_ID,
             trigger_id: TriggerId::default(),
             function_id: *FUNCTION_IDS.get(function).unwrap(),
-            trigger_by_collection_id: *COLLECTION_ID,
-            trigger_by_function_id: *FUNCTION_IDS.get(table_function).unwrap(),
+            trigger_by_collection_id: (*COLLECTION_ID).into(),
+            trigger_by_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
             trigger_by_table_id: *TABLE_IDS.get(table).unwrap(),
             status: TriggerStatus::Active,
             defined_on: AtTime::now(),
@@ -280,6 +280,6 @@ pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWit
             system: System::FALSE,
         },
         collection: COLLECTION_NAME.clone(),
-        trigger_by_collection: COLLECTION_NAME.clone(),
+        trigger_by_collection: COLLECTION_NAME.clone().into(),
     }
 }

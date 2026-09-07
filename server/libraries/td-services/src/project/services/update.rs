@@ -46,8 +46,8 @@ async fn update_project(
 
     let current_id = current.id;
     let mut update_db = ProjectUpdateDB::from(current);
-    update_db.modified_on = ctx.time;
-    update_db.modified_by_id = ctx.user_id;
+    update_db.modified_on = ctx.time.into();
+    update_db.modified_by_id = ctx.user_id.into();
     if let Some(name) = &update.name {
         update_db.name = name.clone();
     }

@@ -270,8 +270,8 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
-            assert_eq!(node.collection_id, dependency.base.table_collection_id);
-            assert_eq!(node.collection, dependency.table_collection);
+            assert_eq!(node.collection_id, *dependency.base.table_collection_id);
+            assert_eq!(node.collection, *dependency.table_collection);
             assert_eq!(node.function_version_id, table.base.function_version_id);
             assert_eq!(node.table_version_id, table.base.id);
             assert_eq!(node.name, table.base.name);
@@ -298,8 +298,8 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
-            assert_eq!(node.collection_id, trigger.base.trigger_by_collection_id);
-            assert_eq!(node.collection, trigger.trigger_by_collection);
+            assert_eq!(node.collection_id, *trigger.base.trigger_by_collection_id);
+            assert_eq!(node.collection, *trigger.trigger_by_collection);
             assert_eq!(node.function_version_id, table.base.function_version_id);
             assert_eq!(node.table_version_id, table.base.id);
             assert_eq!(node.name, table.base.name);

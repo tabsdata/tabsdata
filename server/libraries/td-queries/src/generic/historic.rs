@@ -83,7 +83,7 @@ where
     E: QueryExecutor,
 {
     /// Latest row matching `condition` across all partitions at `on`.
-    pub async fn fetch_one<D>(self, condition: impl SqlCondition) -> Result<D, SqlError>
+    pub async fn fetch_one<D>(self, condition: impl SqlCondition<D>) -> Result<D, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
         E: Domained<Domain = D::Db>,
@@ -94,7 +94,7 @@ where
     /// Optional variant of [`fetch_one`](Self::fetch_one).
     pub async fn fetch_optional<D>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Option<D>, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
@@ -104,7 +104,7 @@ where
     }
 
     /// All latest rows matching `condition`.
-    pub async fn fetch_all<D>(self, condition: impl SqlCondition) -> Result<Vec<D>, SqlError>
+    pub async fn fetch_all<D>(self, condition: impl SqlCondition<D>) -> Result<Vec<D>, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
         E: Domained<Domain = D::Db>,
@@ -121,7 +121,7 @@ where
     /// with the number of values. Prefer
     /// [`crate::Versioned::fetch_all_chunked`] when the partition
     /// column is known.
-    pub async fn fetch_all_chunked<D, V: SqlCondition>(
+    pub async fn fetch_all_chunked<D, V: SqlCondition<D>>(
         self,
         values: &[V],
     ) -> Result<Vec<D>, SqlError>
@@ -135,7 +135,7 @@ where
     /// Latest-per-partition listing at `on`, filtered & paginated.
     pub async fn list_versions<D>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<<D as FromDao>::Dao>,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
@@ -151,7 +151,7 @@ where
     /// Listing of every row at `on` — all versions, no rn=1 dedup.
     pub async fn list_full<D>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<<D as FromDao>::Dao>,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
@@ -175,7 +175,7 @@ where
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
     /// Latest row matching `condition` and the bound state.
-    pub async fn fetch_one(self, condition: impl SqlCondition) -> Result<D, SqlError> {
+    pub async fn fetch_one(self, condition: impl SqlCondition<D>) -> Result<D, SqlError> {
         let r = select_latest_from_cte::<D>(condition, self.condition.as_ref())?
             .order_by_columns(D::order_by())
             .limit(1)
@@ -191,8 +191,8 @@ where
     /// Assert no version matches `condition` and the bound state — a clean
     /// "already exists" error instead of the unique-constraint violation a
     /// later write would raise.
-    pub async fn assert_not_exists(self, condition: impl SqlCondition) -> Result<(), SqlError> {
-        let vals = condition.display_values::<D>();
+    pub async fn assert_not_exists(self, condition: impl SqlCondition<D>) -> Result<(), SqlError> {
+        let vals = condition.display_values();
         let found: Option<D> = self.fetch_optional(condition).await?;
         match found {
             Some(_) => {
@@ -207,7 +207,10 @@ where
     }
 
     /// Optional variant.
-    pub async fn fetch_optional(self, condition: impl SqlCondition) -> Result<Option<D>, SqlError> {
+    pub async fn fetch_optional(
+        self,
+        condition: impl SqlCondition<D>,
+    ) -> Result<Option<D>, SqlError> {
         let r = select_latest_from_cte::<D>(condition, self.condition.as_ref())?
             .order_by_columns(D::order_by())
             .limit(1)
@@ -221,7 +224,7 @@ where
     }
 
     /// All latest rows matching `condition` and the bound state.
-    pub async fn fetch_all(self, condition: impl SqlCondition) -> Result<Vec<D>, SqlError> {
+    pub async fn fetch_all(self, condition: impl SqlCondition<D>) -> Result<Vec<D>, SqlError> {
         let r = select_latest_from_cte::<D>(condition, self.condition.as_ref())?
             .order_by_columns(D::order_by())
             .take()
@@ -235,7 +238,7 @@ where
 
     /// Chunked variant of [`fetch_all`](Self::fetch_all). Same cost
     /// warning as [`Historic::fetch_all_chunked`].
-    pub async fn fetch_all_chunked<V: SqlCondition>(
+    pub async fn fetch_all_chunked<V: SqlCondition<D>>(
         mut self,
         values: &[V],
     ) -> Result<Vec<D>, SqlError> {
@@ -257,7 +260,7 @@ where
     /// Latest-per-partition listing matching the bound state.
     pub async fn list_versions<L>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
         params: &ListQueryParams<L>,
     ) -> Result<Vec<L>, SqlError>
     where
@@ -279,7 +282,7 @@ where
     /// Full audit-trail listing matching the bound state.
     pub async fn list_full<L>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
         params: &ListQueryParams<L>,
     ) -> Result<Vec<L>, SqlError>
     where

@@ -827,10 +827,13 @@ mod tests {
         assert!(qp.pagination.is_some());
     }
 
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    struct RunName(String);
+
     #[ta_objects::Dao]
     struct RunDao {
         id: StringType,
-        name: StringType,
+        name: RunName,
     }
 
     #[ta_objects::Dto]
@@ -839,7 +842,7 @@ mod tests {
         #[dto(list(pagination_by = "+", filter))]
         id: StringType,
         #[dto(list(filter, order_by))]
-        name: StringType,
+        name: RunName,
     }
 
     impl FromDao for RunDto {

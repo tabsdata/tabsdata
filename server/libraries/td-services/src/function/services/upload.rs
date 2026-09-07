@@ -195,8 +195,8 @@ mod tests {
         // elsewhere to mutate seeded rows directly).
         let prod = BasePath::try_from("/prod")?;
         let update = CollectionUpdateDB {
-            modified_on: AtTime::now(),
-            modified_by_id: UserId::admin(),
+            modified_on: AtTime::now().into(),
+            modified_by_id: UserId::admin().into(),
             base_path: Some(Some(prod.clone())),
             ..CollectionUpdateDB::from(&collection)
         };

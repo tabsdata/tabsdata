@@ -61,8 +61,8 @@ async fn update_collection(
         escalate_for_connected(&authz, conn, &ctx, &project, &collection.collection_type).await?;
         update_collection_validate(&update)?;
         let mut update_db = CollectionUpdateDB::from(&collection);
-        update_db.modified_on = ctx.time;
-        update_db.modified_by_id = ctx.user_id;
+        update_db.modified_on = ctx.time.into();
+        update_db.modified_by_id = ctx.user_id.into();
         update.apply_to(&mut update_db);
         let plan = plan_collection_update(conn, &collection, &update, &update_db).await?;
         (plan, grant)
@@ -201,12 +201,12 @@ mod tests {
 
         assert_eq!(updated.name, name);
         assert_eq!(updated.description, description);
-        assert!(updated.created_on < before_update);
-        assert_eq!(updated.created_by_id, UserId::admin());
-        assert_eq!(updated.created_by, UserName::admin());
-        assert!(updated.modified_on > before_update);
-        assert_eq!(updated.modified_by_id, UserId::admin());
-        assert_eq!(updated.modified_by, UserName::admin());
+        assert!(*updated.created_on < before_update);
+        assert_eq!(*updated.created_by_id, UserId::admin());
+        assert_eq!(*updated.created_by, UserName::admin());
+        assert!(*updated.modified_on > before_update);
+        assert_eq!(*updated.modified_by_id, UserId::admin());
+        assert_eq!(*updated.modified_by, UserName::admin());
     }
 
     async fn update_collection(

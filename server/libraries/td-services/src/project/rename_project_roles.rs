@@ -89,8 +89,8 @@ pub async fn rename_project_roles(
         let role_update_db = RoleDBUpdate {
             name: role_update.name,
             description: role_update.description,
-            modified_on: context.time,
-            modified_by_id: context.user_id,
+            modified_on: context.time.into(),
+            modified_by_id: context.user_id.into(),
         };
         conn.live()
             .update::<RoleDBUpdate, RoleDB>(&role_update_db, role.id)

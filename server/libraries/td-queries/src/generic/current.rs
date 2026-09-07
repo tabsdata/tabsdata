@@ -10,7 +10,7 @@ use crate::primitives::chunked::{
 use sea_query::{Condition, Query, SelectStatement};
 use std::marker::PhantomData;
 use ta_objects::errors::SqlError;
-use ta_objects::sql_condition::{SqlCondition, resolve_condition};
+use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{CurrentDao, DaoCore, FromDao, ListDto, StateFilter};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
@@ -73,7 +73,10 @@ where
     E: QueryExecutor,
 {
     /// Fetch the single row matching `condition` (All state).
-    pub async fn fetch_one<D: CurrentDao>(self, condition: impl SqlCondition) -> Result<D, SqlError>
+    pub async fn fetch_one<D: CurrentDao>(
+        self,
+        condition: impl SqlCondition<D>,
+    ) -> Result<D, SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
@@ -83,7 +86,7 @@ where
     /// Fetch the row matching `condition`, or `None` (All state).
     pub async fn fetch_optional<D: CurrentDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Option<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -94,7 +97,7 @@ where
     /// Fetch every row matching `condition` (All state).
     pub async fn fetch_all<D: CurrentDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -103,7 +106,7 @@ where
     }
 
     /// Chunked fetch (All state) — every row matching any of `values`.
-    pub async fn fetch_all_chunked<D: CurrentDao, V: SqlCondition>(
+    pub async fn fetch_all_chunked<D: CurrentDao, V: SqlCondition<D>>(
         self,
         values: &[V],
     ) -> Result<Vec<D>, SqlError>
@@ -116,7 +119,7 @@ where
     /// Filtered, paginated list over the `_current` view (All state).
     pub async fn list<D>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<<D as FromDao>::Dao>,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
@@ -140,7 +143,7 @@ where
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
     /// Fetch the single row matching `condition` and the bound state.
-    pub async fn fetch_one(self, condition: impl SqlCondition) -> Result<D, SqlError> {
+    pub async fn fetch_one(self, condition: impl SqlCondition<D>) -> Result<D, SqlError> {
         select_current::<D>(condition, self.condition.as_ref())?
             .build_query_as()
             .fetch_one(self.executor)
@@ -149,7 +152,10 @@ where
     }
 
     /// Fetch the row matching `condition` and state, or `None`.
-    pub async fn fetch_optional(self, condition: impl SqlCondition) -> Result<Option<D>, SqlError> {
+    pub async fn fetch_optional(
+        self,
+        condition: impl SqlCondition<D>,
+    ) -> Result<Option<D>, SqlError> {
         select_current::<D>(condition, self.condition.as_ref())?
             .build_query_as()
             .fetch_optional(self.executor)
@@ -158,7 +164,7 @@ where
     }
 
     /// Fetch every row matching `condition` and the bound state.
-    pub async fn fetch_all(self, condition: impl SqlCondition) -> Result<Vec<D>, SqlError> {
+    pub async fn fetch_all(self, condition: impl SqlCondition<D>) -> Result<Vec<D>, SqlError> {
         select_current::<D>(condition, self.condition.as_ref())?
             .build_query_as()
             .fetch_all(self.executor)
@@ -167,7 +173,7 @@ where
     }
 
     /// Chunked variant of [`fetch_all`](Self::fetch_all).
-    pub async fn fetch_all_chunked<V: SqlCondition>(
+    pub async fn fetch_all_chunked<V: SqlCondition<D>>(
         mut self,
         values: &[V],
     ) -> Result<Vec<D>, SqlError> {
@@ -189,7 +195,7 @@ where
     /// associated `Dao` must match the wrapper's bound DAO.
     pub async fn list<L>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
         params: &ListQueryParams<L>,
     ) -> Result<Vec<L>, SqlError>
     where
@@ -213,13 +219,13 @@ where
 // ---------------------------------------------------------------------------
 
 fn select_current<D>(
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
     state_cond: Option<&Condition>,
 ) -> Result<SelectStatement, SqlError>
 where
     D: CurrentDao,
 {
-    let mut where_cond = Condition::all().add(resolve_condition::<D>(condition)?);
+    let mut where_cond = Condition::all().add(condition.resolve());
     if let Some(s) = state_cond {
         where_cond = where_cond.add(s.clone());
     }

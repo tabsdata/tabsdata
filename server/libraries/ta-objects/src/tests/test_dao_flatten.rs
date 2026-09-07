@@ -26,6 +26,15 @@ mod tests {
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct OwnerName(String);
 
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct RenamedName(String);
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct WidgetVersionId(String);
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct WidgetRowId(String);
+
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
     #[dao(sql_table = "widgets", key(name))]
@@ -42,8 +51,7 @@ mod tests {
         #[dao(flatten)]
         pub base: WidgetDao,
         pub owner: OwnerName,
-        // Same domain type as base's `name`: base must win in col_for_type.
-        pub renamed: Name,
+        pub renamed: RenamedName,
     }
 
     #[ta_objects::Dao]
@@ -98,13 +106,30 @@ mod tests {
     }
 
     #[test]
-    fn test_col_for_type_base_wins() {
-        // `Name` is both base's `name` and own `renamed`: base first.
+    fn test_col_for_type_resolves_base_and_own() {
         let col = WidgetDaoWithNames::col_for_type(TypeId::of::<Name>()).unwrap();
         assert_eq!(col, WidgetDaoWithNamesIden::Base(WidgetDaoIden::Name));
 
         let own = WidgetDaoWithNames::col_for_type(TypeId::of::<OwnerName>()).unwrap();
         assert_eq!(own, WidgetDaoWithNamesIden::Owner);
+    }
+
+    #[test]
+    fn test_has_column_resolves_base_and_own() {
+        use crate::dxo::HasColumn;
+        assert_eq!(
+            <WidgetDaoWithNames as HasColumn<Name>>::COL,
+            WidgetDaoWithNamesIden::Base(WidgetDaoIden::Name)
+        );
+        assert_eq!(
+            <WidgetDaoWithNames as HasColumn<OwnerName>>::COL,
+            WidgetDaoWithNamesIden::Owner
+        );
+        // Two flatten levels down.
+        assert_eq!(
+            Iden::to_string(&<WidgetDaoWithStatus as HasColumn<Name>>::COL),
+            "name"
+        );
     }
 
     #[test]
@@ -116,7 +141,7 @@ mod tests {
                 defined_on: Some(DefinedOn::try_from(1i64).unwrap()),
             },
             owner: OwnerName::try_from("o").unwrap(),
-            renamed: Name::try_from("r").unwrap(),
+            renamed: RenamedName::try_from("r").unwrap(),
         };
         let cols = WidgetDaoWithNames::columns().into_iter().count();
         let vals = dao.insert_values().into_iter().count();
@@ -141,7 +166,7 @@ mod tests {
                 defined_on: None,
             },
             owner: OwnerName::try_from("o").unwrap(),
-            renamed: Name::try_from("r").unwrap(),
+            renamed: RenamedName::try_from("r").unwrap(),
         };
         let cols: Vec<String> = dao
             .update_values()
@@ -162,7 +187,7 @@ mod tests {
         recursive(up = "widget_id", down = "id")
     )]
     struct VersionedWidgetDao {
-        pub id: WidgetId,
+        pub id: WidgetVersionId,
         pub widget_id: WidgetId,
         pub defined_on: DefinedOn,
     }
@@ -219,7 +244,7 @@ mod tests {
     struct WidgetRowDao {
         #[dao(flatten)]
         pub base: WidgetDao,
-        pub row_id: WidgetId,
+        pub row_id: WidgetRowId,
     }
 
     #[test]

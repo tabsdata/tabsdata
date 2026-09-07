@@ -6,8 +6,8 @@ use crate::dxo::connection::KeyValue;
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BasePath, CollectionId, CollectionIdName, CollectionName, CollectionType,
-    CollectionWhenDeleted, ConnectionId, Description, GroupId, GroupName, ProjectId, ProjectName,
-    UserId, UserName,
+    CollectionWhenDeleted, ConnectionId, Created, Description, GroupId, GroupName, Modified,
+    ProjectId, ProjectName, UserId, UserName, WhenDeleted,
 };
 use ta_objects::FromDao;
 use td_common::id::Id;
@@ -19,11 +19,11 @@ pub struct CollectionCreateDB {
     pub id: CollectionId,
     pub name: CollectionName,
     pub description: Description,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
-    pub name_when_deleted: Option<CollectionName>,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
+    pub name_when_deleted: Option<WhenDeleted<CollectionName>>,
     // Resolved from `CollectionCreate::group` (id-or-name) by the create service.
     pub group_id: GroupId,
     // Logical storage prefix, mapped from `CollectionCreate::base_path`.
@@ -45,10 +45,10 @@ pub struct ActiveCollectionDB {
     pub project_id: ProjectId,
     pub name: CollectionName,
     pub description: Description,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub group_id: GroupId,
     // Raw override: `None` means inherit the owning project's base_path.
     pub base_path: Option<BasePath>,
@@ -67,9 +67,9 @@ impl ActiveCollectionDB {
     pub fn to_delete_dao(&self, ctx: &RequestContext) -> CollectionDeleteDB {
         CollectionDeleteDB {
             name: generate_deleted_name(),
-            modified_on: ctx.time,
-            modified_by_id: ctx.user_id,
-            name_when_deleted: self.name.clone(),
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
+            name_when_deleted: self.name.clone().into(),
         }
     }
 }
@@ -91,10 +91,10 @@ pub struct CollectionDB {
 pub struct CollectionDeleteDB {
     pub name: CollectionName,
 
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
 
-    pub name_when_deleted: CollectionName,
+    pub name_when_deleted: WhenDeleted<CollectionName>,
 }
 
 pub fn generate_deleted_name() -> CollectionName {
@@ -108,8 +108,8 @@ pub struct ActiveCollectionDBWithNames {
     pub base: ActiveCollectionDB,
     // Owning project's name, from the view's join to projects_resolved.
     pub project: ProjectName,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
     // Resolved group display name from the joined groups row.
     pub group: GroupName,
 }
@@ -173,8 +173,8 @@ impl CollectionUpdate {
 pub struct CollectionUpdateDB {
     pub name: CollectionName,
     pub description: Description,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     // DAO side of `CollectionUpdate::base_path`'s tri-state (here the outer
     // `None` skips the column). Seeded from the current `ActiveCollectionDB`,
     // overridden by the update layer.
@@ -191,10 +191,10 @@ pub struct CollectionRead {
     pub name: CollectionName,
     #[dto(list(filter, filter_like, order_by))]
     pub description: Description,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub group_id: GroupId,
     pub base_path: Option<BasePath>,
     pub effective_base_path: BasePath,
@@ -204,8 +204,8 @@ pub struct CollectionRead {
     // Disambiguates same-named collections across projects in wildcard listings.
     #[dto(list(filter, filter_like, order_by))]
     pub project: ProjectName,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
     #[dto(list(filter, filter_like, order_by))]
     pub group: GroupName,
 }

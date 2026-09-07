@@ -346,10 +346,10 @@ pub async fn plan_collection_create(
             Some(ConnectionDB {
                 id: ConnectionId::default(),
                 kind: document.kind.clone(),
-                created_on: request_context.time,
-                created_by_id: request_context.user_id,
-                modified_on: request_context.time,
-                modified_by_id: request_context.user_id,
+                created_on: request_context.time.into(),
+                created_by_id: request_context.user_id.into(),
+                modified_on: request_context.time.into(),
+                modified_by_id: request_context.user_id.into(),
             })
         }
     };
@@ -411,10 +411,10 @@ pub async fn insert_collection_with_connection(
         id: plan.collection_id,
         name: plan.create.name.clone(),
         description: plan.create.description.clone(),
-        created_on: request_context.time,
-        created_by_id: request_context.user_id,
-        modified_on: request_context.time,
-        modified_by_id: request_context.user_id,
+        created_on: request_context.time.into(),
+        created_by_id: request_context.user_id.into(),
+        modified_on: request_context.time.into(),
+        modified_by_id: request_context.user_id.into(),
         name_when_deleted: None,
         group_id: plan.group_id,
         base_path: plan.create.base_path.clone(),

@@ -261,7 +261,7 @@ pub(crate) async fn resolve_input_tables(
                         .collect();
                     let coll_ids: Vec<CollectionId> = deps
                         .values()
-                        .map(|d| d.table_collection_id)
+                        .map(|d| *d.table_collection_id)
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
@@ -305,7 +305,7 @@ pub(crate) async fn resolve_input_tables(
                         dep.table_id
                     )
                 })?;
-                let coll = cache.colls.get(&dep.table_collection_id).ok_or_else(|| {
+                let coll = cache.colls.get(&*dep.table_collection_id).ok_or_else(|| {
                     api_error!(
                         ApiError::InternalError,
                         "CollectionDB not found for dep table_collection_id {} during fallback",
@@ -314,7 +314,7 @@ pub(crate) async fn resolve_input_tables(
                 })?;
                 (
                     table.name.clone(),
-                    dep.table_collection_id,
+                    *dep.table_collection_id,
                     coll.base.name.clone(),
                     dep.table_id,
                     table.id,

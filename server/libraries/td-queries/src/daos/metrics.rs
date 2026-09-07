@@ -1584,12 +1584,12 @@ mod tests {
     use td_objects::dxo::query_filters::{TimeWindow, WindowUnit};
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        AtTime, BundleId, ByteCount, Decorator, DependencyPos, EpochMs, HasData, InputIdx,
+        AtTime, BundleId, ByteCount, Decorator, DependencyPos, Ended, HasData, InputIdx,
         LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
         PhysicalFunctionRunStatus, RowCount, TableFunctionParamPos, TableNameDto,
         TableVersionCount, TransactionKey, VersionPos,
     };
-    use td_objects::types::basic::{CollectionName, ProjectId, ProjectName, UserId};
+    use td_objects::types::basic::{CollectionName, EpochMs, ProjectId, ProjectName, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     const WINDOW_DAY_START: i64 = 1_700_000_000_000; // arbitrary day in Nov 2023
@@ -1670,17 +1670,16 @@ mod tests {
         rows: i64,
         bytes: i64,
     ) -> Result<(), TdError> {
-        let bucket = EpochMs::try_from(IN_WINDOW)?;
-        let ended_on = AtTime::from(Timestamp::try_from(IN_WINDOW)?);
+        let ended_on: Ended<AtTime> = AtTime::from(Timestamp::try_from(IN_WINDOW)?).into();
         let update = UpdatePhysicalFunctionRunDB {
             dispatched_on: None,
             started_on: None,
             ended_on: Some(ended_on),
             status: PhysicalFunctionRunStatus::Done,
-            ended_on_hour_ms: Some(bucket),
-            ended_on_day_ms: Some(bucket),
-            ended_on_week_ms: Some(bucket),
-            ended_on_month_ms: Some(bucket),
+            ended_on_hour_ms: Some(EpochMs::try_from(IN_WINDOW)?.into()),
+            ended_on_day_ms: Some(EpochMs::try_from(IN_WINDOW)?.into()),
+            ended_on_week_ms: Some(EpochMs::try_from(IN_WINDOW)?.into()),
+            ended_on_month_ms: Some(EpochMs::try_from(IN_WINDOW)?.into()),
             metric_table_versions: Some(TableVersionCount::try_from(tables)?),
             metric_rows: Some(RowCount::try_from(rows)?),
             metric_data_bytes: Some(ByteCount::try_from(bytes)?),
@@ -1767,9 +1766,9 @@ mod tests {
     async fn soft_delete_collection(db: &TdPool, coll: &ActiveCollectionDB) -> Result<(), TdError> {
         let del = CollectionDeleteDB {
             name: CollectionName::try_from(format!("deleted_{}", coll.id))?,
-            modified_on: AtTime::from(Timestamp::try_from(IN_WINDOW)?),
-            modified_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
-            name_when_deleted: coll.name.clone(),
+            modified_on: AtTime::from(Timestamp::try_from(IN_WINDOW)?).into(),
+            modified_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?.into(),
+            name_when_deleted: coll.name.clone().into(),
         };
         db.scoped(coll.project_id)
             .live()
@@ -1781,9 +1780,9 @@ mod tests {
     async fn soft_delete_project(db: &TdPool, project: &ActiveProjectDB) -> Result<(), TdError> {
         let del = ProjectDeleteDB {
             name: ProjectName::try_from(format!("deleted_{}", project.id))?,
-            modified_on: AtTime::from(Timestamp::try_from(IN_WINDOW)?),
-            modified_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
-            name_when_deleted: project.name.clone(),
+            modified_on: AtTime::from(Timestamp::try_from(IN_WINDOW)?).into(),
+            modified_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?.into(),
+            name_when_deleted: project.name.clone().into(),
         };
         db.scoped(project.id)
             .live()

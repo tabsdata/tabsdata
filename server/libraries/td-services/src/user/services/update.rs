@@ -99,15 +99,15 @@ mod tests {
             updated.email.unwrap(),
             Email::try_from("u0update@foo.com").unwrap()
         );
-        assert!(updated.created_on < before);
-        assert_eq!(updated.created_by_id, UserId::admin());
-        assert_eq!(updated.created_by, UserName::admin());
+        assert!(*updated.created_on < before);
+        assert_eq!(*updated.created_by_id, UserId::admin());
+        assert_eq!(*updated.created_by, UserName::admin());
         assert_eq!(
             updated.modified_on.timestamp_millis(),
             request_time.timestamp_millis()
         );
-        assert_eq!(updated.modified_by_id, UserId::admin());
-        assert_eq!(updated.modified_by, UserName::admin());
+        assert_eq!(*updated.modified_by_id, UserId::admin());
+        assert_eq!(*updated.modified_by, UserName::admin());
         assert!(!*updated.enabled);
         assert!(*updated.password_must_change);
 
@@ -149,15 +149,15 @@ mod tests {
             updated.email.unwrap(),
             Email::try_from("u0update@foo.com").unwrap()
         );
-        assert!(updated.created_on < before);
-        assert_eq!(updated.created_by_id, UserId::admin());
-        assert_eq!(updated.created_by, UserName::admin());
+        assert!(*updated.created_on < before);
+        assert_eq!(*updated.created_by_id, UserId::admin());
+        assert_eq!(*updated.created_by, UserName::admin());
         assert_eq!(
             updated.modified_on.timestamp_millis(),
             request_time.timestamp_millis()
         );
-        assert_eq!(updated.modified_by_id, user.id);
-        assert_eq!(updated.modified_by, user.name);
+        assert_eq!(*updated.modified_by_id, user.id);
+        assert_eq!(*updated.modified_by, user.name);
         assert!(*updated.enabled);
     }
 

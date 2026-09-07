@@ -27,7 +27,7 @@ use crate::QueryExecutor;
 use sea_query::{IntoTableRef, LockBehavior, LockType, OnConflict, Query, SelectStatement};
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::{SqlError, format_hint};
-use ta_objects::sql_condition::{SqlCondition, resolve_condition};
+use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{Dao, DaoCore, DaoUpdate, FromDao, KeyedDao, ListDto, LiveDao, StateFilter};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
@@ -96,7 +96,7 @@ where
     }
 
     /// Fetch the single row matching `condition`. Errors if missing.
-    pub async fn fetch_one<D: LiveDao>(self, condition: impl SqlCondition) -> Result<D, SqlError>
+    pub async fn fetch_one<D: LiveDao>(self, condition: impl SqlCondition<D>) -> Result<D, SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
@@ -112,7 +112,7 @@ where
     /// Fetch the row matching `condition`, or `None` if no row matches.
     pub async fn fetch_optional<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Option<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -130,12 +130,12 @@ where
     /// error instead of the raw fetch error path.
     pub async fn assert_exists<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<(), SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
-        let vals = condition.display_values::<D>();
+        let vals = condition.display_values();
         let found: Option<D> = self.fetch_optional(condition).await?;
         match found {
             Some(_) => Ok(()),
@@ -153,12 +153,12 @@ where
     /// instead of the unique-constraint violation a later write would raise.
     pub async fn assert_not_exists<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<(), SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
-        let vals = condition.display_values::<D>();
+        let vals = condition.display_values();
         let found: Option<D> = self.fetch_optional(condition).await?;
         match found {
             Some(_) => {
@@ -179,7 +179,7 @@ where
     /// walks the default ordering forward (newest-first for DESC DAOs).
     pub async fn fetch_last<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Option<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -198,7 +198,7 @@ where
     /// this one.
     pub async fn fetch_optional_for_update<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Option<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -217,7 +217,7 @@ where
     /// concurrent read-modify-write on the same row behind this one.
     pub async fn fetch_one_for_update<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<D, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -238,7 +238,7 @@ where
     /// that outer-joins.
     pub async fn fetch_all_for_update<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -254,7 +254,7 @@ where
     /// Fetch every row matching `condition`. No state filter.
     pub async fn fetch_all<D: LiveDao>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -271,7 +271,7 @@ where
     pub async fn update<U: DaoUpdate, D: DaoCore>(
         self,
         dao: &U,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Domained<Domain = U::Db>,
@@ -287,7 +287,7 @@ where
     /// Delete every row matching `condition`.
     pub async fn delete<D: DaoCore>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -304,7 +304,7 @@ where
     /// `D::from_dao`.
     pub async fn list<D>(
         self,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<<D as FromDao>::Dao>,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
@@ -315,7 +315,7 @@ where
         let base = Query::select()
             .columns(<D as FromDao>::Dao::columns())
             .from(<D as FromDao>::Dao::table())
-            .cond_where(resolve_condition::<<D as FromDao>::Dao>(condition)?)
+            .cond_where(condition.resolve())
             .take();
         let mut query = params.apply_to(base);
         let daos: Vec<<D as FromDao>::Dao> = query
@@ -332,7 +332,7 @@ where
     pub async fn fetch_all_in<D: LiveDao>(
         self,
         state: StateFilter<D>,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -352,7 +352,7 @@ where
     pub async fn claim_all_in<D: LiveDao>(
         self,
         state: StateFilter<D>,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         E: Domained<Domain = D::Db>,
@@ -372,7 +372,7 @@ where
     pub async fn fetch_latest_before<D: LiveDao>(
         self,
         state: StateFilter<D>,
-        condition: impl SqlCondition,
+        condition: impl SqlCondition<D>,
         offset: u64,
     ) -> Result<Option<D>, SqlError>
     where
@@ -390,14 +390,14 @@ where
 // SQL builder helpers — shape the statements the inherent methods above
 // execute.
 
-pub(crate) fn select<D>(condition: impl SqlCondition) -> Result<SelectStatement, SqlError>
+pub(crate) fn select<D>(condition: impl SqlCondition<D>) -> Result<SelectStatement, SqlError>
 where
     D: Dao,
 {
     let query = Query::select()
         .from(D::table())
         .columns(D::columns())
-        .cond_where(resolve_condition::<D>(condition)?)
+        .cond_where(condition.resolve())
         .order_by_columns(D::order_by())
         .take();
     Ok(query)
@@ -436,7 +436,7 @@ pub(crate) fn insert_or_ignore_query<D: KeyedDao>(
 /// `select` with the DAO's ordering reversed and `LIMIT 1` — the last row
 /// in default order.
 pub(crate) fn select_last<D: Dao>(
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
 ) -> Result<SelectStatement, SqlError> {
     let query = select::<D>(condition)?
         .clear_order_by()
@@ -448,7 +448,7 @@ pub(crate) fn select_last<D: Dao>(
 
 /// `select` with a `FOR UPDATE` row lock.
 pub(crate) fn select_for_update<D: Dao>(
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
 ) -> Result<SelectStatement, SqlError> {
     let query = select::<D>(condition)?.lock(LockType::Update).take();
     Ok(query)
@@ -480,7 +480,7 @@ fn reverse_order<D: Dao>() -> impl Iterator<Item = (D::Iden, sea_query::Order)> 
 
 pub(crate) fn update_query<U: DaoUpdate, D: DaoCore>(
     dao: &U,
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
 ) -> Result<sea_query::UpdateStatement, SqlError> {
     if condition.matches_all() {
         return Err(SqlError::EmptyConditionRefused(
@@ -490,13 +490,13 @@ pub(crate) fn update_query<U: DaoUpdate, D: DaoCore>(
     let query = Query::update()
         .table(U::table())
         .values(dao.update_values())
-        .cond_where(resolve_condition::<D>(condition)?)
+        .cond_where(condition.resolve())
         .take();
     Ok(query)
 }
 
 pub(crate) fn delete_query<D: DaoCore>(
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
 ) -> Result<sea_query::DeleteStatement, SqlError> {
     if condition.matches_all() {
         return Err(SqlError::EmptyConditionRefused(
@@ -505,14 +505,14 @@ pub(crate) fn delete_query<D: DaoCore>(
     }
     let query = Query::delete()
         .from_table(D::table())
-        .cond_where(resolve_condition::<D>(condition)?)
+        .cond_where(condition.resolve())
         .take();
     Ok(query)
 }
 
 pub(crate) fn select_in<D: LiveDao>(
     state: &StateFilter<D>,
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
 ) -> Result<SelectStatement, SqlError> {
     let query = select::<D>(condition)?
         .cond_where(state.condition().clone())
@@ -522,7 +522,7 @@ pub(crate) fn select_in<D: LiveDao>(
 
 pub(crate) fn select_latest_before<D: LiveDao>(
     state: &StateFilter<D>,
-    condition: impl SqlCondition,
+    condition: impl SqlCondition<D>,
     offset: u64,
 ) -> Result<SelectStatement, SqlError> {
     let mut query = select::<D>(condition)?

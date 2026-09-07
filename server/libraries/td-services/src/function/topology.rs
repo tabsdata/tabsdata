@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::function::{FunctionDB, FunctionPatchDB};
-use td_objects::types::basic::{AtTime, FunctionVersionId};
+use td_objects::types::basic::{AtTime, FunctionVersionId, Parent, Patch};
 use td_queries::{ChunkedQueries, LiveEntry, VersionedEntry};
 
 /// Resolve a fvid to its canonical head: try `functions` first, fall
@@ -26,7 +26,7 @@ pub async fn head_of(
         return Ok(row.id);
     }
     let patch: FunctionPatchDB = conn.live().fetch_one::<FunctionPatchDB>(fvid).await?;
-    Ok(patch.parent_function_version_id)
+    Ok(patch.parent_function_version_id.into_inner())
 }
 
 /// The pair of ids needed to mint an FR/TDV: the head fvid (FK-valid
@@ -35,7 +35,7 @@ pub async fn head_of(
 #[derive(Debug, Clone)]
 pub struct RunnableVersion {
     pub function_version_id: FunctionVersionId,
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
 }
 
 impl RunnableVersion {
@@ -43,7 +43,7 @@ impl RunnableVersion {
     /// patch if set, else head.
     pub fn effective(&self) -> &FunctionVersionId {
         self.function_version_patch_id
-            .as_ref()
+            .as_deref()
             .unwrap_or(&self.function_version_id)
     }
 }
@@ -64,11 +64,11 @@ pub async fn latest_patch_or_head(
     let latest: Option<FunctionPatchDB> = conn
         .versioned(at)
         .state(FunctionPatchDB::active())
-        .fetch_optional(&head_fvid)
+        .fetch_optional(&Parent::from(head_fvid.clone()))
         .await?;
     Ok(RunnableVersion {
         function_version_id: head_fvid,
-        function_version_patch_id: latest.map(|v| v.id),
+        function_version_patch_id: latest.map(|v| Patch::from(v.id)),
     })
 }
 
@@ -112,7 +112,7 @@ pub async fn latest_patch_or_head_batch(
         if let Some(row) = canonical_by_id.remove(&fvid) {
             head_by_input.insert(fvid, row.id);
         } else if let Some(patch) = patch_lookup_by_id.remove(&fvid) {
-            head_by_input.insert(fvid, patch.parent_function_version_id);
+            head_by_input.insert(fvid, patch.parent_function_version_id.into_inner());
         }
     }
 
@@ -129,20 +129,23 @@ pub async fn latest_patch_or_head_batch(
     let latest_patches: Vec<FunctionPatchDB> = if head_fvids.is_empty() {
         Vec::new()
     } else {
+        let head_partitions: Vec<_> = head_fvids.iter().cloned().map(Parent::from).collect();
         conn.versioned(at)
             .state(FunctionPatchDB::active())
-            .fetch_all_chunked(&head_fvids)
+            .fetch_all_chunked(&head_partitions)
             .await?
     };
     let patch_by_head: HashMap<FunctionVersionId, FunctionPatchDB> = latest_patches
         .into_iter()
-        .map(|p| (p.parent_function_version_id.clone(), p))
+        .map(|p| ((*p.parent_function_version_id).clone(), p))
         .collect();
 
     // 3. Resolve `RunnableVersion` for each input fvid in-memory.
     let mut out = HashMap::with_capacity(head_by_input.len());
     for (input_fvid, head_fvid) in head_by_input {
-        let latest = patch_by_head.get(&head_fvid).map(|p| p.id.clone());
+        let latest = patch_by_head
+            .get(&head_fvid)
+            .map(|p| Patch::from(p.id.clone()));
         out.insert(
             input_fvid,
             RunnableVersion {
@@ -164,7 +167,7 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
-        ProjectId, RawSnippet, Snippet, TableNameDto, UserId,
+        Patch, ProjectId, RawSnippet, Snippet, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
 
@@ -214,7 +217,7 @@ mod tests {
     ) -> Result<FunctionVersionId, TdError> {
         let patch = FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: head.id.clone(),
+            parent_function_version_id: head.id.clone().into(),
             function_id: head.function_id,
             collection_id: head.collection_id,
             snippet: Snippet::try_from(RawSnippet::try_from(snippet)?)?,
@@ -252,10 +255,10 @@ mod tests {
 
         let at_t1 = latest_patch_or_head(&mut conn, &head.id, &t1).await?;
         assert_eq!(at_t1.function_version_id, head.id);
-        assert_eq!(at_t1.function_version_patch_id, Some(p1));
+        assert_eq!(at_t1.function_version_patch_id, Some(Patch::from(p1)));
 
         let at_t2 = latest_patch_or_head(&mut conn, &head.id, &t2).await?;
-        assert_eq!(at_t2.function_version_patch_id, Some(p2));
+        assert_eq!(at_t2.function_version_patch_id, Some(Patch::from(p2)));
 
         let at_before = latest_patch_or_head(&mut conn, &head.id, &before).await?;
         assert_eq!(at_before.function_version_patch_id, None);
@@ -287,9 +290,9 @@ mod tests {
         let r_a = map.get(&head_a.id).expect("missing head_a");
         let r_b = map.get(&head_b.id).expect("missing head_b");
         assert_eq!(r_a.function_version_id, head_a.id);
-        assert_eq!(r_a.function_version_patch_id, Some(p_a));
+        assert_eq!(r_a.function_version_patch_id, Some(Patch::from(p_a)));
         assert_eq!(r_b.function_version_id, head_b.id);
-        assert_eq!(r_b.function_version_patch_id, Some(p_b));
+        assert_eq!(r_b.function_version_patch_id, Some(Patch::from(p_b)));
         Ok(())
     }
 }

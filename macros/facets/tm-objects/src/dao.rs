@@ -16,6 +16,7 @@
 // The Iden enum itself is named <StructName>Iden and has a leading Table variant:
 //   struct TableDB { id, defined_on } → enum TableDBIden { Table, Id, DefinedOn }
 
+use crate::dxo_fields::{callback_ident, fields_callback};
 use crate::type_builder::parse_input_item_struct;
 use darling::util::{Flag, PathList};
 use darling::{FromDeriveInput, FromMeta};
@@ -23,6 +24,7 @@ use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
+use std::collections::HashMap;
 use syn::{DeriveInput, Fields, ItemStruct, Type, parse_macro_input};
 
 // ---- Darling argument structs ----------------------------------------------
@@ -411,6 +413,64 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
     };
 
+    // ---- HasColumn -----------------------------------------------------
+    // With a flatten base the merged field list is only visible when the
+    // base's `__dxo_fields_*` callback expands, so ban + impls delegate to
+    // `__dao_has_columns` through it.
+    let has_columns = match &flatten {
+        None => {
+            let mut seen: HashMap<String, &Ident> = HashMap::new();
+            for (name, ty) in field_names.iter().copied().zip(field_types.iter().copied()) {
+                if let Some(first) = seen.insert(quote!(#ty).to_string(), name) {
+                    let ty_str = quote!(#ty).to_string();
+                    return syn::Error::new_spanned(
+                        name,
+                        format!(
+                            "duplicate column type `{ty_str}` on fields `{first}` and `{name}` \
+                             — give each column a distinct newtype",
+                        ),
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+            }
+            quote! {
+                #(
+                    impl #impl_generics ta_objects::HasColumn<#field_types>
+                        for #ident #ty_generics #where_clause
+                    {
+                        const COL: Self::Iden = #table_iden::#field_iden_variants;
+                    }
+                )*
+            }
+        }
+        Some(fi) => {
+            let base_cb = callback_ident(&fi.base_last_ident());
+            let base_iden = &fi.base_iden;
+            quote! {
+                #base_cb! {
+                    ta_objects::__dao_has_columns => { #ident, #table_iden } [#base_iden]
+                    #( [] { #field_names : #field_types } )*
+                }
+            }
+        }
+    };
+
+    // ---- fields callback -------------------------------------------------
+    let fields_cb = if item.generics.params.is_empty() {
+        let pairs: Vec<(&Ident, &Type)> = field_names
+            .iter()
+            .copied()
+            .zip(field_types.iter().copied())
+            .collect();
+        let forward = flatten
+            .as_ref()
+            .map(|fi| (callback_ident(&fi.base_last_ident()), &fi.base_iden));
+        fields_callback(ident, &pairs, forward)
+    } else {
+        quote! {}
+    };
+
     // ---- DaoUpdate (update_values) -----------------------------------------
     //
     // For `Option<T>` fields (non-immutable): skip them when `None` so that
@@ -492,6 +552,8 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         return quote! {
             #iden_enum
             #typed_columns
+            #has_columns
+            #fields_cb
             #dao_core
             #dao_update_impl
         }
@@ -728,23 +790,17 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         None => quote! {},
         Some(r) => {
             let is_own = |name: &str| field_name_strs.iter().any(|f| f == name);
-            let key_type = match (&flatten, is_own(&r.up)) {
+            // Key is the down column's domain type — the reference into the
+            // traversal's reference DAO. The up column may be a distinct
+            // newtype (it must share the SQL representation).
+            let key_type = match (&flatten, is_own(&r.down)) {
                 (Some(fi), false) => {
                     let base_ty = &fi.base_ty;
                     quote! { <#base_ty as ta_objects::Recursive>::Key }
                 }
                 _ => {
-                    let up_type = require_field!(fields, &r.up, "recursive", ident);
                     let down_type = require_field!(fields, &r.down, "recursive", ident);
-                    if up_type != down_type {
-                        return syn::Error::new_spanned(
-                            ident,
-                            "Recursive: up and down columns must have the same type",
-                        )
-                        .to_compile_error()
-                        .into();
-                    }
-                    quote! { #up_type }
+                    quote! { #down_type }
                 }
             };
             let up_col = col_ref(&r.up);
@@ -891,6 +947,8 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
     quote! {
         #iden_enum
         #typed_columns
+        #has_columns
+        #fields_cb
         #dao_core
         #dao_read
         #live_dao_marker
@@ -947,6 +1005,16 @@ struct FlattenInfo {
 }
 
 impl FlattenInfo {
+    /// The base type's bare name — the `__dxo_fields_*` callback ident stem.
+    fn base_last_ident(&self) -> Ident {
+        self.base_ty
+            .segments
+            .last()
+            .expect("non-empty type path")
+            .ident
+            .clone()
+    }
+
     fn of(f: &syn::Field) -> syn::Result<FlattenInfo> {
         let field = f
             .ident

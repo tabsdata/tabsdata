@@ -221,7 +221,7 @@ mod tests {
         // A third execution of function_version_a whose attempt ran a patch.
         let patch = FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: function_version_a.id.clone(),
+            parent_function_version_id: function_version_a.id.clone().into(),
             function_id: function_version_a.function_id,
             collection_id: function_version_a.collection_id,
             snippet: Snippet::try_from("patched")?,

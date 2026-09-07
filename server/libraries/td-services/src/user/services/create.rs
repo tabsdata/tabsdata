@@ -91,12 +91,12 @@ mod tests {
         } else {
             assert!(created.email.is_none());
         }
-        assert!(created.created_on >= before);
-        assert_eq!(created.created_by_id, UserId::admin());
-        assert_eq!(created.created_by, UserName::admin());
-        assert_eq!(created.modified_on, created.created_on);
-        assert_eq!(created.modified_by_id, UserId::admin());
-        assert_eq!(created.modified_by, UserName::admin());
+        assert!(*created.created_on >= before);
+        assert_eq!(*created.created_by_id, UserId::admin());
+        assert_eq!(*created.created_by, UserName::admin());
+        assert_eq!(*created.modified_on, *created.created_on);
+        assert_eq!(*created.modified_by_id, UserId::admin());
+        assert_eq!(*created.modified_by, UserName::admin());
         assert_eq!(*created.enabled, expected_enabled);
 
         let res: Option<UserRoleDB> = db

@@ -6,9 +6,9 @@ use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionName, ConnectionKind, Connector, Decorator,
     Description, Enabled, FunctionId, FunctionIdName, FunctionName, FunctionRuntimeValues,
-    FunctionStatus, FunctionVersionId, GroupId, RawSnippet, ResetStage, ResetState, ReuseFrozen,
-    Snippet, StageId, StorageVersion, TableName, TableNameDto, TableType, UserId, UserName,
-    WorkerConfig, WorkerId, WorkerTypeDto,
+    FunctionStatus, FunctionVersionId, GroupId, Parent, RawSnippet, ResetStage, ResetState,
+    ReuseFrozen, Snippet, StageId, StorageVersion, TableName, TableNameDto, TableType, UserId,
+    UserName, WorkerConfig, WorkerId, WorkerTypeDto,
 };
 use crate::types::composed::{TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto};
 use std::collections::HashMap;
@@ -192,7 +192,7 @@ impl FunctionPatch {
     ) -> Result<FunctionPatchDB, TdError> {
         Ok(FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: parent.id,
+            parent_function_version_id: parent.id.into(),
             function_id: parent.function_id,
             collection_id: parent.collection_id,
             snippet: Snippet::try_from(&self.snippet)?,
@@ -317,7 +317,7 @@ impl FunctionDB {
 )]
 pub struct FunctionPatchDB {
     pub id: FunctionVersionId,
-    pub parent_function_version_id: FunctionVersionId,
+    pub parent_function_version_id: Parent<FunctionVersionId>,
     pub function_id: FunctionId,
     pub collection_id: CollectionId,
     pub snippet: Snippet,
@@ -345,7 +345,7 @@ pub struct FunctionPatchRecord {
     #[dto(list(pagination_by = "-"))]
     pub id: FunctionVersionId,
     #[dto(list(filter, filter_like, order_by))]
-    pub parent_function_version_id: FunctionVersionId,
+    pub parent_function_version_id: Parent<FunctionVersionId>,
     #[dto(list(filter, filter_like, order_by))]
     pub function_id: FunctionId,
     #[dto(list(filter, filter_like, order_by))]

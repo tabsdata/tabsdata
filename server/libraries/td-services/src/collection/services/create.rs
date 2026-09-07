@@ -194,12 +194,12 @@ mod tests {
         assert_eq!(created.base_path, None);
         // No group specified → default group → DataFactory flavour.
         assert_eq!(created.collection_type, CollectionType::DataFactory);
-        assert!(created.created_on >= before);
-        assert_eq!(created.created_by_id, UserId::admin());
-        assert_eq!(created.created_by, UserName::admin());
-        assert_eq!(created.modified_on, created.created_on);
-        assert_eq!(created.modified_by_id, UserId::admin());
-        assert_eq!(created.modified_by, UserName::admin());
+        assert!(*created.created_on >= before);
+        assert_eq!(*created.created_by_id, UserId::admin());
+        assert_eq!(*created.created_by, UserName::admin());
+        assert_eq!(*created.modified_on, *created.created_on);
+        assert_eq!(*created.modified_by_id, UserId::admin());
+        assert_eq!(*created.modified_by, UserName::admin());
 
         let found: Vec<CollectionCreateDB> = db
             .live()

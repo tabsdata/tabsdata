@@ -164,9 +164,9 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, BundleId, CollectionName, Decorator,
-        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Partitioned, Private,
-        StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus,
-        TableType, TableVersionId, TransactionKey, UserId,
+        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Partitioned, Patch,
+        Private, StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto,
+        TableStatus, TableType, TableVersionId, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -303,12 +303,15 @@ mod tests {
         let patch_id = FunctionVersionId::new();
         let runnable = RunnableVersion {
             function_version_id: fx.func.id.clone(),
-            function_version_patch_id: Some(patch_id.clone()),
+            function_version_patch_id: Some(patch_id.clone().into()),
         };
         let built = build_function_run(&fx.lfr, &runnable, &AtTime::now(), &BasePath::default())?;
 
         assert_eq!(built.function_version_id, fx.func.id);
-        assert_eq!(built.function_version_patch_id, Some(patch_id.clone()));
+        assert_eq!(
+            built.function_version_patch_id,
+            Some(Patch::from(patch_id.clone()))
+        );
         assert_eq!(runnable.effective(), &patch_id);
         Ok(())
     }
@@ -376,7 +379,7 @@ mod tests {
         let patch_id = FunctionVersionId::new();
         let runnable = RunnableVersion {
             function_version_id: fx.func.id.clone(),
-            function_version_patch_id: Some(patch_id.clone()),
+            function_version_patch_id: Some(patch_id.clone().into()),
         };
         let tdvs = build_output_table_data_versions(
             &fx.lfr,
@@ -387,7 +390,7 @@ mod tests {
         )?;
         assert!(
             tdvs.iter()
-                .all(|t| t.function_version_patch_id.as_ref() == Some(&patch_id)),
+                .all(|t| t.function_version_patch_id.as_deref() == Some(&patch_id)),
             "every output TDV must carry the resolved patch id",
         );
         Ok(())

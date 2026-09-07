@@ -9,10 +9,10 @@ use crate::dxo::physical_table_data_version::{
 };
 use crate::types::basic::{
     AllowDisabled, AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled,
-    ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
+    Ended, ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
     FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger,
-    PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning, StatusCount, System,
-    TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
+    PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount,
+    System, TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use crate::types::json::Json;
@@ -98,8 +98,8 @@ pub struct ExecutionDBWithStatus {
     #[dao(flatten)]
     pub base: ExecutionDBWithNames,
     pub project_id: ProjectId,
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
     pub status: ExecutionStatus,
     pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
 }
@@ -136,9 +136,9 @@ pub struct Execution {
     pub project_id: ProjectId,
 
     #[dto(list(filter))]
-    pub started_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter))]
-    pub ended_on: Option<AtTime>,
+    pub ended_on: Option<Ended<AtTime>>,
     #[dto(list(filter, order_by))]
     pub status: ExecutionStatus,
     pub function_run_status_count: FunctionRunStatusCount,

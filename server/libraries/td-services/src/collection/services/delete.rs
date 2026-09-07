@@ -156,7 +156,7 @@ mod tests {
         TableName, TableNameDto, TableStatus, TransactionKey, TriggerStatus, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
-    use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
+    use td_objects::types::basic::{CollectionIdName, ReuseFrozen, WhenDeleted};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LiveEntry};
@@ -322,7 +322,10 @@ mod tests {
             .live()
             .fetch_one::<CollectionCreateDB>(&collection.id)
             .await?;
-        assert_eq!(res.name_when_deleted, Some(collection.name.clone()));
+        assert_eq!(
+            res.name_when_deleted,
+            Some(WhenDeleted::from(collection.name.clone()))
+        );
 
         // The resolved surface still returns the soft-deleted collection (its
         // scheduled run outlives it), carrying the real pre-deletion name and the

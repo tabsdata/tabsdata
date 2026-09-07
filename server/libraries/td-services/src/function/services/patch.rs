@@ -160,13 +160,13 @@ mod tests {
             .data;
 
         assert_ne!(response.id, parent.id);
-        assert_eq!(response.parent_function_version_id, parent.id);
+        assert_eq!(*response.parent_function_version_id, parent.id);
         assert_eq!(response.function_id, parent.function_id);
         assert_eq!(response.collection_id, parent.collection_id);
 
         // The DB row matches and lives in `function_patches`.
         let stored: FunctionPatchDB = db.live().fetch_one::<FunctionPatchDB>(&response.id).await?;
-        assert_eq!(stored.parent_function_version_id, parent.id);
+        assert_eq!(*stored.parent_function_version_id, parent.id);
         assert_eq!(stored.function_id, parent.function_id);
         assert_ne!(stored.snippet, parent.snippet); // overridden by body
 
@@ -330,7 +330,7 @@ mod tests {
             ))
             .await?
             .data;
-        assert_eq!(v0_prime.parent_function_version_id, v0.id);
+        assert_eq!(*v0_prime.parent_function_version_id, v0.id);
 
         // Second patch pointing at the FIRST patch: fails — the
         // parent fvid isn't in `functions`.
@@ -370,7 +370,7 @@ mod tests {
         // so fetch-all + filter (≤1 row per parent partition).
         let current_for_parent = |rows: Vec<FunctionPatchDB>| -> Vec<FunctionPatchDB> {
             rows.into_iter()
-                .filter(|p| p.parent_function_version_id == parent_id)
+                .filter(|p| *p.parent_function_version_id == parent_id)
                 .collect()
         };
 

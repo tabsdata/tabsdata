@@ -472,7 +472,7 @@ pub async fn update_table_data_version_status(
                     row_count: Some(table_info.row_count),
                     data_bytes: table_info.data_bytes,
                     schema_hash: Some(table_info.schema_hash.clone()),
-                    with_data_table_data_version_id: Some(data_version.base.base.id.clone()),
+                    with_data_table_data_version_id: Some(data_version.base.base.id.clone().into()),
                 }
             } else if let Some(latest_version_with_data) = latest_version_with_data {
                 UpdateTableDataVersionDB {
@@ -482,7 +482,9 @@ pub async fn update_table_data_version_status(
                     row_count: latest_version_with_data.base.base.row_count,
                     data_bytes: latest_version_with_data.base.base.data_bytes,
                     schema_hash: latest_version_with_data.base.base.schema_hash.clone(),
-                    with_data_table_data_version_id: Some(latest_version_with_data.base.base.id),
+                    with_data_table_data_version_id: Some(
+                        latest_version_with_data.base.base.id.into(),
+                    ),
                 }
             } else {
                 UpdateTableDataVersionDB {

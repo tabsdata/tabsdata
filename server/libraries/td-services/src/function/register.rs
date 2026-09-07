@@ -327,31 +327,28 @@ pub async fn build_tables_trigger_versions(
         .iter()
         .map(|t| (&t.table_id, t))
         .collect();
-    let trigger_versions = existing_triggers
-        .into_iter()
-        .filter_map(|trigger| {
-            let table = match table_versions_map.get(&trigger.trigger_by_table_id) {
-                Some(table) => table,
-                None => return None, // No matching table version found
-            };
-            match (&table.status, &trigger.status) {
-                (TableStatus::Frozen, TriggerStatus::Active) => Some(TriggerDB {
-                    id: TriggerVersionId::default(),
-                    status: TriggerStatus::Frozen,
-                    defined_on: *at_time,
-                    ..trigger.clone()
-                }),
-                (TableStatus::Active, TriggerStatus::Frozen) => Some(TriggerDB {
-                    id: TriggerVersionId::default(),
-                    trigger_by_function_id: table.function_id,
-                    status: TriggerStatus::Active,
-                    defined_on: *at_time,
-                    ..trigger.clone()
-                }),
-                _ => None,
-            }
-        })
-        .collect::<Vec<_>>();
+    let mut trigger_versions = Vec::new();
+    for trigger in existing_triggers {
+        let Some(table) = table_versions_map.get(&trigger.trigger_by_table_id) else {
+            continue; // No matching table version found
+        };
+        match (&table.status, &trigger.status) {
+            (TableStatus::Frozen, TriggerStatus::Active) => trigger_versions.push(TriggerDB {
+                id: TriggerVersionId::default(),
+                status: TriggerStatus::Frozen,
+                defined_on: *at_time,
+                ..trigger.clone()
+            }),
+            (TableStatus::Active, TriggerStatus::Frozen) => trigger_versions.push(TriggerDB {
+                id: TriggerVersionId::default(),
+                trigger_by_function_id: table.function_id.into(),
+                status: TriggerStatus::Active,
+                defined_on: *at_time,
+                ..trigger.clone()
+            }),
+            _ => {}
+        }
+    }
 
     Ok(trigger_versions)
 }
@@ -468,9 +465,12 @@ pub async fn build_dependency_versions(
             .resolve(&mut *conn)
             .await?;
 
+        let table_collection_id = table_db.base.collection_id.into();
+        let table_function_id = table_db.base.function_id.into();
+
         // Reuse dependency id if the dependency is the same
         let existing_version = existing_versions.get(&(
-            table_db.base.collection_id,
+            table_collection_id,
             table_db.base.table_id,
             &dependency_table.versions,
             pos,
@@ -486,8 +486,8 @@ pub async fn build_dependency_versions(
             collection_id: function.collection_id,
             dependency_id: *dependency_id,
             function_id: function.function_id,
-            table_collection_id: table_db.base.collection_id,
-            table_function_id: table_db.base.function_id,
+            table_collection_id,
+            table_function_id,
             table_id: table_db.base.table_id,
             table_versions: dependency_table.versions.clone().into(),
             dep_pos: DependencyPos::try_from(pos)?,
@@ -499,7 +499,7 @@ pub async fn build_dependency_versions(
 
         new_dependency_versions.insert(
             (
-                table_db.base.collection_id,
+                table_collection_id,
                 table_db.base.table_id,
                 &dependency_table.versions,
                 pos,
@@ -516,7 +516,7 @@ pub async fn build_dependency_versions(
                 dependency_id: existing_version.dependency_id,
                 function_id: function.function_id,
                 table_collection_id: existing_version.table_collection_id,
-                table_function_id: existing_version.function_id,
+                table_function_id: existing_version.function_id.into(),
                 table_id: existing_version.table_id,
                 table_versions: existing_version.table_versions.clone(),
                 dep_pos: existing_version.dep_pos,
@@ -560,10 +560,7 @@ pub async fn build_trigger_versions(
         .iter()
         .map(|t| {
             (
-                (
-                    &t.base.trigger_by_collection_id,
-                    &t.base.trigger_by_table_id,
-                ),
+                (t.base.trigger_by_collection_id, t.base.trigger_by_table_id),
                 t,
             )
         })
@@ -634,9 +631,11 @@ pub async fn build_trigger_versions(
             Some(table_db) => Ok(table_db),
         }?;
 
+        let trigger_by_collection_id = table_db.base.collection_id.into();
+
         // Reuse trigger id if the trigger is the same
         let existing_version =
-            existing_versions.get(&(&table_db.base.collection_id, &table_db.base.table_id));
+            existing_versions.get(&(trigger_by_collection_id, table_db.base.table_id));
         let trigger_id = if let Some(existing_version) = existing_version {
             existing_version.base.trigger_id
         } else {
@@ -648,8 +647,8 @@ pub async fn build_trigger_versions(
             collection_id: function.collection_id,
             trigger_id,
             function_id: function.function_id,
-            trigger_by_collection_id: table_db.base.collection_id,
-            trigger_by_function_id: table_db.base.function_id,
+            trigger_by_collection_id,
+            trigger_by_function_id: table_db.base.function_id.into(),
             trigger_by_table_id: table_db.base.table_id,
             status: TriggerStatus::Active,
             defined_on: request_context.time,
@@ -658,7 +657,7 @@ pub async fn build_trigger_versions(
         };
 
         new_trigger_versions.insert(
-            (&table_db.base.collection_id, &table_db.base.table_id),
+            (trigger_by_collection_id, table_db.base.table_id),
             trigger_version,
         );
     }
@@ -681,8 +680,8 @@ pub async fn build_trigger_versions(
 
             new_trigger_versions.insert(
                 (
-                    &existing_version.base.trigger_by_collection_id,
-                    &existing_version.base.trigger_by_table_id,
+                    existing_version.base.trigger_by_collection_id,
+                    existing_version.base.trigger_by_table_id,
                 ),
                 trigger_version,
             );

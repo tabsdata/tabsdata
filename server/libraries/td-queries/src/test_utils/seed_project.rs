@@ -42,10 +42,10 @@ where
         name: project_create.name,
         description: project_create.description,
         base_path: project_create.base_path,
-        created_on: request_context.time,
-        created_by_id: request_context.user_id,
-        modified_on: request_context.time,
-        modified_by_id: request_context.user_id,
+        created_on: request_context.time.into(),
+        created_by_id: request_context.user_id.into(),
+        modified_on: request_context.time.into(),
+        modified_by_id: request_context.user_id.into(),
         name_when_deleted: None,
     };
 
@@ -65,10 +65,10 @@ where
             id: GroupId::try_from(group_id)?,
             name: group_create.name,
             description: group_create.description,
-            created_on: request_context.time,
-            created_by_id: request_context.user_id,
-            modified_on: request_context.time,
-            modified_by_id: request_context.user_id,
+            created_on: request_context.time.into(),
+            created_by_id: request_context.user_id.into(),
+            modified_on: request_context.time.into(),
+            modified_by_id: request_context.user_id.into(),
             system: System::TRUE,
         };
         scoped.live().insert::<GroupDB>(&group).await?;

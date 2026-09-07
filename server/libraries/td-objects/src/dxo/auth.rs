@@ -3,8 +3,9 @@
 //
 
 use crate::types::basic::{
-    AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, GrantType, NewPassword, OldPassword,
-    Password, RefreshToken, RefreshTokenId, SessionStatus, TokenType, UserId, UserName,
+    AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, Created, Expires, GrantType,
+    NewPassword, OldPassword, Password, RefreshToken, RefreshTokenId, SessionStatus, StatusChange,
+    TokenType, UserId, UserName,
 };
 
 #[ta_objects::Dto]
@@ -40,9 +41,9 @@ pub struct SessionDB {
     pub access_token_id: AccessTokenId,
     pub refresh_token_id: RefreshTokenId,
     pub user_id: UserId,
-    pub created_on: AtTime,
-    pub expires_on: AtTime,
-    pub status_change_on: AtTime,
+    pub created_on: Created<AtTime>,
+    pub expires_on: Expires<AtTime>,
+    pub status_change_on: StatusChange<AtTime>,
     pub status: SessionStatus,
 }
 
@@ -53,9 +54,9 @@ impl SessionDB {
             access_token_id: AccessTokenId::default(),
             refresh_token_id: RefreshTokenId::default(),
             user_id,
-            created_on: at,
-            expires_on,
-            status_change_on: AtTime::default(),
+            created_on: at.into(),
+            expires_on: expires_on.into(),
+            status_change_on: AtTime::default().into(),
             status: SessionStatus::Active,
         }
     }
@@ -72,14 +73,14 @@ pub struct SessionDBWithNames {
 #[ta_objects::Dao]
 #[dao(sql_table = "sessions")]
 pub struct SessionLogoutDB {
-    pub status_change_on: AtTime,
+    pub status_change_on: StatusChange<AtTime>,
     pub status: SessionStatus,
 }
 
 impl SessionLogoutDB {
     pub fn new(at: AtTime) -> Self {
         Self {
-            status_change_on: at,
+            status_change_on: at.into(),
             status: SessionStatus::InvalidLogout,
         }
     }
@@ -88,14 +89,14 @@ impl SessionLogoutDB {
 #[ta_objects::Dao]
 #[dao(sql_table = "sessions")]
 pub struct SessionPasswordChangeDB {
-    pub status_change_on: AtTime,
+    pub status_change_on: StatusChange<AtTime>,
     pub status: SessionStatus,
 }
 
 impl SessionPasswordChangeDB {
     pub fn new(at: AtTime) -> Self {
         Self {
-            status_change_on: at,
+            status_change_on: at.into(),
             status: SessionStatus::InvalidPasswordChange,
         }
     }
@@ -104,14 +105,14 @@ impl SessionPasswordChangeDB {
 #[ta_objects::Dao]
 #[dao(sql_table = "sessions")]
 pub struct SessionNewTokenDB {
-    pub status_change_on: AtTime,
+    pub status_change_on: StatusChange<AtTime>,
     pub status: SessionStatus,
 }
 
 impl SessionNewTokenDB {
     pub fn new(at: AtTime) -> Self {
         Self {
-            status_change_on: at,
+            status_change_on: at.into(),
             status: SessionStatus::InvalidNewToken,
         }
     }

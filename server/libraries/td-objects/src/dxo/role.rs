@@ -4,7 +4,8 @@
 
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, Description, Fixed, ProjectId, RoleId, RoleIdName, RoleKind, RoleName, UserId, UserName,
+    AtTime, Created, Description, Fixed, Modified, ProjectId, RoleId, RoleIdName, RoleKind,
+    RoleName, UserId, UserName,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -15,10 +16,10 @@ pub struct RoleDB {
     pub id: RoleId,
     pub name: RoleName,
     pub description: Description,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     // The role's kind. `default` for API-created custom roles; the
     // built-in/per-project kinds are set by the system at seed/mint time.
     pub kind: RoleKind,
@@ -32,8 +33,8 @@ pub struct RoleDB {
 pub struct RoleDBWithNames {
     #[dao(flatten)]
     pub base: RoleDB,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 #[ta_objects::Dto]
@@ -49,10 +50,10 @@ impl RoleCreate {
             id: RoleId::default(),
             name: self.name,
             description: self.description,
-            created_on: ctx.time,
-            created_by_id: ctx.user_id,
-            modified_on: ctx.time,
-            modified_by_id: ctx.user_id,
+            created_on: ctx.time.into(),
+            created_by_id: ctx.user_id.into(),
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
             // API-created roles are tagged `Custom` (seeded roles are `Default`),
             // so the RBAC->Simple representability check can detect them
             // (condition 1).
@@ -68,8 +69,8 @@ impl RoleCreate {
 pub struct RoleDBUpdate {
     pub name: Option<RoleName>,
     pub description: Option<Description>,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
 }
 
 #[ta_objects::Dto]
@@ -87,15 +88,15 @@ pub struct Role {
     pub name: RoleName,
     #[dto(list(filter, filter_like, order_by))]
     pub description: Description,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub kind: RoleKind,
     pub project_id: Option<ProjectId>,
     pub fixed: Fixed,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 impl FromDao for Role {

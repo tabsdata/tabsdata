@@ -144,10 +144,10 @@ impl GraphBuilder {
     ) -> Result<Vec<FunctionId>, TdError> {
         let trigger_function_ids = trigger_graph
             .iter()
-            .flat_map(|f| [f.base.trigger_by_function_id, f.base.function_id]);
+            .flat_map(|f| [*f.base.trigger_by_function_id, f.base.function_id]);
         let dep_function_ids = dep_graph
             .iter()
-            .flat_map(|d| [d.base.table_function_id, d.base.function_id]);
+            .flat_map(|d| [*d.base.table_function_id, d.base.function_id]);
 
         let unique_triggered_function_ids = trigger_function_ids
             .into_iter()
@@ -251,10 +251,10 @@ impl GraphBuilder {
     ) -> Result<HashMap<FunctionId, FunctionDBWithNames>, TdError> {
         let trigger_function_ids = trigger_graph
             .iter()
-            .flat_map(|t| [t.base.trigger_by_function_id, t.base.function_id]);
+            .flat_map(|t| [*t.base.trigger_by_function_id, t.base.function_id]);
         let dep_function_ids = dep_graph
             .iter()
-            .flat_map(|t| [t.base.table_function_id, t.base.function_id]);
+            .flat_map(|t| [*t.base.table_function_id, t.base.function_id]);
         let output_function_ids = output_tables.iter().map(|t| t.base.function_id);
 
         let all_function_ids = trigger_function_ids

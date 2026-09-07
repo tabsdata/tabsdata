@@ -10,7 +10,7 @@
 use sea_query::{Order, Query};
 use sqlx::{Decode, Postgres, Type};
 use std::fmt::Debug;
-use ta_objects::DaoCore;
+use ta_objects::HasColumn;
 use td_common::logic_id::KeyId;
 use td_database::access::ServiceDbError;
 use td_database::connection::PgConnectionExt;
@@ -34,27 +34,24 @@ use td_objects::types::basic::{
 /// Errors that can occur during logical ID initialization.
 #[td_error]
 pub(crate) enum LogicIdsError {
-    /// Indicates that the last ID for a given key could not be found.
-    #[error("Could not find id column for '{0}'")]
-    UnknownIdColumn(String) = 5000,
     #[error("Could not find last id for '{0}': {1}")]
-    CouldNotFindLastId(String, Box<dyn std::error::Error + Send + Sync>) = 5001,
+    CouldNotFindLastId(String, Box<dyn std::error::Error + Send + Sync>) = 5000,
 }
 
-/// Build the SELECT query for finding the last logical ID.
-pub(crate) fn find_last_idl_query<D, ID>() -> Result<sea_query::SelectStatement, LogicIdsError>
+/// Build the SELECT query for finding the last logical ID. The id column is
+/// the DAO's `ID`-typed column, resolved at compile time.
+pub(crate) fn find_last_idl_query<D, ID>() -> sea_query::SelectStatement
 where
-    D: DaoCore,
+    D: HasColumn<ID>,
     ID: 'static,
 {
-    let id_col = D::col_for_type(std::any::TypeId::of::<ID>())
-        .ok_or_else(|| LogicIdsError::UnknownIdColumn(std::any::type_name::<ID>().to_string()))?;
-    Ok(Query::select()
+    let id_col = D::COL;
+    Query::select()
         .columns([id_col])
         .from(D::table())
         .order_by(id_col, Order::Desc)
         .limit(1)
-        .take())
+        .take()
 }
 
 /// Read a single entity's last-used logical id (the max id in its table).
@@ -64,12 +61,11 @@ where
 /// (never a project scope) — see [`initialize_logical_ids`].
 async fn find_last_idl<D, ID, K>(executor: impl SeaExecutor) -> Result<Option<ID>, TdError>
 where
-    D: DaoCore,
+    D: HasColumn<ID>,
     ID: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin + 'static,
     K: KeyId,
 {
     let res = find_last_idl_query::<D, ID>()
-        .map_err(|_| LogicIdsError::UnknownIdColumn(K::key().to_string()))?
         .build_query_scalar()
         .fetch_optional(executor)
         .await
@@ -158,6 +154,7 @@ mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDBIden;
     use td_objects::types::basic::LogicalFunctionRunStatus;
+
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableName;
     use td_objects::types::basic::TransactionKey;
@@ -231,7 +228,7 @@ mod tests {
             .await?;
         let patch = FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: function.id.clone(),
+            parent_function_version_id: function.id.clone().into(),
             function_id: function.function_id,
             collection_id: function.collection_id,
             snippet: Snippet::try_from("S")?,
@@ -394,9 +391,8 @@ mod tests {
 
         #[test]
         fn test_find_last_idl_execution() {
-            let sql = find_last_idl_query::<ExecutionDB, ExecutionId>()
-                .unwrap()
-                .to_string(PostgresQueryBuilder);
+            let sql =
+                find_last_idl_query::<ExecutionDB, ExecutionId>().to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#"FROM "executions""#),
                 "should query executions: {sql}"
@@ -409,7 +405,6 @@ mod tests {
         #[test]
         fn test_find_last_idl_function() {
             let sql = find_last_idl_query::<FunctionDB, FunctionVersionId>()
-                .unwrap()
                 .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#"FROM "functions""#),
@@ -421,7 +416,6 @@ mod tests {
         #[test]
         fn test_find_last_idl_transaction() {
             let sql = find_last_idl_query::<TransactionDB, TransactionId>()
-                .unwrap()
                 .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#"FROM "transactions""#),
@@ -433,7 +427,6 @@ mod tests {
         fn test_find_last_idl_table_data_version() {
             let sql =
                 find_last_idl_query::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId>()
-                    .unwrap()
                     .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains("physical_table_data_version"),

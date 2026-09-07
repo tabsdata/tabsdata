@@ -14,7 +14,7 @@ mod tests {
     use crate::and;
     use crate::dxo::{Dao, DaoCore, DaoUpdate, Recursive, TypedColumns, VersionedDao};
     use crate::or;
-    use crate::sql_condition::resolve_condition;
+    use crate::sql_condition::SqlCondition;
     use sea_query::{Iden, Order, PostgresQueryBuilder, Query};
     use std::any::TypeId;
 
@@ -34,6 +34,9 @@ mod tests {
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct RecursionKey(String);
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct ParentKey(String);
 
     #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     enum ItemStatus {
@@ -138,12 +141,12 @@ mod tests {
         assert!(matches!(order[0].1, Order::Asc));
     }
 
-    // ---- resolve_condition ---------------------------------------------------
+    // ---- SqlCondition::resolve ------------------------------------------------
 
     #[test]
     fn test_resolve_condition_leaf() {
         let name = Name::try_from("hello").unwrap();
-        let cond = resolve_condition::<ItemDao>(name).unwrap();
+        let cond = SqlCondition::<ItemDao>::resolve(&name);
         let q = Query::select()
             .column(ItemDaoIden::Id)
             .from(ItemDaoIden::Table)
@@ -154,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_resolve_condition_unit() {
-        let cond = resolve_condition::<ItemDao>(()).unwrap();
+        let cond = SqlCondition::<ItemDao>::resolve(&());
         let q = Query::select()
             .column(ItemDaoIden::Id)
             .from(ItemDaoIden::Table)
@@ -165,14 +168,6 @@ mod tests {
             !q.contains("WHERE") || q.contains("WHERE TRUE"),
             "unit should produce no real filter: {q}"
         );
-    }
-
-    #[test]
-    fn test_resolve_condition_type_not_found() {
-        // DefinedOn has no column in ItemDao.
-        let on = DefinedOn::try_from(42i64).unwrap();
-        let result = resolve_condition::<ItemDao>(on);
-        assert!(result.is_err());
     }
 
     // ---- Iden FromStr --------------------------------------------------------
@@ -299,7 +294,7 @@ mod tests {
     struct TreeDao {
         pub id: ItemId,
         pub item_id: Name,
-        pub parent: RecursionKey,
+        pub parent: ParentKey,
         pub child: RecursionKey,
         pub status: ItemStatus,
         pub defined_on: DefinedOn,

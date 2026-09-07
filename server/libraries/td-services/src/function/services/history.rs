@@ -141,7 +141,7 @@ mod tests {
 
         let patch = FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: updated.id.clone(),
+            parent_function_version_id: updated.id.clone().into(),
             function_id: updated.function_id,
             collection_id: collection.id,
             snippet: Snippet::try_from("patched snippet")?,

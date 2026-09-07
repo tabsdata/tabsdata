@@ -601,8 +601,8 @@ mod tests {
         flag: CondBool,
     }
 
-    fn cond_sql(cond: impl crate::sql_condition::SqlCondition) -> String {
-        let cond = crate::sql_condition::resolve_condition::<CondDao>(cond).unwrap();
+    fn cond_sql(cond: impl crate::sql_condition::SqlCondition<CondDao>) -> String {
+        let cond = cond.resolve();
         let q = sea_query::Query::select()
             .column(CondDaoIden::Col)
             .from(CondDaoIden::Table)

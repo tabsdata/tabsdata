@@ -382,7 +382,6 @@ mod tests {
     use sea_query::{Asterisk, Query, WithClause};
     use std::sync::LazyLock;
     use ta_objects::Dao;
-    use ta_objects::sql_condition::resolve_condition;
     use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_database::pool::TdPool;
     use td_error::TdError;
@@ -405,6 +404,10 @@ mod tests {
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct TestRecursion(String);
 
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    #[typed(try_from = TestRecursion)]
+    struct TestRecursionUp(String);
+
     // partitioning by id means there are no groups, each entry is independent
     #[Dao]
     #[derive(Eq, PartialEq)]
@@ -416,7 +419,7 @@ mod tests {
     struct TestDao {
         id: TestId,
         status: TestStatus,
-        current: TestRecursion,
+        current: TestRecursionUp,
         downstream: TestRecursion,
         defined_on: AtTime,
     }
@@ -462,35 +465,35 @@ mod tests {
             TestDao {
                 id: TestId::try_from("AAA").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                current: TestRecursion::try_from("ref_0").unwrap(),
+                current: TestRecursionUp::try_from("ref_0").unwrap(),
                 downstream: TestRecursion::try_from("ref_1").unwrap(),
                 defined_on: time(0),
             },
             TestDao {
                 id: TestId::try_from("BBB").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                current: TestRecursion::try_from("ref_1").unwrap(),
+                current: TestRecursionUp::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_2").unwrap(),
                 defined_on: time(0),
             },
             TestDao {
                 id: TestId::try_from("CCC").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                current: TestRecursion::try_from("ref_1").unwrap(),
+                current: TestRecursionUp::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_3").unwrap(),
                 defined_on: time(1),
             },
             TestDao {
                 id: TestId::try_from("DDD").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                current: TestRecursion::try_from("ref_1").unwrap(),
+                current: TestRecursionUp::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_4").unwrap(),
                 defined_on: time(2),
             },
             TestDao {
                 id: TestId::try_from("EEE").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                current: TestRecursion::try_from("ref_4").unwrap(),
+                current: TestRecursionUp::try_from("ref_4").unwrap(),
                 downstream: TestRecursion::try_from("ref_5").unwrap(),
                 defined_on: time(3),
             },
@@ -576,7 +579,7 @@ mod tests {
     )]
     struct BasicTestDao {
         id: TestId,
-        current: TestRecursion,
+        current: TestRecursionUp,
         downstream: TestRecursion,
     }
 
@@ -1015,7 +1018,7 @@ mod tests {
         let dao = TestDao {
             id: TestId::try_from("OV1")?,
             status: TestStatus::try_from("A")?,
-            current: TestRecursion::try_from("ref_del")?,
+            current: TestRecursionUp::try_from("ref_del")?,
             downstream: TestRecursion::try_from("ref_tgt")?,
             defined_on: time(5),
         };
@@ -1071,7 +1074,7 @@ mod tests {
         let dao_a = TestDao {
             id: TestId::try_from("DSA")?,
             status: TestStatus::try_from("A")?,
-            current: TestRecursion::try_from("ref_ds0")?,
+            current: TestRecursionUp::try_from("ref_ds0")?,
             downstream: TestRecursion::try_from("ref_ds1")?,
             defined_on: time(5),
         };
@@ -1080,7 +1083,7 @@ mod tests {
         let dao_b = TestDao {
             id: TestId::try_from("DSB")?,
             status: TestStatus::try_from("D")?,
-            current: TestRecursion::try_from("ref_ds1")?,
+            current: TestRecursionUp::try_from("ref_ds1")?,
             downstream: TestRecursion::try_from("ref_ds2")?,
             defined_on: time(5),
         };
@@ -1152,7 +1155,7 @@ mod tests {
         let dao = TestDao {
             id: TestId::try_from("IF0")?,
             status: TestStatus::try_from("A")?,
-            current: TestRecursion::try_from("ref_iso")?,
+            current: TestRecursionUp::try_from("ref_iso")?,
             downstream: TestRecursion::try_from("ref_nowhere")?,
             defined_on: time(5),
         };
@@ -1187,7 +1190,7 @@ mod tests {
             let dao = TestDao {
                 id: TestId::try_from(format!("CF{i}"))?,
                 status: TestStatus::try_from("A")?,
-                current: TestRecursion::try_from(format!("ref_c{i}"))?,
+                current: TestRecursionUp::try_from(format!("ref_c{i}"))?,
                 downstream: TestRecursion::try_from(format!("ref_c{}", (i + 1) % 4))?,
                 defined_on: time(5),
             };
@@ -1228,7 +1231,7 @@ mod tests {
             let dao = TestDao {
                 id: TestId::try_from(format!("UF{i}"))?,
                 status: TestStatus::try_from("A")?,
-                current: TestRecursion::try_from(format!("ref_uc{i}"))?,
+                current: TestRecursionUp::try_from(format!("ref_uc{i}"))?,
                 downstream: TestRecursion::try_from(format!("ref_uc{}", (i + 1) % 3))?,
                 defined_on: time(5),
             };
@@ -1266,7 +1269,7 @@ mod tests {
             let dao = TestDao {
                 id: TestId::try_from(format!("BF{i}"))?,
                 status: TestStatus::try_from("A")?,
-                current: TestRecursion::try_from(format!("ref_bc{i}"))?,
+                current: TestRecursionUp::try_from(format!("ref_bc{i}"))?,
                 downstream: TestRecursion::try_from(format!("ref_bc{}", (i + 1) % 4))?,
                 defined_on: time(5),
             };
@@ -1311,7 +1314,7 @@ mod tests {
             let dao = TestDao {
                 id: TestId::try_from(*id)?,
                 status: TestStatus::try_from("A")?,
-                current: TestRecursion::try_from(*current)?,
+                current: TestRecursionUp::try_from(*current)?,
                 downstream: TestRecursion::try_from(*downstream)?,
                 defined_on: time(5),
             };
@@ -1444,7 +1447,7 @@ mod tests {
             let dao = TestDao {
                 id: TestId::try_from(format!("ZZZ{i:04}"))?,
                 status: TestStatus::try_from("A")?,
-                current: TestRecursion::try_from(format!("x_ref_{i:04}"))?,
+                current: TestRecursionUp::try_from(format!("x_ref_{i:04}"))?,
                 downstream: TestRecursion::try_from(format!("x_ref_{:04}", i + 1))?,
                 defined_on: time(5),
             };
@@ -1582,7 +1585,8 @@ mod tests {
 
         #[test]
         fn test_versioned_ranked_cte_no_defined_on() {
-            let state_cond = resolve_condition::<TestDao>(TestStatus::Active).unwrap();
+            let state_cond =
+                ta_objects::sql_condition::SqlCondition::<TestDao>::resolve(&TestStatus::Active);
             let cte =
                 versioned_ranked_cte::<TestDao>(None, state_cond, None, Cte::RecursionVersions);
             let sql = Query::select()
@@ -1605,7 +1609,8 @@ mod tests {
 
         #[test]
         fn test_versioned_ranked_cte_with_defined_on() {
-            let state_cond = resolve_condition::<TestDao>(TestStatus::Active).unwrap();
+            let state_cond =
+                ta_objects::sql_condition::SqlCondition::<TestDao>::resolve(&TestStatus::Active);
             let on = AtTime::from(
                 "2025-04-02T08:19:50.543+00:00"
                     .parse::<DateTime<Utc>>()

@@ -46,18 +46,19 @@
 //! column named in `#[dao(...)]` args that isn't an own field resolves into
 //! the flattened base at any nesting depth.
 //!
-//! On a collision the two resolvers deliberately disagree: by *name* (the
-//! Iden's `FromStr`) the own field wins — it shadows the base's, like a
-//! re-declared field on the merged struct would; by *type*
-//! (`col_for_type`) the base wins — base fields come first in merged-field
-//! order, and conditions on a shared domain type should hit the base column.
+//! Collisions across the flatten boundary are compile errors: the merged
+//! (base + own) field list may not repeat a field name (serde/sqlx flatten
+//! would silently alias) nor a field type (type-keyed condition columns,
+//! `HasColumn`, would be ambiguous).
 
 extern crate proc_macro;
 use proc_macro::TokenStream;
 
+mod brand;
 mod dao;
 mod dlo;
 mod dto;
+mod dxo_fields;
 mod type_builder;
 mod typed_types;
 mod url;
@@ -100,6 +101,22 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
 #[allow(non_snake_case)]
 pub fn Dto(args: TokenStream, item: TokenStream) -> TokenStream {
     dto::dto(args, item)
+}
+
+/// Flattened-DAO continuation of `__dxo_fields_*`: merged-list bans +
+/// `HasColumn<T>` impls. Internal to the `#[Dao]` expansion.
+#[doc(hidden)]
+#[proc_macro]
+pub fn __dao_has_columns(input: TokenStream) -> TokenStream {
+    dxo_fields::dao_has_columns(input)
+}
+
+/// Flattened-DLO/DTO continuation of `__dxo_fields_*`: merged duplicate-name
+/// ban. Internal to the `#[Dlo]`/`#[Dto]` expansion.
+#[doc(hidden)]
+#[proc_macro]
+pub fn __dxo_check_flat_names(input: TokenStream) -> TokenStream {
+    dxo_fields::check_flat_names(input)
 }
 
 #[proc_macro_attribute]

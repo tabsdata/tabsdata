@@ -11,7 +11,7 @@ mod tests {
     use crate::Or;
     use crate::and;
     use crate::or;
-    use crate::sql_condition::{SqlCondition, resolve_condition};
+    use crate::sql_condition::SqlCondition;
     use sea_query::{PostgresQueryBuilder, Query};
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
@@ -26,8 +26,8 @@ mod tests {
 
     /// Render a `SqlCondition` to the WHERE clause string.
     /// Returns `"TRUE"` when the condition is empty.
-    fn sql(cond: impl SqlCondition) -> String {
-        let cond = resolve_condition::<TestDao>(cond).unwrap();
+    fn sql(cond: impl SqlCondition<TestDao>) -> String {
+        let cond = cond.resolve();
         let q = Query::select()
             .column(TestDaoIden::V)
             .from(TestDaoIden::V)
@@ -208,49 +208,5 @@ mod tests {
         fn _t2(_: And![VCol, VCol,]) {}
         fn _t3(_: Or![VCol,]) {}
         fn _t4(_: Or![VCol, VCol,]) {}
-    }
-
-    // ----- Error propagation --------------------------------------------------
-
-    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-    struct _UnmappedCol(String);
-
-    /// A DAO with no type mappings — resolving any typed value should fail.
-    #[ta_objects::Dao]
-    #[dao(sql_table = "unmapped")]
-    struct UnmappedDao {
-        dummy: _UnmappedCol,
-    }
-
-    #[test]
-    fn test_resolver_error_propagates_leaf() {
-        let v = VCol::try_from("x").unwrap();
-        // Use a DAO that doesn't map VCol → should fail
-        assert!(resolve_condition::<UnmappedDao>(&v).is_err());
-    }
-
-    #[test]
-    fn test_resolver_error_propagates_all() {
-        let a = VCol::try_from("a").unwrap();
-        let b = VCol::try_from("b").unwrap();
-        let cond = and!(a, b);
-        assert!(resolve_condition::<UnmappedDao>(&cond).is_err());
-    }
-
-    #[test]
-    fn test_resolver_error_propagates_any() {
-        let a = VCol::try_from("a").unwrap();
-        let b = VCol::try_from("b").unwrap();
-        let cond = or!(a, b);
-        assert!(resolve_condition::<UnmappedDao>(&cond).is_err());
-    }
-
-    #[test]
-    fn test_resolver_error_propagates_nested() {
-        let a = VCol::try_from("a").unwrap();
-        let b = VCol::try_from("b").unwrap();
-        let c = VCol::try_from("c").unwrap();
-        let cond = and!(a, or!(b, c));
-        assert!(resolve_condition::<UnmappedDao>(&cond).is_err());
     }
 }

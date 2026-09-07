@@ -5,8 +5,8 @@
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::role::Role;
 use crate::types::basic::{
-    AtTime, Email, FullName, Password, PasswordChangeTime, PasswordHash, PasswordMustChange,
-    UserEnabled, UserId, UserIdName, UserName, UserSystem,
+    AtTime, Created, Email, FullName, Modified, Password, PasswordChangeTime, PasswordHash,
+    PasswordMustChange, UserEnabled, UserId, UserIdName, UserName, UserSystem,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -21,10 +21,10 @@ pub struct UserDB {
     pub name: UserName,
     pub full_name: FullName,
     pub email: Option<Email>,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub password_hash: PasswordHash,
     pub password_set_on: PasswordChangeTime,
     pub password_must_change: PasswordMustChange,
@@ -37,8 +37,8 @@ pub struct UserDB {
 pub struct UserDBWithNames {
     #[dao(flatten)]
     pub base: UserDB,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 #[ta_objects::Dto]
@@ -66,10 +66,10 @@ impl UserCreate {
             name: self.name,
             full_name: self.full_name,
             email: self.email,
-            created_on: ctx.time,
-            created_by_id: ctx.user_id,
-            modified_on: ctx.time,
-            modified_by_id: ctx.user_id,
+            created_on: ctx.time.into(),
+            created_by_id: ctx.user_id.into(),
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
             password_hash,
             password_set_on: PasswordChangeTime::try_from(&ctx.time)?,
             password_must_change: PasswordMustChange::TRUE,
@@ -99,8 +99,8 @@ impl UserUpdate {
         password_hashing_config: &PasswordHashingConfig,
     ) -> Result<UserUpdateDB, TdError> {
         let mut db = UserUpdateDB::from(user);
-        db.modified_on = ctx.time;
-        db.modified_by_id = ctx.user_id;
+        db.modified_on = ctx.time.into();
+        db.modified_by_id = ctx.user_id.into();
         if let Some(full_name) = self.full_name {
             db.full_name = full_name;
         }
@@ -132,8 +132,8 @@ pub struct UserUpdateDB {
     // `Some(None)` sets it NULL (clear), `Some(Some(v))` sets `v`. Seeded from
     // the current `UserDB`, overridden by the update layer.
     pub email: Option<Option<Email>>,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub password_hash: PasswordHash,
     pub password_set_on: PasswordChangeTime,
     pub password_must_change: PasswordMustChange,
@@ -151,16 +151,16 @@ pub struct UserRead {
     pub full_name: FullName,
     #[dto(list(filter, filter_like))]
     pub email: Option<Email>,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub password_set_on: PasswordChangeTime,
     pub password_must_change: PasswordMustChange,
     pub enabled: UserEnabled,
     pub system: UserSystem,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 impl FromDao for UserRead {
@@ -192,16 +192,16 @@ pub struct UserInfo {
     pub name: UserName,
     pub full_name: FullName,
     pub email: Option<Email>,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub password_set_on: PasswordChangeTime,
     pub password_must_change: PasswordMustChange,
     pub enabled: UserEnabled,
     pub system: UserSystem,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 
     pub user_roles: Vec<Role>,
 }

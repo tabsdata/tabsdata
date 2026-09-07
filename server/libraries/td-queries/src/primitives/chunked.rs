@@ -35,11 +35,11 @@ pub(crate) const MAX_QUERY_CONDITIONS: usize = 100;
 pub(crate) const MAX_INSERT_ROWS: usize = 100;
 
 pub(crate) fn resolve_or<D: DaoCore>(
-    items: &[impl SqlCondition],
+    items: &[impl SqlCondition<D>],
 ) -> Result<sea_query::Condition, SqlError> {
     let mut cond = sea_query::Condition::any();
     for item in items {
-        cond = cond.add(item.resolve::<D>()?);
+        cond = cond.add(item.resolve());
     }
     Ok(cond)
 }
@@ -69,7 +69,7 @@ pub(crate) fn insert_vec_query<D: Dao>(daos: &[D]) -> Result<sea_query::InsertSt
     Ok(query)
 }
 
-pub(crate) fn fetch_all_chunk_query<D: Dao, V: SqlCondition>(
+pub(crate) fn fetch_all_chunk_query<D: Dao, V: SqlCondition<D>>(
     chunk: &[V],
 ) -> Result<sea_query::SelectStatement, SqlError> {
     Ok(Query::select()
@@ -80,7 +80,7 @@ pub(crate) fn fetch_all_chunk_query<D: Dao, V: SqlCondition>(
         .take())
 }
 
-pub(crate) fn update_chunk_query<U: DaoUpdate, D: DaoCore, V: SqlCondition>(
+pub(crate) fn update_chunk_query<U: DaoUpdate, D: DaoCore, V: SqlCondition<D>>(
     dao: &U,
     chunk: &[V],
 ) -> Result<sea_query::UpdateStatement, SqlError> {
@@ -91,7 +91,7 @@ pub(crate) fn update_chunk_query<U: DaoUpdate, D: DaoCore, V: SqlCondition>(
         .take())
 }
 
-pub(crate) fn delete_chunk_query<D: DaoCore, V: SqlCondition>(
+pub(crate) fn delete_chunk_query<D: DaoCore, V: SqlCondition<D>>(
     chunk: &[V],
 ) -> Result<sea_query::DeleteStatement, SqlError> {
     Ok(Query::delete()
@@ -100,7 +100,7 @@ pub(crate) fn delete_chunk_query<D: DaoCore, V: SqlCondition>(
         .take())
 }
 
-pub(crate) fn fetch_all_at_chunk_query<D: VersionedDao, V: SqlCondition>(
+pub(crate) fn fetch_all_at_chunk_query<D: VersionedDao, V: SqlCondition<D>>(
     chunk: &[V],
     on: &D::VersionOrder,
     state_cond: Option<&sea_query::Condition>,
@@ -118,7 +118,7 @@ pub(crate) fn fetch_all_at_chunk_query<D: VersionedDao, V: SqlCondition>(
     Ok(q.with(latest_ranked_cte::<D>(on)?))
 }
 
-pub(crate) fn fetch_all_current_chunk_query<D: CurrentDao, V: SqlCondition>(
+pub(crate) fn fetch_all_current_chunk_query<D: CurrentDao, V: SqlCondition<D>>(
     chunk: &[V],
     state_cond: Option<&sea_query::Condition>,
 ) -> Result<sea_query::SelectStatement, SqlError> {

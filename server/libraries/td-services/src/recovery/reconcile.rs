@@ -287,7 +287,7 @@ pub fn classify_divergence(
             .worker_id
             .as_ref()
             .and_then(|worker_id| workload_by_worker.get(worker_id).copied());
-        let dispatched_old = before(&attempt.pfr.dispatched_on, &grace_cutoff);
+        let dispatched_old = before(&attempt.pfr.dispatched_on.map(|d| *d), &grace_cutoff);
 
         // (remove workload?, recover policy?, reason)
         let outcome: Option<(bool, bool, String)> = match workload {
@@ -302,7 +302,7 @@ pub fn classify_divergence(
                         Some((true, true, "exceeded max pre-running time".to_string()))
                     } else if attempt.pfr.status == PhysicalFunctionRunStatus::Running
                         && running_cutoff
-                            .map(|cutoff| before(&attempt.pfr.started_on, &cutoff))
+                            .map(|cutoff| before(&attempt.pfr.started_on.map(|s| *s), &cutoff))
                             .unwrap_or(false)
                     {
                         Some((true, false, "exceeded max running time".to_string()))
@@ -324,7 +324,7 @@ pub fn classify_divergence(
                     // callback may still be retrying through an outage.
                     let finished_old = match &w.finished_at {
                         Some(finished) => dt(finished) < completion_cutoff,
-                        None => before(&attempt.pfr.dispatched_on, &completion_cutoff),
+                        None => before(&attempt.pfr.dispatched_on.map(|d| *d), &completion_cutoff),
                     };
                     if finished_old {
                         // Outputs never bound; a fresh attempt is the only
@@ -642,7 +642,7 @@ pub async fn finalize_recovery_actions(
 pub async fn failed_worker_update(at: &AtTime) -> Result<WorkerUpdateDB, TdError> {
     Ok(WorkerUpdateDB {
         started_on: None,
-        ended_on: Some(*at),
+        ended_on: Some((*at).into()),
         status: WorkerStatus::Failed,
     })
 }

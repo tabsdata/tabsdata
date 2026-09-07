@@ -6,12 +6,12 @@ use crate::QueryExecutor;
 use crate::generic::versioned::Versioned;
 use crate::generic::{Bound, Unbound};
 use sea_query::{
-    Alias, Asterisk, CommonTableExpression, Condition, Expr, ExprTrait, Func, Iden, IntoTableRef,
-    Order, OverStatement, Query, SubQueryStatement, WindowStatement, WithClause,
+    Alias, Asterisk, CommonTableExpression, Condition, Expr, ExprTrait, Func, Iden, Order,
+    OverStatement, Query, SubQueryStatement, WindowStatement, WithClause,
 };
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
-use ta_objects::{DataVersionDao, VersionedDao};
+use ta_objects::{DataVersionDao, HasColumn, VersionedDao};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::types::basic::LogicalTableDataVersionId;
@@ -87,7 +87,7 @@ fn ranked_cte<D>(
     on: &<D as VersionedDao>::VersionOrder,
 ) -> Result<WithClause, SqlError>
 where
-    D: DataVersionDao,
+    D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
 {
     let rn_window = WindowStatement::new()
         .partition_by(D::partition_col())
@@ -133,7 +133,7 @@ where
 /// Builds WHERE conditions for version filtering.
 fn version_condition<D>(versions: &Versions) -> Result<Condition, SqlError>
 where
-    D: DataVersionDao,
+    D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
 {
     match versions {
         Versions::None => Ok(Condition::all().add(Expr::col(Cte::Rn).eq(1_i64))),
@@ -159,16 +159,11 @@ where
 /// Expression for matching a single version.
 fn single_version_expr<D>(version: &Version) -> Result<Expr, SqlError>
 where
-    D: DataVersionDao,
+    D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
 {
     match version {
         Version::Fixed(id) => {
-            let col = D::col_for_type(id.as_type_id()).ok_or_else(|| {
-                SqlError::TypeNotFound(
-                    std::any::type_name_of_val(id).to_string(),
-                    Box::new(D::table().into_table_ref()),
-                )
-            })?;
+            let col = <D as HasColumn<LogicalTableDataVersionId>>::COL;
             Ok(Expr::col(col).eq(id.as_sea_value()))
         }
         Version::Head(back) => Ok(Expr::col(Cte::Rn).eq((-back + 1) as i64)),
@@ -181,14 +176,9 @@ where
 /// Subquery to find the rn of a fixed version in the ranked CTE.
 fn fixed_version_rn_subquery<D>(id: &LogicalTableDataVersionId) -> Result<Expr, SqlError>
 where
-    D: DataVersionDao,
+    D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
 {
-    let col = D::col_for_type(id.as_type_id()).ok_or_else(|| {
-        SqlError::TypeNotFound(
-            std::any::type_name_of_val(id).to_string(),
-            Box::new(D::table().into_table_ref()),
-        )
-    })?;
+    let col = <D as HasColumn<LogicalTableDataVersionId>>::COL;
     let sub = Query::select()
         .column(Cte::Rn)
         .from(Cte::Ranked)
@@ -203,7 +193,7 @@ where
 /// Upper bound for range: rn <= bound (from = older end, larger rn).
 fn range_upper_bound<D>(version: &Version) -> Result<Expr, SqlError>
 where
-    D: DataVersionDao,
+    D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
 {
     match version {
         Version::Fixed(id) => Ok(Expr::col(Cte::Rn).lte(fixed_version_rn_subquery::<D>(id)?)),
@@ -217,7 +207,7 @@ where
 /// Lower bound for range: rn >= bound (to = newer end, smaller rn).
 fn range_lower_bound<D>(version: &Version) -> Result<Expr, SqlError>
 where
-    D: DataVersionDao,
+    D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
 {
     match version {
         Version::Fixed(id) => Ok(Expr::col(Cte::Rn).gte(fixed_version_rn_subquery::<D>(id)?)),
@@ -232,7 +222,10 @@ impl<'a, T, P, E> VersionedDataVersion<'a, T, P, E>
 where
     E: QueryExecutor,
 {
-    fn where_cond<D: DataVersionDao>(&self, versions: &Versions) -> Result<Condition, SqlError> {
+    fn where_cond<D>(&self, versions: &Versions) -> Result<Condition, SqlError>
+    where
+        D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
+    {
         let mut cond = Condition::all().add(version_condition::<D>(versions)?);
         if let Some(s) = &self.state_cond {
             cond = cond.add(s.clone());
@@ -243,7 +236,7 @@ where
     /// Resolve `versions` to one row, errors if missing.
     pub async fn fetch_one<D>(self, versions: &Versions) -> Result<D, SqlError>
     where
-        D: DataVersionDao,
+        D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
         D: VersionedDao<VersionOrder = T, Partition = P>,
         E: Domained<Domain = D::Db>,
     {
@@ -265,7 +258,7 @@ where
     /// Resolve `versions` to one row, returning `None` if no match.
     pub async fn fetch_optional<D>(self, versions: &Versions) -> Result<Option<D>, SqlError>
     where
-        D: DataVersionDao,
+        D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
         D: VersionedDao<VersionOrder = T, Partition = P>,
         E: Domained<Domain = D::Db>,
     {
@@ -288,7 +281,7 @@ where
     /// `rn DESC` order (oldest first).
     pub async fn fetch_all<D>(self, versions: &Versions) -> Result<Vec<D>, SqlError>
     where
-        D: DataVersionDao,
+        D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
         D: VersionedDao<VersionOrder = T, Partition = P>,
         E: Domained<Domain = D::Db>,
     {
@@ -320,7 +313,7 @@ where
     /// PostgreSQL types as `BIGINT`.
     pub async fn fetch_relative_offset<D>(self, version: &Version) -> Result<Option<i64>, SqlError>
     where
-        D: DataVersionDao,
+        D: DataVersionDao + HasColumn<LogicalTableDataVersionId>,
         D: VersionedDao<VersionOrder = T, Partition = P>,
         E: Domained<Domain = D::Db>,
     {

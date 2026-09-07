@@ -143,9 +143,15 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
         },
     };
 
+    let flat_machinery = match crate::dxo_fields::dlo_dto_flat_machinery(&item) {
+        Ok(ts) => ts,
+        Err(e) => return e.to_compile_error().into(),
+    };
+
     quote! {
         #dto
         #list_query
+        #flat_machinery
     }
     .into()
 }

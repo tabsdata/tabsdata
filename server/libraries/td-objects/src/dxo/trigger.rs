@@ -4,8 +4,8 @@
 
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, System, TableId, TriggerId, TriggerStatus,
-    TriggerVersionId, UserId,
+    AtTime, CollectionId, CollectionName, FunctionId, System, TableId, TriggerBy, TriggerId,
+    TriggerStatus, TriggerVersionId, UserId,
 };
 use ta_objects::StateFilter;
 use ta_objects::or;
@@ -26,8 +26,8 @@ pub struct TriggerDB {
     pub collection_id: CollectionId,
     pub trigger_id: TriggerId,
     pub function_id: FunctionId,
-    pub trigger_by_collection_id: CollectionId,
-    pub trigger_by_function_id: FunctionId,
+    pub trigger_by_collection_id: TriggerBy<CollectionId>,
+    pub trigger_by_function_id: TriggerBy<FunctionId>,
     pub trigger_by_table_id: TableId,
     pub status: TriggerStatus,
     pub defined_on: AtTime,
@@ -73,7 +73,7 @@ pub struct TriggerDBWithNames {
     #[dao(flatten)]
     pub base: TriggerDB,
     pub collection: CollectionName,
-    pub trigger_by_collection: CollectionName,
+    pub trigger_by_collection: TriggerBy<CollectionName>,
 }
 
 impl TriggerDBWithNames {

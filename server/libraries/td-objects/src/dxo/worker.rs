@@ -7,9 +7,10 @@ use crate::dxo::yaml::WorkerOutput;
 use crate::dxo::yaml::function::WrittenTable;
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask,
-    Enabled, EpochMs, ExecutionId, ExecutionName, FunctionName, FunctionVersionId,
-    LogicalFunctionRunId, LogsCastNumber, PhysicalFunctionRunId, ProjectId, ProjectName, RowCount,
-    SizeThreshold, TableVersionCount, TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId,
+    Enabled, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek, EpochMs, ExecutionId,
+    ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId, LogsCastNumber,
+    OfFunction, Patch, PhysicalFunctionRunId, ProjectId, ProjectName, RowCount, SizeThreshold,
+    Started, TableVersionCount, TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId,
     WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 use chrono::{DateTime, Utc};
@@ -41,8 +42,8 @@ pub struct WorkerDB {
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     pub function_version_id: FunctionVersionId,
     pub message_status: WorkerMessageStatus,
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
     pub status: WorkerStatus,
 
     pub worker_type: WorkerType,
@@ -81,9 +82,9 @@ pub struct WorkerDBWithNames {
     pub connection: Option<ConnectionKind>,
     pub execution: Option<ExecutionName>,
     pub function: FunctionName,
-    pub enabled: Enabled,
+    pub enabled: OfFunction<Enabled>,
     // Patch the attempt's PFR ran (NULL = head), from physical_function_runs.
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
     pub project: Option<ProjectName>,
 }
 
@@ -146,9 +147,9 @@ pub struct Worker {
     #[dto(list(filter, order_by))]
     pub message_status: WorkerMessageStatus,
     #[dto(list(filter, order_by))]
-    pub started_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter, order_by))]
-    pub ended_on: Option<AtTime>,
+    pub ended_on: Option<Ended<AtTime>>,
     #[dto(list(filter, order_by))]
     pub status: WorkerStatus,
 
@@ -164,7 +165,7 @@ pub struct Worker {
     #[dto(list(filter, order_by))]
     pub worker_type: WorkerType,
     #[dto(list(filter, order_by))]
-    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
     #[dto(list(filter, filter_like, order_by))]
     pub project: Option<ProjectName>,
 }
@@ -200,16 +201,16 @@ pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;
 
 #[ta_objects::Dlo]
 pub struct WorkerExecutionUpdate {
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
     pub status: WorkerCallbackStatus,
     // Bucket floors derived from `ended_on`. NULL while still
     // running (no `ended_on` yet); populated at terminalization
     // via td_common::bucket::BucketFloors::from_utc.
-    pub ended_on_hour_ms: Option<EpochMs>,
-    pub ended_on_day_ms: Option<EpochMs>,
-    pub ended_on_week_ms: Option<EpochMs>,
-    pub ended_on_month_ms: Option<EpochMs>,
+    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
+    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
+    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
+    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
     // Per-attempt metrics aggregated from the worker callback's
     // Function output. `metric_data_bytes` stays None when the
     // worker yaml omits `data_bytes` on every written table.
@@ -226,14 +227,14 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
             .end
             .map(|v| {
                 let ts = Timestamp::try_from(v)?;
-                Ok::<_, TdError>(AtTime::from(ts))
+                Ok::<_, TdError>(Ended::from(AtTime::from(ts)))
             })
             .transpose()?;
 
         // Compute bucket floors from `ended_on` if present. Single
         // atomic site for derivation: every PFR row whose `ended_on`
         // is set also gets its four bucket-floor columns set.
-        let floors = ended_on.as_ref().map(|t| {
+        let floors = ended_on.map(|t| {
             let dt: DateTime<Utc> = ***t;
             BucketFloors::from_utc(dt)
         });
@@ -283,15 +284,23 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
                 .start
                 .map(|v| {
                     let ts = Timestamp::try_from(v)?;
-                    Ok::<_, TdError>(AtTime::from(ts))
+                    Ok::<_, TdError>(Started::from(AtTime::from(ts)))
                 })
                 .transpose()?,
             ended_on,
             status: value.status.clone(),
-            ended_on_hour_ms: floors.map(|f| EpochMs::try_from(f.hour_ms)).transpose()?,
-            ended_on_day_ms: floors.map(|f| EpochMs::try_from(f.day_ms)).transpose()?,
-            ended_on_week_ms: floors.map(|f| EpochMs::try_from(f.week_ms)).transpose()?,
-            ended_on_month_ms: floors.map(|f| EpochMs::try_from(f.month_ms)).transpose()?,
+            ended_on_hour_ms: floors
+                .map(|f| EpochMs::try_from(f.hour_ms).map(EndedHour::from))
+                .transpose()?,
+            ended_on_day_ms: floors
+                .map(|f| EpochMs::try_from(f.day_ms).map(EndedDay::from))
+                .transpose()?,
+            ended_on_week_ms: floors
+                .map(|f| EpochMs::try_from(f.week_ms).map(EndedWeek::from))
+                .transpose()?,
+            ended_on_month_ms: floors
+                .map(|f| EpochMs::try_from(f.month_ms).map(EndedMonth::from))
+                .transpose()?,
             metric_table_versions,
             metric_rows,
             metric_data_bytes,
@@ -303,8 +312,8 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
 #[dao(update, sql_table = "workers")]
 pub struct WorkerUpdateDB {
     #[dao(immutable)]
-    pub started_on: Option<AtTime>,
-    pub ended_on: Option<AtTime>,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
     pub status: WorkerStatus,
 }
 
@@ -336,7 +345,7 @@ impl WorkerUpdateDB {
     pub fn stopped(at: &AtTime) -> Self {
         Self {
             started_on: None,
-            ended_on: Some(*at),
+            ended_on: Some((*at).into()),
             status: WorkerStatus::Stopped,
         }
     }

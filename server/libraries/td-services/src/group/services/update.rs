@@ -32,8 +32,8 @@ async fn update_group(
     let update_db = GroupDBUpdate {
         name: update.name.clone(),
         description: update.description.clone(),
-        modified_on: ctx.time,
-        modified_by_id: ctx.user_id,
+        modified_on: ctx.time.into(),
+        modified_by_id: ctx.user_id.into(),
     };
 
     let current: GroupDBWithNames = conn.live().fetch_one(&param.group).await?;

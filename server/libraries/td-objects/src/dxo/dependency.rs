@@ -5,7 +5,7 @@
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus,
-    DependencyVersionId, FunctionId, System, TableId, UserId,
+    DependencyVersionId, FunctionId, OfTable, System, TableId, UserId,
 };
 use crate::types::composed::TableVersions;
 use ta_objects::StateFilter;
@@ -28,8 +28,8 @@ pub struct DependencyDB {
     pub collection_id: CollectionId,
     pub dependency_id: DependencyId,
     pub function_id: FunctionId,
-    pub table_collection_id: CollectionId,
-    pub table_function_id: FunctionId,
+    pub table_collection_id: OfTable<CollectionId>,
+    pub table_function_id: OfTable<FunctionId>,
     pub table_id: TableId,
     pub table_versions: TableVersions,
     pub dep_pos: DependencyPos,
@@ -72,7 +72,7 @@ pub struct DependencyDBWithNames {
     #[dao(flatten)]
     pub base: DependencyDB,
     pub collection: CollectionName,
-    pub table_collection: CollectionName,
+    pub table_collection: OfTable<CollectionName>,
 }
 
 impl DependencyDBWithNames {

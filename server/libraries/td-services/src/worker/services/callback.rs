@@ -48,8 +48,8 @@ mod tests {
     use td_objects::dxo::worker::WorkerDBWithNames;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues, UserId,
-        WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, Ended, FunctionRuntimeValues,
+        Started, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -122,7 +122,7 @@ mod tests {
             db.live().fetch_one::<WorkerDBWithNames>(&worker.id).await?;
         assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.base.status, WorkerStatus::Running);
-        assert_eq!(worker.base.started_on, Some(started_on));
+        assert_eq!(worker.base.started_on, Some(Started::from(started_on)));
         assert_eq!(worker.base.ended_on, None);
 
         let ended_on = AtTime::now();
@@ -152,8 +152,8 @@ mod tests {
             .await?;
         assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.base.status, WorkerStatus::Done);
-        assert_eq!(worker.base.started_on, Some(started_on));
-        assert_eq!(worker.base.ended_on, Some(ended_on));
+        assert_eq!(worker.base.started_on, Some(Started::from(started_on)));
+        assert_eq!(worker.base.ended_on, Some(Ended::from(ended_on)));
 
         Ok(())
     }

@@ -15,7 +15,8 @@
 
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, Description, GroupId, GroupIdName, GroupName, System, UserId, UserName,
+    AtTime, Created, Description, GroupId, GroupIdName, GroupName, Modified, System, UserId,
+    UserName,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -26,10 +27,10 @@ pub struct GroupDB {
     pub id: GroupId,
     pub name: GroupName,
     pub description: Description,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub system: System,
 }
 
@@ -38,8 +39,8 @@ pub struct GroupDB {
 pub struct GroupDBWithNames {
     #[dao(flatten)]
     pub base: GroupDB,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 #[ta_objects::Dto]
@@ -55,10 +56,10 @@ impl GroupCreate {
             id: GroupId::default(),
             name: self.name,
             description: self.description,
-            created_on: ctx.time,
-            created_by_id: ctx.user_id,
-            modified_on: ctx.time,
-            modified_by_id: ctx.user_id,
+            created_on: ctx.time.into(),
+            created_by_id: ctx.user_id.into(),
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
             system: System::FALSE,
         }
     }
@@ -69,8 +70,8 @@ impl GroupCreate {
 pub struct GroupDBUpdate {
     pub name: Option<GroupName>,
     pub description: Option<Description>,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
 }
 
 #[ta_objects::Dto]
@@ -88,13 +89,13 @@ pub struct Group {
     pub name: GroupName,
     #[dto(list(filter, filter_like, order_by))]
     pub description: Description,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
     pub system: System,
-    pub created_by: UserName,
-    pub modified_by: UserName,
+    pub created_by: Created<UserName>,
+    pub modified_by: Modified<UserName>,
 }
 
 impl FromDao for Group {

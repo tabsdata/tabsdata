@@ -236,12 +236,12 @@ mod tests {
         assert_eq!(response.data.len(), 2);
         assert!(response.data[0].defined_on >= response.data[1].defined_on);
         for v in &response.data {
-            assert_eq!(v.parent_function_version_id, parent.base.id);
+            assert_eq!(*v.parent_function_version_id, parent.base.id);
         }
 
         let response = list("f1").await?;
         assert_eq!(response.data.len(), 1);
-        assert_eq!(response.data[0].parent_function_version_id, sibling.id);
+        assert_eq!(*response.data[0].parent_function_version_id, sibling.id);
 
         // Deleting a function hides its patches: the function no longer
         // resolves, so the listing is not found rather than leaking rows.

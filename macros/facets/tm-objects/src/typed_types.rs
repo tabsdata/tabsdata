@@ -24,14 +24,34 @@ use syn::{DeriveInput, Expr, Type, parse_macro_input};
 
 pub fn derive_typed(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    if let Some(t) = crate::brand::brand_param(&input) {
+        return match reject_brand_args(&input) {
+            Ok(()) => crate::brand::expand_typed(&input.ident, &t).into(),
+            Err(e) => e.to_compile_error().into(),
+        };
+    }
     match expand_typed(&input) {
         Ok(ts) => ts.into(),
         Err(e) => e.to_compile_error().into(),
     }
 }
 
+/// Brands take no `#[typed(...)]` constraints — they are transparent.
+fn reject_brand_args(input: &DeriveInput) -> syn::Result<()> {
+    match input.attrs.iter().find(|a| a.path().is_ident("typed")) {
+        Some(attr) => Err(syn::Error::new_spanned(
+            attr,
+            "#[typed(...)] does not apply to brand wrappers",
+        )),
+        None => Ok(()),
+    }
+}
+
 pub fn derive_typed_serde(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    if let Some(t) = crate::brand::brand_param(&input) {
+        return crate::brand::expand_serde(&input.ident, &t).into();
+    }
     let result = match &input.data {
         syn::Data::Enum(_) => {
             if is_tag_enum(&input) {
@@ -50,6 +70,9 @@ pub fn derive_typed_serde(input: TokenStream) -> TokenStream {
 
 pub fn derive_typed_sqlx(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    if let Some(t) = crate::brand::brand_param(&input) {
+        return crate::brand::expand_sqlx(&input.ident, &t).into();
+    }
     let result = match &input.data {
         syn::Data::Enum(_) => {
             if is_tag_enum(&input) {
@@ -71,6 +94,9 @@ pub fn derive_typed_sqlx(input: TokenStream) -> TokenStream {
 
 pub fn derive_typed_openapi(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    if let Some(t) = crate::brand::brand_param(&input) {
+        return crate::brand::expand_openapi(&input.ident, &t).into();
+    }
     let result = match &input.data {
         syn::Data::Enum(_) => {
             if is_tag_enum(&input) {
@@ -961,16 +987,17 @@ fn impl_sea_value_typed(name: &Ident, inner: &Type) -> proc_macro2::TokenStream 
     }
 }
 
-/// Emits `SqlCondition` for a leaf type (single AND with one column).
+/// Emits `SqlCondition<D>` for a leaf type (single AND with one column),
+/// implemented only for DAOs that have a column of this type.
 fn impl_sql_condition(name: &Ident) -> proc_macro2::TokenStream {
     quote! {
-        impl ta_objects::sql_condition::SqlCondition for #name {
-            fn resolve<D: ta_objects::DaoCore>(&self) -> Result<sea_query::Condition, ta_objects::errors::SqlError> {
-                ta_objects::sql_condition::resolve_leaf_eq::<D>(self)
+        impl<D: ta_objects::HasColumn<#name>> ta_objects::sql_condition::SqlCondition<D> for #name {
+            fn resolve(&self) -> sea_query::Condition {
+                ta_objects::sql_condition::resolve_leaf_eq::<D, Self>(self)
             }
 
-            fn display_values<D: ta_objects::DaoCore>(&self) -> Vec<(String, String)> {
-                ta_objects::sql_condition::leaf_display_values::<D>(self)
+            fn display_values(&self) -> Vec<(String, String)> {
+                ta_objects::sql_condition::leaf_display_values::<D, Self>(self)
             }
         }
     }
@@ -1442,7 +1469,41 @@ fn expand_typed_tag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream
         }
     };
 
-    let sql_condition = impl_sql_condition(name);
+    // The active variant picks the column at runtime, so the DAO must have a
+    // column for every variant's inner type.
+    let variant_tys: Vec<&Type> = variants.iter().map(|v| &v.ty).collect();
+    let resolve_arms = variants.iter().map(|v| {
+        let (ident, ty) = (&v.ident, &v.ty);
+        quote! {
+            Self::#ident(inner) =>
+                ta_objects::sql_condition::resolve_leaf_eq::<D, #ty>(inner),
+        }
+    });
+    let display_value_arms = variants.iter().map(|v| {
+        let (ident, ty) = (&v.ident, &v.ty);
+        quote! {
+            Self::#ident(inner) =>
+                ta_objects::sql_condition::leaf_display_values::<D, #ty>(inner),
+        }
+    });
+    let sql_condition = quote! {
+        impl<D> ta_objects::sql_condition::SqlCondition<D> for #name
+        where
+            D: ta_objects::DaoCore #(+ ta_objects::HasColumn<#variant_tys>)*,
+        {
+            fn resolve(&self) -> sea_query::Condition {
+                match self {
+                    #(#resolve_arms)*
+                }
+            }
+
+            fn display_values(&self) -> Vec<(String, String)> {
+                match self {
+                    #(#display_value_arms)*
+                }
+            }
+        }
+    };
 
     Ok(quote! {
         impl Clone for #name {

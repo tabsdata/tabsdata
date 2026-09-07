@@ -3,12 +3,10 @@
 //
 
 use crate::types::basic::ProjectId;
-use sea_query::{Condition, Expr, ExprTrait, IntoTableRef};
-use std::any::TypeId;
+use sea_query::{Condition, Expr, ExprTrait};
 use std::collections::HashSet;
-use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{DaoCore, SeaValue};
+use ta_objects::{HasColumn, SeaValue};
 
 /// The set of projects a requester may view: every project ([`Self::All`], from
 /// a `project:__all__` view grant) or an explicit set ([`Self::Only`], possibly
@@ -31,24 +29,18 @@ impl VisibleProjects {
 }
 
 /// As a WHERE clause: `All` matches everything, `Only(ids)` restricts the
-/// DAO's `project_id` column to the set, an empty set matches nothing.
-impl SqlCondition for VisibleProjects {
-    fn resolve<D: DaoCore>(&self) -> Result<Condition, SqlError> {
+/// DAO's `ProjectId` column to the set, an empty set matches nothing.
+impl<D: HasColumn<ProjectId>> SqlCondition<D> for VisibleProjects {
+    fn resolve(&self) -> Condition {
         let ids = match self {
-            VisibleProjects::All => return Ok(Condition::all()),
+            VisibleProjects::All => return Condition::all(),
             VisibleProjects::Only(ids) => ids,
         };
         if ids.is_empty() {
-            return Ok(Condition::all().add(Expr::cust("1 = 0")));
+            return Condition::all().add(Expr::cust("1 = 0"));
         }
-        let col = D::col_for_type(TypeId::of::<ProjectId>()).ok_or_else(|| {
-            SqlError::TypeNotFound(
-                std::any::type_name::<ProjectId>().to_string(),
-                Box::new(D::table().into_table_ref()),
-            )
-        })?;
         let values: Vec<_> = ids.iter().map(|id| id.as_sea_value()).collect();
-        Ok(Condition::all().add(Expr::col(col).is_in(values)))
+        Condition::all().add(Expr::col(D::COL).is_in(values))
     }
 
     fn matches_all(&self) -> bool {

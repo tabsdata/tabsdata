@@ -59,8 +59,8 @@ pub(crate) async fn set_collection_base_path(
         .read::<String>("")
         .context;
     let mut update = CollectionUpdateDB::from(collection);
-    update.modified_on = request_context.time;
-    update.modified_by_id = request_context.user_id;
+    update.modified_on = request_context.time.into();
+    update.modified_by_id = request_context.user_id.into();
     update.base_path = Some(base_path.cloned());
     db.scoped(project_id)
         .live()

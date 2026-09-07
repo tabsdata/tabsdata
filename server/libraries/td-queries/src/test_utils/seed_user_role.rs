@@ -21,7 +21,7 @@ pub(crate) async fn seed_user_role(
         user_id: *user,
         role_id: *role,
         added_on: request_context.time,
-        added_by_id: request_context.user_id,
+        added_by_id: request_context.user_id.into(),
         fixed: Fixed::FALSE,
     };
 

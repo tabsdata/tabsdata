@@ -3,7 +3,7 @@
 //
 
 use crate::dxo::crudl::RequestContext;
-use crate::types::basic::{AtTime, Fixed, RoleId, RoleName, UserId, UserName, UserRoleId};
+use crate::types::basic::{Added, AtTime, Fixed, RoleId, RoleName, UserId, UserName, UserRoleId};
 use ta_objects::FromDao;
 use td_error::TdError;
 
@@ -14,7 +14,7 @@ pub struct UserRoleDB {
     pub user_id: UserId,
     pub role_id: RoleId,
     pub added_on: AtTime,
-    pub added_by_id: UserId,
+    pub added_by_id: Added<UserId>,
     pub fixed: Fixed,
 }
 
@@ -25,7 +25,7 @@ impl UserRoleDB {
             user_id,
             role_id,
             added_on: ctx.time,
-            added_by_id: ctx.user_id,
+            added_by_id: ctx.user_id.into(),
             fixed,
         }
     }
@@ -38,7 +38,7 @@ pub struct UserRoleDBWithNames {
     pub base: UserRoleDB,
     pub user: UserName,
     pub role: RoleName,
-    pub added_by: UserName,
+    pub added_by: Added<UserName>,
 }
 
 #[ta_objects::Dlo]
@@ -60,7 +60,7 @@ pub struct UserRole {
     pub user_id: UserId,
     pub role_id: RoleId,
     pub added_on: AtTime,
-    pub added_by_id: UserId,
+    pub added_by_id: Added<UserId>,
     pub fixed: Fixed,
 
     #[dto(list(filter, filter_like, order_by))]
@@ -68,7 +68,7 @@ pub struct UserRole {
     #[dto(list(filter, filter_like, order_by))]
     pub role: RoleName,
     #[dto(list(filter, filter_like, order_by))]
-    pub added_by: UserName,
+    pub added_by: Added<UserName>,
 }
 
 impl FromDao for UserRole {

@@ -7,7 +7,7 @@ mod tests {
     use crate as ta_objects;
     use tm_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
-    use crate::sql_condition::{SqlCondition, resolve_condition};
+    use crate::sql_condition::SqlCondition;
     use crate::{SeaValue, and, or};
     use sea_query::{PostgresQueryBuilder, Query};
 
@@ -120,8 +120,8 @@ mod tests {
         enabled: Enabled,
     }
 
-    fn sql(cond: impl SqlCondition) -> String {
-        let cond = resolve_condition::<EnumTestDao>(cond).unwrap();
+    fn sql(cond: impl SqlCondition<EnumTestDao>) -> String {
+        let cond = cond.resolve();
         let q = Query::select()
             .column(EnumTestDaoIden::Status)
             .from(EnumTestDaoIden::Table)

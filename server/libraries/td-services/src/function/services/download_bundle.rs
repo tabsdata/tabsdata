@@ -159,7 +159,7 @@ mod tests {
             upload_bundle(&context, p.id, &collection.name, payload_patch.clone()).await?;
         let patch = FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: v2.id.clone(),
+            parent_function_version_id: v2.id.clone().into(),
             function_id: v2.function_id,
             collection_id: v2.collection_id,
             snippet: "patched snippet".try_into()?,
@@ -232,7 +232,7 @@ mod tests {
         // cascade to the patch row, so the parent's status is what decides.
         let orphan = FunctionPatchDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: deleted.id.clone(),
+            parent_function_version_id: deleted.id.clone().into(),
             function_id: deleted.function_id,
             collection_id: deleted.collection_id,
             snippet: "orphan snippet".try_into()?,

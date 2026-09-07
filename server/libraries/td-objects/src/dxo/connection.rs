@@ -69,7 +69,7 @@ pub struct ConnectionHydrated {
     pub vars: Vec<KeyValue>,
 }
 
-use crate::types::basic::{AtTime, ConnectionKind, UserId};
+use crate::types::basic::{AtTime, ConnectionKind, Created, Modified, UserId};
 
 /// A connection row: stable identity + connector kind, 1:1 with its
 /// source/destination collection (created with it, named by it, deleted
@@ -83,8 +83,8 @@ use crate::types::basic::{AtTime, ConnectionKind, UserId};
 pub struct ConnectionDB {
     pub id: ConnectionId,
     pub kind: ConnectionKind,
-    pub created_on: AtTime,
-    pub created_by_id: UserId,
-    pub modified_on: AtTime,
-    pub modified_by_id: UserId,
+    pub created_on: Created<AtTime>,
+    pub created_by_id: Created<UserId>,
+    pub modified_on: Modified<AtTime>,
+    pub modified_by_id: Modified<UserId>,
 }

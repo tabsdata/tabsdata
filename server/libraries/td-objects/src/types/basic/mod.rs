@@ -3,6 +3,7 @@
 //
 
 mod bool;
+mod brand;
 mod i16;
 mod i32;
 mod i64;
@@ -14,6 +15,7 @@ mod timestamp;
 mod typed_enum;
 
 pub use bool::*;
+pub use brand::*;
 pub use i16::*;
 pub use i32::*;
 pub use i64::*;
