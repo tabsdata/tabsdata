@@ -45,6 +45,7 @@ async fn delete_function(
 
     let at = ctx.time;
     let current: FunctionDBWithNames = conn
+        .scd2()
         .as_of(&at)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
@@ -62,7 +63,8 @@ async fn delete_function(
         &empty_workers,
     )
     .await?;
-    conn.close::<FunctionDB>(&current.base.base.function_id, &at)
+    conn.scd2()
+        .close::<FunctionDB>(&current.base.base.function_id, &at)
         .await?;
     gated_trx.commit().await?;
 
@@ -494,6 +496,7 @@ mod tests {
         service.delete_function(request).await?;
 
         let function_version: FunctionDBWithNames = db
+            .timeline()
             .fetch_one::<FunctionDBWithNames>(&(&created_function_version_1.id))
             .await?;
         let function_version = Function::from_dao(function_version)?;

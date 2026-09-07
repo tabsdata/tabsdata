@@ -215,7 +215,7 @@ mod tests {
             for table in &created_tables {
                 let table = TableName::try_from(table)?;
                 let table_version: TableDB = db
-                    .latest()
+                    .scd2()
                     .fetch_one::<TableDBWithNames>(and!(
                         &collection.id,
                         &TableIdName::Name(table.clone())

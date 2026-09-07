@@ -2,27 +2,95 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::generic::chunked::LatestChunked;
+use crate::generic::as_of::AsOf;
+use crate::generic::chunked::Scd2Chunked;
 use crate::primitives::scd2::select_open;
+use crate::primitives::scd2::{close_query, update_open_query};
+use crate::primitives::table::insert_query;
 use crate::{QueryExecutor, Serves};
+use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{AddressesOneVersion, Dao, ListDto, Scd2Dao, SelectDao, single_row};
+use ta_objects::{
+    AddressesOneVersion, Dao, InsertableFrom, ListDto, Scd2Dao, Scd2InsertDao, SelectDao, TableDao,
+    UpdateDao, single_row,
+};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
 
-/// At-now surface over the open SCD2 intervals (`valid_to = 'infinity'`,
-/// served by the partial indexes).
-pub struct Latest<E> {
+/// The only door to an interval table: the open intervals
+/// (`valid_to = 'infinity'`, served by the partial indexes) until
+/// [`as_of`](Self::as_of) moves the instant.
+pub struct Scd2<E> {
     pub(crate) executor: E,
 }
 
-impl<E> Latest<E> {
-    pub fn chunked(self) -> LatestChunked<E> {
-        LatestChunked {
+impl<E> Scd2<E> {
+    /// The caller's condition composed with the visibility interval at `on`,
+    /// so cost follows the condition's selectivity.
+    #[allow(clippy::wrong_self_convention)]
+    pub fn as_of<V>(self, on: &V) -> AsOf<'_, E, V> {
+        AsOf {
+            on,
             executor: self.executor,
         }
+    }
+
+    pub fn chunked(self) -> Scd2Chunked<E> {
+        Scd2Chunked {
+            executor: self.executor,
+        }
+    }
+
+    /// A new version: the trigger closes the partition's previous open row.
+    pub async fn insert<D: Scd2InsertDao + InsertableFrom<E::Scope>>(
+        self,
+        dao: &D,
+    ) -> Result<PgQueryResult, SqlError>
+    where
+        E: Serves<D>,
+    {
+        insert_query::<D>(dao)?
+            .build_query()
+            .execute(self.executor)
+            .await
+            .map_err(|e| SqlError::on_write::<D>(e, &dao.column_display_values()))
+    }
+
+    /// A payload update of the matching open rows; closed versions are history.
+    pub async fn update<U: UpdateDao>(
+        self,
+        dao: &U,
+        condition: impl SqlCondition<U::FilterBy>,
+    ) -> Result<PgQueryResult, SqlError>
+    where
+        U::FilterBy: Scd2Dao,
+        E: Serves<U>,
+    {
+        update_open_query(dao, condition)?
+            .build_query()
+            .execute(self.executor)
+            .await
+            .map_err(|e| SqlError::on_write::<U>(e, &dao.column_display_values()))
+    }
+
+    /// Ends the matching open intervals at `at` with no successor: the SCD2
+    /// deletion. A later insert into the partition reopens it.
+    pub async fn close<D: TableDao + Scd2Dao>(
+        self,
+        condition: impl SqlCondition<D>,
+        at: &D::VersionOrder,
+    ) -> Result<PgQueryResult, SqlError>
+    where
+        E: Serves<D>,
+    {
+        let values = condition.display_values();
+        close_query::<D>(condition, at)?
+            .build_query()
+            .execute(self.executor)
+            .await
+            .map_err(|e| SqlError::on_write::<D>(e, &values))
     }
 
     pub async fn fetch_one<D: SelectDao + Scd2Dao>(
@@ -160,7 +228,7 @@ mod tests {
         #[dao(partition_by)]
         partition_id: TestPartition,
         status: TestStatus,
-        #[dao(valid_from)]
+        #[dao(scd2(valid_from))]
         defined_on: TestDefinedOn,
     }
 

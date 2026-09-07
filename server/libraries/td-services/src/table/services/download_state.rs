@@ -36,13 +36,20 @@ async fn table_state_download(
 
     let mut trx = db.read().await?;
     let conn = trx.get(authz.none());
-    let function: FunctionDBWithNames = conn.as_of(&at).fetch_one(&function_version_id).await?;
+    let function: FunctionDBWithNames = conn.timeline().fetch_one(&function_version_id).await?;
+    if !function.base.covers(&at) {
+        return Err(api_error!(
+            ApiError::NotFound,
+            "Function version '{function_version_id}' was not live at '{at}'",
+        ));
+    }
     let collection: ResolvedCollectionDB =
         conn.fetch_one(&function.base.base.collection_id).await?;
     let mut trx = trx.enter_project(&collection.base.project_id).await?;
     let conn = trx.get(authz.none());
 
     let system_tables: Vec<TableDBWithNames> = conn
+        .scd2()
         .as_of(&at)
         .fetch_all(and!(&function.base.base.id, TableDBWithNames::system()))
         .await?;

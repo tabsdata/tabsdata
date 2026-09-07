@@ -8,7 +8,7 @@ mod tests {
     use tm_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
     use crate::and;
-    use crate::dxo::{Dao, HasColumn, InsertDao, PkDao, RecursiveDao, TimelineDao, UpdateDao};
+    use crate::dxo::{Dao, HasColumn, Insertable, PkDao, RecursiveDao, TimelineDao, UpdateDao};
     use crate::or;
     use crate::sql_condition::SqlCondition;
     use crate::unique::AddressesOneRow;
@@ -189,7 +189,7 @@ mod tests {
         pub item_id: Name,
         pub status: ItemStatus,
         pub system: System,
-        #[dao(valid_from)]
+        #[dao(scd2(valid_from))]
         pub defined_on: DefinedOn,
     }
 
@@ -205,6 +205,22 @@ mod tests {
         pub fn executable() -> impl SqlCondition<Self> {
             and!(ItemStatus::Active, System::FALSE)
         }
+    }
+
+    #[test]
+    fn test_scd2_insert_is_an_interval_insert() {
+        fn interval<T: crate::Scd2InsertDao>() {}
+        fn plain<T: crate::InsertDao>() {}
+        interval::<Scd2ItemDao>();
+        plain::<ItemDao>();
+    }
+
+    #[test]
+    fn test_scd2_pk_addresses_a_row_not_a_version() {
+        fn row<T: crate::AddressesOneRow<Scd2ItemDao, td_database::access::Global>>() {}
+        fn version<T: crate::AddressesOneVersion<Scd2ItemDao>>() {}
+        row::<ItemId>();
+        version::<Name>();
     }
 
     #[test]
@@ -233,7 +249,7 @@ mod tests {
         pub id: ItemId,
         #[dao(partition_by)]
         pub item_id: Name,
-        #[dao(version_by)]
+        #[dao(timeline(version_by))]
         pub defined_on: DefinedOn,
     }
 
@@ -305,12 +321,12 @@ mod tests {
         pub id: ItemId,
         #[dao(partition_by)]
         pub item_id: Name,
-        #[dao(recurse_up)]
+        #[dao(recursive(up))]
         pub parent: ParentKey,
-        #[dao(recurse_down)]
+        #[dao(recursive(down))]
         pub child: RecursionKey,
         pub status: ItemStatus,
-        #[dao(valid_from)]
+        #[dao(scd2(valid_from))]
         pub defined_on: DefinedOn,
     }
 

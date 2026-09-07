@@ -29,10 +29,10 @@ async fn load_recursive_current(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let opts = options()?;
     let t = Instant::now();
-    let rows = (&db)
-        .latest()
+    let rows = db
+        .scd2()
         .recursive::<DependencyDBWithNames, FunctionDB>(opts)
-        .direct_reference(&h.consumer_function_id)
+        .start_at(&h.consumer_function_id)
         .fetch_all()
         .await?;
     record("recursive::current", profile, t, rows.len(), seeded);
@@ -45,10 +45,11 @@ async fn load_recursive_find_at(db: TdPool) -> Result<(), TdError> {
     let at = AtTime::now();
     let opts = options()?;
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
+        .scd2()
         .as_of(&at)
         .recursive::<DependencyDBWithNames, FunctionDB>(opts)
-        .direct_reference(&h.consumer_function_id)
+        .start_at(&h.consumer_function_id)
         .fetch_all()
         .await?;
     record("recursive::find_at", profile, t, rows.len(), seeded);

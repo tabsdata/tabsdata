@@ -51,7 +51,7 @@ pub(crate) async fn seed_system_tables(
             table_type: TableType::default(),
         };
 
-        executor.reuse().insert(&table).await?;
+        executor.reuse().scd2().insert(&table).await?;
         system_tables.push(table);
     }
 
@@ -64,7 +64,7 @@ pub(crate) async fn seed_system_tables(
 
         let table_db = executor
             .reuse()
-            .latest()
+            .scd2()
             .fetch_first::<TableDBWithNames>(and!(table_collection, table_name))
             .await?
             .expect("seeded system table must exist");
@@ -84,13 +84,13 @@ pub(crate) async fn seed_system_tables(
             system: System::TRUE,
         };
 
-        executor.reuse().insert(&dependency).await?;
+        executor.reuse().scd2().insert(&dependency).await?;
     }
 
     let ids: Vec<_> = system_tables.iter().map(|t| t.id).collect();
     Ok(executor
         .reuse()
-        .history()
+        .timeline()
         .chunked()
         .fetch_all(&ids, ())
         .await?)
@@ -158,7 +158,11 @@ mod tests {
 
         assert_eq!(system_tables.len(), 1);
         for table in system_tables {
-            let found = db.fetch_one::<TableDB>(&table.base.id).await.unwrap();
+            let found = db
+                .timeline()
+                .fetch_one::<TableDB>(&table.base.id)
+                .await
+                .unwrap();
             assert_eq!(table.base.id, found.base.id);
             assert_eq!(table.base.collection_id, found.base.collection_id);
             assert_eq!(table.base.table_id, found.base.table_id);

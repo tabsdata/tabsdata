@@ -101,6 +101,7 @@ impl Entity for Defs {
                 source_table: FunctionPatches::Table.into_iden(),
                 partition_col: FunctionPatches::ParentFunctionVersionId.into_iden(),
                 valid_from_col: FunctionPatches::DefinedOn.into_iden(),
+                valid_to_col: FunctionPatches::ValidTo.into_iden(),
                 pk_col: FunctionPatches::Id.into_iden(),
             }
             .derived(),

@@ -8,9 +8,9 @@ use td_common::datetime::IntervalEnd;
 /// The trigger-owned SCD2 `valid_to` column, surfaced on read-only view
 /// DAOs; regular DAOs never carry it (inserts must not bind it).
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ValidTo(IntervalEnd);
+pub struct Scd2ValidTo(IntervalEnd);
 
-impl ValidTo {
+impl Scd2ValidTo {
     pub fn infinity() -> Self {
         Self(IntervalEnd::Infinity)
     }

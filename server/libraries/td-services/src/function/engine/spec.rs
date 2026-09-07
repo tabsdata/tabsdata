@@ -266,7 +266,12 @@ async fn resolve_tables<S: SeesProjectRows>(
             .iter()
             .map(|name| and!(&collection.id, *name))
             .collect();
-        let taken: Vec<TableDBWithNames> = conn.as_of(at).chunked().fetch_all(&lookups, ()).await?;
+        let taken: Vec<TableDBWithNames> = conn
+            .scd2()
+            .as_of(at)
+            .chunked()
+            .fetch_all(&lookups, ())
+            .await?;
         if !taken.is_empty() {
             let names: Vec<TableName> = taken.into_iter().map(|t| t.base.base.name).collect();
             Err(RegisterFunctionError::TableAlreadyExists(
@@ -340,7 +345,12 @@ async fn referenced_rows<S: SeesProjectRows>(
     for t in triggers {
         lookups.push(and!(t.collection.as_ref().unwrap_or(collection), &t.table));
     }
-    let rows: Vec<TableDBWithNames> = conn.as_of(at).chunked().fetch_all(&lookups, ()).await?;
+    let rows: Vec<TableDBWithNames> = conn
+        .scd2()
+        .as_of(at)
+        .chunked()
+        .fetch_all(&lookups, ())
+        .await?;
     Ok(rows
         .into_iter()
         .map(|t| {

@@ -80,6 +80,7 @@ pub async fn resolve_worker_message<S: SeesProjectRows>(
             // A pod resolving a terminalized attempt gets a clean
             // not-found instead of work.
             let pfr: PhysicalFunctionRunDB = conn
+                .timeline()
                 .fetch_one::<PhysicalFunctionRunDB>(&function_run_id)
                 .await?;
             if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status) {

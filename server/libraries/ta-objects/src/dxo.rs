@@ -77,23 +77,37 @@ pub trait UpdateDao: TableDao {
 )]
 pub trait SelectDao: Dao + for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Unpin {}
 
-/// Insert capability over a base table. Independent of [`SelectDao`], so the
-/// write shape of a relation need not be a read surface too.
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be inserted",
-    note = "declare `ops(insert)`; a view has no row to write back to"
-)]
-pub trait InsertDao: TableDao {
+/// The insert payload over a base table; not a capability. The query builders
+/// take it, the surfaces bound on [`InsertDao`] or [`Scd2InsertDao`], which
+/// say where the insert may be issued from.
+pub trait Insertable: TableDao {
     /// In [`Dao::columns`] order.
     fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr>;
 }
+
+/// A plain insert: the row it writes is the whole story.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be inserted here",
+    note = "declare `ops(insert)`; a view has no row to write back to, and an `scd2` \
+            relation inserts through `db.scd2().insert(..)`, which is what closes the \
+            partition's previous open interval"
+)]
+pub trait InsertDao: Insertable {}
+
+/// An interval insert: the trigger closes the partition's previous open row.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an interval-table insert",
+    note = "`db.scd2().insert(..)` takes an `ops(insert)` DAO declaring `scd2`; an \
+            unversioned row inserts through the wordless `db.insert(..)`"
+)]
+pub trait Scd2InsertDao: Insertable + Scd2Dao {}
 
 /// One row per entity, so a condition selects entities rather than versions.
 /// The open reads bind on it.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is a version log, so an open read there matches every version",
-    note = "for the latest version use `latest()` / `as_of()`, for the whole \
-            history `history()`"
+    note = "for the version visible at an instant use `scd2()` / `scd2().as_of()`, for \
+            the version log `timeline()`"
 )]
 pub trait UnversionedDao: Dao {}
 
@@ -104,7 +118,7 @@ pub trait UnversionedDao: Dao {}
     message = "`{Self}` has no conflict target",
     note = "declare `ops(upsert(A, B))` over a set backed by a UNIQUE constraint"
 )]
-pub trait UpsertDao: UnversionedDao + InsertDao {
+pub trait UpsertDao: UnversionedDao + Insertable {
     /// The `ON CONFLICT (...)` target, which must back a `UNIQUE` constraint.
     fn key_columns() -> impl IntoIterator<Item = Self::Iden>;
 
@@ -117,7 +131,7 @@ pub trait UpsertDao: UnversionedDao + InsertDao {
 /// roles, so an insert DAO carries them and the row DAO inherits them.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an interval table",
-    note = "declare `scd2` and mark `#[dao(valid_from)]`"
+    note = "declare `scd2` and mark `#[dao(scd2(valid_from))]`"
 )]
 pub trait Scd2Dao: TimelineDao {
     /// Trigger-owned, so only a read-only DAO may project it.
@@ -128,8 +142,8 @@ pub trait Scd2Dao: TimelineDao {
 /// [`Scd2Dao`] adds.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not versioned",
-    note = "declare `scd2` or `timeline`, and mark `#[dao(pk)]` / `#[dao(partition_by)]` \
-            plus `#[dao(valid_from)]` or `#[dao(version_by)]`"
+    note = "declare `scd2` or `timeline`, and mark `#[dao(pk)]`, `#[dao(partition_by)]` and \
+            the grain's version order: `#[dao(scd2(valid_from))]` / `#[dao(timeline(version_by))]`"
 )]
 pub trait TimelineDao: PkDao {
     /// Groups rows into per-entity histories.
@@ -144,7 +158,7 @@ pub trait TimelineDao: PkDao {
 /// Hierarchical traversal through recursive CTEs.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be traversed",
-    note = "declare `recursive` and mark `#[dao(recurse_up)]` / `#[dao(recurse_down)]`"
+    note = "declare `recursive` and mark `#[dao(recursive(up))]` / `#[dao(recursive(down))]`"
 )]
 pub trait RecursiveDao: Dao {
     /// The reference into the traversal's reference DAO.

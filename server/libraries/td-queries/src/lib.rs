@@ -10,7 +10,6 @@ mod generic;
 mod logic_id;
 mod primitives;
 
-pub use daos::data_version::DataVersion;
 pub use daos::dependency::Dependencies;
 pub use daos::execution::Executions;
 pub use daos::function_runs::{LogicalRuns, PhysicalRuns};
@@ -22,11 +21,13 @@ pub use daos::table_data_versions::TableDataVersions;
 
 pub use executor::{QueryExecutor, Serves};
 pub use generic::as_of::AsOf;
-pub use generic::chunked::{AsOfChunked, Chunked, HistoryChunked, LatestChunked};
+pub use generic::chunked::{AsOfChunked, Chunked, Scd2Chunked, TimelineChunked};
+pub use generic::data_version::DataVersion;
 pub use generic::for_update::ForUpdate;
-pub use generic::history::History;
-pub use generic::latest::Latest;
-pub use generic::recursive::{AsOfRecursive, LatestRecursive, RecursiveQuery};
+pub use generic::timeline::Timeline;
+
+pub use generic::recursive::{AsOfRecursive, Scd2Recursive};
+pub use generic::scd2::Scd2;
 
 pub use logic_id::initialize_logical_ids;
 pub use queries::Queries;

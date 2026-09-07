@@ -6,9 +6,9 @@ use crate::types::basic::{
     AtTime, BasePath, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, Ended,
     ExecutionId, FunctionName, FunctionVersionId, HasData, LogicalTableDataVersionId, Patch,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId,
-    RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started, StorageVersion,
+    RowCount, Scd2ValidTo, SchemaChanged, SchemaDataChanged, SchemaHash, Started, StorageVersion,
     TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
-    UserName, ValidTo, WithData,
+    UserName, WithData,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -40,7 +40,7 @@ pub struct PhysicalTableDataVersionInsertDB {
     #[dao(partition_by)]
     pub logical_table_data_version_id: LogicalTableDataVersionId,
     pub function_param_pos: TableFunctionParamPos,
-    #[dao(valid_from, order_by)]
+    #[dao(scd2(valid_from), order_by)]
     pub triggered_on: TriggeredOn,
     // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
     // Reads use this directly (never recompute), so the data stays findable after
@@ -76,8 +76,8 @@ pub struct PhysicalTableDataVersionDB {
     #[dao(flatten)]
     pub base: PhysicalTableDataVersionInsertDB,
     pub project_id: ProjectId,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 
 #[ta_objects::Dao]

@@ -240,7 +240,7 @@ mod tests {
             defined_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).insert(&patch).await?;
+        db.scoped(p.id).scd2().insert(&patch).await?;
 
         let head = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&db).await?;
         assert_eq!(head, Some(function.base.id));
@@ -325,7 +325,7 @@ mod tests {
             .await?;
 
         let table_version = db
-            .latest()
+            .scd2()
             .fetch_first::<TableDB>(and!(&collection.id, TableName::try_from(table_name)?))
             .await?
             .expect("seeded table must exist");

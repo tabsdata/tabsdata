@@ -11,7 +11,7 @@ use sea_query::{
 };
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{InsertDao, SelectDao, TableDao, UpdateDao, UpsertDao};
+use ta_objects::{Insertable, SelectDao, TableDao, UpdateDao, UpsertDao};
 
 /// No ordering: the base a listing extends, since `ListQueryParams::apply_to`
 /// only appends `ORDER BY`, and a DAO default order left in front of the
@@ -37,7 +37,7 @@ pub(crate) fn select_last<D: SelectDao>(condition: impl SqlCondition<D>) -> Sele
         .take()
 }
 
-pub(crate) fn select_latest_before<D: SelectDao>(
+pub(crate) fn select_nth_last<D: SelectDao>(
     condition: impl SqlCondition<D>,
     offset: u64,
 ) -> SelectStatement {
@@ -80,7 +80,7 @@ fn reverse_order<D: SelectDao>() -> impl Iterator<Item = (D::Iden, sea_query::Or
     })
 }
 
-pub(crate) fn insert_query<D: InsertDao>(dao: &D) -> Result<InsertStatement, SqlError> {
+pub(crate) fn insert_query<D: Insertable>(dao: &D) -> Result<InsertStatement, SqlError> {
     let mut query = Query::insert();
     query
         .into_table(D::TABLE)

@@ -5,7 +5,6 @@
 //! DAO-specific query handles, one module per entity cluster, each opened by
 //! its own [`Queries`](crate::Queries) method.
 
-pub mod data_version;
 pub mod dependency;
 pub mod execution;
 pub mod function_runs;

@@ -317,7 +317,7 @@ mod tests {
     /// The current Active version of the function named `name`.
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
         let active: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&FunctionStatus::Active)
             .await?;
         let function = active

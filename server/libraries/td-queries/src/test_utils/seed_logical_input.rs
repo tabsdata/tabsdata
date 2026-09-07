@@ -140,7 +140,7 @@ mod tests {
             .unwrap();
 
         let requirement_tables = db
-            .latest()
+            .scd2()
             .fetch_all::<TableDB>(&function.base.id)
             .await
             .unwrap();

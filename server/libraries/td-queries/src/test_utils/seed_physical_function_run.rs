@@ -67,9 +67,13 @@ pub(crate) async fn seed_physical_function_run(
         logical_function_run_id: logical.base.id.clone(),
     };
 
-    executor.reuse().insert(&function_db).await?;
+    executor.reuse().scd2().insert(&function_db).await?;
 
-    Ok(executor.reuse().fetch_one(&function_db.id).await?)
+    Ok(executor
+        .reuse()
+        .timeline()
+        .fetch_one(&function_db.id)
+        .await?)
 }
 
 #[cfg(test)]

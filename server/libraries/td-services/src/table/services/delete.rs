@@ -47,6 +47,7 @@ async fn table_delete(
 
     let at = ctx.time;
     let table: TableDBWithNames = conn
+        .scd2()
         .as_of(&at)
         .fetch_one(and!(
             &collection_id_name,
@@ -58,11 +59,11 @@ async fn table_delete(
 
     let functions = dependants_of_tables(conn, &[table_id], &at).await?;
     let frozen: Vec<FunctionInsertDB> = functions.iter().map(|f| f.frozen_version(&ctx)).collect();
-    conn.chunked().insert(&frozen).await?;
+    conn.scd2().chunked().insert(&frozen).await?;
 
-    conn.close::<TriggerDB>(&table_id, &ctx.time).await?;
+    conn.scd2().close::<TriggerDB>(&table_id, &ctx.time).await?;
 
-    let previous: TableDB = conn.fetch_one(&table.base.base.id).await?;
+    let previous: TableDB = conn.timeline().fetch_one(&table.base.base.id).await?;
     // Re-check on the live row: only frozen tables can be deleted.
     if !matches!(previous.base.status, TableStatus::Frozen) {
         Err(DeleteTableError::TableNotFrozen(
@@ -71,7 +72,7 @@ async fn table_delete(
             previous.base.status.to_string(),
         ))?
     }
-    conn.close::<TableDB>(&table_id, &ctx.time).await?;
+    conn.scd2().close::<TableDB>(&table_id, &ctx.time).await?;
     Ok(())
 }
 

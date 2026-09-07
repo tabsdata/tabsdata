@@ -133,7 +133,7 @@ async fn tick_project(
     // query excludes these PFRs from the next tick.
     let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
     let dispatched = PhysicalFunctionRunUpdateDB::dispatched(at);
-    conn.chunked().update(&dispatched, &pfr_ids).await?;
+    conn.scd2().chunked().update(&dispatched, &pfr_ids).await?;
 
     // Replay dispatch path: PFRs minted by the replay endpoint (status
     // Requested, no worker). No mint, no bind, no LFR.status flip.
@@ -152,7 +152,7 @@ async fn tick_project(
     .await?;
     conn.chunked().insert(&workers).await?;
     let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-    conn.chunked().update(&dispatched, &pfr_ids).await?;
+    conn.scd2().chunked().update(&dispatched, &pfr_ids).await?;
 
     let to_stop =
         claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::CronTrigger)).await?;
@@ -387,7 +387,7 @@ mod tests {
 
         let info = &message.info;
         let physical_function_runs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(physical_function_runs.len(), 1);
@@ -453,6 +453,7 @@ mod tests {
             match output_table {
                 OutputTable::Table(output) => {
                     let physical_table_data_version: PhysicalTableDataVersionDBWithNames = db
+                        .timeline()
                         .fetch_one::<PhysicalTableDataVersionDBWithNames>(
                             &(output.table_data_version_id),
                         )
@@ -593,7 +594,7 @@ mod tests {
         assert_ne!(replay_response.new_function_run_id, fr_old.base.id);
 
         let frs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(and!(&lfr.base.execution_id, &lfr.base.function_id))
             .await?;
         assert_eq!(frs.len(), 2);
@@ -639,12 +640,13 @@ mod tests {
 
         // The replay attempt is the run's current version from mint.
         let current = db
-            .latest()
+            .scd2()
             .fetch_one::<PhysicalFunctionRunDB>(&lfr_id)
             .await?;
         assert_eq!(current.base.id, replay_response.new_function_run_id);
 
         let pfr_new = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
             .await?;
         assert_eq!(pfr_new.base.status, PhysicalFunctionRunStatus::Dispatched);
@@ -837,7 +839,7 @@ mod tests {
         );
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
-                .history()
+                .timeline()
                 .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
                 .await?;
             assert_eq!(pfrs.len(), 1, "each project must dispatch its own run");
@@ -1171,7 +1173,7 @@ mod tests {
         assert_eq!(created.len(), 1);
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
-                .history()
+                .timeline()
                 .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
                 .await?;
             assert_eq!(pfrs.len(), 1);
@@ -1209,7 +1211,7 @@ mod tests {
         context.clone().request(()).await?;
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
-                .history()
+                .timeline()
                 .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
                 .await?;
             assert_eq!(pfrs.len(), 2);
@@ -1312,12 +1314,12 @@ mod tests {
             1
         );
         let pfrs_oldest: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[0].manual_trigger))
             .await?;
         assert_eq!(pfrs_oldest.len(), 1);
         let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
             .await?;
         assert!(pfrs_newest.is_empty());
@@ -1336,7 +1338,7 @@ mod tests {
             2
         );
         let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
             .await?;
         assert_eq!(pfrs_newest.len(), 1);

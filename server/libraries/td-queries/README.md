@@ -120,15 +120,16 @@ So `use td_queries::Queries;` is the only import a caller needs. The
 unversioned default grain is on the trait itself — `insert(&dao)`,
 `fetch_one::<D>(cond)`, `fetch_all::<D>(cond)`, `update`, `delete`, `list`
 — with no entry word, because there is nothing else the caller could have
-picked. A word appears only where there is a choice: a point in time
-(`latest()`, `as_of(&t)`, `history()`,
-`data_version(&on, &partition)`), row locks (`for_update()`), batching
-(`chunked()`), a traversal (`recursive::<D, R>(opts)`), or a per-DAO
+picked. A word appears only where there is a choice: an interval table
+(`scd2()`, and `scd2().as_of(&t)` for an instant other than now), the
+version log (`timeline()`, and `timeline().at(&on, &partition)` for a
+position in it), row locks (`for_update()`), batching (`chunked()`), a
+traversal (`scd2().recursive::<D, R>(opts)`), or a per-DAO
 handle (`logical_runs()`, `physical_runs()`, `table_data_versions()`,
 `executions()`, `dependencies()`, `sessions()`, `metrics()`).
 
 A grain word is a modifier and names no DAO; the terminal names the DAO and
-the shape, exactly as the wordless grain does — `db.latest().fetch_one::<D>(c)`,
+the shape, exactly as the wordless grain does — `db.scd2().fetch_one::<D>(c)`,
 not `db.current::<D>().fetch_one(c)`. Where the terminal takes the DAO as an
 argument (`insert`, `update`) or derives it from a list DTO (`list`), the
 turbofish is unnecessary.
@@ -170,7 +171,8 @@ The `#[ta_objects::Dao]` attribute macro (defined in `tm-objects`) generates:
    **`RecursiveDao`**, **`UnversionedDao`**, **`TableDao`**,
    **`ProjectScoped`**, **`ReachableFrom`** and **`InsertableFrom`** the
    attribute and the field marks call for — and the **capabilities**
-   `ops(...)` declares: **`SelectDao`**, **`InsertDao`**, **`UpdateDao`**,
+   `ops(...)` declares: **`SelectDao`**, **`InsertDao`** (or
+   **`Scd2InsertDao`** on an `scd2` relation), **`UpdateDao`**,
    **`UpsertDao`**, **`DeleteDao`**.
 4. **`HasColumn<T>`** per field — the compile-time column resolution behind
    [conditions](#conditions) — and the addressing impls, in every argument
@@ -190,7 +192,7 @@ compile error rather than a runtime one:
 
 ```rust
 let user: UserDB = conn.fetch_one(&user_id).await?;                       // one leaf
-let f: FunctionDB = conn.latest().fetch_one(and!(&function_id, &enabled)).await?;
+let f: FunctionDB = conn.scd2().fetch_one(and!(&function_id, &enabled)).await?;
 ```
 
 `and!` / `or!` compose in value position, `And!` / `Or!` in type position, and
@@ -215,11 +217,13 @@ Dao                — Iden, Db, RELATION, TABLE, columns(), order_by(), display
   ├── RecursiveDao   — Key, UP, DOWN: the traversal edge
   └── TableDao       — marker: a base table, so writes are legal
 
-SelectDao  (ops(select))         — marker: decodes a row; requires FromRow
-InsertDao  (ops(insert))         — insert_values(), over a TableDao
-UpdateDao  (ops(update(RowDao))) — FilterBy, update_values(), over a TableDao
-DeleteDao  (ops(delete))         — marker, over an unversioned TableDao
-UpsertDao  (ops(upsert(A, B)))   — key_columns(), value_columns(); an unversioned InsertDao
+SelectDao     (ops(select))         — marker: decodes a row; requires FromRow
+Insertable    (ops(insert))         — insert_values(), over a TableDao; the payload, not a capability
+├── InsertDao                       — the plain insert: db.insert(..)
+└── Scd2InsertDao                   — the interval insert: db.scd2().insert(..); Insertable + Scd2Dao
+UpdateDao     (ops(update(RowDao))) — FilterBy, update_values(), over a TableDao
+DeleteDao     (ops(delete))         — marker, over an unversioned TableDao
+UpsertDao     (ops(upsert(A, B)))   — key_columns(), value_columns(); an unversioned Insertable
 ```
 
 Every query surface also bounds the executor's RLS scope: `ReachableFrom`
@@ -239,11 +243,15 @@ the grain:
   `unique(..)` set, with the key columns leading and any narrowing
   condition trailing via `and!` (`and!(&user_id, &enabled)`). On a
   versioned relation only the pk qualifies — a unique set there holds per
-  instant, not per row, and the partition column matches every version.
-- On `latest()` and `as_of(&t)`, they take an `AddressesOneVersion<D>`:
+  instant, not per row, and the partition column matches every version —
+  and the read that takes it is `timeline().fetch_one` / `fetch_optional`:
+  "this exact version", no time predicate.
+- On `scd2()` and `scd2().as_of(&t)`, they take an `AddressesOneVersion<D>`:
   the partition column qualifies, since intervals within a partition are
   disjoint and one is visible at any instant, and so does every declared
-  `unique(..)` or `unique_at(..)` set. `unique_at(..)` is unique among the
+  `unique(..)` or `unique_at(..)` set. The pk does **not**: a version id has
+  already picked the version, so ANDing an instant onto it could only turn a
+  hit into a miss. `unique_at(..)` is unique among the
   versions visible at one instant only — one `(collection, name)` at a time,
   an invariant the write path keeps rather than an index — so it addresses
   one version but not one row of the history
@@ -253,11 +261,15 @@ the grain:
 Both are the compile-time half of the claim. The runtime half is that a
 second matching row is an error (`single_row`), never a silent pick.
 
-The open reads (`fetch_all`, `fetch_first`, `fetch_last`, `list`,
-`fetch_latest_before`, `assert_exists` / `assert_not_exists`) bind on
-`UnversionedDao`, which only an unversioned relation implements. On a versioned one
-they do not exist: reach for `latest()` / `as_of(&t)` for the
-version visible at a time, or `history()` to read history on purpose.
+Every wordless read (`fetch_one`, `fetch_optional`, `fetch_all`,
+`fetch_first`, `fetch_last`, `list`, `fetch_nth_last`, `assert_exists` /
+`assert_not_exists`) binds on `UnversionedDao`, which only an unversioned
+relation implements. On a versioned one they do not exist: reach for
+`scd2()` / `scd2().as_of(&t)` for the version visible at a time, or
+`timeline()` to read the version log on purpose. The wordless `insert` is the
+same: `InsertDao` is the plain insert, an `scd2` relation's `ops(insert)` DAO
+is an `Scd2InsertDao` instead and inserts through `scd2().insert(..)`, so the
+insert that closes a previous interval always says so at the call site.
 
 A `view = "..."` DAO gets no `TableDao`, so `insert`, `update` and `delete`
 do not typecheck for it. `SELECT ... FOR UPDATE` stays available: locking
@@ -307,7 +319,7 @@ Database-owned columns never ride on a write, and the ban is written in the
 same currency as the rest of the DAO layer — the column's **type**, not its
 field name. A `project_scoped` DAO declaring `insert` may not carry a
 `ProjectId` column (the `project_isolation` policy defaults it from the
-connection), and no DAO declaring `insert` may carry a `ValidTo` one (the
+connection), and no DAO declaring `insert` may carry a `Scd2ValidTo` one (the
 close-out trigger owns the interval end). Both look through `Option<..>` and
 wrapper newtypes, both run over the flattened field list too, and both are
 compile errors naming the reason. That is what splits a written relation into
@@ -322,13 +334,19 @@ Which single column plays which role is a **field mark**:
 | `#[dao(immutable)]` | Set-once column in generated UPDATEs |
 | `#[dao(order_by)]` / `#[dao(order_by(asc|desc))]` | Default result ordering |
 | `#[dao(pk)]` | The primary key, the row's addressing column |
-| `#[dao(partition_by)]` | The timeline's partition |
-| `#[dao(valid_from)]` | The SCD2 interval start, which is also the version order |
-| `#[dao(valid_to)]` | Names the projected column `Scd2Dao::VALID_TO` points at. Unmarked, the macro synthesizes the `ValidTo` `Iden` variant for a column the DAO does not project |
-| `#[dao(version_by)]` | Timeline version order (non-SCD2) |
-| `#[dao(recurse_up)]`, `#[dao(recurse_down)]` | Traversal edge |
+| `#[dao(partition_by)]` | The partition of any versioned relation (`TimelineDao::PARTITION`) |
+| `#[dao(scd2(valid_from))]` | The SCD2 interval start, which is also the version order |
+| `#[dao(scd2(valid_to))]` | Names the projected column `Scd2Dao::VALID_TO` points at. Unmarked, the macro synthesizes the `ValidTo` `Iden` variant for a column the DAO does not project |
+| `#[dao(timeline(version_by))]` | Timeline version order (non-SCD2) |
+| `#[dao(recursive(up))]`, `#[dao(recursive(down))]` | Traversal edge |
 
-One attribute may carry several: `#[dao(pk, partition_by)]`.
+A mark that only means something under one struct-level grain (`scd2`,
+`timeline`, `recursive`) nests under that grain's word, and the struct must
+declare the grain: `#[dao(scd2(valid_from))]` on a `timeline` DAO is an error
+at the mark. `partition_by` belongs to every versioned relation — an `scd2`
+relation is a timeline — so it stays flat, as do the grain-free `pk`,
+`order_by`, `immutable` and `flatten`. One attribute may carry several:
+`#[dao(pk, partition_by)]`.
 
 A `#[dao(flatten)]` DAO inherits only its base's `#[dao(pk)]`: row identity
 passes through a row-preserving view untouched, while a *value* can be
@@ -376,21 +394,23 @@ pub struct DependencyInsertDB {
     pub id: DependencyVersionId,
     #[dao(partition_by)]
     pub dependency_id: DependencyId,
-    #[dao(recurse_down)]
+    #[dao(recursive(down))]
     pub function_id: FunctionId,
-    #[dao(recurse_up)]
+    #[dao(recursive(up))]
     pub table_function_id: OfTable<FunctionId>,
     #[dao(order_by)]
     pub dep_pos: DependencyPos,
-    #[dao(valid_from)]
+    #[dao(scd2(valid_from))]
     pub defined_on: AtTime,
     ...
 }
 ```
 
-This implements `TableDao` / `InsertDao` (it is a table and declares
+This implements `TableDao` / `Insertable` (it is a table and declares
 `insert`), `Scd2Dao` and `TimelineDao`, and `RecursiveDao`. Being `scd2`, it
-does **not** implement `UnversionedDao`.
+does **not** implement `UnversionedDao`, and its insert capability is
+`Scd2InsertDao`, not `InsertDao`: `db.insert(&dep)` does not compile,
+`db.scd2().insert(&dep)` does.
 
 The row DAO is its flatten plus the trigger-owned interval end, and it is the
 one that is read:
@@ -401,13 +421,13 @@ one that is read:
 pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 ```
 
-`SelectDao` is what enables `latest()` / `as_of()` / `history()` /
-`data_version()` / `recursive()` — the kind traits are structure, and say
+`SelectDao` is what enables `scd2()` / `scd2().as_of()` / `timeline()` /
+`timeline().at()` / `recursive()` — the kind traits are structure, and say
 only how the relation is versioned.
 
 ## Query Surfaces
@@ -418,22 +438,22 @@ Unversioned reads and every write, straight on the executor.
 
 | Method | Description |
 |--------|-------------|
-| `insert(dao)` | INSERT a row |
+| `insert(dao)` | INSERT a row; needs an `InsertDao` (unversioned) |
 | `upsert(dao)` / `insert_or_ignore(dao)` | INSERT … ON CONFLICT, for an `UpsertDao` |
-| `fetch_one(condition)` | One row, error if absent; needs `AddressesOneRow` |
+| `fetch_one(condition)` | One row, error if absent; needs `AddressesOneRow` and an `UnversionedDao` |
 | `fetch_optional(condition)` | Same, `None` if absent |
 | `fetch_first(condition)` | The first row in the DAO's order, of however many match |
 | `fetch_last(condition)` | The last row in that order |
 | `fetch_all(condition)` | Every matching row |
 | `assert_exists` / `assert_not_exists` | Existence checks with a clean error |
-| `update(dao, condition)` | UPDATE; the condition is typed on `U::FilterBy` |
+| `update(dao, condition)` | UPDATE; the condition is typed on `U::FilterBy`, which must be an `UnversionedDao` |
 | `delete(condition)` | DELETE; needs a `DeleteDao` |
 | `list(condition, params)` | Paginated/filtered SELECT, returns DTOs |
-| `fetch_latest_before(condition, offset)` | Nth most recent row |
+| `fetch_nth_last(condition, offset)` | The row `offset` places from the end of the default order (`0` = last) |
 
-Writes and the addressing reads take any DAO kind (on a versioned one the
-address is the pk); the open reads take a `UnversionedDao`, so on a versioned
-relation they are not offered. `list`
+Every read and every write takes an `UnversionedDao` (for `update`, the
+`FilterBy` row DAO), so on a versioned relation the wordless grain offers
+nothing — its reads and writes live under `scd2()` and `timeline()`. `list`
 takes only the domain — no scope bound — because row visibility is the
 connection's business: RLS scopes project rows, and a cross-project caller
 narrows by its viewable projects in the condition.
@@ -447,44 +467,61 @@ Two grains hang off the same level:
   parameters: each chunk is one statement, the slice's conditions OR-joined
   and `extra` AND-ed onto every chunk.
 
-### `Latest<E>` — `db.latest()`
+### `Scd2<E>` — `db.scd2()`
 
-At-now reads over the open SCD2 intervals (`valid_to = 'infinity'`, served
-by the partial indexes): `fetch_one`, `fetch_optional` (`AddressesOneVersion`),
+The only door to an interval table. Wordless, it is at-now: reads over the
+open SCD2 intervals (`valid_to = 'infinity'`, served by the partial
+indexes) — `fetch_one`, `fetch_optional` (`AddressesOneVersion`),
 `fetch_first`, `fetch_all`, `assert_not_exists`, `list`,
-`recursive::<D, R>(opts)`, and `chunked().fetch_all(values, extra)`.
+`recursive::<D, R>(opts)` — and the interval writes: `insert(&dao)`
+(the trigger closes the partition's previous open row),
+`update(&dao, condition)` (an in-place payload change of the matching
+**open** rows — closed versions are history), `close::<D>(condition, at)`
+(the SCD2 deletion; `at` is the instant written into `valid_to`), and
+`chunked()` with `insert(&[D])`, `update(&dao, values)`,
+`fetch_all(values, extra)`, `close(values, extra, at)`.
+An update payload over a versioned relation must leave the partition,
+version-order and interval-end columns alone; the macro does not check
+this — a row's place in its chain is set by the insert that created it and
+the trigger that closes it.
 
-### `AsOf<'a, E, V>` — `db.as_of(&t)`
+### `AsOf<'a, E, V>` — `db.scd2().as_of(&t)`
 
-Latest-at-time by condition, across partitions — a flat interval predicate
+Visible at `t` by condition, across partitions — a flat interval predicate
 (`version_order <= t AND valid_to > t`), no ranking window, so cost follows
-the condition's selectivity. The same methods as `latest()`.
+the condition's selectivity. The reads of `scd2()`, none of its writes:
+`as_of` is a read predicate, and `close` carries its own `at`.
 
-### `Versions<E>` — `db.history()`
+### `Timeline<E>` — `db.timeline()`
 
-The whole history of a `TimelineDao`, no time predicate: `fetch_all`,
-`fetch_first`, `fetch_last`, `list`, `list_until(&t, cond, params)` (the
-audit trail up to an instant), and `chunked().fetch_all(values, extra)`. The
-named slow path — the open reads on the default surface refuse a versioned
-relation precisely so that a history read says so at the call site.
+The version log of a `TimelineDao`, no time predicate: `fetch_one` /
+`fetch_optional` (an `AddressesOneRow`, in practice the version id — "this
+exact version"), `fetch_all`, `fetch_first`, `fetch_last`, `list`,
+`list_until(&t, cond, params)` (the audit trail up to an instant), and
+`chunked().fetch_all(values, extra)`. The word mirrors the trait, as
+`scd2()` mirrors `Scd2Dao`: on a `timeline` relation it is the only door; on
+an `scd2` one (`Scd2Dao: TimelineDao`) it is the deliberate read of the log
+rather than the interval, and the wordless surface refuses both precisely so
+the choice shows at the call site.
 
-### `DataVersion<'a, E, V, P>` — `db.data_version(&on, &partition)`
+### `DataVersion<'a, E, V, P>` — `db.timeline().at(&on, &partition)`
 
-Ordinal timeline resolution: a `Versions` selector (`Single`, `List` or
+The version log read by position: a `Versions` selector (`Single`, `List` or
 `Range` of `Head~k` / `Initial+k` / `Fixed` positions) over one partition at
 `on` — `fetch_one`, `fetch_optional`, `fetch_all`, `fetch_relative_offset`. Positions resolve as top-k scans and
 key probes on the `(partition, version_order, pk)` index, no window
 functions.
 
-### `RecursiveQuery<'a, D, R, E>` — `db.recursive::<D, R>(opts)`
+### `Scd2Recursive` / `AsOfRecursive` — `db.scd2().recursive::<D, R>(opts)`
 
 Graph traversal with `WITH RECURSIVE`, for upstream/downstream dependency
-resolution. `D` is the `RecursiveDao` walked, `R` the reference DAO its
-`Key` points into; `direct_reference(&v)` / `direct_references(vec)` anchor
-the walk, `fetch_all` runs it. `db.recursive::<D, R>(..)` traverses an
-unversioned relation; `latest().recursive::<D, R>(..)` and
-`as_of(&t).recursive::<D, R>(..)` traverse at a time and add `filter`,
-`filter_references` and `filter_start` conditions.
+resolution. `D` is the `RecursiveDao` walked — the edges — and `R` the
+reference DAO its `Key` points into — the nodes. `start_at(&key)` /
+`start_at_any(keys)` anchor the walk, `where_edges(cond on D)`,
+`where_nodes(cond on R)` and `where_start(cond on R)` narrow it, `fetch_all`
+runs it. `scd2().recursive(..)` walks the open intervals,
+`scd2().as_of(&t).recursive(..)` the versions visible at `t`. Every
+`recursive` relation is versioned, so there is no wordless traversal.
 
 ### Per-DAO Surfaces
 
@@ -594,33 +631,37 @@ conn.delete::<UserDB>(&user_id).await?;
 use td_queries::Queries;
 
 // The open row: one per partition, flat predicate on the interval.
-let function: FunctionDB = conn.latest().fetch_one(&function_id).await?;
+let function: FunctionDB = conn.scd2().fetch_one(&function_id).await?;
 
 // By name: the `unique_at` set on the view.
 let function: FunctionDBWithNames = conn
-    .latest()
+    .scd2()
     .fetch_one(and!(&collection_id, &function_name))
     .await?;
 
+// A new version: the trigger closes the previous open row of the partition.
+conn.scd2().insert(&function_version).await?;
+
 // Deletion is the closed interval with no successor: after this the entity
-// is gone from `latest()` and from `as_of(&t)` for any `t >= at`.
-conn.latest().close::<FunctionDB>(&function_id, &ctx.time).await?;
+// is gone from `scd2()` and from `scd2().as_of(&t)` for any `t >= at`.
+conn.scd2().close::<FunctionDB>(&function_id, &ctx.time).await?;
 
 // Visible at a time, by condition — cost follows the condition.
-let in_collection: Vec<FunctionDB> = conn.as_of(&at).fetch_all(&collection_id).await?;
+let in_collection: Vec<FunctionDB> = conn.scd2().as_of(&at).fetch_all(&collection_id).await?;
 
-// Every version of a partition, history on purpose.
-let all: Vec<FunctionDB> = conn.history().fetch_all(&function_id).await?;
+// Every version of a partition: the log, read on purpose.
+let all: Vec<FunctionDB> = conn.timeline().fetch_all(&function_id).await?;
 
-// A Versions selector over one partition.
+// A Versions selector over one partition: the log read by position.
 let version: LogicalTableDataVersionDB = conn
-    .data_version(&at, &table_id)
+    .timeline()
+    .at(&at, &table_id)
     .fetch_one(&versions)
     .await?;
 ```
 
 The turbofish, when the result type does not pin the DAO, goes on the
-terminal: `conn.latest().fetch_all::<FunctionDB>(&collection_id)`.
+terminal: `conn.scd2().fetch_all::<FunctionDB>(&collection_id)`.
 
 ### Locks and Chunked Grains
 

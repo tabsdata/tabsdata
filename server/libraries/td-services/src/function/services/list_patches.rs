@@ -36,13 +36,14 @@ async fn list_function_patches(
     let function_id_name = function_param.function;
     let at = ctx.time;
     let function: FunctionDBWithNames = conn
+        .scd2()
         .as_of(&at)
         .fetch_one(and!(&collection_id_name, &function_id_name))
         .await?;
 
     let query_params = ListQueryParams::<FunctionPatchRecord>::try_from(&list_params)?;
     let rows = conn
-        .history()
+        .timeline()
         .list(&function.base.base.function_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
@@ -130,7 +131,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let coll = seed_patches_fixture(&db, p.id).await;
         let parent: FunctionDBWithNames = {
-            db.latest()
+            db.scd2()
                 .fetch_one::<FunctionDBWithNames>(and!(
                     &CollectionIdName::from_str("c0")?,
                     &FunctionIdName::from_str("f0")?

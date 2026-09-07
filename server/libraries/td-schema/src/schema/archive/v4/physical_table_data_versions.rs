@@ -194,6 +194,7 @@ impl Entity for Defs {
                 source_table: PhysicalTableDataVersions::Table.into_iden(),
                 partition_col: PhysicalTableDataVersions::LogicalTableDataVersionId.into_iden(),
                 valid_from_col: PhysicalTableDataVersions::TriggeredOn.into_iden(),
+                valid_to_col: PhysicalTableDataVersions::ValidTo.into_iden(),
                 pk_col: PhysicalTableDataVersions::Id.into_iden(),
             }
             .derived(),

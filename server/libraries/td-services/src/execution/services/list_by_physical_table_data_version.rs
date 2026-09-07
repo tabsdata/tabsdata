@@ -26,7 +26,8 @@ async fn execution_list_by_physical_table_data_version(
     let tdv_id = param.table_data_version;
 
     let mut trx = db.read().await?;
-    let tdv: PhysicalTableDataVersionDB = trx.get(authz.none()).fetch_one(&tdv_id).await?;
+    let tdv: PhysicalTableDataVersionDB =
+        trx.get(authz.none()).timeline().fetch_one(&tdv_id).await?;
     let mut trx = trx.enter_project(&tdv.project_id).await?;
     let grant = authz
         .require::<Project, ViewProject>(&mut trx, &ctx, &tdv.project_id)
@@ -110,7 +111,7 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
                 &TableIdName::Name(TableName::try_from(tables[0].clone())?)
@@ -269,7 +270,7 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
                 &TableIdName::Name(TableName::try_from(tables[0].clone())?)

@@ -8,8 +8,8 @@ use crate::types::basic::{
     ConnectionKind, Decorator, Dispatched, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek,
     EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx,
     LogicalFunctionRunId, OfExecution, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-    ProjectId, ProjectName, RowCount, StageId, Started, StorageVersion, TableVersionCount,
-    TransactionId, Trigger, TriggeredOn, UserId, UserName, ValidTo,
+    ProjectId, ProjectName, RowCount, Scd2ValidTo, StageId, Started, StorageVersion,
+    TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
 };
 use chrono::{DateTime, Utc};
 use ta_objects::FromDao;
@@ -32,7 +32,7 @@ pub struct PhysicalFunctionRunInsertDB {
     pub transaction_id: TransactionId,
     #[dao(partition_by)]
     pub logical_function_run_id: LogicalFunctionRunId,
-    #[dao(valid_from, order_by)]
+    #[dao(scd2(valid_from), order_by)]
     pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
     pub trigger: Trigger,
@@ -73,8 +73,8 @@ pub struct PhysicalFunctionRunDB {
     #[dao(flatten)]
     pub base: PhysicalFunctionRunInsertDB,
     pub project_id: ProjectId,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 
 #[ta_objects::Dao]

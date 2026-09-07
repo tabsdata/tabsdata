@@ -253,7 +253,7 @@ mod tests {
         let context_1 = dispatch_services(&db);
         context_1.clone().request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(pfrs.len(), 1);
@@ -275,6 +275,7 @@ mod tests {
         let context_fresh =
             recovery_and_request_tick(&db, StuckRequestedTimeout::default()).await?;
         let pfr: PhysicalFunctionRunDB = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
             .await?;
         assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
@@ -291,6 +292,7 @@ mod tests {
             recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
         let pfr_failed: PhysicalFunctionRunDB = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
             .await?;
         assert_eq!(pfr_failed.base.status, PhysicalFunctionRunStatus::Failed);
@@ -301,7 +303,7 @@ mod tests {
         assert!(pfr_failed.base.ended_on_month_ms.is_some());
 
         let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(pfrs.len(), 2);
@@ -332,11 +334,12 @@ mod tests {
         let context_3 = dispatch_services(&db);
         context_3.clone().request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(pfrs.len(), 2);
         let pfr: PhysicalFunctionRunDB = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&pfr_new.base.id)
             .await?;
         assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
@@ -426,6 +429,7 @@ mod tests {
         let context_1 = dispatch_services(&db);
         context_1.clone().request(()).await?;
         let pfr: PhysicalFunctionRunDB = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
             .await?;
         assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
@@ -435,6 +439,7 @@ mod tests {
             recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
         let pfr: PhysicalFunctionRunDB = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
             .await?;
         assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Failed);
@@ -444,7 +449,7 @@ mod tests {
             db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
         assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Committed);
         let current = db
-            .latest()
+            .scd2()
             .fetch_one::<PhysicalFunctionRunDB>(&lfr.base.id)
             .await?;
         assert_eq!(current.base.id, replay_response.new_function_run_id);
@@ -526,7 +531,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             ..function.base.clone()
         };
-        db.scoped(project_id).insert(&newer).await?;
+        db.scoped(project_id).scd2().insert(&newer).await?;
         Ok(())
     }
 
@@ -649,7 +654,7 @@ mod tests {
         dispatch_services(&db).request(()).await?;
 
         let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(pfrs.len(), 1);
@@ -670,7 +675,7 @@ mod tests {
             metric_rows: None,
             metric_data_bytes: None,
         };
-        db.update(&to_running, &pfr_old.base.id).await?;
+        db.scd2().update(&to_running, &pfr_old.base.id).await?;
         let lfr: LogicalFunctionRunDB = db
             .fetch_one::<LogicalFunctionRunDB>(and!(
                 &pfr_old.base.execution_id,
@@ -694,6 +699,7 @@ mod tests {
         services.recovery(()).await?;
 
         let pfr_failed: PhysicalFunctionRunDB = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
             .await?;
         assert_eq!(pfr_failed.base.status, PhysicalFunctionRunStatus::Failed);
@@ -707,7 +713,7 @@ mod tests {
 
         dispatch_services(&db).request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(pfrs.len(), 2);

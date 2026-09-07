@@ -178,6 +178,7 @@ impl Entity for Defs {
                 source_table: Functions::Table.into_iden(),
                 partition_col: Functions::FunctionId.into_iden(),
                 valid_from_col: Functions::DefinedOn.into_iden(),
+                valid_to_col: Functions::ValidTo.into_iden(),
                 pk_col: Functions::Id.into_iden(),
             }
             .derived(),

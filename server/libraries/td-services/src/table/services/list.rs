@@ -29,7 +29,7 @@ async fn table_list(
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
     let rows = conn
-        .latest()
+        .scd2()
         .list(TableDBWithNames::user(), &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)

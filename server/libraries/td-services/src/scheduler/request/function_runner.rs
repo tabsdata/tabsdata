@@ -135,7 +135,7 @@ pub async fn materialize_replay_dispatch<S: SeesProjectRows>(
     let lfr_by_exec_fn = index_lfrs_by_exec_fn(all_lfrs);
 
     let tdvs: Vec<PhysicalTableDataVersionDB> = conn
-        .history()
+        .timeline()
         .chunked()
         .fetch_all::<PhysicalTableDataVersionDB>(&pfr_ids, ())
         .await?;

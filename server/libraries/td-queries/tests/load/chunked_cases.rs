@@ -10,9 +10,11 @@ use std::time::Instant;
 
 use td_database::pool::TdPool;
 use td_error::TdError;
+use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputInsertDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunUpdateDB;
 use td_objects::dxo::table::TableDB;
+use td_objects::types::basic::LogicalFunctionRunStatus;
 use td_objects::types::basic::{AtTime, PhysicalFunctionRunStatus};
 use td_queries::Queries;
 
@@ -39,7 +41,7 @@ pub(crate) fn done_update() -> PhysicalFunctionRunUpdateDB {
 async fn load_chunked_fetch_all(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
         .chunked()
         .fetch_all::<LogicalFunctionRunDB>(&h.execs, ())
         .await?;
@@ -69,11 +71,29 @@ async fn load_chunked_insert(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_chunked_update(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let update = done_update();
+    let update = LogicalFunctionRunStatusUpdateDB {
+        status: LogicalFunctionRunStatus::Done,
+    };
     let t = Instant::now();
-    let r = (&db).chunked().update(&update, &h.fr_ids).await?;
+    let r = db.chunked().update(&update, &h.producer_lfrs).await?;
     record(
         "chunked::update",
+        profile,
+        t,
+        r.rows_affected() as usize,
+        seeded,
+    );
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_scd2_update_chunked(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let update = done_update();
+    let t = Instant::now();
+    let r = db.scd2().chunked().update(&update, &h.fr_ids).await?;
+    record(
+        "scd2::update_chunked",
         profile,
         t,
         r.rows_affected() as usize,
@@ -88,7 +108,7 @@ async fn load_chunked_close(db: TdPool) -> Result<(), TdError> {
     let now = AtTime::now();
     let ids = [h.table_id];
     let t = Instant::now();
-    let r = (&db).chunked().close::<TableDB>(&ids, (), &now).await?;
+    let r = db.scd2().chunked().close::<TableDB>(&ids, (), &now).await?;
     record(
         "chunked::close",
         profile,
@@ -105,7 +125,7 @@ async fn load_default_close(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let now = AtTime::now();
     let t = Instant::now();
-    let r = Queries::close::<TableDB>(&db, &h.table_id, &now).await?;
+    let r = db.scd2().close::<TableDB>(&h.table_id, &now).await?;
     record(
         "default::close",
         profile,

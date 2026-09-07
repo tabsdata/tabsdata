@@ -31,7 +31,7 @@ async fn load_lfr_to_execute(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db).logical_runs().to_execute(&h.at, 50).await?;
+    let rows = db.logical_runs().to_execute(&h.at, 50).await?;
     record("lfr::to_execute", profile, t, rows.len(), seeded);
     Ok(())
 }
@@ -41,7 +41,7 @@ async fn load_lfr_to_commit(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db).logical_runs().to_commit(&h.execs).await?;
+    let rows = db.logical_runs().to_commit(&h.execs).await?;
     record("lfr::to_commit", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty(), "all-Done transactions are committable");
     Ok(())
@@ -52,7 +52,7 @@ async fn load_lfr_previous_for_function_at(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let row = (&db)
+    let row = db
         .logical_runs()
         .previous_for_function_at(&h.consumer_function_id, &h.before_time)
         .await?;
@@ -72,7 +72,7 @@ async fn load_lfr_for_dispatch(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db).logical_runs().for_dispatch(&h.fr_ids).await?;
+    let rows = db.logical_runs().for_dispatch(&h.fr_ids).await?;
     record("lfr::for_dispatch", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty(), "seeded FR ids enrich to rows");
     Ok(())
@@ -83,7 +83,7 @@ async fn load_lfr_blocked_ids(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db).logical_runs().blocked_ids(&h.execs[0], &h.at).await?;
+    let rows = db.logical_runs().blocked_ids(&h.execs[0], &h.at).await?;
     record("lfr::blocked_ids", profile, t, rows.len(), seeded);
     Ok(())
 }
@@ -93,7 +93,7 @@ async fn load_lfr_downstream_one_hop(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
         .logical_runs()
         .downstream_one_hop(&h.producer_lfrs, &[])
         .await?;
@@ -138,7 +138,7 @@ async fn load_pfr_to_dispatch(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db).physical_runs().to_dispatch(50).await?;
+    let rows = db.physical_runs().to_dispatch(50).await?;
     record("pfr::to_dispatch", profile, t, rows.len(), seeded);
     Ok(())
 }
@@ -148,10 +148,7 @@ async fn load_pfr_dispatched_before(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db)
-        .physical_runs()
-        .dispatched_before(&AtTime::now())
-        .await?;
+    let rows = db.physical_runs().dispatched_before(&AtTime::now()).await?;
     record("pfr::dispatched_before", profile, t, rows.len(), seeded);
     Ok(())
 }
@@ -162,7 +159,7 @@ async fn load_executions_list_by_table_data_version(db: TdPool) -> Result<(), Td
     let seeded = h.fr_ids.len();
     let params = exec_list_params()?;
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
         .executions()
         .list_by_table_data_version(&Some(h.producer_tdv_id.clone()), &params)
         .await?;
@@ -182,7 +179,7 @@ async fn load_executions_list_by_function_version(db: TdPool) -> Result<(), TdEr
     let seeded = h.fr_ids.len();
     let params = exec_list_params()?;
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
         .executions()
         .list_by_function_version(&h.producer_function_version_id, &params)
         .await?;
@@ -202,7 +199,7 @@ async fn load_dependencies_active_for_function_at(db: TdPool) -> Result<(), TdEr
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
         .dependencies()
         .active_for_function_at(&h.consumer_function_id, &h.at)
         .await?;

@@ -8,7 +8,7 @@ mod tests {
     use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 
     use crate::dxo::{
-        Dao, InsertDao, PkDao, RecursiveDao, SelectDao, TimelineDao, UpdateDao, UpsertDao,
+        Dao, Insertable, PkDao, RecursiveDao, SelectDao, TimelineDao, UpdateDao, UpsertDao,
     };
     use crate::unique::AddressesOneRow;
     use sea_query::{Iden, Order};
@@ -188,11 +188,11 @@ mod tests {
     #[derive(Eq, PartialEq)]
     #[dao(table = "scd2_widgets", ops(select, insert), scd2, recursive)]
     struct Scd2WidgetDao {
-        #[dao(pk, recurse_down)]
+        #[dao(pk, recursive(down))]
         pub id: WidgetVersionId,
-        #[dao(partition_by, recurse_up)]
+        #[dao(partition_by, recursive(up))]
         pub widget_id: WidgetId,
-        #[dao(valid_from)]
+        #[dao(scd2(valid_from))]
         pub defined_on: DefinedOn,
     }
 

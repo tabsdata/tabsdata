@@ -33,7 +33,8 @@ async fn execute_function_version(
     let (requested, project, grant) = {
         let mut trx = db.read().await?;
         let conn = trx.get(authz.none());
-        let requested: FunctionDBWithNames = conn.fetch_one(&function_version_id).await?;
+        let requested: FunctionDBWithNames =
+            conn.timeline().fetch_one(&function_version_id).await?;
         let collection: ResolvedCollectionDB =
             conn.fetch_one(&requested.base.base.collection_id).await?;
         let project = collection.base.project_id;
@@ -50,6 +51,7 @@ async fn execute_function_version(
     // older versions to execute).
     let conn = trx.get(grant);
     let function: FunctionDBWithNames = conn
+        .scd2()
         .as_of(&ctx.time)
         .fetch_one(&requested.base.base.function_id)
         .await?;

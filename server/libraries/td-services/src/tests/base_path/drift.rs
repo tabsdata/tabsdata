@@ -53,12 +53,12 @@ async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdErr
     drop(conn);
 
     // ...the stamped rows did not.
-    let fr_row: PhysicalFunctionRunDB = db.fetch_one(&before.fr.id).await?;
+    let fr_row: PhysicalFunctionRunDB = db.timeline().fetch_one(&before.fr.id).await?;
     assert_eq!(
         fr_row.base.base_path, old,
         "prior FR keeps its frozen prefix"
     );
-    let tdv_row: PhysicalTableDataVersionDB = db.fetch_one(&before.tdvs[0].id).await?;
+    let tdv_row: PhysicalTableDataVersionDB = db.timeline().fetch_one(&before.tdvs[0].id).await?;
     assert_eq!(
         tdv_row.base.base_path, old,
         "prior TDV keeps its frozen prefix"
@@ -96,7 +96,7 @@ async fn test_collection_clear_falls_back_to_project(db: TdPool) -> Result<(), T
     let minted_inherited = mint_committed(&db, std::slice::from_ref(&lfr_inherited)).await?;
     assert_eq!(minted_inherited[0].fr.base_path, p.base_path);
 
-    let fr_row: PhysicalFunctionRunDB = db.fetch_one(&minted_owned[0].fr.id).await?;
+    let fr_row: PhysicalFunctionRunDB = db.timeline().fetch_one(&minted_owned[0].fr.id).await?;
     assert_eq!(
         fr_row.base.base_path, own,
         "the earlier run keeps the cleared prefix"

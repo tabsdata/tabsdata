@@ -46,13 +46,14 @@ async fn register_function(
     // own, else the project's — already resolved by the collections_active view).
     let base_path = collection.effective_base_path.clone();
 
-    conn.as_of(&at)
+    conn.scd2()
+        .as_of(&at)
         .assert_not_exists::<FunctionDBWithNames>(and!(&collection.id, &register.name))
         .await?;
 
     let function = register.to_dao(&ctx, collection.id, base_path.clone())?;
     ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
-    conn.insert(&function).await?;
+    conn.scd2().insert(&function).await?;
 
     // Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
     let bundle_registered = BundleStatusUpdateDB::registered();
@@ -73,7 +74,7 @@ async fn register_function(
     )
     .await?;
 
-    let with_names: FunctionDBWithNames = conn.fetch_one(&function.id).await?;
+    let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
     let read = Function::from_dao(with_names)?;
     gated_trx.commit().await?;
 
@@ -119,7 +120,7 @@ mod tests {
 
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
         let active: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&FunctionStatus::Active)
             .await?;
         let function = active
@@ -252,7 +253,7 @@ mod tests {
 
         assert_eq!(*response.snippet, module);
 
-        let stored: FunctionDB = db.fetch_one(&response.id).await?;
+        let stored: FunctionDB = db.timeline().fetch_one(&response.id).await?;
         assert_eq!(*stored.base.snippet, module);
 
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
@@ -1152,7 +1153,7 @@ mod tests {
         assert!(res.is_ok());
 
         let tables: Vec<TableDB> = db
-            .history()
+            .timeline()
             .fetch_all::<TableDB>(&(res.unwrap().id))
             .await?;
         let map: HashMap<String, TableDB> = tables

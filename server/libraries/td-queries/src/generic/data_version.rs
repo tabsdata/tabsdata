@@ -498,7 +498,7 @@ mod tests {
         #[dao(partition_by)]
         partition_id: TestPartition,
         status: TestStatus,
-        #[dao(version_by)]
+        #[dao(timeline(version_by))]
         defined_on: AtTime,
     }
 
@@ -535,8 +535,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_versions_none_returns_head(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::None)
             .await?;
         assert_eq!(r.id, *DV_3);
@@ -550,8 +551,9 @@ mod tests {
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         );
-        let r = (&db)
-            .data_version(&before, P0.deref())
+        let r = db
+            .timeline()
+            .at(&before, P0.deref())
             .fetch_optional::<TestDvDao>(&Versions::None)
             .await?;
         assert!(r.is_none());
@@ -560,8 +562,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_versions_none_fetch_all(db: TdPool) -> Result<(), TdError> {
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&Versions::None)
             .await?;
         assert_eq!(r.len(), 1);
@@ -571,8 +574,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_single_head(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::Single(Version::Head(0)))
             .await?;
         assert_eq!(r.id, *DV_3);
@@ -581,8 +585,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_single_head_back_1(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::Single(Version::Head(-1)))
             .await?;
         assert_eq!(r.id, *DV_2);
@@ -591,8 +596,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_single_head_back_2(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::Single(Version::Head(-2)))
             .await?;
         assert_eq!(r.id, *DV_1);
@@ -601,8 +607,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_single_initial(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::Single(Version::Initial(0)))
             .await?;
         assert_eq!(r.id, *DV_1);
@@ -611,8 +618,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_single_initial_forward_1(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::Single(Version::Initial(1)))
             .await?;
         assert_eq!(r.id, *DV_2);
@@ -621,8 +629,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_single_fixed(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::Single(Version::Fixed(DV_2.clone())))
             .await?;
         assert_eq!(r.id, *DV_2);
@@ -631,8 +640,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_list_empty(db: TdPool) -> Result<(), TdError> {
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&Versions::List(vec![]))
             .await?;
         assert_eq!(r.len(), 0);
@@ -642,8 +652,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_list_multiple(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::List(vec![Version::Head(0), Version::Head(-2)]);
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 2);
@@ -659,8 +670,9 @@ mod tests {
             Version::Fixed(DV_1.clone()),
             Version::Fixed(DV_3.clone()),
         ]);
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 2);
@@ -678,8 +690,9 @@ mod tests {
             Version::Initial(2),
             Version::Fixed(DV_3.clone()),
         ]);
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 1);
@@ -690,8 +703,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_list_single_row_fetch_one(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::List(vec![Version::Head(0), Version::Fixed(DV_3.clone())]);
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.id, *DV_3);
@@ -701,8 +715,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_list_multiple_rows_fetch_one_errors(db: TdPool) {
         let versions = Versions::List(vec![Version::Head(0), Version::Head(-1)]);
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&versions)
             .await;
         assert!(matches!(r, Err(SqlError::MultipleRowsMatched(_))), "{r:?}");
@@ -711,8 +726,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_range_multiple_rows_fetch_optional_errors(db: TdPool) {
         let versions = Versions::Range(Version::Head(-2), Version::Head(0));
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_optional::<TestDvDao>(&versions)
             .await;
         assert!(matches!(r, Err(SqlError::MultipleRowsMatched(_))), "{r:?}");
@@ -721,8 +737,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_range_head(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::Range(Version::Head(-2), Version::Head(0));
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 3);
@@ -736,8 +753,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_range_head_clamps_to_timeline(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::Range(Version::Head(-5), Version::Head(0));
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 3);
@@ -749,8 +767,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_range_initial(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::Range(Version::Initial(0), Version::Initial(1));
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 2);
@@ -762,8 +781,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_range_fixed(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::Range(Version::Fixed(DV_1.clone()), Version::Fixed(DV_3.clone()));
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 3);
@@ -776,8 +796,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_range_mixed_bounds(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::Range(Version::Initial(0), Version::Head(0));
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 3);
@@ -789,8 +810,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_range_empty_when_reversed(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::Range(Version::Head(0), Version::Head(-2));
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_all::<TestDvDao>(&versions)
             .await?;
         assert_eq!(r.len(), 0);
@@ -799,8 +821,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_versions_new_returns_error(db: TdPool) {
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::New)
             .await;
         assert!(r.is_err());
@@ -808,8 +831,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_head_includes_deleted(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON.deref(), P1.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON.deref(), P1.deref())
             .fetch_one::<TestDvDao>(&Versions::None)
             .await?;
         assert_eq!(r.id, *DV_5);
@@ -818,8 +842,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_on_parameter_filters_newer_versions(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON_T2.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON_T2.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::None)
             .await?;
         assert_eq!(r.id, *DV_2);
@@ -828,8 +853,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_on_parameter_initial_with_limited_versions(db: TdPool) -> Result<(), TdError> {
-        let r: TestDvDao = (&db)
-            .data_version(ON_T2.deref(), P0.deref())
+        let r: TestDvDao = db
+            .timeline()
+            .at(ON_T2.deref(), P0.deref())
             .fetch_one::<TestDvDao>(&Versions::Single(Version::Initial(0)))
             .await?;
         assert_eq!(r.id, *DV_1);
@@ -838,8 +864,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_relative_offset_head(db: TdPool) -> Result<(), TdError> {
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_relative_offset::<TestDvDao>(&Version::Head(0))
             .await?;
         assert_eq!(r, Some(1));
@@ -848,8 +875,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_relative_offset_fixed(db: TdPool) -> Result<(), TdError> {
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_relative_offset::<TestDvDao>(&Version::Fixed(DV_2.clone()))
             .await?;
         assert_eq!(r, Some(2));
@@ -858,8 +886,9 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_relative_offset_initial(db: TdPool) -> Result<(), TdError> {
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_relative_offset::<TestDvDao>(&Version::Initial(0))
             .await?;
         assert_eq!(r, Some(3));
@@ -869,8 +898,9 @@ mod tests {
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_relative_offset_nonexistent(db: TdPool) -> Result<(), TdError> {
         let nonexistent = LogicalTableDataVersionId::try_from("dv20260101-9999999999")?;
-        let r = (&db)
-            .data_version(ON.deref(), P0.deref())
+        let r = db
+            .timeline()
+            .at(ON.deref(), P0.deref())
             .fetch_relative_offset::<TestDvDao>(&Version::Fixed(nonexistent))
             .await?;
         assert!(r.is_none());

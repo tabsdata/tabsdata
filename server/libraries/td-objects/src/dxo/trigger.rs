@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::types::basic::ValidTo;
+use crate::types::basic::Scd2ValidTo;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionId, ProjectId, System, TableId, TriggerBy,
     TriggerId, TriggerStatus, TriggerVersionId, UserId,
@@ -17,14 +17,14 @@ pub struct TriggerInsertDB {
     pub collection_id: CollectionId,
     #[dao(partition_by)]
     pub trigger_id: TriggerId,
-    #[dao(recurse_down)]
+    #[dao(recursive(down))]
     pub function_id: FunctionId,
     pub trigger_by_collection_id: TriggerBy<CollectionId>,
-    #[dao(recurse_up)]
+    #[dao(recursive(up))]
     pub trigger_by_function_id: TriggerBy<FunctionId>,
     pub trigger_by_table_id: TableId,
     pub status: TriggerStatus,
-    #[dao(valid_from)]
+    #[dao(scd2(valid_from))]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub system: System,
@@ -36,8 +36,8 @@ pub struct TriggerDB {
     #[dao(flatten)]
     pub base: TriggerInsertDB,
     pub project_id: ProjectId,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 
 impl TriggerDB {

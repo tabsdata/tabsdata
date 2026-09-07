@@ -23,7 +23,11 @@ async fn load_find_at_fetch_one_by_partition(db: TdPool) -> Result<(), TdError> 
     let (h, profile, seeded) = seed(&db).await?;
     let at = TriggeredOn::try_from(AtTime::now())?;
     let t = Instant::now();
-    let _row: Ptdv = (&db).as_of(&at).fetch_one::<Ptdv>(&h.ltdv_ids[0]).await?;
+    let _row: Ptdv = db
+        .scd2()
+        .as_of(&at)
+        .fetch_one::<Ptdv>(&h.ltdv_ids[0])
+        .await?;
     record("as_of::fetch_one_by_partition", profile, t, 1, seeded);
     Ok(())
 }
@@ -33,7 +37,8 @@ async fn load_find_at_fetch_optional_by_partition(db: TdPool) -> Result<(), TdEr
     let (h, profile, seeded) = seed(&db).await?;
     let at = TriggeredOn::try_from(AtTime::now())?;
     let t = Instant::now();
-    let row = (&db)
+    let row = db
+        .scd2()
         .as_of(&at)
         .fetch_optional::<Ptdv>(&h.ltdv_ids[0])
         .await?;
@@ -53,7 +58,8 @@ async fn load_find_at_fetch_all_chunked_by_partition(db: TdPool) -> Result<(), T
     let (h, profile, seeded) = seed(&db).await?;
     let at = TriggeredOn::try_from(AtTime::now())?;
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
+        .scd2()
         .as_of(&at)
         .chunked()
         .fetch_all::<Ptdv>(&h.ltdv_ids, ())
@@ -74,7 +80,11 @@ async fn load_find_at_fetch_one(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let at = TriggeredOn::try_from(AtTime::now())?;
     let t = Instant::now();
-    let _row: Ptdv = (&db).as_of(&at).fetch_one::<Ptdv>(&h.ltdv_ids[0]).await?;
+    let _row: Ptdv = db
+        .scd2()
+        .as_of(&at)
+        .fetch_one::<Ptdv>(&h.ltdv_ids[0])
+        .await?;
     record("as_of::fetch_one", profile, t, 1, seeded);
     Ok(())
 }
@@ -84,7 +94,8 @@ async fn load_find_at_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let at = TriggeredOn::try_from(AtTime::now())?;
     let t = Instant::now();
-    let row = (&db)
+    let row = db
+        .scd2()
         .as_of(&at)
         .fetch_optional::<Ptdv>(&h.ltdv_ids[0])
         .await?;
@@ -105,7 +116,7 @@ async fn load_find_at_fetch_all(db: TdPool) -> Result<(), TdError> {
     let at = TriggeredOn::try_from(AtTime::now())?;
     let t = Instant::now();
     // `()` matches all → latest row per partition across the whole log.
-    let rows = (&db).as_of(&at).fetch_all::<Ptdv>(()).await?;
+    let rows = db.scd2().as_of(&at).fetch_all::<Ptdv>(()).await?;
     record("as_of::fetch_all", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -116,7 +127,8 @@ async fn load_find_at_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let at = TriggeredOn::try_from(AtTime::now())?;
     let t = Instant::now();
-    let rows = (&db)
+    let rows = db
+        .scd2()
         .as_of(&at)
         .chunked()
         .fetch_all::<Ptdv>(&h.ltdv_ids, ())

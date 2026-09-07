@@ -10,13 +10,14 @@ use crate::Serves;
 use crate::primitives::chunked::{
     MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_all_at_chunk_query,
     fetch_all_chunk_query, fetch_all_current_chunk_query, fetch_chunked, insert_vec_query,
-    update_chunk_query, warn_if_chunked,
+    update_chunk_query, update_open_chunk_query, warn_if_chunked,
 };
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    InsertDao, InsertableFrom, Scd2Dao, SelectDao, TableDao, TimelineDao, UnversionedDao, UpdateDao,
+    InsertDao, InsertableFrom, Scd2Dao, Scd2InsertDao, SelectDao, TableDao, TimelineDao,
+    UnversionedDao, UpdateDao,
 };
 use td_database::sea_query::builder::SeaQueryExt;
 
@@ -38,31 +39,6 @@ impl<E> Chunked<E> {
             fetch_all_chunk_query::<D>(chunk, &extra)
         })
         .await
-    }
-
-    /// Ends the matching open intervals at `at`, chunk by chunk.
-    pub async fn close<D: TableDao + Scd2Dao>(
-        self,
-        values: &[impl SqlCondition<D>],
-        extra: impl SqlCondition<D>,
-        at: &D::VersionOrder,
-    ) -> Result<PgQueryResult, SqlError>
-    where
-        E: Serves<D>,
-    {
-        let mut executor = self.executor;
-        warn_if_chunked::<D>(values.len());
-        let extra = extra.resolve();
-        let mut result = PgQueryResult::default();
-        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
-            let r = close_chunk_query::<D>(chunk, &extra, at)?
-                .build_query()
-                .execute(executor.reuse())
-                .await
-                .map_err(|e| SqlError::on_write::<D>(e, &[]))?;
-            result.extend(std::iter::once(r));
-        }
-        Ok(result)
     }
 
     pub async fn insert<D: InsertDao + InsertableFrom<E::Scope>>(
@@ -97,6 +73,7 @@ impl<E> Chunked<E> {
         values: &[impl SqlCondition<D::FilterBy>],
     ) -> Result<PgQueryResult, SqlError>
     where
+        D::FilterBy: UnversionedDao,
         E: Serves<D>,
     {
         let mut executor = self.executor;
@@ -114,11 +91,86 @@ impl<E> Chunked<E> {
     }
 }
 
-pub struct LatestChunked<E> {
+pub struct Scd2Chunked<E> {
     pub(crate) executor: E,
 }
 
-impl<E> LatestChunked<E> {
+impl<E> Scd2Chunked<E> {
+    /// Ends the matching open intervals at `at`, chunk by chunk.
+    pub async fn close<D: TableDao + Scd2Dao>(
+        self,
+        values: &[impl SqlCondition<D>],
+        extra: impl SqlCondition<D>,
+        at: &D::VersionOrder,
+    ) -> Result<PgQueryResult, SqlError>
+    where
+        E: Serves<D>,
+    {
+        let mut executor = self.executor;
+        warn_if_chunked::<D>(values.len());
+        let extra = extra.resolve();
+        let mut result = PgQueryResult::default();
+        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
+            let r = close_chunk_query::<D>(chunk, &extra, at)?
+                .build_query()
+                .execute(executor.reuse())
+                .await
+                .map_err(|e| SqlError::on_write::<D>(e, &[]))?;
+            result.extend(std::iter::once(r));
+        }
+        Ok(result)
+    }
+
+    /// Rewrites the payload of the matching open rows, chunk by chunk.
+    pub async fn update<D: UpdateDao>(
+        self,
+        dao: &D,
+        values: &[impl SqlCondition<D::FilterBy>],
+    ) -> Result<PgQueryResult, SqlError>
+    where
+        D::FilterBy: Scd2Dao,
+        E: Serves<D>,
+    {
+        let mut executor = self.executor;
+        warn_if_chunked::<D>(values.len());
+        let mut result = PgQueryResult::default();
+        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
+            let r = update_open_chunk_query::<D>(dao, chunk)
+                .build_query()
+                .execute(executor.reuse())
+                .await
+                .map_err(|e| SqlError::on_write::<D>(e, &dao.column_display_values()))?;
+            result.extend(std::iter::once(r));
+        }
+        Ok(result)
+    }
+
+    pub async fn insert<D: Scd2InsertDao + InsertableFrom<E::Scope>>(
+        self,
+        daos: &[D],
+    ) -> Result<PgQueryResult, SqlError>
+    where
+        E: Serves<D>,
+    {
+        let mut executor = self.executor;
+        let mut result = PgQueryResult::default();
+        for chunk in daos.chunks(MAX_INSERT_ROWS) {
+            let r = insert_vec_query::<D>(chunk)?
+                .build_query()
+                .execute(executor.reuse())
+                .await
+                .map_err(|e| {
+                    let values: Vec<_> = chunk
+                        .iter()
+                        .flat_map(|dao| dao.column_display_values())
+                        .collect();
+                    SqlError::on_write::<D>(e, &values)
+                })?;
+            result.extend(std::iter::once(r));
+        }
+        Ok(result)
+    }
+
     pub async fn fetch_all<D: SelectDao + Scd2Dao>(
         self,
         values: &[impl SqlCondition<D>],
@@ -157,11 +209,11 @@ impl<E, V> AsOfChunked<'_, E, V> {
     }
 }
 
-pub struct HistoryChunked<E> {
+pub struct TimelineChunked<E> {
     pub(crate) executor: E,
 }
 
-impl<E> HistoryChunked<E> {
+impl<E> TimelineChunked<E> {
     pub async fn fetch_all<D: SelectDao + TimelineDao>(
         self,
         values: &[impl SqlCondition<D>],

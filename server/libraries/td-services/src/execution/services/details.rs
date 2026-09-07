@@ -46,7 +46,7 @@ async fn execution_details(
         .map(|x| x.base.function_version_id.clone())
         .collect();
     let function_rows: Vec<FunctionDBWithNames> = conn
-        .history()
+        .timeline()
         .chunked()
         .fetch_all::<FunctionDBWithNames>(&function_version_ids, ())
         .await?;

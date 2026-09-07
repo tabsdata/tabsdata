@@ -10,10 +10,11 @@ use std::time::Instant;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
-use td_objects::dxo::logical::LogicalFunctionRunInputInsertDB;
+use td_objects::dxo::logical::{LogicalFunctionRunInputInsertDB, LogicalFunctionRunStatusUpdateDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunUpdateDB;
 use td_objects::types::basic::{
-    DependencyPos, InputIdx, LogicalFunctionRunInputId, PhysicalFunctionRunStatus, VersionPos,
+    DependencyPos, InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
+    PhysicalFunctionRunStatus, VersionPos,
 };
 use td_queries::Queries;
 
@@ -54,6 +55,24 @@ async fn load_default_insert(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_default_update(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
+    let update = LogicalFunctionRunStatusUpdateDB {
+        status: LogicalFunctionRunStatus::Done,
+    };
+    let t = Instant::now();
+    let r = db.update(&update, &h.producer_lfrs[0]).await?;
+    record(
+        "default::update",
+        profile,
+        t,
+        r.rows_affected() as usize,
+        seeded,
+    );
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_scd2_update(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
     let update = PhysicalFunctionRunUpdateDB {
         dispatched_on: None,
         started_on: None,
@@ -68,9 +87,9 @@ async fn load_default_update(db: TdPool) -> Result<(), TdError> {
         metric_data_bytes: None,
     };
     let t = Instant::now();
-    let r = (&db).update(&update, &h.fr_ids[0]).await?;
+    let r = db.scd2().update(&update, &h.fr_ids[0]).await?;
     record(
-        "default::update",
+        "scd2::update",
         profile,
         t,
         r.rows_affected() as usize,
@@ -98,9 +117,7 @@ async fn load_default_delete(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_latest_before(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = (&db)
-        .fetch_latest_before::<ActiveCollectionDB>((), 0)
-        .await?;
+    let row = db.fetch_nth_last::<ActiveCollectionDB>((), 0).await?;
     record(
         "default::fetch_latest_before",
         profile,

@@ -45,7 +45,8 @@ async fn execution_callback(
 
     let conn = trx.get(grant);
     let physical_function_run_id = function_run_param.function_run;
-    let physical_run: PhysicalFunctionRunDB = conn.fetch_one(&physical_function_run_id).await?;
+    let physical_run: PhysicalFunctionRunDB =
+        conn.timeline().fetch_one(&physical_function_run_id).await?;
     let lfr: LogicalFunctionRunDB = conn
         .fetch_one(&physical_run.base.logical_function_run_id)
         .await?;
@@ -53,7 +54,9 @@ async fn execution_callback(
     // Per-attempt audit on the PhysicalFunctionRunDB row: started_on,
     // ended_on, and status (the per-attempt status — never sticky).
     let audit_update = PhysicalFunctionRunUpdateDB::try_from(&update)?;
-    conn.update(&audit_update, &physical_run.base.id).await?;
+    conn.scd2()
+        .update(&audit_update, &physical_run.base.id)
+        .await?;
 
     let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
     update_worker_status(conn, &worker_update, &worker_id).await?;
@@ -505,14 +508,14 @@ mod tests {
         .await?;
 
         let physical_function_runs: Vec<PhysicalFunctionRunDBWithNames> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)
             .await?;
         assert_eq!(physical_function_runs.len(), 1);
         let physical_function_run = &physical_function_runs[0];
 
         let physical_table_data_versions: Vec<PhysicalTableDataVersionDBWithNames> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_0")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 1);
@@ -539,7 +542,7 @@ mod tests {
         );
 
         let physical_table_data_versions: Vec<PhysicalTableDataVersionDBWithNames> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 1);
@@ -666,7 +669,7 @@ mod tests {
         .await?;
 
         let physical_function_runs = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)
             .await?;
         assert_eq!(physical_function_runs.len(), 2);
@@ -674,7 +677,7 @@ mod tests {
         let function_run_1 = &physical_function_runs[1];
 
         let physical_table_data_versions = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_0")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 2);
@@ -740,7 +743,7 @@ mod tests {
         assert_eq!(table_data_version_1.base.base.base.schema_hash, None);
 
         let physical_table_data_versions = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 2);

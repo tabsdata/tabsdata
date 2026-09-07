@@ -98,6 +98,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "scd2::update",
+        covers: &["Scd2::update"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "default::delete",
         covers: &["Queries::delete"],
         family: Family::Default,
@@ -111,7 +117,7 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     LoadCase {
         name: "default::fetch_latest_before",
-        covers: &["Queries::fetch_latest_before"],
+        covers: &["Queries::fetch_nth_last"],
         family: Family::Default,
         status: Status::Implemented,
     },
@@ -157,34 +163,34 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Default,
         status: Status::Implemented,
     },
-    // generic/current.rs — open-interval (at-now) reads.
+    // generic/scd2.rs — open-interval (at-now) reads and the interval writes.
     LoadCase {
         name: "latest::fetch_one",
-        covers: &["Latest::fetch_one"],
+        covers: &["Scd2::fetch_one"],
         family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
         name: "latest::fetch_optional",
-        covers: &["Latest::fetch_optional"],
+        covers: &["Scd2::fetch_optional"],
         family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
         name: "latest::fetch_all",
-        covers: &["Latest::fetch_all"],
+        covers: &["Scd2::fetch_all"],
         family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
         name: "latest::fetch_all_chunked",
-        covers: &["LatestChunked::fetch_all"],
+        covers: &["Scd2Chunked::fetch_all"],
         family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
         name: "latest::list",
-        covers: &["Latest::list"],
+        covers: &["Scd2::list"],
         family: Family::Latest,
         status: Status::Implemented,
     },
@@ -271,7 +277,7 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     LoadCase {
         name: "recursive::current",
-        covers: &["LatestRecursive::fetch_all"],
+        covers: &["Scd2Recursive::fetch_all"],
         family: Family::Recursive,
         status: Status::Implemented,
     },
@@ -364,13 +370,13 @@ pub const LOAD_CASES: &[LoadCase] = &[
     // The attempt tables' current-version reads.
     LoadCase {
         name: "attempts::current_run",
-        covers: &["Latest::fetch_optional"],
+        covers: &["Scd2::fetch_optional"],
         family: Family::Attempts,
         status: Status::Implemented,
     },
     LoadCase {
         name: "attempts::current_version",
-        covers: &["Latest::fetch_optional"],
+        covers: &["Scd2::fetch_optional"],
         family: Family::Attempts,
         status: Status::Implemented,
     },
@@ -425,41 +431,53 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Sessions,
         status: Status::Implemented,
     },
-    // generic/history.rs — the whole timeline of a partition, no validity
-    // filter, and the time-bounded listing over it.
+    // generic/timeline.rs — the version log of a partition, no validity
+    // filter, one version by id, and the time-bounded listing over it.
+    LoadCase {
+        name: "timeline::fetch_one",
+        covers: &["Timeline::fetch_one"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "timeline::fetch_optional",
+        covers: &["Timeline::fetch_optional"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
     LoadCase {
         name: "history::fetch_all",
-        covers: &["History::fetch_all"],
+        covers: &["Timeline::fetch_all"],
         family: Family::History,
         status: Status::Implemented,
     },
     LoadCase {
         name: "history::fetch_first",
-        covers: &["History::fetch_first"],
+        covers: &["Timeline::fetch_first"],
         family: Family::History,
         status: Status::Implemented,
     },
     LoadCase {
         name: "history::fetch_last",
-        covers: &["History::fetch_last"],
+        covers: &["Timeline::fetch_last"],
         family: Family::History,
         status: Status::Implemented,
     },
     LoadCase {
         name: "history::list",
-        covers: &["History::list"],
+        covers: &["Timeline::list"],
         family: Family::History,
         status: Status::Implemented,
     },
     LoadCase {
         name: "history::list_until",
-        covers: &["History::list_until"],
+        covers: &["Timeline::list_until"],
         family: Family::History,
         status: Status::Implemented,
     },
     LoadCase {
         name: "history::fetch_all_chunked",
-        covers: &["HistoryChunked::fetch_all"],
+        covers: &["TimelineChunked::fetch_all"],
         family: Family::History,
         status: Status::Implemented,
     },
@@ -478,6 +496,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "scd2::update_chunked",
+        covers: &["Scd2Chunked::update"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "chunked::update",
         covers: &["Chunked::update"],
         family: Family::Chunked,
@@ -485,7 +509,7 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     LoadCase {
         name: "chunked::close",
-        covers: &["Chunked::close"],
+        covers: &["Scd2Chunked::close"],
         family: Family::Chunked,
         status: Status::Implemented,
     },
@@ -499,15 +523,27 @@ pub const LOAD_CASES: &[LoadCase] = &[
     // default family like the other writes.
     LoadCase {
         name: "default::close",
-        covers: &["Queries::close"],
+        covers: &["Scd2::close"],
         family: Family::Default,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "scd2::insert",
+        covers: &["Scd2::insert"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "scd2::insert_chunked",
+        covers: &["Scd2Chunked::insert"],
+        family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
         name: "latest::fetch_first",
         // assert_not_exists is a thin wrapper over the same fetch_first
         // query.
-        covers: &["Latest::fetch_first", "Latest::assert_not_exists"],
+        covers: &["Scd2::fetch_first", "Scd2::assert_not_exists"],
         family: Family::Latest,
         status: Status::Implemented,
     },

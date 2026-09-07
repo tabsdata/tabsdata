@@ -78,7 +78,7 @@ pub(crate) mod tests {
         let function_id = response.function_id;
 
         let functions: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&function_version_id)
             .await?;
         assert_eq!(functions.len(), 1);
@@ -92,7 +92,7 @@ pub(crate) mod tests {
         assert_eq!(function.base.status, FunctionStatus::Active);
 
         let table_versions: Vec<TableDB> = db
-            .latest()
+            .scd2()
             .fetch_all(and!(&function_id, TableDB::active()))
             .await?;
         assert_eq!(
@@ -115,7 +115,7 @@ pub(crate) mod tests {
         }
 
         let dependency_versions: Vec<DependencyDBWithNames> =
-            db.latest().fetch_all(&function_id).await?;
+            db.scd2().fetch_all(&function_id).await?;
         assert_eq!(
             dependency_versions.len(),
             req_dependencies.len() + SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES.len()
@@ -123,7 +123,7 @@ pub(crate) mod tests {
         for dependency in req_dependencies {
             let dependency = &TableDependency::try_from(dependency)?;
             let dependency_table = db
-                .latest()
+                .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
                         dependency
@@ -150,14 +150,14 @@ pub(crate) mod tests {
         }
 
         let trigger_versions: Vec<TriggerDBWithNames> = db
-            .latest()
+            .scd2()
             .fetch_all(and!(&function_id, TriggerDBWithNames::active()))
             .await?;
         assert_eq!(trigger_versions.len(), req_triggers.len());
         for trigger in req_triggers {
             let trigger = TableTrigger::try_from(trigger)?;
             let trigger_table = db
-                .latest()
+                .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
                         trigger
@@ -195,13 +195,13 @@ pub(crate) mod tests {
         response: &Function,
     ) -> Result<(), TdError> {
         let functions: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&created_function.base.function_id)
             .await?;
         assert_eq!(functions.len(), 2);
 
         let functions: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&created_function.base.id)
             .await?;
         assert_eq!(functions.len(), 1);
@@ -219,7 +219,7 @@ pub(crate) mod tests {
         for table_dto in create.tables.as_deref().unwrap_or(&[]) {
             let table = &TableName::try_from(table_dto)?;
             let versions = db
-                .history()
+                .timeline()
                 .fetch_all::<TableDB>(and!(collection.id, table))
                 .await?;
             let created = versions
@@ -252,6 +252,7 @@ pub(crate) mod tests {
             let dependency = &TableDependency::try_from(dependency_dto)?;
 
             let dependency_table: TableDBWithNames = db
+                .scd2()
                 .as_of(&before_at_time)
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
@@ -264,6 +265,7 @@ pub(crate) mod tests {
                 ))
                 .await?;
             let old_version = db
+                .scd2()
                 .as_of(&before_at_time)
                 .fetch_all::<DependencyDBWithNames>(and!(
                     dependency_table.base.base.table_id,
@@ -273,7 +275,7 @@ pub(crate) mod tests {
             assert_eq!(old_version.len(), 1);
 
             let dependency_table = db
-                .latest()
+                .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
                         dependency
@@ -285,7 +287,7 @@ pub(crate) mod tests {
                 ))
                 .await?;
             let new_version = db
-                .latest()
+                .scd2()
                 .fetch_all::<DependencyDBWithNames>(and!(
                     dependency_table.base.base.table_id,
                     response.function_id
@@ -310,7 +312,7 @@ pub(crate) mod tests {
         for trigger_dto in create.triggers.as_deref().unwrap_or(&[]) {
             let trigger = TableTrigger::try_from(trigger_dto)?;
             let trigger_table: TableDBWithNames = db
-                .latest()
+                .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
                         trigger
@@ -322,6 +324,7 @@ pub(crate) mod tests {
                 ))
                 .await?;
             let old_version: Vec<TriggerDBWithNames> = db
+                .scd2()
                 .as_of(&before_at_time)
                 .fetch_all::<TriggerDBWithNames>(and!(
                     trigger_table.base.base.table_id,
@@ -331,7 +334,7 @@ pub(crate) mod tests {
             assert_eq!(old_version.len(), 1);
 
             let new_version = db
-                .latest()
+                .scd2()
                 .fetch_all::<TriggerDBWithNames>(and!(
                     trigger_table.base.base.table_id,
                     response.function_id
@@ -387,13 +390,13 @@ pub(crate) mod tests {
         created_function: &FunctionDB,
     ) -> Result<(), TdError> {
         let live: Option<FunctionDB> = db
-            .latest()
+            .scd2()
             .fetch_optional::<FunctionDB>(&created_function.base.function_id)
             .await?;
         assert!(live.is_none());
 
         let functions: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&created_function.base.id)
             .await?;
         assert_eq!(functions.len(), 1);
@@ -401,17 +404,17 @@ pub(crate) mod tests {
         assert!(!functions[0].valid_to.is_infinity());
 
         let created_tables: Vec<TableDB> = db
-            .history()
+            .timeline()
             .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
             .await?;
         assert!(created_tables.iter().all(|t| !t.valid_to.is_infinity()));
         let active: Vec<TableDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
             .await?;
         assert!(active.is_empty());
         let current: Vec<TableDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<TableDB>(&created_function.base.id)
             .await?;
         let user_tables = created_tables
@@ -425,7 +428,7 @@ pub(crate) mod tests {
         for table_dto in create.tables.as_deref().unwrap_or(&[]) {
             let table = &TableName::try_from(table_dto)?;
             let versions = db
-                .history()
+                .timeline()
                 .fetch_all::<TableDB>(and!(collection.id, table, &created_function.base.id))
                 .await?;
             assert_eq!(versions.len(), 2);
@@ -447,6 +450,7 @@ pub(crate) mod tests {
         for dependency in create.dependencies.as_deref().unwrap_or(&[]) {
             let dependency = &TableDependency::try_from(dependency)?;
             let table_dependency = db
+                .scd2()
                 .as_of(&created_function.base.defined_on)
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
@@ -459,6 +463,7 @@ pub(crate) mod tests {
                 ))
                 .await?;
             let old_version = db
+                .scd2()
                 .as_of(&created_function.base.defined_on)
                 .fetch_all::<DependencyDBWithNames>(and!(
                     table_dependency.base.base.table_id,
@@ -471,6 +476,7 @@ pub(crate) mod tests {
         for trigger_dto in create.triggers.as_deref().unwrap_or(&[]) {
             let trigger = &TableTrigger::try_from(trigger_dto)?;
             let table_trigger = db
+                .scd2()
                 .as_of(&created_function.base.defined_on)
                 .fetch_one::<TableDBWithNames>(and!(
                     &CollectionIdName::Name(
@@ -483,6 +489,7 @@ pub(crate) mod tests {
                 ))
                 .await?;
             let old_version = db
+                .scd2()
                 .as_of(&created_function.base.defined_on)
                 .fetch_all::<TriggerDBWithNames>(and!(
                     table_trigger.base.base.table_id,

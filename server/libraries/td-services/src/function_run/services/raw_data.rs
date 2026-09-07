@@ -36,7 +36,7 @@ async fn function_run_raw_data(
 
     let collection: ActiveCollectionDB = conn.fetch_one(&collection.collection).await?;
     let run_id = function_run.function_run;
-    let run: PhysicalFunctionRunDBWithNames = conn.fetch_one(&run_id).await?;
+    let run: PhysicalFunctionRunDBWithNames = conn.timeline().fetch_one(&run_id).await?;
     if run.base.base.collection_id != collection.id {
         return Err(api_error!(
             ApiError::NotFound,
@@ -46,7 +46,10 @@ async fn function_run_raw_data(
         ));
     }
     // Only a publisher ingests, so only a publisher run has raw data at all.
-    let function: FunctionDB = conn.fetch_one(&run.base.base.function_version_id).await?;
+    let function: FunctionDB = conn
+        .timeline()
+        .fetch_one(&run.base.base.function_version_id)
+        .await?;
     if function.base.decorator != Decorator::Publisher {
         return Err(api_error!(
             ApiError::NotFound,

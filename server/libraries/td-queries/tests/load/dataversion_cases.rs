@@ -42,7 +42,7 @@ pub(crate) struct LoadDvDao {
     #[dao(partition_by)]
     pub partition_id: DvPartition,
     pub status: DvStatus,
-    #[dao(version_by)]
+    #[dao(timeline(version_by))]
     pub defined_on: AtTime,
 }
 
@@ -224,8 +224,9 @@ async fn load_data_version_fetch_one(db: TdPool) -> Result<(), TdError> {
     let on = after_all();
     let p = p0();
     let t = Instant::now();
-    let _row: LoadDvDao = (&db)
-        .data_version(&on, &p)
+    let _row: LoadDvDao = db
+        .timeline()
+        .at(&on, &p)
         .fetch_one::<LoadDvDao>(&Versions::Single(Version::Head(0)))
         .await?;
     record("data_version::fetch_one", t, 1);
@@ -237,8 +238,9 @@ async fn load_data_version_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let on = after_all();
     let p = p0();
     let t = Instant::now();
-    let row = (&db)
-        .data_version(&on, &p)
+    let row = db
+        .timeline()
+        .at(&on, &p)
         .fetch_optional::<LoadDvDao>(&Versions::None)
         .await?;
     record("data_version::fetch_optional", t, row.is_some() as usize);
@@ -251,8 +253,9 @@ async fn load_data_version_fetch_all(db: TdPool) -> Result<(), TdError> {
     let on = after_all();
     let p = p0();
     let t = Instant::now();
-    let rows = (&db)
-        .data_version(&on, &p)
+    let rows = db
+        .timeline()
+        .at(&on, &p)
         .fetch_all::<LoadDvDao>(&Versions::Range(Version::Head(-2), Version::Head(0)))
         .await?;
     record("data_version::fetch_all", t, rows.len());
@@ -265,8 +268,9 @@ async fn load_data_version_fetch_relative_offset(db: TdPool) -> Result<(), TdErr
     let on = after_all();
     let p = p0();
     let t = Instant::now();
-    let offset = (&db)
-        .data_version(&on, &p)
+    let offset = db
+        .timeline()
+        .at(&on, &p)
         .fetch_relative_offset::<LoadDvDao>(&Version::Head(0))
         .await?;
     record(
@@ -339,28 +343,32 @@ pub(crate) async fn time_dv_queries(db: &TdPool) -> Result<Vec<(&'static str, f6
     let _ = timed!(
         out,
         "data_version::fetch_one",
-        (db).data_version(&on, &p)
+        (db).timeline()
+            .at(&on, &p)
             .fetch_one::<LoadDvDao>(&Versions::Single(Version::Head(0)))
             .await?
     );
     let _ = timed!(
         out,
         "data_version::fetch_optional",
-        (db).data_version(&on, &p)
+        (db).timeline()
+            .at(&on, &p)
             .fetch_optional::<LoadDvDao>(&Versions::None)
             .await?
     );
     let _ = timed!(
         out,
         "data_version::fetch_all",
-        (db).data_version(&on, &p)
+        (db).timeline()
+            .at(&on, &p)
             .fetch_all::<LoadDvDao>(&Versions::Range(Version::Head(-2), Version::Head(0)))
             .await?
     );
     let _ = timed!(
         out,
         "data_version::fetch_relative_offset",
-        (db).data_version(&on, &p)
+        (db).timeline()
+            .at(&on, &p)
             .fetch_relative_offset::<LoadDvDao>(&Version::Head(0))
             .await?
     );

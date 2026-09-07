@@ -104,7 +104,7 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows>(
     let all_output_tables: Vec<PhysicalTableDataVersionDBWithNames> = if fr_ids.is_empty() {
         Vec::new()
     } else {
-        conn.history()
+        conn.timeline()
             .chunked()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&fr_ids, ())
             .await?
@@ -140,6 +140,7 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows>(
         // An input with no materialization visible at `at` stays `None`:
         // never produced, or voided.
         let bound: Vec<PhysicalTableDataVersionDB> = conn
+            .scd2()
             .as_of(&TriggeredOn::try_from(at)?)
             .chunked()
             .fetch_all::<PhysicalTableDataVersionDB>(&input_ftdv_ids, ())
@@ -160,7 +161,7 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows>(
         if bound_tdv_ids.is_empty() {
             HashMap::new()
         } else {
-            conn.history()
+            conn.timeline()
                 .chunked()
                 .fetch_all::<PhysicalTableDataVersionDBWithNames>(&bound_tdv_ids, ())
                 .await?
@@ -266,7 +267,8 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows>(
                     let tables: HashMap<TableId, TableDB> = if table_ids.is_empty() {
                         HashMap::new()
                     } else {
-                        conn.as_of(&triggered_at)
+                        conn.scd2()
+                            .as_of(&triggered_at)
                             .chunked()
                             .fetch_all::<TableDB>(&table_ids, ())
                             .await?

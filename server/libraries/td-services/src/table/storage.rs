@@ -153,7 +153,10 @@ mod tests {
         // The no-data current version must come from its own execution: within
         // one execution a second seed re-materializes the same LTDV, superseding the
         // with-data version instead of leaving it as a prior logical version.
-        let function: FunctionDB = db.fetch_one(&table.base.function_version_id).await?;
+        let function: FunctionDB = db
+            .timeline()
+            .fetch_one(&table.base.function_version_id)
+            .await?;
         let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction = db
             .scoped(p.id)
@@ -248,7 +251,10 @@ mod tests {
             )
             .await;
         // Its own run: a run writes each of its tables exactly once.
-        let function: FunctionDB = db.fetch_one(&table.base.function_version_id).await?;
+        let function: FunctionDB = db
+            .timeline()
+            .fetch_one(&table.base.function_version_id)
+            .await?;
         let physical_function_run = db
             .scoped(p.id)
             .seed()
@@ -377,7 +383,7 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .latest()
+            .scd2()
             .fetch_first(&function.base.id)
             .await?
             .expect("row must exist");
@@ -424,7 +430,7 @@ mod tests {
         let response = service.update_function(request).await;
         let response = response?;
 
-        let function: FunctionDB = db.fetch_one(&(response.id)).await?;
+        let function: FunctionDB = db.timeline().fetch_one(&(response.id)).await?;
         let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
@@ -446,7 +452,7 @@ mod tests {
             .await?;
 
         let table = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &function.base.collection_id,
                 &TableIdName::from_str("table_1")?
@@ -489,8 +495,10 @@ mod tests {
         };
 
         let expected = if let Some(expected_data_version) = expected_data_version {
-            let expected_data_version: PhysicalTableDataVersionDBWithNames =
-                db.fetch_one(&expected_data_version.base.id).await?;
+            let expected_data_version: PhysicalTableDataVersionDBWithNames = db
+                .timeline()
+                .fetch_one(&expected_data_version.base.id)
+                .await?;
             let (expected, _) = get_spath(&expected_data_version)?;
             Some(expected)
         } else {
@@ -564,7 +572,7 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .latest()
+            .scd2()
             .fetch_first(&function.base.id)
             .await?
             .expect("row must exist");

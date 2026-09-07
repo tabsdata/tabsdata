@@ -9,45 +9,39 @@
 //! traversal.
 //!
 //! A grain word names no DAO; the terminal does, as the wordless grain does:
-//! `db.latest().fetch_one::<D>(c)`, never `db.current::<D>()`.
+//! `db.scd2().fetch_one::<D>(c)`, never `db.current::<D>()`.
 //!
-//! Open multi-row reads bind on [`UnversionedDao`]: on a versioned relation a
-//! condition matches every version, so the read must say which one it means.
-//! Addressing reads need no such gate, since [`AddressesOneRow`] already pins
-//! one row.
+//! Every wordless read binds on [`UnversionedDao`]: on a versioned relation
+//! the caller has a version to pick, so the read must say which — a grain
+//! word for an instant, or `timeline()` for the version log, where a pinned
+//! version id is a plain [`AddressesOneRow`] read.
 
 use crate::QueryExecutor;
 use crate::Serves;
-use crate::daos::data_version::DataVersion;
 use crate::daos::dependency::Dependencies;
 use crate::daos::execution::Executions;
 use crate::daos::function_runs::{LogicalRuns, PhysicalRuns};
 use crate::daos::metrics::Metrics;
 use crate::daos::session::Sessions;
 use crate::daos::table_data_versions::TableDataVersions;
-use crate::generic::as_of::AsOf;
 use crate::generic::chunked::Chunked;
 use crate::generic::for_update::ForUpdate;
-use crate::generic::history::History;
-use crate::generic::latest::Latest;
-use crate::generic::recursive::RecursiveQuery;
-use crate::primitives::scd2::close_query;
+use crate::generic::scd2::Scd2;
+use crate::generic::timeline::Timeline;
 use crate::primitives::table::{
-    delete_query, insert_or_ignore_query, insert_query, select, select_last, select_latest_before,
+    delete_query, insert_or_ignore_query, insert_query, select, select_last, select_nth_last,
     select_unordered, update_query, upsert_query,
 };
 use sqlx::postgres::PgQueryResult;
 use std::future::Future;
-use std::marker::PhantomData;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    AddressesOneRow, DeleteDao, InsertDao, InsertableFrom, ListDto, RecursiveDao, Scd2Dao,
-    SelectDao, TableDao, UnversionedDao, UpdateDao, UpsertDao, single_row,
+    AddressesOneRow, DeleteDao, InsertDao, InsertableFrom, ListDto, SelectDao, UnversionedDao,
+    UpdateDao, UpsertDao, single_row,
 };
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
-use td_objects::types::recursion::RecursionOptions;
 
 pub trait Queries: QueryExecutor {
     fn insert<D: InsertDao + InsertableFrom<Self::Scope>>(
@@ -107,6 +101,7 @@ pub trait Queries: QueryExecutor {
         condition: impl SqlCondition<U::FilterBy>,
     ) -> impl Future<Output = Result<PgQueryResult, SqlError>> + Send
     where
+        U::FilterBy: UnversionedDao,
         Self: Serves<U>,
     {
         async move {
@@ -135,27 +130,7 @@ pub trait Queries: QueryExecutor {
         }
     }
 
-    /// Ends the matching open intervals at `at` with no successor: the SCD2
-    /// deletion. A later insert into the partition reopens it.
-    fn close<D: TableDao + Scd2Dao>(
-        self,
-        condition: impl SqlCondition<D>,
-        at: &D::VersionOrder,
-    ) -> impl Future<Output = Result<PgQueryResult, SqlError>> + Send
-    where
-        Self: Serves<D>,
-    {
-        async move {
-            let values = condition.display_values();
-            close_query::<D>(condition, at)?
-                .build_query()
-                .execute(self)
-                .await
-                .map_err(|e| SqlError::on_write::<D>(e, &values))
-        }
-    }
-
-    fn fetch_one<D: SelectDao>(
+    fn fetch_one<D: SelectDao + UnversionedDao>(
         self,
         condition: impl AddressesOneRow<D, Self::Scope>,
     ) -> impl Future<Output = Result<D, SqlError>> + Send
@@ -173,7 +148,7 @@ pub trait Queries: QueryExecutor {
         }
     }
 
-    fn fetch_optional<D: SelectDao>(
+    fn fetch_optional<D: SelectDao + UnversionedDao>(
         self,
         condition: impl AddressesOneRow<D, Self::Scope>,
     ) -> impl Future<Output = Result<Option<D>, SqlError>> + Send
@@ -243,7 +218,7 @@ pub trait Queries: QueryExecutor {
     }
 
     /// `offset = 0` is the most recent match.
-    fn fetch_latest_before<D: SelectDao + UnversionedDao>(
+    fn fetch_nth_last<D: SelectDao + UnversionedDao>(
         self,
         condition: impl SqlCondition<D>,
         offset: u64,
@@ -252,7 +227,7 @@ pub trait Queries: QueryExecutor {
         Self: Serves<D>,
     {
         async move {
-            select_latest_before::<D>(condition, offset)
+            select_nth_last::<D>(condition, offset)
                 .build_query_as()
                 .fetch_optional(self)
                 .await
@@ -334,30 +309,16 @@ pub trait Queries: QueryExecutor {
         }
     }
 
-    /// The open SCD2 intervals (`valid_to = 'infinity'`).
-    fn latest(self) -> Latest<Self> {
-        Latest { executor: self }
+    /// The interval-table surface: the open SCD2 intervals
+    /// (`valid_to = 'infinity'`) until [`Scd2::as_of`] moves the instant.
+    fn scd2(self) -> Scd2<Self> {
+        Scd2 { executor: self }
     }
 
-    /// The caller's condition composed with the visibility interval, so cost
-    /// follows the condition's selectivity.
-    #[allow(clippy::wrong_self_convention)]
-    fn as_of<V>(self, on: &V) -> AsOf<'_, Self, V> {
-        AsOf { on, executor: self }
-    }
-
-    /// Every version row: the slow path, named so a reader sees it is one.
-    fn history(self) -> History<Self> {
-        History { executor: self }
-    }
-
-    /// Ordinal resolution over one partition (`HEAD~k`, `INITIAL+k`, ranges).
-    fn data_version<'a, V, P>(self, on: &'a V, partition: &'a P) -> DataVersion<'a, Self, V, P> {
-        DataVersion {
-            on,
-            partition,
-            executor: self,
-        }
+    /// The version log of a `TimelineDao`: every version row, no time
+    /// predicate. The only door to a `timeline` relation.
+    fn timeline(self) -> Timeline<Self> {
+        Timeline { executor: self }
     }
 
     /// The same reads, holding row locks until the transaction ends.
@@ -369,21 +330,6 @@ pub trait Queries: QueryExecutor {
     /// limit.
     fn chunked(self) -> Chunked<Self> {
         Chunked { executor: self }
-    }
-
-    /// At-time traversal goes through [`Latest::recursive`] /
-    /// [`AsOf::recursive`].
-    fn recursive<'a, D, R>(self, recursion: RecursionOptions) -> RecursiveQuery<'a, D, R, Self>
-    where
-        D: SelectDao + UnversionedDao + RecursiveDao,
-        R: SelectDao + UnversionedDao,
-    {
-        RecursiveQuery {
-            recursion,
-            start: None,
-            executor: self,
-            _phantom: PhantomData,
-        }
     }
 
     fn logical_runs(self) -> LogicalRuns<Self> {

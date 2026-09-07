@@ -13,7 +13,7 @@ use sea_query::{
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{Scd2Dao, SelectDao, TableDao, TimelineDao};
+use ta_objects::{Scd2Dao, SelectDao, TableDao, TimelineDao, UpdateDao};
 
 /// The `'infinity'` literal, never a bind parameter, is what matches the
 /// `WHERE valid_to = 'infinity'` partial indexes.
@@ -74,6 +74,27 @@ pub(crate) fn select_open<D: SelectDao + Scd2Dao>(
     select_where::<D>(condition, Condition::all().add(open_interval_cond::<D>()))
 }
 
+/// A payload update of the matching open rows; closed versions stay as written.
+pub(crate) fn update_open_query<U: UpdateDao>(
+    dao: &U,
+    condition: impl SqlCondition<U::FilterBy>,
+) -> Result<UpdateStatement, SqlError>
+where
+    U::FilterBy: Scd2Dao,
+{
+    if condition.matches_all() {
+        return Err(SqlError::EmptyConditionRefused(
+            U::display_name().to_string(),
+        ));
+    }
+    Ok(Query::update()
+        .table(U::TABLE)
+        .values(dao.update_values())
+        .cond_where(condition.resolve())
+        .cond_where(open_interval_cond::<U::FilterBy>())
+        .take())
+}
+
 /// Ends the matching open intervals at `at` with no successor: the SCD2
 /// deletion. A later insert into the partition reopens it.
 pub(crate) fn close_query<D: TableDao + Scd2Dao>(
@@ -127,7 +148,7 @@ mod tests {
         #[dao(partition_by)]
         partition_id: TestPartition,
         status: TestVStatus,
-        #[dao(valid_from)]
+        #[dao(scd2(valid_from))]
         defined_on: TestDefinedOn,
     }
 
@@ -194,6 +215,36 @@ mod tests {
             sql,
             r#"UPDATE "test_scd2" SET "valid_to" = 100 WHERE "partition_id" = 'p1' AND "valid_to" = ('infinity'::timestamptz)"#
         );
+    }
+
+    #[Dao]
+    #[dao(table = "test_scd2", ops(update(TestScd2Dao)))]
+    struct TestScd2Update {
+        status: Option<TestVStatus>,
+    }
+
+    #[test]
+    fn test_update_open_query_reaches_open_rows_only() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let update = TestScd2Update {
+            status: Some(TestVStatus::Active),
+        };
+        let sql = update_open_query(&update, &id)
+            .unwrap()
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"UPDATE "test_scd2" SET "status" = 'A' WHERE "partition_id" = 'p1' AND "valid_to" = ('infinity'::timestamptz)"#
+        );
+    }
+
+    #[test]
+    fn test_update_open_query_refuses_match_all() {
+        let update = TestScd2Update { status: None };
+        assert!(matches!(
+            update_open_query(&update, ()),
+            Err(SqlError::EmptyConditionRefused(_))
+        ));
     }
 
     #[test]

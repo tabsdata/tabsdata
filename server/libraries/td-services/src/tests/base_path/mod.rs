@@ -56,6 +56,9 @@ async fn fetch_run(
     db: &TdPool,
     id: &PhysicalFunctionRunId,
 ) -> Result<PhysicalFunctionRunDBWithNames, TdError> {
-    let run = db.fetch_one::<PhysicalFunctionRunDBWithNames>(id).await?;
+    let run = db
+        .timeline()
+        .fetch_one::<PhysicalFunctionRunDBWithNames>(id)
+        .await?;
     Ok(run)
 }

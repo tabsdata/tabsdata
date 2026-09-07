@@ -441,7 +441,7 @@ async fn build_unit(
     }
     let pfr = pfr;
 
-    let tables: Vec<TableDB> = db.latest().fetch_all::<TableDB>(&func.base.id).await?;
+    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.base.id).await?;
     let table = tables
         .into_iter()
         .next()

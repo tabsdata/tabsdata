@@ -72,7 +72,7 @@ async fn delete_collection(
     conn.update::<CollectionDeleteDB>(&delete_db, collection.id)
         .await?;
 
-    let tables: Vec<TableDB> = conn.latest().fetch_all(&collection.id).await?;
+    let tables: Vec<TableDB> = conn.scd2().fetch_all(&collection.id).await?;
     let table_ids: Vec<TableId> = tables.iter().map(|x| x.base.table_id).collect();
     // Same-collection dependants are closed with the collection below; a
     // frozen version for them would be closed in the same instant.
@@ -82,18 +82,27 @@ async fn delete_collection(
         .filter(|f| f.base.collection_id != collection.id)
         .map(|f| f.frozen_version(&ctx))
         .collect();
-    conn.chunked().insert(&frozen).await?;
-    conn.chunked()
+    conn.scd2().chunked().insert(&frozen).await?;
+    conn.scd2()
+        .chunked()
         .close::<TriggerDB>(&table_ids, (), &ctx.time)
         .await?;
-    conn.close::<TriggerDB>(&collection.id, &ctx.time).await?;
-    conn.chunked()
+    conn.scd2()
+        .close::<TriggerDB>(&collection.id, &ctx.time)
+        .await?;
+    conn.scd2()
+        .chunked()
         .close::<DependencyDB>(&table_ids, (), &ctx.time)
         .await?;
-    conn.close::<DependencyDB>(&collection.id, &ctx.time)
+    conn.scd2()
+        .close::<DependencyDB>(&collection.id, &ctx.time)
         .await?;
-    conn.close::<TableDB>(&collection.id, &ctx.time).await?;
-    conn.close::<FunctionDB>(&collection.id, &ctx.time).await?;
+    conn.scd2()
+        .close::<TableDB>(&collection.id, &ctx.time)
+        .await?;
+    conn.scd2()
+        .close::<FunctionDB>(&collection.id, &ctx.time)
+        .await?;
     update_deleted_workers(conn, &collection.id).await?;
     trx.commit().await?;
 
@@ -324,28 +333,31 @@ mod tests {
         assert_eq!(resolved[0].base.name, collection.name);
         assert!(*resolved[0].deleted);
 
-        let found = db.latest().fetch_all::<FunctionDBWithNames>(()).await?;
+        let found = db.scd2().fetch_all::<FunctionDBWithNames>(()).await?;
         assert!(found.is_empty());
-        let versions = db.history().fetch_all::<FunctionDB>(&collection.id).await?;
+        let versions = db
+            .timeline()
+            .fetch_all::<FunctionDB>(&collection.id)
+            .await?;
         assert_eq!(versions.len(), 4);
         assert!(versions.iter().all(|f| !f.valid_to.is_infinity()));
 
-        let found = db.latest().fetch_all::<TableDBWithNames>(()).await?;
+        let found = db.scd2().fetch_all::<TableDBWithNames>(()).await?;
         assert!(found.is_empty());
-        let versions = db.history().fetch_all::<TableDB>(&collection.id).await?;
+        let versions = db.timeline().fetch_all::<TableDB>(&collection.id).await?;
         assert_eq!(versions.len(), 4);
         assert!(versions.iter().all(|t| !t.valid_to.is_infinity()));
 
-        let found = db.latest().fetch_all::<TriggerDBWithNames>(()).await?;
+        let found = db.scd2().fetch_all::<TriggerDBWithNames>(()).await?;
         assert!(found.is_empty());
-        let versions = db.history().fetch_all::<TriggerDB>(&collection.id).await?;
+        let versions = db.timeline().fetch_all::<TriggerDB>(&collection.id).await?;
         assert_eq!(versions.len(), 2);
         assert!(versions.iter().all(|t| !t.valid_to.is_infinity()));
 
-        let found = db.latest().fetch_all::<DependencyDBWithNames>(()).await?;
+        let found = db.scd2().fetch_all::<DependencyDBWithNames>(()).await?;
         assert!(found.is_empty());
         let versions = db
-            .history()
+            .timeline()
             .fetch_all::<DependencyDB>(&collection.id)
             .await?;
         assert_eq!(versions.len(), 1);
@@ -440,13 +452,13 @@ mod tests {
         assert_eq!(found[0].name, name_c_1);
 
         let found = db
-            .latest()
+            .scd2()
             .fetch_all::<FunctionDBWithNames>(&FunctionName::try_from("function_1")?)
             .await?;
         assert_eq!(found.len(), 1);
 
         let found = db
-            .latest()
+            .scd2()
             .fetch_all::<TableDBWithNames>(&TableName::try_from("table_1")?)
             .await?;
         assert_eq!(found.len(), 1);

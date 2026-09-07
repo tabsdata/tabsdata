@@ -85,7 +85,7 @@ pub async fn _seed_physical_table_data_version(
         .await?;
     let existing: Option<LogicalTableDataVersionDB> = executor
         .reuse()
-        .history()
+        .timeline()
         .fetch_first(and!(&execution.base.id, &table.base.table_id))
         .await?;
     let logical_id = match existing {
@@ -134,8 +134,12 @@ pub async fn _seed_physical_table_data_version(
         with_data_table_data_version_id: None,
         logical_table_data_version_id: logical_id.clone(),
     };
-    executor.reuse().insert(&table_data_version_db).await?;
-    Ok(executor.reuse().fetch_one(&ptdv_id).await?)
+    executor
+        .reuse()
+        .scd2()
+        .insert(&table_data_version_db)
+        .await?;
+    Ok(executor.reuse().timeline().fetch_one(&ptdv_id).await?)
 }
 
 #[cfg(test)]
@@ -227,7 +231,7 @@ mod tests {
             .unwrap();
 
         let table_version = db
-            .latest()
+            .scd2()
             .fetch_first::<TableDB>(and!(
                 &collection.id,
                 TableName::try_from(table_name).unwrap()

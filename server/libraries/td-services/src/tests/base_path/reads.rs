@@ -166,7 +166,7 @@ async fn test_table_download_survives_collection_move(db: TdPool) -> Result<(), 
         )
         .await?;
     let table: TableDB = db
-        .latest()
+        .scd2()
         .fetch_first(&func.base.id)
         .await?
         .expect("row must exist");

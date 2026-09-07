@@ -3,7 +3,7 @@
 //
 
 use crate::dxo::crudl::RequestContext;
-use crate::types::basic::ValidTo;
+use crate::types::basic::Scd2ValidTo;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, ConnectionKind,
     Connector, Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
@@ -225,7 +225,7 @@ pub struct FunctionInsertDB {
     pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub snippet: Snippet,
-    #[dao(valid_from)]
+    #[dao(scd2(valid_from))]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
@@ -239,13 +239,18 @@ pub struct FunctionDB {
     #[dao(flatten)]
     pub base: FunctionInsertDB,
     pub project_id: ProjectId,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 
 impl FunctionDB {
     pub fn active() -> impl SqlCondition<Self> {
         FunctionStatus::Active
+    }
+
+    /// Whether this version was the live one at `at`: `[defined_on, valid_to)`.
+    pub fn covers(&self, at: &AtTime) -> bool {
+        self.base.defined_on <= *at && self.valid_to.at().is_none_or(|end| **at < *end)
     }
 
     pub fn frozen_version(&self, ctx: &RequestContext) -> FunctionInsertDB {
@@ -289,7 +294,7 @@ pub struct FunctionPatchInsertDB {
     pub bundle_id: BundleId,
     pub runtime_values: FunctionRuntimeValues,
     pub description: Description,
-    #[dao(valid_from, order_by)]
+    #[dao(scd2(valid_from), order_by)]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
@@ -303,8 +308,8 @@ pub struct FunctionPatchDB {
     #[dao(flatten)]
     pub base: FunctionPatchInsertDB,
     pub project_id: ProjectId,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 
 impl FunctionPatchDB {
@@ -407,7 +412,7 @@ pub struct FunctionVersionDBWithNames {
     pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub snippet: Snippet,
-    #[dao(order_by, version_by)]
+    #[dao(order_by, timeline(version_by))]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,

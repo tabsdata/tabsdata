@@ -30,10 +30,10 @@ use td_queries::Queries;
 macro_rules! read_chain {
     ($historic:expr, $conn:expr, $at:expr, |$entry:ident| $body:block) => {{
         if $historic {
-            let $entry = $conn.as_of(&*$at);
+            let $entry = $conn.scd2().as_of(&*$at);
             $body
         } else {
-            let $entry = $conn.latest();
+            let $entry = $conn.scd2();
             $body
         }
     }};
@@ -59,15 +59,13 @@ impl GraphBuilder {
         D: SelectDao + Scd2Dao<Db = Apiserver, VersionOrder = AtTime> + ReachableFrom<S>,
     {
         let rows = if self.config.historic {
-            conn.as_of(at)
+            conn.scd2()
+                .as_of(at)
                 .chunked()
                 .fetch_all::<D>(values, extra)
                 .await?
         } else {
-            conn.latest()
-                .chunked()
-                .fetch_all::<D>(values, extra)
-                .await?
+            conn.scd2().chunked().fetch_all::<D>(values, extra).await?
         };
         Ok(rows)
     }
@@ -84,11 +82,11 @@ impl GraphBuilder {
                 read_chain!(self.config.historic, conn, at_time, |entry| {
                     let walk = entry
                         .recursive::<TriggerDBWithNames, FunctionDB>(*recursion_options)
-                        .direct_reference(function_id)
-                        .filter(&self.config.trigger_state)
-                        .filter_references(&self.config.function_state);
+                        .start_at(function_id)
+                        .where_edges(&self.config.trigger_state)
+                        .where_nodes(&self.config.function_state);
                     let walk = if recursion_options.override_disabled_trigger() {
-                        walk.filter_start(FunctionDB::active())
+                        walk.where_start(FunctionDB::active())
                     } else {
                         walk
                     };
@@ -99,8 +97,8 @@ impl GraphBuilder {
                 read_chain!(self.config.historic, conn, at_time, |entry| {
                     entry
                         .recursive::<TriggerDBWithNames, TableDB>(*recursion_options)
-                        .direct_reference(table_id)
-                        .filter(&self.config.trigger_state)
+                        .start_at(table_id)
+                        .where_edges(&self.config.trigger_state)
                         .fetch_all()
                         .await?
                 })
@@ -122,8 +120,8 @@ impl GraphBuilder {
                 read_chain!(self.config.historic, conn, at_time, |entry| {
                     entry
                         .recursive::<DependencyDBWithNames, FunctionDB>(*recursion_options)
-                        .direct_reference(function_id)
-                        .filter_references(&self.config.function_state)
+                        .start_at(function_id)
+                        .where_nodes(&self.config.function_state)
                         .fetch_all()
                         .await?
                 })
@@ -132,7 +130,7 @@ impl GraphBuilder {
                 read_chain!(self.config.historic, conn, at_time, |entry| {
                     entry
                         .recursive::<DependencyDBWithNames, TableDB>(*recursion_options)
-                        .direct_reference(table_id)
+                        .start_at(table_id)
                         .fetch_all()
                         .await?
                 })
@@ -152,9 +150,12 @@ impl GraphBuilder {
             FunctionOrTable::Function(function_id) => *function_id,
             FunctionOrTable::Table(table_id) => {
                 let table: TableDB = if self.config.historic {
-                    conn.as_of(at_time).fetch_one::<TableDB>(table_id).await?
+                    conn.scd2()
+                        .as_of(at_time)
+                        .fetch_one::<TableDB>(table_id)
+                        .await?
                 } else {
-                    conn.latest().fetch_one::<TableDB>(table_id).await?
+                    conn.scd2().fetch_one::<TableDB>(table_id).await?
                 };
                 table.base.function_id
             }

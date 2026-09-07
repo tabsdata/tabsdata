@@ -35,6 +35,7 @@ async fn table_flow_graph(
     let at = ctx.time;
 
     let table: TableDBWithNames = conn
+        .scd2()
         .as_of(&at)
         .fetch_one(and!(&collection_id_name, &table_id_name))
         .await?;
@@ -138,7 +139,7 @@ mod tests {
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &function_0.base.collection_id,
                 &TableIdName::from_str("table_0")?
@@ -290,7 +291,7 @@ mod tests {
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table: TableDBWithNames = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &function_0.base.collection_id,
                 &TableIdName::from_str("table_0")?
@@ -463,7 +464,7 @@ mod tests {
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &function_2.base.collection_id,
                 &TableIdName::from_str("table_3")?

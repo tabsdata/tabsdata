@@ -72,7 +72,7 @@ pub(crate) async fn seed_logical_function_run(
 
     let tables: Vec<TableDB> = executor
         .reuse()
-        .latest()
+        .scd2()
         .fetch_all::<TableDB>(&function_version.base.id)
         .await?;
     for t in &tables {

@@ -5,10 +5,6 @@
 //! Trigger definitions and their renderers. Each def renders to a
 //! [`Derived`] (`CREATE` statements plus the matching `DROP TRIGGER`s),
 //! which is what `Entity::create_db_triggers` returns.
-//!
-//! Table and column references are typed as [`DynIden`] so callers source
-//! them from the same `Iden` enums that declare the schema — no parallel
-//! `&'static str` lists to keep in sync.
 
 use sea_query::DynIden;
 
@@ -34,8 +30,8 @@ pub struct Scd2TriggerDef {
     pub name: String,
     pub source_table: DynIden,
     pub partition_col: DynIden,
-    /// The version-order column; doubles as the interval's `valid_from`.
     pub valid_from_col: DynIden,
+    pub valid_to_col: DynIden,
     /// Tie-breaker for same-instant versions.
     pub pk_col: DynIden,
 }
@@ -53,6 +49,7 @@ impl Scd2TriggerDef {
         let table = self.source_table.to_string();
         let partition = self.partition_col.to_string();
         let valid_from = self.valid_from_col.to_string();
+        let valid_to = self.valid_to_col.to_string();
         let pk = self.pk_col.to_string();
 
         vec![
@@ -60,14 +57,14 @@ impl Scd2TriggerDef {
                 "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
                  BEGIN\n  \
                    PERFORM pg_advisory_xact_lock(hashtextextended('{table}:' || NEW.{partition}, 0));\n  \
-                   SELECT COALESCE(MIN({valid_from}), 'infinity') INTO NEW.valid_to\n  \
+                   SELECT COALESCE(MIN({valid_from}), 'infinity') INTO NEW.{valid_to}\n  \
                    FROM {table}\n  \
                    WHERE {partition} = NEW.{partition}\n    \
                      AND ({valid_from}, {pk}) > (NEW.{valid_from}, NEW.{pk});\n  \
-                   UPDATE {table} SET valid_to = NEW.{valid_from}\n  \
+                   UPDATE {table} SET {valid_to} = NEW.{valid_from}\n  \
                    WHERE {partition} = NEW.{partition}\n    \
                      AND ({valid_from}, {pk}) < (NEW.{valid_from}, NEW.{pk})\n    \
-                     AND valid_to > NEW.{valid_from};\n  \
+                     AND {valid_to} > NEW.{valid_from};\n  \
                    RETURN NEW;\n\
                  END;\n\
                  $$ LANGUAGE plpgsql",
@@ -225,6 +222,7 @@ mod tests {
             source_table: alias("foos"),
             partition_col: alias("foo_id"),
             valid_from_col: alias("defined_on"),
+            valid_to_col: alias("valid_to"),
             pk_col: alias("id"),
         }
     }

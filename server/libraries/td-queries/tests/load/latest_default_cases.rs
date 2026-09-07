@@ -20,7 +20,7 @@ use td_queries::Queries;
 async fn load_current_fetch_one(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let _row: TableDB = (&db).latest().fetch_one::<TableDB>(&h.table_id).await?;
+    let _row: TableDB = db.scd2().fetch_one::<TableDB>(&h.table_id).await?;
     record("latest::fetch_one", profile, t, 1, seeded);
     Ok(())
 }
@@ -29,10 +29,7 @@ async fn load_current_fetch_one(db: TdPool) -> Result<(), TdError> {
 async fn load_current_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = (&db)
-        .latest()
-        .fetch_optional::<TableDB>(&h.table_id)
-        .await?;
+    let row = db.scd2().fetch_optional::<TableDB>(&h.table_id).await?;
     record(
         "latest::fetch_optional",
         profile,
@@ -48,7 +45,7 @@ async fn load_current_fetch_optional(db: TdPool) -> Result<(), TdError> {
 async fn load_current_fetch_all(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let rows = (&db).latest().fetch_all::<TableDB>(()).await?;
+    let rows = db.scd2().fetch_all::<TableDB>(()).await?;
     record("latest::fetch_all", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -59,11 +56,7 @@ async fn load_current_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let fvids = vec![h.producer_function_version_id.clone()];
     let t = Instant::now();
-    let rows = (&db)
-        .latest()
-        .chunked()
-        .fetch_all::<TableDB>(&fvids, ())
-        .await?;
+    let rows = db.scd2().chunked().fetch_all::<TableDB>(&fvids, ()).await?;
     record("latest::fetch_all_chunked", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -73,7 +66,7 @@ async fn load_current_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
 async fn load_current_fetch_first(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = (&db).latest().fetch_first::<TableDB>(()).await?;
+    let row = db.scd2().fetch_first::<TableDB>(()).await?;
     record(
         "latest::fetch_first",
         profile,
@@ -89,7 +82,7 @@ async fn load_current_fetch_first(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_first(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = (&db).fetch_first::<ActiveCollectionDB>(()).await?;
+    let row = db.fetch_first::<ActiveCollectionDB>(()).await?;
     record(
         "default::fetch_first",
         profile,
@@ -105,9 +98,7 @@ async fn load_default_fetch_first(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_one(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let _row: ActiveCollectionDB = (&db)
-        .fetch_one::<ActiveCollectionDB>(&h.collection_id)
-        .await?;
+    let _row: ActiveCollectionDB = db.fetch_one::<ActiveCollectionDB>(&h.collection_id).await?;
     record("default::fetch_one", profile, t, 1, seeded);
     Ok(())
 }
@@ -116,7 +107,7 @@ async fn load_default_fetch_one(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = (&db)
+    let row = db
         .fetch_optional::<ActiveCollectionDB>(&h.collection_id)
         .await?;
     record(
@@ -134,7 +125,7 @@ async fn load_default_fetch_optional(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_all(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let rows = (&db).fetch_all::<ActiveCollectionDB>(()).await?;
+    let rows = db.fetch_all::<ActiveCollectionDB>(()).await?;
     record("default::fetch_all", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -232,7 +223,7 @@ async fn load_default_claim_all_in(db: TdPool) -> Result<(), TdError> {
 async fn load_sessions_purge(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    (&db).sessions().purge().await?;
+    db.sessions().purge().await?;
     record("sessions::purge", profile, t, 0, seeded);
     Ok(())
 }

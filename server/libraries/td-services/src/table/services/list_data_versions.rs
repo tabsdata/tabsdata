@@ -40,13 +40,13 @@ async fn table_list_data_versions(
     let triggered_on = TriggeredOn::try_from(&at)?;
     let table_id_name = table_param.table;
     let table: TableDBWithNames = conn
-        .latest()
+        .scd2()
         .fetch_one(and!(&collection_id_name, &table_id_name))
         .await?;
 
     let query_params = ListQueryParams::<TableDataVersion>::try_from(&list_params)?;
     let rows = conn
-        .history()
+        .timeline()
         .list_until(&triggered_on, &table.base.base.table_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)

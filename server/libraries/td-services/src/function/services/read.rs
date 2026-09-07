@@ -44,6 +44,7 @@ async fn read_function(
     let at = ctx.time;
 
     let function: FunctionDBWithNames = conn
+        .scd2()
         .as_of(&at)
         .fetch_one(and!(&collection, &function_id_name))
         .await?;
@@ -53,6 +54,7 @@ async fn read_function(
     let read: Function = Function::from_dao(function)?;
 
     let tables: Vec<TableDBWithNames> = conn
+        .scd2()
         .as_of(&at)
         .fetch_all(and!(&function_id, TableDBWithNames::user()))
         .await?;
@@ -62,6 +64,7 @@ async fn read_function(
         .collect::<Result<Vec<_>, _>>()?;
 
     let triggers: Vec<TriggerDBWithNames> = conn
+        .scd2()
         .as_of(&at)
         .fetch_all(and!(&function_id, TriggerDBWithNames::active()))
         .await?;
@@ -70,6 +73,7 @@ async fn read_function(
         .map(|x| x.base.base.trigger_by_table_id)
         .collect();
     let trigger_tables: Vec<TableDBWithNames> = conn
+        .scd2()
         .as_of(&at)
         .chunked()
         .fetch_all(&trigger_table_ids, ())
@@ -80,12 +84,14 @@ async fn read_function(
         .collect::<Result<Vec<_>, _>>()?;
 
     let dependencies: Vec<DependencyDBWithNames> = conn
+        .scd2()
         .as_of(&at)
         .fetch_all(and!(&function_id, DependencyDBWithNames::user()))
         .await?;
     let dependency_table_ids: Vec<TableId> =
         dependencies.iter().map(|x| x.base.base.table_id).collect();
     let dependency_tables: Vec<TableDBWithNames> = conn
+        .scd2()
         .as_of(&at)
         .chunked()
         .fetch_all(&dependency_table_ids, ())

@@ -36,7 +36,7 @@ async fn function_run_read(
 
     let function_id_name = function_param.function;
     let function: FunctionDBWithNames = conn
-        .latest()
+        .scd2()
         .fetch_one(and!(
             &collection_id_name,
             &function_id_name,

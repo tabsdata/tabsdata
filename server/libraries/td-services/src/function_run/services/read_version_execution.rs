@@ -34,7 +34,7 @@ async fn function_version_execution_read(
     let conn = trx.get(authz.none());
 
     // Replays mint several attempts under one LFR; the current one is canonical.
-    let function: FunctionDB = conn.fetch_one(&function_version_id).await?;
+    let function: FunctionDB = conn.timeline().fetch_one(&function_version_id).await?;
     let run = resolve_current_function_run(conn, &execution_id, &function.base.function_id).await?;
     PhysicalFunctionRun::from_dao(run)
 }

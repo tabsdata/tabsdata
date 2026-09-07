@@ -24,9 +24,7 @@ const SKIP_DIRS: &[&str] = &["test_utils", "fixtures"];
 /// Queries with no load case, each with a reason (`Type::*` matches every
 /// method on the type; stale entries fail the audit):
 /// - `initialize_logical_ids`: one-shot startup bootstrap, not request-path.
-/// - `RecursiveQuery::fetch_all`: recursion over an unversioned relation; no
-///   DAO is both `recursive` and unversioned, so nothing can construct it.
-const EXEMPT: &[&str] = &["initialize_logical_ids", "RecursiveQuery::fetch_all"];
+const EXEMPT: &[&str] = &["initialize_logical_ids"];
 
 fn is_exempt(key: &str) -> bool {
     EXEMPT.iter().any(|e| match e.strip_suffix("::*") {

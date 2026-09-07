@@ -17,6 +17,7 @@ use crate::default_write_cases::build_lfri;
 use crate::harness::{analyze, timed, timed_once};
 use crate::profile::{ChainKnobs, MetricsKnobs};
 use crate::raw::delete_by_pk;
+use crate::scd2_cases::build_attempt;
 use std::collections::BTreeSet;
 use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
@@ -26,7 +27,9 @@ use td_objects::dxo::crudl::ListParams;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::function::{Function, FunctionDB};
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputInsertDB};
+use td_objects::dxo::logical::{
+    LogicalFunctionRunDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunStatusUpdateDB,
+};
 use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest, NodeKind};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
@@ -34,8 +37,8 @@ use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
 use td_objects::dxo::table::{Table, TableDB};
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
-    AtTime, DependencyPos, Depth, InputIdx, LogicalFunctionRunInputId, PhysicalFunctionRunStatus,
-    TriggeredOn, VersionPos,
+    AtTime, DependencyPos, Depth, InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
+    PhysicalFunctionRunStatus, TriggeredOn, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::visible_projects::VisibleProjects;
@@ -183,19 +186,20 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "attempts::current_run",
-        (db).latest()
+        (db).scd2()
             .fetch_optional::<PhysicalFunctionRunDB>(&h.producer_lfrs[0])
             .await?
     );
     let _ = timed!(
         out,
         "attempts::current_version",
-        (db).latest().fetch_optional::<Ptdv>(&h.ltdv_ids[0]).await?
+        (db).scd2().fetch_optional::<Ptdv>(&h.ltdv_ids[0]).await?
     );
     let _ = timed!(
         out,
         "attempts::version_at",
-        (db).as_of(&triggered_at)
+        (db).scd2()
+            .as_of(&triggered_at)
             .fetch_optional::<Ptdv>(&h.ltdv_ids[0])
             .await?
     );
@@ -210,21 +214,24 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "as_of::fetch_one_by_partition",
-        (db).as_of(&triggered_at)
+        (db).scd2()
+            .as_of(&triggered_at)
             .fetch_one::<Ptdv>(&h.ltdv_ids[0])
             .await?
     );
     let _ = timed!(
         out,
         "as_of::fetch_optional_by_partition",
-        (db).as_of(&triggered_at)
+        (db).scd2()
+            .as_of(&triggered_at)
             .fetch_optional::<Ptdv>(&h.ltdv_ids[0])
             .await?
     );
     let _ = timed!(
         out,
         "as_of::fetch_all_chunked_by_partition",
-        (db).as_of(&triggered_at)
+        (db).scd2()
+            .as_of(&triggered_at)
             .chunked()
             .fetch_all::<Ptdv>(&h.ltdv_ids, ())
             .await?
@@ -232,26 +239,32 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "as_of::fetch_one",
-        (db).as_of(&triggered_at)
+        (db).scd2()
+            .as_of(&triggered_at)
             .fetch_one::<Ptdv>(&h.ltdv_ids[0])
             .await?
     );
     let _ = timed!(
         out,
         "as_of::fetch_optional",
-        (db).as_of(&triggered_at)
+        (db).scd2()
+            .as_of(&triggered_at)
             .fetch_optional::<Ptdv>(&h.ltdv_ids[0])
             .await?
     );
     let _ = timed!(
         out,
         "as_of::fetch_all",
-        (db).as_of(&triggered_at).fetch_all::<Ptdv>(()).await?
+        (db).scd2()
+            .as_of(&triggered_at)
+            .fetch_all::<Ptdv>(())
+            .await?
     );
     let _ = timed!(
         out,
         "as_of::fetch_all_chunked",
-        (db).as_of(&triggered_at)
+        (db).scd2()
+            .as_of(&triggered_at)
             .chunked()
             .fetch_all::<Ptdv>(&h.ltdv_ids, ())
             .await?
@@ -261,22 +274,22 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "latest::fetch_one",
-        (db).latest().fetch_one::<TableDB>(&h.table_id).await?
+        (db).scd2().fetch_one::<TableDB>(&h.table_id).await?
     );
     let _ = timed!(
         out,
         "latest::fetch_optional",
-        (db).latest().fetch_optional::<TableDB>(&h.table_id).await?
+        (db).scd2().fetch_optional::<TableDB>(&h.table_id).await?
     );
     let _ = timed!(
         out,
         "latest::fetch_all",
-        (db).latest().fetch_all::<TableDB>(()).await?
+        (db).scd2().fetch_all::<TableDB>(()).await?
     );
     let _ = timed!(
         out,
         "latest::fetch_all_chunked",
-        (db).latest()
+        (db).scd2()
             .chunked()
             .fetch_all::<TableDB>(&fvids, ())
             .await?
@@ -312,7 +325,7 @@ async fn time_chain_queries(
             out,
             "default::fetch_optional_for_update",
             conn.for_update()
-                .fetch_optional::<PhysicalFunctionRunDB>(&h.fr_ids[0])
+                .fetch_optional::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
                 .await?
         );
     }
@@ -322,7 +335,7 @@ async fn time_chain_queries(
             out,
             "default::fetch_one_for_update",
             conn.for_update()
-                .fetch_one::<PhysicalFunctionRunDB>(&h.fr_ids[0])
+                .fetch_one::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
                 .await?
         );
     }
@@ -404,8 +417,35 @@ async fn time_chain_queries(
     };
     let _ = timed_once!(
         out,
+        "scd2::update",
+        (db).scd2().update(&update, &h.fr_ids[0]).await?
+    );
+    let lfr_update = LogicalFunctionRunStatusUpdateDB {
+        status: LogicalFunctionRunStatus::Done,
+    };
+    let _ = timed_once!(
+        out,
         "default::update",
-        (db).update(&update, &h.fr_ids[0]).await?
+        (db).update(&lfr_update, &h.producer_lfrs[0]).await?
+    );
+    let _ = timed_once!(
+        out,
+        "chunked::update",
+        (db).chunked().update(&lfr_update, &h.producer_lfrs).await?
+    );
+    let _ = timed!(
+        out,
+        "timeline::fetch_one",
+        (db).timeline()
+            .fetch_one::<FunctionDB>(&h.producer_function_version_id)
+            .await?
+    );
+    let _ = timed!(
+        out,
+        "timeline::fetch_optional",
+        (db).timeline()
+            .fetch_optional::<FunctionDB>(&h.producer_function_version_id)
+            .await?
     );
     let _ = timed!(
         out,
@@ -415,8 +455,7 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "default::fetch_latest_before",
-        (db).fetch_latest_before::<ActiveCollectionDB>((), 0)
-            .await?
+        (db).fetch_nth_last::<ActiveCollectionDB>((), 0).await?
     );
 
     let depth = Depth::try_from(16)?;
@@ -424,18 +463,19 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "recursive::current",
-        (db).latest()
+        (db).scd2()
             .recursive::<DependencyDBWithNames, FunctionDB>(opts)
-            .direct_reference(&h.consumer_function_id)
+            .start_at(&h.consumer_function_id)
             .fetch_all()
             .await?
     );
     let _ = timed!(
         out,
         "recursive::find_at",
-        (db).as_of(&at)
+        (db).scd2()
+            .as_of(&at)
             .recursive::<DependencyDBWithNames, FunctionDB>(opts)
-            .direct_reference(&h.consumer_function_id)
+            .start_at(&h.consumer_function_id)
             .fetch_all()
             .await?
     );
@@ -447,12 +487,15 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "latest::list",
-        (db).latest().list::<Table>((), &table_params).await?
+        (db).scd2().list::<Table>((), &table_params).await?
     );
     let _ = timed!(
         out,
         "as_of::list",
-        (db).as_of(&now).list::<Function>((), &fn_params).await?
+        (db).scd2()
+            .as_of(&now)
+            .list::<Function>((), &fn_params)
+            .await?
     );
 
     let _ = timed!(
@@ -463,27 +506,27 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "latest::fetch_first",
-        (db).latest().fetch_first::<TableDB>(()).await?
+        (db).scd2().fetch_first::<TableDB>(()).await?
     );
     let _ = timed!(
         out,
         "history::fetch_all",
-        (db).history().fetch_all::<TableDB>(&h.table_id).await?
+        (db).timeline().fetch_all::<TableDB>(&h.table_id).await?
     );
     let _ = timed!(
         out,
         "history::fetch_first",
-        (db).history().fetch_first::<TableDB>(&h.table_id).await?
+        (db).timeline().fetch_first::<TableDB>(&h.table_id).await?
     );
     let _ = timed!(
         out,
         "history::fetch_last",
-        (db).history().fetch_last::<TableDB>(&h.table_id).await?
+        (db).timeline().fetch_last::<TableDB>(&h.table_id).await?
     );
     let _ = timed!(
         out,
         "history::fetch_all_chunked",
-        (db).history()
+        (db).timeline()
             .chunked()
             .fetch_all::<TableDB>(&fvids, ())
             .await?
@@ -491,12 +534,12 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "history::list",
-        (db).history().list::<Table>((), &table_params).await?
+        (db).timeline().list::<Table>((), &table_params).await?
     );
     let _ = timed!(
         out,
         "history::list_until",
-        (db).history()
+        (db).timeline()
             .list_until::<Table, _>(&now, (), &table_params)
             .await?
     );
@@ -519,8 +562,23 @@ async fn time_chain_queries(
         let update = done_update();
         timed_once!(
             out,
-            "chunked::update",
-            (db).chunked().update(&update, &h.fr_ids).await?
+            "scd2::update_chunked",
+            (db).scd2().chunked().update(&update, &h.fr_ids).await?
+        );
+        let attempt = build_attempt(db, h).await?;
+        timed_once!(
+            out,
+            "scd2::insert",
+            (&scoped).scd2().insert(&attempt).await?
+        );
+        let mut attempts = Vec::with_capacity(8);
+        for _ in 0..8 {
+            attempts.push(build_attempt(db, h).await?);
+        }
+        timed_once!(
+            out,
+            "scd2::insert_chunked",
+            (&scoped).scd2().chunked().insert(&attempts).await?
         );
     }
     // Closes go last: they end the seeded table's open interval, which every
@@ -529,14 +587,15 @@ async fn time_chain_queries(
     timed_once!(
         out,
         "chunked::close",
-        (db).chunked()
+        (db).scd2()
+            .chunked()
             .close::<TableDB>(&table_ids, (), &now)
             .await?
     );
     timed_once!(
         out,
         "default::close",
-        Queries::close::<TableDB>(db, &h.table_id, &now).await?
+        db.scd2().close::<TableDB>(&h.table_id, &now).await?
     );
 
     Ok(out)

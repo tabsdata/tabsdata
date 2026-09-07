@@ -52,15 +52,16 @@ async fn update_function(
     // Before-update ids: the function id does not change, the function
     // version id does.
     let current: FunctionDBWithNames = conn
+        .scd2()
         .as_of(&at)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
     assert_function_name_not_exists(conn, &collection.id, &current, &update).await?;
 
-    let previous: FunctionDB = conn.fetch_one(&current.base.base.id).await?;
+    let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
     let function = update.to_dao(&previous, &ctx)?;
     ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
-    conn.insert(&function).await?;
+    conn.scd2().insert(&function).await?;
 
     // Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
     let bundle_registered = BundleStatusUpdateDB::registered();
@@ -82,7 +83,7 @@ async fn update_function(
     )
     .await?;
 
-    let with_names: FunctionDBWithNames = conn.fetch_one(&function.id).await?;
+    let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
     let read = Function::from_dao(with_names)?;
     gated_trx.commit().await?;
 
@@ -102,7 +103,7 @@ pub async fn assert_function_name_not_exists<S: SeesProjectRows>(
     if let Some(name) = &function_update.name
         && *name != function.base.base.name
     {
-        conn.latest()
+        conn.scd2()
             .assert_not_exists::<FunctionDBWithNames>(and!(collection_id, name))
             .await?;
     }
@@ -523,7 +524,7 @@ mod tests {
         pred: impl Fn(&TableName) -> bool,
     ) -> Result<TableId, TdError> {
         let active: Vec<TableDB> = db
-            .history()
+            .timeline()
             .fetch_all::<TableDB>(&TableStatus::Active)
             .await?;
         let table = active
@@ -685,7 +686,7 @@ mod tests {
 
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
         let active: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&FunctionStatus::Active)
             .await?;
         let function = active
@@ -1656,7 +1657,7 @@ mod tests {
         let _response = response?;
 
         let tables = db
-            .history()
+            .timeline()
             .fetch_all::<TableDB>(and!(
                 TableName::try_from("joaquin_table")?,
                 TableStatus::Frozen
@@ -1721,7 +1722,7 @@ mod tests {
         let _response = response?;
 
         let tables: Vec<TableDB> = db
-            .history()
+            .timeline()
             .fetch_all::<TableDB>(&(&TableName::try_from("joaquin_table")?))
             .await?;
         assert_eq!(tables.len(), 3);
@@ -2056,7 +2057,7 @@ mod tests {
         assert!(res.is_ok());
 
         let tables: Vec<TableDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<TableDB>(&(res.unwrap().function_id))
             .await?;
         let map: HashMap<String, TableDB> = tables
@@ -2170,29 +2171,30 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = db
+            .scd2()
             .as_of(&AtTime::now())
             .recursive::<TriggerDB, FunctionDB>(RecursionOptions::new(Some(Depth::ZERO), None))
-            .direct_reference(&response.function_id)
-            .filter(TriggerDB::active())
-            .filter_references(FunctionDB::executable())
+            .start_at(&response.function_id)
+            .where_edges(TriggerDB::active())
+            .where_nodes(FunctionDB::executable())
             .fetch_all()
             .await
             .unwrap();
         assert_eq!(recursive_downstream_trigger.len(), 1);
         let triggered_function_id = &recursive_downstream_trigger[0].base.function_id;
         let triggered_function: FunctionDBWithNames = db
-            .latest()
+            .scd2()
             .fetch_one::<FunctionDBWithNames>(&(triggered_function_id))
             .await
             .unwrap();
         assert_eq!(triggered_function.base.base.name, dependant.name);
 
         let downstream_dependencies: Vec<DependencyDB> =
-            db.latest().fetch_all(&triggered_function_id).await.unwrap();
+            db.scd2().fetch_all(&triggered_function_id).await.unwrap();
         assert_eq!(downstream_dependencies.len(), 1);
         let dependency_function_id = &recursive_downstream_trigger[0].base.function_id;
         let dependency_function: FunctionDBWithNames = db
-            .latest()
+            .scd2()
             .fetch_one::<FunctionDBWithNames>(&dependency_function_id)
             .await
             .unwrap();
@@ -2297,18 +2299,19 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = db
+            .scd2()
             .as_of(&AtTime::now())
             .recursive::<TriggerDB, FunctionDB>(RecursionOptions::new(Some(Depth::ZERO), None))
-            .direct_reference(&response.function_id)
-            .filter(TriggerDB::active())
-            .filter_references(FunctionDB::executable())
+            .start_at(&response.function_id)
+            .where_edges(TriggerDB::active())
+            .where_nodes(FunctionDB::executable())
             .fetch_all()
             .await
             .unwrap();
         assert!(recursive_downstream_trigger.is_empty());
 
         let dependency_function: Vec<FunctionDBWithNames> = db
-            .latest()
+            .scd2()
             .fetch_all::<FunctionDBWithNames>(&(&response.function_id))
             .await
             .unwrap();

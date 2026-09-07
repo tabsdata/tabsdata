@@ -31,7 +31,7 @@ pub async fn logical_versions_by_table<S: SeesProjectRows>(
     logical_function_run_id: &LogicalFunctionRunId,
 ) -> Result<HashMap<TableId, LogicalTableDataVersionId>, TdError> {
     let ltdvs: Vec<LogicalTableDataVersionDB> = conn
-        .history()
+        .timeline()
         .fetch_all::<LogicalTableDataVersionDB>(&Some(logical_function_run_id.clone()))
         .await?;
     Ok(ltdvs
@@ -107,7 +107,9 @@ pub async fn mint_function_run(
 ) -> Result<PhysicalFunctionRunInsertDB, TdError> {
     let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
     let fr = build_function_run(lfr, runnable, at, &base_path)?;
-    conn.insert::<PhysicalFunctionRunInsertDB>(&fr).await?;
+    conn.scd2()
+        .insert::<PhysicalFunctionRunInsertDB>(&fr)
+        .await?;
     Ok(fr)
 }
 
@@ -179,6 +181,7 @@ pub async fn mint_output_table_data_versions(
 ) -> Result<Vec<PhysicalTableDataVersionInsertDB>, TdError> {
     let planned_at = AtTime::try_from(&lfr.base.triggered_on)?;
     let tables: Vec<TableDB> = conn
+        .scd2()
         .as_of(&planned_at)
         .fetch_all::<TableDB>(&lfr.base.function_id)
         .await?;
@@ -193,7 +196,7 @@ pub async fn mint_output_table_data_versions(
         &logical_by_table,
     )?;
     if !tdvs.is_empty() {
-        conn.chunked().insert(&tdvs).await?;
+        conn.scd2().chunked().insert(&tdvs).await?;
     }
     Ok(tdvs)
 }
@@ -302,9 +305,9 @@ mod tests {
             status: TableStatus::Active,
             table_type: TableType::default(),
         };
-        db.scoped(p.id).insert(&private).await?;
+        db.scoped(p.id).scd2().insert(&private).await?;
 
-        let tables: Vec<TableDB> = db.history().fetch_all::<TableDB>(&func.base.id).await?;
+        let tables: Vec<TableDB> = db.timeline().fetch_all::<TableDB>(&func.base.id).await?;
         let exec = db.scoped(p.id).seed().execution(&func).await?;
         let trx = db
             .scoped(p.id)

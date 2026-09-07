@@ -505,8 +505,10 @@ mod tests {
                     .execution_recover(request)
                     .await?;
 
-                let pfr: PhysicalFunctionRunDB =
-                    db.fetch_one::<PhysicalFunctionRunDB>(&pfr_id).await?;
+                let pfr: PhysicalFunctionRunDB = db
+                    .timeline()
+                    .fetch_one::<PhysicalFunctionRunDB>(&pfr_id)
+                    .await?;
                 assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Failed);
                 assert!(pfr.base.ended_on.is_some());
                 assert!(pfr.base.ended_on_hour_ms.is_some());

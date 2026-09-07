@@ -254,6 +254,7 @@ impl Entity for Defs {
                 source_table: PhysicalFunctionRuns::Table.into_iden(),
                 partition_col: PhysicalFunctionRuns::LogicalFunctionRunId.into_iden(),
                 valid_from_col: PhysicalFunctionRuns::TriggeredOn.into_iden(),
+                valid_to_col: PhysicalFunctionRuns::ValidTo.into_iden(),
                 pk_col: PhysicalFunctionRuns::Id.into_iden(),
             }
             .derived(),

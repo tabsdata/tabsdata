@@ -33,7 +33,7 @@ pub async fn resolve_current_function_run<S: SeesProjectRows>(
 ) -> Result<PhysicalFunctionRunDBWithNames, TdError> {
     let lfr: LogicalFunctionRunDB = conn.fetch_one(and!(execution_id, function_id)).await?;
     let current: PhysicalFunctionRunDB = conn
-        .latest()
+        .scd2()
         .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
         .await?
         .ok_or_else(|| {
@@ -43,6 +43,6 @@ pub async fn resolve_current_function_run<S: SeesProjectRows>(
                 lfr.base.id
             )
         })?;
-    let fr: PhysicalFunctionRunDBWithNames = conn.fetch_one(&current.base.id).await?;
+    let fr: PhysicalFunctionRunDBWithNames = conn.timeline().fetch_one(&current.base.id).await?;
     Ok(fr)
 }

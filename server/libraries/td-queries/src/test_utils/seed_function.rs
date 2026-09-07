@@ -56,7 +56,7 @@ pub(crate) async fn seed_function(
         enabled: function_create.enabled.unwrap_or_default(),
     };
 
-    executor.reuse().insert(&function_db).await?;
+    executor.reuse().scd2().insert(&function_db).await?;
 
     if let Some(tables) = &function_create.tables {
         for (pos, table_name) in tables.iter().enumerate() {
@@ -77,7 +77,7 @@ pub(crate) async fn seed_function(
                 table_type: TableType::default(),
             };
 
-            executor.reuse().insert(&table).await?;
+            executor.reuse().scd2().insert(&table).await?;
         }
     }
 
@@ -96,7 +96,7 @@ pub(crate) async fn seed_function(
 
             let table_db: TableDBWithNames = executor
                 .reuse()
-                .latest()
+                .scd2()
                 .fetch_first::<_>(and!(table_collection, table_name))
                 .await?
                 .expect("seeded dependency table must exist");
@@ -116,7 +116,7 @@ pub(crate) async fn seed_function(
                 system: System::FALSE,
             };
 
-            executor.reuse().insert(&dependency).await?;
+            executor.reuse().scd2().insert(&dependency).await?;
         }
     }
 
@@ -135,7 +135,7 @@ pub(crate) async fn seed_function(
 
             let table_db: TableDBWithNames = executor
                 .reuse()
-                .latest()
+                .scd2()
                 .fetch_first::<_>(and!(table_collection, table_name))
                 .await?
                 .expect("seeded trigger table must exist");
@@ -154,7 +154,7 @@ pub(crate) async fn seed_function(
                 system: System::FALSE,
             };
 
-            executor.reuse().insert(&trigger).await?;
+            executor.reuse().scd2().insert(&trigger).await?;
         }
     }
 
@@ -182,7 +182,11 @@ pub(crate) async fn seed_function(
         }
     }
 
-    Ok(executor.reuse().fetch_one(&function_db.id).await?)
+    Ok(executor
+        .reuse()
+        .timeline()
+        .fetch_one(&function_db.id)
+        .await?)
 }
 
 #[cfg(test)]
@@ -192,7 +196,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::types::basic::ReuseFrozen;
-    use td_objects::types::basic::{AtTime, BundleId, CollectionName, Decorator, UserId};
+    use td_objects::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
@@ -238,7 +242,7 @@ mod tests {
             .await
             .unwrap();
         let found = db
-            .as_of(&AtTime::now())
+            .timeline()
             .fetch_one::<FunctionDB>(&function.base.id)
             .await
             .unwrap();

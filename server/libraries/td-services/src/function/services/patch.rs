@@ -39,16 +39,16 @@ async fn create_function_patch(
     let function_id_name = function_param.function;
     let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
 
-    let parent: FunctionDB = conn.fetch_one(&body.patch_of).await?;
+    let parent: FunctionDB = conn.timeline().fetch_one(&body.patch_of).await?;
     assert_patch_parent_matches_url(conn, &parent, &collection.id, &function_id_name).await?;
     let patch: FunctionPatchInsertDB = body.to_dao(parent, &ctx)?;
-    conn.insert(&patch).await?;
+    conn.scd2().insert(&patch).await?;
 
     let bundle_registered = BundleStatusUpdateDB::registered();
     conn.update::<BundleStatusUpdateDB>(&bundle_registered, patch.bundle_id)
         .await?;
 
-    let stored: FunctionPatchDB = conn.fetch_one(&patch.id).await?;
+    let stored: FunctionPatchDB = conn.timeline().fetch_one(&patch.id).await?;
     let record: FunctionPatchRecord = FunctionPatchRecord::from_dao(stored)?;
     Ok(record)
 }
@@ -88,7 +88,7 @@ pub async fn assert_patch_parent_matches_url<S: SeesProjectRows>(
     // Deletion closes the function's open interval, so aliveness is whether a
     // current row exists, not the parent row's status.
     let current = conn
-        .latest()
+        .scd2()
         .fetch_optional::<FunctionDB>(&parent.base.function_id)
         .await?;
     if current.is_none() {
@@ -214,13 +214,16 @@ mod tests {
         assert_eq!(response.function_id, parent.base.function_id);
         assert_eq!(response.collection_id, parent.base.collection_id);
 
-        let stored: FunctionPatchDB = db.fetch_one::<FunctionPatchDB>(&response.id).await?;
+        let stored: FunctionPatchDB = db
+            .timeline()
+            .fetch_one::<FunctionPatchDB>(&response.id)
+            .await?;
         assert_eq!(*stored.base.parent_function_version_id, parent.base.id);
         assert_eq!(stored.base.function_id, parent.base.function_id);
         assert_ne!(stored.base.snippet, parent.base.snippet);
 
         let functions: Vec<FunctionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionDB>(&parent.base.function_id)
             .await?;
         assert_eq!(
@@ -316,6 +319,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let v0 = seed_function(&db, p.id, "c0", "f0").await;
         db.scoped(p.id)
+            .scd2()
             .close::<FunctionDB>(&v0.base.function_id, &AtTime::now())
             .await?;
 
@@ -408,7 +412,7 @@ mod tests {
                 .collect()
         };
 
-        let before = current_for_parent(db.latest().fetch_all::<FunctionPatchDB>(&()).await?);
+        let before = current_for_parent(db.scd2().fetch_all::<FunctionPatchDB>(&()).await?);
         assert!(
             before.is_empty(),
             "no current row before any patch is inserted"
@@ -429,7 +433,7 @@ mod tests {
             ))
             .await?
             .data;
-        let after_first = current_for_parent(db.latest().fetch_all::<FunctionPatchDB>(&()).await?);
+        let after_first = current_for_parent(db.scd2().fetch_all::<FunctionPatchDB>(&()).await?);
         assert_eq!(after_first.len(), 1);
         assert_eq!(after_first[0].base.id, first.id);
 
@@ -449,7 +453,7 @@ mod tests {
             ))
             .await?
             .data;
-        let after_second = current_for_parent(db.latest().fetch_all::<FunctionPatchDB>(&()).await?);
+        let after_second = current_for_parent(db.scd2().fetch_all::<FunctionPatchDB>(&()).await?);
         assert_eq!(after_second.len(), 1, "one current row per parent");
         assert_eq!(after_second[0].base.id, second.id);
         assert!(
@@ -458,7 +462,7 @@ mod tests {
         );
 
         let all: Vec<FunctionPatchDB> = db
-            .history()
+            .timeline()
             .fetch_all::<FunctionPatchDB>(&parent.base.function_id)
             .await?;
         assert_eq!(all.len(), 2, "both patches retained in base table");

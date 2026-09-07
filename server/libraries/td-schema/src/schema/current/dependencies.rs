@@ -160,6 +160,7 @@ impl Entity for Defs {
                 source_table: Dependencies::Table.into_iden(),
                 partition_col: Dependencies::DependencyId.into_iden(),
                 valid_from_col: Dependencies::DefinedOn.into_iden(),
+                valid_to_col: Dependencies::ValidTo.into_iden(),
                 pk_col: Dependencies::Id.into_iden(),
             }
             .derived(),

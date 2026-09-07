@@ -34,7 +34,7 @@ async fn table_list_by_collection(
     let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
     let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
     let rows = conn
-        .latest()
+        .scd2()
         .list(
             and!(&collection.id, TableDBWithNames::user()),
             &query_params,

@@ -54,7 +54,10 @@ async fn execution_read(
     let conn = trx.get(grant);
     let at = AtTime::try_from(&execution.base.triggered_on)?;
 
-    let function: FunctionDBWithNames = conn.fetch_one(&execution.base.function_version_id).await?;
+    let function: FunctionDBWithNames = conn
+        .timeline()
+        .fetch_one(&execution.base.function_version_id)
+        .await?;
     let function_id = function.base.base.function_id;
     let entrypoint = FunctionOrTable::from(&function_id);
     let recursion_options = with_existing_recursion_options(&execution)?;

@@ -109,6 +109,7 @@ pub(crate) fn is_direction_enabled(max_depth: Option<Depth>) -> bool {
     !matches!(max_depth, Some(d) if *d == 0)
 }
 
+#[cfg(test)]
 pub(crate) fn versions_cte_basic<T: Dao>(cte_name: Cte) -> CommonTableExpression {
     let query = Query::select()
         .expr(Expr::col((Rv, Asterisk)))

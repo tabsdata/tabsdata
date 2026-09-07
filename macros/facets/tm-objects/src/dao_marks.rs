@@ -10,19 +10,89 @@ use syn::{Field, Fields, Token, Type, parenthesized};
 const MARKS: &[&str] = &[
     "pk",
     "partition_by",
-    "valid_from",
-    "valid_to",
-    "version_by",
+    "scd2",
+    "timeline",
+    "recursive",
     "order_by",
-    "recurse_up",
-    "recurse_down",
     "immutable",
     "flatten",
+];
+
+/// Grain-owned marks nest under their grain's word; `scd2(valid_from)` is
+/// flattened to the role `valid_from`, the grain kept for the cross-check.
+const GRAINS: &[(&str, &[(&str, &str)])] = &[
+    (
+        "scd2",
+        &[("valid_from", "valid_from"), ("valid_to", "valid_to")],
+    ),
+    ("timeline", &[("version_by", "version_by")]),
+    (
+        "recursive",
+        &[("up", "recurse_up"), ("down", "recurse_down")],
+    ),
 ];
 
 pub struct Mark {
     pub name: Ident,
     pub arg: Option<Ident>,
+    pub grain: Option<Ident>,
+}
+
+fn grain_roles(grain: &str) -> Option<&'static [(&'static str, &'static str)]> {
+    GRAINS.iter().find(|(g, _)| *g == grain).map(|(_, r)| *r)
+}
+
+fn nested_form_of(role: &str) -> Vec<String> {
+    GRAINS
+        .iter()
+        .flat_map(|(g, roles)| {
+            roles
+                .iter()
+                .filter(move |(_, r)| *r == role)
+                .map(move |(a, _)| format!("#[dao({g}({a}))]"))
+        })
+        .collect()
+}
+
+impl Mark {
+    fn normalise(self) -> syn::Result<Self> {
+        let name = self.name.to_string();
+        let Some(roles) = grain_roles(&name) else {
+            let bare = nested_form_of(&name);
+            if !bare.is_empty() {
+                return Err(syn::Error::new_spanned(
+                    &self.name,
+                    format!("`{name}` nests under its grain: {}", bare.join(" or ")),
+                ));
+            }
+            return Ok(self);
+        };
+        let Some(arg) = self.arg else {
+            return Err(syn::Error::new_spanned(
+                &self.name,
+                format!("`{name}` takes one of {}", expected(roles)),
+            ));
+        };
+        let Some((_, role)) = roles.iter().find(|(a, _)| arg == a) else {
+            return Err(syn::Error::new_spanned(
+                &arg,
+                format!("`{name}` takes one of {}, not `{arg}`", expected(roles)),
+            ));
+        };
+        Ok(Mark {
+            name: Ident::new(role, arg.span()),
+            arg: None,
+            grain: Some(self.name),
+        })
+    }
+}
+
+fn expected(roles: &[(&str, &str)]) -> String {
+    roles
+        .iter()
+        .map(|(a, _)| format!("`{a}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl Parse for Mark {
@@ -35,7 +105,11 @@ impl Parse for Mark {
         } else {
             None
         };
-        Ok(Mark { name, arg })
+        Ok(Mark {
+            name,
+            arg,
+            grain: None,
+        })
     }
 }
 
@@ -49,35 +123,51 @@ impl<'a> FieldMarks<'a> {
         for field in fields {
             let mut marks = Vec::new();
             for attr in field.attrs.iter().filter(|a| a.path().is_ident("dao")) {
-                marks
-                    .extend(attr.parse_args_with(Punctuated::<Mark, Token![,]>::parse_terminated)?);
-            }
-            for mark in &marks {
-                let name = mark.name.to_string();
-                if name == "unique" || name == "key" {
-                    let ty = &field.ty;
-                    return Err(syn::Error::new_spanned(
-                        &mark.name,
-                        format!(
-                            "`{name}` is a struct-level argument, not a field mark: \
-                             #[dao(unique({}))]",
-                            quote::quote! { #ty }
-                        ),
-                    ));
-                }
-                if !MARKS.contains(&name.as_str()) {
-                    return Err(syn::Error::new_spanned(
-                        &mark.name,
-                        format!(
-                            "unknown field mark `{name}`; expected one of {}",
-                            MARKS.join(", ")
-                        ),
-                    ));
+                for mark in attr.parse_args_with(Punctuated::<Mark, Token![,]>::parse_terminated)? {
+                    let name = mark.name.to_string();
+                    if name == "unique" || name == "key" {
+                        let ty = &field.ty;
+                        return Err(syn::Error::new_spanned(
+                            &mark.name,
+                            format!(
+                                "`{name}` is a struct-level argument, not a field mark: \
+                                 #[dao(unique({}))]",
+                                quote::quote! { #ty }
+                            ),
+                        ));
+                    }
+                    let mark = mark.normalise()?;
+                    if !MARKS.contains(&name.as_str()) && mark.grain.is_none() {
+                        return Err(syn::Error::new_spanned(
+                            &mark.name,
+                            format!(
+                                "unknown field mark `{name}`; expected one of {}",
+                                MARKS.join(", ")
+                            ),
+                        ));
+                    }
+                    marks.push(mark);
                 }
             }
             entries.push((field, marks));
         }
         Ok(Self { entries })
+    }
+
+    pub fn check_grains(&self, declared: &[&str]) -> syn::Result<()> {
+        for (_, marks) in &self.entries {
+            for mark in marks {
+                if let Some(grain) = &mark.grain
+                    && !declared.iter().any(|d| grain == d)
+                {
+                    return Err(syn::Error::new_spanned(
+                        grain,
+                        format!("#[dao({grain}(..))] requires the struct to declare `{grain}`"),
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn has(&self, field: &Field, name: &str) -> bool {
@@ -94,17 +184,19 @@ impl<'a> FieldMarks<'a> {
             .map(|(f, _)| *f)
     }
 
-    pub fn any(&self, name: &str) -> bool {
-        self.fields_marked(name).next().is_some()
-    }
-
     pub fn marked_once(&self, name: &str) -> syn::Result<Option<&'a Field>> {
         let mut marked = self.fields_marked(name);
         let first = marked.next();
         if let Some(second) = marked.next() {
+            let nested = nested_form_of(name);
+            let spelled = if nested.is_empty() {
+                format!("#[dao({name})]")
+            } else {
+                nested.join(" / ")
+            };
             return Err(syn::Error::new_spanned(
                 second,
-                format!("at most one field may be marked #[dao({name})]"),
+                format!("at most one field may be marked {spelled}"),
             ));
         }
         Ok(first)

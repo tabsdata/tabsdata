@@ -34,9 +34,10 @@ impl FunctionState {
         function_id: &FunctionId,
         at: &AtTime,
     ) -> Result<Self, TdError> {
-        let tables: Vec<TableDB> = conn.as_of(at).fetch_all(function_id).await?;
-        let dependencies: Vec<DependencyDB> = conn.as_of(at).fetch_all(function_id).await?;
-        let triggers: Vec<TriggerDBWithNames> = conn.as_of(at).fetch_all(function_id).await?;
+        let tables: Vec<TableDB> = conn.scd2().as_of(at).fetch_all(function_id).await?;
+        let dependencies: Vec<DependencyDB> = conn.scd2().as_of(at).fetch_all(function_id).await?;
+        let triggers: Vec<TriggerDBWithNames> =
+            conn.scd2().as_of(at).fetch_all(function_id).await?;
         Ok(Self {
             tables,
             dependencies,

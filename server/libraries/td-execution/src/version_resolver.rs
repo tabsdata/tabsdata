@@ -82,14 +82,16 @@ impl<'a> VersionResolver<'a> {
         let resolved = match self.versions {
             Versions::None | Versions::Single(Version::Head(0)) => {
                 let v = conn
-                    .data_version(triggered_on, table_id)
+                    .timeline()
+                    .at(triggered_on, table_id)
                     .fetch_optional::<ActiveLogicalTableDataVersionDB>(self.versions)
                     .await?;
                 vec![v]
             }
             Versions::Single(Version::Head(_) | Version::Initial(_)) => {
                 let v = conn
-                    .data_version(triggered_on, table_id)
+                    .timeline()
+                    .at(triggered_on, table_id)
                     .fetch_optional::<ActiveLogicalTableDataVersionDB>(self.versions)
                     .await?;
                 vec![v]
@@ -115,6 +117,7 @@ impl<'a> VersionResolver<'a> {
         ltdv_id: &LogicalTableDataVersionId,
     ) -> Result<ActiveLogicalTableDataVersionDB, TdError> {
         let ltdv = conn
+            .timeline()
             .fetch_optional::<ActiveLogicalTableDataVersionDB>(ltdv_id)
             .await?
             .ok_or_else(|| {
@@ -131,7 +134,8 @@ impl<'a> VersionResolver<'a> {
         ltdv_id: &LogicalTableDataVersionId,
     ) -> Result<Version, TdError> {
         let rn = conn
-            .data_version(self.triggered_on, self.table_id)
+            .timeline()
+            .at(self.triggered_on, self.table_id)
             .fetch_relative_offset::<ActiveLogicalTableDataVersionDB>(&Version::Fixed(
                 ltdv_id.clone(),
             ))
@@ -172,7 +176,7 @@ impl<'a> VersionResolver<'a> {
                 })
                 .collect();
             let by_id: HashMap<_, _> = conn
-                .history()
+                .timeline()
                 .chunked()
                 .fetch_all::<ActiveLogicalTableDataVersionDB>(&ids, ())
                 .await?
@@ -212,7 +216,8 @@ impl<'a> VersionResolver<'a> {
 
             let resolved = if let Some((min, max)) = minmax {
                 let mut found: Vec<ActiveLogicalTableDataVersionDB> = conn
-                    .data_version(triggered_on, table_id)
+                    .timeline()
+                    .at(triggered_on, table_id)
                     .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(min, max))
                     .await?;
                 if reverse {
@@ -288,7 +293,8 @@ impl<'a> VersionResolver<'a> {
 
         let substituted = Versions::Range(relative_from.clone(), relative_to.clone());
         let mut found = conn
-            .data_version(triggered_on, table_id)
+            .timeline()
+            .at(triggered_on, table_id)
             .fetch_all::<ActiveLogicalTableDataVersionDB>(&substituted)
             .await?
             .into_iter()
@@ -337,7 +343,8 @@ impl<'a> VersionResolver<'a> {
 
         let last_logical = match last_lfr {
             Some(last) => {
-                conn.data_version(&last.base.triggered_on, table_id)
+                conn.timeline()
+                    .at(&last.base.triggered_on, table_id)
                     .fetch_optional::<ActiveLogicalTableDataVersionDB>(&Versions::None)
                     .await?
             }
@@ -357,7 +364,8 @@ impl<'a> VersionResolver<'a> {
                 if boundary_pos == 0 {
                     Vec::new()
                 } else {
-                    conn.data_version(triggered_on, table_id)
+                    conn.timeline()
+                        .at(triggered_on, table_id)
                         .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(
                             Version::Head(-((boundary_pos - 1) as isize)),
                             Version::Head(0),
@@ -369,7 +377,8 @@ impl<'a> VersionResolver<'a> {
                 }
             }
             None => conn
-                .data_version(triggered_on, table_id)
+                .timeline()
+                .at(triggered_on, table_id)
                 .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(
                     Version::Initial(0),
                     Version::Head(0),
@@ -463,7 +472,7 @@ mod tests {
 
         let table_name_typed = TableName::try_from(&table_name).unwrap();
         let table = db
-            .latest()
+            .scd2()
             .fetch_first::<TableDB>(and!(&collection.id, &table_name_typed))
             .await
             .unwrap()
@@ -812,7 +821,7 @@ mod tests {
             .await?;
         let table_b_typed = TableName::try_from(&table_b_name)?;
         let table_b = db
-            .latest()
+            .scd2()
             .fetch_first::<TableDB>(and!(&collection.id, &table_b_typed))
             .await?
             .expect("row must exist");
@@ -888,7 +897,7 @@ mod tests {
         // materialization exists for it; translating to one is the
         // caller's step.
         let current: Option<PhysicalTableDataVersionDB> = conn
-            .latest()
+            .scd2()
             .fetch_optional::<PhysicalTableDataVersionDB>(&ltdv.base.base.id)
             .await?;
         assert!(current.is_none(), "no materialization was seeded");

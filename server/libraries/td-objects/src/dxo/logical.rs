@@ -280,7 +280,7 @@ pub struct LogicalTableDataVersionInsertDB {
     // The *table version* (schema) an attempt produces lives on each
     // concrete TDV row — replays can attach a concrete TDV with a different
     // table_version_id under the same LTDV identity.
-    #[dao(order_by, version_by)]
+    #[dao(order_by, timeline(version_by))]
     pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
     // Equal by construction to the producing LFR's group_id (both copied

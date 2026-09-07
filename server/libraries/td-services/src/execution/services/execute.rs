@@ -43,6 +43,7 @@ async fn execute_function(
     let mut trx = db.begin_exclusive().await?;
     let conn = trx.get(grant);
     let function: FunctionDBWithNames = conn
+        .scd2()
         .as_of(&ctx.time)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
@@ -260,7 +261,7 @@ pub(crate) mod tests {
         };
         let producer = db.scoped(p).seed().function(&collection, &create).await?;
         let table: TableDB = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(&collection.id, &TableIdName::from_str(tables[0])?))
             .await?
             .base;
@@ -907,7 +908,7 @@ pub(crate) mod tests {
 
             // Concrete FRs/TDVs are minted at dispatch, not plan-build.
             let function: FunctionDBWithNames = db
-                .latest()
+                .scd2()
                 .fetch_one::<FunctionDBWithNames>(and!(
                     &collection_0.id,
                     &FunctionIdName::Name(FUNCTION_NAMES[0].clone())
@@ -922,7 +923,7 @@ pub(crate) mod tests {
             assert_eq!(lfrs[0].base.status, LogicalFunctionRunStatus::Scheduled);
 
             let function: FunctionDBWithNames = db
-                .latest()
+                .scd2()
                 .fetch_one::<FunctionDBWithNames>(and!(
                     &collection_2.id,
                     &FunctionIdName::Name(FUNCTION_NAMES[2].clone())
@@ -936,7 +937,7 @@ pub(crate) mod tests {
             }
 
             let ltdvs: Vec<LogicalTableDataVersionDB> = db
-                .history()
+                .timeline()
                 .fetch_all::<LogicalTableDataVersionDB>(())
                 .await?;
             assert_eq!(ltdvs.len(), expected_created_tables.len());
@@ -1098,7 +1099,7 @@ pub(crate) mod tests {
             .await?;
         let table_name = TableName::try_from("table_0")?;
         let table = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
                 &TableIdName::Name(table_name.clone())
@@ -1137,7 +1138,7 @@ pub(crate) mod tests {
             .await?;
         let table_name = TableName::try_from("table_1")?;
         let table = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
                 &TableIdName::Name(table_name.clone())
@@ -1180,7 +1181,7 @@ pub(crate) mod tests {
         let _response = service.execute_function(request).await?.data;
 
         let function_2: FunctionDBWithNames = db
-            .latest()
+            .scd2()
             .fetch_one::<FunctionDBWithNames>(and!(
                 &collection.id,
                 &FunctionIdName::Name(FUNCTION_NAMES[2].clone())

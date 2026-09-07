@@ -67,7 +67,7 @@ pub async fn reject_if_running<S: SeesProjectRows>(
         .await?;
     let physical_function_run: Option<PhysicalFunctionRunDB> = match lfr {
         Some(lfr) => {
-            conn.latest()
+            conn.scd2()
                 .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
                 .await?
         }

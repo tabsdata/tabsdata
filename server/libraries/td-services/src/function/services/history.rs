@@ -32,6 +32,7 @@ async fn function_history(
     let collection: ActiveCollectionDB = conn.fetch_one(&collection_param.collection).await?;
     let at = at.at;
     let function: FunctionDBWithNames = conn
+        .scd2()
         .as_of(&at)
         .fetch_one(and!(&collection.id, &function_param.function))
         .await?;
@@ -40,7 +41,7 @@ async fn function_history(
     // patch-aware surface.
     let query_params = ListQueryParams::<FunctionVersion>::try_from(&list_params)?;
     let rows = conn
-        .history()
+        .timeline()
         .list_until(&at, and!(&function.base.base.function_id), &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
@@ -145,7 +146,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).insert(&patch).await?;
+        db.scoped(p.id).scd2().insert(&patch).await?;
 
         let t2p = AtTime::now();
 

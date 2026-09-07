@@ -29,10 +29,10 @@ pub(crate) mod tests {
         collection: &ActiveCollectionDB,
         table_name: &TableName,
     ) -> Result<(), TdError> {
-        let live: Vec<TableDB> = db.latest().fetch_all(&table_name).await?;
+        let live: Vec<TableDB> = db.scd2().fetch_all(&table_name).await?;
         assert!(live.is_empty());
 
-        let table_versions: Vec<TableDB> = db.history().fetch_all(&table_name).await?;
+        let table_versions: Vec<TableDB> = db.timeline().fetch_all(&table_name).await?;
         assert_eq!(table_versions.len(), 2);
         for table_version in &table_versions {
             assert_eq!(table_version.base.name, *table_name);
@@ -48,26 +48,26 @@ pub(crate) mod tests {
         );
 
         let function: FunctionDB = db
-            .latest()
+            .scd2()
             .fetch_one::<FunctionDB>(&table_versions[0].base.function_id)
             .await?;
         assert_eq!(function.base.status, FunctionStatus::Active);
 
         let dependency_versions: Vec<DependencyDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<DependencyDB>(&table_versions[0].base.table_id)
             .await?;
 
         for dependency_version in &dependency_versions {
             let function: FunctionDB = db
-                .latest()
+                .scd2()
                 .fetch_one::<FunctionDB>(&dependency_version.base.function_id)
                 .await?;
             assert_eq!(function.base.status, FunctionStatus::Frozen);
 
             // Note that the function version in the dependency still points to the active function version
             // thus being active itself.
-            let function_version: FunctionDB = db.fetch_one(&function.base.id).await?;
+            let function_version: FunctionDB = db.timeline().fetch_one(&function.base.id).await?;
             assert_eq!(function_version.base.status, FunctionStatus::Frozen);
         }
 
@@ -81,12 +81,12 @@ pub(crate) mod tests {
         table_name: &TableName,
     ) -> Result<(), TdError> {
         let table: Option<TableDBWithNames> = db
-            .latest()
+            .scd2()
             .fetch_optional(and!(&collection.id, &TableIdName::Name(table_name.clone())))
             .await?;
         assert!(table.is_some());
 
-        let table_versions: Vec<TableDB> = db.history().fetch_all(&table_name).await?;
+        let table_versions: Vec<TableDB> = db.timeline().fetch_all(&table_name).await?;
         for table_version in &table_versions {
             assert_eq!(table_version.base.name, *table_name);
             assert_eq!(table_version.base.collection_id, collection.id);

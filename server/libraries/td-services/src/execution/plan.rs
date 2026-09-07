@@ -305,7 +305,8 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows>(
     let tdvs: Vec<PhysicalTableDataVersionDBWithFunction> = if all_ftdv_ids.is_empty() {
         Vec::new()
     } else {
-        conn.as_of(&TriggeredOn::try_from(at_time)?)
+        conn.scd2()
+            .as_of(&TriggeredOn::try_from(at_time)?)
             .chunked()
             .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&all_ftdv_ids, ())
             .await?

@@ -5,7 +5,7 @@
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use crate::dxo::graph::GraphEdge;
-use crate::types::basic::ValidTo;
+use crate::types::basic::Scd2ValidTo;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
     FunctionVersionId, Partitioned, Private, ProjectId, SampleLen, SampleOffset, SchemaFieldName,
@@ -33,7 +33,7 @@ pub struct TableInsertDB {
     pub function_param_pos: Option<TableFunctionParamPos>,
     pub private: Private,
     pub partitioned: Partitioned,
-    #[dao(valid_from)]
+    #[dao(scd2(valid_from))]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: TableStatus,
@@ -46,8 +46,8 @@ pub struct TableDB {
     #[dao(flatten)]
     pub base: TableInsertDB,
     pub project_id: ProjectId,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 
 impl TableDB {

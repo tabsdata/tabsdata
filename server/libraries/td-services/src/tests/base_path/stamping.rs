@@ -75,7 +75,7 @@ async fn test_dispatch_stamps_fr_and_tdvs_identically(db: TdPool) -> Result<(), 
 
         let fr_row = fetch_run(&db, &m.fr.id).await?;
         assert_eq!(&fr_row.base.base.base_path, base, "the FR row persisted it");
-        let tdv_row: PhysicalTableDataVersionDB = db.fetch_one(&m.tdvs[0].id).await?;
+        let tdv_row: PhysicalTableDataVersionDB = db.timeline().fetch_one(&m.tdvs[0].id).await?;
         assert_eq!(&tdv_row.base.base_path, base, "the TDV row persisted it");
     }
     Ok(())

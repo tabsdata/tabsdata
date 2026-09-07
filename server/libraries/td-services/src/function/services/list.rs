@@ -28,7 +28,7 @@ async fn function_list(
         .await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Function>::try_from(&list_params)?;
-    let rows = conn.latest().list((), &query_params).await?;
+    let rows = conn.scd2().list((), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 

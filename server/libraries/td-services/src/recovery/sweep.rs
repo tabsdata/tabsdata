@@ -119,7 +119,8 @@ pub async fn fail_stale_abandoned_attempts<S: SeesProjectRows>(
         return Ok(());
     }
     let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
-    conn.chunked()
+    conn.scd2()
+        .chunked()
         .update(&update, &stale.abandoned_pfr_ids)
         .await?;
     debug!(

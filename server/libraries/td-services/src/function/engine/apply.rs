@@ -25,18 +25,21 @@ pub async fn apply(
     changes: &Changes,
     at: &AtTime,
 ) -> Result<(), TdError> {
-    conn.chunked().insert(&changes.tables).await?;
-    conn.chunked()
+    conn.scd2().chunked().insert(&changes.tables).await?;
+    conn.scd2()
+        .chunked()
         .close::<TableDB>(&changes.close_tables, (), at)
         .await?;
     let flips = trigger_flips(conn, &changes.table_transitions, at).await?;
-    conn.chunked().insert(&flips).await?;
-    conn.chunked().insert(&changes.dependencies).await?;
-    conn.chunked()
+    conn.scd2().chunked().insert(&flips).await?;
+    conn.scd2().chunked().insert(&changes.dependencies).await?;
+    conn.scd2()
+        .chunked()
         .close::<DependencyDB>(&changes.close_dependencies, (), at)
         .await?;
-    conn.chunked().insert(&changes.triggers).await?;
-    conn.chunked()
+    conn.scd2().chunked().insert(&changes.triggers).await?;
+    conn.scd2()
+        .chunked()
         .close::<TriggerDB>(&changes.close_triggers, (), at)
         .await?;
     Ok(())
@@ -51,7 +54,12 @@ async fn trigger_flips<S: SeesProjectRows>(
         return Ok(Vec::new());
     }
     let table_ids: Vec<TableId> = transitions.iter().map(|t| t.table_id).collect();
-    let triggers: Vec<TriggerDB> = conn.as_of(at).chunked().fetch_all(&table_ids, ()).await?;
+    let triggers: Vec<TriggerDB> = conn
+        .scd2()
+        .as_of(at)
+        .chunked()
+        .fetch_all(&table_ids, ())
+        .await?;
     let by_table: HashMap<TableId, &TableTransition> =
         transitions.iter().map(|t| (t.table_id, t)).collect();
     let mut flips = Vec::new();
@@ -86,9 +94,15 @@ pub async fn dependants_of_tables<S: SeesProjectRows>(
     table_ids: &[TableId],
     at: &AtTime,
 ) -> Result<Vec<FunctionDB>, TdError> {
-    let dependencies: Vec<DependencyDB> = conn.as_of(at).chunked().fetch_all(table_ids, ()).await?;
+    let dependencies: Vec<DependencyDB> = conn
+        .scd2()
+        .as_of(at)
+        .chunked()
+        .fetch_all(table_ids, ())
+        .await?;
     let function_ids: Vec<FunctionId> = dependencies.iter().map(|d| d.base.function_id).collect();
     let functions = conn
+        .scd2()
         .as_of(at)
         .chunked()
         .fetch_all(&function_ids, and!(FunctionDB::active()))

@@ -179,7 +179,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(project_id).insert(&patch).await.unwrap();
+        db.scoped(project_id).scd2().insert(&patch).await.unwrap();
         Ok(patch.id)
     }
 
@@ -204,7 +204,7 @@ mod tests {
         assert_ne!(response.new_function_run_id, fr_old.base.id);
 
         let frs: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(and!(&lfr.base.execution_id, &lfr.base.function_id))
             .await?;
         assert_eq!(frs.len(), 2);
@@ -214,12 +214,13 @@ mod tests {
 
         // The replay attempt is the run's current version from mint.
         let current = db
-            .latest()
+            .scd2()
             .fetch_one::<PhysicalFunctionRunDB>(&lfr.base.id)
             .await?;
         assert_eq!(current.base.id, response.new_function_run_id);
 
         let pfr_new = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&response.new_function_run_id)
             .await?;
         assert_eq!(pfr_new.base.status, PhysicalFunctionRunStatus::Requested);
@@ -274,7 +275,7 @@ mod tests {
             status: PhysicalFunctionRunStatus::Dispatched,
             ..fr.base.clone()
         };
-        db.scoped(p.id).insert(&dispatched).await?;
+        db.scoped(p.id).scd2().insert(&dispatched).await?;
 
         let result = Services::with_defaults(db.clone())
             .replay_logical_function_run(replay_request(&lfr.base.id))
@@ -282,7 +283,7 @@ mod tests {
 
         assert!(result.is_err(), "expected refusal, got {result:?}");
         let attempts: Vec<PhysicalFunctionRunDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(and!(&fr.base.execution_id, &fr.base.function_id))
             .await?;
         assert_eq!(attempts.len(), 2, "no new attempt minted");
@@ -356,6 +357,7 @@ mod tests {
         assert_eq!(response.function_version_id, patch_id);
 
         let fr_new: PhysicalFunctionRunDB = db
+            .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&response.new_function_run_id)
             .await?;
         // FR.function_version_id stays at the head fvid (FK valid);
@@ -369,7 +371,7 @@ mod tests {
         // The minted TDV mirrors the FR's split: head fvid in the bare
         // column, patch id on the dedicated column.
         let tdvs: Vec<PhysicalTableDataVersionDB> = db
-            .history()
+            .timeline()
             .fetch_all::<PhysicalTableDataVersionDB>(&fr_new.base.id)
             .await?;
         assert_eq!(tdvs.len(), 1);

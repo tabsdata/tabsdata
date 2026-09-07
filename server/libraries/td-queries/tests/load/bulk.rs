@@ -7,7 +7,7 @@
 //! stay correct.
 
 use sea_query::Query;
-use ta_objects::InsertDao;
+use ta_objects::Insertable;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_queries::QueryExecutor;
@@ -17,7 +17,7 @@ const MAX_BIND_PARAMS: usize = 800;
 
 pub async fn bulk_insert<D, E>(executor: E, rows: &[D]) -> Result<u64, SqlError>
 where
-    D: InsertDao,
+    D: Insertable,
     E: QueryExecutor + Copy,
 {
     if rows.is_empty() {

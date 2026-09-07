@@ -17,8 +17,9 @@ use td_database::access::DbScope;
     note = "single-row reads need the `#[dao(pk)]` column or a whole `unique(...)` \
             set, optionally narrowed with `and!` (key columns lead, narrowing \
             conditions trail); a `project_scoped(unique(...))` set only from `InProject`",
-    note = "for the latest version of a partition use `latest()` / `as_of()`; \
-            for every version use `history()`; for many unversioned rows use `fetch_all`"
+    note = "for the version of a partition visible at an instant use `scd2()` / \
+            `scd2().as_of()`; for every version use `timeline()`; for many unversioned \
+            rows use `fetch_all`"
 )]
 pub trait AddressesOneRow<D: Dao, S: DbScope>: SqlCondition<D> {}
 
@@ -29,7 +30,7 @@ impl<D: Dao, S: DbScope, T: AddressesOneRow<D, S> + ?Sized> AddressesOneRow<D, S
 /// disjoint, and the unique partial index pins the open one.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` can match more than one version of `{D}` at an instant",
-    note = "`latest()` / `as_of()` single-row reads need the `#[dao(partition_by)]` \
+    note = "`scd2()` / `scd2().as_of()` single-row reads need the `#[dao(partition_by)]` \
             column or a whole unique set, optionally narrowed with `and!`; the key \
             columns lead, narrowing conditions trail",
     note = "for the first row of however many match, use `fetch_first`"

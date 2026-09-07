@@ -223,7 +223,7 @@ pub(crate) mod tests {
 
             for table in tables {
                 let table_version = db
-                    .latest()
+                    .scd2()
                     .fetch_one::<TableDBWithNames>(and!(
                         &collection.id,
                         &TableIdName::Name(table.clone())

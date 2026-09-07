@@ -8,7 +8,7 @@ use crate::dxo::graph::{FunctionNode, TableNode};
 use crate::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
 use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames, TriggerInsertDB};
 use crate::graph::{TdGraph, TdGraphBuilder};
-use crate::types::basic::ValidTo;
+use crate::types::basic::Scd2ValidTo;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId,
     DependencyPos, DependencyVersionId, Description, Enabled, FunctionId, FunctionName,
@@ -195,7 +195,7 @@ pub fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
                 table_type: TableType::Regular,
             },
             project_id: *PROJECT_ID,
-            valid_to: ValidTo::infinity(),
+            valid_to: Scd2ValidTo::infinity(),
         },
         system: System::FALSE,
         defined_by: UserName::try_from("joaquin").unwrap(),
@@ -229,7 +229,7 @@ pub fn function(function: &FunctionName) -> FunctionDBWithNames {
                 enabled: Enabled::TRUE,
             },
             project_id: *PROJECT_ID,
-            valid_to: ValidTo::infinity(),
+            valid_to: Scd2ValidTo::infinity(),
         },
         collection: COLLECTION_NAME.clone(),
         group_id: *GROUP_ID,
@@ -260,7 +260,7 @@ pub fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWit
                 system: System::FALSE,
             },
             project_id: *PROJECT_ID,
-            valid_to: ValidTo::infinity(),
+            valid_to: Scd2ValidTo::infinity(),
         },
         collection: COLLECTION_NAME.clone(),
         table_collection: COLLECTION_NAME.clone().into(),
@@ -289,7 +289,7 @@ pub fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames
                 system: System::FALSE,
             },
             project_id: *PROJECT_ID,
-            valid_to: ValidTo::infinity(),
+            valid_to: Scd2ValidTo::infinity(),
         },
         collection: COLLECTION_NAME.clone(),
         trigger_by_collection: COLLECTION_NAME.clone().into(),

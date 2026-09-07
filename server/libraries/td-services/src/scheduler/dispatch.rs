@@ -242,6 +242,7 @@ pub async fn unlock_function_runner_worker<S: SeesProjectRows>(
     // in flight; sticky-terminal = replay dispatch (LFR is canonical
     // and doesn't move during a replay).
     let pfr: PhysicalFunctionRunDB = conn
+        .timeline()
         .fetch_one::<PhysicalFunctionRunDB>(&context.info.function_run_id)
         .await?;
     // The branch below is decided from `lfr.status` and the rollback writes it.

@@ -2,31 +2,70 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! History reads over a versioned relation: every version row a condition
-//! matches, with no time predicate. The named slow path; point-in-time
-//! reads are [`latest`](crate::Queries::latest) and
-//! [`as_of`](crate::Queries::as_of).
+//! The version log of a `TimelineDao`: every version row a condition
+//! matches, no time predicate. The only door to a `timeline` relation; the
+//! point-in-time reads of an `scd2` one are [`scd2`](crate::Queries::scd2).
 
-use crate::generic::chunked::HistoryChunked;
+use crate::generic::chunked::TimelineChunked;
+use crate::generic::data_version::DataVersion;
 use crate::primitives::scd2::select_until;
 use crate::primitives::table::{select, select_last, select_unordered};
 use crate::{QueryExecutor, Serves};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{Dao, ListDto, SelectDao, TimelineDao};
+use ta_objects::{AddressesOneRow, Dao, ListDto, SelectDao, TimelineDao, single_row};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
 
-pub struct History<E> {
+pub struct Timeline<E> {
     pub(crate) executor: E,
 }
 
-impl<E> History<E> {
-    pub fn chunked(self) -> HistoryChunked<E> {
-        HistoryChunked {
+impl<E> Timeline<E> {
+    /// The log read by position over one partition at `on`: `HEAD~k`,
+    /// `INITIAL+k`, ranges.
+    pub fn at<'a, V, P>(self, on: &'a V, partition: &'a P) -> DataVersion<'a, E, V, P> {
+        DataVersion {
+            on,
+            partition,
             executor: self.executor,
         }
+    }
+
+    pub fn chunked(self) -> TimelineChunked<E> {
+        TimelineChunked {
+            executor: self.executor,
+        }
+    }
+
+    /// One row of the log by a key that pins it, in practice the version id.
+    pub async fn fetch_one<D: SelectDao + TimelineDao>(
+        self,
+        condition: impl AddressesOneRow<D, E::Scope>,
+    ) -> Result<D, SqlError>
+    where
+        E: Serves<D>,
+    {
+        self.fetch_optional(condition)
+            .await?
+            .ok_or_else(SqlError::not_found::<D>)
+    }
+
+    pub async fn fetch_optional<D: SelectDao + TimelineDao>(
+        self,
+        condition: impl AddressesOneRow<D, E::Scope>,
+    ) -> Result<Option<D>, SqlError>
+    where
+        E: Serves<D>,
+    {
+        let rows = select::<D>(condition)
+            .limit(2)
+            .build_query_as()
+            .fetch_all(self.executor)
+            .await
+            .map_err(SqlError::on_read::<D>)?;
+        single_row::<D>(rows)
     }
 
     pub async fn fetch_all<D: SelectDao + TimelineDao>(
@@ -143,7 +182,7 @@ mod tests {
         id: TestId,
         #[dao(partition_by)]
         partition_id: TestPartition,
-        #[dao(version_by, order_by)]
+        #[dao(timeline(version_by), order_by)]
         defined_on: TestDefinedOn,
     }
 

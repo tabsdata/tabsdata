@@ -137,6 +137,7 @@ async fn stamp_buckets_and_metrics_on_pfr(
         metric_data_bytes: Some(ByteCount::try_from(bytes)?),
     };
     db.scoped(pfr.project_id)
+        .scd2()
         .update(&update, &pfr.base.id)
         .await?;
     Ok(())
@@ -179,8 +180,8 @@ async fn bind_ptdv_with_magnitudes(
         logical_table_data_version_id: ltdv.base.id.clone(),
     };
     let scoped = db.scoped(pfr.project_id);
-    (&scoped).insert(&ptdv).await?;
-    Ok((&scoped).fetch_one(&ptdv.id).await?)
+    (&scoped).scd2().insert(&ptdv).await?;
+    Ok((&scoped).timeline().fetch_one(&ptdv.id).await?)
 }
 
 async fn seed_collection(
@@ -290,12 +291,12 @@ async fn seed_publisher_with_ltdv(
     let (lfr, pfr) = seed_done_run(db, &coll, &func).await?;
     stamp_buckets_on_pfr(db, &pfr).await?;
     let ltdvs: Vec<LogicalTableDataVersionDB> =
-        db.history().fetch_all(&lfr.base.execution_id).await?;
+        db.timeline().fetch_all(&lfr.base.execution_id).await?;
     let ltdv = ltdvs
         .into_iter()
         .find(|t| t.base.producer_logical_function_run_id.as_ref() == Some(&lfr.base.id))
         .expect("publisher mints exactly one output LTDV");
-    let tables: Vec<TableDB> = db.latest().fetch_all::<TableDB>(&func.base.id).await?;
+    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.base.id).await?;
     let table = tables
         .iter()
         .find(|t| t.base.table_id == ltdv.base.table_id)
@@ -313,8 +314,8 @@ async fn bind_all_outputs(
     pfr: &PhysicalFunctionRunDB,
 ) -> Result<(), TdError> {
     let ltdvs: Vec<LogicalTableDataVersionDB> =
-        db.history().fetch_all(&lfr.base.execution_id).await?;
-    let tables: Vec<TableDB> = db.latest().fetch_all::<TableDB>(&func.base.id).await?;
+        db.timeline().fetch_all(&lfr.base.execution_id).await?;
+    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.base.id).await?;
     for table in &tables {
         let ltdv = ltdvs
             .iter()
@@ -438,11 +439,13 @@ async fn test_nodes_out_magnitudes_follow_the_current_materialization(
     // view was resolving, so its magnitudes stop counting.
     let current: PhysicalTableDataVersionDB = db
         .scoped(ltdv.project_id)
-        .latest()
+        .scd2()
         .fetch_one::<PhysicalTableDataVersionDB>(&ltdv.base.id)
         .await?;
-    let producer: PhysicalFunctionRunDB =
-        db.fetch_one(&current.base.physical_function_run_id).await?;
+    let producer: PhysicalFunctionRunDB = db
+        .timeline()
+        .fetch_one(&current.base.physical_function_run_id)
+        .await?;
     let retried_on =
         TriggeredOn::try_from(AtTime::from(Timestamp::try_from(4_102_444_800_000_i64)?))?;
     let retry = PhysicalFunctionRunInsertDB {
@@ -450,7 +453,7 @@ async fn test_nodes_out_magnitudes_follow_the_current_materialization(
         triggered_on: retried_on,
         ..producer.base
     };
-    db.scoped(p.id).insert(&retry).await?;
+    db.scoped(p.id).scd2().insert(&retry).await?;
     let empty = PhysicalTableDataVersionInsertDB {
         id: PhysicalTableDataVersionId::new(),
         physical_function_run_id: retry.id.clone(),
@@ -460,7 +463,7 @@ async fn test_nodes_out_magnitudes_follow_the_current_materialization(
         data_bytes: None,
         ..current.base
     };
-    db.scoped(p.id).insert(&empty).await?;
+    db.scoped(p.id).scd2().insert(&empty).await?;
 
     let after = db
         .metrics()
@@ -734,7 +737,7 @@ async fn test_private_input_excluded_from_in_and_real_edges(db: TdPool) -> Resul
     stamp_buckets_on_pfr(&db, &prod_pfr).await?;
     bind_all_outputs(&db, &prod_fn, &prod_lfr, &prod_pfr).await?;
     let prod_ltdvs: Vec<LogicalTableDataVersionDB> =
-        db.history().fetch_all(&prod_lfr.base.execution_id).await?;
+        db.timeline().fetch_all(&prod_lfr.base.execution_id).await?;
     let private_ltdv = &prod_ltdvs[0];
 
     let cons_coll = seed_collection(&db, p.id, "priv_in_cons").await?;

@@ -31,7 +31,8 @@ async fn execution_list_by_function_version(
     // authorize the requester to view it.
     let mut trx = db.read().await?;
     let conn = trx.get(authz.none());
-    let version: FunctionVersionDBWithNames = conn.fetch_one(&function_version_id).await?;
+    let version: FunctionVersionDBWithNames =
+        conn.timeline().fetch_one(&function_version_id).await?;
     let collection: ResolvedCollectionDB = conn.fetch_one(&version.collection_id).await?;
     let project = collection.base.project_id;
     let mut trx = trx.enter_project(&project).await?;
@@ -130,7 +131,7 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .latest()
+            .scd2()
             .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
                 &TableIdName::Name(TableName::try_from(tables[0].clone())?)
@@ -238,7 +239,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).insert(&patch).await?;
+        db.scoped(p.id).scd2().insert(&patch).await?;
 
         let execution_3 = db
             .scoped(p.id)

@@ -53,7 +53,7 @@ pub async fn mint_function_runs_on_dispatch(
         lfr_ids.iter().cloned().map(Some).collect();
 
     let ltdvs_all: Vec<LogicalTableDataVersionDB> = conn
-        .history()
+        .timeline()
         .chunked()
         .fetch_all::<LogicalTableDataVersionDB>(&producer_filters, ())
         .await?;
@@ -75,7 +75,7 @@ pub async fn mint_function_runs_on_dispatch(
     let all_tables: Vec<TableDB> = if distinct_head_fvids.is_empty() {
         Vec::new()
     } else {
-        conn.history()
+        conn.timeline()
             .chunked()
             .fetch_all::<TableDB>(&distinct_head_fvids, ())
             .await?
@@ -147,10 +147,10 @@ pub async fn mint_function_runs_on_dispatch(
     }
 
     if !frs.is_empty() {
-        conn.chunked().insert(&frs).await?;
+        conn.scd2().chunked().insert(&frs).await?;
     }
     if !all_tdvs.is_empty() {
-        conn.chunked().insert(&all_tdvs).await?;
+        conn.scd2().chunked().insert(&all_tdvs).await?;
     }
 
     let mut output = Vec::with_capacity(ready_lfrs.len());

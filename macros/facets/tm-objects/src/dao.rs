@@ -287,31 +287,19 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         ));
     }
     let version_mark = if is_scd2 { "valid_from" } else { "version_by" };
-    if !is_versioned
-        && (marks.any("partition_by") || marks.any("valid_from") || marks.any("version_by"))
-    {
+    let declared: Vec<&str> = [
+        is_scd2.then_some("scd2"),
+        is_timeline.then_some("timeline"),
+        parsed.recursive.is_present().then_some("recursive"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    marks.check_grains(&declared)?;
+    if !is_versioned && marks.marked_once("partition_by")?.is_some() {
         return Err(syn::Error::new_spanned(
             ident,
-            "#[dao(partition_by)] / #[dao(valid_from)] / #[dao(version_by)] \
-             require `scd2` or `timeline`",
-        ));
-    }
-    if is_scd2 && marks.any("version_by") {
-        return Err(syn::Error::new_spanned(
-            ident,
-            "an SCD2 table orders by its interval start: mark it #[dao(valid_from)]",
-        ));
-    }
-    if is_timeline && marks.any("valid_from") {
-        return Err(syn::Error::new_spanned(
-            ident,
-            "a timeline has no interval chain: mark its ordering column #[dao(version_by)]",
-        ));
-    }
-    if !parsed.recursive.is_present() && (marks.any("recurse_up") || marks.any("recurse_down")) {
-        return Err(syn::Error::new_spanned(
-            ident,
-            "#[dao(recurse_up)] / #[dao(recurse_down)] require `recursive`",
+            "#[dao(partition_by)] requires `scd2` or `timeline`",
         ));
     }
 
@@ -322,28 +310,22 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
     };
 
     let valid_to_field = marks.marked_once("valid_to")?;
-    if let Some(f) = valid_to_field {
-        if !is_scd2 {
-            return Err(syn::Error::new_spanned(
-                f,
-                "#[dao(valid_to)] requires `scd2`: only an interval table has an interval end",
-            ));
-        }
-        if !type_names(&f.ty, "ValidTo") {
-            return Err(syn::Error::new_spanned(
-                f,
-                "#[dao(valid_to)] marks the `ValidTo` column",
-            ));
-        }
+    if let Some(f) = valid_to_field
+        && !type_names(&f.ty, "Scd2ValidTo")
+    {
+        return Err(syn::Error::new_spanned(
+            f,
+            "#[dao(scd2(valid_to))] marks the `Scd2ValidTo` column",
+        ));
     }
     if valid_to_field.is_none()
         && let Some(c) = columns
             .iter()
-            .find(|c| type_names(c.ty, "ValidTo") || c.name == "valid_to")
+            .find(|c| type_names(c.ty, "Scd2ValidTo") || c.name == "valid_to")
     {
         return Err(syn::Error::new_spanned(
             c.name,
-            "the interval end must be marked #[dao(valid_to)]",
+            "the interval end must be marked #[dao(scd2(valid_to))]",
         ));
     }
     if ops.insert.is_present()
@@ -475,7 +457,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                         .chain([#(#table_iden::#field_iden_variants),*])
                 },
                 quote! {
-                    ta_objects::InsertDao::insert_values(&self.#bf)
+                    ta_objects::Insertable::insert_values(&self.#bf)
                         .into_iter()
                         .chain([#(self.#field_names.as_sea_value().into()),*])
                 },
@@ -651,14 +633,20 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         .is_present()
         .then(|| quote! { impl ta_objects::SelectDao for #ident {} });
     let insert_impl = ops.insert.is_present().then(|| {
+        let capability = if is_scd2 {
+            quote! { impl ta_objects::Scd2InsertDao for #ident {} }
+        } else {
+            quote! { impl ta_objects::InsertDao for #ident {} }
+        };
         quote! {
-            impl ta_objects::InsertDao for #ident {
+            impl ta_objects::Insertable for #ident {
                 fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr> {
                     #[allow(unused_imports)]
                     use ta_objects::SeaValue;
                     #insert_items
                 }
             }
+            #capability
         }
     });
     let delete_impl = ops
@@ -750,7 +738,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             let (version_col, version_ty) = version_order.clone().ok_or_else(|| {
                 syn::Error::new_spanned(
                     ident,
-                    format!("{kind}: mark the version column with #[dao({version_mark})]"),
+                    format!("{kind}: mark the version column with #[dao({kind}({version_mark}))]"),
                 )
             })?;
             let scd2_impl = is_scd2.then(|| {
@@ -778,12 +766,13 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         let as_types = |list: &PathList| -> Vec<Type> {
             list.iter().map(|p| syn::parse_quote! { #p }).collect()
         };
-        let mut global_sets: Vec<Vec<Type>> = parsed.unique_types.iter().map(as_types).collect();
+        let mut unique_sets: Vec<Vec<Type>> = parsed.unique_types.iter().map(as_types).collect();
+        if let Some(types) = &ops.upsert {
+            unique_sets.push(as_types(types));
+        }
+        let mut global_sets = unique_sets.clone();
         if let Some((_, ty)) = &pk {
             global_sets.push(vec![syn::parse_quote! { #ty }]);
-        }
-        if let Some(types) = &ops.upsert {
-            global_sets.push(as_types(types));
         }
         let project_sets: Vec<Vec<Type>> = parsed
             .project_scoped
@@ -811,6 +800,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         let global_sets = minimal_sets(global_sets);
         let project_sets = minimal_sets(project_sets);
         let at_sets = minimal_sets(at_sets);
+        let unique_sets = minimal_sets(unique_sets);
         let type_key = |t: &Type| quote!(#t).to_string();
         if let Some(shared) = global_sets.iter().flatten().find(|t| {
             project_sets
@@ -839,11 +829,13 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             &format_ident!("AddressesOneRow"),
             Under::InProject,
         );
+        // The pk already pins a version: ANDing an instant onto it could only
+        // turn a hit into a miss, so it addresses a row, never a version.
         let version = match (is_scd2, &partition) {
             (true, Some((_, partition_ty))) => {
                 let partition_ty: Type = syn::parse_quote! { #partition_ty };
                 let key = type_key(&partition_ty);
-                let mut sets: Vec<Vec<Type>> = global_sets
+                let mut sets: Vec<Vec<Type>> = unique_sets
                     .iter()
                     .chain(project_sets.iter())
                     .chain(at_sets.iter())
@@ -872,7 +864,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             let ((up_col, _), (down_col, key_ty)) = up.zip(down).ok_or_else(|| {
                 syn::Error::new_spanned(
                     ident,
-                    "recursive: mark both #[dao(recurse_up)] and #[dao(recurse_down)]",
+                    "recursive: mark both #[dao(recursive(up))] and #[dao(recursive(down))]",
                 )
             })?;
             Ok::<_, syn::Error>(quote! {

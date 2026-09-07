@@ -73,6 +73,7 @@ pub async fn resolve_function_version<S: SeesProjectRows>(
     function_version_id: &FunctionVersionId,
 ) -> Result<FunctionVersionDBWithNames, TdError> {
     let version = conn
+        .timeline()
         .fetch_optional::<FunctionVersionDBWithNames>(function_version_id)
         .await?
         .ok_or_else(|| {
@@ -85,7 +86,7 @@ pub async fn resolve_function_version<S: SeesProjectRows>(
     // readable, so a prior version still resolves above. Aliveness is
     // whether a current row exists.
     let current = conn
-        .latest()
+        .scd2()
         .fetch_optional::<FunctionDB>(&version.function_id)
         .await?;
     if current.is_none() {
@@ -202,7 +203,7 @@ mod tests {
             defined_on: AtTime::now(),
             ..v1.base.clone()
         };
-        db.scoped(p.id).insert(&v2).await?;
+        db.scoped(p.id).scd2().insert(&v2).await?;
 
         let service = context.clone();
 
@@ -254,7 +255,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).insert(&patch).await?;
+        db.scoped(p.id).scd2().insert(&patch).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionParam {
@@ -276,6 +277,7 @@ mod tests {
         // Deleting the function closes its interval, so a prior version of
         // it (v1) — still readable in its own row — is no longer downloadable.
         db.scoped(p.id)
+            .scd2()
             .close::<FunctionDB>(&v2.function_id, &AtTime::now())
             .await?;
 
@@ -307,7 +309,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).insert(&orphan).await?;
+        db.scoped(p.id).scd2().insert(&orphan).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionParam {

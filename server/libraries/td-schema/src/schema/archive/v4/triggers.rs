@@ -152,6 +152,7 @@ impl Entity for Defs {
                 source_table: Triggers::Table.into_iden(),
                 partition_col: Triggers::TriggerId.into_iden(),
                 valid_from_col: Triggers::DefinedOn.into_iden(),
+                valid_to_col: Triggers::ValidTo.into_iden(),
                 pk_col: Triggers::Id.into_iden(),
             }
             .derived(),

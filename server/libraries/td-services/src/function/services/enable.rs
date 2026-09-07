@@ -44,19 +44,19 @@ async fn enable_function(
     // Before-update ids: the function id does not change, the function
     // version id does.
     let current: FunctionDBWithNames = conn
-        .latest()
+        .scd2()
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
-    let previous: FunctionDB = conn.fetch_one(&current.base.base.id).await?;
+    let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
     let function = previous.re_registered(&ctx, enable.enabled);
-    conn.insert(&function).await?;
+    conn.scd2().insert(&function).await?;
 
     let previous_version_id = Some(current.base.base.id);
     let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
     register_workers(conn, &function, &previous_version_id, &no_workers).await?;
 
-    let with_names: FunctionDBWithNames = conn.fetch_one(&function.id).await?;
+    let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
     let read = Function::from_dao(with_names)?;
     gated_trx.commit().await?;
 
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(response.enabled, enabled_update);
 
         let current_function: Vec<FunctionDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<FunctionDB>(&response.function_id)
             .await?;
         assert_eq!(current_function.len(), 1);
@@ -277,7 +277,7 @@ mod tests {
         // Flipping the flag versions the function alone: its tables keep the
         // version that defined them.
         let current_tables: Vec<TableDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<TableDB>(and!(&current_function.base.function_id, TableDB::active()))
             .await?;
         assert_eq!(current_tables.len(), tables.unwrap_or_default().len());
@@ -288,7 +288,7 @@ mod tests {
         );
 
         let current_dependencies: Vec<DependencyDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<DependencyDB>(&current_function.base.function_id)
             .await?;
         assert_eq!(
@@ -297,7 +297,7 @@ mod tests {
         );
 
         let current_triggers: Vec<TriggerDB> = db
-            .latest()
+            .scd2()
             .fetch_all::<TriggerDB>(&current_function.base.function_id)
             .await?;
         assert_eq!(current_triggers.len(), triggers.unwrap_or_default().len());

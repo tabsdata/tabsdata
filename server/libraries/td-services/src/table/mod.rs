@@ -34,7 +34,11 @@ pub async fn find_data_version_location_at<S: SeesProjectRows>(
     at: &AtTime,
     uncommitted: &UncommittedStatus,
 ) -> Result<(TableDBWithNames, Option<SPath>), TdError> {
-    let table_row: TableDBWithNames = conn.as_of(at).fetch_one(and!(collection, table)).await?;
+    let table_row: TableDBWithNames = conn
+        .scd2()
+        .as_of(at)
+        .fetch_one(and!(collection, table))
+        .await?;
     let table_id = table_row.base.base.table_id;
     let triggered_on = TriggeredOn::try_from(at)?;
     let location = resolve_table_location(conn, &triggered_on, &table_id, uncommitted).await?;

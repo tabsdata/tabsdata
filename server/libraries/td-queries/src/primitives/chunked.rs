@@ -12,7 +12,7 @@ use sqlx::FromRow;
 use sqlx::postgres::PgRow;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{Dao, InsertDao, Scd2Dao, SelectDao, TableDao, UpdateDao};
+use ta_objects::{Dao, Insertable, Scd2Dao, SelectDao, TableDao, UpdateDao};
 use td_database::sea_query::builder::SeaQueryExt;
 use tracing::warn;
 
@@ -63,7 +63,7 @@ where
     Ok(results)
 }
 
-pub(crate) fn insert_vec_query<D: InsertDao>(daos: &[D]) -> Result<InsertStatement, SqlError> {
+pub(crate) fn insert_vec_query<D: Insertable>(daos: &[D]) -> Result<InsertStatement, SqlError> {
     let mut query = Query::insert();
     query.into_table(D::TABLE).columns(D::columns());
     for dao in daos {
@@ -107,6 +107,21 @@ pub(crate) fn update_chunk_query<U: UpdateDao>(
         .table(U::TABLE)
         .values(dao.update_values())
         .cond_where(resolve_or::<U::FilterBy>(chunk))
+        .take()
+}
+
+pub(crate) fn update_open_chunk_query<U: UpdateDao>(
+    dao: &U,
+    chunk: &[impl SqlCondition<U::FilterBy>],
+) -> UpdateStatement
+where
+    U::FilterBy: Scd2Dao,
+{
+    Query::update()
+        .table(U::TABLE)
+        .values(dao.update_values())
+        .cond_where(resolve_or::<U::FilterBy>(chunk))
+        .cond_where(open_interval_cond::<U::FilterBy>())
         .take()
 }
 
@@ -193,7 +208,7 @@ mod tests {
         #[dao(partition_by)]
         pub partition_id: TestPartition,
         pub status: TestVStatus,
-        #[dao(valid_from)]
+        #[dao(scd2(valid_from))]
         pub defined_on: TestDefinedOn,
     }
 
@@ -205,7 +220,7 @@ mod tests {
         #[dao(partition_by)]
         pub partition_id: TestPartition,
         pub status: TestVStatus,
-        #[dao(valid_from)]
+        #[dao(scd2(valid_from))]
         pub defined_on: TestDefinedOn,
     }
 
@@ -297,6 +312,28 @@ mod tests {
         assert_eq!(
             sql,
             r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_chunked_versioned" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("defined_on" <= 100 AND "valid_to" > 100 AND TRUE) ORDER BY "id" DESC"#
+        );
+    }
+
+    #[ta_objects::Dao]
+    #[dao(table = "test_chunked_versioned", ops(update(TestScd2Dao)))]
+    struct TestScd2Update {
+        status: Option<TestVStatus>,
+    }
+
+    #[test]
+    fn test_update_open_chunk_query() {
+        let ids = vec![
+            TestPartition::try_from("p1").unwrap(),
+            TestPartition::try_from("p2").unwrap(),
+        ];
+        let update = TestScd2Update {
+            status: Some(TestVStatus::Active),
+        };
+        let sql = update_open_chunk_query(&update, &ids).to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"UPDATE "test_chunked_versioned" SET "status" = 'A' WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND "valid_to" = ('infinity'::timestamptz)"#
         );
     }
 

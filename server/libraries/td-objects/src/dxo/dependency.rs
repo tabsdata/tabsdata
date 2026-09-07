@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::types::basic::ValidTo;
+use crate::types::basic::Scd2ValidTo;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId,
     FunctionId, OfTable, ProjectId, System, TableId, UserId,
@@ -18,16 +18,16 @@ pub struct DependencyInsertDB {
     pub collection_id: CollectionId,
     #[dao(partition_by)]
     pub dependency_id: DependencyId,
-    #[dao(recurse_down)]
+    #[dao(recursive(down))]
     pub function_id: FunctionId,
     pub table_collection_id: OfTable<CollectionId>,
-    #[dao(recurse_up)]
+    #[dao(recursive(up))]
     pub table_function_id: OfTable<FunctionId>,
     pub table_id: TableId,
     pub table_versions: TableVersions,
     #[dao(order_by)]
     pub dep_pos: DependencyPos,
-    #[dao(valid_from)]
+    #[dao(scd2(valid_from))]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub system: System,
@@ -39,8 +39,8 @@ pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
     pub project_id: ProjectId,
-    #[dao(valid_to)]
-    pub valid_to: ValidTo,
+    #[dao(scd2(valid_to))]
+    pub valid_to: Scd2ValidTo,
 }
 
 #[ta_objects::Dao]

@@ -17,7 +17,7 @@ pub struct ForUpdate<E> {
 }
 
 impl<E> ForUpdate<E> {
-    pub async fn fetch_one<D: SelectDao>(
+    pub async fn fetch_one<D: SelectDao + UnversionedDao>(
         self,
         condition: impl AddressesOneRow<D, E::Scope>,
     ) -> Result<D, SqlError>
@@ -29,7 +29,7 @@ impl<E> ForUpdate<E> {
             .ok_or_else(SqlError::not_found::<D>)
     }
 
-    pub async fn fetch_optional<D: SelectDao>(
+    pub async fn fetch_optional<D: SelectDao + UnversionedDao>(
         self,
         condition: impl AddressesOneRow<D, E::Scope>,
     ) -> Result<Option<D>, SqlError>

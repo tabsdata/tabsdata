@@ -110,7 +110,7 @@ pub async fn fn_candidates<S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S>,
 ) -> Result<FnCandidates, TdError> {
     let mut pfrs: Vec<PhysicalFunctionRunDB> = conn
-        .history()
+        .timeline()
         .fetch_all::<PhysicalFunctionRunDB>(or!(
             PhysicalFunctionRunStatus::Dispatched,
             PhysicalFunctionRunStatus::Running
@@ -192,7 +192,7 @@ pub async fn current_trigger_versions<S: SeesProjectRows>(
         return Ok(CurrentTriggerVersions::default());
     }
     let current: Vec<FunctionDB> = conn
-        .latest()
+        .scd2()
         .chunked()
         .fetch_all::<FunctionDB>(&fvids, ())
         .await?;
@@ -583,7 +583,7 @@ pub async fn finalize_recovery_actions<S: SeesProjectRows>(
         .unique()
         .collect();
     let current_pfrs: Vec<PhysicalFunctionRunDB> = conn
-        .history()
+        .timeline()
         .chunked()
         .fetch_all::<PhysicalFunctionRunDB>(&pfr_ids, ())
         .await?;
@@ -683,7 +683,7 @@ pub async fn fail_recovered_attempts<S: SeesProjectRows>(
         return Ok(());
     }
     let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
-    conn.chunked().update(&update, &pfr_ids).await?;
+    conn.scd2().chunked().update(&update, &pfr_ids).await?;
     Ok(())
 }
 

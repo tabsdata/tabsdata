@@ -90,7 +90,7 @@ pub async fn abandon_requested_physical_runs<S: SeesProjectRows>(
         .unique()
         .collect();
     let physical_function_runs: Vec<PhysicalFunctionRunDB> = conn
-        .history()
+        .timeline()
         .chunked()
         .fetch_all::<PhysicalFunctionRunDB>(&execution_ids, ())
         .await?;
@@ -107,7 +107,7 @@ pub async fn abandon_requested_physical_runs<S: SeesProjectRows>(
     }
 
     let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
-    conn.chunked().update(&update, &abandoned).await?;
+    conn.scd2().chunked().update(&update, &abandoned).await?;
     debug!(
         abandoned_count = abandoned.len(),
         "execution.recover_abandon: terminalized in-flight PFR(s) of Requested LFR(s)"
@@ -437,6 +437,7 @@ pub async fn update_table_data_version_status<S: SeesProjectRows>(
 
             // one because single table data version per execution
             let data_version = conn
+                .timeline()
                 .fetch_one::<PhysicalTableDataVersionDBWithNames>(and!(
                     physical_function_run_id.clone(),
                     table_name,
@@ -499,7 +500,8 @@ pub async fn update_table_data_version_status<S: SeesProjectRows>(
                 }
             };
 
-            conn.update(&update, &data_version.base.base.base.id)
+            conn.scd2()
+                .update(&update, &data_version.base.base.base.id)
                 .await?;
         }
     }
@@ -620,7 +622,7 @@ pub(crate) mod tests {
         {
             let collection = collections.get(&test_function.collection).unwrap();
             let existing = db
-                .latest()
+                .scd2()
                 .fetch_optional::<FunctionDBWithNames>(and!(
                     &collection.id,
                     &FunctionIdName::Name(test_function.name.clone())
@@ -754,7 +756,7 @@ pub(crate) mod tests {
                         .unwrap();
 
                     let tables = db
-                        .history()
+                        .timeline()
                         .fetch_all::<TableDB>(&function_versions.get(f).unwrap().base.id)
                         .await
                         .unwrap();
@@ -826,7 +828,7 @@ pub(crate) mod tests {
                         .unwrap();
 
                     let physical_table_data_versions = db
-                        .history()
+                        .timeline()
                         .fetch_all::<PhysicalTableDataVersionDB>(
                             &function_versions.get(dependency_f).unwrap().base.id,
                         )
@@ -939,7 +941,7 @@ pub(crate) mod tests {
             // carries the canonical flow-control status; derive it via
             // (execution_id, function_id).
             let physical_function_runs = db
-                .history()
+                .timeline()
                 .fetch_all::<PhysicalFunctionRunDB>(&physical_function_run.base.id)
                 .await?;
             assert_eq!(physical_function_runs.len(), 1);
@@ -956,7 +958,7 @@ pub(crate) mod tests {
             // mirrors FR.status (the producer attempt's lifecycle).
             // Canonical (sticky-Committed) status lives on the producer LFR.
             let physical_table_data_versions = db
-                .history()
+                .timeline()
                 .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&physical_function_run.base.id)
                 .await?;
             for physical_table_data_version in &physical_table_data_versions {

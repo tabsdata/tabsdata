@@ -2,8 +2,9 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Latest-at-time reads: the caller's condition composed with the SCD2
-//! visibility predicate, so cost follows the condition's selectivity.
+//! At-time reads, reached through [`Scd2::as_of`](crate::Scd2::as_of): the
+//! caller's condition composed with the visibility predicate, so cost follows
+//! the condition's selectivity. Reads only; `close` takes its own `at`.
 
 use crate::generic::chunked::AsOfChunked;
 use crate::primitives::scd2::select_visible_at;

@@ -120,9 +120,9 @@ pub fn dao_has_columns(input: TokenStream) -> TokenStream {
 
     let mut out = duplicate_name_errors(&derived, &fields, "merged (flattened)");
 
-    if bans_valid_to && fields.iter().any(|f| type_names(&f.ty, "ValidTo")) {
+    if bans_valid_to && fields.iter().any(|f| type_names(&f.ty, "Scd2ValidTo")) {
         let msg = format!(
-            "a write DAO cannot carry a `ValidTo` column (here through a flattened \
+            "a write DAO cannot carry a `Scd2ValidTo` column (here through a flattened \
              base) on `{derived}`: the close-out trigger owns the interval end",
         );
         out.push(quote! { compile_error!(#msg); });

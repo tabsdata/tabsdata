@@ -24,10 +24,10 @@ pub async fn head_of<S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S>,
     fvid: &FunctionVersionId,
 ) -> Result<FunctionVersionId, TdError> {
-    if let Some(row) = conn.fetch_optional::<FunctionDB>(fvid).await? {
+    if let Some(row) = conn.timeline().fetch_optional::<FunctionDB>(fvid).await? {
         return Ok(row.base.id);
     }
-    let patch: FunctionPatchDB = conn.fetch_one::<FunctionPatchDB>(fvid).await?;
+    let patch: FunctionPatchDB = conn.timeline().fetch_one::<FunctionPatchDB>(fvid).await?;
     Ok(patch.base.parent_function_version_id.into_inner())
 }
 
@@ -62,6 +62,7 @@ pub async fn latest_patch_or_head<S: SeesProjectRows>(
 ) -> Result<RunnableVersion, TdError> {
     let head_fvid = head_of(conn, fvid).await?;
     let latest: Option<FunctionPatchDB> = conn
+        .scd2()
         .as_of(at)
         .fetch_optional(and!(
             &Parent::from(head_fvid.clone()),
@@ -88,7 +89,7 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows>(
     // Any fvid missing from `functions` is presumed to be a patch id (rare
     // on the dispatch path — LFRs are minted with head fvids).
     let canonical: Vec<FunctionDB> = conn
-        .history()
+        .timeline()
         .chunked()
         .fetch_all::<FunctionDB>(&fvids, ())
         .await?;
@@ -104,7 +105,7 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows>(
     let patch_lookups: Vec<FunctionPatchDB> = if unresolved.is_empty() {
         Vec::new()
     } else {
-        conn.history()
+        conn.timeline()
             .chunked()
             .fetch_all::<FunctionPatchDB>(&unresolved, ())
             .await?
@@ -135,7 +136,8 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows>(
         Vec::new()
     } else {
         let head_partitions: Vec<_> = head_fvids.iter().cloned().map(Parent::from).collect();
-        conn.as_of(at)
+        conn.scd2()
+            .as_of(at)
             .chunked()
             .fetch_all(&head_partitions, FunctionPatchDB::active())
             .await?
@@ -234,7 +236,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(project_id).insert(&patch).await?;
+        db.scoped(project_id).scd2().insert(&patch).await?;
         Ok(patch.id)
     }
 

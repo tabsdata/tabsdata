@@ -102,6 +102,7 @@ impl SchemaSource for RecursiveVersionsSource {
                 source_table: TestTable::Table.into_iden(),
                 partition_col: TestTable::Id.into_iden(),
                 valid_from_col: TestTable::DefinedOn.into_iden(),
+                valid_to_col: TestTable::ValidTo.into_iden(),
                 pk_col: TestTable::Id.into_iden(),
             },
             Scd2TriggerDef {
@@ -109,6 +110,7 @@ impl SchemaSource for RecursiveVersionsSource {
                 source_table: TestTableReference::Table.into_iden(),
                 partition_col: TestTableReference::ReferenceId.into_iden(),
                 valid_from_col: TestTableReference::DefinedOn.into_iden(),
+                valid_to_col: TestTableReference::ValidTo.into_iden(),
                 pk_col: TestTableReference::Id.into_iden(),
             },
         ]

@@ -49,7 +49,7 @@ pub async fn load_current_function_run_id<S: SeesProjectRows>(
     lfr: &LogicalFunctionRunDB,
 ) -> Result<PhysicalFunctionRunId, TdError> {
     let current: Option<PhysicalFunctionRunDB> = conn
-        .latest()
+        .scd2()
         .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
         .await?;
     let current = current.ok_or_else(|| ReplayError::NoAttempt(lfr.base.id.clone()))?;
@@ -68,7 +68,7 @@ pub async fn assert_no_concurrent_replay<S: SeesProjectRows>(
     lfr: &LogicalFunctionRunDB,
 ) -> Result<(), TdError> {
     let current: Option<PhysicalFunctionRunDB> = conn
-        .latest()
+        .scd2()
         .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
         .await?;
     if let Some(pfr) = current
