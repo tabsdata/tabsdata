@@ -5,8 +5,8 @@
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::ViewProject;
-use td_database::access::{GatedConnection, RO};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::ReadRequest;
@@ -15,33 +15,40 @@ use td_objects::dxo::execution::{Execution, ExecutionDBWithStatus, ExecutionDeta
 use td_objects::dxo::function::{Function, FunctionDBWithNames};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::types::basic::FunctionVersionId;
-use td_queries::{ChunkedQueries, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn execution_details(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<ExecutionParam>,
 ) -> Result<ExecutionDetails, TdError> {
     let (ctx, param) = request.into_parts();
     let execution_id = param.execution;
 
-    let conn = gated_conn.get(authz.none());
-    let execution: ExecutionDBWithStatus = conn.live().fetch_one(&execution_id).await?;
-    let _grant = authz
-        .require_in_project::<ViewProject>(conn, &ctx, &execution.project_id)
+    let mut trx = db.read().await?;
+    let execution: ExecutionDBWithStatus = trx.get(authz.none()).fetch_one(&execution_id).await?;
+    let project = execution.base.base.project_id;
+    let mut trx = trx.enter_project(&project).await?;
+    let grant = authz
+        .require::<Project, ViewProject>(&mut trx, &ctx, &project)
         .await?;
+    let conn = trx.get(grant);
 
     let read: Execution = Execution::from_dao(execution)?;
 
     // Find all LFRs (concrete FRs are minted at dispatch; LFRs are the
     // plan-build identity rows), then all functions via the LFR's
     // function_version_id.
-    let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&execution_id).await?;
-    let function_version_ids: Vec<FunctionVersionId> =
-        lfrs.iter().map(|x| x.function_version_id.clone()).collect();
+    let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
+    let function_version_ids: Vec<FunctionVersionId> = lfrs
+        .iter()
+        .map(|x| x.base.function_version_id.clone())
+        .collect();
     let function_rows: Vec<FunctionDBWithNames> = conn
-        .fetch_all_chunked::<_, FunctionVersionId>(&function_version_ids)
+        .history()
+        .chunked()
+        .fetch_all::<FunctionDBWithNames>(&function_version_ids, ())
         .await?;
     let functions = function_rows
         .into_iter()

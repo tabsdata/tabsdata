@@ -12,12 +12,12 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{DbPool, InProject};
 use td_error::TdError;
 use td_execution::{SchedulerNotify, TransactionBy};
+use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionParam};
-use td_objects::{StateFilter, and};
-use td_queries::HistoricEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn execute_function(
@@ -31,9 +31,9 @@ async fn execute_function(
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), execution_request) = request.into_parts();
 
-    // before any read (the 425/409 trigger-gate answers must not be
+    // Authz before any read (the 425/409 trigger-gate answers must not be
     // observable unauthorized) and before the exclusive lock (unauthorized
-    // callers must not queue on it)
+    // callers must not queue on it).
     let grant = {
         let mut conn = db.read().await?;
         authz
@@ -43,20 +43,16 @@ async fn execute_function(
     let mut trx = db.begin_exclusive().await?;
     let conn = trx.get(grant);
     let function: FunctionDBWithNames = conn
-        .historic(&ctx.time)
-        .state(StateFilter::all())
+        .as_of(&ctx.time)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
     let trigger_type = trigger_type_manual().await?;
 
-    // Run the trigger gates (425 if running / 409 on external_uid conflict),
-    // build the execution, and shape the response.
     let response = execute(
         conn,
         msgs,
         &transaction_by,
         ctx,
-        project,
         execution_request,
         function,
         trigger_type,
@@ -80,7 +76,6 @@ pub(crate) mod tests {
     use td_database::pool::scoped::ScopedExt;
     use td_error::{ApiError, TdError};
     use td_execution::EXECUTION_GRAPH_OPTIONS;
-    use td_objects::and;
     use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
@@ -90,10 +85,10 @@ pub(crate) mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::graph::GraphEdge;
     use td_objects::dxo::logical::{
-        LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunUpdateDB,
+        LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunStatusUpdateDB,
         LogicalTableDataVersionDB,
     };
-    use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDBWithStatus;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
@@ -103,10 +98,10 @@ pub(crate) mod tests {
         ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
         TriggeredOn, UserId, VersionPos,
     };
-    use td_objects::types::basic::{CollectionIdName, FunctionIdName};
+    use td_objects::types::basic::{CollectionIdName, FunctionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
-    use td_queries::{CurrentEntry, LiveEntry};
 
     // Projects are silos with no inter-collection checks: triggering across
     // collections within the same project is always allowed for a
@@ -139,14 +134,12 @@ pub(crate) mod tests {
     /// identically-named group.
     #[td_test::test(db)]
     async fn test_execute_stamps_project_scoped_group(db: TdPool) -> Result<(), TdError> {
-        // A fresh project, seeded with its own system groups.
         let project = db
             .seed()
             .project(ProjectName::try_from("grp_proj")?)
             .await?;
 
-        // Create a collection in that project through the real service, which
-        // resolves the `default` group within the project's scope.
+        // Through the real service so `default` resolves in the project's scope.
         let collection_name = CollectionName::try_from("grp_coll")?;
         Services::with_defaults(db.clone())
             .create_collection(
@@ -169,7 +162,6 @@ pub(crate) mod tests {
 
         let collection: ActiveCollectionDB = db
             .scoped(project.id)
-            .live()
             .fetch_one::<ActiveCollectionDB>(&collection_name)
             .await?;
         assert_eq!(collection.project_id, project.id);
@@ -180,9 +172,7 @@ pub(crate) mod tests {
              project's own row is what scopes it (asserted via project_id)",
         );
 
-        // Register a publisher function in that collection and seed a run
-        // chain on it — every run-level row must inherit the project's group,
-        // never the global default.
+        // Every run-level row must inherit the project's group.
         let create = FunctionRegister {
             name: FunctionName::try_from("grp_fn")?,
             description: "grp fn".try_into()?,
@@ -220,18 +210,15 @@ pub(crate) mod tests {
             )
             .await?;
 
-        // The transaction is stamped with the collection's project group at mint.
-        assert_eq!(transaction.group_id, collection.group_id);
+        assert_eq!(transaction.base.group_id, collection.group_id);
 
-        // The minted LFR carries the project's group and project — not another's.
         let lfrs: Vec<LogicalFunctionRunDB> = db
             .scoped(p)
-            .live()
-            .fetch_all::<LogicalFunctionRunDB>(&function.function_id)
+            .fetch_all::<LogicalFunctionRunDB>(&function.base.function_id)
             .await?;
         assert_eq!(lfrs.len(), 1);
         assert_eq!(lfrs[0].project_id, project.id);
-        assert_eq!(lfrs[0].group_id, collection.group_id);
+        assert_eq!(lfrs[0].base.group_id, collection.group_id);
 
         Ok(())
     }
@@ -276,9 +263,10 @@ pub(crate) mod tests {
         };
         let producer = db.scoped(p).seed().function(&collection, &create).await?;
         let table: TableDB = db
-            .current()
-            .fetch_one(and!(&collection.id, TableName::try_from(tables[0])?))
-            .await?;
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(&collection.id, &TableIdName::from_str(tables[0])?))
+            .await?
+            .base;
 
         let mut executions = Vec::new();
         for _ in 0..versions {
@@ -382,8 +370,8 @@ pub(crate) mod tests {
     ) -> &LogicalFunctionRunInputDB {
         rows.iter()
             .find(|r| {
-                r.requirement_dependency_pos.map(|d| *d) == Some(dep_pos)
-                    && *r.requirement_version_pos == version_pos
+                r.base.requirement_dependency_pos.map(|d| *d) == Some(dep_pos)
+                    && *r.base.requirement_version_pos == version_pos
             })
             .unwrap_or_else(|| panic!("missing LFRI row dep {dep_pos} pos {version_pos}"))
     }
@@ -425,14 +413,14 @@ pub(crate) mod tests {
         )
         .await?;
 
-        // Persisted LFRI rows: range slots get one idx per resolved version
-        // (HEAD~2 → HEAD, oldest first), the single-version dep continues
-        // the sequence, trigger rows carry no idx.
-        let rows: Vec<LogicalFunctionRunInputDB> =
-            db.scoped(p).live().fetch_all(&response.id).await?;
+        let rows: Vec<LogicalFunctionRunInputDB> = db.scoped(p).fetch_all(&response.id).await?;
 
-        let idx_of =
-            |dep: i32, pos: i32| lfri_slot(&rows, dep, pos).requirement_input_idx.map(|i| *i);
+        let idx_of = |dep: i32, pos: i32| {
+            lfri_slot(&rows, dep, pos)
+                .base
+                .requirement_input_idx
+                .map(|i| *i)
+        };
         assert_eq!(idx_of(0, 0), Some(0));
         assert_eq!(idx_of(0, 1), Some(1));
         assert_eq!(idx_of(0, 2), Some(2));
@@ -441,6 +429,7 @@ pub(crate) mod tests {
         let range_ltdvs: HashSet<_> = (0..3)
             .map(|pos| {
                 lfri_slot(&rows, 0, pos)
+                    .base
                     .requirement_logical_table_data_version_id
                     .clone()
                     .expect("range slot must bind an LTDV")
@@ -449,18 +438,23 @@ pub(crate) mod tests {
         assert_eq!(range_ltdvs.len(), 3, "each range slot binds its own LTDV");
         assert_eq!(
             lfri_slot(&rows, 1, *VersionPos::SINGLE_VERSION)
+                .base
                 .requirement_logical_table_data_version_id,
-            lfri_slot(&rows, 0, 2).requirement_logical_table_data_version_id,
+            lfri_slot(&rows, 0, 2)
+                .base
+                .requirement_logical_table_data_version_id,
             "single-version dep binds the same LTDV as the range's HEAD slot",
         );
         for row in rows
             .iter()
-            .filter(|r| r.requirement_dependency_pos.is_none())
+            .filter(|r| r.base.requirement_dependency_pos.is_none())
         {
-            assert_eq!(row.requirement_input_idx, None, "trigger rows carry no idx");
+            assert_eq!(
+                row.base.requirement_input_idx, None,
+                "trigger rows carry no idx"
+            );
         }
 
-        // Execute response renders the persisted idxs.
         assert_eq!(idxs(dep_edge(&response, 0)), vec![0, 1, 2]);
         assert!(dep_edge(&response, 0).inner.iter().all(|v| v.is_some()));
         assert_eq!(idxs(dep_edge(&response, 1)), vec![3]);
@@ -473,7 +467,6 @@ pub(crate) mod tests {
             }
         }
 
-        // Read path reproduces them.
         let read_service = Services::with_defaults(db.clone());
         let read_request = || {
             RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
@@ -495,16 +488,15 @@ pub(crate) mod tests {
         // sees its version, but the idxs stay the persisted ones.
         let middle_lfr: LogicalFunctionRunDB = db
             .scoped(p)
-            .live()
-            .fetch_one(and!(&producer_executions[1].id, &producer.function_id))
+            .fetch_one(and!(
+                &producer_executions[1].base.id,
+                &producer.base.function_id
+            ))
             .await?;
-        let update = LogicalFunctionRunUpdateDB {
+        let update = LogicalFunctionRunStatusUpdateDB {
             status: LogicalFunctionRunStatus::Canceled,
         };
-        db.scoped(p)
-            .live()
-            .update::<_, LogicalFunctionRunDB>(&update, &middle_lfr.id)
-            .await?;
+        db.scoped(p).update(&update, &middle_lfr.base.id).await?;
 
         let drifted = read_service.execution_read(read_request()).await?.data;
         assert_eq!(idxs(dep_edge(&drifted, 0)), vec![0, 1, 2]);
@@ -542,8 +534,6 @@ pub(crate) mod tests {
         };
         let _ = db.scoped(p).seed().function(&collection, &create).await?;
 
-        // `table_p` has one version (range over three slots resolves two
-        // empty), `table_q` has none.
         let response = execute_consumer(
             &db,
             p,
@@ -553,11 +543,14 @@ pub(crate) mod tests {
         )
         .await?;
 
-        let rows: Vec<LogicalFunctionRunInputDB> =
-            db.scoped(p).live().fetch_all(&response.id).await?;
+        let rows: Vec<LogicalFunctionRunInputDB> = db.scoped(p).fetch_all(&response.id).await?;
 
-        let idx_of =
-            |dep: i32, pos: i32| lfri_slot(&rows, dep, pos).requirement_input_idx.map(|i| *i);
+        let idx_of = |dep: i32, pos: i32| {
+            lfri_slot(&rows, dep, pos)
+                .base
+                .requirement_input_idx
+                .map(|i| *i)
+        };
         assert_eq!(idx_of(0, 0), Some(*InputIdx::NO_DATA));
         assert_eq!(idx_of(0, 1), Some(*InputIdx::NO_DATA));
         assert_eq!(idx_of(0, 2), Some(0));
@@ -567,11 +560,13 @@ pub(crate) mod tests {
         );
         assert!(
             lfri_slot(&rows, 0, 0)
+                .base
                 .requirement_logical_table_data_version_id
                 .is_none()
         );
         assert!(
             lfri_slot(&rows, 0, 2)
+                .base
                 .requirement_logical_table_data_version_id
                 .is_some()
         );
@@ -628,8 +623,8 @@ pub(crate) mod tests {
             EXECUTION_GRAPH_OPTIONS.max_downstream_depth()
         };
 
-        // Trigger function without permission restrictions (collection_0), which triggers function_1
-        // and function_2. These will trigger function_3, depending on the test.
+        // collection_0/function_0 triggers function_1 and function_2, which
+        // may trigger function_3 depending on the test.
         let create = FunctionRegister {
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
@@ -800,8 +795,6 @@ pub(crate) mod tests {
             None => FUNCTION_NAMES.iter().collect::<Vec<_>>(),
         };
 
-        // Projects are silos: cross-collection triggering within the project
-        // is always allowed, so every trigger succeeds.
         {
             let response = response?.data;
 
@@ -859,11 +852,9 @@ pub(crate) mod tests {
             all_tables.sort();
             assert_eq!(expected_all_tables, all_tables);
 
-            // In this test, all tables are user tables.
             assert_eq!(response.user_tables.len(), all_tables.len());
             assert_eq!(response.system_tables.len(), 0);
 
-            // In our test, created tables are all of them.
             let expected_created_tables = expected_all_tables;
             let mut created_tables: Vec<_> = response
                 .created_tables
@@ -880,54 +871,80 @@ pub(crate) mod tests {
             assert_eq!(expected_created_tables, created_tables);
 
             let executions: Vec<ExecutionDBWithStatus> =
-                db.live().fetch_all::<ExecutionDBWithStatus>(()).await?;
+                db.fetch_all::<ExecutionDBWithStatus>(()).await?;
             assert_eq!(executions.len(), 1);
-            assert_eq!(executions[0].base.base.id, response.id);
-            assert_eq!(executions[0].base.base.name, response.name);
-            assert_eq!(executions[0].base.base.collection_id, collection_0.id);
-            assert_eq!(executions[0].status, ExecutionStatus::Scheduled);
+            assert_eq!(executions[0].base.base.base.id, response.id);
+            assert_eq!(executions[0].base.base.base.name, response.name);
+            assert_eq!(executions[0].base.base.base.collection_id, collection_0.id);
+            // The status views aggregate the plan's runs; the plan's shape is
+            // the edition's business and asserted in its te-execution tests.
+            let runs: Vec<LogicalFunctionRunDB> = db.fetch_all::<LogicalFunctionRunDB>(()).await?;
+            let all_scheduled = runs
+                .iter()
+                .all(|run| run.base.status == LogicalFunctionRunStatus::Scheduled);
+            let expected = if all_scheduled {
+                ExecutionStatus::Scheduled
+            } else {
+                ExecutionStatus::Running
+            };
+            assert_eq!(executions[0].status, expected);
 
             let transactions: Vec<TransactionDBWithStatus> =
-                db.live().fetch_all::<TransactionDBWithStatus>(()).await?;
-            assert!(transactions.len() == 1 || transactions.len() == 3);
+                db.fetch_all::<TransactionDBWithStatus>(()).await?;
+            let transaction_ids: HashSet<_> =
+                runs.iter().map(|run| &run.base.transaction_id).collect();
+            assert_eq!(transactions.len(), transaction_ids.len());
             for transaction in transactions {
-                assert_eq!(&transaction.base.execution_id, &response.id);
-                assert_eq!(transaction.status, TransactionStatus::Scheduled);
+                assert_eq!(&transaction.base.base.execution_id, &response.id);
+                let scheduled = runs
+                    .iter()
+                    .filter(|run| run.base.transaction_id == transaction.base.base.id)
+                    .all(|run| run.base.status == LogicalFunctionRunStatus::Scheduled);
+                let expected = if scheduled {
+                    TransactionStatus::Scheduled
+                } else {
+                    TransactionStatus::Stalled
+                };
+                assert_eq!(transaction.status, expected);
             }
 
-            // LFRs (concrete FRs are minted at dispatch, not plan-build).
+            // Concrete FRs/TDVs are minted at dispatch, not plan-build.
             let function: FunctionDBWithNames = db
-                .live()
-                .fetch_one::<FunctionDBWithNames>(&FUNCTION_NAMES[0])
+                .latest()
+                .fetch_one::<FunctionDBWithNames>(and!(
+                    &collection_0.id,
+                    &FunctionIdName::Name(FUNCTION_NAMES[0].clone())
+                ))
                 .await?;
             let lfrs: Vec<LogicalFunctionRunDB> = db
-                .live()
-                .fetch_all::<LogicalFunctionRunDB>(&function.base.function_id)
+                .fetch_all::<LogicalFunctionRunDB>(&function.base.base.function_id)
                 .await?;
             assert_eq!(lfrs.len(), 1);
-            assert_eq!(lfrs[0].collection_id, collection_0.id);
-            assert_eq!(lfrs[0].execution_id, response.id);
-            assert_eq!(lfrs[0].status, LogicalFunctionRunStatus::Scheduled);
+            assert_eq!(lfrs[0].base.collection_id, collection_0.id);
+            assert_eq!(lfrs[0].base.execution_id, response.id);
+            assert_eq!(lfrs[0].base.status, LogicalFunctionRunStatus::Scheduled);
 
             let function: FunctionDBWithNames = db
-                .live()
-                .fetch_one::<FunctionDBWithNames>(&FunctionName::try_from("function_2")?)
+                .latest()
+                .fetch_one::<FunctionDBWithNames>(and!(
+                    &collection_2.id,
+                    &FunctionIdName::Name(FUNCTION_NAMES[2].clone())
+                ))
                 .await?;
             let lfrs: Vec<LogicalFunctionRunDB> = db
-                .live()
-                .fetch_all::<LogicalFunctionRunDB>(&function.base.function_id)
+                .fetch_all::<LogicalFunctionRunDB>(&function.base.base.function_id)
                 .await?;
             for lfr in lfrs {
-                assert_eq!(&lfr.execution_id, &response.id);
-                assert_eq!(lfr.status, LogicalFunctionRunStatus::Scheduled);
+                assert_eq!(&lfr.base.execution_id, &response.id);
             }
 
-            // LTDVs (concrete TDVs are minted at dispatch).
-            let ltdvs: Vec<LogicalTableDataVersionDB> =
-                db.live().fetch_all::<LogicalTableDataVersionDB>(()).await?;
+            let ltdvs: Vec<LogicalTableDataVersionDB> = db
+                .history()
+                .fetch_all::<LogicalTableDataVersionDB>(())
+                .await?;
             assert_eq!(ltdvs.len(), expected_created_tables.len());
             for ltdv in ltdvs {
-                assert_eq!(&ltdv.execution_id, &response.id);
+                assert_eq!(&ltdv.base.execution_id, &response.id);
             }
             Ok(response)
         }
@@ -1084,9 +1101,13 @@ pub(crate) mod tests {
             .await?;
         let table_name = TableName::try_from("table_0")?;
         let table = db
-            .live()
-            .fetch_one::<TableDB>(and!(&collection.id, &table_name))
-            .await?;
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
+                &collection.id,
+                &TableIdName::Name(table_name.clone())
+            ))
+            .await?
+            .base;
         let _table_data_version = db
             .scoped(project_id)
             .seed()
@@ -1119,9 +1140,13 @@ pub(crate) mod tests {
             .await?;
         let table_name = TableName::try_from("table_1")?;
         let table = db
-            .live()
-            .fetch_one::<TableDB>(and!(&collection.id, &table_name))
-            .await?;
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
+                &collection.id,
+                &TableIdName::Name(table_name.clone())
+            ))
+            .await?
+            .base;
         let _table_data_version = db
             .scoped(project_id)
             .seed()
@@ -1157,20 +1182,18 @@ pub(crate) mod tests {
         let service = Services::with_defaults(db.clone());
         let _response = service.execute_function(request).await?.data;
 
-        // there should only be one LFR for function_2 (concrete FRs are
-        // minted at dispatch).
         let function_2: FunctionDBWithNames = db
-            .live()
-            .fetch_one::<FunctionDBWithNames>(&FUNCTION_NAMES[2])
+            .latest()
+            .fetch_one::<FunctionDBWithNames>(and!(
+                &collection.id,
+                &FunctionIdName::Name(FUNCTION_NAMES[2].clone())
+            ))
             .await?;
         let lfrs: Vec<LogicalFunctionRunDB> = db
-            .live()
-            .fetch_all::<LogicalFunctionRunDB>(&function_2.base.function_id)
+            .fetch_all::<LogicalFunctionRunDB>(&function_2.base.base.function_id)
             .await?;
         assert_eq!(lfrs.len(), 1);
-
-        // and in OnHold status, because even tho function_1 is Done, function_0 is not ready
-        assert_eq!(lfrs[0].status, expected_initial_status);
+        assert_eq!(lfrs[0].base.status, expected_initial_status);
         Ok(())
     }
 
@@ -1193,8 +1216,7 @@ pub(crate) mod tests {
             test_execute_disabled_trigger(db, p.id, OverrideDisabledTrigger::TRUE).await?;
         let response = response?;
 
-        // Assert that the disabled function as executed, and downstream was OK as well.
-        // Note that test_execute_disabled_trigger only created function 0 and 1.
+        // test_execute_disabled_trigger only creates functions 0 and 1.
         let graph_depth = EXECUTION_GRAPH_OPTIONS.max_downstream_depth();
 
         assert_eq!(
@@ -1389,7 +1411,6 @@ pub(crate) mod tests {
         let service = Services::with_defaults(db.clone());
         service.execute_function(trigger(Some(uid.clone()))).await?;
 
-        // Same external_uid on a still-live execution -> 409 Conflict.
         let service = Services::with_defaults(db.clone());
         let err = service
             .execute_function(trigger(Some(uid)))

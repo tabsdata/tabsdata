@@ -6,34 +6,35 @@ use crate::execution::list::list_executions_by_tdv;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::ViewProject;
-use td_database::access::{GatedConnection, RO};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionParam;
 use td_objects::list::params::ListQueryParams;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn execution_list_by_physical_table_data_version(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ListRequest<PhysicalTableDataVersionParam>,
 ) -> Result<ListResponse<Execution>, TdError> {
     let (ctx, param, list_params) = request.into_parts();
     let tdv_id = param.table_data_version;
 
-    let conn = gated_conn.get(authz.none());
-    let tdv: PhysicalTableDataVersionDB = conn.live().fetch_one(&tdv_id).await?;
-    let _grant = authz
-        .require_in_project::<ViewProject>(conn, &ctx, &tdv.project_id)
+    let mut trx = db.read().await?;
+    let tdv: PhysicalTableDataVersionDB = trx.get(authz.none()).fetch_one(&tdv_id).await?;
+    let mut trx = trx.enter_project(&tdv.project_id).await?;
+    let grant = authz
+        .require::<Project, ViewProject>(&mut trx, &ctx, &tdv.project_id)
         .await?;
 
     let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
     // Wrap into Option to match the nullable column.
-    list_executions_by_tdv(conn, &Some(tdv_id), &list_params, &query_params).await
+    list_executions_by_tdv(trx.get(grant), &Some(tdv_id), &list_params, &query_params).await
 }
 
 #[cfg(test)]
@@ -45,13 +46,13 @@ mod tests {
     use td_objects::and;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::dxo::table::TableDB;
-    use td_objects::types::basic::ReuseFrozen;
+    use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TableNameDto,
         TransactionKey, UserId, VersionPos,
     };
-    use td_queries::LiveEntry;
+    use td_objects::types::basic::{ReuseFrozen, TableIdName, TableName};
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -109,12 +110,13 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .live()
-            .fetch_one(and!(
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
-                &td_objects::types::basic::TableName::try_from(tables[0].clone())?
+                &TableIdName::Name(TableName::try_from(tables[0].clone())?)
             ))
-            .await?;
+            .await?
+            .base;
 
         let tdv = db
             .scoped(p.id)
@@ -184,8 +186,6 @@ mod tests {
                 &execution_2,
                 &transaction_2,
                 &function_run_2,
-                &table,
-                Some(&function_run_1),
                 Some(&tdv),
                 None,
                 &VersionPos::try_from(0)?,
@@ -198,7 +198,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
             PhysicalTableDataVersionParam {
-                table_data_version: tdv.id.clone(),
+                table_data_version: tdv.base.id.clone(),
             },
             ListParams::default(),
         );
@@ -209,7 +209,7 @@ mod tests {
 
         // Only execution_2 should appear (it has the function requirement referencing the TDV).
         assert_eq!(response.len, 1);
-        assert_eq!(response.data[0].id, execution_2.id);
+        assert_eq!(response.data[0].id, execution_2.base.id);
 
         Ok(())
     }
@@ -269,12 +269,13 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .live()
-            .fetch_one(and!(
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
-                &td_objects::types::basic::TableName::try_from(tables[0].clone())?
+                &TableIdName::Name(TableName::try_from(tables[0].clone())?)
             ))
-            .await?;
+            .await?
+            .base;
 
         let tdv = db
             .scoped(p.id)
@@ -292,7 +293,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
             PhysicalTableDataVersionParam {
-                table_data_version: tdv.id.clone(),
+                table_data_version: tdv.base.id.clone(),
             },
             ListParams::default(),
         );

@@ -5,6 +5,7 @@
 use crate::graph::{FunctionOrTable, GraphConfig};
 use itertools::Itertools;
 use std::collections::HashMap;
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -12,22 +13,27 @@ use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
+use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::{AtTime, FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
-use td_queries::{CurrentEntry, HistoricEntry};
+use td_objects::{ReachableFrom, Scd2Dao, SelectDao};
+use td_queries::Queries;
 
-/// Pick `current()` or `historic(at)` once at the call site, then run
-/// the same chain body. The body is expanded twice (one per arm) so it
-/// is type-checked under each wrapper independently — `Current<E>` and
-/// `Historic<'_, AtTime, E>` expose parallel method surfaces, so any
-/// chain that compiles under one compiles under the other.
+/// Pick `current()` or `find_at(at)` once at the call site, then run the
+/// same chain body — expanded per arm, since `Current` and `FindAt` are
+/// distinct types with parallel surfaces and no trait spans them.
+///
+/// Only the recursive walks still need it: their chain is six steps, and
+/// writing it twice per site is what lets the two arms drift apart. The
+/// one-step reads go through [`GraphBuilder::chunked_at`] and a plain
+/// `if`/`else` instead.
 macro_rules! read_chain {
     ($historic:expr, $conn:expr, $at:expr, |$entry:ident| $body:block) => {{
         if $historic {
-            let $entry = $conn.historic(&*$at);
+            let $entry = $conn.as_of(&*$at);
             $body
         } else {
-            let $entry = $conn.current();
+            let $entry = $conn.latest();
             $body
         }
     }};
@@ -38,9 +44,37 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub async fn find_recursive_trigger_graph(
+    /// One chunked read at the configured grain: live now, or visible at
+    /// `at`. Holds the `historic` branch for every caller that needs nothing
+    /// but this one step.
+    async fn chunked_at<S, D>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
+        at: &AtTime,
+        values: &[impl SqlCondition<D>],
+        extra: impl SqlCondition<D>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        S: SeesProjectRows,
+        D: SelectDao + Scd2Dao<Db = Apiserver, VersionOrder = AtTime> + ReachableFrom<S>,
+    {
+        let rows = if self.config.historic {
+            conn.as_of(at)
+                .chunked()
+                .fetch_all::<D>(values, extra)
+                .await?
+        } else {
+            conn.latest()
+                .chunked()
+                .fetch_all::<D>(values, extra)
+                .await?
+        };
+        Ok(rows)
+    }
+
+    pub async fn find_recursive_trigger_graph<S: SeesProjectRows>(
+        &self,
+        conn: &mut DomainConnection<Apiserver, S>,
         at_time: &AtTime,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
@@ -48,19 +82,17 @@ impl GraphBuilder {
         let trigger_graph: Vec<TriggerDBWithNames> = match function_or_table {
             FunctionOrTable::Function(function_id) => {
                 read_chain!(self.config.historic, conn, at_time, |entry| {
-                    entry
+                    let walk = entry
                         .recursive::<TriggerDBWithNames, FunctionDB>(*recursion_options)
                         .direct_reference(function_id)
-                        .d_state(self.config.trigger_state.clone())
-                        .r_state(self.config.function_state.clone())
-                        .direct_reference_state(
-                            // move from Executable to Active for the entry point only
-                            recursion_options
-                                .override_disabled_trigger()
-                                .then(FunctionDB::active),
-                        )
-                        .fetch_all()
-                        .await?
+                        .filter(&self.config.trigger_state)
+                        .filter_references(&self.config.function_state);
+                    let walk = if recursion_options.override_disabled_trigger() {
+                        walk.filter_start(FunctionDB::active())
+                    } else {
+                        walk
+                    };
+                    walk.fetch_all().await?
                 })
             }
             FunctionOrTable::Table(table_id) => {
@@ -68,8 +100,7 @@ impl GraphBuilder {
                     entry
                         .recursive::<TriggerDBWithNames, TableDB>(*recursion_options)
                         .direct_reference(table_id)
-                        .d_state(self.config.trigger_state.clone())
-                        .r_state(self.config.table_state.clone())
+                        .filter(&self.config.trigger_state)
                         .fetch_all()
                         .await?
                 })
@@ -79,9 +110,9 @@ impl GraphBuilder {
         Ok(trigger_graph)
     }
 
-    pub async fn find_recursive_dependency_graph(
+    pub async fn find_recursive_dependency_graph<S: SeesProjectRows>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
         at_time: &AtTime,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
@@ -92,8 +123,7 @@ impl GraphBuilder {
                     entry
                         .recursive::<DependencyDBWithNames, FunctionDB>(*recursion_options)
                         .direct_reference(function_id)
-                        .d_state(self.config.dependency_state.clone())
-                        .r_state(self.config.function_state.clone())
+                        .filter_references(&self.config.function_state)
                         .fetch_all()
                         .await?
                 })
@@ -103,8 +133,6 @@ impl GraphBuilder {
                     entry
                         .recursive::<DependencyDBWithNames, TableDB>(*recursion_options)
                         .direct_reference(table_id)
-                        .d_state(self.config.dependency_state.clone())
-                        .r_state(self.config.table_state.clone())
                         .fetch_all()
                         .await?
                 })
@@ -114,22 +142,21 @@ impl GraphBuilder {
         Ok(dep_graph)
     }
 
-    pub async fn main_function_id(
+    pub async fn main_function_id<S: SeesProjectRows>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
         at_time: &AtTime,
         function_or_table: &FunctionOrTable,
     ) -> Result<FunctionId, TdError> {
         let function_id = match function_or_table {
             FunctionOrTable::Function(function_id) => *function_id,
             FunctionOrTable::Table(table_id) => {
-                let table: TableDB = read_chain!(self.config.historic, conn, at_time, |entry| {
-                    entry
-                        .state(self.config.table_state.clone())
-                        .fetch_one(table_id)
-                        .await?
-                });
-                table.function_id
+                let table: TableDB = if self.config.historic {
+                    conn.as_of(at_time).fetch_one::<TableDB>(table_id).await?
+                } else {
+                    conn.latest().fetch_one::<TableDB>(table_id).await?
+                };
+                table.base.function_id
             }
         };
 
@@ -144,10 +171,10 @@ impl GraphBuilder {
     ) -> Result<Vec<FunctionId>, TdError> {
         let trigger_function_ids = trigger_graph
             .iter()
-            .flat_map(|f| [*f.base.trigger_by_function_id, f.base.function_id]);
+            .flat_map(|f| [*f.base.base.trigger_by_function_id, f.base.base.function_id]);
         let dep_function_ids = dep_graph
             .iter()
-            .flat_map(|d| [*d.base.table_function_id, d.base.function_id]);
+            .flat_map(|d| [*d.base.base.table_function_id, d.base.base.function_id]);
 
         let unique_triggered_function_ids = trigger_function_ids
             .into_iter()
@@ -166,7 +193,7 @@ impl GraphBuilder {
     ) -> Result<Vec<FunctionId>, TdError> {
         let unique_triggered_function_ids = trigger_graph
             .iter()
-            .map(|f| f.base.function_id)
+            .map(|f| f.base.base.function_id)
             .chain(std::iter::once(*function_id))
             .unique()
             .collect();
@@ -174,51 +201,39 @@ impl GraphBuilder {
         Ok(unique_triggered_function_ids)
     }
 
-    pub async fn find_triggered_functions_dependency_graph(
+    pub async fn find_triggered_functions_dependency_graph<S: SeesProjectRows>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
         at_time: &AtTime,
         triggered_functions: &[FunctionId],
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-        let dep_graph: Vec<DependencyDBWithNames> =
-            read_chain!(self.config.historic, conn, at_time, |entry| {
-                entry
-                    .state(self.config.dependency_state.clone())
-                    .fetch_all_chunked::<_>(triggered_functions)
-                    .await?
-            });
-
-        Ok(dep_graph)
+        self.chunked_at(conn, at_time, triggered_functions, ())
+            .await
     }
 
-    pub async fn find_functions_output_tables(
+    pub async fn find_functions_output_tables<S: SeesProjectRows>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
         at_time: &AtTime,
         functions: &[FunctionId],
     ) -> Result<Vec<TableDBWithNames>, TdError> {
-        let output_tables: Vec<TableDBWithNames> =
-            read_chain!(self.config.historic, conn, at_time, |entry| {
-                entry
-                    .state(TableDBWithNames::active())
-                    .fetch_all_chunked::<_>(functions)
-                    .await?
-            });
-
-        Ok(output_tables)
+        self.chunked_at(conn, at_time, functions, TableDBWithNames::active())
+            .await
     }
 
-    pub async fn find_all_tables_map(
+    pub async fn find_all_tables_map<S: SeesProjectRows>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
         at_time: &AtTime,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],
         output_tables: &[TableDBWithNames],
     ) -> Result<HashMap<TableId, TableDBWithNames>, TdError> {
-        let trigger_table_ids = trigger_graph.iter().map(|t| t.base.trigger_by_table_id);
-        let dep_table_ids = dep_graph.iter().map(|t| t.base.table_id);
-        let output_table_ids = output_tables.iter().map(|t| t.base.table_id);
+        let trigger_table_ids = trigger_graph
+            .iter()
+            .map(|t| t.base.base.trigger_by_table_id);
+        let dep_table_ids = dep_graph.iter().map(|t| t.base.base.table_id);
+        let output_table_ids = output_tables.iter().map(|t| t.base.base.table_id);
 
         let all_table_ids = trigger_table_ids
             .chain(dep_table_ids)
@@ -227,23 +242,19 @@ impl GraphBuilder {
             .collect::<Vec<_>>();
 
         let all_tables: Vec<TableDBWithNames> =
-            read_chain!(self.config.historic, conn, at_time, |entry| {
-                entry
-                    .fetch_all_chunked::<TableDBWithNames, _>(&all_table_ids)
-                    .await?
-            });
+            self.chunked_at(conn, at_time, &all_table_ids, ()).await?;
 
         let all_tables = all_tables
             .into_iter()
-            .map(|t| (t.base.table_id, t))
+            .map(|t| (t.base.base.table_id, t))
             .collect::<HashMap<_, _>>();
 
         Ok(all_tables)
     }
 
-    pub async fn find_all_functions_map(
+    pub async fn find_all_functions_map<S: SeesProjectRows>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
         at_time: &AtTime,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],
@@ -251,11 +262,11 @@ impl GraphBuilder {
     ) -> Result<HashMap<FunctionId, FunctionDBWithNames>, TdError> {
         let trigger_function_ids = trigger_graph
             .iter()
-            .flat_map(|t| [*t.base.trigger_by_function_id, t.base.function_id]);
+            .flat_map(|t| [*t.base.base.trigger_by_function_id, t.base.base.function_id]);
         let dep_function_ids = dep_graph
             .iter()
-            .flat_map(|t| [*t.base.table_function_id, t.base.function_id]);
-        let output_function_ids = output_tables.iter().map(|t| t.base.function_id);
+            .flat_map(|t| [*t.base.base.table_function_id, t.base.base.function_id]);
+        let output_function_ids = output_tables.iter().map(|t| t.base.base.function_id);
 
         let all_function_ids = trigger_function_ids
             .chain(dep_function_ids)
@@ -263,16 +274,13 @@ impl GraphBuilder {
             .unique()
             .collect::<Vec<_>>();
 
-        let all_functions: Vec<FunctionDBWithNames> =
-            read_chain!(self.config.historic, conn, at_time, |entry| {
-                entry
-                    .fetch_all_chunked::<FunctionDBWithNames, _>(&all_function_ids)
-                    .await?
-            });
+        let all_functions: Vec<FunctionDBWithNames> = self
+            .chunked_at(conn, at_time, &all_function_ids, ())
+            .await?;
 
         let all_functions = all_functions
             .into_iter()
-            .map(|f| (f.base.function_id, f))
+            .map(|f| (f.base.base.function_id, f))
             .collect::<HashMap<_, _>>();
 
         Ok(all_functions)

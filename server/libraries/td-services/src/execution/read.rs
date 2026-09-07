@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use td_error::TdError;
 use td_execution::{EXECUTION_GRAPH_OPTIONS, TransactionBy};
 use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::transaction::{TransactionDB, TransactionValue};
+use td_objects::dxo::transaction::{TransactionInsertDB, TransactionValue};
 use td_objects::transaction::map::TransactionMap;
 use td_objects::types::recursion::RecursionOptions;
 
@@ -15,6 +15,7 @@ pub async fn with_existing_recursion_options(
 ) -> Result<RecursionOptions, TdError> {
     // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
     let options = execution
+        .base
         .recursion_options
         .as_deref()
         .cloned()
@@ -25,7 +26,7 @@ pub async fn with_existing_recursion_options(
 // Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
 pub fn build_existing_transaction_map(
     transaction_by: &TransactionBy,
-    transactions: &[TransactionDB],
+    transactions: &[TransactionInsertDB],
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
     let mut mapped_transactions = HashMap::new();
     for transaction in transactions.iter() {

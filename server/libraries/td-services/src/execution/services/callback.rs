@@ -2,39 +2,35 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::redirect_at_finish::redirect_pointers_at_finish;
 use crate::execution::update_status::{
     update_function_run_status, update_table_data_version_status, update_worker_status,
 };
-use crate::logical::index_lfrs_by_exec_fn;
-use std::collections::HashSet;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{DbPool, Global};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
 use td_objects::dxo::physical_function_run::FunctionRunIdParam;
-use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
+use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
 use td_objects::dxo::worker::{
     CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerIdParam, WorkerUpdateDB,
 };
-use td_objects::types::basic::{ExecutionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus};
-use td_queries::{ChunkedQueries, LiveEntry};
+use td_objects::types::basic::PhysicalFunctionRunStatus;
+use td_queries::Queries;
 
 #[service_factory]
 async fn execution_callback(
     authz: Ctx<AuthzContext>,
     scheduler_notify: Ctx<SchedulerNotify>,
     msgs: &mut ReqCtx,
-    db: DbPool<Global>,
+    db: DbPool<AcrossProjects>,
     request: UpdateRequest<CallbackRequest, (FunctionRunIdParam, WorkerIdParam)>,
 ) -> Result<(), TdError> {
-    let (ctx, (function_run_param, worker_param), callback) = request.into_parts();
-    let at = ctx.time;
+    let (_ctx, (function_run_param, worker_param), callback) = request.into_parts();
 
     let update: WorkerExecutionUpdate = WorkerExecutionUpdate::try_from(&callback)?;
 
@@ -42,37 +38,22 @@ async fn execution_callback(
     let worker_id = worker_param.worker_id;
     let project = {
         let mut trx = db.read().await?;
-        let worker: WorkerDB = trx.get(grant).live().fetch_one(&worker_id).await?;
+        let worker: WorkerDB = trx.get(grant).fetch_one(&worker_id).await?;
         worker.project_id
     };
     let mut trx = db.in_project(&project).begin_exclusive().await?;
 
     let conn = trx.get(grant);
     let physical_function_run_id = function_run_param.function_run_id;
-    let execution_ids: Vec<ExecutionId> = conn
-        .live()
-        .fetch_all::<PhysicalFunctionRunDB>(&physical_function_run_id)
-        .await?
-        .into_iter()
-        .map(|fr| fr.execution_id)
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-    // Execution-wide, not just the reporting run: the commit roll-up in
-    // `update_function_run_status` reads the whole transaction's LFRs.
-    let execution_lfrs: Vec<LogicalFunctionRunDB> = conn
-        .fetch_all_chunked::<LogicalFunctionRunDB, ExecutionId>(&execution_ids)
+    let physical_run: PhysicalFunctionRunDB = conn.fetch_one(&physical_function_run_id).await?;
+    let lfr: LogicalFunctionRunDB = conn
+        .fetch_one(&physical_run.base.logical_function_run_id)
         .await?;
 
     // Per-attempt audit on the PhysicalFunctionRunDB row: started_on,
     // ended_on, and status (the per-attempt status — never sticky).
-    let physical_runs: Vec<PhysicalFunctionRunDB> =
-        conn.live().fetch_all(&physical_function_run_id).await?;
-    let audit_update = UpdatePhysicalFunctionRunDB::try_from(&update)?;
-    let attempt_ids: Vec<PhysicalFunctionRunId> =
-        physical_runs.iter().map(|fr| fr.id.clone()).collect();
-    conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&audit_update, &attempt_ids)
-        .await?;
+    let audit_update = PhysicalFunctionRunUpdateDB::try_from(&update)?;
+    conn.update(&audit_update, &physical_run.base.id).await?;
 
     let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
     update_worker_status(conn, &worker_update, &worker_id).await?;
@@ -80,24 +61,15 @@ async fn execution_callback(
     // Canonical flow-control status update on the LFR (sticky-Committed gate
     // applies inside `update_function_run_status`). An attempt whose PFR has
     // already ended is a late or duplicate callback — drop it.
-    let lfr_by_exec_fn = index_lfrs_by_exec_fn(execution_lfrs);
-    let lfrs: Vec<LogicalFunctionRunDB> = physical_runs
-        .iter()
-        .filter(|fr| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&fr.status))
-        .filter_map(|fr| {
-            lfr_by_exec_fn
-                .get(&fr.execution_id)
-                .and_then(|inner| inner.get(&fr.function_id))
-                .cloned()
-        })
-        .collect();
-    let lfr_update: LogicalFunctionRunUpdateDB = LogicalFunctionRunUpdateDB::try_from(&update)?;
+    let lfrs = if PhysicalFunctionRunStatus::IN_FLIGHT.contains(&physical_run.base.status) {
+        vec![lfr]
+    } else {
+        Vec::new()
+    };
+    let lfr_update: LogicalFunctionRunStatusUpdateDB =
+        LogicalFunctionRunStatusUpdateDB::try_from(&update)?;
     update_function_run_status(msgs, conn, &lfrs, &lfr_update).await?;
 
-    // Redirect-at-finish: if the reporting FR is a replay attempt
-    // (LFR pointer is currently bound to a different FR), append
-    // the redirect events on success. No-op on failure.
-    redirect_pointers_at_finish(conn, &physical_runs, &update, &at).await?;
     update_table_data_version_status(conn, &physical_function_run_id, &callback).await?;
     trx.commit().await?;
 
@@ -128,7 +100,7 @@ mod tests {
         TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     async fn test_callback(
@@ -149,8 +121,8 @@ mod tests {
                 .flat_map(|t| &t.functions)
                 .find(|f| f.name.as_str() == callback_function)
                 .unwrap();
-            let physical_function_run = (*f[&test_function].id).clone();
-            let worker = (*w[&test_function].id).clone();
+            let physical_function_run = (*f[&test_function].base.id).clone();
+            let worker = (*w[&test_function].base.id).clone();
 
             async move {
                 let response: CallbackRequest = ResponseMessagePayload {
@@ -533,75 +505,75 @@ mod tests {
         .await?;
 
         let physical_function_runs: Vec<PhysicalFunctionRunDBWithNames> = db
-            .live()
+            .history()
             .fetch_all::<PhysicalFunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)
             .await?;
         assert_eq!(physical_function_runs.len(), 1);
         let physical_function_run = &physical_function_runs[0];
 
         let physical_table_data_versions: Vec<PhysicalTableDataVersionDBWithNames> = db
-            .live()
+            .history()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_0")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 1);
         let physical_table_data_version = &physical_table_data_versions[0];
         assert_eq!(
-            physical_table_data_version.base.base.triggered_on,
-            physical_function_run.base.triggered_on
+            physical_table_data_version.base.base.base.triggered_on,
+            physical_function_run.base.base.triggered_on
         );
         assert_eq!(
             physical_table_data_version.base.triggered_by_id,
-            physical_function_run.base.triggered_by_id
+            physical_function_run.base.base.triggered_by_id
         );
         assert_eq!(
             physical_table_data_version.base.status,
-            physical_function_run.base.status
+            physical_function_run.base.base.status
         );
         assert_eq!(
-            physical_table_data_version.base.base.has_data,
+            physical_table_data_version.base.base.base.has_data,
             Some(HasData::FALSE)
         );
         assert_eq!(
-            physical_table_data_version.base.base.schema_changed,
+            physical_table_data_version.base.base.base.schema_changed,
             Some(SchemaChanged::FALSE)
         );
 
         let physical_table_data_versions: Vec<PhysicalTableDataVersionDBWithNames> = db
-            .live()
+            .history()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 1);
         let physical_table_data_version = &physical_table_data_versions[0];
         assert_eq!(
-            physical_table_data_version.base.base.triggered_on,
-            physical_function_run.base.triggered_on
+            physical_table_data_version.base.base.base.triggered_on,
+            physical_function_run.base.base.triggered_on
         );
         assert_eq!(
             physical_table_data_version.base.triggered_by_id,
-            physical_function_run.base.triggered_by_id
+            physical_function_run.base.base.triggered_by_id
         );
         assert_eq!(
             physical_table_data_version.base.status,
-            physical_function_run.base.status
+            physical_function_run.base.base.status
         );
         assert_eq!(
-            physical_table_data_version.base.base.has_data,
+            physical_table_data_version.base.base.base.has_data,
             Some(HasData::TRUE)
         );
         assert_eq!(
-            physical_table_data_version.base.base.schema_changed,
+            physical_table_data_version.base.base.base.schema_changed,
             Some(SchemaChanged::FALSE)
         );
         assert_eq!(
-            physical_table_data_version.base.base.column_count,
+            physical_table_data_version.base.base.base.column_count,
             Some(ColumnCount::try_from(1i64)?)
         );
         assert_eq!(
-            physical_table_data_version.base.base.row_count,
+            physical_table_data_version.base.base.base.row_count,
             Some(RowCount::try_from(2i64)?)
         );
         assert_eq!(
-            physical_table_data_version.base.base.schema_hash,
+            physical_table_data_version.base.base.base.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
 
@@ -694,7 +666,7 @@ mod tests {
         .await?;
 
         let physical_function_runs = db
-            .live()
+            .history()
             .fetch_all::<PhysicalFunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)
             .await?;
         assert_eq!(physical_function_runs.len(), 2);
@@ -702,7 +674,7 @@ mod tests {
         let function_run_1 = &physical_function_runs[1];
 
         let physical_table_data_versions = db
-            .live()
+            .history()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_0")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 2);
@@ -710,56 +682,65 @@ mod tests {
         let table_data_version_1 = &physical_table_data_versions[1];
 
         assert_eq!(
-            table_data_version_0.base.base.triggered_on,
-            function_run_0.base.triggered_on
+            table_data_version_0.base.base.base.triggered_on,
+            function_run_0.base.base.triggered_on
         );
         assert_eq!(
-            table_data_version_1.base.base.triggered_on,
-            function_run_1.base.triggered_on
+            table_data_version_1.base.base.base.triggered_on,
+            function_run_1.base.base.triggered_on
         );
         assert_eq!(
             table_data_version_0.base.triggered_by_id,
-            function_run_0.base.triggered_by_id
+            function_run_0.base.base.triggered_by_id
         );
         assert_eq!(
             table_data_version_1.base.triggered_by_id,
-            function_run_1.base.triggered_by_id
+            function_run_1.base.base.triggered_by_id
         );
-        assert_eq!(table_data_version_0.base.status, function_run_0.base.status);
-        assert_eq!(table_data_version_1.base.status, function_run_1.base.status);
+        assert_eq!(
+            table_data_version_0.base.status,
+            function_run_0.base.base.status
+        );
+        assert_eq!(
+            table_data_version_1.base.status,
+            function_run_1.base.base.status
+        );
 
         // version_0 (newer) has data, and version_1 (older) does not
-        assert_eq!(table_data_version_0.base.base.has_data, Some(HasData::TRUE));
         assert_eq!(
-            table_data_version_0.base.base.schema_changed,
+            table_data_version_0.base.base.base.has_data,
+            Some(HasData::TRUE)
+        );
+        assert_eq!(
+            table_data_version_0.base.base.base.schema_changed,
             Some(SchemaChanged::FALSE)
         );
         assert_eq!(
-            table_data_version_0.base.base.column_count,
+            table_data_version_0.base.base.base.column_count,
             Some(ColumnCount::try_from(3i64)?)
         );
         assert_eq!(
-            table_data_version_0.base.base.row_count,
+            table_data_version_0.base.base.base.row_count,
             Some(RowCount::try_from(4i64)?)
         );
         assert_eq!(
-            table_data_version_0.base.base.schema_hash,
+            table_data_version_0.base.base.base.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
         assert_eq!(
-            table_data_version_1.base.base.has_data,
+            table_data_version_1.base.base.base.has_data,
             Some(HasData::FALSE)
         );
         assert_eq!(
-            table_data_version_1.base.base.schema_changed,
+            table_data_version_1.base.base.base.schema_changed,
             Some(SchemaChanged::FALSE)
         );
-        assert_eq!(table_data_version_1.base.base.column_count, None);
-        assert_eq!(table_data_version_1.base.base.row_count, None);
-        assert_eq!(table_data_version_1.base.base.schema_hash, None);
+        assert_eq!(table_data_version_1.base.base.base.column_count, None);
+        assert_eq!(table_data_version_1.base.base.base.row_count, None);
+        assert_eq!(table_data_version_1.base.base.base.schema_hash, None);
 
         let physical_table_data_versions = db
-            .live()
+            .history()
             .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
             .await?;
         assert_eq!(physical_table_data_versions.len(), 2);
@@ -767,60 +748,69 @@ mod tests {
         let table_data_version_1 = &physical_table_data_versions[1];
 
         assert_eq!(
-            table_data_version_0.base.base.triggered_on,
-            function_run_0.base.triggered_on
+            table_data_version_0.base.base.base.triggered_on,
+            function_run_0.base.base.triggered_on
         );
         assert_eq!(
-            table_data_version_1.base.base.triggered_on,
-            function_run_1.base.triggered_on
+            table_data_version_1.base.base.base.triggered_on,
+            function_run_1.base.base.triggered_on
         );
         assert_eq!(
             table_data_version_0.base.triggered_by_id,
-            function_run_0.base.triggered_by_id
+            function_run_0.base.base.triggered_by_id
         );
         assert_eq!(
             table_data_version_1.base.triggered_by_id,
-            function_run_1.base.triggered_by_id
+            function_run_1.base.base.triggered_by_id
         );
-        assert_eq!(table_data_version_0.base.status, function_run_0.base.status);
-        assert_eq!(table_data_version_1.base.status, function_run_1.base.status);
+        assert_eq!(
+            table_data_version_0.base.status,
+            function_run_0.base.base.status
+        );
+        assert_eq!(
+            table_data_version_1.base.status,
+            function_run_1.base.base.status
+        );
 
         // version_0 (newer) has no data, and version_1 (older) does. version_0 inherits data info
         assert_eq!(
-            table_data_version_0.base.base.has_data,
+            table_data_version_0.base.base.base.has_data,
             Some(HasData::FALSE)
         );
         assert_eq!(
-            table_data_version_0.base.base.schema_changed,
+            table_data_version_0.base.base.base.schema_changed,
             Some(SchemaChanged::FALSE)
         );
         assert_eq!(
-            table_data_version_0.base.base.column_count,
+            table_data_version_0.base.base.base.column_count,
             Some(ColumnCount::try_from(1i64)?)
         );
         assert_eq!(
-            table_data_version_0.base.base.row_count,
+            table_data_version_0.base.base.base.row_count,
             Some(RowCount::try_from(2i64)?)
         );
         assert_eq!(
-            table_data_version_0.base.base.schema_hash,
+            table_data_version_0.base.base.base.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
-        assert_eq!(table_data_version_1.base.base.has_data, Some(HasData::TRUE));
         assert_eq!(
-            table_data_version_1.base.base.schema_changed,
+            table_data_version_1.base.base.base.has_data,
+            Some(HasData::TRUE)
+        );
+        assert_eq!(
+            table_data_version_1.base.base.base.schema_changed,
             Some(SchemaChanged::FALSE)
         );
         assert_eq!(
-            table_data_version_1.base.base.column_count,
+            table_data_version_1.base.base.base.column_count,
             Some(ColumnCount::try_from(1i64)?)
         );
         assert_eq!(
-            table_data_version_1.base.base.row_count,
+            table_data_version_1.base.base.base.row_count,
             Some(RowCount::try_from(2i64)?)
         );
         assert_eq!(
-            table_data_version_1.base.base.schema_hash,
+            table_data_version_1.base.base.base.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
         Ok(())
@@ -870,10 +860,10 @@ mod tests {
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
                     (
                         FunctionRunIdParam {
-                            function_run_id: (*f[&test_function].id).clone().into(),
+                            function_run_id: (*f[&test_function].base.id).clone().into(),
                         },
                         WorkerIdParam {
-                            worker_id: (*w[&test_function].id).clone().into(),
+                            worker_id: (*w[&test_function].base.id).clone().into(),
                         },
                     ),
                     done_callback(),
@@ -936,10 +926,10 @@ mod tests {
                     RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
                         (
                             FunctionRunIdParam {
-                                function_run_id: (*f[&test_function].id).clone().into(),
+                                function_run_id: (*f[&test_function].base.id).clone().into(),
                             },
                             WorkerIdParam {
-                                worker_id: (*w[&test_function].id).clone().into(),
+                                worker_id: (*w[&test_function].base.id).clone().into(),
                             },
                         ),
                         done_callback(),

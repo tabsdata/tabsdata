@@ -2,34 +2,31 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Replay-endpoint helpers. The endpoint mints PFR + PTDV
-//! placeholders for the new attempt; the pointer log is untouched
-//! until the worker callback. Dispatch readiness lives on the
-//! physical side ([`td_queries::Pfr::to_dispatch`]).
+//! Replay-endpoint helpers. The endpoint mints PFR + PTDV placeholders for
+//! the new attempt; dispatch readiness lives on the physical side
+//! ([`td_queries::PhysicalRuns::to_dispatch`]).
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head};
 use crate::logical::mint::{mint_function_run, mint_output_table_data_versions};
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
-use td_objects::dxo::logical::{
-    LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalFunctionRunReplayResponse,
-};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunReplayResponse};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunInsertDB;
 use td_objects::types::basic::{
-    AtTime, LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalPointerStatus,
-    PhysicalFunctionRunId, PhysicalFunctionRunStatus,
+    AtTime, LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
+    PhysicalFunctionRunStatus,
 };
-use td_queries::{PfrEntry, VersionedEntry};
+use td_queries::Queries;
 use tracing::{debug, instrument};
 
 #[td_error]
 pub enum ReplayError {
-    #[error("LFR [{0}] is not Bound to a finished function run; nothing to replay")]
-    NotBound(LogicalFunctionRunId) = 0,
+    #[error("LFR [{0}] has no function run attempt; nothing to replay")]
+    NoAttempt(LogicalFunctionRunId) = 0,
     #[error("LFR [{0}] status [{1:?}] is not terminal; cannot replay an in-flight run")]
     NotTerminal(LogicalFunctionRunId, LogicalFunctionRunStatus) = 1,
-    #[error("LFR [{0}] pointer is Bound but the bound FR id is missing")]
-    BoundWithoutId(LogicalFunctionRunId) = 2,
     #[error(
         "LFR [{0}] has an in-flight attempt [{1}] (status {2:?}); cannot replay until it finishes"
     )]
@@ -40,57 +37,47 @@ pub enum ReplayError {
     ) = 3,
 }
 
-/// Read the LFR's current pointer event. Refuse if not Bound — replay
-/// only applies to a previously-dispatched LFR. Surfaces FR_old's id
-/// for the next step.
+/// The LFR's current attempt; replay only applies to a dispatched LFR.
 #[instrument(
-    name = "replay.load_bound_pointer",
+    name = "replay.load_current_attempt",
     skip_all,
     level = "debug",
     err(Debug)
 )]
-pub async fn load_bound_function_run_id(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn load_current_function_run_id<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     lfr: &LogicalFunctionRunDB,
-    at: &AtTime,
 ) -> Result<PhysicalFunctionRunId, TdError> {
-    let latest: LogicalFunctionRunPointerDB = conn.versioned(at).fetch_one(&lfr.id).await?;
-    if !matches!(latest.status, LogicalPointerStatus::Bound) {
-        Err(ReplayError::NotBound(lfr.id.clone()))?
-    }
-    let fr_id = latest
-        .physical_function_run_id
-        .clone()
-        .ok_or_else(|| ReplayError::BoundWithoutId(lfr.id.clone()))?;
-    Ok(fr_id)
+    let current: Option<PhysicalFunctionRunDB> = conn
+        .latest()
+        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
+        .await?;
+    let current = current.ok_or_else(|| ReplayError::NoAttempt(lfr.base.id.clone()))?;
+    Ok(current.base.id)
 }
 
-/// Refuse replay when a prior attempt is still in flight (PFR status
-/// in `Requested | Running`). Failed / Done / Canceled prior
-/// attempts don't block — they're terminal, and the operator may
-/// legitimately want to mint a new replay.
+/// Refuse replay while the current attempt is in flight.
 #[instrument(
     name = "replay.assert_no_concurrent_replay",
     skip_all,
     level = "debug",
     err(Debug)
 )]
-pub async fn assert_no_concurrent_replay(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn assert_no_concurrent_replay<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     lfr: &LogicalFunctionRunDB,
-    bound: &PhysicalFunctionRunId,
 ) -> Result<(), TdError> {
-    let in_flight: Option<PhysicalFunctionRunDB> = conn
-        .pfr()
-        .in_flight_for(&lfr.execution_id, &lfr.function_id)
+    let current: Option<PhysicalFunctionRunDB> = conn
+        .latest()
+        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
         .await?;
-    if let Some(pfr) = in_flight
-        && pfr.id != *bound
+    if let Some(pfr) = current
+        && PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status)
     {
         Err(ReplayError::AttemptInFlight(
-            lfr.id.clone(),
-            pfr.id.clone(),
-            pfr.status,
+            lfr.base.id.clone(),
+            pfr.base.id.clone(),
+            pfr.base.status,
         ))?
     }
     Ok(())
@@ -101,21 +88,24 @@ pub async fn assert_no_concurrent_replay(
 ///
 /// - `Committed` / `Canceled` / `Yanked` are **sticky** (DB-enforced via
 ///   the `logical_function_runs__sticky_terminals` trigger) — the LFR
-///   stays put; the replay's outcome surfaces through a fresh `Bound`
-///   pointer event written by `redirect_at_finish`.
+///   stays put; the replay's outcome surfaces on the new attempt, which
+///   is the run's current version from mint.
 /// - `Done` — same shape (idempotent self-transition allowed).
 /// - `Failed` — can be **promoted to `Done`** by a successful replay
 ///   ("replay healed a failed run"); see the `Failed → Done` arm in
 ///   `update_function_run_status`.
 #[instrument(name = "replay.assert_terminal", skip_all, level = "debug", err(Debug))]
 pub async fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
-    match lfr.status {
+    match lfr.base.status {
         LogicalFunctionRunStatus::Done
         | LogicalFunctionRunStatus::Committed
         | LogicalFunctionRunStatus::Failed
         | LogicalFunctionRunStatus::Canceled
         | LogicalFunctionRunStatus::Yanked => Ok(()),
-        _ => Err(ReplayError::NotTerminal(lfr.id.clone(), lfr.status))?,
+        _ => Err(ReplayError::NotTerminal(
+            lfr.base.id.clone(),
+            lfr.base.status,
+        ))?,
     }
 }
 
@@ -123,15 +113,15 @@ pub async fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdErr
 /// Pins to the replay-request `at`, so a patch registered between the
 /// replay request and the dispatch tick won't be silently picked up.
 #[instrument(name = "replay.resolve_fvid", skip_all, level = "debug", err(Debug))]
-pub async fn resolve_replay_function_version_id(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn resolve_replay_function_version_id<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     lfr: &LogicalFunctionRunDB,
     at: &AtTime,
 ) -> Result<RunnableVersion, TdError> {
-    let runnable = latest_patch_or_head(&mut *conn, &lfr.function_version_id, at).await?;
+    let runnable = latest_patch_or_head(&mut *conn, &lfr.base.function_version_id, at).await?;
     debug!(
-        lfr = %lfr.id,
-        planned = %lfr.function_version_id,
+        lfr = %lfr.base.id,
+        planned = %lfr.base.function_version_id,
         head = %runnable.function_version_id,
         patch = ?runnable.function_version_patch_id,
         "replay.resolve: head + optional patch"
@@ -141,20 +131,20 @@ pub async fn resolve_replay_function_version_id(
 
 #[instrument(name = "replay.mint_fr_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_function_run(
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: &AtTime,
-) -> Result<PhysicalFunctionRunDB, TdError> {
+) -> Result<PhysicalFunctionRunInsertDB, TdError> {
     mint_function_run(&mut *conn, lfr, runnable, at).await
 }
 
 #[instrument(name = "replay.mint_tdvs_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_table_data_versions(
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
-    fr_new: &PhysicalFunctionRunDB,
+    fr_new: &PhysicalFunctionRunInsertDB,
 ) -> Result<(), TdError> {
     mint_output_table_data_versions(&mut *conn, lfr, runnable, fr_new).await?;
     Ok(())
@@ -164,13 +154,11 @@ pub async fn mint_replay_table_data_versions(
 pub async fn build_replay_response(
     lfr: &LogicalFunctionRunDB,
     previous_function_run_id: &PhysicalFunctionRunId,
-    fr_new: &PhysicalFunctionRunDB,
+    fr_new: &PhysicalFunctionRunInsertDB,
     runnable: &RunnableVersion,
 ) -> Result<LogicalFunctionRunReplayResponse, TdError> {
-    // Response advertises the effective fvid — the patch if one was
-    // picked up, else the head.
     Ok(LogicalFunctionRunReplayResponse {
-        logical_function_run_id: lfr.id.clone(),
+        logical_function_run_id: lfr.base.id.clone(),
         previous_function_run_id: previous_function_run_id.clone(),
         new_function_run_id: fr_new.id.clone(),
         function_version_id: runnable.effective().clone(),

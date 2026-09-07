@@ -5,25 +5,25 @@
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{GatedConnection, RO};
+use td_database::access::{AcrossProjects, GatedConnection, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn execution_list(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    gated_conn: &mut GatedConnection<RO, AcrossProjects>,
     request: ListRequest,
 ) -> Result<ListResponse<Execution>, TdError> {
     let (ctx, _, list_params) = request.into_parts();
     let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
-    let rows = conn.live().list(&visible, &query_params).await?;
+    let rows = conn.list(&visible, &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -90,16 +90,31 @@ mod tests {
 
         let response = service.execution_list(request).await?.data;
         assert_eq!(response.len, executions.len());
-        assert_eq!(response.data[0].id, executions[0].id);
-        assert_eq!(response.data[0].triggered_on, executions[0].triggered_on);
-        assert_eq!(response.data[1].id, executions[1].id);
-        assert_eq!(response.data[1].triggered_on, executions[1].triggered_on);
-        assert_eq!(response.data[2].id, executions[2].id);
-        assert_eq!(response.data[2].triggered_on, executions[2].triggered_on);
-        assert_eq!(response.data[3].id, executions[3].id);
-        assert_eq!(response.data[3].triggered_on, executions[3].triggered_on);
-        assert_eq!(response.data[4].id, executions[4].id);
-        assert_eq!(response.data[4].triggered_on, executions[4].triggered_on);
+        assert_eq!(response.data[0].id, executions[0].base.id);
+        assert_eq!(
+            response.data[0].triggered_on,
+            executions[0].base.triggered_on
+        );
+        assert_eq!(response.data[1].id, executions[1].base.id);
+        assert_eq!(
+            response.data[1].triggered_on,
+            executions[1].base.triggered_on
+        );
+        assert_eq!(response.data[2].id, executions[2].base.id);
+        assert_eq!(
+            response.data[2].triggered_on,
+            executions[2].base.triggered_on
+        );
+        assert_eq!(response.data[3].id, executions[3].base.id);
+        assert_eq!(
+            response.data[3].triggered_on,
+            executions[3].base.triggered_on
+        );
+        assert_eq!(response.data[4].id, executions[4].base.id);
+        assert_eq!(
+            response.data[4].triggered_on,
+            executions[4].base.triggered_on
+        );
         let base = Some(p.name.clone());
         assert!(response.data.iter().all(|e| e.project == base));
         Ok(())

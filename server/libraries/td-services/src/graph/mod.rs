@@ -4,15 +4,14 @@
 
 use crate::graph::build::GraphBuilder;
 use std::collections::HashMap;
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::StateFilter;
-use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::TdGraph;
+use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::AtTime;
 use td_objects::types::basic::{FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
@@ -26,33 +25,26 @@ pub mod build;
 /// GraphConfig { historic: true, ..GraphConfig::defaults(FunctionDB::active()) }
 /// ```
 ///
-/// Authorization is owned by the calling service: under the
-/// project-oriented RBAC model projects are silos with no
-/// inter-project visibility, so the caller gates access with its own
-/// project-scoped `Rbac` check before invoking graph generation, and
-/// the graph module itself carries no authz.
+/// Authorization is owned by the calling service: projects are silos, so
+/// the caller gates access with its own project-scoped check and the graph
+/// module carries no authz.
 ///
-/// `historic` picks the read mode: `false` (default) reads live
-/// state from `_current` views — used by execution and live
-/// inspection. `true` rebuilds graph state at the request's `AtTime`
-/// via ranked CTEs — used only by plan-reading services that need the
-/// graph as it existed when the plan was dispatched.
+/// `historic` picks the read mode: `false` (default) reads live state from
+/// the open SCD2 intervals; `true` rebuilds graph state at the request's
+/// `AtTime` via visible-at interval scans — used only by plan-reading
+/// services that need the graph as it existed at dispatch.
 pub struct GraphConfig {
-    pub trigger_state: StateFilter<TriggerDBWithNames>,
-    pub dependency_state: StateFilter<DependencyDBWithNames>,
-    pub table_state: StateFilter<TableDB>,
-    pub function_state: StateFilter<FunctionDB>,
+    pub trigger_state: Box<dyn SqlCondition<TriggerDBWithNames>>,
+    pub function_state: Box<dyn SqlCondition<FunctionDB>>,
     pub include_dependency_functions: bool,
     pub historic: bool,
 }
 
 impl GraphConfig {
-    pub fn defaults(function_state: StateFilter<FunctionDB>) -> Self {
+    pub fn defaults(function_state: impl SqlCondition<FunctionDB> + 'static) -> Self {
         Self {
-            trigger_state: TriggerDBWithNames::active(),
-            dependency_state: DependencyDBWithNames::active(),
-            table_state: TableDB::available(),
-            function_state,
+            trigger_state: Box::new(TriggerDBWithNames::active()),
+            function_state: Box::new(function_state),
             include_dependency_functions: false,
             historic: false,
         }
@@ -80,8 +72,8 @@ impl From<&TableId> for FunctionOrTable {
 /// Generate the trigger/dependency graph around `function_or_table`, per the
 /// [`GraphConfig`] knobs. Authorization is owned by the calling service (see
 /// [`GraphConfig`]).
-pub async fn generate_td_graph(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn generate_td_graph<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     config: GraphConfig,
     at_time: &AtTime,
     function_or_table: &FunctionOrTable,
@@ -91,9 +83,7 @@ pub async fn generate_td_graph(
     let trigger_graph = builder
         .find_recursive_trigger_graph(conn, at_time, function_or_table, recursion_options)
         .await?;
-    // Find dependencies. For clarity, we always show the function, even if
-    // generating a table centered graph, the same way we show the tables of
-    // a function centered graph.
+    // The main function is always shown, even in a table-centered graph.
     let function_id = builder
         .main_function_id(conn, at_time, function_or_table)
         .await?;

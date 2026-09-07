@@ -9,15 +9,14 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{DbPool, Global};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::{SchedulerNotify, TransactionBy};
-use td_objects::StateFilter;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse, InternalExecutionRequest};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionIdParam};
-use td_queries::{HistoricEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn execute_function_version(
@@ -25,7 +24,7 @@ async fn execute_function_version(
     transaction_by: Ctx<TransactionBy>,
     scheduler_notify: Ctx<SchedulerNotify>,
     msgs: &mut ReqCtx,
-    db: DbPool<Global>,
+    db: DbPool<AcrossProjects>,
     request: CreateRequest<InternalExecutionRequest, FunctionVersionIdParam>,
 ) -> Result<ExecutionResponse, TdError> {
     let (ctx, param, internal_request) = request.into_parts();
@@ -34,8 +33,9 @@ async fn execute_function_version(
     let (requested, project, grant) = {
         let mut trx = db.read().await?;
         let conn = trx.get(authz.none());
-        let requested: FunctionDBWithNames = conn.live().fetch_one(&function_version_id).await?;
-        let collection: CollectionDB = conn.live().fetch_one(&requested.base.collection_id).await?;
+        let requested: FunctionDBWithNames = conn.fetch_one(&function_version_id).await?;
+        let collection: ResolvedCollectionDB =
+            conn.fetch_one(&requested.base.base.collection_id).await?;
         let project = collection.base.project_id;
         // the project is known now: authorize before any further read and
         // before queueing on its exclusive lock
@@ -50,9 +50,8 @@ async fn execute_function_version(
     // older versions to execute).
     let conn = trx.get(grant);
     let function: FunctionDBWithNames = conn
-        .historic(&ctx.time)
-        .state(StateFilter::all())
-        .fetch_one(&requested.base.function_id)
+        .as_of(&ctx.time)
+        .fetch_one(&requested.base.base.function_id)
         .await?;
     assert_function_version(&function_version_id, &function).await?;
 
@@ -64,7 +63,6 @@ async fn execute_function_version(
         msgs,
         &transaction_by,
         ctx,
-        project,
         execution_request,
         function,
         trigger_type,
@@ -89,9 +87,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
     use td_objects::dxo::function::FunctionParam;
-    use td_objects::dxo::function::{
-        FunctionDB, FunctionDBWithNames, FunctionRegister, FunctionUpdate,
-    };
+    use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
@@ -99,17 +95,19 @@ mod tests {
         LogicalFunctionRunStatus, ProjectId, SkipIfRunning, TableNameDto, TransactionKey, UserId,
     };
     use td_objects::types::basic::{FunctionVersionId, TriggerType};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
-    // Similar to tests in execute, but just testing that the functions are found properly.
-    // Tests in execute assert the correctness of the execution.
+    // Tests in execute assert execution correctness; these only cover lookup.
     #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let (function, response) =
             test_execute_version(db, p.id, None, SkipIfRunning::FALSE).await?;
-        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        assert_eq!(
+            response.triggered_functions,
+            HashSet::from([function.base.id])
+        );
         Ok(())
     }
 
@@ -120,7 +118,10 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (function, response) =
             test_execute_version(db, p.id, None, SkipIfRunning::TRUE).await?;
-        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        assert_eq!(
+            response.triggered_functions,
+            HashSet::from([function.base.id])
+        );
         Ok(())
     }
 
@@ -137,7 +138,10 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        assert_eq!(
+            response.triggered_functions,
+            HashSet::from([function.base.id])
+        );
         Ok(())
     }
 
@@ -146,7 +150,6 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        // skip_if_running + currently running -> 425 Too Early, no new execution.
         let err = test_execute_version(
             db.clone(),
             p.id,
@@ -160,15 +163,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.api_error(), ApiError::Any(425));
 
-        // There should be only one, the previous one.
-        let function: FunctionDBWithNames = db
-            .live()
-            .fetch_one::<FunctionDBWithNames>(&FunctionName::try_from("function_0")?)
-            .await?;
-        let executions: Vec<ExecutionDB> = db
-            .live()
-            .fetch_all::<ExecutionDB>(&function.base.id)
-            .await?;
+        let executions: Vec<ExecutionDB> = db.fetch_all::<ExecutionDB>(()).await?;
         assert_eq!(executions.len(), 1);
         Ok(())
     }
@@ -186,7 +181,10 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        assert_eq!(
+            response.triggered_functions,
+            HashSet::from([function.base.id])
+        );
         Ok(())
     }
 
@@ -205,7 +203,10 @@ mod tests {
             SkipIfRunning::TRUE,
         )
         .await?;
-        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        assert_eq!(
+            response.triggered_functions,
+            HashSet::from([function.base.id])
+        );
         Ok(())
     }
 
@@ -224,7 +225,10 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        assert_eq!(
+            response.triggered_functions,
+            HashSet::from([function.base.id])
+        );
         Ok(())
     }
 
@@ -243,7 +247,10 @@ mod tests {
             SkipIfRunning::TRUE,
         )
         .await?;
-        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        assert_eq!(
+            response.triggered_functions,
+            HashSet::from([function.base.id])
+        );
         Ok(())
     }
 
@@ -322,7 +329,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             FunctionVersionIdParam {
-                function_version_id: function.id.clone(),
+                function_version_id: function.base.id.clone(),
             },
             InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),
@@ -384,7 +391,10 @@ mod tests {
                         collection: CollectionIdName::from_str(&format!("~{}", collection_0.id))?,
                     },
                     FunctionParam {
-                        function: FunctionIdName::from_str(&format!("~{}", function.function_id))?,
+                        function: FunctionIdName::from_str(&format!(
+                            "~{}",
+                            function.base.function_id
+                        ))?,
                     },
                 ),
                 update.clone(),
@@ -394,10 +404,9 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let updated = service.update_function(request).await?.data;
 
-        // Now, using function.id will fail
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             FunctionVersionIdParam {
-                function_version_id: function.id.clone(),
+                function_version_id: function.base.id.clone(),
             },
             InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),
@@ -414,7 +423,7 @@ mod tests {
         assert!(err.to_string().contains("Function version missmatch."));
         assert!(err.to_string().contains(format!(
             "Requested function version '{}' must be the current version of the function '{}'.",
-            function.id, updated.id
+            function.base.id, updated.id
         ).as_str()));
         Ok(())
     }
@@ -481,17 +490,15 @@ mod tests {
         let function = seed_dedup_function(&db, p.id).await?;
         let uid = ExternalUid::try_from("uid-123")?;
 
-        trigger_with_external_uid(&db, &function.id, Some(uid.clone())).await?;
+        trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
 
-        // Same external_uid on a still-live execution -> 409 Conflict, no new row.
-        let err = trigger_with_external_uid(&db, &function.id, Some(uid))
+        let err = trigger_with_external_uid(&db, &function.base.id, Some(uid))
             .await
             .unwrap_err();
         assert_eq!(err.api_error(), ApiError::Any(409));
 
         let executions: Vec<ExecutionDB> = db
-            .live()
-            .fetch_all::<ExecutionDB>(&function.function_id)
+            .fetch_all::<ExecutionDB>(&function.base.function_id)
             .await?;
         assert_eq!(executions.len(), 1);
         Ok(())
@@ -502,12 +509,11 @@ mod tests {
         let p = db.seed().test_project().await?;
         let function = seed_dedup_function(&db, p.id).await?;
 
-        trigger_with_external_uid(&db, &function.id, None).await?;
-        trigger_with_external_uid(&db, &function.id, None).await?;
+        trigger_with_external_uid(&db, &function.base.id, None).await?;
+        trigger_with_external_uid(&db, &function.base.id, None).await?;
 
         let executions: Vec<ExecutionDB> = db
-            .live()
-            .fetch_all::<ExecutionDB>(&function.function_id)
+            .fetch_all::<ExecutionDB>(&function.base.function_id)
             .await?;
         assert_eq!(executions.len(), 2);
         Ok(())
@@ -528,8 +534,8 @@ mod tests {
         let uid = ExternalUid::try_from("uid-concurrent")?;
 
         let (a, b) = tokio::join!(
-            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
-            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
+            trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())),
+            trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())),
         );
 
         let executed = [&a, &b].into_iter().filter(|r| r.is_ok()).count();
@@ -544,8 +550,7 @@ mod tests {
         );
 
         let executions: Vec<ExecutionDB> = db
-            .live()
-            .fetch_all::<ExecutionDB>(&function.function_id)
+            .fetch_all::<ExecutionDB>(&function.base.function_id)
             .await?;
         assert_eq!(executions.len(), 1, "only one execution row must exist");
         Ok(())

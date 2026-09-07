@@ -3,6 +3,7 @@
 //
 
 use http::StatusCode;
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
@@ -13,20 +14,20 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::types::basic::{
     ExternalUid, FunctionId, FunctionVersionId, LogicalFunctionRunStatus, SkipIfRunning,
 };
-use td_queries::{LfrEntry, LiveEntry};
+use td_queries::Queries;
 use tracing::{debug, instrument};
 
 pub async fn assert_function_version(
     function_version_id: &FunctionVersionId,
     function: &FunctionDBWithNames,
 ) -> Result<(), TdError> {
-    if function.base.id != *function_version_id {
+    if function.base.base.id != *function_version_id {
         Err(api_error!(
             ApiError::InputError,
             r#"Function version missmatch. There is a newer version of the function.
             Requested function version '{}' must be the current version of the function '{}'."#,
             function_version_id,
-            function.base.id
+            function.base.base.id
         ))?
     }
     Ok(())
@@ -36,9 +37,8 @@ pub async fn assert_function_version(
 /// short-circuit with `425 Too Early` rather than starting a concurrent run. No-op when the
 /// flag is unset, there is no prior execution, or the latest run has ended.
 ///
-/// The "latest attempt" for an (execution, fvid) is whichever FR the LFR's pointer is
-/// currently bound to — replays leave the prior FR row in `physical_function_runs`, but the
-/// pointer is what consumers (and this gate) should follow.
+/// The "latest attempt" for an (execution, fvid) is the LFR's current FR — replays leave
+/// the prior FR rows in `physical_function_runs` as closed versions.
 #[instrument(
     name = "execution.reject_if_running",
     skip_all,
@@ -46,8 +46,8 @@ pub async fn assert_function_version(
     level = "debug",
     err(Debug)
 )]
-pub async fn reject_if_running(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn reject_if_running<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     function_version_id: &FunctionVersionId,
     skip_if_running: &SkipIfRunning,
     latest_execution: &Option<ExecutionDB>,
@@ -60,25 +60,26 @@ pub async fn reject_if_running(
         return Ok(());
     };
     let lfr: Option<LogicalFunctionRunDB> = conn
-        .live()
-        .fetch_optional(and!(&latest_execution.id, function_version_id))
+        .fetch_optional(and!(
+            &latest_execution.base.id,
+            &latest_execution.base.function_id,
+        ))
         .await?;
-    let bound_fr_id = if let Some(lfr) = lfr {
-        conn.lfr().pointers().concrete(&lfr.id).await?
-    } else {
-        None
-    };
-    let physical_function_run: Option<PhysicalFunctionRunDB> = match bound_fr_id {
-        Some(id) => conn.live().fetch_optional(&id).await?,
+    let physical_function_run: Option<PhysicalFunctionRunDB> = match lfr {
+        Some(lfr) => {
+            conn.latest()
+                .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
+                .await?
+        }
         None => None,
     };
     match physical_function_run {
-        Some(fr) if !fr.status.is_ended() => {
-            debug!(physical_function_run_id = %fr.id, status = ?fr.status, "Latest function run running");
+        Some(fr) if !fr.base.status.is_ended() => {
+            debug!(physical_function_run_id = %fr.base.id, status = ?fr.base.status, "Latest function run running");
             Err(api_error!(
                 status = StatusCode::TOO_EARLY,
                 "Function is currently running (execution '{}'); retry once it finishes",
-                latest_execution.id
+                latest_execution.base.id
             ))
         }
         _ => Ok(()),
@@ -102,28 +103,25 @@ pub async fn reject_if_running(
     level = "debug",
     err(Debug)
 )]
-pub async fn reject_if_external_uid_in_use(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn reject_if_external_uid_in_use<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     function_id: &FunctionId,
     external_uid: &Option<ExternalUid>,
 ) -> Result<(), TdError> {
-    if external_uid.is_none() {
+    let Some(external_uid) = external_uid else {
         return Ok(());
-    }
-    let existing: Option<ExecutionDB> = conn
-        .live()
-        .fetch_optional(and!(function_id, external_uid))
-        .await?;
+    };
+    let existing: Option<ExecutionDB> =
+        conn.fetch_optional(and!(function_id, external_uid)).await?;
     let Some(existing) = existing else {
         return Ok(());
     };
     // A canceled/yanked run frees the external_uid so a fresh trigger may reuse it.
     let lfr: Option<LogicalFunctionRunDB> = conn
-        .live()
-        .fetch_optional(and!(&existing.id, function_id))
+        .fetch_optional(and!(&existing.base.id, function_id))
         .await?;
     let released = matches!(
-        lfr.map(|lfr| lfr.status),
+        lfr.map(|lfr| lfr.base.status),
         Some(LogicalFunctionRunStatus::Canceled | LogicalFunctionRunStatus::Yanked)
     );
     if released {
@@ -132,6 +130,6 @@ pub async fn reject_if_external_uid_in_use(
     Err(api_error!(
         status = StatusCode::CONFLICT,
         "external_uid already in use by execution '{}'",
-        existing.id
+        existing.base.id
     ))
 }

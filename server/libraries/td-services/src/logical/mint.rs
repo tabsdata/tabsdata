@@ -5,34 +5,51 @@
 //! Shared mint primitive: given an LFR, materialize a fresh
 //! `PhysicalFunctionRunDB` row and its output `PhysicalTableDataVersionDB` placeholders.
 //!
-//! The primitive does not append pointer events; the caller decides
-//! whether (and when) to bind the LFR pointer. Replay defers the bind
-//! to worker-finish (redirect-at-finish); initial dispatch binds in
-//! the same DB tx.
+//! Attempts are SCD2 versions of their logical rows, ordered by
+//! `triggered_on`: minting one makes it the current version.
+
+use std::collections::HashMap;
 
 use crate::function::topology::RunnableVersion;
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
-use td_error::TdError;
-use td_objects::dxo::logical::LogicalFunctionRunDB;
-use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
+use td_error::{ApiError, TdError, api_error};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunInsertDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, BasePath, FunctionVersionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-    PhysicalTableDataVersionId, TableFunctionParamPos, TriggeredOn,
+    AtTime, BasePath, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId,
+    TableFunctionParamPos, TableId, TriggeredOn,
 };
-use td_queries::{ChunkedQueries, LfrEntry, LiveEntry};
+use td_queries::Queries;
+
+/// The logical table-data versions the plan minted for one run, by table.
+pub async fn logical_versions_by_table<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    logical_function_run_id: &LogicalFunctionRunId,
+) -> Result<HashMap<TableId, LogicalTableDataVersionId>, TdError> {
+    let ltdvs: Vec<LogicalTableDataVersionDB> = conn
+        .history()
+        .fetch_all::<LogicalTableDataVersionDB>(&Some(logical_function_run_id.clone()))
+        .await?;
+    Ok(ltdvs
+        .into_iter()
+        .map(|l| (l.base.table_id, l.base.id))
+        .collect())
+}
 
 /// Effective storage prefix for a function run and its output table data:
 /// the function version's `base_path` override if set, else the
 /// collection's `base_path`. Stamped (frozen) onto the FR and every output
 /// TDV at mint so reads never recompute it.
-pub async fn resolve_output_base_path(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn resolve_output_base_path<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     function_version_id: &FunctionVersionId,
 ) -> Result<BasePath, TdError> {
     let effective = conn
-        .lfr()
+        .logical_runs()
         .effective_output_base_paths(std::slice::from_ref(function_version_id))
         .await?;
     Ok(effective.into_values().next().unwrap_or_default())
@@ -49,22 +66,23 @@ pub fn build_function_run(
     runnable: &RunnableVersion,
     at: &AtTime,
     base_path: &BasePath,
-) -> Result<PhysicalFunctionRunDB, TdError> {
+) -> Result<PhysicalFunctionRunInsertDB, TdError> {
     let triggered_on = TriggeredOn::try_from(at)?;
     // FR is born `Requested`: mint and run-request happen in the same
     // dispatch tx, and the per-attempt status mirrors that the worker
     // has been queued. Worker callbacks then advance Running → Done/Failed.
-    Ok(PhysicalFunctionRunDB {
-        id: PhysicalFunctionRunId::new(),
-        project_id: lfr.project_id,
-        collection_id: lfr.collection_id,
-        function_id: lfr.function_id,
+    let id = PhysicalFunctionRunId::new();
+    Ok(PhysicalFunctionRunInsertDB {
+        id: id.clone(),
+        collection_id: lfr.base.collection_id,
+        function_id: lfr.base.function_id,
         function_version_id: runnable.function_version_id.clone(),
-        execution_id: lfr.execution_id.clone(),
-        transaction_id: lfr.transaction_id.clone(),
+        execution_id: lfr.base.execution_id.clone(),
+        transaction_id: lfr.base.transaction_id.clone(),
+        logical_function_run_id: lfr.base.id.clone(),
         triggered_on,
-        triggered_by_id: lfr.triggered_by_id,
-        trigger: lfr.trigger.clone(),
+        triggered_by_id: lfr.base.triggered_by_id,
+        trigger: lfr.base.trigger.clone(),
         base_path: base_path.clone(),
         dispatched_on: None,
         started_on: None,
@@ -82,44 +100,61 @@ pub fn build_function_run(
 }
 
 pub async fn mint_function_run(
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: &AtTime,
-) -> Result<PhysicalFunctionRunDB, TdError> {
+) -> Result<PhysicalFunctionRunInsertDB, TdError> {
     let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
     let fr = build_function_run(lfr, runnable, at, &base_path)?;
-    conn.live().insert::<PhysicalFunctionRunDB>(&fr).await?;
+    conn.insert::<PhysicalFunctionRunInsertDB>(&fr).await?;
     Ok(fr)
 }
 
 /// Pure builder for the output TDV rows of one FR — no DB I/O. Takes
 /// the pre-fetched `tables` for the runnable's head fvid (tables are
-/// declared against the head fvid; patches don't override `tables`).
+/// declared against the head fvid; patches don't override `tables`), and
+/// `logical_by_table` to name the logical version each materializes: the
+/// LTDVs the plan minted for this run, by table. Missing one is an error,
+/// not a skip — a materialization with no logical version is unreachable.
 pub fn build_output_table_data_versions(
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
-    fr: &PhysicalFunctionRunDB,
+    fr: &PhysicalFunctionRunInsertDB,
     tables: &[TableDB],
     base_path: &BasePath,
-) -> Result<Vec<PhysicalTableDataVersionDB>, TdError> {
+    logical_by_table: &HashMap<TableId, LogicalTableDataVersionId>,
+) -> Result<Vec<PhysicalTableDataVersionInsertDB>, TdError> {
     let mut tdvs = Vec::with_capacity(tables.len());
     for t in tables {
         let function_param_pos = t
+            .base
             .function_param_pos
             .unwrap_or(TableFunctionParamPos::try_from(0)?);
-        let tdv = PhysicalTableDataVersionDB {
-            id: PhysicalTableDataVersionId::new(),
-            project_id: lfr.project_id,
-            collection_id: lfr.collection_id,
-            table_id: t.table_id,
-            name: t.name.clone(),
-            table_version_id: t.id,
+        let logical_table_data_version_id = logical_by_table
+            .get(&t.base.table_id)
+            .cloned()
+            .ok_or_else(|| {
+                api_error!(
+                    ApiError::InternalError,
+                    "no logical table-data version for LFR {} table {}",
+                    lfr.base.id,
+                    t.base.table_id
+                )
+            })?;
+        let id = PhysicalTableDataVersionId::new();
+        let tdv = PhysicalTableDataVersionInsertDB {
+            id: id.clone(),
+            collection_id: lfr.base.collection_id,
+            table_id: t.base.table_id,
+            name: t.base.name.clone(),
+            table_version_id: t.base.id,
             function_version_id: runnable.function_version_id.clone(),
             function_version_patch_id: runnable.function_version_patch_id.clone(),
-            execution_id: lfr.execution_id.clone(),
-            transaction_id: lfr.transaction_id.clone(),
+            execution_id: lfr.base.execution_id.clone(),
+            transaction_id: lfr.base.transaction_id.clone(),
             physical_function_run_id: fr.id.clone(),
+            logical_table_data_version_id,
             function_param_pos,
             triggered_on: fr.triggered_on,
             base_path: base_path.clone(),
@@ -137,19 +172,28 @@ pub fn build_output_table_data_versions(
 }
 
 pub async fn mint_output_table_data_versions(
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
-    fr: &PhysicalFunctionRunDB,
-) -> Result<Vec<PhysicalTableDataVersionDB>, TdError> {
+    fr: &PhysicalFunctionRunInsertDB,
+) -> Result<Vec<PhysicalTableDataVersionInsertDB>, TdError> {
+    let planned_at = AtTime::try_from(&lfr.base.triggered_on)?;
     let tables: Vec<TableDB> = conn
-        .live()
-        .fetch_all::<TableDB>(&runnable.function_version_id)
+        .as_of(&planned_at)
+        .fetch_all::<TableDB>(&lfr.base.function_id)
         .await?;
     let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
-    let tdvs = build_output_table_data_versions(lfr, runnable, fr, &tables, &base_path)?;
+    let logical_by_table = logical_versions_by_table(conn, &lfr.base.id).await?;
+    let tdvs = build_output_table_data_versions(
+        lfr,
+        runnable,
+        fr,
+        &tables,
+        &base_path,
+        &logical_by_table,
+    )?;
     if !tdvs.is_empty() {
-        conn.insert_vec::<PhysicalTableDataVersionDB>(&tdvs).await?;
+        conn.chunked().insert(&tdvs).await?;
     }
     Ok(tdvs)
 }
@@ -158,8 +202,20 @@ pub async fn mint_output_table_data_versions(
 mod tests {
     use super::*;
     use td_database::pool::TdPool;
+    use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+    use td_objects::dxo::table::TableInsertDB;
+
+    /// A logical version per output table — what the plan would have minted.
+    /// These are pure-builder tests, so the ids need not exist as rows.
+    fn synthetic_logical_versions(
+        tables: &[TableDB],
+    ) -> HashMap<TableId, LogicalTableDataVersionId> {
+        tables
+            .iter()
+            .map(|t| (t.base.table_id, LogicalTableDataVersionId::new()))
+            .collect()
+    }
     use td_error::TdError;
-    use td_objects::and;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
@@ -168,7 +224,7 @@ mod tests {
         Private, StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto,
         TableStatus, TableType, TableVersionId, TransactionKey, UserId,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
     use td_storage::SPath;
     use td_storage::location::StorageLocation;
@@ -186,13 +242,13 @@ mod tests {
     }
 
     fn is_regular(t: &TableDB) -> bool {
-        !*t.private && **t.function_param_pos.as_ref().unwrap() >= 0
+        !*t.base.private && **t.base.function_param_pos.as_ref().unwrap() >= 0
     }
     fn is_private(t: &TableDB) -> bool {
-        *t.private
+        *t.base.private
     }
     fn is_system(t: &TableDB) -> bool {
-        **t.function_param_pos.as_ref().unwrap() < 0
+        **t.base.function_param_pos.as_ref().unwrap() < 0
     }
 
     /// Seed a function with regular ("t0") + private ("_internal") +
@@ -231,13 +287,13 @@ mod tests {
             td_objects::dxo::crudl::RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read::<String>("")
                 .context;
-        let private = TableDB {
+        let private = TableInsertDB {
             id: TableVersionId::default(),
-            collection_id: func.collection_id,
+            collection_id: func.base.collection_id,
             table_id: TableId::default(),
             name: TableName::try_from(PRIVATE_TABLE_NAME)?,
-            function_id: func.function_id,
-            function_version_id: func.id.clone(),
+            function_id: func.base.function_id,
+            function_version_id: func.base.id.clone(),
             function_param_pos: Some(TableFunctionParamPos::try_from(1)?),
             private: Private::TRUE,
             partitioned: Partitioned::FALSE,
@@ -246,9 +302,9 @@ mod tests {
             status: TableStatus::Active,
             table_type: TableType::default(),
         };
-        db.scoped(p.id).live().insert(&private).await?;
+        db.scoped(p.id).insert(&private).await?;
 
-        let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&func.id).await?;
+        let tables: Vec<TableDB> = db.history().fetch_all::<TableDB>(&func.base.id).await?;
         let exec = db.scoped(p.id).seed().execution(&func).await?;
         let trx = db
             .scoped(p.id)
@@ -267,8 +323,7 @@ mod tests {
             )
             .await?;
         let lfr = db
-            .live()
-            .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
+            .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
             .await?;
         Ok(MintFixture {
             func,
@@ -282,16 +337,16 @@ mod tests {
     async fn test_build_function_run_head_only(db: TdPool) -> Result<(), TdError> {
         let fx = seed_mint_fixture(&db).await?;
         let runnable = RunnableVersion {
-            function_version_id: fx.func.id.clone(),
+            function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: None,
         };
         let built = build_function_run(&fx.lfr, &runnable, &AtTime::now(), &BasePath::default())?;
 
-        assert_eq!(built.collection_id, fx.lfr.collection_id);
-        assert_eq!(built.execution_id, fx.lfr.execution_id);
-        assert_eq!(built.transaction_id, fx.lfr.transaction_id);
-        assert_eq!(built.function_id, fx.lfr.function_id);
-        assert_eq!(built.function_version_id, fx.func.id);
+        assert_eq!(built.collection_id, fx.lfr.base.collection_id);
+        assert_eq!(built.execution_id, fx.lfr.base.execution_id);
+        assert_eq!(built.transaction_id, fx.lfr.base.transaction_id);
+        assert_eq!(built.function_id, fx.lfr.base.function_id);
+        assert_eq!(built.function_version_id, fx.func.base.id);
         assert!(built.function_version_patch_id.is_none());
         assert_eq!(built.status, PhysicalFunctionRunStatus::Requested);
         Ok(())
@@ -302,12 +357,12 @@ mod tests {
         let fx = seed_mint_fixture(&db).await?;
         let patch_id = FunctionVersionId::new();
         let runnable = RunnableVersion {
-            function_version_id: fx.func.id.clone(),
+            function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: Some(patch_id.clone().into()),
         };
         let built = build_function_run(&fx.lfr, &runnable, &AtTime::now(), &BasePath::default())?;
 
-        assert_eq!(built.function_version_id, fx.func.id);
+        assert_eq!(built.function_version_id, fx.func.base.id);
         assert_eq!(
             built.function_version_patch_id,
             Some(Patch::from(patch_id.clone()))
@@ -336,21 +391,30 @@ mod tests {
         );
 
         let runnable = RunnableVersion {
-            function_version_id: fx.func.id.clone(),
+            function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: None,
         };
+        let logical_by_table = synthetic_logical_versions(&fx.tables);
         let tdvs = build_output_table_data_versions(
             &fx.lfr,
             &runnable,
-            &fx.pfr,
+            &fx.pfr.base,
             &fx.tables,
             &BasePath::default(),
+            &logical_by_table,
         )?;
 
         assert_eq!(tdvs.len(), fx.tables.len(), "one TDV per output table");
         for table in &fx.tables {
-            let count = tdvs.iter().filter(|t| t.table_id == table.table_id).count();
-            assert_eq!(count, 1, "expected exactly one TDV for {:?}", table.name);
+            let count = tdvs
+                .iter()
+                .filter(|t| t.table_id == table.base.table_id)
+                .count();
+            assert_eq!(
+                count, 1,
+                "expected exactly one TDV for {:?}",
+                table.base.name
+            );
         }
         Ok(())
     }
@@ -359,15 +423,17 @@ mod tests {
     async fn test_build_output_tdvs_empty_tables(db: TdPool) -> Result<(), TdError> {
         let fx = seed_mint_fixture(&db).await?;
         let runnable = RunnableVersion {
-            function_version_id: fx.func.id.clone(),
+            function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: None,
         };
+        let logical_by_table: HashMap<TableId, LogicalTableDataVersionId> = HashMap::new();
         let tdvs = build_output_table_data_versions(
             &fx.lfr,
             &runnable,
-            &fx.pfr,
+            &fx.pfr.base,
             &[],
             &BasePath::default(),
+            &logical_by_table,
         )?;
         assert!(tdvs.is_empty());
         Ok(())
@@ -378,15 +444,17 @@ mod tests {
         let fx = seed_mint_fixture(&db).await?;
         let patch_id = FunctionVersionId::new();
         let runnable = RunnableVersion {
-            function_version_id: fx.func.id.clone(),
+            function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: Some(patch_id.clone().into()),
         };
+        let logical_by_table = synthetic_logical_versions(&fx.tables);
         let tdvs = build_output_table_data_versions(
             &fx.lfr,
             &runnable,
-            &fx.pfr,
+            &fx.pfr.base,
             &fx.tables,
             &BasePath::default(),
+            &logical_by_table,
         )?;
         assert!(
             tdvs.iter()
@@ -407,14 +475,20 @@ mod tests {
     ) -> Result<(), TdError> {
         let fx = seed_mint_fixture(&db).await?;
         let runnable = RunnableVersion {
-            function_version_id: fx.func.id.clone(),
+            function_version_id: fx.func.base.id.clone(),
             function_version_patch_id: None,
         };
 
         // Run 1: the effective base_path resolved at mint is "/proj_a".
         let base_a = BasePath::try_from("/proj_a")?;
-        let tdvs_a =
-            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &base_a)?;
+        let tdvs_a = build_output_table_data_versions(
+            &fx.lfr,
+            &runnable,
+            &fx.pfr.base,
+            &fx.tables,
+            &base_a,
+            &synthetic_logical_versions(&fx.tables),
+        )?;
         assert!(!tdvs_a.is_empty());
         for tdv in &tdvs_a {
             assert_eq!(
@@ -443,8 +517,14 @@ mod tests {
 
         // Run 2: the collection's base_path has since changed to "/proj_b".
         let base_b = BasePath::try_from("/proj_b")?;
-        let tdvs_b =
-            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &base_b)?;
+        let tdvs_b = build_output_table_data_versions(
+            &fx.lfr,
+            &runnable,
+            &fx.pfr.base,
+            &fx.tables,
+            &base_b,
+            &synthetic_logical_versions(&fx.tables),
+        )?;
         for tdv in &tdvs_b {
             assert_eq!(
                 tdv.base_path, base_b,

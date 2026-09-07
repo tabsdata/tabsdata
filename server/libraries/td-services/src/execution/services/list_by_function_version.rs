@@ -6,21 +6,21 @@ use crate::execution::list::list_executions_by_fv;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::ViewProject;
-use td_database::access::{GatedConnection, RO};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::function::FunctionVersionDBWithNames;
 use td_objects::dxo::function::FunctionVersionIdParam;
 use td_objects::list::params::ListQueryParams;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn execution_list_by_function_version(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ListRequest<FunctionVersionIdParam>,
 ) -> Result<ListResponse<Execution>, TdError> {
     let (ctx, param, list_params) = request.into_parts();
@@ -29,15 +29,24 @@ async fn execution_list_by_function_version(
     // Resolve the anchor — a head version or a patch, the union view
     // serves both — into its owning project via its collection;
     // authorize the requester to view it.
-    let conn = gated_conn.get(authz.none());
-    let version: FunctionVersionDBWithNames = conn.live().fetch_one(&function_version_id).await?;
-    let collection: CollectionDB = conn.live().fetch_one(&version.collection_id).await?;
-    let _grant = authz
-        .require_in_project::<ViewProject>(conn, &ctx, &collection.base.project_id)
+    let mut trx = db.read().await?;
+    let conn = trx.get(authz.none());
+    let version: FunctionVersionDBWithNames = conn.fetch_one(&function_version_id).await?;
+    let collection: ResolvedCollectionDB = conn.fetch_one(&version.collection_id).await?;
+    let project = collection.base.project_id;
+    let mut trx = trx.enter_project(&project).await?;
+    let grant = authz
+        .require::<Project, ViewProject>(&mut trx, &ctx, &project)
         .await?;
 
     let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
-    list_executions_by_fv(conn, &function_version_id, &list_params, &query_params).await
+    list_executions_by_fv(
+        trx.get(grant),
+        &function_version_id,
+        &list_params,
+        &query_params,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -49,17 +58,17 @@ mod tests {
     use td_database::sea_query::builder::SeaQueryExt;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::function::{FunctionPatchDB, FunctionRegister};
+    use td_objects::dxo::function::{FunctionPatchInsertDB, FunctionRegister};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
-    use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, Description,
         FunctionRuntimeValues, FunctionStatus, LogicalFunctionRunStatus, Snippet, TableNameDto,
         TransactionKey, UserId, VersionPos,
     };
-    use td_objects::types::basic::{FunctionVersionId, ReuseFrozen};
+    use td_objects::types::basic::{FunctionVersionId, ReuseFrozen, TableIdName, TableName};
     use td_objects::{SeaValue, and};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -121,12 +130,13 @@ mod tests {
             .await?;
 
         let table: TableDB = db
-            .live()
-            .fetch_one(and!(
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
                 &collection.id,
-                &td_objects::types::basic::TableName::try_from(tables[0].clone())?
+                &TableIdName::Name(TableName::try_from(tables[0].clone())?)
             ))
-            .await?;
+            .await?
+            .base;
 
         let tdv = db
             .scoped(p.id)
@@ -148,8 +158,6 @@ mod tests {
                 &execution_1,
                 &transaction_1,
                 &function_run_1,
-                &table,
-                Some(&function_run_1),
                 Some(&tdv),
                 None,
                 &VersionPos::try_from(0)?,
@@ -210,8 +218,6 @@ mod tests {
                 &execution_2,
                 &transaction_2,
                 &function_run_2,
-                &table,
-                Some(&function_run_1),
                 Some(&tdv),
                 None,
                 &VersionPos::try_from(0)?,
@@ -219,11 +225,11 @@ mod tests {
             .await?;
 
         // A third execution of function_version_a whose attempt ran a patch.
-        let patch = FunctionPatchDB {
+        let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: function_version_a.id.clone().into(),
-            function_id: function_version_a.function_id,
-            collection_id: function_version_a.collection_id,
+            parent_function_version_id: function_version_a.base.id.clone().into(),
+            function_id: function_version_a.base.function_id,
+            collection_id: function_version_a.base.collection_id,
             snippet: Snippet::try_from("patched")?,
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv")?,
@@ -232,7 +238,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).live().insert(&patch).await?;
+        db.scoped(p.id).insert(&patch).await?;
 
         let execution_3 = db
             .scoped(p.id)
@@ -262,7 +268,7 @@ mod tests {
                 patch.id.as_sea_value(),
             )
             .and_where(
-                Expr::col(PhysicalFunctionRunDBIden::Id).eq(function_run_3.id.as_sea_value()),
+                Expr::col(PhysicalFunctionRunDBIden::Id).eq(function_run_3.base.id.as_sea_value()),
             )
             .build_query()
             .execute(&db)
@@ -286,18 +292,18 @@ mod tests {
 
         // The head fvid matches every execution that ran the version,
         // patched attempts included.
-        let response = list(&function_version_a.id).await?;
+        let response = list(&function_version_a.base.id).await?;
         assert_eq!(response.len, 2);
         let mut ids: Vec<_> = response.data.iter().map(|e| e.id.clone()).collect();
         ids.sort();
-        let mut expected = vec![execution_1.id.clone(), execution_3.id.clone()];
+        let mut expected = vec![execution_1.base.id.clone(), execution_3.base.id.clone()];
         expected.sort();
         assert_eq!(ids, expected);
 
         // The patch fvid matches exactly the executions that ran the patch.
         let response = list(&patch.id).await?;
         assert_eq!(response.len, 1);
-        assert_eq!(response.data[0].id, execution_3.id);
+        assert_eq!(response.data[0].id, execution_3.base.id);
 
         Ok(())
     }
@@ -339,7 +345,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
             FunctionVersionIdParam {
-                function_version_id: function_version.id.clone(),
+                function_version_id: function_version.base.id.clone(),
             },
             ListParams::default(),
         );

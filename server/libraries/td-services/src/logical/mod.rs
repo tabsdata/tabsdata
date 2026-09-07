@@ -5,11 +5,8 @@
 //! Operator-driven logic-layer endpoints.
 //!
 //! Replay re-executes a finished LFR by minting a fresh concrete FR +
-//! output TDV placeholders against the latest patch of the LFR's
-//! planned function version. Pointer redirection happens at worker
-//! finish (on success only) — at replay time the LFR pointer keeps
-//! pointing at FR_old so downstream consumers continue to read the
-//! prior-committed data while the new attempt runs.
+//! output TDV placeholders against the latest patch of the LFR's planned
+//! function version; the new attempt is the LFR's current version from mint.
 
 pub mod services;
 
@@ -30,9 +27,9 @@ pub fn index_lfrs_by_exec_fn(
 ) -> HashMap<ExecutionId, HashMap<FunctionId, LogicalFunctionRunDB>> {
     let mut out: HashMap<ExecutionId, HashMap<FunctionId, LogicalFunctionRunDB>> = HashMap::new();
     for lfr in lfrs {
-        out.entry(lfr.execution_id.clone())
+        out.entry(lfr.base.execution_id.clone())
             .or_default()
-            .insert(lfr.function_id, lfr);
+            .insert(lfr.base.function_id, lfr);
     }
     out
 }

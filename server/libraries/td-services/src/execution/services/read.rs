@@ -10,54 +10,57 @@ use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::ViewProject;
-use td_database::access::{GatedConnection, RO};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::TransactionBy;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
-use td_objects::dxo::transaction::TransactionDB;
+use td_objects::dxo::logical::{
+    LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunInputInsertDB,
+    LogicalFunctionRunInsertDB,
+};
+use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
+use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::{AllowDisabled, AtTime};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
-// Very similar to trigger, but without triggering. It selects entities needed
-// to build an execution plan.
 #[service_factory]
 async fn execution_read(
     authz: Ctx<AuthzContext>,
     transaction_by: Ctx<TransactionBy>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<(ExecutionParam, AllowDisabled)>,
 ) -> Result<ExecutionResponse, TdError> {
     let (ctx, (param, allow_disabled)) = request.into_parts();
     let execution_id = param.execution;
 
-    let conn = gated_conn.get(authz.none());
-    let execution: ExecutionDB = conn.live().fetch_one(&execution_id).await?;
-    let collection: CollectionDB = conn.live().fetch_one(&execution.collection_id).await?;
-    let _grant = authz
-        .require_in_project::<ViewProject>(conn, &ctx, &collection.base.project_id)
+    let mut trx = db.read().await?;
+    let conn = trx.get(authz.none());
+    let execution: ExecutionDB = conn.fetch_one(&execution_id).await?;
+    let collection: ResolvedCollectionDB = conn.fetch_one(&execution.base.collection_id).await?;
+    let project = collection.base.project_id;
+    let mut trx = trx.enter_project(&project).await?;
+    let grant = authz
+        .require::<Project, ViewProject>(&mut trx, &ctx, &project)
         .await?;
-    let at = AtTime::try_from(&execution.triggered_on)?;
+    let conn = trx.get(grant);
+    let at = AtTime::try_from(&execution.base.triggered_on)?;
 
-    let function: FunctionDBWithNames = conn
-        .live()
-        .fetch_one(&execution.function_version_id)
-        .await?;
-    let function_id = function.base.function_id;
+    let function: FunctionDBWithNames = conn.fetch_one(&execution.base.function_version_id).await?;
+    let function_id = function.base.base.function_id;
     let entrypoint = FunctionOrTable::from(&function_id);
     let recursion_options = with_existing_recursion_options(&execution).await?;
-    let function_state = if *allow_disabled {
-        FunctionDB::active()
+    let function_state: Box<dyn SqlCondition<FunctionDB>> = if *allow_disabled {
+        Box::new(FunctionDB::active())
     } else {
-        FunctionDB::executable()
+        Box::new(FunctionDB::executable())
     };
     // Plan-reading rebuilds the graph as it existed at the plan's
-    // `TriggeredOn` — point-in-time SQL via ranked CTEs.
+    // `TriggeredOn` — point-in-time SQL via visible-at interval scans.
     let config = GraphConfig {
         historic: true,
         ..GraphConfig::defaults(function_state)
@@ -65,19 +68,35 @@ async fn execution_read(
     let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion_options).await?;
 
     let execution_plan = build_execution_plan(&graph, &function).await?;
-    let transactions: Vec<TransactionDB> = conn.live().fetch_all(&execution_id).await?;
+    let transactions: Vec<TransactionInsertDB> = conn
+        .fetch_all::<TransactionDB>(&execution_id)
+        .await?
+        .into_iter()
+        .map(|transaction| transaction.base)
+        .collect();
     let transaction_map = build_existing_transaction_map(&transaction_by, &transactions)?;
-    let resolved_plan = resolve_execution_plan_versions(conn, &execution, &execution_plan).await?;
+    let resolved_plan =
+        resolve_execution_plan_versions(conn, &execution.base, &execution_plan).await?;
 
     // Persisted logical rows — the response renders `input_idx` from
     // them, so reads reproduce the plan-build assignment exactly.
-    let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&execution_id).await?;
-    let inputs: Vec<LogicalFunctionRunInputDB> = conn.live().fetch_all(&execution_id).await?;
+    let lfrs: Vec<LogicalFunctionRunInsertDB> = conn
+        .fetch_all::<LogicalFunctionRunDB>(&execution_id)
+        .await?
+        .into_iter()
+        .map(|lfr| lfr.base)
+        .collect();
+    let inputs: Vec<LogicalFunctionRunInputInsertDB> = conn
+        .fetch_all::<LogicalFunctionRunInputDB>(&execution_id)
+        .await?
+        .into_iter()
+        .map(|input| input.base)
+        .collect();
 
     build_response(
         &transaction_by,
         &transaction_map,
-        &execution,
+        &execution.base,
         &resolved_plan,
         &lfrs,
         &inputs,
@@ -131,10 +150,8 @@ mod tests {
         let rhs: HashSet<_> = response.relations.iter().collect();
         assert_eq!(lhs, rhs);
 
-        // `dot` uses petgraph node indices assigned in graph-walk order;
-        // two equivalent graphs (in-memory build vs DB re-read) can produce
-        // different index labelings of the same edges. Compare the
-        // semantic edge set after resolving each index back to its label.
+        // `dot` uses petgraph node indices assigned in graph-walk order, so
+        // equivalent graphs can label differently; compare the edge set.
         assert_eq!(
             dot_edge_set(execution.dot.as_str()),
             dot_edge_set(response.dot.as_str()),

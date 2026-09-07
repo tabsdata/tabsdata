@@ -3,11 +3,11 @@
 //
 
 //! Mint-at-dispatch: mint FR + output TDV placeholders for each ready LFR in
-//! one transaction. A first dispatch (pointer `Pending`) also binds the
-//! LFR/LTDV pointers to the minted ids; a re-run (recover — pointer `Bound`)
-//! skips the bind and lets `redirect_pointers_at_finish` rebind on success,
-//! as replay does. DB reads are hoisted to chunked fetches before the per-LFR
-//! loop; FR and TDV rows are bulk-inserted; only pointer appends stay per-row.
+//! one transaction; the minted rows become their logical rows' current
+//! versions. DB reads are hoisted to chunked fetches before the per-LFR
+//! loop, and FR and TDV rows are bulk-inserted.
+
+use td_database::access::InProject;
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head_batch};
 use crate::logical::mint::{build_function_run, build_output_table_data_versions};
@@ -15,14 +15,11 @@ use std::collections::HashMap;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
-use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunInsertDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
 use td_objects::dxo::table::TableDB;
-use td_objects::types::basic::{
-    AtTime, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId,
-    PhysicalFunctionRunId, PhysicalTableDataVersionId, UserId,
-};
-use td_queries::{Bind, ChunkedQueries, LfrEntry, LtdvEntry};
+use td_objects::types::basic::{AtTime, FunctionVersionId, LogicalFunctionRunId};
+use td_queries::Queries;
 use tracing::{debug, instrument};
 
 /// One ready LFR's mint output. Carries everything downstream steps
@@ -31,9 +28,9 @@ use tracing::{debug, instrument};
 #[derive(Debug, Clone)]
 pub struct MintedDispatch {
     pub lfr: LogicalFunctionRunDB,
-    pub fr: PhysicalFunctionRunDB,
+    pub fr: PhysicalFunctionRunInsertDB,
     pub runnable: RunnableVersion,
-    pub tdvs: Vec<PhysicalTableDataVersionDB>,
+    pub tdvs: Vec<PhysicalTableDataVersionInsertDB>,
 }
 
 #[instrument(
@@ -43,7 +40,7 @@ pub struct MintedDispatch {
     err(Debug)
 )]
 pub async fn mint_function_runs_on_dispatch(
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     ready_lfrs: &[LogicalFunctionRunDB],
     at: &AtTime,
 ) -> Result<Vec<MintedDispatch>, TdError> {
@@ -51,25 +48,19 @@ pub async fn mint_function_runs_on_dispatch(
         return Ok(Vec::new());
     }
 
-    // InitialDispatch is system-class (scheduler auto-binds the
-    // freshly-minted PFR/PTDV to its identity); attribute to SYSTEM,
-    // not to the operator who happened to trigger the original
-    // execution.
-    let by = UserId::system();
-
-    let lfr_ids: Vec<LogicalFunctionRunId> = ready_lfrs.iter().map(|f| f.id.clone()).collect();
+    let lfr_ids: Vec<LogicalFunctionRunId> = ready_lfrs.iter().map(|f| f.base.id.clone()).collect();
     let producer_filters: Vec<Option<LogicalFunctionRunId>> =
         lfr_ids.iter().cloned().map(Some).collect();
 
     let ltdvs_all: Vec<LogicalTableDataVersionDB> = conn
-        .fetch_all_chunked::<LogicalTableDataVersionDB, Option<LogicalFunctionRunId>>(
-            &producer_filters,
-        )
+        .history()
+        .chunked()
+        .fetch_all::<LogicalTableDataVersionDB>(&producer_filters, ())
         .await?;
 
     let distinct_fvids: Vec<FunctionVersionId> = ready_lfrs
         .iter()
-        .map(|f| f.function_version_id.clone())
+        .map(|f| f.base.function_version_id.clone())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
@@ -84,13 +75,15 @@ pub async fn mint_function_runs_on_dispatch(
     let all_tables: Vec<TableDB> = if distinct_head_fvids.is_empty() {
         Vec::new()
     } else {
-        conn.fetch_all_chunked::<TableDB, FunctionVersionId>(&distinct_head_fvids)
+        conn.history()
+            .chunked()
+            .fetch_all::<TableDB>(&distinct_head_fvids, ())
             .await?
     };
     let mut tables_by_head_fvid: HashMap<FunctionVersionId, Vec<TableDB>> = HashMap::new();
     for t in all_tables {
         tables_by_head_fvid
-            .entry(t.function_version_id.clone())
+            .entry(t.base.function_version_id.clone())
             .or_default()
             .push(t);
     }
@@ -101,7 +94,7 @@ pub async fn mint_function_runs_on_dispatch(
     // Stamped onto every output TDV so reads never recompute it after a later
     // base_path change.
     let effective = conn
-        .lfr()
+        .logical_runs()
         .effective_output_base_paths(&distinct_head_fvids)
         .await?;
 
@@ -110,19 +103,19 @@ pub async fn mint_function_runs_on_dispatch(
     // than cloning rows out by index — `frs` and `all_tdvs` aren't
     // needed after the inserts, so move ownership into `MintedDispatch`
     // entries directly.
-    let mut frs: Vec<PhysicalFunctionRunDB> = Vec::with_capacity(ready_lfrs.len());
-    let mut all_tdvs: Vec<PhysicalTableDataVersionDB> = Vec::new();
+    let mut frs: Vec<PhysicalFunctionRunInsertDB> = Vec::with_capacity(ready_lfrs.len());
+    let mut all_tdvs: Vec<PhysicalTableDataVersionInsertDB> = Vec::new();
     let mut per_lfr: Vec<(LogicalFunctionRunDB, usize)> = Vec::with_capacity(ready_lfrs.len());
 
     for lfr in ready_lfrs.iter() {
         let runnable = runnable_by_fvid
-            .get(&lfr.function_version_id)
+            .get(&lfr.base.function_version_id)
             .ok_or_else(|| {
                 api_error!(
                     ApiError::InternalError,
                     "no runnable resolved for LFR {} (fvid {})",
-                    lfr.id,
-                    lfr.function_version_id
+                    lfr.base.id,
+                    lfr.base.function_version_id
                 )
             })?;
         let base_path = effective
@@ -134,7 +127,19 @@ pub async fn mint_function_runs_on_dispatch(
         let tables = tables_by_head_fvid
             .get(&runnable.function_version_id)
             .unwrap_or(&empty);
-        let tdvs = build_output_table_data_versions(lfr, runnable, &fr, tables, &base_path)?;
+        let logical_by_table: HashMap<_, _> = ltdvs_all
+            .iter()
+            .filter(|f| f.base.producer_logical_function_run_id.as_ref() == Some(&lfr.base.id))
+            .map(|f| (f.base.table_id, f.base.id.clone()))
+            .collect();
+        let tdvs = build_output_table_data_versions(
+            lfr,
+            runnable,
+            &fr,
+            tables,
+            &base_path,
+            &logical_by_table,
+        )?;
         let tdv_count = tdvs.len();
         all_tdvs.extend(tdvs);
         frs.push(fr);
@@ -142,11 +147,10 @@ pub async fn mint_function_runs_on_dispatch(
     }
 
     if !frs.is_empty() {
-        conn.insert_vec::<PhysicalFunctionRunDB>(&frs).await?;
+        conn.chunked().insert(&frs).await?;
     }
     if !all_tdvs.is_empty() {
-        conn.insert_vec::<PhysicalTableDataVersionDB>(&all_tdvs)
-            .await?;
+        conn.chunked().insert(&all_tdvs).await?;
     }
 
     let mut output = Vec::with_capacity(ready_lfrs.len());
@@ -156,16 +160,17 @@ pub async fn mint_function_runs_on_dispatch(
         let fr = frs_iter
             .next()
             .expect("frs and per_lfr were built in lockstep");
-        let tdvs: Vec<PhysicalTableDataVersionDB> = (&mut tdvs_iter).take(tdv_count).collect();
+        let tdvs: Vec<PhysicalTableDataVersionInsertDB> =
+            (&mut tdvs_iter).take(tdv_count).collect();
         let runnable = runnable_by_fvid
-            .get(&lfr.function_version_id)
+            .get(&lfr.base.function_version_id)
             .cloned()
             .ok_or_else(|| {
                 api_error!(
                     ApiError::InternalError,
                     "no runnable resolved for LFR {} (fvid {})",
-                    lfr.id,
-                    lfr.function_version_id
+                    lfr.base.id,
+                    lfr.base.function_version_id
                 )
             })?;
         output.push(MintedDispatch {
@@ -176,67 +181,9 @@ pub async fn mint_function_runs_on_dispatch(
         });
     }
 
-    // A re-run comes back in `deferred`: its rebind waits for redirect_at_finish.
-    let lfr_binds: Vec<Bind<LogicalFunctionRunId, PhysicalFunctionRunId>> = output
-        .iter()
-        .map(|m| Bind {
-            project_id: m.lfr.project_id,
-            logical_id: m.lfr.id.clone(),
-            new_concrete_id: m.fr.id.clone(),
-        })
-        .collect();
-    let deferred = conn.lfr().pointers().bind_all(&lfr_binds, at, &by).await?;
-
-    let mut ltdv_binds: Vec<Bind<LogicalTableDataVersionId, PhysicalTableDataVersionId>> =
-        Vec::new();
-    for m in &output {
-        if deferred.contains(&m.lfr.id) {
-            debug!(
-                lfr_id = %m.lfr.id,
-                "scheduler.dispatch: re-run of bound LFR — deferring pointer rebind to redirect_at_finish"
-            );
-            continue;
-        }
-        for tdv in &m.tdvs {
-            let ltdv = ltdvs_all
-                .iter()
-                .find(|f| {
-                    f.producer_logical_function_run_id.as_ref() == Some(&m.lfr.id)
-                        && f.table_id == tdv.table_id
-                })
-                .ok_or_else(|| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "no LTDV for LFR {} table {} during mint+bind",
-                        m.lfr.id,
-                        tdv.table_id
-                    )
-                })?;
-            ltdv_binds.push(Bind {
-                project_id: ltdv.project_id,
-                logical_id: ltdv.id.clone(),
-                new_concrete_id: tdv.id.clone(),
-            });
-        }
-    }
-    // Deferral only applies to LFRs; an output LTDV of a Pending LFR must
-    // itself be Pending — its TDV was minted in this very tick.
-    let bound_ltdvs = conn
-        .ltdv()
-        .pointers()
-        .bind_all(&ltdv_binds, at, &by)
-        .await?;
-    if let Some(ltdv_id) = bound_ltdvs.into_iter().next() {
-        return Err(api_error!(
-            ApiError::InternalError,
-            "LTDV {} already Bound at dispatch while its producer LFR is Pending",
-            ltdv_id
-        ));
-    }
-
     debug!(
         minted = output.len(),
-        "scheduler.dispatch: minted FR + TDVs and bound pointers"
+        "scheduler.dispatch: minted FR + TDVs"
     );
     Ok(output)
 }
@@ -245,20 +192,19 @@ pub async fn mint_function_runs_on_dispatch(
 mod tests {
     use super::*;
     use crate::tests::fixtures::register;
+    use td_database::access::InProject;
+    use td_database::connection::PgConnectionExt;
     use td_database::pool::TdPool;
-    use td_objects::and;
     use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::types::basic::{
         CollectionName, LogicalFunctionRunStatus, PhysicalFunctionRunId, ProjectId, TransactionKey,
         UserId,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
-    /// Seed a function + Scheduled PFR whose LFR pointer is left `Bound` to that
-    /// seeded PFR — an identity that already ran (the recover re-run case).
-    /// Returns the LFR and the id of the PFR its pointer is bound to.
-    async fn seed_bound_lfr(
+    /// An identity that already ran (the recover re-run case).
+    async fn seed_run_lfr(
         db: &TdPool,
         project_id: ProjectId,
         collection: &ActiveCollectionDB,
@@ -287,35 +233,32 @@ mod tests {
             )
             .await?;
         let lfr = db
-            .live()
-            .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
+            .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
             .await?;
-        // No Pending append (unlike seed_dispatch_lfr): the pointer stays Bound
-        // to `pfr`, so the mint loop sees an already-run identity.
-        Ok((lfr, pfr.id))
+        Ok((lfr, pfr.base.id))
     }
 
-    /// Recover re-run (LFR pointer already Bound): mint must succeed without
-    /// rebinding — pre-fix the eager bind made this Err (the recover deadlock).
+    /// Recover re-run of a run that already has an attempt mints a new one.
     #[td_test::test(db)]
-    async fn test_dispatch_rerun_of_bound_lfr_does_not_rebind(db: TdPool) -> Result<(), TdError> {
+    async fn test_dispatch_rerun_mints_a_new_attempt(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
             .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let (lfr, bound_pfr) = seed_bound_lfr(&db, p.id, &coll, "fr").await?;
+        let (lfr, previous_pfr) = seed_run_lfr(&db, p.id, &coll, "fr").await?;
 
-        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        conn.scope_in_project(&p.id.to_string()).await.unwrap();
         let ready = vec![lfr.clone()];
         let at = AtTime::now();
         let minted = mint_function_runs_on_dispatch(&mut conn, &ready, &at).await?;
 
-        assert_eq!(minted.len(), 1, "the bound LFR is re-minted");
+        assert_eq!(minted.len(), 1, "the LFR is re-minted");
         assert_ne!(
-            minted[0].fr.id, bound_pfr,
-            "re-run mints a NEW PFR, distinct from the one the pointer is bound to"
+            minted[0].fr.id, previous_pfr,
+            "re-run mints a NEW PFR, distinct from the previous attempt"
         );
         Ok(())
     }
