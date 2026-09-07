@@ -142,7 +142,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         with patch(
             "tabsdatak.conn.common.sql.cdc._runner._run_loop",
         ), patch(
-            "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
+            "tabsdatak.conn.mysql._cdc_impl.BinlogIngester",
         ):
             MySQLCdcStreamSrcPlugin().run(ctx=ctx, conn=_conn(), stream_src=src)
         assert connector_logger.level == logging.DEBUG
@@ -160,7 +160,7 @@ def test_build_ingester_constructs_binlog_with_server_id_and_blocking():
     conn = _conn()
 
     with patch(
-        "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
+        "tabsdatak.conn.mysql._cdc_impl.BinlogIngester",
     ) as mock_ingester_cls:
         mock_ingester_cls.return_value = "ingester-instance"
         ingester = MySQLCdcStreamSrcPlugin().build_ingester(conn, src)
@@ -218,7 +218,7 @@ def test_build_ingester_translates_timestamp_start_from():
     src = _src(start_from=TimestampPosition(ts=ts))
 
     with patch(
-        "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
+        "tabsdatak.conn.mysql._cdc_impl.BinlogIngester",
     ) as mock_ingester_cls:
         MySQLCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
@@ -231,7 +231,7 @@ def test_build_ingester_blocking_timeout_falls_back_to_default():
     src = _src()  # no src_cfg
 
     with patch(
-        "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
+        "tabsdatak.conn.mysql._cdc_impl.BinlogIngester",
     ) as mock_ingester_cls:
         MySQLCdcStreamSrcPlugin().build_ingester(_conn(), src)
 

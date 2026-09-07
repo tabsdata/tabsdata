@@ -142,7 +142,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         with patch(
             "tabsdatak.conn.common.sql.cdc._runner._run_loop",
         ), patch(
-            "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
+            "tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester",
         ):
             Db2CdcStreamSrcPlugin().run(ctx=ctx, conn=_conn(), stream_src=src)
         assert connector_logger.level == logging.DEBUG
@@ -163,7 +163,7 @@ def test_build_ingester_constructs_with_timeout_and_fetch_size():
     conn = _conn()
 
     with patch(
-        "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
+        "tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester",
     ) as mock_ingester_cls:
         mock_ingester_cls.return_value = "ingester-instance"
         ingester = Db2CdcStreamSrcPlugin().build_ingester(conn, src)
@@ -182,7 +182,7 @@ def test_build_ingester_defaults_when_no_src_cfg():
     src = _src()
 
     with patch(
-        "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
+        "tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester",
     ) as mock_ingester_cls:
         Db2CdcStreamSrcPlugin().build_ingester(_conn(), src)
 
@@ -231,7 +231,7 @@ def test_build_ingester_translates_timestamp_start_from():
     src = _src(start_from=TimestampPosition(ts=ts))
 
     with patch(
-        "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
+        "tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester",
     ) as mock_ingester_cls:
         Db2CdcStreamSrcPlugin().build_ingester(_conn(), src)
 
@@ -244,7 +244,7 @@ def test_build_ingester_forwards_commitseq_position():
     src = _src(start_from=CommitSeqPosition(seq="cd" * 16))
 
     with patch(
-        "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
+        "tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester",
     ) as mock_ingester_cls:
         Db2CdcStreamSrcPlugin().build_ingester(_conn(), src)
 

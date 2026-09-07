@@ -25,6 +25,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
@@ -51,11 +52,12 @@ from tabsdatak.conn.mysql import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
-
-# noinspection PyProtectedMember
 from tabsdatak.conn.mysql._explorer import MySQLCdcConnectionExplorer
 from tabsdatak.spi import StreamSrcDef
+
+if TYPE_CHECKING:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_resolve_*`` reads from src_cfg and
@@ -124,6 +126,9 @@ class MySQLCdcStreamSrcPlugin(CdcPlugin[MySQLCdcStreamSrcConn, MySQLCdcStreamSrc
         conn: MySQLCdcStreamSrcConn,
         stream_src: MySQLCdcStreamSrc,
     ) -> BinlogIngester:
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
+
         blocking_timeout = (stream_src.src_cfg or {}).get(
             _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS
         )

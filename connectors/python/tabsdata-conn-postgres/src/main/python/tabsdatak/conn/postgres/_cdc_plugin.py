@@ -24,6 +24,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
@@ -48,14 +49,12 @@ from tabsdatak.conn.postgres import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.postgres._cdc_impl import (
-    DEFAULT_WAL2JSON_FORMAT_VERSION,
-    Wal2JsonIngester,
-)
-
-# noinspection PyProtectedMember
 from tabsdatak.conn.postgres._explorer import PostgresCdcConnectionExplorer
 from tabsdatak.spi import StreamSrcDef
+
+if TYPE_CHECKING:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.postgres._cdc_impl import Wal2JsonIngester
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_build_cdc_run_config`` reads from
@@ -127,6 +126,12 @@ class PostgresCdcStreamSrcPlugin(
         conn: PostgresCdcStreamSrcConn,
         stream_src: PostgresCdcStreamSrc,
     ) -> Wal2JsonIngester:
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.postgres._cdc_impl import (
+            DEFAULT_WAL2JSON_FORMAT_VERSION,
+            Wal2JsonIngester,
+        )
+
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT,

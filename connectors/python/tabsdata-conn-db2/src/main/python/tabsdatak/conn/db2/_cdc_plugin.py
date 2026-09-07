@@ -23,6 +23,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
@@ -49,11 +50,12 @@ from tabsdatak.conn.db2 import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
-
-# noinspection PyProtectedMember
 from tabsdatak.conn.db2._explorer import Db2CdcConnectionExplorer
 from tabsdatak.spi import StreamSrcDef
+
+if TYPE_CHECKING:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.db2._cdc_impl import SqlReplicaIngester
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_build_cdc_run_config`` reads from
@@ -124,6 +126,9 @@ class Db2CdcStreamSrcPlugin(CdcPlugin[Db2CdcStreamSrcConn, Db2CdcStreamSrc]):
         conn: Db2CdcStreamSrcConn,
         stream_src: Db2CdcStreamSrc,
     ) -> SqlReplicaIngester:
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
+
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT,

@@ -143,7 +143,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         with patch(
             "tabsdatak.conn.common.sql.cdc._runner._run_loop",
         ), patch(
-            "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
+            "tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester",
         ):
             PostgresCdcStreamSrcPlugin().run(ctx=ctx, conn=_conn(), stream_src=src)
         assert connector_logger.level == logging.DEBUG
@@ -166,7 +166,7 @@ def test_build_ingester_constructs_with_slot_and_format_version():
     conn = _conn()
 
     with patch(
-        "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
+        "tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester",
     ) as mock_ingester_cls:
         mock_ingester_cls.return_value = "ingester-instance"
         ingester = PostgresCdcStreamSrcPlugin().build_ingester(conn, src)
@@ -188,7 +188,7 @@ def test_build_ingester_blocking_timeout_falls_back_to_default():
     src = _src()  # no src_cfg
 
     with patch(
-        "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
+        "tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester",
     ) as mock_ingester_cls:
         PostgresCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
@@ -201,7 +201,7 @@ def test_build_ingester_format_version_falls_back_to_default():
     src = _src()
 
     with patch(
-        "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
+        "tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester",
     ) as mock_ingester_cls:
         PostgresCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
@@ -227,7 +227,7 @@ def test_build_ingester_forwards_lsn_position_to_ingester():
     src = _src(start_from=LsnPosition(lsn=12345))
 
     with patch(
-        "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
+        "tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester",
     ) as mock_ingester_cls:
         PostgresCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
