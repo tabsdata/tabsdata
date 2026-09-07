@@ -184,7 +184,7 @@ def _trigger_one(
         )
         return _TriggerOutcome.SKIPPED
 
-    # ExecutionRequestInternal body shape. Mirrors the cron-trigger
+    # InternalExecutionRequest body shape. Mirrors the cron-trigger
     # caller at td-crontrigger/src/cli.rs:81-91, which is the only
     # other in-tree builder of this payload — keeps the apiserver
     # handler's calling convention uniform across orchestrators.

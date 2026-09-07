@@ -12,7 +12,7 @@ use ta_apiserver::status::ok_status::{CreateStatus, GetStatus, NoContent, Update
 use td_apiforge::apiserver_path;
 use td_objects::Route;
 use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
-use td_objects::dxo::execution::{ExecutionParam, ExecutionRequestInternal, ExecutionResponse};
+use td_objects::dxo::execution::{ExecutionParam, ExecutionResponse, InternalExecutionRequest};
 use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::function::FunctionVersionIdParam;
 use td_objects::dxo::physical_function_run::{FunctionRunIdParam, PhysicalFunctionRun};
@@ -64,7 +64,7 @@ pub async fn function_version_execute(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
     Path(function_version_id): Path<FunctionVersionIdParam>,
-    Json(request): Json<ExecutionRequestInternal>,
+    Json(request): Json<InternalExecutionRequest>,
 ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
     let request = context.create(function_version_id, request);
     let response = state.execute_function_version(request).await?;

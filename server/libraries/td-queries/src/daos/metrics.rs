@@ -72,7 +72,7 @@ use td_objects::dxo::logical::{
     TableDataVersionDBWithNamesIden,
 };
 use td_objects::dxo::metrics::{
-    Dim, EdgeRow, EdgeTableRow, InflightRequest, InflightRow, MetricsRequest, NodeKind,
+    Dimension, EdgeRow, EdgeTableRow, InflightRequest, InflightRow, MetricsRequest, NodeKind,
     NodeOutputTableRow, NodeRow,
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
@@ -465,7 +465,7 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     let mut inner = Query::select();
     from_windowed_runs(&mut inner, req);
     inner.expr_as(bucket_expr(req), Col::Bucket);
-    if matches!(req.dim, Dim::Collection) {
+    if matches!(req.dim, Dimension::Collection) {
         inner.expr_as(
             fr_col(LogicalFunctionRunDBIden::CollectionId),
             Col::CollectionId,
@@ -507,7 +507,7 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         PhysicalFunctionRunDBIden::Table,
         bucket_column_pfr(req.unit),
     ));
-    if matches!(req.dim, Dim::Collection) {
+    if matches!(req.dim, Dimension::Collection) {
         inner.group_by_col((
             FunctionRunDBWithNamesIden::Table,
             LogicalFunctionRunDBIden::CollectionId,
@@ -532,13 +532,13 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         .expr(Expr::col((Sq::A, Col::Bucket)))
         .expr_as(kind_lit(NodeKind::Dim), Col::Kind);
     match req.dim {
-        Dim::Collection => {
+        Dimension::Collection => {
             outer.expr(Expr::col((Sq::A, Col::CollectionId))).expr_as(
                 Expr::col((Sq::C, ActiveCollectionDBIden::Name)),
                 Col::CollectionName,
             );
         }
-        Dim::Group => {
+        Dimension::Group => {
             outer
                 .expr_as(null_str(), Col::CollectionId)
                 .expr_as(null_str(), Col::CollectionName);
@@ -572,7 +572,7 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         Col::LogicalTablesOut,
     );
     outer.from_subquery(inner, Sq::A);
-    if matches!(req.dim, Dim::Collection) {
+    if matches!(req.dim, Dimension::Collection) {
         outer.join_as(
             JoinType::LeftJoin,
             CollectionDBIden::Table,
@@ -723,8 +723,8 @@ fn node_output_tables_query(req: &MetricsRequest) -> SelectStatement {
         .expr_as(bucket_expr(req), Col::Bucket)
         .expr_as(fr_col(LogicalFunctionRunDBIden::ProjectId), Col::ProjectId);
     let collection_id_expr = match req.dim {
-        Dim::Collection => fr_col(LogicalFunctionRunDBIden::CollectionId),
-        Dim::Group => null_str(),
+        Dimension::Collection => fr_col(LogicalFunctionRunDBIden::CollectionId),
+        Dimension::Group => null_str(),
     };
     stmt.expr_as(collection_id_expr, Col::CollectionId)
         .expr_as(fr_col(LogicalFunctionRunDBIden::GroupId), Col::GroupId)
@@ -1107,12 +1107,12 @@ fn edge_inner_union(req: &MetricsRequest) -> SelectStatement {
 /// endpoint's project rides along as `source_project_id`.
 fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     let (dim_table, dim_id, dim_name) = match req.dim {
-        Dim::Collection => (
+        Dimension::Collection => (
             CollectionDBIden::Table.into_iden(),
             ActiveCollectionDBIden::Id.into_iden(),
             ActiveCollectionDBIden::Name.into_iden(),
         ),
-        Dim::Group => (
+        Dimension::Group => (
             GroupDBIden::Table.into_iden(),
             GroupDBIden::Id.into_iden(),
             GroupDBIden::Name.into_iden(),
@@ -1179,8 +1179,8 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         .join_as(JoinType::LeftJoin, dim_table.clone(), Sq::SrcC, {
             let on = Expr::col((Sq::SrcC, dim_id.clone())).equals((Sq::A, Col::Source));
             match req.dim {
-                Dim::Collection => on,
-                Dim::Group => on.and(
+                Dimension::Collection => on,
+                Dimension::Group => on.and(
                     Expr::col((Sq::SrcC, Col::ProjectId)).equals((Sq::A, Col::SourceProjectId)),
                 ),
             }
@@ -1188,8 +1188,8 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         .join_as(JoinType::LeftJoin, dim_table, Sq::TgtC, {
             let on = Expr::col((Sq::TgtC, dim_id)).equals((Sq::A, Col::Target));
             match req.dim {
-                Dim::Collection => on,
-                Dim::Group => {
+                Dimension::Collection => on,
+                Dimension::Group => {
                     on.and(Expr::col((Sq::TgtC, Col::ProjectId)).equals((Sq::A, Col::ProjectId)))
                 }
             }
@@ -1379,18 +1379,18 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
 // ---------------------------------------------------------------------------
 
 /// Per-dim target column on the LFR view.
-fn target_dim_iden(dim: Dim) -> LogicalFunctionRunDBIden {
+fn target_dim_iden(dim: Dimension) -> LogicalFunctionRunDBIden {
     match dim {
-        Dim::Collection => LogicalFunctionRunDBIden::CollectionId,
-        Dim::Group => LogicalFunctionRunDBIden::GroupId,
+        Dimension::Collection => LogicalFunctionRunDBIden::CollectionId,
+        Dimension::Group => LogicalFunctionRunDBIden::GroupId,
     }
 }
 
 /// Per-dim source column on the LTDV-with-names view.
-fn source_dim_iden(dim: Dim) -> LogicalTableDataVersionDBIden {
+fn source_dim_iden(dim: Dimension) -> LogicalTableDataVersionDBIden {
     match dim {
-        Dim::Collection => LogicalTableDataVersionDBIden::CollectionId,
-        Dim::Group => LogicalTableDataVersionDBIden::GroupId,
+        Dimension::Collection => LogicalTableDataVersionDBIden::CollectionId,
+        Dimension::Group => LogicalTableDataVersionDBIden::GroupId,
     }
 }
 
@@ -1574,7 +1574,7 @@ mod tests {
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalPointerDao,
         LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
     };
-    use td_objects::dxo::metrics::{Dim, MetricsRequest, NodeKind};
+    use td_objects::dxo::metrics::{Dimension, MetricsRequest, NodeKind};
     use td_objects::dxo::physical_function_run::{
         PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB,
     };
@@ -1602,7 +1602,7 @@ mod tests {
         TimeWindow::new(WINDOW_DAY_START, WINDOW_DAY_END)
     }
 
-    fn empty_request(dim: Dim) -> MetricsRequest {
+    fn empty_request(dim: Dimension) -> MetricsRequest {
         MetricsRequest {
             dim,
             window: day_window(),
@@ -1950,7 +1950,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_nodes_empty_window(db: TdPool) -> Result<(), TdError> {
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let nodes = db.metrics().metrics_nodes(&req).await?;
         assert!(nodes.is_empty(), "empty DB → empty nodes, got {nodes:?}");
         Ok(())
@@ -1961,7 +1961,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, p.id, "pub_coll", "pub_fn").await?;
 
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let nodes = db.metrics().metrics_nodes(&req).await?;
 
         assert_eq!(
@@ -1989,7 +1989,7 @@ mod tests {
         let (_coll, _lfr, ltdv) =
             seed_publisher_with_ltdv(&db, p.id, "void_coll", "void_fn").await?;
 
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let before = db.metrics().metrics_nodes(&req).await?;
         assert_eq!(*before[0].row_count_out, 10);
         assert_eq!(*before[0].data_bytes_out, 100);
@@ -2034,7 +2034,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (coll, _lfr, ltdv) = seed_publisher_with_ltdv(&db, p.id, "lot_coll", "lot_fn").await?;
 
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let rows = db.metrics().metrics_node_output_tables(&req).await?;
 
         assert_eq!(
@@ -2052,7 +2052,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_edges_empty_window(db: TdPool) -> Result<(), TdError> {
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let edges = db.metrics().metrics_edges(&req).await?;
         assert!(edges.is_empty(), "empty DB → empty edges, got {edges:?}");
         Ok(())
@@ -2069,7 +2069,7 @@ mod tests {
         let (coll, _, _ltdv) =
             seed_publisher_with_ltdv(&db, p.id, "pub_synth", "pub_synth_fn").await?;
 
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let edges = db.metrics().metrics_edges(&req).await?;
 
         let ingress: Vec<_> = edges
@@ -2158,7 +2158,7 @@ mod tests {
         };
         db.scoped(p.id).live().insert(&input).await?;
 
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let edges = db.metrics().metrics_edges(&req).await?;
 
         let real: Vec<_> = edges
@@ -2280,7 +2280,7 @@ mod tests {
         };
         db.scoped(p.id).live().insert(&input).await?;
 
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let edges = db.metrics().metrics_edges(&req).await?;
 
         let egress: Vec<_> = edges
@@ -2333,7 +2333,7 @@ mod tests {
 
         let nodes = db
             .metrics()
-            .metrics_nodes(&empty_request(Dim::Collection))
+            .metrics_nodes(&empty_request(Dimension::Collection))
             .await?;
         assert_eq!(nodes.len(), 1, "one node expected, got {nodes:?}");
         let n = &nodes[0];
@@ -2346,7 +2346,7 @@ mod tests {
 
         let edges = db
             .metrics()
-            .metrics_edges(&empty_request(Dim::Collection))
+            .metrics_edges(&empty_request(Dimension::Collection))
             .await?;
         let ingress: Vec<_> = edges
             .iter()
@@ -2403,7 +2403,7 @@ mod tests {
 
         let nodes = db
             .metrics()
-            .metrics_nodes(&empty_request(Dim::Collection))
+            .metrics_nodes(&empty_request(Dimension::Collection))
             .await?;
         let prod_node = nodes
             .iter()
@@ -2426,7 +2426,7 @@ mod tests {
 
         let edges = db
             .metrics()
-            .metrics_edges(&empty_request(Dim::Collection))
+            .metrics_edges(&empty_request(Dimension::Collection))
             .await?;
         let prod_id = prod_coll.id.to_string();
         assert!(
@@ -2472,7 +2472,7 @@ mod tests {
 
         let edges = db
             .metrics()
-            .metrics_edges(&empty_request(Dim::Collection))
+            .metrics_edges(&empty_request(Dimension::Collection))
             .await?;
         let egress: Vec<_> = edges
             .iter()
@@ -2500,7 +2500,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, p.id, "del_coll", "del_fn").await?;
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         assert_eq!(db.metrics().metrics_nodes(&req).await?.len(), 1);
         assert!(!db.metrics().metrics_edges(&req).await?.is_empty());
 
@@ -2521,7 +2521,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_coll, _lfr, _ltdv) =
             seed_publisher_with_ltdv(&db, p.id, "del_proj_coll", "del_proj_fn").await?;
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         assert_eq!(db.metrics().metrics_nodes(&req).await?.len(), 1);
 
         soft_delete_project(&db, &p).await?;
@@ -2556,7 +2556,7 @@ mod tests {
         };
         db.scoped(p.id).live().insert(&input).await?;
 
-        let req = empty_request(Dim::Collection);
+        let req = empty_request(Dimension::Collection);
         let producer_id = producer_coll.id.to_string();
         assert!(
             db.metrics()

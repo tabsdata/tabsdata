@@ -23,8 +23,8 @@ use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::graph::{GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
     ActiveLogicalTableDataVersionDB, LogicalFunctionRunDB, LogicalFunctionRunInputDB,
-    LogicalFunctionRunPointerDB, LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
-    UpdateLogicalFunctionRunDB,
+    LogicalFunctionRunPointerDB, LogicalFunctionRunUpdateDB, LogicalTableDataVersionDB,
+    LogicalTableDataVersionPointerDB,
 };
 use td_objects::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithFunction;
@@ -650,7 +650,7 @@ pub async fn update_initial_function_run_status(
     );
 
     if !lfr_ids.is_empty() {
-        let update = UpdateLogicalFunctionRunDB {
+        let update = LogicalFunctionRunUpdateDB {
             status: LogicalFunctionRunStatus::OnHold,
         };
         let _ = conn

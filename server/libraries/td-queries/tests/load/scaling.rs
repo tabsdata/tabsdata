@@ -29,7 +29,7 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB, LogicalPointerDao,
     LogicalTableDataVersionPointerDB,
 };
-use td_objects::dxo::metrics::{Dim, InflightRequest, MetricsRequest, NodeKind};
+use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest, NodeKind};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
 use td_objects::dxo::table::{Table, TableDB};
@@ -580,7 +580,7 @@ async fn report_scaling_chain(db: TdPool) -> Result<(), TdError> {
 
 fn metrics_request() -> MetricsRequest {
     MetricsRequest {
-        dim: Dim::Collection,
+        dim: Dimension::Collection,
         window: TimeWindow::new(WINDOW_START_MS, WINDOW_END_MS),
         unit: WindowUnit::Day,
         collections: DimensionFilter::default(),
@@ -637,7 +637,7 @@ fn metrics_queries_hold_window_first_fenced_contract() {
     use td_objects::dxo::query_filters::WindowUnit::{Day, Hour, Month, Quarter, Week, Year};
 
     for unit in [Hour, Day, Week, Month, Quarter, Year] {
-        for dim in [Dim::Collection, Dim::Group] {
+        for dim in [Dimension::Collection, Dimension::Group] {
             let mut req = metrics_request();
             req.unit = unit;
             req.dim = dim;
@@ -701,7 +701,7 @@ async fn metrics_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
     .await?;
 
     let mut conn = db.begin_ro().await.unwrap();
-    for dim in [Dim::Collection, Dim::Group] {
+    for dim in [Dimension::Collection, Dimension::Group] {
         let mut req = metrics_request();
         req.dim = dim;
 
@@ -709,11 +709,11 @@ async fn metrics_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
         assert!(!nodes.is_empty(), "{dim:?}: no node rows on seeded data");
         for n in &nodes {
             match dim {
-                Dim::Collection => assert!(
+                Dimension::Collection => assert!(
                     n.collection_id.is_some() && n.collection_name.is_some(),
                     "{dim:?} node lost its collection identity: {n:?}"
                 ),
-                Dim::Group => assert!(
+                Dimension::Group => assert!(
                     n.collection_id.is_none() && n.collection_name.is_none(),
                     "{dim:?} node must fold collections to NULL: {n:?}"
                 ),

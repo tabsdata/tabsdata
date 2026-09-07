@@ -9,13 +9,13 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::logical::{
-    CommitLogicalFunctionRunDB, LogicalFunctionRunDB, UpdateLogicalFunctionRunDB,
+    LogicalFunctionRunCommitDB, LogicalFunctionRunDB, LogicalFunctionRunUpdateDB,
 };
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDB, PhysicalTableDataVersionDBWithNames, UpdateTableDataVersionDB,
 };
-use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
+use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerUpdateDB};
 use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function::WrittenTable;
 use td_objects::types::basic::{
@@ -50,7 +50,7 @@ enum UpdateStatusRunError {
 )]
 pub async fn update_worker_status(
     conn: &mut DomainConnection<Apiserver>,
-    update: &UpdateWorkerDB,
+    update: &WorkerUpdateDB,
     worker_id: &WorkerId,
 ) -> Result<(), TdError> {
     // Worker status update is never conditional, we want to know exactly what got reported,
@@ -258,7 +258,7 @@ pub async fn update_function_run_status(
     msgs: &mut ReqCtx,
     conn: &mut DomainConnection<Apiserver>,
     logical_function_runs: &Vec<LogicalFunctionRunDB>,
-    update: &UpdateLogicalFunctionRunDB,
+    update: &LogicalFunctionRunUpdateDB,
 ) -> Result<(), TdError> {
     let input_count = logical_function_runs.len();
     let mut lfr_ids = Vec::new();
@@ -308,7 +308,7 @@ pub async fn update_function_run_status(
         );
 
         if !to_commit_ffrs.is_empty() {
-            let commit_update = CommitLogicalFunctionRunDB::default();
+            let commit_update = LogicalFunctionRunCommitDB::default();
             let _ = conn
                 .update_chunked::<_, LogicalFunctionRunDB, _>(&commit_update, &to_commit_ffrs)
                 .await?;
@@ -374,7 +374,7 @@ async fn cascade_downstream_status(
         return Ok(());
     }
 
-    let cascade_update = UpdateLogicalFunctionRunDB { status: *status };
+    let cascade_update = LogicalFunctionRunUpdateDB { status: *status };
     let _ = conn
         .update_chunked::<_, LogicalFunctionRunDB, _>(&cascade_update, &to_update)
         .await?;

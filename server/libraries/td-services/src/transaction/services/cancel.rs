@@ -13,7 +13,7 @@ use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
 use td_objects::dxo::transaction::{TransactionDB, TransactionParam};
 use td_queries::LiveEntry;
 
@@ -44,7 +44,7 @@ async fn transaction_cancel(
     let conn = trx.get(grant);
 
     let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&transaction_id).await?;
-    let update = UpdateLogicalFunctionRunDB::cancel();
+    let update = LogicalFunctionRunUpdateDB::cancel();
     update_function_run_status(msgs, conn, &lfrs, &update).await?;
     trx.commit().await?;
 

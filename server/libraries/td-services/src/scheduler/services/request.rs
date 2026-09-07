@@ -23,10 +23,10 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{SchedulerConfig, SchedulerNotify};
 use td_objects::StateFilter;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::worker::{
-    UpdateWorkerDB, UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames,
+    WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB, WorkerUpdateDB,
 };
 use td_objects::types::basic::{AtTime, ProjectId, WorkerId, WorkerType};
 use td_queries::{ChunkedQueries, LiveEntry};
@@ -130,7 +130,7 @@ async fn tick_project(
     conn.insert_vec::<WorkerDB>(&workers).await?;
     // Flip LFR.status Scheduled/ReScheduled -> Requested.
     let lfr_ids = lfr_ids_from_minted_dispatch(&minted)?;
-    let requested = UpdateLogicalFunctionRunDB::requested();
+    let requested = LogicalFunctionRunUpdateDB::requested();
     conn.update_chunked::<_, LogicalFunctionRunDB, _>(&requested, &lfr_ids)
         .await?;
     // Flip PFR.status Requested -> Dispatched so the replay-side readiness
@@ -250,14 +250,14 @@ async fn update_worker_message_statuses(
     stopping: bool,
 ) -> Result<(), TdError> {
     let worker_ids: Vec<WorkerId> = workers.iter().map(|x| x.base.id.clone()).collect();
-    let status_update: UpdateWorkerDB = if stopping {
+    let status_update: WorkerUpdateDB = if stopping {
         stop_worker_update(orchestrator, at).await?
     } else {
-        UpdateWorkerDB::requested()
+        WorkerUpdateDB::requested()
     };
     conn.update_chunked::<_, WorkerDB, _>(&status_update, &worker_ids)
         .await?;
-    let locked = UpdateWorkerMessageStatusDB::locked();
+    let locked = WorkerMessageStatusUpdateDB::locked();
     conn.update_chunked::<_, WorkerDB, _>(&locked, &worker_ids)
         .await?;
     Ok(())

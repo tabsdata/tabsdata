@@ -5,7 +5,7 @@
 """Small HTTP invocation helper for in-pod calls to the apiserver.
 
 Built for the manifest-trigger sidecar (NU7), which needs to POST
-``fn_trigger`` as a JSON ``ExecutionRequestInternal`` body and inspect
+``fn_trigger`` as a JSON ``InternalExecutionRequest`` body and inspect
 the response without treating 4xx as exceptional.
 
 Why not :mod:`urllib` directly: the standard library's default
@@ -93,7 +93,7 @@ def invoke(
             general-purpose escape hatch even though the sidecar's
             ``fn_trigger`` call now carries its args in the JSON body.
         body: Optional request body bytes. NU7 passes a JSON-encoded
-            ``ExecutionRequestInternal``; ``None`` sends no body.
+            ``InternalExecutionRequest``; ``None`` sends no body.
         timeout_seconds: Socket timeout. ``None`` disables (not
             recommended for the sidecar; the apiserver should respond
             in well under 30s).

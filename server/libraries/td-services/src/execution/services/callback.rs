@@ -16,11 +16,11 @@ use td_database::access::{DbPool, Global};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
 use td_objects::dxo::physical_function_run::FunctionRunIdParam;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::worker::{
-    CallbackRequest, UpdateWorkerDB, UpdateWorkerExecution, WorkerDB, WorkerIdParam,
+    CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerIdParam, WorkerUpdateDB,
 };
 use td_objects::types::basic::{ExecutionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus};
 use td_queries::{ChunkedQueries, LiveEntry};
@@ -36,7 +36,7 @@ async fn execution_callback(
     let (ctx, (function_run_param, worker_param), callback) = request.into_parts();
     let at = ctx.time;
 
-    let update: UpdateWorkerExecution = UpdateWorkerExecution::try_from(&callback)?;
+    let update: WorkerExecutionUpdate = WorkerExecutionUpdate::try_from(&callback)?;
 
     let grant = authz.none();
     let worker_id = worker_param.worker_id;
@@ -74,7 +74,7 @@ async fn execution_callback(
     conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&audit_update, &attempt_ids)
         .await?;
 
-    let worker_update: UpdateWorkerDB = UpdateWorkerDB::try_from(&update)?;
+    let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
     update_worker_status(conn, &worker_update, &worker_id).await?;
 
     // Canonical flow-control status update on the LFR (sticky-Committed gate
@@ -91,7 +91,7 @@ async fn execution_callback(
                 .cloned()
         })
         .collect();
-    let lfr_update: UpdateLogicalFunctionRunDB = UpdateLogicalFunctionRunDB::try_from(&update)?;
+    let lfr_update: LogicalFunctionRunUpdateDB = LogicalFunctionRunUpdateDB::try_from(&update)?;
     update_function_run_status(msgs, conn, &lfrs, &lfr_update).await?;
 
     // Redirect-at-finish: if the reporting FR is a replay attempt

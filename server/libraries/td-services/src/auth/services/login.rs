@@ -15,7 +15,7 @@ use td_common::jwt::JwtConfig;
 use td_common::provider::Provider;
 use td_database::access::{DbPool, Global, Grant};
 use td_error::TdError;
-use td_objects::dxo::auth::{Login, SessionDB, TokenResponseX};
+use td_objects::dxo::auth::{Login, SessionDB, TokenResponse};
 use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::AtTime;
 use td_queries::LiveEntry;
@@ -26,7 +26,7 @@ async fn login(
     sessions: Ctx<Sessions>,
     db: DbPool<Global>,
     request: Login,
-) -> Result<TokenResponseX, TdError> {
+) -> Result<TokenResponse, TdError> {
     let mut gated_trx = db.begin().await?;
     let conn = gated_trx.get(Grant::asserted("login credential verification"));
     // request time (we don't have a request context in this service)

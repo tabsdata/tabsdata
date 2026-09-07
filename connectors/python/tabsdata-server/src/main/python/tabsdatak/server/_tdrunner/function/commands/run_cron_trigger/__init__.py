@@ -9,7 +9,7 @@ Kubernetes owns the ticking -- the gateway stamps ``spec.schedule`` from
 the function's cron mask at create time (see TD-2625) -- so each fire
 spawns a fresh pod that runs this command exactly once: it POSTs the
 function's execute endpoint with a ``CronTrigger``
-``ExecutionRequestInternal`` and exits.
+``InternalExecutionRequest`` and exits.
 
 Unlike the long-running supervisor cron worker (``td-crontrigger``) and the
 manifest-trigger sidecar, there is no loop, no ``request.yaml``, and no
@@ -51,7 +51,7 @@ MAN = (
     "    ... + standard responder/liveness/log/journal args\n\n"
     "Builds an HttpRequest from the --trigger-* triplet (injected by the "
     "cron-publisher pod profile from the worker's TD_TRIGGER_* secret) and "
-    "POSTs a CronTrigger ExecutionRequestInternal once. Exits 0 on 2xx; any "
+    "POSTs a CronTrigger InternalExecutionRequest once. Exits 0 on 2xx; any "
     "other response (or a connection failure) fails the Job so the missed "
     "fire is visible. Kubernetes re-spawns the pod on the next schedule tick."
 )

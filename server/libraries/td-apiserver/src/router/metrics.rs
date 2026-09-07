@@ -26,7 +26,7 @@ use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::metrics::{
-    Dim, InflightQuery, InflightRequest, InflightResponse, InflightStatusQuery, MetricsQuery,
+    Dimension, InflightQuery, InflightRequest, InflightResponse, InflightStatusQuery, MetricsQuery,
     MetricsRequest, MetricsResponse, SnapshotRequest, SnapshotResponse, StatusFilterError,
 };
 use td_objects::dxo::query_filters::{
@@ -73,7 +73,7 @@ pub(crate) fn metrics_query_into_request(q: MetricsQuery) -> Result<MetricsReque
         .into());
     }
     Ok(MetricsRequest {
-        dim: q.dim.unwrap_or(Dim::Collection),
+        dim: q.dim.unwrap_or(Dimension::Collection),
         window,
         unit,
         collections: DimensionFilter::new(q.collection, q.collection_exclude),
@@ -392,7 +392,7 @@ mod tests {
             .parse()
             .unwrap();
         let Query(m) = Query::<MetricsQuery>::try_from_uri(&uri).unwrap();
-        assert_eq!(m.dim, Some(Dim::Group));
+        assert_eq!(m.dim, Some(Dimension::Group));
         assert_eq!(m.unit, Some(WindowUnit::Hour));
         assert_eq!(m.collection.len(), 2);
         assert_eq!(

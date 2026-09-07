@@ -35,8 +35,8 @@ pub struct ExecutionRequest {
     pub external_uid: Option<ExternalUid>,
 }
 
-impl From<&ExecutionRequestInternal> for ExecutionRequest {
-    fn from(value: &ExecutionRequestInternal) -> Self {
+impl From<&InternalExecutionRequest> for ExecutionRequest {
+    fn from(value: &InternalExecutionRequest) -> Self {
         ExecutionRequest {
             name: value.name.clone(),
             function_only: value.function_only,
@@ -48,7 +48,7 @@ impl From<&ExecutionRequestInternal> for ExecutionRequest {
 }
 
 #[ta_objects::Dto]
-pub struct ExecutionRequestInternal {
+pub struct InternalExecutionRequest {
     pub name: Option<ExecutionName>,
     #[serde(default)]
     pub function_only: FunctionOnly,

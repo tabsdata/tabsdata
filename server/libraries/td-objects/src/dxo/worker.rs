@@ -199,7 +199,7 @@ impl FromDao for Worker {
 pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;
 
 #[ta_objects::Dlo]
-pub struct UpdateWorkerExecution {
+pub struct WorkerExecutionUpdate {
     pub started_on: Option<AtTime>,
     pub ended_on: Option<AtTime>,
     pub status: WorkerCallbackStatus,
@@ -218,7 +218,7 @@ pub struct UpdateWorkerExecution {
     pub metric_data_bytes: Option<ByteCount>,
 }
 
-impl TryFrom<&CallbackRequest> for UpdateWorkerExecution {
+impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
     type Error = TdError;
 
     fn try_from(value: &CallbackRequest) -> Result<Self, Self::Error> {
@@ -278,7 +278,7 @@ impl TryFrom<&CallbackRequest> for UpdateWorkerExecution {
         let metric_rows = metrics.as_ref().map(|m| m.rows);
         let metric_data_bytes = metrics.as_ref().and_then(|m| m.data_bytes);
 
-        Ok(UpdateWorkerExecution {
+        Ok(WorkerExecutionUpdate {
             started_on: value
                 .start
                 .map(|v| {
@@ -301,14 +301,14 @@ impl TryFrom<&CallbackRequest> for UpdateWorkerExecution {
 
 #[ta_objects::Dao]
 #[dao(update, sql_table = "workers")]
-pub struct UpdateWorkerDB {
+pub struct WorkerUpdateDB {
     #[dao(immutable)]
     pub started_on: Option<AtTime>,
     pub ended_on: Option<AtTime>,
     pub status: WorkerStatus,
 }
 
-impl UpdateWorkerDB {
+impl WorkerUpdateDB {
     pub fn requested() -> Self {
         Self {
             started_on: None,
@@ -344,11 +344,11 @@ impl UpdateWorkerDB {
 
 #[ta_objects::Dao]
 #[dao(update, sql_table = "workers")]
-pub struct UpdateWorkerMessageStatusDB {
+pub struct WorkerMessageStatusUpdateDB {
     pub message_status: WorkerMessageStatus,
 }
 
-impl UpdateWorkerMessageStatusDB {
+impl WorkerMessageStatusUpdateDB {
     pub fn locked() -> Self {
         Self {
             message_status: WorkerMessageStatus::Locked,
@@ -376,10 +376,10 @@ pub struct StageTriggerConfig {
     pub start: Option<DateTime<Utc>>,
     pub end: Option<DateTime<Utc>>,
 }
-impl TryFrom<&UpdateWorkerExecution> for UpdateWorkerDB {
+impl TryFrom<&WorkerExecutionUpdate> for WorkerUpdateDB {
     type Error = TdError;
-    fn try_from(src: &UpdateWorkerExecution) -> Result<Self, Self::Error> {
-        Ok(UpdateWorkerDB {
+    fn try_from(src: &WorkerExecutionUpdate) -> Result<Self, Self::Error> {
+        Ok(WorkerUpdateDB {
             started_on: src.started_on,
             ended_on: src.ended_on,
             status: src.status.clone().into(),

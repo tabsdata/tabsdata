@@ -24,7 +24,7 @@ Main loop (per poll), driven by ``next_after(cursor)``:
 
   * Fetch the oldest manifest after the cursor; POST ``fn_trigger`` with
     ``{"skip_if_running": true, "external_uid": <TS>, "trigger_type": "ST", ...}``
-    (the ``ExecutionRequestInternal`` shape the cron trigger also sends).
+    (the ``InternalExecutionRequest`` shape the cron trigger also sends).
   * On ``409`` (completed) -> queue the manifest + its files for deletion
     and **advance the cursor past it**, then fetch the next.
   * On ``2xx`` / ``425`` / other transient -> **stop**, leaving the cursor

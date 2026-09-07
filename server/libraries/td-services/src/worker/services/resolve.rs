@@ -15,7 +15,7 @@ use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::WorkerIdParam;
-use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames};
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB};
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::types::basic::{
     AtTime, PhysicalFunctionRunStatus, WorkerId, WorkerStatus, WorkerType,
@@ -142,7 +142,7 @@ pub async fn resolve_worker_message(
 
     // Flip Locked → Unlocked — the "make ready" the dispatch tick did for
     // the supervisor path. Idempotent: a pod restart can re-pull.
-    let update = UpdateWorkerMessageStatusDB::unlocked();
+    let update = WorkerMessageStatusUpdateDB::unlocked();
     conn.live()
         .update::<_, WorkerDB>(&update, worker_id)
         .await?;

@@ -13,7 +13,7 @@ use crate::recovery::{
 use ta_services::ctx_service::ReqCtx;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::logical::UpdateLogicalFunctionRunDB;
+use td_objects::dxo::logical::LogicalFunctionRunUpdateDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::AtTime;
 use td_queries::ChunkedQueries;
@@ -44,13 +44,13 @@ pub async fn apply_recovery_actions(
     // Running LFRs with a recover verdict → Failed first; ReScheduled is only
     // reachable from Failed/OnHold/Requested.
     let running = fail_running_lfrs_for_recover(&actions).await?;
-    let failed = UpdateLogicalFunctionRunDB::failed();
+    let failed = LogicalFunctionRunUpdateDB::failed();
     update_function_run_status(msgs, conn, &running, &failed).await?;
 
     // Requested and just-failed LFRs with a recover verdict → ReScheduled.
     let to_recover = recover_lfrs_from_actions(&actions).await?;
     abandon_requested_physical_runs(conn, at, &to_recover).await?;
-    let recover = UpdateLogicalFunctionRunDB::recover();
+    let recover = LogicalFunctionRunUpdateDB::recover();
     update_function_run_status(msgs, conn, &to_recover, &recover).await?;
 
     // The rest → Failed, with the downstream on-hold cascade.

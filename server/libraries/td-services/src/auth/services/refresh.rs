@@ -16,7 +16,7 @@ use td_common::provider::Provider;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
 use td_objects::and;
-use td_objects::dxo::auth::{SessionDB, SessionNewTokenDB, TokenResponseX};
+use td_objects::dxo::auth::{SessionDB, SessionNewTokenDB, TokenResponse};
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::RefreshToken;
@@ -29,7 +29,7 @@ async fn refresh(
     sessions: Ctx<Sessions>,
     db: DbPool<Global>,
     request: UpdateRequest<RefreshToken>,
-) -> Result<TokenResponseX, TdError> {
+) -> Result<TokenResponse, TdError> {
     let (ctx, _, refresh_token) = request.into_parts();
     let mut gated_trx = db.begin().await?;
     let conn = gated_trx.get(authz.none());

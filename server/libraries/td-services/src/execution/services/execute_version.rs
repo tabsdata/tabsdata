@@ -15,7 +15,7 @@ use td_execution::{SchedulerNotify, TransactionBy};
 use td_objects::StateFilter;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::CreateRequest;
-use td_objects::dxo::execution::{ExecutionRequest, ExecutionRequestInternal, ExecutionResponse};
+use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse, InternalExecutionRequest};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionIdParam};
 use td_queries::{HistoricEntry, LiveEntry};
 
@@ -26,7 +26,7 @@ async fn execute_function_version(
     scheduler_notify: Ctx<SchedulerNotify>,
     msgs: &mut ReqCtx,
     db: DbPool<Global>,
-    request: CreateRequest<ExecutionRequestInternal, FunctionVersionIdParam>,
+    request: CreateRequest<InternalExecutionRequest, FunctionVersionIdParam>,
 ) -> Result<ExecutionResponse, TdError> {
     let (ctx, param, internal_request) = request.into_parts();
     let function_version_id = param.function_version_id;
@@ -324,7 +324,7 @@ mod tests {
             FunctionVersionIdParam {
                 function_version_id: function.id.clone(),
             },
-            ExecutionRequestInternal {
+            InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),
                 function_only: FunctionOnly::default(),
                 skip_if_running,
@@ -399,7 +399,7 @@ mod tests {
             FunctionVersionIdParam {
                 function_version_id: function.id.clone(),
             },
-            ExecutionRequestInternal {
+            InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),
                 function_only: FunctionOnly::default(),
                 skip_if_running: SkipIfRunning::default(),
@@ -461,7 +461,7 @@ mod tests {
             FunctionVersionIdParam {
                 function_version_id: function_version_id.clone(),
             },
-            ExecutionRequestInternal {
+            InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),
                 function_only: FunctionOnly::default(),
                 skip_if_running: SkipIfRunning::default(),

@@ -16,7 +16,7 @@ use td_error::TdError;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::dxo::worker::UpdateWorkerExecution;
+use td_objects::dxo::worker::WorkerExecutionUpdate;
 use td_objects::types::basic::{AtTime, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId};
 use td_queries::{ChunkedQueries, LfrEntry, LtdvEntry, OutputRedirect, ReplayRedirect};
 use tracing::{debug, instrument};
@@ -30,7 +30,7 @@ use tracing::{debug, instrument};
 pub async fn redirect_pointers_at_finish(
     conn: &mut DomainConnection<Apiserver>,
     physical_function_runs: &[PhysicalFunctionRunDB],
-    update: &UpdateWorkerExecution,
+    update: &WorkerExecutionUpdate,
     at: &AtTime,
 ) -> Result<(), TdError> {
     if !matches!(update.status, WorkerCallbackStatus::Done) {

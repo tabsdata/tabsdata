@@ -57,7 +57,7 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::metrics::Dim;
+    use td_objects::dxo::metrics::Dimension;
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
     use td_objects::types::basic::{AccessTokenId, UserId};
     use td_queries::test_utils::SeedEntry;
@@ -66,7 +66,7 @@ mod tests {
     async fn test_metrics_empty_window(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let request = MetricsRequest {
-            dim: Dim::Collection,
+            dim: Dimension::Collection,
             window: TimeWindow::new(0, 86_400_000),
             unit: WindowUnit::Day,
             collections: DimensionFilter::default(),
@@ -82,7 +82,7 @@ mod tests {
             )
             .await?
             .data;
-        assert_eq!(response.dim, Dim::Collection);
+        assert_eq!(response.dim, Dimension::Collection);
         assert_eq!(response.unit, WindowUnit::Day);
         assert_eq!(response.start_ms, 0);
         assert_eq!(response.end_ms, 86_400_000);

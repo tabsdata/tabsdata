@@ -54,7 +54,7 @@ pub struct InflightResponse {
 /// Breakout dimension for the `/metrics` response. Selects whether
 /// nodes/edges are keyed on collection_id or group_id.
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash, Copy)]
-pub enum Dim {
+pub enum Dimension {
     Collection,
     Group,
 }
@@ -202,7 +202,7 @@ pub struct EdgeTableRow {
 
 #[ta_objects::Dto]
 pub struct MetricsResponse {
-    pub dim: Dim,
+    pub dim: Dimension,
     pub unit: WindowUnit,
     pub start_ms: i64,
     pub end_ms: i64,
@@ -217,7 +217,7 @@ pub struct MetricsResponse {
 /// since they have no source dim to filter).
 #[derive(Clone)]
 pub struct MetricsRequest {
-    pub dim: Dim,
+    pub dim: Dimension,
     pub window: TimeWindow,
     pub unit: WindowUnit,
     pub collections: DimensionFilter<CollectionId>,
@@ -254,7 +254,7 @@ pub struct SnapshotResponse {
 pub struct MetricsQuery {
     /// Breakout dimension (`collection` (default) | `group`).
     #[serde(default)]
-    pub dim: Option<Dim>,
+    pub dim: Option<Dimension>,
     /// Window unit and GROUP BY grain. Defaults to `day`.
     #[serde(default)]
     pub unit: Option<WindowUnit>,

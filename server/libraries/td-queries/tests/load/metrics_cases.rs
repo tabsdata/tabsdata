@@ -10,11 +10,11 @@ use crate::profile::SizeProfile;
 use std::time::Instant;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::metrics::{Dim, InflightRequest, MetricsRequest};
+use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest};
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
 use td_queries::MetricsEntry;
 
-fn metrics_request(dim: Dim) -> MetricsRequest {
+fn metrics_request(dim: Dimension) -> MetricsRequest {
     MetricsRequest {
         dim,
         window: TimeWindow::new(WINDOW_START_MS, WINDOW_END_MS),
@@ -30,7 +30,7 @@ async fn load_metrics_nodes(db: TdPool) -> Result<(), TdError> {
     let profile = SizeProfile::from_env();
     let seeded = dataset::metrics_dataset(&db, profile.metrics()).await?;
 
-    let req = metrics_request(Dim::Collection);
+    let req = metrics_request(Dimension::Collection);
     let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
     let rows = conn.metrics().metrics_nodes(&req).await?;
@@ -45,7 +45,7 @@ async fn load_metrics_edges(db: TdPool) -> Result<(), TdError> {
     let profile = SizeProfile::from_env();
     let seeded = dataset::metrics_dataset(&db, profile.metrics()).await?;
 
-    let req = metrics_request(Dim::Collection);
+    let req = metrics_request(Dimension::Collection);
     let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
     let rows = conn.metrics().metrics_edges(&req).await?;

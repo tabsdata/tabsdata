@@ -5,7 +5,6 @@
 use crate::types::basic::{AccessTokenId, AtTime, ProjectId, UserId};
 use serde_valid::Validate;
 use std::fmt::Debug;
-use td_error::td_error;
 
 /// How the requester was authenticated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -213,33 +212,6 @@ impl RequestContext {
             list_params: list_params.into(),
         }
     }
-}
-
-#[td_error]
-pub enum CrudlErrorX {
-    #[error("Cannot create, a unique value in data already exists: {0}")]
-    CannotCreateUniqueValueExists(String) = 0,
-    #[error("Cannot update, a unique value in data already exists: {0}")]
-    CannotUpdateUniqueValueExists(String) = 1,
-    #[error("Cannot delete: {0}")]
-    CannotDelete(String) = 2,
-
-    #[error("Not found.")]
-    NotFound = 1000,
-
-    #[error("Not allowed: {0}")]
-    NotAllowed(String) = 2000,
-
-    #[error("Forbidden: {0}")]
-    Forbidden(String) = 3000,
-
-    #[error("Invalid credentials")]
-    Unauthorized = 4000,
-    #[error("Invalid old password")]
-    InvalidOldPassword = 4001,
-
-    #[error("Internal error: {0}")]
-    InternalError(String) = 5002,
 }
 
 #[ta_objects::Dto]

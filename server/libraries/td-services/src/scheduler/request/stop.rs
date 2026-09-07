@@ -4,7 +4,7 @@
 
 use td_bridge::Orchestrator;
 use td_error::TdError;
-use td_objects::dxo::worker::UpdateWorkerDB;
+use td_objects::dxo::worker::WorkerUpdateDB;
 use td_objects::types::basic::AtTime;
 
 /// The stop-flip update for trigger workers. The kubernetes stop is
@@ -15,9 +15,9 @@ use td_objects::types::basic::AtTime;
 pub async fn stop_worker_update(
     orchestrator: Orchestrator,
     at: &AtTime,
-) -> Result<UpdateWorkerDB, TdError> {
+) -> Result<WorkerUpdateDB, TdError> {
     match orchestrator {
-        Orchestrator::Kubernetes => Ok(UpdateWorkerDB::stopped(at)),
-        Orchestrator::Supervisor => Ok(UpdateWorkerDB::stop_requested()),
+        Orchestrator::Kubernetes => Ok(WorkerUpdateDB::stopped(at)),
+        Orchestrator::Supervisor => Ok(WorkerUpdateDB::stop_requested()),
     }
 }

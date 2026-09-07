@@ -10,7 +10,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::extractors::Json;
 use ta_apiserver::status::ok_status::{GetStatus, NoContent, RawStatus, UpdateStatus};
 use td_apiforge::apiserver_path;
-use td_objects::dxo::auth::{Login, PasswordChange, RefreshRequestX, TokenResponseX};
+use td_objects::dxo::auth::{Login, PasswordChange, RefreshRequest, TokenResponse};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::user::UserInfo;
@@ -30,8 +30,8 @@ pub async fn logout(
 pub async fn refresh(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
-    Form(request): Form<RefreshRequestX>,
-) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
+    Form(request): Form<RefreshRequest>,
+) -> Result<RawStatus<TokenResponse>, ErrorStatus> {
     let request = context.update((), request.refresh_token.clone());
     let response = state.refresh(request).await?.data;
     Ok(RawStatus::OK(response))
@@ -51,7 +51,7 @@ pub async fn user_info(
 pub async fn login(
     State(state): State<Services>,
     Json(request): Json<Login>,
-) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
+) -> Result<RawStatus<TokenResponse>, ErrorStatus> {
     let response = state.login(request).await?.data;
     Ok(RawStatus::OK(response))
 }

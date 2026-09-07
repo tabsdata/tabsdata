@@ -11,7 +11,7 @@ use ta_services::ctx_service::ReqCtx;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
@@ -147,7 +147,7 @@ pub async fn sweep_stale_runs(
     fail_stale_abandoned_attempts(conn, at, &stale).await?;
     let stuck_lfrs = stuck_lfrs_from_stale(&stale).await?;
     abandon_requested_physical_runs(conn, at, &stuck_lfrs).await?;
-    let recover = UpdateLogicalFunctionRunDB::recover();
+    let recover = LogicalFunctionRunUpdateDB::recover();
     update_function_run_status(msgs, conn, &stuck_lfrs, &recover).await?;
     Ok(())
 }

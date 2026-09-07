@@ -11,8 +11,8 @@ use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::logical::{
-    LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalPointerDao,
-    LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB, UpdateLogicalFunctionRunDB,
+    LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalFunctionRunUpdateDB,
+    LogicalPointerDao, LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::table::TableDB;
@@ -47,7 +47,7 @@ pub(crate) async fn seed_physical_function_run(
     let logical = match existing {
         Some(existing) => {
             if &existing.status != status {
-                let update = UpdateLogicalFunctionRunDB { status: *status };
+                let update = LogicalFunctionRunUpdateDB { status: *status };
                 executor
                     .reuse()
                     .live()

@@ -117,7 +117,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionRequest;
     use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister};
-    use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+    use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
     use td_objects::dxo::physical_function_run::{
         PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB,
     };
@@ -648,7 +648,7 @@ mod tests {
             .live()
             .fetch_one::<LogicalFunctionRunDB>(and!(&pfr_old.execution_id, &pfr_old.function_id))
             .await?;
-        let lfr_to_running = UpdateLogicalFunctionRunDB {
+        let lfr_to_running = LogicalFunctionRunUpdateDB {
             status: LogicalFunctionRunStatus::Running,
         };
         db.live()

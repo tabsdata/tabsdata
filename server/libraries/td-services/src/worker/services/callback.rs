@@ -11,7 +11,7 @@ use td_database::access::{GatedConnection, RW};
 use td_error::TdError;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::worker::{
-    CallbackRequest, UpdateWorkerDB, UpdateWorkerExecution, WorkerDB, WorkerIdParam,
+    CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerIdParam, WorkerUpdateDB,
 };
 use td_queries::LiveEntry;
 
@@ -23,13 +23,13 @@ async fn worker_callback(
 ) -> Result<(), TdError> {
     let (_, param, callback) = request.into_parts();
     let conn = gated_trx.get(authz.none());
-    let update = UpdateWorkerExecution::try_from(&callback)?;
+    let update = WorkerExecutionUpdate::try_from(&callback)?;
 
     let worker_id = param.worker_id;
     let worker: WorkerDB = conn.live().fetch_one(&worker_id).await?;
     scope_to_project(conn, &worker.project_id).await?;
 
-    let worker_update: UpdateWorkerDB = UpdateWorkerDB::try_from(&update)?;
+    let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
     update_worker_status(conn, &worker_update, &worker_id).await?;
     Ok(())
 }

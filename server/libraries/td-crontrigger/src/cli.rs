@@ -13,7 +13,7 @@ use td_common::logging::LoggingOptions;
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_common::worker::{REQUEST_FILE, WORKER_PID_FILE};
-use td_objects::dxo::execution::ExecutionRequestInternal;
+use td_objects::dxo::execution::InternalExecutionRequest;
 use td_objects::dxo::worker::CronTriggerConfig;
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::types::basic::{ExecutionName, FunctionOnly, SkipIfRunning, TriggerType};
@@ -79,7 +79,7 @@ pub fn run() {
             let execution_name = format!("by cron mask '{}'", mask);
 
             let execution_request = ExecutionName::try_from(execution_name)
-                .map(|name| ExecutionRequestInternal {
+                .map(|name| InternalExecutionRequest {
                     name: Some(name),
                     function_only: FunctionOnly::FALSE,
                     skip_if_running: SkipIfRunning::FALSE,

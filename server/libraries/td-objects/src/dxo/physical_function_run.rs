@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::worker::UpdateWorkerExecution;
+use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
     ConnectionKind, Decorator, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
@@ -163,8 +163,8 @@ impl FromDao for PhysicalFunctionRun {
 }
 
 // Per-attempt timing + status on the concrete FR. The worker callback
-// writes both via UpdateWorkerExecution → builder. The LFR's
-// canonical status is updated separately via UpdateLogicalFunctionRunDB
+// writes both via WorkerExecutionUpdate → builder. The LFR's
+// canonical status is updated separately via LogicalFunctionRunUpdateDB
 // (sticky-Committed gate applies there, not here).
 //
 // At terminalization, the same UPDATE also writes the four
@@ -235,9 +235,9 @@ impl UpdatePhysicalFunctionRunDB {
     }
 }
 
-impl TryFrom<&UpdateWorkerExecution> for UpdatePhysicalFunctionRunDB {
+impl TryFrom<&WorkerExecutionUpdate> for UpdatePhysicalFunctionRunDB {
     type Error = TdError;
-    fn try_from(src: &UpdateWorkerExecution) -> Result<Self, Self::Error> {
+    fn try_from(src: &WorkerExecutionUpdate) -> Result<Self, Self::Error> {
         Ok(UpdatePhysicalFunctionRunDB {
             dispatched_on: None,
             started_on: src.started_on,

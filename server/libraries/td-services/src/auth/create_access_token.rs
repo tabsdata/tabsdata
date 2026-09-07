@@ -4,13 +4,13 @@
 
 use td_common::jwt::{JwtConfig, TokenClaims, encode_token};
 use td_error::TdError;
-use td_objects::dxo::auth::{SessionDB, TokenResponseX};
+use td_objects::dxo::auth::{SessionDB, TokenResponse};
 use tracing::info;
 
 pub fn create_access_token(
     jwt_settings: &JwtConfig,
     session: &SessionDB,
-) -> Result<TokenResponseX, TdError> {
+) -> Result<TokenResponse, TdError> {
     const BEARER: &str = "Bearer";
 
     let id = *session.access_token_id;
@@ -24,7 +24,7 @@ pub fn create_access_token(
         access_exp + jwt_settings.refresh_token_expiration - jwt_settings.access_token_expiration,
     );
 
-    let token = TokenResponseX {
+    let token = TokenResponse {
         access_token: encode_token(jwt_settings, &access_token)?.try_into()?,
         refresh_token: encode_token(jwt_settings, &refresh_token)?.try_into()?,
         token_type: BEARER.try_into()?,

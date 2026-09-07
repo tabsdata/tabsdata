@@ -15,7 +15,7 @@ use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::execution::ExecutionParam;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
 use td_queries::LiveEntry;
 
 #[service_factory]
@@ -46,7 +46,7 @@ async fn execution_cancel(
     let conn = trx.get(grant);
     let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&execution_id).await?;
     // Set cancel status (on the LFR — FR has no status), then cascade.
-    let update = UpdateLogicalFunctionRunDB::cancel();
+    let update = LogicalFunctionRunUpdateDB::cancel();
     update_function_run_status(msgs, conn, &lfrs, &update).await?;
     trx.commit().await?;
 

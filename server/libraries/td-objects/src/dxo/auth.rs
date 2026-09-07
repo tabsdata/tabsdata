@@ -14,13 +14,13 @@ pub struct Login {
 }
 
 #[ta_objects::Dto]
-pub struct RefreshRequestX {
+pub struct RefreshRequest {
     pub grant_type: GrantType,
     pub refresh_token: RefreshToken,
 }
 
 #[ta_objects::Dto]
-pub struct TokenResponseX {
+pub struct TokenResponse {
     pub access_token: AccessToken,
     pub refresh_token: RefreshToken,
     pub token_type: TokenType,

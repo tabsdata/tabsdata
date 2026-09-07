@@ -18,7 +18,7 @@ use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBWithNames};
-use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB};
+use td_objects::dxo::worker::{WorkerDB, WorkerUpdateDB};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
@@ -733,7 +733,7 @@ pub async fn stop_current_workers(
             }
         }
 
-        let update = UpdateWorkerDB::stop_scheduled();
+        let update = WorkerUpdateDB::stop_scheduled();
         let res = conn
             .update_chunked::<_, WorkerDB, _>(&update, &to_stop)
             .await?;

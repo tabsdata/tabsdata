@@ -17,9 +17,9 @@ use td_database::access::{DbPool, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
+use td_objects::dxo::worker::{WorkerDB, WorkerMessageStatusUpdateDB};
 use td_objects::dxo::yaml::function::FunctionInput;
 use td_objects::types::basic::{
     LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId, ProjectId, WorkerId,
@@ -315,7 +315,7 @@ async fn commit_unlock(
     pfr_id: &PhysicalFunctionRunId,
     branch: DispatchBranch,
 ) -> Result<(), TdError> {
-    let update = UpdateWorkerMessageStatusDB::unlocked();
+    let update = WorkerMessageStatusUpdateDB::unlocked();
     let outcome: Result<(), String> = async {
         conn.live()
             .update::<_, WorkerDB>(&update, worker_id)
@@ -364,7 +364,7 @@ async fn rollback_initial_function_run(
 ) {
     // Conditional on `Requested`: the read feeding this was unlocked, and
     // forcing a run that has since moved on back to Scheduled would re-run it.
-    let update = UpdateLogicalFunctionRunDB::scheduled();
+    let update = LogicalFunctionRunUpdateDB::scheduled();
     match conn
         .live()
         .update::<_, LogicalFunctionRunDB>(
@@ -453,7 +453,7 @@ async fn unlock_simple_worker(
     error_label: &str,
     log_kind: &str,
 ) -> Result<(), TdError> {
-    let update = UpdateWorkerMessageStatusDB::unlocked();
+    let update = WorkerMessageStatusUpdateDB::unlocked();
     conn.live()
         .update::<_, WorkerDB>(&update, &worker_id)
         .await

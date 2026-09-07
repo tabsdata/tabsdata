@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def _execution_request_body() -> bytes:
-    """Build the ``ExecutionRequestInternal`` body for one cron fire.
+    """Build the ``InternalExecutionRequest`` body for one cron fire.
 
     Mirrors the legacy supervisor builder
     (``td-crontrigger/src/cli.rs:82-88``): a fresh execution every tick --

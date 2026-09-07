@@ -59,7 +59,7 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::metrics::{Dim, InflightRequest, MetricsRequest};
+    use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest};
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
     use td_objects::types::basic::{AccessTokenId, UserId};
     use td_queries::test_utils::SeedEntry;
@@ -69,7 +69,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let request = SnapshotRequest {
             metrics: MetricsRequest {
-                dim: Dim::Collection,
+                dim: Dimension::Collection,
                 window: TimeWindow::new(0, 86_400_000),
                 unit: WindowUnit::Day,
                 collections: DimensionFilter::default(),
@@ -91,7 +91,7 @@ mod tests {
             )
             .await?
             .data;
-        assert_eq!(response.metrics.dim, Dim::Collection);
+        assert_eq!(response.metrics.dim, Dimension::Collection);
         assert_eq!(response.metrics.unit, WindowUnit::Day);
         assert!(response.metrics.nodes.is_empty());
         assert!(response.metrics.edges.is_empty());

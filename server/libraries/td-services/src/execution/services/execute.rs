@@ -90,8 +90,8 @@ pub(crate) mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::graph::GraphEdge;
     use td_objects::dxo::logical::{
-        LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalTableDataVersionDB,
-        UpdateLogicalFunctionRunDB,
+        LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunUpdateDB,
+        LogicalTableDataVersionDB,
     };
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDBWithStatus;
@@ -498,7 +498,7 @@ pub(crate) mod tests {
             .live()
             .fetch_one(and!(&producer_executions[1].id, &producer.function_id))
             .await?;
-        let update = UpdateLogicalFunctionRunDB {
+        let update = LogicalFunctionRunUpdateDB {
             status: LogicalFunctionRunStatus::Canceled,
         };
         db.scoped(p)

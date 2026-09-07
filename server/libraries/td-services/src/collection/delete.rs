@@ -4,7 +4,7 @@
 
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB};
+use td_objects::dxo::worker::{WorkerDB, WorkerUpdateDB};
 use td_objects::types::basic::{CollectionId, WorkerType};
 use td_objects::{and, or};
 use td_queries::LiveEntry;
@@ -14,7 +14,7 @@ pub async fn update_deleted_workers(
     conn: &mut DomainConnection<Apiserver>,
     collection_id: &CollectionId,
 ) -> Result<(), TdError> {
-    let update = UpdateWorkerDB::stop_scheduled();
+    let update = WorkerUpdateDB::stop_scheduled();
 
     let res = conn
         .live()

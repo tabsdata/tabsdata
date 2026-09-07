@@ -101,7 +101,7 @@ pub trait LogicalPointerDao:
     fn initial_mint_for(identity: &Self::IdentityDB) -> Result<Self, TdError>;
 }
 
-use crate::dxo::worker::UpdateWorkerExecution;
+use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
     DataChanged, DependencyPos, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
@@ -323,11 +323,11 @@ impl FromDao for FunctionRun {
 // wall-clock fields (started_on, ended_on) live on PhysicalFunctionRunDB.
 #[ta_objects::Dao]
 #[dao(update, sql_table = "logical_function_runs")]
-pub struct UpdateLogicalFunctionRunDB {
+pub struct LogicalFunctionRunUpdateDB {
     pub status: LogicalFunctionRunStatus,
 }
 
-impl UpdateLogicalFunctionRunDB {
+impl LogicalFunctionRunUpdateDB {
     pub fn scheduled() -> Self {
         Self {
             status: LogicalFunctionRunStatus::Scheduled,
@@ -361,11 +361,11 @@ impl UpdateLogicalFunctionRunDB {
 
 #[ta_objects::Dao]
 #[dao(update, sql_table = "logical_function_runs")]
-pub struct CommitLogicalFunctionRunDB {
+pub struct LogicalFunctionRunCommitDB {
     pub status: LogicalFunctionRunStatus,
 }
 
-impl Default for CommitLogicalFunctionRunDB {
+impl Default for LogicalFunctionRunCommitDB {
     fn default() -> Self {
         Self {
             status: LogicalFunctionRunStatus::Committed,
@@ -684,10 +684,10 @@ pub struct LogicalFunctionRunInputDB {
     pub requirement_dependency_pos: Option<DependencyPos>,
     pub requirement_version_pos: VersionPos,
 }
-impl TryFrom<&UpdateWorkerExecution> for UpdateLogicalFunctionRunDB {
+impl TryFrom<&WorkerExecutionUpdate> for LogicalFunctionRunUpdateDB {
     type Error = TdError;
-    fn try_from(src: &UpdateWorkerExecution) -> Result<Self, Self::Error> {
-        Ok(UpdateLogicalFunctionRunDB {
+    fn try_from(src: &WorkerExecutionUpdate) -> Result<Self, Self::Error> {
+        Ok(LogicalFunctionRunUpdateDB {
             status: src.status.clone().try_into()?,
         })
     }

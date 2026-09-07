@@ -18,7 +18,7 @@ use td_execution::RecoveryConfig;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithBundleBasePath};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
-use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBWithNames};
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerUpdateDB};
 use td_objects::or;
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionVersionId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
@@ -639,8 +639,8 @@ pub async fn finalize_recovery_actions(
     Ok(RecoveryActions { fn_actions })
 }
 
-pub async fn failed_worker_update(at: &AtTime) -> Result<UpdateWorkerDB, TdError> {
-    Ok(UpdateWorkerDB {
+pub async fn failed_worker_update(at: &AtTime) -> Result<WorkerUpdateDB, TdError> {
+    Ok(WorkerUpdateDB {
         started_on: None,
         ended_on: Some(*at),
         status: WorkerStatus::Failed,

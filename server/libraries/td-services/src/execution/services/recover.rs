@@ -17,7 +17,7 @@ use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::execution::ExecutionParam;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
 use td_queries::LiveEntry;
 
 #[service_factory]
@@ -52,7 +52,7 @@ async fn execution_recover(
     abandon_requested_physical_runs(conn, &at, &lfrs).await?;
     // Set recover status (ReScheduled). Dispatch re-mints per LFR; already-run
     // (Bound) LFRs rebind at redirect_pointers_at_finish, not at dispatch.
-    let update = UpdateLogicalFunctionRunDB::recover();
+    let update = LogicalFunctionRunUpdateDB::recover();
     update_function_run_status(msgs, conn, &lfrs, &update).await?;
     trx.commit().await?;
 
