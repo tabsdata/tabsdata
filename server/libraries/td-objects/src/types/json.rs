@@ -4,7 +4,6 @@
 
 use sea_query::Value;
 use serde::Serialize;
-use std::any::TypeId;
 use std::fmt::Debug;
 use std::ops::Deref;
 use ta_objects::{NullableSeaValue, SeaValue};
@@ -30,10 +29,6 @@ impl<T: Serialize + Debug + Send + Sync + 'static> SeaValue for Json<T> {
                 error!("Error converting json value {self:?} to a sea value: {e}");
                 Value::Json(None)
             })
-    }
-
-    fn as_type_id(&self) -> TypeId {
-        TypeId::of::<T>()
     }
 }
 

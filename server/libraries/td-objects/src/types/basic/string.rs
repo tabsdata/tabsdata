@@ -228,7 +228,7 @@ impl TryFrom<&TableDBWithNames> for TableName {
     type Error = td_error::TdError;
 
     fn try_from(v: &TableDBWithNames) -> Result<Self, Self::Error> {
-        let table = v.base.name.clone();
+        let table = v.base.base.name.clone();
         Ok(table)
     }
 }

@@ -13,6 +13,7 @@ mod string;
 mod tagged;
 mod timestamp;
 mod typed_enum;
+mod valid_to;
 
 pub use bool::*;
 pub use brand::*;
@@ -25,3 +26,4 @@ pub use string::*;
 pub use tagged::*;
 pub use timestamp::*;
 pub use typed_enum::*;
+pub use valid_to::*;

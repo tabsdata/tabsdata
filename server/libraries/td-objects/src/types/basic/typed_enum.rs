@@ -29,14 +29,6 @@ impl Decorator {
     }
 }
 
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
-pub enum DependencyStatus {
-    #[typed_enum(rename = "A")]
-    Active,
-    #[typed_enum(rename = "D")]
-    Deleted,
-}
-
 /// Flavour of a collection, inferred from its group at creation time and then
 /// immutable. `DataFactory` is the default; `Source`/`Destination` collections
 /// carry connection info.
@@ -194,58 +186,6 @@ impl TryFrom<WorkerCallbackStatus> for LogicalFunctionRunStatus {
     }
 }
 
-/// Status of a logical pointer (LFR or LTDV) at any moment.
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
-pub enum LogicalPointerStatus {
-    /// The logical row exists but no concrete is bound yet.
-    #[typed_enum(rename = "P")]
-    Pending,
-    /// Bound to a concrete row.
-    #[typed_enum(rename = "B")]
-    Bound,
-    /// Not bound; only re-bindable via an explicit operator redirect.
-    #[typed_enum(rename = "V")]
-    Voided,
-}
-
-/// Reason recorded on every pointer-changing event in the logical history.
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
-pub enum LogicalPointerReason {
-    /// Logical row created at plan-build time; status begins `Pending`.
-    #[typed_enum(rename = "IM")]
-    InitialMint,
-    /// Auto-bind at dispatch: `Pending → Bound`.
-    #[typed_enum(rename = "ID")]
-    InitialDispatch,
-    /// Retroactive lazy-mint of a V1-born concrete TDV; LTDV is created
-    /// already `Bound` with no dispatch event.
-    #[typed_enum(rename = "IT")]
-    InitialMaterialization,
-    /// Void path used by the cancel pipeline; only voids `Pending` rows.
-    #[typed_enum(rename = "TC")]
-    TransactionCancelManual,
-    /// Void path triggered by upstream cancellation.
-    #[typed_enum(rename = "UC")]
-    UpstreamCancellationManual,
-    /// Explicit operator-driven repointing. The only path to
-    /// `Voided → Bound`, `Bound → Bound(different concrete)`, or any
-    /// rebind the auto path refuses. Always carries the operator's
-    /// actual user id in `set_by_id`, never `UserId::admin`.
-    #[typed_enum(rename = "OR")]
-    OperatorRedirect,
-    /// Operator force-void of a `Bound` (or `Pending`) row — deliberately
-    /// abandons a binding without choosing a replacement. Distinct from
-    /// `TransactionCancelManual`, which only voids `Pending` rows.
-    #[typed_enum(rename = "OV")]
-    OperatorForceVoid,
-    /// Worker-finish redirect on a replay attempt's success. LFR pointer
-    /// was `Bound(PFR_old)` while the replay PFR ran; on its `Done`
-    /// callback `redirect_at_finish` appends `Bound(PFR_new)` with this
-    /// reason. Paired with `Bound` status.
-    #[typed_enum(rename = "RR")]
-    ReplayRedirect,
-}
-
 /// Per-attempt status on `physical_function_runs`. Independent of
 /// [`LogicalFunctionRunStatus`] (LFR/LTDV-canonical, sticky-Committed).
 ///
@@ -360,8 +300,6 @@ pub enum FunctionStatus {
     Active,
     #[typed_enum(rename = "F")]
     Frozen,
-    #[typed_enum(rename = "D")]
-    Deleted,
 }
 
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
@@ -591,11 +529,9 @@ pub enum TableStatus {
     Active,
     #[typed_enum(rename = "F")]
     Frozen,
-    #[typed_enum(rename = "D")]
-    Deleted,
 }
 
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Default)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Default, Eq, PartialEq)]
 pub enum TableType {
     #[default]
     #[typed_enum(rename = "R")]
@@ -650,8 +586,6 @@ pub enum TriggerStatus {
     Active,
     #[typed_enum(rename = "F")]
     Frozen,
-    #[typed_enum(rename = "D")]
-    Deleted,
 }
 
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]

@@ -3,7 +3,7 @@
 //
 
 use crate::types::basic::ProjectId;
-use sea_query::{Condition, Expr, ExprTrait};
+use sea_query::{Condition, Expr, ExprTrait, SimpleExpr};
 use std::collections::HashSet;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{HasColumn, SeaValue};
@@ -30,8 +30,11 @@ impl VisibleProjects {
 
 /// As a WHERE clause: `All` matches everything, `Only(ids)` restricts the
 /// DAO's `ProjectId` column to the set, an empty set matches nothing.
-impl<D: HasColumn<ProjectId>> SqlCondition<D> for VisibleProjects {
-    fn resolve(&self) -> Condition {
+impl VisibleProjects {
+    /// The visibility boundary as a predicate over `project_id`: part of the
+    /// query plan, so a tenant-wide statement only ever aggregates the rows
+    /// the requester may see.
+    pub fn narrows(&self, project_id: impl Into<SimpleExpr>) -> Condition {
         let ids = match self {
             VisibleProjects::All => return Condition::all(),
             VisibleProjects::Only(ids) => ids,
@@ -40,7 +43,13 @@ impl<D: HasColumn<ProjectId>> SqlCondition<D> for VisibleProjects {
             return Condition::all().add(Expr::cust("1 = 0"));
         }
         let values: Vec<_> = ids.iter().map(|id| id.as_sea_value()).collect();
-        Condition::all().add(Expr::col(D::COL).is_in(values))
+        Condition::all().add(project_id.into().is_in(values))
+    }
+}
+
+impl<D: HasColumn<ProjectId>> SqlCondition<D> for VisibleProjects {
+    fn resolve(&self) -> Condition {
+        self.narrows(Expr::col(D::COL))
     }
 
     fn matches_all(&self) -> bool {

@@ -116,13 +116,7 @@ pub struct LogicalFunctionRunId(IdL<FR>);
 pub struct LogicalFunctionRunInputId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-pub struct LogicalFunctionRunPointerId(Id);
-
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct LogicalTableDataVersionId(IdL<DV>);
-
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-pub struct LogicalTableDataVersionPointerId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct PermissionId(Id);
