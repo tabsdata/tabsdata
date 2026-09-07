@@ -2,7 +2,6 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
-pub mod backend_cfg;
 pub mod customizer;
 pub mod descriptor;
 pub mod environment;
