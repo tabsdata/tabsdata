@@ -2,17 +2,15 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Replay-endpoint layer fns. The endpoint mints PFR + PTDV
+//! Replay-endpoint helpers. The endpoint mints PFR + PTDV
 //! placeholders for the new attempt; the pointer log is untouched
 //! until the worker callback. Dispatch readiness lives on the
 //! physical side ([`td_queries::Pfr::to_dispatch`]).
 
-use crate::function::layers::topology::{RunnableVersion, latest_patch_or_head};
-use crate::logical::layers::mint::{mint_function_run, mint_output_table_data_versions};
-use std::ops::Deref;
+use crate::function::topology::{RunnableVersion, latest_patch_or_head};
+use crate::logical::mint::{mint_function_run, mint_output_table_data_versions};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
-use td_objects::Buildable;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalFunctionRunReplayResponse,
 };
@@ -22,7 +20,6 @@ use td_objects::types::basic::{
     PhysicalFunctionRunId, PhysicalFunctionRunStatus,
 };
 use td_queries::{PfrEntry, VersionedEntry};
-use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
 #[td_error]
@@ -45,7 +42,7 @@ pub enum ReplayError {
 
 /// Read the LFR's current pointer event. Refuse if not Bound — replay
 /// only applies to a previously-dispatched LFR. Surfaces FR_old's id
-/// for the next layer.
+/// for the next step.
 #[instrument(
     name = "replay.load_bound_pointer",
     skip_all,
@@ -53,11 +50,11 @@ pub enum ReplayError {
     err(Debug)
 )]
 pub async fn load_bound_function_run_id(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    lfr: Ref<LogicalFunctionRunDB>,
-    at: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    lfr: &LogicalFunctionRunDB,
+    at: &AtTime,
 ) -> Result<PhysicalFunctionRunId, TdError> {
-    let latest: LogicalFunctionRunPointerDB = conn.versioned(at.deref()).fetch_one(&lfr.id).await?;
+    let latest: LogicalFunctionRunPointerDB = conn.versioned(at).fetch_one(&lfr.id).await?;
     if !matches!(latest.status, LogicalPointerStatus::Bound) {
         Err(ReplayError::NotBound(lfr.id.clone()))?
     }
@@ -79,9 +76,9 @@ pub async fn load_bound_function_run_id(
     err(Debug)
 )]
 pub async fn assert_no_concurrent_replay(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    lfr: Ref<LogicalFunctionRunDB>,
-    bound: Ref<PhysicalFunctionRunId>,
+    conn: &mut DomainConnection<Apiserver>,
+    lfr: &LogicalFunctionRunDB,
+    bound: &PhysicalFunctionRunId,
 ) -> Result<(), TdError> {
     let in_flight: Option<PhysicalFunctionRunDB> = conn
         .pfr()
@@ -111,7 +108,7 @@ pub async fn assert_no_concurrent_replay(
 ///   ("replay healed a failed run"); see the `Failed → Done` arm in
 ///   `update_function_run_status`.
 #[instrument(name = "replay.assert_terminal", skip_all, level = "debug", err(Debug))]
-pub async fn assert_lfr_terminal(lfr: Ref<LogicalFunctionRunDB>) -> Result<(), TdError> {
+pub async fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
     match lfr.status {
         LogicalFunctionRunStatus::Done
         | LogicalFunctionRunStatus::Committed
@@ -127,11 +124,11 @@ pub async fn assert_lfr_terminal(lfr: Ref<LogicalFunctionRunDB>) -> Result<(), T
 /// replay request and the dispatch tick won't be silently picked up.
 #[instrument(name = "replay.resolve_fvid", skip_all, level = "debug", err(Debug))]
 pub async fn resolve_replay_function_version_id(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    lfr: Ref<LogicalFunctionRunDB>,
-    at: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    lfr: &LogicalFunctionRunDB,
+    at: &AtTime,
 ) -> Result<RunnableVersion, TdError> {
-    let runnable = latest_patch_or_head(&mut conn, &lfr.function_version_id, at.deref()).await?;
+    let runnable = latest_patch_or_head(&mut *conn, &lfr.function_version_id, at).await?;
     debug!(
         lfr = %lfr.id,
         planned = %lfr.function_version_id,
@@ -144,39 +141,38 @@ pub async fn resolve_replay_function_version_id(
 
 #[instrument(name = "replay.mint_fr_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_function_run(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    lfr: Ref<LogicalFunctionRunDB>,
-    runnable: Ref<RunnableVersion>,
-    at: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    lfr: &LogicalFunctionRunDB,
+    runnable: &RunnableVersion,
+    at: &AtTime,
 ) -> Result<PhysicalFunctionRunDB, TdError> {
-    mint_function_run(&mut conn, lfr.deref(), runnable.deref(), at.deref()).await
+    mint_function_run(&mut *conn, lfr, runnable, at).await
 }
 
 #[instrument(name = "replay.mint_tdvs_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_table_data_versions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    lfr: Ref<LogicalFunctionRunDB>,
-    runnable: Ref<RunnableVersion>,
-    fr_new: Ref<PhysicalFunctionRunDB>,
+    conn: &mut DomainConnection<Apiserver>,
+    lfr: &LogicalFunctionRunDB,
+    runnable: &RunnableVersion,
+    fr_new: &PhysicalFunctionRunDB,
 ) -> Result<(), TdError> {
-    mint_output_table_data_versions(&mut conn, lfr.deref(), runnable.deref(), fr_new.deref())
-        .await?;
+    mint_output_table_data_versions(&mut *conn, lfr, runnable, fr_new).await?;
     Ok(())
 }
 
 #[instrument(name = "replay.response", skip_all, level = "debug")]
 pub async fn build_replay_response(
-    lfr: Ref<LogicalFunctionRunDB>,
-    previous_function_run_id: Ref<PhysicalFunctionRunId>,
-    fr_new: Ref<PhysicalFunctionRunDB>,
-    runnable: Ref<RunnableVersion>,
+    lfr: &LogicalFunctionRunDB,
+    previous_function_run_id: &PhysicalFunctionRunId,
+    fr_new: &PhysicalFunctionRunDB,
+    runnable: &RunnableVersion,
 ) -> Result<LogicalFunctionRunReplayResponse, TdError> {
     // Response advertises the effective fvid — the patch if one was
     // picked up, else the head.
-    Ok(LogicalFunctionRunReplayResponse::builder()
-        .logical_function_run_id(lfr.id.clone())
-        .previous_function_run_id(previous_function_run_id.deref().clone())
-        .new_function_run_id(fr_new.id.clone())
-        .function_version_id(runnable.effective().clone())
-        .build()?)
+    Ok(LogicalFunctionRunReplayResponse {
+        logical_function_run_id: lfr.id.clone(),
+        previous_function_run_id: previous_function_run_id.clone(),
+        new_function_run_id: fr_new.id.clone(),
+        function_version_id: runnable.effective().clone(),
+    })
 }

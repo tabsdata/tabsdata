@@ -9,10 +9,9 @@
 //! as replay does. DB reads are hoisted to chunked fetches before the per-LFR
 //! loop; FR and TDV rows are bulk-inserted; only pointer appends stay per-row.
 
-use crate::function::layers::topology::{RunnableVersion, latest_patch_or_head_batch};
-use crate::logical::layers::mint::{build_function_run, build_output_table_data_versions};
+use crate::function::topology::{RunnableVersion, latest_patch_or_head_batch};
+use crate::logical::mint::{build_function_run, build_output_table_data_versions};
 use std::collections::HashMap;
-use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
@@ -24,10 +23,9 @@ use td_objects::types::basic::{
     PhysicalFunctionRunId, PhysicalTableDataVersionId, UserId,
 };
 use td_queries::{Bind, ChunkedQueries, LfrEntry, LtdvEntry};
-use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
-/// One ready LFR's mint output. Carries everything downstream layers
+/// One ready LFR's mint output. Carries everything downstream steps
 /// (worker yaml builder, status flip) need to emit a worker request
 /// without re-querying.
 #[derive(Debug, Clone)]
@@ -45,9 +43,9 @@ pub struct MintedDispatch {
     err(Debug)
 )]
 pub async fn mint_function_runs_on_dispatch(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    ready_lfrs: Ref<Vec<LogicalFunctionRunDB>>,
-    at: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    ready_lfrs: &Vec<LogicalFunctionRunDB>,
+    at: &AtTime,
 ) -> Result<Vec<MintedDispatch>, TdError> {
     if ready_lfrs.is_empty() {
         return Ok(Vec::new());
@@ -63,25 +61,20 @@ pub async fn mint_function_runs_on_dispatch(
     let producer_filters: Vec<Option<LogicalFunctionRunId>> =
         lfr_ids.iter().cloned().map(Some).collect();
 
-    // Pre-fetch every read the per-LFR mint+bind loop needs.
-
     let ltdvs_all: Vec<LogicalTableDataVersionDB> = conn
         .fetch_all_chunked::<LogicalTableDataVersionDB, Option<LogicalFunctionRunId>>(
             &producer_filters,
         )
         .await?;
 
-    // Resolve latest_patch_or_head for every distinct fvid in the tick.
     let distinct_fvids: Vec<FunctionVersionId> = ready_lfrs
         .iter()
         .map(|f| f.function_version_id.clone())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    let runnable_by_fvid =
-        latest_patch_or_head_batch(&mut conn, distinct_fvids, at.deref()).await?;
+    let runnable_by_fvid = latest_patch_or_head_batch(&mut *conn, distinct_fvids, at).await?;
 
-    // Tables for every head fvid we'll be minting against.
     let distinct_head_fvids: Vec<FunctionVersionId> = runnable_by_fvid
         .values()
         .map(|r| r.function_version_id.clone())
@@ -132,7 +125,7 @@ pub async fn mint_function_runs_on_dispatch(
                     lfr.function_version_id
                 )
             })?;
-        let fr = build_function_run(lfr, runnable, at.deref())?;
+        let fr = build_function_run(lfr, runnable, at)?;
         let empty = Vec::new();
         let tables = tables_by_head_fvid
             .get(&runnable.function_version_id)
@@ -192,11 +185,7 @@ pub async fn mint_function_runs_on_dispatch(
             new_concrete_id: m.fr.id.clone(),
         })
         .collect();
-    let deferred = conn
-        .lfr()
-        .pointers()
-        .bind_all(&lfr_binds, at.deref(), &by)
-        .await?;
+    let deferred = conn.lfr().pointers().bind_all(&lfr_binds, at, &by).await?;
 
     let mut ltdv_binds: Vec<Bind<LogicalTableDataVersionId, PhysicalTableDataVersionId>> =
         Vec::new();
@@ -235,7 +224,7 @@ pub async fn mint_function_runs_on_dispatch(
     let bound_ltdvs = conn
         .ltdv()
         .pointers()
-        .bind_all(&ltdv_binds, at.deref(), &by)
+        .bind_all(&ltdv_binds, at, &by)
         .await?;
     if let Some(ltdv_id) = bound_ltdvs.into_iter().next() {
         return Err(api_error!(
@@ -256,15 +245,12 @@ pub async fn mint_function_runs_on_dispatch(
 mod tests {
     use super::*;
     use td_database::pool::TdPool;
-    use td_objects::Buildable;
-    use td_objects::TryUpdater;
     use td_objects::and;
-    use td_objects::dxo::collection::{
-        ActiveCollectionDB, CollectionUpdateDB, CollectionUpdateDBBuilder,
-    };
+    use td_objects::dxo::collection::{ActiveCollectionDB, CollectionUpdateDB};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::logical::{LogicalFunctionRunPointerDB, LogicalPointerDao};
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
         LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
@@ -272,7 +258,6 @@ mod tests {
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::extractors::{MutRef, Ref};
 
     /// Set a collection's `base_path` via the live-update seam (no
     /// service oneshot): seed the updater from the current `ActiveCollectionDB`,
@@ -287,12 +272,10 @@ mod tests {
         let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read::<String>("")
             .context;
-        let mut builder = CollectionUpdateDBBuilder::try_from(collection)?;
-        let builder = TryUpdater::try_update_from(&mut builder, &request_context)?;
-        let update = builder
-            .clone()
-            .base_path(Some(Some(base_path.clone())))
-            .build()?;
+        let mut update = CollectionUpdateDB::from(collection);
+        update.modified_on = request_context.time;
+        update.modified_by_id = request_context.user_id;
+        update.base_path = Some(Some(base_path.clone()));
         db.scoped(project_id)
             .live()
             .update::<CollectionUpdateDB, ActiveCollectionDB>(&update, &collection.id)
@@ -311,26 +294,31 @@ mod tests {
         name: &str,
         base_path: Option<BasePath>,
     ) -> Result<LogicalFunctionRunDB, TdError> {
-        let create = FunctionRegister::builder()
-            .try_name(name)?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .base_path(base_path)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("t0")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: name.try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let func = db
             .scoped(project_id)
             .seed()
             .function(collection, &create)
             .await?;
         let exec = db.scoped(project_id).seed().execution(&func).await?;
-        let txn = db
+        let trx = db
             .scoped(project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
@@ -342,7 +330,7 @@ mod tests {
                 collection,
                 &func,
                 &exec,
-                &txn,
+                &trx,
                 &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
@@ -395,12 +383,10 @@ mod tests {
         let fvid_a = lfr_a.function_version_id.clone();
         let fvid_b = lfr_b.function_version_id.clone();
 
-        let conn = MutRef::new(DomainConnection::ready(
-            db.begin().await.unwrap().into_connection(),
-        ));
-        let ready = Ref::new(vec![lfr_a, lfr_b]);
-        let at = Ref::new(AtTime::now());
-        let minted = mint_function_runs_on_dispatch(conn, ready, at).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let ready = vec![lfr_a, lfr_b];
+        let at = AtTime::now();
+        let minted = mint_function_runs_on_dispatch(&mut conn, &ready, &at).await?;
 
         assert_eq!(minted.len(), 2, "both LFRs minted in one batch");
         let a = minted
@@ -440,26 +426,31 @@ mod tests {
         collection: &ActiveCollectionDB,
         name: &str,
     ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunId), TdError> {
-        let create = FunctionRegister::builder()
-            .try_name(name)?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .base_path(None)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("t0")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: name.try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let func = db
             .scoped(project_id)
             .seed()
             .function(collection, &create)
             .await?;
         let exec = db.scoped(project_id).seed().execution(&func).await?;
-        let txn = db
+        let trx = db
             .scoped(project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
@@ -471,7 +462,7 @@ mod tests {
                 collection,
                 &func,
                 &exec,
-                &txn,
+                &trx,
                 &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
@@ -496,12 +487,10 @@ mod tests {
             .await?;
         let (lfr, bound_pfr) = seed_bound_lfr(&db, p.id, &coll, "fr").await?;
 
-        let conn = MutRef::new(DomainConnection::ready(
-            db.begin().await.unwrap().into_connection(),
-        ));
-        let ready = Ref::new(vec![lfr.clone()]);
-        let at = Ref::new(AtTime::now());
-        let minted = mint_function_runs_on_dispatch(conn, ready, at).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let ready = vec![lfr.clone()];
+        let at = AtTime::now();
+        let minted = mint_function_runs_on_dispatch(&mut conn, &ready, &at).await?;
 
         assert_eq!(minted.len(), 1, "the bound LFR is re-minted");
         assert_ne!(

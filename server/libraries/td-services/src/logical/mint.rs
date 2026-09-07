@@ -10,17 +10,16 @@
 //! to worker-finish (redirect-at-finish); initial dispatch binds in
 //! the same DB tx.
 
-use crate::function::layers::topology::RunnableVersion;
+use crate::function::topology::RunnableVersion;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::Buildable;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, BasePath, FunctionVersionId, PhysicalFunctionRunStatus, TableFunctionParamPos,
-    TriggeredOn,
+    AtTime, BasePath, FunctionVersionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
+    PhysicalTableDataVersionId, TableFunctionParamPos, TriggeredOn,
 };
 use td_queries::{ChunkedQueries, LfrEntry, LiveEntry};
 
@@ -54,19 +53,30 @@ pub fn build_function_run(
     // FR is born `Requested`: mint and run-request happen in the same
     // dispatch tx, and the per-attempt status mirrors that the worker
     // has been queued. Worker callbacks then advance Running → Done/Failed.
-    Ok(PhysicalFunctionRunDB::builder()
-        .project_id(lfr.project_id)
-        .collection_id(lfr.collection_id)
-        .function_id(lfr.function_id)
-        .function_version_id(&runnable.function_version_id)
-        .function_version_patch_id(runnable.function_version_patch_id.clone())
-        .execution_id(&lfr.execution_id)
-        .transaction_id(&lfr.transaction_id)
-        .triggered_on(triggered_on)
-        .triggered_by_id(lfr.triggered_by_id)
-        .trigger(lfr.trigger.clone())
-        .status(PhysicalFunctionRunStatus::Requested)
-        .build()?)
+    Ok(PhysicalFunctionRunDB {
+        id: PhysicalFunctionRunId::new(),
+        project_id: lfr.project_id,
+        collection_id: lfr.collection_id,
+        function_id: lfr.function_id,
+        function_version_id: runnable.function_version_id.clone(),
+        execution_id: lfr.execution_id.clone(),
+        transaction_id: lfr.transaction_id.clone(),
+        triggered_on,
+        triggered_by_id: lfr.triggered_by_id,
+        trigger: lfr.trigger.clone(),
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        status: PhysicalFunctionRunStatus::Requested,
+        function_version_patch_id: runnable.function_version_patch_id.clone(),
+        ended_on_hour_ms: None,
+        ended_on_day_ms: None,
+        ended_on_week_ms: None,
+        ended_on_month_ms: None,
+        metric_table_versions: None,
+        metric_rows: None,
+        metric_data_bytes: None,
+    })
 }
 
 pub async fn mint_function_run(
@@ -95,21 +105,29 @@ pub fn build_output_table_data_versions(
         let function_param_pos = t
             .function_param_pos
             .unwrap_or(TableFunctionParamPos::try_from(0)?);
-        let tdv = PhysicalTableDataVersionDB::builder()
-            .project_id(lfr.project_id)
-            .collection_id(lfr.collection_id)
-            .table_id(t.table_id)
-            .name(t.name.clone())
-            .table_version_id(t.id)
-            .function_version_id(&runnable.function_version_id)
-            .function_version_patch_id(runnable.function_version_patch_id.clone())
-            .execution_id(&lfr.execution_id)
-            .transaction_id(&lfr.transaction_id)
-            .physical_function_run_id(&fr.id)
-            .function_param_pos(function_param_pos)
-            .triggered_on(fr.triggered_on)
-            .base_path(base_path.clone())
-            .build()?;
+        let tdv = PhysicalTableDataVersionDB {
+            id: PhysicalTableDataVersionId::new(),
+            project_id: lfr.project_id,
+            collection_id: lfr.collection_id,
+            table_id: t.table_id,
+            name: t.name.clone(),
+            table_version_id: t.id,
+            function_version_id: runnable.function_version_id.clone(),
+            function_version_patch_id: runnable.function_version_patch_id.clone(),
+            execution_id: lfr.execution_id.clone(),
+            transaction_id: lfr.transaction_id.clone(),
+            physical_function_run_id: fr.id.clone(),
+            function_param_pos,
+            triggered_on: fr.triggered_on,
+            base_path: base_path.clone(),
+            has_data: None,
+            schema_changed: None,
+            column_count: None,
+            row_count: None,
+            data_bytes: None,
+            schema_hash: None,
+            with_data_table_data_version_id: None,
+        };
         tdvs.push(tdv);
     }
     Ok(tdvs)
@@ -138,15 +156,14 @@ mod tests {
     use super::*;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::TryUpdater;
     use td_objects::and;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
-    use td_objects::dxo::table::TableDBBuilder;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, BundleId, CollectionName, Decorator,
-        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Private,
+        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Partitioned, Private,
         StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus,
-        TransactionKey, UserId,
+        TableType, TableVersionId, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -186,18 +203,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f0")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("t0")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f0".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let func = db.scoped(p.id).seed().function(&coll, &create).await?;
         db.scoped(p.id).seed().system_tables(&func).await?;
 
@@ -205,21 +228,26 @@ mod tests {
             td_objects::dxo::crudl::RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read::<String>("")
                 .context;
-        let mut builder = TableDBBuilder::try_from(&func)?;
-        let builder = TryUpdater::try_update_from(&mut builder, &request_context)?;
-        let private = builder
-            .clone()
-            .table_id(TableId::default())
-            .name(TableName::try_from(PRIVATE_TABLE_NAME)?)
-            .function_param_pos(Some(TableFunctionParamPos::try_from(1)?))
-            .private(Private::TRUE)
-            .status(TableStatus::Active)
-            .build()?;
+        let private = TableDB {
+            id: TableVersionId::default(),
+            collection_id: func.collection_id,
+            table_id: TableId::default(),
+            name: TableName::try_from(PRIVATE_TABLE_NAME)?,
+            function_id: func.function_id,
+            function_version_id: func.id.clone(),
+            function_param_pos: Some(TableFunctionParamPos::try_from(1)?),
+            private: Private::TRUE,
+            partitioned: Partitioned::FALSE,
+            defined_on: request_context.time,
+            defined_by_id: request_context.user_id,
+            status: TableStatus::Active,
+            table_type: TableType::default(),
+        };
         db.scoped(p.id).live().insert(&private).await?;
 
         let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&func.id).await?;
         let exec = db.scoped(p.id).seed().execution(&func).await?;
-        let txn = db
+        let trx = db
             .scoped(p.id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
@@ -231,7 +259,7 @@ mod tests {
                 &coll,
                 &func,
                 &exec,
-                &txn,
+                &trx,
                 &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;

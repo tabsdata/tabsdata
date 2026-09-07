@@ -3,67 +3,42 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::Visible;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::transaction::Transaction;
 use td_objects::list::params::ListQueryParams;
-use td_objects::tower_service::with::With;
-use td_queries::By;
-use td_queries::list_filter::VisibleProjectsFilter;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = TransactionListService,
-    request = ListRequest<()>,
-    response = ListResponse<Transaction>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Visible::projects),
-        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Transaction>, _>),
-        from_fn(By::<()>::list::<VisibleProjectsFilter, Transaction>),
-    )
+#[service_factory]
+async fn transaction_list(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest,
+) -> Result<ListResponse<Transaction>, TdError> {
+    let (ctx, _, list_params) = request.into_parts();
+    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    let conn = gated_conn.get(grant);
+    let query_params = ListQueryParams::<Transaction>::try_from(&list_params)?;
+    let rows = conn.live().list(&visible, &query_params).await?;
+    build_list_response(&list_params, &query_params, rows)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, ProjectName, TransactionKey, UserId,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_transaction(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        TransactionListService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<()>, ListResponse<Transaction>>(&[
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Visible::projects),
-                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Transaction>, _>),
-                type_of_val(&By::<()>::list::<VisibleProjectsFilter, Transaction>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_transaction(db: TdPool) -> Result<(), TdError> {
@@ -78,18 +53,24 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -120,11 +101,11 @@ mod tests {
                 .await?,
         ];
 
-        let service = TransactionListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default());
 
-        let response = service.raw_oneshot(request).await?;
+        let response = service.transaction_list(request).await?.data;
         assert_eq!(response.len, transactions.len());
         // Shared `triggered_on`: paging by id makes seed order the response order.
         let expected: Vec<_> = transactions.iter().map(|t| t.id.clone()).collect();
@@ -146,18 +127,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("walker")?
-            .try_description("page-walk seed")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "walker".try_into()?,
+            description: "page-walk seed".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -176,16 +163,17 @@ mod tests {
             }
         }
 
-        let service = TransactionListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let list = |params: ListParams| {
             let service = service.clone();
             async move {
                 service
-                    .raw_oneshot(
+                    .transaction_list(
                         RequestContext::with(AccessTokenId::default(), UserId::admin())
                             .list((), params),
                     )
                     .await
+                    .map(|response| response.data)
             }
         };
         let walk = |order_by: Option<String>, len: usize| async move {
@@ -250,64 +238,72 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_transaction_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_txn = seed_run(&db, base.id).await?.transaction;
+        let base_trx = seed_run(&db, base.id).await?.transaction;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_txn = seed_run(&db, alpha.id).await?.transaction;
+        let alpha_trx = seed_run(&db, alpha.id).await?.transaction;
 
-        let service = TransactionListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
 
         // The wildcard spans every project the admin can view.
         let wildcard = service
             .clone()
-            .raw_oneshot(
+            .transaction_list(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .list((), ListParams::default()),
             )
-            .await?;
-        assert!(wildcard.data.iter().any(|t| t.id == base_txn));
-        assert!(wildcard.data.iter().any(|t| t.id == alpha_txn));
+            .await?
+            .data;
+        assert!(wildcard.data.iter().any(|t| t.id == base_trx));
+        assert!(wildcard.data.iter().any(|t| t.id == alpha_trx));
 
         // The project name resolves through the view join.
-        let alpha_row = wildcard.data.iter().find(|t| t.id == alpha_txn).unwrap();
+        let alpha_row = wildcard.data.iter().find(|t| t.id == alpha_trx).unwrap();
         assert_eq!(alpha_row.project, Some(ProjectName::try_from("alpha")?));
-        let base_row = wildcard.data.iter().find(|t| t.id == base_txn).unwrap();
+        let base_row = wildcard.data.iter().find(|t| t.id == base_trx).unwrap();
         assert!(base_row.project.is_some());
 
         // A project filter narrows to that project alone.
         let base_only = service
-            .raw_oneshot(
+            .transaction_list(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
                     (),
-                    ListParams::builder()
-                        .filter(vec![format!("project:eq:{}", base.name)])
-                        .build()?,
+                    ListParams {
+                        filter: vec![format!("project:eq:{}", base.name)],
+                        order_by: None,
+                        previous: None,
+                        next: None,
+                        pagination_id: None,
+                        ..ListParams::default()
+                    },
                 ),
             )
-            .await?;
-        assert!(base_only.data.iter().any(|t| t.id == base_txn));
-        assert!(!base_only.data.iter().any(|t| t.id == alpha_txn));
+            .await?
+            .data;
+        assert!(base_only.data.iter().any(|t| t.id == base_trx));
+        assert!(!base_only.data.iter().any(|t| t.id == alpha_trx));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_transaction_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_txn = seed_run(&db, base.id).await?.transaction;
+        let base_trx = seed_run(&db, base.id).await?.transaction;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_txn = seed_run(&db, alpha.id).await?.transaction;
+        let alpha_trx = seed_run(&db, alpha.id).await?.transaction;
 
         let user = seed_project_viewer(&db, base.id).await?;
 
-        let service = TransactionListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .raw_oneshot(
+            .transaction_list(
                 RequestContext::with(AccessTokenId::default(), user.id)
                     .list((), ListParams::default()),
             )
-            .await?;
+            .await?
+            .data;
 
-        assert!(response.data.iter().any(|t| t.id == base_txn));
-        assert!(!response.data.iter().any(|t| t.id == alpha_txn));
+        assert!(response.data.iter().any(|t| t.id == base_trx));
+        assert!(!response.data.iter().any(|t| t.id == alpha_trx));
         Ok(())
     }
 }

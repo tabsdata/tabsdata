@@ -2,80 +2,79 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::logical::layers::replay::{
+use crate::logical::replay::{
     assert_lfr_terminal, assert_no_concurrent_replay, build_replay_response,
     load_bound_function_run_id, mint_replay_function_run, mint_replay_table_data_versions,
     resolve_replay_function_version_id,
 };
-use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope, enter_project_scope};
+use td_authz::rbac::DevelopProject;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::crudl::{CreateRequest, RequestContext};
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunReplayResponse};
-use td_objects::rest_urls::LogicalFunctionRunParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, LogicalFunctionRunId, ProjectId};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::dxo::crudl::CreateRequest;
+use td_objects::dxo::logical::{
+    LogicalFunctionRunDB, LogicalFunctionRunParam, LogicalFunctionRunReplayResponse,
+};
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ReplayLogicalFunctionRunService,
-    request = CreateRequest<LogicalFunctionRunParam, ()>,
-    response = LogicalFunctionRunReplayResponse,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-    context = SchedulerNotify,
-)]
-fn service() {
-    layers!(
-        // Pull the request envelope apart.
-        from_fn(With::<CreateRequest<LogicalFunctionRunParam, ()>>::extract::<RequestContext>),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(
-            With::<CreateRequest<LogicalFunctionRunParam, ()>>::extract_name::<
-                LogicalFunctionRunParam,
-            >
-        ),
-        from_fn(With::<LogicalFunctionRunParam>::extract::<LogicalFunctionRunId>),
-        // Load the LFR identity row and authz on its project.
-        from_fn(By::<LogicalFunctionRunId>::fetch_one::<LogicalFunctionRunDB>),
-        from_fn(With::<LogicalFunctionRunDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, DevelopProject>::check),
-        // Validate replay preconditions: LFR.status terminal + pointer Bound +
-        // no concurrent replay (only meaningful when LFR is sticky-Committed —
-        // for other terminal statuses no prior replay can exist).
-        from_fn(assert_lfr_terminal),
-        from_fn(load_bound_function_run_id),
-        from_fn(assert_no_concurrent_replay),
-        // Resolve the patch to run on this attempt.
-        from_fn(resolve_replay_function_version_id),
-        // Mint FR_new + TDV_new placeholders. The pointer log is
-        // untouched until the worker callback. Dispatch readiness keys
-        // off `Pfr::to_dispatch` (status=RR + no WorkerDB).
-        from_fn(mint_replay_function_run),
-        from_fn(mint_replay_table_data_versions),
-        from_fn(build_replay_response),
-        // Wake the scheduler so the next tick fires immediately
-        // instead of waiting for the periodic interval.
-        from_fn(notify_scheduler),
-    )
+#[service_factory]
+async fn replay_logical_function_run(
+    authz: Ctx<AuthzContext>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    db: DbPool<Global>,
+    request: CreateRequest<(), LogicalFunctionRunParam>,
+) -> Result<LogicalFunctionRunReplayResponse, TdError> {
+    let (ctx, param, _) = request.into_parts();
+    let at = ctx.time;
+    let lfr_id = param.logical_function_run;
+
+    let (project, grant) = {
+        let mut trx = db.read().await?;
+        let lfr: LogicalFunctionRunDB = trx.get(authz.none()).live().fetch_one(&lfr_id).await?;
+        let project = lfr.project_id;
+        // before the exclusive lock: unauthorized callers must not queue on it
+        let grant = authz
+            .require_in_project::<DevelopProject>(&mut trx, &ctx, &project)
+            .await?;
+        (project, grant)
+    };
+    let mut trx = db.in_project(&project).begin_exclusive().await?;
+    let conn = trx.get(grant);
+    let lfr: LogicalFunctionRunDB = conn.live().fetch_one(&lfr_id).await?;
+
+    // Validate replay preconditions: LFR.status terminal + pointer Bound +
+    // no concurrent replay (only meaningful when LFR is sticky-Committed —
+    // for other terminal statuses no prior replay can exist).
+    assert_lfr_terminal(&lfr).await?;
+    let bound = load_bound_function_run_id(conn, &lfr, &at).await?;
+    assert_no_concurrent_replay(conn, &lfr, &bound).await?;
+    // Resolve the patch to run on this attempt.
+    let runnable = resolve_replay_function_version_id(conn, &lfr, &at).await?;
+    // Mint FR_new + TDV_new placeholders. The pointer log is untouched until
+    // the worker callback. Dispatch readiness keys off `Pfr::to_dispatch`
+    // (status=RR + no WorkerDB).
+    let fr_new = mint_replay_function_run(conn, &lfr, &runnable, &at).await?;
+    mint_replay_table_data_versions(conn, &lfr, &runnable, &fr_new).await?;
+    let response = build_replay_response(&lfr, &bound, &fr_new, &runnable).await?;
+    trx.commit().await?;
+
+    // Wake the scheduler so the next tick fires immediately instead of
+    // waiting for the periodic interval.
+    scheduler_notify.notify_scheduler();
+    Ok(response)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::and;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionPatchDB, FunctionRegister};
     use td_objects::dxo::logical::{
         LogicalFunctionRunPointerDB, LogicalPointerDao, LogicalTableDataVersionDB,
@@ -87,59 +86,17 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues,
         FunctionStatus, FunctionVersionId, LogicalFunctionRunStatus, LogicalPointerReason,
-        LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, RawSnippet, Snippet,
-        TableNameDto, TransactionKey, UserId,
+        LogicalPointerStatus, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId,
+        RawSnippet, Snippet, TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::types::basic::{LogicalFunctionRunId, ReuseFrozen};
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
-    use td_tower::ctx_service::RawOneshot;
 
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_replay(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ReplayLogicalFunctionRunService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<CreateRequest<LogicalFunctionRunParam, ()>, LogicalFunctionRunReplayResponse>(&[
-                // Pull the request envelope apart.
-                type_of_val(&With::<CreateRequest<LogicalFunctionRunParam, ()>>::extract::<RequestContext>),
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&
-                    With::<CreateRequest<LogicalFunctionRunParam, ()>>::extract_name::<
-                        LogicalFunctionRunParam,
-                    >
-                ),
-                type_of_val(&With::<LogicalFunctionRunParam>::extract::<LogicalFunctionRunId>),
-                // Load the LFR identity row and authz on its project.
-                type_of_val(&By::<LogicalFunctionRunId>::fetch_one::<LogicalFunctionRunDB>),
-                type_of_val(&With::<LogicalFunctionRunDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, DevelopProject>::check),
-                // Validate replay preconditions: LFR.status terminal + pointer Bound +
-                // no concurrent replay (only meaningful when LFR is sticky-Committed —
-                // for other terminal statuses no prior replay can exist).
-                type_of_val(&assert_lfr_terminal),
-                type_of_val(&load_bound_function_run_id),
-                type_of_val(&assert_no_concurrent_replay),
-                // Resolve the patch to run on this attempt.
-                type_of_val(&resolve_replay_function_version_id),
-                // Mint FR_new + TDV_new placeholders.
-                type_of_val(&mint_replay_function_run),
-                type_of_val(&mint_replay_table_data_versions),
-                type_of_val(&build_replay_response),
-                type_of_val(&notify_scheduler),
-            ]);
-    }
-
-    /// Build a CreateRequest hitting the replay endpoint for an LFR.
-    fn replay_request(lfr_id: &LogicalFunctionRunId) -> CreateRequest<LogicalFunctionRunParam, ()> {
-        let param = LogicalFunctionRunParam::builder()
-            .logical_function_run(lfr_id.clone())
-            .build()
-            .unwrap();
+    fn replay_request(lfr_id: &LogicalFunctionRunId) -> CreateRequest<(), LogicalFunctionRunParam> {
+        let param = LogicalFunctionRunParam {
+            logical_function_run: lfr_id.clone(),
+        };
         RequestContext::with(AccessTokenId::default(), UserId::admin()).create(param, ())
     }
 
@@ -166,22 +123,24 @@ mod tests {
             )
             .await
             .unwrap();
-        let create = FunctionRegister::builder()
-            .try_name(fn_name)
-            .unwrap()
-            .try_description("d")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("s")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("t0").unwrap()]))
-            .runtime_values(FunctionRuntimeValues::try_from("rv").unwrap())
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: fn_name.try_into().unwrap(),
+            description: "d".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0").unwrap()]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv").unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let func = db
             .scoped(project_id)
             .seed()
@@ -189,17 +148,17 @@ mod tests {
             .await
             .unwrap();
         let exec = db.scoped(project_id).seed().execution(&func).await.unwrap();
-        let txn_key = TransactionKey::try_from("ANY").unwrap();
-        let txn = db
+        let trx_key = TransactionKey::try_from("ANY").unwrap();
+        let trx = db
             .scoped(project_id)
             .seed()
-            .transaction(&exec, &txn_key)
+            .transaction(&exec, &trx_key)
             .await
             .unwrap();
         let fr = db
             .scoped(project_id)
             .seed()
-            .physical_function_run(&coll, &func, &exec, &txn, &status)
+            .physical_function_run(&coll, &func, &exec, &trx, &status)
             .await
             .unwrap();
         let lfr = db
@@ -210,25 +169,24 @@ mod tests {
         (lfr, fr, func.id)
     }
 
-    /// Insert a patch of the given head fvid and return its id.
     async fn seed_patch(
         db: &TdPool,
         project_id: ProjectId,
         head: &td_objects::dxo::function::FunctionDB,
     ) -> FunctionVersionId {
-        let patch = FunctionPatchDB::builder()
-            .parent_function_version_id(head.id.clone())
-            .function_id(head.function_id)
-            .collection_id(head.collection_id)
-            .snippet(Snippet::try_from(RawSnippet::try_from("patched").unwrap()).unwrap())
-            .bundle_id(BundleId::default())
-            .runtime_values(FunctionRuntimeValues::try_from("rv-patch").unwrap())
-            .description(Description::try_from("patch").unwrap())
-            .defined_on(td_objects::types::basic::AtTime::now())
-            .defined_by_id(UserId::admin())
-            .status(FunctionStatus::Active)
-            .build()
-            .unwrap();
+        let patch = FunctionPatchDB {
+            id: FunctionVersionId::new(),
+            parent_function_version_id: head.id.clone(),
+            function_id: head.function_id,
+            collection_id: head.collection_id,
+            snippet: Snippet::try_from(RawSnippet::try_from("patched").unwrap()).unwrap(),
+            bundle_id: BundleId::default(),
+            runtime_values: FunctionRuntimeValues::try_from("rv-patch").unwrap(),
+            description: Description::try_from("patch").unwrap(),
+            defined_on: td_objects::types::basic::AtTime::now(),
+            defined_by_id: UserId::admin(),
+            status: FunctionStatus::Active,
+        };
         db.scoped(project_id).live().insert(&patch).await.unwrap();
         patch.id
     }
@@ -245,8 +203,11 @@ mod tests {
         let (lfr, fr_old, _head) =
             seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
 
-        let service = ReplayLogicalFunctionRunService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(replay_request(&lfr.id)).await?;
+        let service = Services::with_defaults(db.clone());
+        let response = service
+            .replay_logical_function_run(replay_request(&lfr.id))
+            .await?
+            .data;
 
         assert_eq!(response.logical_function_run_id, lfr.id);
         assert_eq!(response.previous_function_run_id, fr_old.id);
@@ -296,10 +257,10 @@ mod tests {
         let (lfr, fr_old, _head) =
             seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Done).await;
 
-        let response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(replay_request(&lfr.id))
-            .await?;
+        let response = Services::with_defaults(db.clone())
+            .replay_logical_function_run(replay_request(&lfr.id))
+            .await?
+            .data;
 
         assert_ne!(response.new_function_run_id, fr_old.id);
         let lfr_after = db.live().fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
@@ -314,12 +275,39 @@ mod tests {
         let (lfr, _fr, _head) =
             seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Running).await;
 
-        let result = ReplayLogicalFunctionRunService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(replay_request(&lfr.id))
+        let result = Services::with_defaults(db.clone())
+            .replay_logical_function_run(replay_request(&lfr.id))
             .await;
 
         assert!(result.is_err(), "expected refusal, got {result:?}");
+        Ok(())
+    }
+
+    /// A `Dispatched` attempt is in flight too: replay refused, no new
+    /// attempt minted. Guards the gate against the full IN_FLIGHT set —
+    /// a dispatched-but-not-yet-running attempt used to be invisible to it.
+    #[td_test::test(db)]
+    async fn test_replay_dispatched_refused(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (lfr, fr, _head) =
+            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
+        let dispatched = PhysicalFunctionRunDB {
+            id: PhysicalFunctionRunId::new(),
+            status: PhysicalFunctionRunStatus::Dispatched,
+            ..fr.clone()
+        };
+        db.scoped(p.id).live().insert(&dispatched).await?;
+
+        let result = Services::with_defaults(db.clone())
+            .replay_logical_function_run(replay_request(&lfr.id))
+            .await;
+
+        assert!(result.is_err(), "expected refusal, got {result:?}");
+        let attempts: Vec<PhysicalFunctionRunDB> = db
+            .live()
+            .fetch_all(and!(&fr.execution_id, &fr.function_id))
+            .await?;
+        assert_eq!(attempts.len(), 2, "no new attempt minted");
         Ok(())
     }
 
@@ -331,27 +319,32 @@ mod tests {
     #[td_test::test(db)]
     async fn test_replay_picks_up_latest_patch(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        // Seed a Committed LFR for a head function.
         let coll = db
             .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f0")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("t0")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f0".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let head = db.scoped(p.id).seed().function(&coll, &create).await?;
         let exec = db.scoped(p.id).seed().execution(&head).await?;
-        let txn = db
+        let trx = db
             .scoped(p.id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
@@ -363,7 +356,7 @@ mod tests {
                 &coll,
                 &head,
                 &exec,
-                &txn,
+                &trx,
                 &LogicalFunctionRunStatus::Committed,
             )
             .await?;
@@ -377,10 +370,10 @@ mod tests {
         let patch_id = seed_patch(&db, p.id, &head).await;
 
         // Replay: the minted FR_new must run the patch, not the head.
-        let response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(replay_request(&lfr_id))
-            .await?;
+        let response = Services::with_defaults(db.clone())
+            .replay_logical_function_run(replay_request(&lfr_id))
+            .await?
+            .data;
 
         // The response advertises the effective (patch) fvid.
         assert_eq!(response.function_version_id, patch_id);
@@ -420,40 +413,47 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f0")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("t0")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f0".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let head = db.scoped(p.id).seed().function(&coll, &create).await?;
         let exec = db.scoped(p.id).seed().execution(&head).await?;
-        let txn = db
+        let trx = db
             .scoped(p.id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         // Build the LFR directly (skip seed_function_run, which appends a
         // Bound event we don't want here) and append InitialMint Pending.
-        let lfr = LogicalFunctionRunDB::builder()
-            .project_id(coll.project_id)
-            .group_id(coll.group_id)
-            .collection_id(coll.id)
-            .execution_id(&exec.id)
-            .transaction_id(&txn.id)
-            .function_id(head.function_id)
-            .function_version_id(&head.id)
-            .trigger(td_objects::types::basic::Trigger::Manual)
-            .triggered_on(txn.triggered_on)
-            .triggered_by_id(txn.triggered_by_id)
-            .status(LogicalFunctionRunStatus::Committed)
-            .build()?;
+        let lfr = LogicalFunctionRunDB {
+            id: LogicalFunctionRunId::new(),
+            project_id: coll.project_id,
+            collection_id: coll.id,
+            execution_id: exec.id,
+            transaction_id: trx.id,
+            function_id: head.function_id,
+            function_version_id: head.id,
+            trigger: td_objects::types::basic::Trigger::Manual,
+            triggered_on: trx.triggered_on,
+            triggered_by_id: trx.triggered_by_id,
+            status: LogicalFunctionRunStatus::Committed,
+            group_id: coll.group_id,
+        };
         db.scoped(p.id)
             .live()
             .insert::<LogicalFunctionRunDB>(&lfr)
@@ -463,8 +463,8 @@ mod tests {
             &lfr.id,
             LogicalPointerStatus::Pending,
             None,
-            td_objects::types::basic::AtTime::try_from(txn.triggered_on)?,
-            txn.triggered_by_id,
+            td_objects::types::basic::AtTime::try_from(trx.triggered_on)?,
+            trx.triggered_by_id,
             LogicalPointerReason::InitialMint,
         )?;
         db.scoped(p.id)
@@ -472,9 +472,8 @@ mod tests {
             .insert::<LogicalFunctionRunPointerDB>(&pending)
             .await?;
 
-        let result = ReplayLogicalFunctionRunService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(replay_request(&lfr.id))
+        let result = Services::with_defaults(db.clone())
+            .replay_logical_function_run(replay_request(&lfr.id))
             .await;
         assert!(result.is_err(), "expected NotBound, got {result:?}");
         Ok(())

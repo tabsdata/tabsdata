@@ -1,84 +1,49 @@
 //
-// Copyright 2025 Tabsdata Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::NoFilter;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::synchrotron::SynchrotronResponse;
 use td_objects::list::params::ListQueryParams;
-use td_objects::tower_service::with::With;
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_queries::LiveEntry;
 
-/// Very similar to the `TransactionListService`. The idea is that this service is used as a
-/// lightweight timeline of the transactions in the system, not a regular list. It should evolve
-/// in that direction, if we add more information at some point.
-
-#[service_factory(
-    name = SynchrotronService,
-    request = ListRequest<()>,
-    response = ListResponse<SynchrotronResponse>,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        // Authorize: the requester must be able to view the project in scope.
-        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // List all transactions in the project.
-        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<SynchrotronResponse>, _>),
-        from_fn(By::<()>::list::<NoFilter, SynchrotronResponse>),
-    )
+#[service_factory]
+async fn synchrotron(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<ListRequest>,
+) -> Result<ListResponse<SynchrotronResponse>, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, _, list_params) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+    let conn = gated_conn.get(grant);
+    let query_params = ListQueryParams::<SynchrotronResponse>::try_from(&list_params)?;
+    let rows = conn.live().list(&(), &query_params).await?;
+    build_list_response(&list_params, &query_params, rows)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_synchrotron(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
-        use td_tower::metadata::type_of_val;
-
-        SynchrotronService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<SynchrotronResponse>>(&[
-                // Authorize: the requester must be able to view the project in scope.
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // List all transactions in the project.
-                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(
-                    &With::<ListParams>::try_convert_to::<ListQueryParams<SynchrotronResponse>, _>,
-                ),
-                type_of_val(&By::<()>::list::<NoFilter, SynchrotronResponse>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_synchrotron(db: TdPool) -> Result<(), TdError> {
@@ -93,18 +58,24 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -135,12 +106,12 @@ mod tests {
                 .await?,
         ];
 
-        let service = SynchrotronService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
             .in_project(p.id);
 
-        let response = service.raw_oneshot(request).await?;
+        let response = service.synchrotron(request).await?.data;
         assert_eq!(response.len, transactions.len());
         // Shared `triggered_on`: paging by id makes seed order the response order.
         let expected: Vec<_> = transactions.iter().map(|t| t.id.clone()).collect();
