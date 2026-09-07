@@ -225,7 +225,6 @@ def open_file(source: str) -> Iterator[IO[bytes]]:
 
 
 class ChunkReader(io.RawIOBase):
-
     def __init__(self, chunks: Iterator[bytes]) -> None:
         self._chunks = chunks
         self._buffer = b""
@@ -254,7 +253,9 @@ def open_azs(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
     blob_name = parsed.path.lstrip("/")
     if not container or not blob_name:
         die("Downloading the image", f"Malformed az uri: {source}")
-    account = options.get(OPTION_AZS_ACCOUNT_NAME) or os.environ.get(ENV_AZS_ACCOUNT_NAME)
+    account = options.get(OPTION_AZS_ACCOUNT_NAME) or os.environ.get(
+        ENV_AZS_ACCOUNT_NAME
+    )
     secret = options.get(OPTION_AZS_ACCOUNT_KEY) or os.environ.get(ENV_AZS_ACCOUNT_KEY)
     if not account:
         die("Downloading the image", f"No storage account for {source}")
@@ -294,9 +295,7 @@ def open_gcs(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
         credentials = service_account.Credentials.from_service_account_info(
             json.loads(key)
         )
-        client = gcs.Client(
-            credentials=credentials, project=credentials.project_id
-        )
+        client = gcs.Client(credentials=credentials, project=credentials.project_id)
     else:
         client = gcs.Client()
     trace(f"Downloading {source}")

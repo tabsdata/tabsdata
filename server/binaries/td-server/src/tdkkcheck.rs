@@ -81,8 +81,9 @@ fn run(arguments: &Arguments) -> Result<AssessCheck, String> {
                 persisted.as_ref(),
             ))
         }
-        Checked::MandatoryValues => local::assess_pending_values(name, &cluster)
-            .map_err(|error| format!("{error:?}")),
+        Checked::MandatoryValues => {
+            local::assess_pending_values(name, &cluster).map_err(|error| format!("{error:?}"))
+        }
     }
 }
 

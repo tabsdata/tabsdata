@@ -33,7 +33,7 @@ mock-env = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "te-execution"]
+ignored = ["openssl", "te-execution", "tokio"]
 
 [dependencies]
 
