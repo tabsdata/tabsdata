@@ -2,47 +2,30 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::system::layers::status::database_status;
+use crate::system::status::database_status;
 use ta_services::factory::service_factory;
+use td_database::access::{GatedConnection, Grant, RO};
+use td_error::TdError;
 use td_objects::dxo::system::ApiStatus;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 
-#[service_factory(
-    name = StatusService,
-    request = (),
-    response = ApiStatus,
-    connection = ConnectionProvider,
-    scope = "Global",
-)]
-fn service() {
-    layers!(from_fn(database_status))
+#[service_factory]
+async fn status(conn: &mut GatedConnection<RO>, _request: ()) -> Result<ApiStatus, TdError> {
+    let conn = conn.get(Grant::asserted(
+        "health probe: unauthenticated status endpoint, ping only",
+    ));
+    database_status(conn).await
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_objects::dxo::system::HealthStatus;
-    use tower::ServiceExt;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_status(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        StatusService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<(), ApiStatus>(&[type_of_val(&database_status)]);
-    }
 
     #[td_test::test(db)]
     async fn test_database_status_service(db: TdPool) {
-        let service = StatusService::with_defaults(db).service();
-        let response = service.oneshot(()).await.unwrap();
+        let service = Services::with_defaults(db);
+        let response = service.status(()).await.unwrap();
 
         assert!(matches!(response.status, HealthStatus::OK));
         assert!(response.latency_as_nanos > 0);
