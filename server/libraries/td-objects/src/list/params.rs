@@ -686,7 +686,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let list_query: ListQueryParams<Def> = (&list_params).try_into().unwrap();
         // two distinct columns → two OR-groups AND'd together
@@ -699,7 +698,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
         let err = res.err().unwrap();
@@ -713,7 +711,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
         let err = res.err().unwrap();
@@ -727,7 +724,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
         let err = res.err().unwrap();
@@ -744,7 +740,6 @@ mod tests {
             previous: Some("prev".to_string()),
             next: Some("next".to_string()),
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
         let err = res.err().unwrap();
@@ -761,7 +756,6 @@ mod tests {
             previous: Some("prev".to_string()),
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
         let err = res.err().unwrap();
@@ -778,7 +772,6 @@ mod tests {
             previous: None,
             next: Some("next".to_string()),
             pagination_id: None,
-            ..Default::default()
         };
         let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
         let err = res.err().unwrap();
@@ -795,7 +788,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
         let err = res.err().unwrap();
@@ -812,7 +804,6 @@ mod tests {
             previous: None,
             next: Some("cursor_val".to_string()),
             pagination_id: Some("id_val".to_string()),
-            ..Default::default()
         };
         let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
         assert!(res.is_ok());
@@ -829,7 +820,6 @@ mod tests {
             previous: Some("cursor_val".to_string()),
             next: None,
             pagination_id: Some("id_val".to_string()),
-            ..Default::default()
         };
         let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
         assert!(res.is_ok());
@@ -885,7 +875,6 @@ mod tests {
             previous: None,
             next: Some("i2".to_string()),
             pagination_id: Some("i2".to_string()),
-            ..Default::default()
         };
         assert_eq!(
             run_sql(&list_params),
@@ -903,7 +892,6 @@ mod tests {
             previous: None,
             next: Some("n2".to_string()),
             pagination_id: Some("i2".to_string()),
-            ..Default::default()
         };
         assert_eq!(
             run_sql(&list_params),
@@ -921,7 +909,6 @@ mod tests {
             previous: Some("n2".to_string()),
             next: None,
             pagination_id: Some("i2".to_string()),
-            ..Default::default()
         };
         assert_eq!(
             run_sql(&list_params),
@@ -985,7 +972,6 @@ mod tests {
             previous: None,
             next: Some("e2".to_string()),
             pagination_id: Some("i2".to_string()),
-            ..Default::default()
         };
         assert_eq!(
             nullable_sql(&list_params),
@@ -1003,7 +989,6 @@ mod tests {
             previous: None,
             next: Some("~".to_string()),
             pagination_id: Some("i2".to_string()),
-            ..Default::default()
         };
         assert_eq!(
             nullable_sql(&list_params),
@@ -1021,7 +1006,6 @@ mod tests {
             previous: Some("~".to_string()),
             next: None,
             pagination_id: Some("i2".to_string()),
-            ..Default::default()
         };
         assert_eq!(
             nullable_sql(&list_params),
@@ -1039,7 +1023,6 @@ mod tests {
             previous: None,
             next: Some("e2".to_string()),
             pagination_id: Some("i2".to_string()),
-            ..Default::default()
         };
         assert_eq!(
             nullable_sql(&list_params),
@@ -1058,7 +1041,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
 
@@ -1093,7 +1075,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
 
@@ -1128,7 +1109,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
 

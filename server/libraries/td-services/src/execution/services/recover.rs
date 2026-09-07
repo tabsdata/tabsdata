@@ -501,8 +501,7 @@ mod tests {
                     );
                 Services::with_defaults(db.clone())
                     .execution_recover(request)
-                    .await?
-                    .data;
+                    .await?;
 
                 let pfr: PhysicalFunctionRunDB = db
                     .live()

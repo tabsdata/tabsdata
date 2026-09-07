@@ -26,7 +26,6 @@ td-test = [
     "dummy",
     "mock-env",
     "test-utils",
-    "ta-services/td-test",
 ]
 dummy = []
 mock-env = []
@@ -50,7 +49,6 @@ td-build = { workspace = true }
 
 # Internal dependencies
 
-ta-services = { workspace = true }
 td-database = { workspace = true }
 td-error = { workspace = true }
 
@@ -59,8 +57,6 @@ td-error = { workspace = true }
 ## Libraries
 
 # External dependencies
-
-axum = { workspace = true }
 
 [dev-dependencies]
 te-services = { workspace = true, features = ["td-test"] }

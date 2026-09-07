@@ -296,7 +296,7 @@ fn walk_sequence<V: PlaceholderVisitor>(
     }
 
     let identities = sequence_identities(items, &displayed_path)?;
-    for (item, identity) in items.iter_mut().zip(identities.into_iter()) {
+    for (item, identity) in items.iter_mut().zip(identities) {
         path.push(identity);
         walk_node(item, path, visitor)?;
         path.pop();

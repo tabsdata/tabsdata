@@ -16,20 +16,22 @@ use td_objects::dxo::crudl::{AtTimeParam, WithinProject};
 use td_objects::dxo::table::{ExtraColsParam, TableParam, TableSchema, UncommittedParam};
 use td_storage::Storage;
 
+type TableSchemaRequest = WithinProject<
+    ReadRequest<(
+        CollectionParam,
+        TableParam,
+        AtTimeParam,
+        UncommittedParam,
+        ExtraColsParam,
+    )>,
+>;
+
 #[service_factory]
 async fn table_schema(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<
-        ReadRequest<(
-            CollectionParam,
-            TableParam,
-            AtTimeParam,
-            UncommittedParam,
-            ExtraColsParam,
-        )>,
-    >,
+    request: TableSchemaRequest,
 ) -> Result<TableSchema, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, table, at, uncommitted, extra_cols)) = request.into_parts();
@@ -240,7 +242,7 @@ mod tests {
             at_time: &AtTime,
         ) -> Result<TableSchema, TdError> {
             let service = Services {
-                storage: storage,
+                storage,
                 ..Services::with_defaults(db)
             };
 

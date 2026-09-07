@@ -30,7 +30,7 @@ pub(crate) mod tests {
             })
             .join(WORK_FOLDER)
             .join(CAST_FOLDER)
-            .join(format!("{}_{}", worker_db.id, &cast.to_string()))
+            .join(format!("{}_{}", worker_db.id, cast))
             .join(WORK_FOLDER)
             .join(LOG_FOLDER)
     }

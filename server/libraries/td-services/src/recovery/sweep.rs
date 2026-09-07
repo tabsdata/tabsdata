@@ -117,7 +117,7 @@ pub async fn fail_stale_abandoned_attempts(
     if stale.abandoned_pfr_ids.is_empty() {
         return Ok(());
     }
-    let update = UpdatePhysicalFunctionRunDB::failed_at(&at)?;
+    let update = UpdatePhysicalFunctionRunDB::failed_at(at)?;
     conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&update, &stale.abandoned_pfr_ids)
         .await?;
     debug!(

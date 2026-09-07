@@ -127,26 +127,14 @@ mod tests {
         let _ = BadDefault::default();
     }
 
-    /// sqlx decode is gated too: a legacy-invalid row errors on read, while a
-    /// valid one round-trips.
+    /// sqlx decode is gated too: a legacy-invalid value errors on read, while
+    /// a valid one round-trips.
     #[td_test::test(db)]
     async fn decode_routes_through_the_gate(db: td_database::pool::TdPool) {
-        db.execute_batch(&["CREATE TABLE typed_gate (v TEXT)".to_string()])
-            .await
-            .unwrap();
-
         let select_gated = async |raw: &str| -> Result<Gated, sqlx::Error> {
             let mut conn = db.begin().await.unwrap();
-            sqlx::query("TRUNCATE typed_gate")
-                .execute(&mut *conn)
-                .await
-                .unwrap();
-            sqlx::query("INSERT INTO typed_gate VALUES ($1)")
+            sqlx::query_scalar("SELECT $1::TEXT")
                 .bind(raw)
-                .execute(&mut *conn)
-                .await
-                .unwrap();
-            sqlx::query_scalar("SELECT v FROM typed_gate")
                 .fetch_one(&mut *conn)
                 .await
         };

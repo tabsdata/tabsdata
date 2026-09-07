@@ -69,8 +69,7 @@ mod tests {
             .create_project(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
-            .await?
-            .data;
+            .await?;
         Ok(())
     }
 

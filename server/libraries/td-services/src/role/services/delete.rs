@@ -137,7 +137,7 @@ mod tests {
                 role: role_id_name.clone(),
             });
         let service = Services::with_defaults(db.clone());
-        service.delete_role(request).await?.data;
+        service.delete_role(request).await?;
 
         // Assert just one of the roles in the db got deleted
         let found = db.live().fetch_all::<RoleDB>(&role_id_name).await?;

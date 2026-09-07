@@ -13,8 +13,8 @@ use td_objects::types::composed::TableDependency;
 use td_objects::types::table_ref::VersionedTableRef;
 
 pub async fn vec_create_table_dependency(
-    dependencies: &Vec<DependencyDBWithNames>,
-    tables: &Vec<TableDBWithNames>,
+    dependencies: &[DependencyDBWithNames],
+    tables: &[TableDBWithNames],
 ) -> Result<Vec<TableDependency>, TdError> {
     let tables = tables
         .iter()
@@ -37,7 +37,7 @@ pub async fn vec_create_table_dependency(
 }
 
 pub async fn map_create_worker(
-    workers: &Vec<WorkerDBWithNames>,
+    workers: &[WorkerDBWithNames],
 ) -> Result<HashMap<WorkerTypeDto, WorkerId>, TdError> {
     let workers = workers
         .iter()

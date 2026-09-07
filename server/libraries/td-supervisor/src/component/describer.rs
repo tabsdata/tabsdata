@@ -286,23 +286,23 @@ impl Display for TabsDataWorkerDescriber {
              Work: {:?}\n\
              Queue: {:?}\n,
              Etc: {:?}",
-            &self.class,
-            &self.name,
-            &self.location,
-            &self.program,
-            &self.set_state,
-            &self.get_states,
-            &self.arguments,
-            &self.markers,
-            &self.config,
+            self.class,
+            self.name,
+            self.location,
+            self.program,
+            self.set_state,
+            self.get_states,
+            self.arguments,
+            self.markers,
+            self.config,
             match &self.message {
                 Some(message) => serde_yaml::to_string(&message)
                     .unwrap_or("<non serializable message>".to_string()),
                 None => "No message...".to_string(),
             },
-            &self.work,
-            &self.queue,
-            &self.etc,
+            self.work,
+            self.queue,
+            self.etc,
         )
     }
 }

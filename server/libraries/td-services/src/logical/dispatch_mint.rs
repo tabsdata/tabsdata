@@ -44,7 +44,7 @@ pub struct MintedDispatch {
 )]
 pub async fn mint_function_runs_on_dispatch(
     conn: &mut DomainConnection<Apiserver>,
-    ready_lfrs: &Vec<LogicalFunctionRunDB>,
+    ready_lfrs: &[LogicalFunctionRunDB],
     at: &AtTime,
 ) -> Result<Vec<MintedDispatch>, TdError> {
     if ready_lfrs.is_empty() {

@@ -173,12 +173,12 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match (&self.collection, &self.versions) {
-            (Some(collection), Versions::None) => write!(f, "{}/{}", collection, &self.table),
+            (Some(collection), Versions::None) => write!(f, "{}/{}", collection, self.table),
             (Some(collection), versions) => {
-                write!(f, "{}/{}@{}", collection, &self.table, versions)
+                write!(f, "{}/{}@{}", collection, self.table, versions)
             }
-            (None, Versions::None) => write!(f, "{}", &self.table),
-            (None, versions) => write!(f, "{}@{}", &self.table, versions),
+            (None, Versions::None) => write!(f, "{}", self.table),
+            (None, versions) => write!(f, "{}@{}", self.table, versions),
         }
     }
 }

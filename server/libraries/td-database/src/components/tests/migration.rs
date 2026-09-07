@@ -10,6 +10,8 @@
 //! the pool's drop-ladder-rebuild ordering exercised regardless.
 
 use crate::components::{ApiserverComponent, SchemaComponent};
+use crate::connection::PgConnectionExt;
+use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::test_utils::TestDb;
@@ -268,20 +270,63 @@ async fn assert_destructive_delta_clears_standing_views(new_db: impl AsyncFn() -
     assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a"]);
 }
 
-/// Two upgraders racing the same fresh schema: the `tabsdata_system` lock
-/// makes the loser wait, re-read `db_version`, and no-op — both must succeed.
+/// Two upgraders racing the same fresh schema never reach a raw DDL error.
+/// Whether they overlap at all is up to the scheduler, so the guard is on the
+/// failure mode, not on a loser existing.
 #[tokio::test]
-async fn concurrent_upgrades_serialize_postgres() {
+async fn concurrent_upgrades_never_race_the_ladder_postgres() {
     let db = crate::test_utils::postgres::pool().await;
     let (a, b) = (db.admin.clone(), db.admin.clone());
     let (ra, rb) = tokio::join!(
         tokio::spawn(async move { a.upgrade_source(&DestructiveFixture(2)).await }),
         tokio::spawn(async move { b.upgrade_source(&DestructiveFixture(2)).await }),
     );
-    ra.unwrap().unwrap();
-    rb.unwrap().unwrap();
+    let results = [ra.unwrap(), rb.unwrap()];
+    assert!(results.iter().any(|r| r.is_ok()));
+    for refused in results.iter().filter_map(|r| r.as_ref().err()) {
+        assert!(
+            matches!(refused, DbError::ConcurrentUpgradeInProgress(_)),
+            "{refused:?}"
+        );
+    }
+
     assert_eq!(db.admin.db_version().await.unwrap(), Some(2));
     assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a"]);
+
+    // A retry after the winner commits must not conflict with itself.
+    db.admin
+        .upgrade_source(&DestructiveFixture(2))
+        .await
+        .unwrap();
+    assert_eq!(db.admin.db_version().await.unwrap(), Some(2));
+}
+
+/// The refusal, with the claim deliberately held: advisory locks are
+/// database-wide, so any connection holding the key stands in for a peer.
+#[tokio::test]
+async fn upgrade_refuses_a_held_claim_postgres() {
+    let db = crate::test_utils::postgres::pool().await;
+    let mut holder = db.serving.begin().await.unwrap();
+    let key = format!("upgrade:schema:{}", db.admin.schema());
+    assert!(holder.try_advisory_xact_lock_text(&key).await.unwrap());
+
+    let refused = db
+        .admin
+        .upgrade_source(&DestructiveFixture(2))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(refused, DbError::ConcurrentUpgradeInProgress(_)),
+        "{refused:?}"
+    );
+    assert_eq!(db.admin.db_version().await.unwrap(), None);
+
+    holder.rollback().await.unwrap();
+    db.admin
+        .upgrade_source(&DestructiveFixture(2))
+        .await
+        .unwrap();
+    assert_eq!(db.admin.db_version().await.unwrap(), Some(2));
 }
 
 /// A v1 -> v3 ladder whose second hop is invalid: the failure must undo the

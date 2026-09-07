@@ -51,10 +51,10 @@ fn into_boxed_sync_stream(stream: WorkerLogStream) -> BoxedSyncStream {
 pub async fn worker_logs(
     bridge: &BridgeProviderHandle,
     worker: &WorkerDB,
-    extensions: &Vec<LogsExtension>,
-    casts: &Vec<LogsCastNumber>,
+    extensions: &[LogsExtension],
+    casts: &[LogsCastNumber],
 ) -> Result<BoxedSyncStream, TdError> {
-    let target = worker_log_target(&worker, &extensions, &casts);
+    let target = worker_log_target(worker, extensions, casts);
     let stream = bridge.worker_handler().logs(&target).await?;
     Ok(into_boxed_sync_stream(stream))
 }
@@ -62,10 +62,10 @@ pub async fn worker_logs(
 pub async fn worker_logs_tail(
     bridge: &BridgeProviderHandle,
     worker: &WorkerDB,
-    extensions: &Vec<LogsExtension>,
-    casts: &Vec<LogsCastNumber>,
+    extensions: &[LogsExtension],
+    casts: &[LogsCastNumber],
 ) -> Result<BoxedSyncStream, TdError> {
-    let target = worker_log_target(&worker, &extensions, &casts);
+    let target = worker_log_target(worker, extensions, casts);
     let stream = bridge.worker_handler().logs_tail(&target).await?;
     Ok(into_boxed_sync_stream(stream))
 }

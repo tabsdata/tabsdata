@@ -20,24 +20,26 @@ use td_objects::dxo::table::{
 use td_objects::types::stream::BoxedSyncStream;
 use td_storage::Storage;
 
+type TableSampleRequest = WithinProject<
+    ReadRequest<(
+        CollectionParam,
+        TableParam,
+        AtTimeParam,
+        UncommittedParam,
+        SampleOffsetParam,
+        SampleLenParam,
+        FileFormatParam,
+        SqlParam,
+        ExtraColsParam,
+    )>,
+>;
+
 #[service_factory]
 async fn table_sample(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<
-        ReadRequest<(
-            CollectionParam,
-            TableParam,
-            AtTimeParam,
-            UncommittedParam,
-            SampleOffsetParam,
-            SampleLenParam,
-            FileFormatParam,
-            SqlParam,
-            ExtraColsParam,
-        )>,
-    >,
+    request: TableSampleRequest,
 ) -> Result<BoxedSyncStream, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, table, at, uncommitted, offset, len, format, sql, extra_cols)) =
@@ -271,7 +273,7 @@ mod tests {
             len: i64,
         ) -> Result<Bytes, TdError> {
             let service = Services {
-                storage: storage,
+                storage,
                 ..Services::with_defaults(db)
             };
 

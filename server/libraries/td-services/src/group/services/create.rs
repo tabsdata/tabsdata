@@ -134,8 +134,7 @@ mod tests {
         // `dup` in the first project.
         Services::with_defaults(db.clone())
             .create_group(ctx().create((), dup()).in_project(p.id))
-            .await?
-            .data;
+            .await?;
 
         // A second project, then the same group name within it — succeeds
         // because uniqueness is scoped by `project_id`.
@@ -153,8 +152,7 @@ mod tests {
 
         Services::with_defaults(db.clone())
             .create_group(ctx().create((), dup()).in_project(p2.id))
-            .await?
-            .data;
+            .await?;
         Ok(())
     }
 }

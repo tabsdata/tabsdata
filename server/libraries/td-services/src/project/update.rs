@@ -14,7 +14,7 @@ use td_queries::LiveEntry;
 /// otherwise the call is a no-op and we surface it loudly.
 pub fn update_project_validate(update: &ProjectUpdate) -> Result<(), TdError> {
     if update.name.is_none() && update.description.is_none() {
-        return Err(ProjectError::UpdateRequestHasNothingToUpdate)?;
+        Err(ProjectError::UpdateRequestHasNothingToUpdate)?;
     }
     Ok(())
 }

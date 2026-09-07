@@ -77,7 +77,7 @@ pub async fn update_worker_status(
 pub async fn abandon_requested_physical_runs(
     conn: &mut DomainConnection<Apiserver>,
     at: &AtTime,
-    logical_function_runs: &Vec<LogicalFunctionRunDB>,
+    logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<(), TdError> {
     let requested: HashSet<(&ExecutionId, &FunctionId)> = logical_function_runs
         .iter()

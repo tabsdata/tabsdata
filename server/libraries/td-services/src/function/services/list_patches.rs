@@ -257,8 +257,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .delete_function(request)
-            .await?
-            .data;
+            .await?;
 
         let err = list("f0").await.map(|_| ()).unwrap_err();
         assert_eq!(err.api_error(), ApiError::NotFound);

@@ -256,4 +256,10 @@ pub enum DbError {
          that schema. (Missing: {0})"
     )]
     UpgraderLacksPermissions(String) = 5022,
+    #[error(
+        "Another upgrader is creating or upgrading schema '{0}' right now. \
+         Only one process may run a schema's delta ladder at a time; retry \
+         once it has finished."
+    )]
+    ConcurrentUpgradeInProgress(String) = 5046,
 }

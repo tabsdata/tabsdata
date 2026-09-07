@@ -25,6 +25,7 @@ use tracing::{error, warn};
 /// → notify (post-commit). Unobservable workloads degrade the tick to the
 /// time-based sweep (short TX). Every orchestrator action is idempotent, so an
 /// aborted tick converges on the next one.
+#[allow(clippy::too_many_arguments)]
 #[service_factory]
 async fn recovery(
     storage: Ctx<Storage>,
@@ -426,10 +427,6 @@ mod tests {
 
         Ok(())
     }
-
-    /// In kubernetes mode the request path emits the per-action
-    /// `FunctionRequest::Start` kind (not the flat request), carrying the
-    /// decorator + resolver, with no pre-resolved context. WorkerDB stays Locked.
 
     /// Seed a collection + function and an enabled trigger worker in
     /// `worker_status`.

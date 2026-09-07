@@ -95,8 +95,7 @@ mod tests {
             .create_project(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
-            .await?
-            .data;
+            .await?;
         Ok(())
     }
 
@@ -126,7 +125,7 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        service.grant_simple_permission(request).await?.data;
+        service.grant_simple_permission(request).await?;
 
         // resolved to `p0_dev`
         let dev_role = db
@@ -152,7 +151,7 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        service.grant_simple_permission(request).await?.data;
+        service.grant_simple_permission(request).await?;
 
         assert_eq!(
             user_role_count(&db, &user.id, &RoleId::project_creator()).await,
@@ -176,7 +175,7 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        service.grant_simple_permission(request).await?.data;
+        service.grant_simple_permission(request).await?;
 
         assert_eq!(
             user_role_count(&db, &user.id, &RoleId::sys_admin()).await,
@@ -204,7 +203,7 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant()?);
-        service.grant_simple_permission(request).await?.data;
+        service.grant_simple_permission(request).await?;
 
         let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant()?);

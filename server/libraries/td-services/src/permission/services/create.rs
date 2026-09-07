@@ -75,7 +75,7 @@ mod tests {
     async fn test_create_permission(db: TdPool) -> Result<(), TdError> {
         let create = PermissionCreate {
             permission_type: PermissionType::manage_access(),
-            entity_name: None.try_into().unwrap(),
+            entity_name: None,
         };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
@@ -125,7 +125,7 @@ mod tests {
 
         let create = PermissionCreate {
             permission_type: PermissionType::view_project(),
-            entity_name: Some(EntityName::try_from("p0")?).try_into().unwrap(),
+            entity_name: Some(EntityName::try_from("p0")?),
         };
 
         // `admin` holds manage_project on `__all__`, so it can grant on any project.
@@ -184,7 +184,7 @@ mod tests {
 
         let create = PermissionCreate {
             permission_type: PermissionType::view_project(),
-            entity_name: Some(EntityName::try_from("p1")?).try_into().unwrap(),
+            entity_name: Some(EntityName::try_from("p1")?),
         };
 
         let request = RequestContext::with(AccessTokenId::default(), user.id).create(
@@ -211,7 +211,7 @@ mod tests {
 
         let create = PermissionCreate {
             permission_type: PermissionType::create_projects(),
-            entity_name: None.try_into().unwrap(),
+            entity_name: None,
         };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(

@@ -486,7 +486,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_auto_compression() {
-        for (extension, _) in EXTENSIONS_TO_COMPRESSION_MAP.iter() {
+        for extension in EXTENSIONS_TO_COMPRESSION_MAP.keys() {
             let original_data = b"Hello, world! This is a test string for auto compression.";
             let file = format!("test.{}", extension);
 

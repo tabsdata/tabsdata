@@ -87,7 +87,7 @@ mod tests {
         ));
 
         let service = Services::with_defaults(db.clone());
-        service.delete_user_role(request).await?.data;
+        service.delete_user_role(request).await?;
 
         let not_found = db.live().fetch_one::<UserRoleDB>(&user_role.id).await;
         assert!(not_found.is_err());

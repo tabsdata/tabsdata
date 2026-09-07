@@ -29,7 +29,7 @@ use tracing::{debug, instrument};
 )]
 pub async fn redirect_pointers_at_finish(
     conn: &mut DomainConnection<Apiserver>,
-    physical_function_runs: &Vec<PhysicalFunctionRunDB>,
+    physical_function_runs: &[PhysicalFunctionRunDB],
     update: &UpdateWorkerExecution,
     at: &AtTime,
 ) -> Result<(), TdError> {

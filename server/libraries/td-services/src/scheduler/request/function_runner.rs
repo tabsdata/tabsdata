@@ -112,7 +112,7 @@ pub async fn fetch_pfrs_to_dispatch(
 )]
 pub async fn materialize_replay_dispatch(
     conn: &mut DomainConnection<Apiserver>,
-    pfrs: &Vec<PhysicalFunctionRunDB>,
+    pfrs: &[PhysicalFunctionRunDB],
 ) -> Result<Vec<MintedDispatch>, TdError> {
     if pfrs.is_empty() {
         return Ok(Vec::new());
@@ -188,7 +188,7 @@ pub async fn materialize_replay_dispatch(
 )]
 pub async fn enrich_minted_dispatch(
     conn: &mut DomainConnection<Apiserver>,
-    minted: &Vec<MintedDispatch>,
+    minted: &[MintedDispatch],
 ) -> Result<Vec<PhysicalFunctionRunToExecute>, TdError> {
     if minted.is_empty() {
         return Ok(Vec::new());
@@ -201,7 +201,7 @@ pub async fn enrich_minted_dispatch(
 /// Extract the LFR ids from the minted dispatch set so the requested
 /// status flip can update_chunked across them.
 pub fn lfr_ids_from_minted_dispatch(
-    minted: &Vec<MintedDispatch>,
+    minted: &[MintedDispatch],
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
     Ok(minted.iter().map(|m| m.lfr.id.clone()).collect())
 }
@@ -212,7 +212,7 @@ pub fn lfr_ids_from_minted_dispatch(
 /// is re-picked by the replay-side readiness next tick. Used by both initial
 /// and replay pipelines after WorkerDB insert.
 pub fn pfr_ids_from_dispatched_workers(
-    workers: &Vec<WorkerDB>,
+    workers: &[WorkerDB],
 ) -> Result<Vec<PhysicalFunctionRunId>, TdError> {
     Ok(workers
         .iter()

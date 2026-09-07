@@ -42,7 +42,7 @@ pub async fn resolve_function_version(
     let version = conn
         .live()
         .fetch_optional::<FunctionVersionDBWithNames>(and!(
-            &*function_version_id,
+            function_version_id,
             not!(FunctionStatus::Deleted)
         ))
         .await?

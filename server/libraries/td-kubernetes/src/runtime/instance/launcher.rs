@@ -290,7 +290,7 @@ async fn apply_init_phase(
         validate_pod(key, cluster_provider.validate_init_job(&job))?;
         prepared.push((sequence, key.to_owned(), job));
     }
-    prepared.sort_by(|left, right| left.0.cmp(&right.0));
+    prepared.sort_by_key(|left| left.0);
     for pair in prepared.windows(2) {
         if pair[0].0 == pair[1].0 {
             return Err(LauncherError::DuplicateInitSequence {

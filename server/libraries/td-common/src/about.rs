@@ -478,7 +478,7 @@ pub fn show_build_metadata() {
     let header_version_content = format!(
         "{}{}{}",
         " ".repeat(header_version_padding_left),
-        &header_line_version,
+        header_line_version,
         " ".repeat(
             inner_width
                 .saturating_sub(header_version_padding_left)
@@ -498,7 +498,7 @@ pub fn show_build_metadata() {
     let header_edition_content = format!(
         "{}{}{}",
         " ".repeat(header_edition_padding_left),
-        &header_line_edition,
+        header_line_edition,
         " ".repeat(
             inner_width
                 .saturating_sub(header_edition_padding_left)
@@ -518,7 +518,7 @@ pub fn show_build_metadata() {
     let header_mode_content = format!(
         "{}{}{}",
         " ".repeat(header_mode_padding_left),
-        &header_line_mode,
+        header_line_mode,
         " ".repeat(
             inner_width
                 .saturating_sub(header_mode_padding_left)

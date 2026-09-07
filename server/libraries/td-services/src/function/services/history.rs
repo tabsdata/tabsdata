@@ -167,7 +167,7 @@ mod tests {
             ))
             .in_project(p.id);
         let service = Services::with_defaults(db.clone());
-        service.delete_function(request).await?.data;
+        service.delete_function(request).await?;
 
         let t3 = AtTime::now();
 

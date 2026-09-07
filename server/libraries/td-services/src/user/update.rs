@@ -13,7 +13,7 @@ pub fn update_user_validate(update: &UserUpdate) -> Result<(), TdError> {
         && update.password.is_none()
         && update.enabled.is_none()
     {
-        return Err(UserError::UpdateRequestHasNothingToUpdate)?;
+        Err(UserError::UpdateRequestHasNothingToUpdate)?;
     }
     Ok(())
 }
@@ -27,7 +27,7 @@ pub fn update_user_validate_password_change(
     if update.password.is_some() {
         if *request_user_id == user_db.id {
             // a self password change must be done via de password_change endpoint
-            return Err(UserError::PasswordChangeNotAllowed)?;
+            Err(UserError::PasswordChangeNotAllowed)?;
         }
         // only a manage_access holder can make it here without being the requester
     }
@@ -40,7 +40,7 @@ pub fn update_user_validate_enabled(
     update: &UserUpdate,
 ) -> Result<(), TdError> {
     if update.enabled.is_some() && *request_user_id == user_db.id {
-        return Err(UserError::UserCannotEnableDisableThemselves)?;
+        Err(UserError::UserCannotEnableDisableThemselves)?;
     }
     Ok(())
 }

@@ -209,7 +209,7 @@ pub fn initial_mint_lfr_pointer(
 }
 
 pub fn build_initial_mint_lfr_pointers(
-    logical_function_runs: &Vec<LogicalFunctionRunDB>,
+    logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<Vec<LogicalFunctionRunPointerDB>, TdError> {
     logical_function_runs
         .iter()
@@ -227,7 +227,7 @@ pub fn build_logical_table_data_versions(
     transaction_map: &TransactionMap<TransactionBy>,
     execution_plan: &ExecutionPlan,
     execution: &ExecutionDB,
-    logical_function_runs: &Vec<LogicalFunctionRunDB>,
+    logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<Vec<LogicalTableDataVersionDB>, TdError> {
     // Producer LFR lookup is keyed by function_id (logical identity), not
     // function_version_id — see `build_function_runs` for why. The map
@@ -291,7 +291,7 @@ pub fn initial_mint_ltdv_pointer(
 }
 
 pub fn build_initial_mint_ltdv_pointers(
-    logical_table_data_versions: &Vec<LogicalTableDataVersionDB>,
+    logical_table_data_versions: &[LogicalTableDataVersionDB],
 ) -> Result<Vec<LogicalTableDataVersionPointerDB>, TdError> {
     logical_table_data_versions
         .iter()
@@ -502,7 +502,7 @@ pub async fn build_logical_function_run_inputs(
     transaction_map: &TransactionMap<TransactionBy>,
     execution_plan: &ExecutionPlan,
     execution: &ExecutionDB,
-    logical_function_runs: &Vec<LogicalFunctionRunDB>,
+    logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<Vec<LogicalFunctionRunInputDB>, TdError> {
     let triggered_on = execution.triggered_on;
 
@@ -666,8 +666,8 @@ pub async fn build_response(
     transaction_map: &TransactionMap<TransactionBy>,
     execution: &ExecutionDB,
     execution_plan: &ResolvedExecutionPlan,
-    logical_function_runs: &Vec<LogicalFunctionRunDB>,
-    logical_function_run_inputs: &Vec<LogicalFunctionRunInputDB>,
+    logical_function_runs: &[LogicalFunctionRunDB],
+    logical_function_run_inputs: &[LogicalFunctionRunInputDB],
 ) -> Result<ExecutionResponse, TdError> {
     let dot = Dot::try_from(execution_plan.dot().to_string())?;
 

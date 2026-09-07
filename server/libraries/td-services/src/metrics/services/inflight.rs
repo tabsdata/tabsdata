@@ -275,8 +275,7 @@ mod tests {
                     )
                     .in_project(project_b.id),
             )
-            .await?
-            .data;
+            .await?;
         let coll_b: ActiveCollectionDB = db
             .scoped(&project_b_id)
             .live()

@@ -101,7 +101,7 @@ pub async fn get_table_sample(
         Ok(Bytes::from(buffer))
     }
 
-    let bytes = if let Some(table_path) = &*table_path {
+    let bytes = if let Some(table_path) = table_path {
         let (url, mount_def) = storage.to_external_uri(table_path)?;
         let url_str = url.to_string();
         let pl_path = PlPath::new(url_str.as_str());
@@ -141,12 +141,12 @@ pub async fn get_table_sample(
 
             let lazy_frame = lazy_frame.slice(0, **len as IdxSize);
             let dataframe = lazy_frame.collect().map_err(SampleError::LazyFrameError)?;
-            write_sample(dataframe, &format)
+            write_sample(dataframe, format)
         })?
     } else {
         tokio::task::block_in_place(move || {
             let dataframe = DataFrame::default();
-            write_sample(dataframe, &format)
+            write_sample(dataframe, format)
         })?
     };
 

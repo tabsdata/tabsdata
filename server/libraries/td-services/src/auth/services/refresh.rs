@@ -146,7 +146,7 @@ mod tests {
 
         let request = RequestContext::with(original_access_token_id, UserId::admin())
             .update((), refresh_token.clone());
-        auth_services.refresh(request).await?.data;
+        auth_services.refresh(request).await?;
 
         let request = RequestContext::with(original_access_token_id, UserId::admin())
             .update((), refresh_token);

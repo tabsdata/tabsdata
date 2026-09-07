@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::execution::{
+use crate::execution::plan::{
     build_execution_plan, build_response, resolve_execution_plan_versions,
 };
 use crate::execution::read::{build_existing_transaction_map, with_existing_recursion_options};

@@ -324,8 +324,7 @@ mod tests {
         service
             .clone()
             .download_bundle(download(version.id.clone()))
-            .await?
-            .data;
+            .await?;
 
         // Delete the function through the real service (it tombstones a fresh
         // Deleted version and leaves this one Active).
@@ -341,8 +340,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .delete_function(delete_request)
-            .await?
-            .data;
+            .await?;
 
         // The still-Active version is no longer downloadable once its function is
         // deleted, matching the endpoint's contract and the history surface.

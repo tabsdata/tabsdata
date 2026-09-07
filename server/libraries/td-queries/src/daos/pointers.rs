@@ -458,7 +458,7 @@ mod tests {
         use td_common::datetime::Timestamp;
 
         fn at(ms: i64) -> AtTime {
-            AtTime::try_from(Timestamp::try_from(ms).unwrap()).unwrap()
+            AtTime::from(Timestamp::try_from(ms).unwrap())
         }
 
         fn pointer(
@@ -491,7 +491,7 @@ mod tests {
             assert!(!is_replay_attempt(
                 &p,
                 &pfr_id,
-                &TriggeredOn::try_from(*at(2_000)).unwrap()
+                &TriggeredOn::from(*at(2_000))
             ));
         }
 
@@ -507,7 +507,7 @@ mod tests {
             assert!(is_replay_attempt(
                 &p,
                 &reporting,
-                &TriggeredOn::try_from(*at(2_000)).unwrap()
+                &TriggeredOn::from(*at(2_000))
             ));
         }
 
@@ -525,7 +525,7 @@ mod tests {
             assert!(!is_replay_attempt(
                 &p,
                 &stale,
-                &TriggeredOn::try_from(*at(1_000)).unwrap()
+                &TriggeredOn::from(*at(1_000))
             ));
         }
 
@@ -541,7 +541,7 @@ mod tests {
             assert!(!is_replay_attempt(
                 &p,
                 &reporting,
-                &TriggeredOn::try_from(*at(2_000)).unwrap()
+                &TriggeredOn::from(*at(2_000))
             ));
         }
 
@@ -557,7 +557,7 @@ mod tests {
             assert!(!is_replay_attempt(
                 &p,
                 &reporting,
-                &TriggeredOn::try_from(*at(2_000)).unwrap()
+                &TriggeredOn::from(*at(2_000))
             ));
         }
     }

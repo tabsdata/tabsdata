@@ -342,12 +342,12 @@ mod tests {
                 env::set_var(
                     format!(
                         "TD__{}_{}",
-                        &instance
+                        instance
                             .file_name()
                             .unwrap()
                             .to_string_lossy()
                             .to_uppercase(),
-                        &ENV_LOG_MODE.to_uppercase()
+                        ENV_LOG_MODE.to_uppercase()
                     ),
                     &value_env_ins,
                 );
@@ -379,7 +379,7 @@ mod tests {
             unsafe {
                 env::remove_var(format!(
                     "TD__{}_{}",
-                    &instance
+                    instance
                         .file_name()
                         .unwrap()
                         .to_string_lossy()
@@ -434,12 +434,12 @@ mod tests {
                 env::set_var(
                     format!(
                         "TD__{}_{}",
-                        &instance
+                        instance
                             .file_name()
                             .unwrap()
                             .to_string_lossy()
                             .to_uppercase(),
-                        &ENV_LOG_MODE.to_uppercase()
+                        ENV_LOG_MODE.to_uppercase()
                     ),
                     &value_env_ins,
                 );
@@ -483,7 +483,7 @@ mod tests {
             unsafe {
                 env::remove_var(format!(
                     "TD__{}_{}",
-                    &instance
+                    instance
                         .file_name()
                         .unwrap()
                         .to_string_lossy()
@@ -568,7 +568,7 @@ mod tests {
             unsafe {
                 env::remove_var(format!(
                     "TD__{}_{}",
-                    &instance
+                    instance
                         .file_name()
                         .unwrap()
                         .to_string_lossy()

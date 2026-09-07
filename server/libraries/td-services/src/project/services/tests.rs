@@ -79,8 +79,7 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
 
     Services::with_defaults(db.clone())
         .delete_project(admin_ctx().delete(project_param("payments_v2")))
-        .await?
-        .data;
+        .await?;
 
     // After delete the row is gone from the active view.
     let list = Services::with_defaults(db.clone())
@@ -167,8 +166,7 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
 
     Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create()))
-        .await?
-        .data;
+        .await?;
 
     // Second create with the same name fails up front with a clean
     // `EntityAlreadyExists` (via the `By::<ProjectName>::assert_not_exists`
@@ -189,12 +187,10 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
     // unique constraint on `name` no longer blocks reuse.
     Services::with_defaults(db.clone())
         .delete_project(admin_ctx().delete(project_param("billing")))
-        .await?
-        .data;
+        .await?;
     Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create()))
-        .await?
-        .data;
+        .await?;
     Ok(())
 }
 
@@ -214,8 +210,7 @@ async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError
                 base_path: BasePath::default(),
             },
         ))
-        .await?
-        .data;
+        .await?;
 
     // Renaming `test` to the taken name `billing` collides.
     let upd = ProjectUpdate {
@@ -353,8 +348,7 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
 
     Services::with_defaults(db.clone())
         .delete_project(admin_ctx().delete(project_param("comet")))
-        .await?
-        .data;
+        .await?;
 
     // Role rows for the project are gone.
     let roles_after = project_roles(&db, created.id).await?;
@@ -414,8 +408,7 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
     };
     Services::with_defaults(db.clone())
         .update_project(admin_ctx().update(project_param("orbit"), upd))
-        .await?
-        .data;
+        .await?;
 
     let after = project_roles(&db, created.id).await?;
     assert_eq!(after.len(), 3, "still exactly three roles");
@@ -483,8 +476,7 @@ async fn test_rename_then_recreate_old_name(db: TdPool) -> Result<(), TdError> {
 
     Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create_foo()))
-        .await?
-        .data;
+        .await?;
 
     let upd = ProjectUpdate {
         name: Some(ProjectName::try_from("bar")?),
@@ -492,8 +484,7 @@ async fn test_rename_then_recreate_old_name(db: TdPool) -> Result<(), TdError> {
     };
     Services::with_defaults(db.clone())
         .update_project(admin_ctx().update(project_param("foo"), upd))
-        .await?
-        .data;
+        .await?;
 
     let new_foo = Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create_foo()))
@@ -522,8 +513,7 @@ mod delete_guards {
         db.seed().test_project().await?;
         Services::with_defaults(db.clone())
             .delete_project(admin_ctx().delete(project_param("test")))
-            .await?
-            .data;
+            .await?;
         // It's gone from the active registry.
         let list = Services::with_defaults(db)
             .list_projects(admin_ctx().list((), ListParams::default()))
@@ -567,8 +557,7 @@ mod delete_guards {
         let collections = Services::with_defaults(db.clone());
         collections
             .create_collection(admin_ctx().create((), coll).in_project(project.id))
-            .await?
-            .data;
+            .await?;
 
         // Delete is refused while the project still owns a collection.
         let err = Services::with_defaults(db.clone())

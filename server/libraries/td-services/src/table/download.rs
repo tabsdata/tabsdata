@@ -12,7 +12,7 @@ pub async fn get_table_download(
     storage: &Storage,
     table_path: &Option<SPath>,
 ) -> Result<BoxedSyncStream, TdError> {
-    match &*table_path {
+    match table_path {
         Some(path) => {
             let stream = storage.read_stream(path).await?.map_err(TdError::from);
             let stream = SyncStream::new(stream);

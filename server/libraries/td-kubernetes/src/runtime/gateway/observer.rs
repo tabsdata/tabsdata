@@ -38,7 +38,7 @@ impl KubernetesWorkloadObserver {
 }
 
 fn at_time(time: Option<&Time>) -> Option<AtTime> {
-    time.and_then(|stamp| AtTime::try_from(stamp.0).ok())
+    time.map(|stamp| AtTime::from(stamp.0))
 }
 
 trait WorkloadMetadata {

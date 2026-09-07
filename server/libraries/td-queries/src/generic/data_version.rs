@@ -393,22 +393,20 @@ mod tests {
 
     /// After all fixture data.
     static ON: LazyLock<AtTime> = LazyLock::new(|| {
-        AtTime::try_from(
+        AtTime::from(
             "2026-01-01T00:00:10.000+00:00"
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         )
-        .unwrap()
     });
 
     /// Between t2 and t3: includes DV_1 and DV_2 for p0 (defined_on <= ON_T2).
     static ON_T2: LazyLock<AtTime> = LazyLock::new(|| {
-        AtTime::try_from(
+        AtTime::from(
             "2026-01-01T00:00:02.500+00:00"
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         )
-        .unwrap()
     });
 
     static DV_1: LazyLock<LogicalTableDataVersionId> =

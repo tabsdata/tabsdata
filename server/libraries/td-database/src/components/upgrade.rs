@@ -88,8 +88,8 @@ impl UpgradeTransaction<'_> {
     pub async fn upgrade_db_version(&mut self, source: &dyn SchemaSource) -> Result<(), DbError> {
         // The pool, not the schema's SQL, owns the `tabsdata_system` ledger
         // and its `db_version` row.
+        self.lock_schema_upgrades().await?;
         self.ensure_system_table().await?;
-        self.lock_system_table().await?;
 
         let current = source.current_version();
         let stored = db_version(self.conn()).await?;
@@ -215,13 +215,21 @@ impl UpgradeTransaction<'_> {
         self.execute_batch(&[ddl]).await
     }
 
-    /// Serialize concurrent upgraders of this schema: the second waits here,
-    /// re-reads `db_version` once the first commits, and no-ops — instead of
-    /// racing the ladder into a raw DDL error. A table lock, not `FOR UPDATE`:
-    /// on a fresh install there is no row to lock.
-    async fn lock_system_table(&mut self) -> Result<(), DbError> {
-        self.execute_batch(&["LOCK TABLE tabsdata_system IN ACCESS EXCLUSIVE MODE".to_string()])
+    /// Claim this schema's upgrade, or refuse: a peer mid-ladder is a conflict
+    /// to report, not a wait to sit out. An advisory lock, not a lock on
+    /// `tabsdata_system`: a fresh install has no ledger yet, and `CREATE TABLE
+    /// IF NOT EXISTS` is not itself race-free.
+    async fn lock_schema_upgrades(&mut self) -> Result<(), DbError> {
+        let schema = self.admin.schema().to_string();
+        let claimed = self
+            .conn()
+            .try_advisory_xact_lock_text(&format!("upgrade:schema:{schema}"))
             .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        if !claimed {
+            return Err(DbError::ConcurrentUpgradeInProgress(schema));
+        }
+        Ok(())
     }
 
     /// Upsert the `db_version` row — works for fresh install and upgrade.

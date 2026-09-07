@@ -2,9 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-//! API server edition extension. Routes self-register into
-//! [`ta_apiserver::router`]'s inventory registry; the open-source edition adds
-//! none. The enterprise edition swaps this crate to register its own.
+//! API server edition extension. Routes self-register into td-apiserver's
+//! inventory registry; the open-source edition adds none. The enterprise
+//! edition swaps this crate to register its own.
 
 pub mod config;
 

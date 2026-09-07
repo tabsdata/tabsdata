@@ -19,9 +19,9 @@ pub async fn list_executions_by_tdv(
 ) -> Result<ListResponse<Execution>, TdError> {
     let result = conn
         .executions()
-        .list_by_table_data_version(tdv_id, &query_params)
+        .list_by_table_data_version(tdv_id, query_params)
         .await?;
-    build_list_response(&list_params, &query_params, result)
+    build_list_response(list_params, query_params, result)
 }
 
 pub async fn list_executions_by_fv(
@@ -32,7 +32,7 @@ pub async fn list_executions_by_fv(
 ) -> Result<ListResponse<Execution>, TdError> {
     let result = conn
         .executions()
-        .list_by_function_version(fv_id, &query_params)
+        .list_by_function_version(fv_id, query_params)
         .await?;
-    build_list_response(&list_params, &query_params, result)
+    build_list_response(list_params, query_params, result)
 }

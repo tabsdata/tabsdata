@@ -231,7 +231,7 @@ pub struct Mount {
 impl Debug for Mount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Mount")
-            .field("mount_path", &format!("{}/", &self.mount_path))
+            .field("mount_path", &format!("{}/", self.mount_path))
             .field("store_uri", &self.def.uri)
             .finish()
     }

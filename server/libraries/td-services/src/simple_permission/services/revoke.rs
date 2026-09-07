@@ -101,8 +101,7 @@ mod tests {
             .create_project(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
-            .await?
-            .data;
+            .await?;
         Ok(())
     }
 
@@ -129,7 +128,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(grant);
 
         let service = Services::with_defaults(db.clone());
-        service.revoke_simple_permission(request).await?.data;
+        service.revoke_simple_permission(request).await?;
 
         assert_eq!(user_role_count(&db, &user.id, &dev_role.id).await, 0);
         Ok(())

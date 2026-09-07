@@ -446,12 +446,11 @@ mod tests {
     }
 
     fn time(i: usize) -> AtTime {
-        AtTime::try_from(
+        AtTime::from(
             format!("2025-04-02T08:19:5{i}.543+00:00")
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         )
-        .unwrap()
     }
 
     /// Time later than any fixture or test insert — safe default for
@@ -937,12 +936,11 @@ mod tests {
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_at_time_before_any_data(db: TdPool) {
         // Use a time before all fixture data was inserted
-        let early = AtTime::try_from(
+        let early = AtTime::from(
             "2020-01-01T00:00:00.000+00:00"
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
-        )
-        .unwrap();
+        );
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
             .historic(&early)
@@ -1608,12 +1606,11 @@ mod tests {
         #[test]
         fn test_versioned_ranked_cte_with_defined_on() {
             let state_cond = resolve_condition::<TestDao>(TestStatus::Active).unwrap();
-            let on = AtTime::try_from(
+            let on = AtTime::from(
                 "2025-04-02T08:19:50.543+00:00"
                     .parse::<DateTime<Utc>>()
                     .unwrap(),
-            )
-            .unwrap();
+            );
             let cte = versioned_ranked_cte::<TestDao>(
                 Some(&on),
                 state_cond,

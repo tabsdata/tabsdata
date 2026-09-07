@@ -416,8 +416,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .register_function(request)
-            .await?
-            .data;
+            .await?;
 
         // Both artifacts are stamped with the old "/a" prefix at create time.
         let function_name = FunctionName::try_from("artifact_fn")?;
@@ -574,8 +573,7 @@ mod tests {
         // DataFactory rename with develop_project: fine.
         Services::with_defaults(db.clone())
             .create_collection(create_request(p.id, "dev_df_u", None))
-            .await?
-            .data;
+            .await?;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
                 CollectionParam {
@@ -586,8 +584,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .update_collection(request)
-            .await?
-            .data;
+            .await?;
 
         // Source rename with develop_project: forbidden.
         create_collection(&db, p.id, "dev_src_u", Some(GroupName::source())).await;

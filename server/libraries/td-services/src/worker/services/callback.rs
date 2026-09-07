@@ -116,7 +116,7 @@ mod tests {
         );
 
         let service = Services::with_defaults(db.clone());
-        service.worker_callback(request).await?.data;
+        service.worker_callback(request).await?;
 
         let worker: WorkerDBWithNames =
             db.live().fetch_one::<WorkerDBWithNames>(&worker.id).await?;
@@ -144,7 +144,7 @@ mod tests {
         );
 
         let service = Services::with_defaults(db.clone());
-        service.worker_callback(request).await?.data;
+        service.worker_callback(request).await?;
 
         let worker: WorkerDBWithNames = db
             .live()

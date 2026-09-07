@@ -15,11 +15,11 @@ use td_error::{TdError, td_error};
 #[td_error]
 enum ProbeError {
     #[error("the body failed")]
-    BodyFailed = 0,
+    Body = 0,
     #[error("the ending failed")]
-    EndingFailed = 1,
+    Ending = 1,
     #[error("the extraction failed")]
-    ExtractionFailed = 2,
+    Extraction = 2,
 }
 
 #[derive(Default, Clone)]
@@ -71,7 +71,7 @@ impl<Req: Sync> ExtractMut<Probe, Req> for &mut FailingResource {
 
     async fn extract(srv: &Probe, _req: &Req) -> Result<Self::Kept, TdError> {
         srv.log.record("extract failing");
-        Err(ProbeError::ExtractionFailed.into())
+        Err(ProbeError::Extraction.into())
     }
 
     async fn finish(_kept: Self::Kept, _ok: bool) -> Result<(), TdError> {
@@ -120,7 +120,7 @@ impl<Req: Sync> ExtractMut<Probe, Req> for &mut Resource {
     async fn finish(kept: Self::Kept, ok: bool) -> Result<(), TdError> {
         kept.log.record(format!("finish({ok})"));
         if kept.ending_fails {
-            return Err(ProbeError::EndingFailed.into());
+            return Err(ProbeError::Ending.into());
         }
         Ok(())
     }
@@ -155,7 +155,7 @@ async fn succeeds(resource: &mut Resource, _request: ()) -> Result<u8, TdError> 
 #[service_factory(on = Probe)]
 async fn fails(resource: &mut Resource, _request: ()) -> Result<u8, TdError> {
     resource.use_it();
-    Err(ProbeError::BodyFailed.into())
+    Err(ProbeError::Body.into())
 }
 
 #[service_factory(on = Probe)]

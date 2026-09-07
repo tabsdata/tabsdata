@@ -313,8 +313,7 @@ mod tests {
 
         Services::with_defaults(db.clone())
             .delete_collection(delete_request(p.id, &name.to_string()))
-            .await?
-            .data;
+            .await?;
 
         let found = db.live().fetch_all::<ActiveCollectionDB>(()).await?;
         assert_eq!(found.len(), 0);
@@ -439,8 +438,7 @@ mod tests {
 
         Services::with_defaults(db.clone())
             .delete_collection(delete_request(p.id, &name_c_0.to_string()))
-            .await?
-            .data;
+            .await?;
 
         let found = db.live().fetch_all::<ActiveCollectionDB>(()).await?;
         assert_eq!(found.len(), 1);

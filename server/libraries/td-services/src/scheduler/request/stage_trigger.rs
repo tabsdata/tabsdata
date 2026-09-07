@@ -248,8 +248,8 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let kubernetes = matches!(orchestrator, Orchestrator::Kubernetes);
 
-    // One worker's failure must not abort the tick: skip it (it stays
-    // `StopScheduled`, re-picked next tick) and keep the rest.
+    // A worker whose message cannot be built must not abort the tick: skip it
+    // (it stays `StopScheduled`, re-picked next tick) and keep the rest.
     let mut kept = Vec::with_capacity(stage_trigger_workers.len());
     for stage_trigger_worker in stage_trigger_workers {
         let built = (|| {

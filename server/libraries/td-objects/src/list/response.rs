@@ -175,7 +175,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let query_params = make_query_params(10);
         let resp = build_list_response(&list_params, &query_params, vec![]).unwrap();
@@ -193,7 +192,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let query_params = make_query_params(10);
         let result = make_items(5);
@@ -213,7 +211,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let query_params = make_query_params(3);
         let result = make_items(3);
@@ -233,7 +230,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let query_params = make_query_params(3);
         let result = make_items(4);
@@ -257,7 +253,6 @@ mod tests {
             previous: None,
             next: Some("cursor".to_string()),
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(5);
         let result = make_items(3);
@@ -277,7 +272,6 @@ mod tests {
             previous: None,
             next: Some("cursor".to_string()),
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(3);
         let result = make_items(3);
@@ -296,7 +290,6 @@ mod tests {
             previous: None,
             next: Some("cursor".to_string()),
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(3);
         let result = make_items(4);
@@ -319,7 +312,6 @@ mod tests {
             previous: Some("cursor".to_string()),
             next: None,
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(5);
         let result = make_items(3);
@@ -339,7 +331,6 @@ mod tests {
             previous: Some("cursor".to_string()),
             next: None,
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(3);
         let result = make_items(3);
@@ -358,7 +349,6 @@ mod tests {
             previous: Some("cursor".to_string()),
             next: None,
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(3);
         let result = make_items(4);
@@ -377,7 +367,6 @@ mod tests {
             previous: Some("cursor".to_string()),
             next: None,
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(5);
         let result = vec![make_dto("c"), make_dto("b"), make_dto("a")];
@@ -396,7 +385,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let query_params = make_query_params(10);
         let result = vec![make_dto("a"), make_dto("b"), make_dto("a")];
@@ -421,7 +409,6 @@ mod tests {
             previous: None,
             next: None,
             pagination_id: None,
-            ..Default::default()
         };
         let query_params = make_query_params(2);
         let result = vec![make_dto("first"), make_dto("second"), make_dto("extra")];
@@ -438,7 +425,6 @@ mod tests {
             previous: None,
             next: Some("cursor".to_string()),
             pagination_id: Some("id".to_string()),
-            ..Default::default()
         };
         let query_params = make_query_params(5);
         let result = vec![make_dto("first"), make_dto("second")];

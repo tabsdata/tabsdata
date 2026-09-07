@@ -195,7 +195,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.table_delete(request).await?.data;
+        service.table_delete(request).await?;
 
         assert_delete(
             &db,
@@ -310,7 +310,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.table_delete(request).await?.data;
+        service.table_delete(request).await?;
 
         assert_delete(
             &db,

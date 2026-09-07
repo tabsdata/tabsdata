@@ -222,8 +222,7 @@ mod tests {
                     },
                 ),
             )
-            .await?
-            .data;
+            .await?;
 
         let create = CollectionCreate {
             name: CollectionName::try_from("ds0")?,
@@ -461,7 +460,7 @@ mod tests {
             td_bridge::test::TestBridgeProvider::default().with_connection_store(FailingStore),
         )));
         let err = Services {
-            bridge: bridge,
+            bridge,
             ..Services::with_defaults(db.clone())
         }
         .create_collection(request(p.id, create))

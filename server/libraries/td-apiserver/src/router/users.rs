@@ -91,7 +91,7 @@ mod tests {
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let router = router.clone().into();
-        router.layer(Extension(context.clone()))
+        router.layer(Extension(context))
     }
 
     #[td_test::test(db)]

@@ -26,11 +26,9 @@ pub async fn assert_patch_parent_matches_url(
     url_collection: &CollectionId,
     url_function: &FunctionIdName,
 ) -> Result<(), TdError> {
-    let parent = parent;
     if parent.collection_id != *url_collection {
         Err(CreateFunctionPatchError::WrongCollection(parent.id.clone()))?
     }
-    let url_function = url_function;
     let url_matches = match url_function {
         FunctionIdName::Id(id) => *id == parent.function_id,
         FunctionIdName::Name(name) => *name == parent.name,

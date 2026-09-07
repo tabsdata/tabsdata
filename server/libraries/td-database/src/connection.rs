@@ -11,9 +11,10 @@ use sqlx::postgres::PgConnection;
 use sqlx::{Error, Executor};
 use std::time::Duration;
 use td_schema::{BYPASS_RLS_GUC, PROJECT_ID_GUC};
+use tracing::debug;
 
 const ADVISORY_XACT_LOCK: &str = "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))";
-use tracing::debug;
+const TRY_ADVISORY_XACT_LOCK: &str = "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))";
 
 pub trait PgConnectionExt {
     fn execute_batch(&mut self, stmts: &[String])
@@ -25,12 +26,20 @@ pub trait PgConnectionExt {
     /// unrelated keys. Floors at 1ms: `lock_timeout = 0` means no timeout in
     /// PostgreSQL, i.e. the opposite of "don't wait".
     ///
-    /// Bounded is the only form: an unbounded wait on a serving connection is
-    /// a request that never answers.
+    /// Bounded is the only waiting form: an unbounded wait on a serving
+    /// connection is a request that never answers.
     fn advisory_xact_lock_text_within(
         &mut self,
         key: &str,
         wait: Duration,
+    ) -> impl Future<Output = Result<bool, Error>> + Send;
+
+    /// Takes the same lock without waiting: `false` when another transaction
+    /// holds it. Sets no `lock_timeout`, so the caller's later locks still wait
+    /// normally.
+    fn try_advisory_xact_lock_text(
+        &mut self,
+        key: &str,
     ) -> impl Future<Output = Result<bool, Error>> + Send;
 
     /// Bound as a parameter, so the value reaches no SQL text — client batch
@@ -96,6 +105,13 @@ impl PgConnectionExt for PgConnection {
             Err(e) if lock_wait_elapsed(&e) => Ok(false),
             Err(e) => Err(e),
         }
+    }
+
+    async fn try_advisory_xact_lock_text(&mut self, key: &str) -> Result<bool, Error> {
+        sqlx::query_scalar(TRY_ADVISORY_XACT_LOCK)
+            .bind(key)
+            .fetch_one(&mut *self)
+            .await
     }
 
     async fn set_local_secret(&mut self, name: &str, value: &str) -> Result<(), Error> {

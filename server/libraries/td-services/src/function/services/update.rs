@@ -618,8 +618,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .register_function(register)
-            .await?
-            .data;
+            .await?;
 
         let user_table = TableName::try_from("user_table")?;
         let state_id_before = active_table_id(&db, |n| n.starts_with(TD_FN_STATE_PREFIX)).await?;
@@ -698,8 +697,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .register_function(register)
-            .await?
-            .data;
+            .await?;
 
         let state_id_before = active_table_id(&db, |n| n.starts_with(TD_FN_STATE_PREFIX)).await?;
 
@@ -782,8 +780,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .register_function(register)
-            .await?
-            .data;
+            .await?;
 
         let fn_name = FunctionName::try_from("stage_fn")?;
         let before = active_function(&db, &fn_name).await?;
@@ -860,8 +857,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .register_function(register)
-            .await?
-            .data;
+            .await?;
 
         let fn_name = FunctionName::try_from("nostage_fn")?;
         let stage_id_before = active_function(&db, &fn_name).await?.stage_id;
@@ -937,8 +933,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .register_function(register)
-            .await?
-            .data;
+            .await?;
 
         let fn_name = FunctionName::try_from("override_fn")?;
 
@@ -2012,9 +2007,9 @@ mod tests {
             bundle_id: Some(bundle_id),
             snippet: Some("function_2 snippet".try_into()?),
             decorator: Some(Decorator::Transformer),
-            dependencies: dependencies,
-            triggers: triggers,
-            tables: tables,
+            dependencies,
+            triggers,
+            tables,
             runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
             reuse_frozen_tables: ReuseFrozen::FALSE,
             ..Default::default()
@@ -2089,7 +2084,7 @@ mod tests {
         let bundle_id = BundleId::default();
         let update = FunctionUpdate {
             bundle_id: Some(bundle_id),
-            tables: tables,
+            tables,
             ..Default::default()
         };
 
@@ -2733,8 +2728,7 @@ mod tests {
             .in_project(p.id);
         Services::with_defaults(db.clone())
             .register_function(register_request)
-            .await?
-            .data;
+            .await?;
 
         let update = FunctionUpdate {
             bundle_id: Some(BundleId::default()),

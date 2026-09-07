@@ -210,7 +210,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.delete_function(request).await?.data;
+        service.delete_function(request).await?;
 
         assert_delete(
             &db,
@@ -272,7 +272,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.delete_function(request).await?.data;
+        service.delete_function(request).await?;
 
         assert_delete(
             &db,
@@ -356,7 +356,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.delete_function(request).await?.data;
+        service.delete_function(request).await?;
 
         assert_delete(
             &db,
@@ -440,7 +440,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.delete_function(request).await?.data;
+        service.delete_function(request).await?;
 
         assert_delete(
             &db,
@@ -556,7 +556,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.delete_function(request).await?.data;
+        service.delete_function(request).await?;
 
         let function_version: FunctionDBWithNames = db
             .live()
@@ -635,7 +635,7 @@ mod tests {
             ))
             .in_project(p.id);
         let service = Services::with_defaults(db.clone());
-        service.delete_function(request).await?.data;
+        service.delete_function(request).await?;
 
         let workers: Vec<WorkerDB> = db.live().fetch_all::<WorkerDB>(()).await.unwrap();
         assert_eq!(workers.len(), 1);

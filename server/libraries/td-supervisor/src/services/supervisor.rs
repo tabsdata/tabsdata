@@ -579,8 +579,8 @@ impl Supervisor {
 
         debug!("Attempting to mark remaining tasks as shutdown in progress...");
         if let Ok(mut map) = self.running_tasks_map.try_lock() {
-            for (_worker_name, tasks) in map.iter_mut() {
-                for (_worker_id, run_info) in tasks.iter_mut() {
+            for tasks in map.values_mut() {
+                for run_info in tasks.values_mut() {
                     run_info.shutdown_in_progress.store(true, SeqCst);
                 }
             }
@@ -2252,7 +2252,7 @@ impl Supervisor {
                                     let message = format!(
                                         "Class {} worker '{}' failed with exit code: {:?}",
                                         class.as_ref(),
-                                        &describer.name(),
+                                        describer.name(),
                                         code
                                     );
                                     error!(message);
@@ -2264,7 +2264,7 @@ impl Supervisor {
                                             let message = format!(
                                                 "Class {} worker '{}' failed with signal: {:?}",
                                                 class.as_ref(),
-                                                &describer.name(),
+                                                describer.name(),
                                                 signal
                                             );
                                             error!(message);
@@ -2614,8 +2614,8 @@ impl Supervisor {
     async fn stop_workers(&self, signal: Signal) -> Result<(), RuntimeError> {
         debug!("Marking all running tasks as shutdown in progress before stopping...");
         let mut map = self.running_tasks_map.lock().await;
-        for (_worker_name, tasks) in map.iter_mut() {
-            for (_worker_id, run_info) in tasks.iter_mut() {
+        for tasks in map.values_mut() {
+            for run_info in tasks.values_mut() {
                 run_info.shutdown_in_progress.store(true, SeqCst);
             }
         }

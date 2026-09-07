@@ -200,12 +200,11 @@ impl SchemaComponent for LoadDvTableOnly {
 
 /// A time after every fixture row.
 fn after_all() -> AtTime {
-    AtTime::try_from(
+    AtTime::from(
         "2026-01-02T00:00:00.000+00:00"
             .parse::<chrono::DateTime<chrono::Utc>>()
             .unwrap(),
     )
-    .unwrap()
 }
 
 fn p0() -> DvPartition {

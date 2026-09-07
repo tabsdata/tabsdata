@@ -29,10 +29,6 @@ dummy = []
 
 [dependencies]
 
-# Internal dependencies
-
-td-shared = { workspace = true }
-
 # External dependencies
 
 darling = { workspace = true }

@@ -69,7 +69,7 @@ mod tests {
             .in_project(p.id);
 
         let service = Services::with_defaults(db.clone());
-        service.delete_group(request).await?.data;
+        service.delete_group(request).await?;
 
         // The user-created group is gone; the seeded system rows remain.
         let gone = db

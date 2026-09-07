@@ -114,7 +114,7 @@ async fn messages_by_project(
     for message in messages {
         let project = WorkerId::try_from(message.id.as_str())
             .ok()
-            .and_then(|id| project_of.get(&id).map(|p| (*p).clone()));
+            .and_then(|id| project_of.get(&id).map(|p| *(*p)));
         match project {
             Some(project) => grouped.entry(project).or_default().push(message.clone()),
             None => unresolved.push(message.clone()),

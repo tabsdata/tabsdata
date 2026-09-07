@@ -1054,12 +1054,14 @@ mod tests {
         Ok((message.payload, message.id, worker))
     }
 
-    /// One poisoned worker must not abort the tick: the failing stop is
-    /// skipped (stays `StopScheduled`, re-pickable next tick) while the
-    /// healthy one completes — and the kubernetes stop is synchronous, so
-    /// its row lands directly in `Stopped`.
+    /// Stop messages are enqueued post-commit: a poisoned put neither aborts
+    /// the tick nor holds back the remaining puts, so both rows commit
+    /// `Stopped` (the kubernetes stop is synchronous) while only the healthy
+    /// message reaches the queue. The pod the lost put leaves is recovery's job.
     #[td_test::test(db)]
-    async fn test_stop_stage_trigger_isolation_kubernetes(db: TdPool) -> Result<(), TdError> {
+    async fn test_stop_stage_trigger_put_failure_does_not_abort_tick_kubernetes(
+        db: TdPool,
+    ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let poisoned = seed_trigger_worker(
             &db,
@@ -1084,14 +1086,12 @@ mod tests {
         let context = kubernetes_scheduler_context_with_queue(&db, queue);
         context.clone().request(()).await?;
 
-        let skipped: WorkerDB = db.live().fetch_one::<WorkerDB>(&poisoned.id).await?;
-        assert_eq!(skipped.status, WorkerStatus::StopScheduled);
-        assert_eq!(skipped.message_status, WorkerMessageStatus::Unlocked);
-
-        let stopped: WorkerDB = db.live().fetch_one::<WorkerDB>(&healthy.id).await?;
-        assert_eq!(stopped.status, WorkerStatus::Stopped);
-        assert!(stopped.ended_on.is_some());
-        assert_eq!(stopped.message_status, WorkerMessageStatus::Locked);
+        for id in [&poisoned.id, &healthy.id] {
+            let stopped: WorkerDB = db.live().fetch_one::<WorkerDB>(id).await?;
+            assert_eq!(stopped.status, WorkerStatus::Stopped);
+            assert!(stopped.ended_on.is_some());
+            assert_eq!(stopped.message_status, WorkerMessageStatus::Locked);
+        }
 
         let created = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created.len(), 1);

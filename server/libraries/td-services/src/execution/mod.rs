@@ -4,14 +4,14 @@
 
 pub mod services;
 
-use crate::execution::execution::{
+use crate::execution::execution_version::{reject_if_external_uid_in_use, reject_if_running};
+use crate::execution::plan::{
     assert_function_status, build_execution_plan, build_initial_mint_lfr_pointers,
     build_initial_mint_ltdv_pointers, build_logical_function_run_inputs,
     build_logical_function_runs, build_logical_table_data_versions, build_response,
     build_transaction_map, build_transactions, resolve_execution_plan_versions,
     update_initial_function_run_status, validate_execution_plan, with_recursion_options,
 };
-use crate::execution::execution_version::{reject_if_external_uid_in_use, reject_if_running};
 use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::ctx_service::ReqCtx;
 use td_database::domain::{Apiserver, DomainConnection};
@@ -30,9 +30,9 @@ use td_objects::types::basic::{ExecutionId, FunctionId, ProjectId, TriggerType, 
 use td_objects::types::json::Json;
 use td_queries::{ChunkedQueries, LiveEntry};
 
-pub(crate) mod execution;
 pub(crate) mod execution_version;
 pub(crate) mod list;
+pub(crate) mod plan;
 pub(crate) mod read;
 pub(crate) mod redirect_at_finish;
 pub(crate) mod runtime_info;

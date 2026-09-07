@@ -128,7 +128,7 @@ pub async fn fn_candidates(
         return Ok(FnCandidates::default());
     }
     // Oldest-dispatched first, so the per-tick cap never starves a run.
-    pfrs.sort_by(|a, b| a.dispatched_on.cmp(&b.dispatched_on));
+    pfrs.sort_by_key(|a| a.dispatched_on);
 
     // Condition columns resolve by exact field type: the nullable worker
     // column needs `Option`-wrapped keys.
@@ -677,7 +677,7 @@ pub async fn fail_recovered_attempts(
     if pfr_ids.is_empty() {
         return Ok(());
     }
-    let update = UpdatePhysicalFunctionRunDB::failed_at(&at)?;
+    let update = UpdatePhysicalFunctionRunDB::failed_at(at)?;
     conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&update, &pfr_ids)
         .await?;
     Ok(())

@@ -17,7 +17,7 @@ pub async fn stop_worker_update(
     at: &AtTime,
 ) -> Result<UpdateWorkerDB, TdError> {
     match orchestrator {
-        Orchestrator::Kubernetes => Ok(UpdateWorkerDB::stopped(&at)),
+        Orchestrator::Kubernetes => Ok(UpdateWorkerDB::stopped(at)),
         Orchestrator::Supervisor => Ok(UpdateWorkerDB::stop_requested()),
     }
 }

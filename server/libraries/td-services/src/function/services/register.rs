@@ -209,8 +209,7 @@ mod tests {
             .in_project(project_id);
         Services::with_defaults(db.clone())
             .update_collection(request)
-            .await?
-            .data;
+            .await?;
         Ok(base_path)
     }
 
@@ -1511,7 +1510,7 @@ mod tests {
             )
             .in_project(p.id);
         let service = Services::with_defaults(db.clone());
-        service.register_function(request).await?.data;
+        service.register_function(request).await?;
 
         let function = active_function(&db, &FunctionName::try_from("stamped_fn")?).await?;
         assert_eq!(
@@ -1584,7 +1583,7 @@ mod tests {
             )
             .in_project(p.id);
         let service = Services::with_defaults(db.clone());
-        service.register_function(request).await?.data;
+        service.register_function(request).await?;
 
         // The bundle the function claimed is flipped Pending -> Registered.
         let function = active_function(&db, &FunctionName::try_from("flip_fn")?).await?;
@@ -1634,7 +1633,7 @@ mod tests {
             )
             .in_project(p.id);
         let service = Services::with_defaults(db.clone());
-        service.register_function(request).await?.data;
+        service.register_function(request).await?;
 
         let function = active_function(&db, &FunctionName::try_from("override_fn")?).await?;
         assert_eq!(

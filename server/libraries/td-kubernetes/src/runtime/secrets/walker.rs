@@ -177,7 +177,7 @@ fn walk_promoted_sequence<V: SecretVisitor>(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    for (item, item_id) in items.iter_mut().zip(item_first_keys.into_iter()) {
+    for (item, item_id) in items.iter_mut().zip(item_first_keys) {
         path.push(item_id);
         walk_node(config, item, path, visitor)?;
         path.pop();

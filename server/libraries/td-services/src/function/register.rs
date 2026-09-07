@@ -115,7 +115,7 @@ pub async fn validate_tables_do_not_exist(
     conn: &mut DomainConnection<Apiserver>,
     collection_id: &CollectionId,
     collection_name: &CollectionName,
-    existing_versions: &Vec<TableDB>,
+    existing_versions: &[TableDB],
     new_tables: &Option<Vec<TableNameDto>>,
     at_time: &AtTime,
 ) -> Result<(), TdError> {
@@ -171,7 +171,7 @@ pub async fn build_table_versions(
     collection_id: &CollectionId,
     collection_name: &CollectionName,
     function_id: &FunctionId,
-    existing_versions: &Vec<TableDB>,
+    existing_versions: &[TableDB],
     new_tables: &Option<Vec<TableNameDto>>,
     new_tables_types: &Option<HashMap<TableNameDto, TableType>>,
     function: &FunctionDB,
@@ -308,7 +308,7 @@ pub async fn build_table_versions(
 pub async fn build_tables_trigger_versions(
     conn: &mut DomainConnection<Apiserver>,
     at_time: &AtTime,
-    new_table_versions: &Vec<TableDB>,
+    new_table_versions: &[TableDB],
 ) -> Result<Vec<TriggerDB>, TdError> {
     let table_ids = new_table_versions
         .iter()
@@ -545,7 +545,7 @@ pub async fn build_dependency_versions(
 #[allow(clippy::too_many_arguments)]
 pub async fn build_trigger_versions(
     conn: &mut DomainConnection<Apiserver>,
-    existing_versions: &Vec<TriggerDBWithNames>,
+    existing_versions: &[TriggerDBWithNames],
     new_tables: &Option<Vec<TableNameDto>>,
     new_triggers: &Option<Vec<TableTriggerDto>>,
     new_dependencies: &Option<Vec<TableDependencyDto>>,

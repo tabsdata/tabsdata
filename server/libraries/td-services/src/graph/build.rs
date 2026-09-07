@@ -139,8 +139,8 @@ impl GraphBuilder {
     pub fn unique_function_ids(
         &self,
         function_id: &FunctionId,
-        trigger_graph: &Vec<TriggerDBWithNames>,
-        dep_graph: &Vec<DependencyDBWithNames>,
+        trigger_graph: &[TriggerDBWithNames],
+        dep_graph: &[DependencyDBWithNames],
     ) -> Result<Vec<FunctionId>, TdError> {
         let trigger_function_ids = trigger_graph
             .iter()
@@ -162,7 +162,7 @@ impl GraphBuilder {
     pub fn unique_triggered_function_ids(
         &self,
         function_id: &FunctionId,
-        trigger_graph: &Vec<TriggerDBWithNames>,
+        trigger_graph: &[TriggerDBWithNames],
     ) -> Result<Vec<FunctionId>, TdError> {
         let unique_triggered_function_ids = trigger_graph
             .iter()
@@ -178,7 +178,7 @@ impl GraphBuilder {
         &self,
         conn: &mut DomainConnection<Apiserver>,
         at_time: &AtTime,
-        triggered_functions: &Vec<FunctionId>,
+        triggered_functions: &[FunctionId],
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
         let dep_graph: Vec<DependencyDBWithNames> =
             read_chain!(self.config.historic, conn, at_time, |entry| {
@@ -195,7 +195,7 @@ impl GraphBuilder {
         &self,
         conn: &mut DomainConnection<Apiserver>,
         at_time: &AtTime,
-        functions: &Vec<FunctionId>,
+        functions: &[FunctionId],
     ) -> Result<Vec<TableDBWithNames>, TdError> {
         let output_tables: Vec<TableDBWithNames> =
             read_chain!(self.config.historic, conn, at_time, |entry| {
@@ -212,9 +212,9 @@ impl GraphBuilder {
         &self,
         conn: &mut DomainConnection<Apiserver>,
         at_time: &AtTime,
-        trigger_graph: &Vec<TriggerDBWithNames>,
-        dep_graph: &Vec<DependencyDBWithNames>,
-        output_tables: &Vec<TableDBWithNames>,
+        trigger_graph: &[TriggerDBWithNames],
+        dep_graph: &[DependencyDBWithNames],
+        output_tables: &[TableDBWithNames],
     ) -> Result<HashMap<TableId, TableDBWithNames>, TdError> {
         let trigger_table_ids = trigger_graph.iter().map(|t| t.base.trigger_by_table_id);
         let dep_table_ids = dep_graph.iter().map(|t| t.base.table_id);
@@ -245,9 +245,9 @@ impl GraphBuilder {
         &self,
         conn: &mut DomainConnection<Apiserver>,
         at_time: &AtTime,
-        trigger_graph: &Vec<TriggerDBWithNames>,
-        dep_graph: &Vec<DependencyDBWithNames>,
-        output_tables: &Vec<TableDBWithNames>,
+        trigger_graph: &[TriggerDBWithNames],
+        dep_graph: &[DependencyDBWithNames],
+        output_tables: &[TableDBWithNames],
     ) -> Result<HashMap<FunctionId, FunctionDBWithNames>, TdError> {
         let trigger_function_ids = trigger_graph
             .iter()
@@ -280,9 +280,9 @@ impl GraphBuilder {
 
     pub fn build_td_graph(
         &self,
-        trigger_graph: &Vec<TriggerDBWithNames>,
-        dep_graph: &Vec<DependencyDBWithNames>,
-        output_tables: &Vec<TableDBWithNames>,
+        trigger_graph: &[TriggerDBWithNames],
+        dep_graph: &[DependencyDBWithNames],
+        output_tables: &[TableDBWithNames],
         all_tables_map: &HashMap<TableId, TableDBWithNames>,
         all_functions_map: &HashMap<FunctionId, FunctionDBWithNames>,
     ) -> Result<TdGraph, TdError> {

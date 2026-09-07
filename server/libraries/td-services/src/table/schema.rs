@@ -32,7 +32,7 @@ pub async fn get_table_schema(
         Ok(TableSchema { fields: schema })
     }
 
-    if let Some(table_path) = &*table_path {
+    if let Some(table_path) = table_path {
         let (url, mount_def) = storage.to_external_uri(table_path)?;
         let url_str = url.to_string();
         let pl_path = PlPath::new(url_str.as_str());

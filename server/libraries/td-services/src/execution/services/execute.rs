@@ -3,7 +3,7 @@
 //
 
 use crate::execution::execute;
-use crate::execution::execution::trigger_type_manual;
+use crate::execution::plan::trigger_type_manual;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -165,8 +165,7 @@ pub(crate) mod tests {
                     )
                     .in_project(project.id),
             )
-            .await?
-            .data;
+            .await?;
 
         let collection: ActiveCollectionDB = db
             .scoped(project.id)
@@ -872,7 +871,7 @@ pub(crate) mod tests {
                 .map(|t| {
                     TableName::try_from(format!(
                         "{}/{}",
-                        &response.all_tables[t].collection, &response.all_tables[t].name
+                        response.all_tables[t].collection, response.all_tables[t].name
                     ))
                     .unwrap()
                 })
@@ -1235,7 +1234,7 @@ pub(crate) mod tests {
             .map(|t| {
                 TableName::try_from(format!(
                     "{}/{}",
-                    &response.all_tables[t].collection, &response.all_tables[t].name
+                    response.all_tables[t].collection, response.all_tables[t].name
                 ))
                 .unwrap()
             })
@@ -1388,10 +1387,7 @@ pub(crate) mod tests {
 
         let uid = ExternalUid::try_from("uid-abc")?;
         let service = Services::with_defaults(db.clone());
-        service
-            .execute_function(trigger(Some(uid.clone())))
-            .await?
-            .data;
+        service.execute_function(trigger(Some(uid.clone()))).await?;
 
         // Same external_uid on a still-live execution -> 409 Conflict.
         let service = Services::with_defaults(db.clone());

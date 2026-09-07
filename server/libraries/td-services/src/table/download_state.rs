@@ -13,7 +13,7 @@ use td_objects::types::basic::{AtTime, CollectionIdName, TableIdName, Uncommitte
 pub async fn get_table_at_id_name(
     at_time: &AtTime,
     function: &FunctionDBWithNames,
-    system_tables: &Vec<TableDBWithNames>,
+    system_tables: &[TableDBWithNames],
 ) -> Result<(CollectionParam, TableParam, AtTimeParam, UncommittedParam), TdError> {
     let state_tables = system_tables
         .iter()

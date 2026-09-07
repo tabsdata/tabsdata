@@ -96,7 +96,7 @@ mod tests {
         ));
 
         let service = Services::with_defaults(db.clone());
-        service.delete_permission(request).await?.data;
+        service.delete_permission(request).await?;
 
         let not_found = db.live().fetch_one::<PermissionDB>(&seeded.id).await;
         assert!(not_found.is_err());

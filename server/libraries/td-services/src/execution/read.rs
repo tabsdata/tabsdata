@@ -25,7 +25,7 @@ pub async fn with_existing_recursion_options(
 // Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
 pub fn build_existing_transaction_map(
     transaction_by: &TransactionBy,
-    transactions: &Vec<TransactionDB>,
+    transactions: &[TransactionDB],
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
     let mut mapped_transactions = HashMap::new();
     for transaction in transactions.iter() {

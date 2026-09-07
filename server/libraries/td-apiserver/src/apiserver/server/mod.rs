@@ -47,6 +47,7 @@ pub trait Server: Debug + Send + Sync {
         shutdown: watch::Receiver<()>,
     ) -> Vec<JoinHandle<Result<(), ServerError>>>;
 
+    #[allow(unused)]
     fn listeners(&self) -> &Vec<TcpListener>;
 
     #[allow(unused)]

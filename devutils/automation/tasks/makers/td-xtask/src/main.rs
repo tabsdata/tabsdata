@@ -113,7 +113,7 @@ fn link(
             println!("Deleting symlink: '{link_path:?}'");
             remove_file(&link_path)?;
         }
-        println!("Creating symlink: '{:?}' to '{:?}'", &program, link_path);
+        println!("Creating symlink: '{program:?}' to '{link_path:?}'");
         symlink(Path::new(&program), Path::new(&link_path))?;
     }
     Ok(())
