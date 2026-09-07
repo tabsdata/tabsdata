@@ -1357,6 +1357,7 @@ class APIServer:
         offset: int = None,
         len: int = None,
         sql: str = None,
+        extra_cols: str = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(
@@ -1368,8 +1369,9 @@ class APIServer:
                 "offset",
                 "len",
                 "sql",
+                "extra-cols",
             ],
-            [at, offset, len, sql],
+            [at, offset, len, sql, extra_cols],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -1379,14 +1381,15 @@ class APIServer:
         collection_name: str,
         table_name: str,
         at: int = None,
+        extra_cols: str = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(
             f"/collections/{collection_name}/tables/{table_name}/schema"
         )
         params = self.get_params_dict(
-            ["at"],
-            [at],
+            ["at", "extra-cols"],
+            [at, extra_cols],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)

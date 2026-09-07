@@ -84,7 +84,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 class _FakeSession:
     """Drop-in stand-in for ``pymongo.ClientSession`` capturing the
-    txn lifecycle the plugin drives."""
+    trx lifecycle the plugin drives."""
 
     def __init__(self) -> None:
         self.started_transactions = 0
@@ -303,7 +303,7 @@ def test_write_out_replace_drops_existing_collection(monkeypatch, work_dir):
     coll = db.collections["users"]
     assert coll.dropped is True
     # The replace path inserts a sentinel + deletes it -- regression
-    # guard for the "create collection outside a txn" trick.
+    # guard for the "create collection outside a trx" trick.
     assert coll.inserted_one  # sentinel
     assert coll.deleted_one_filters
 

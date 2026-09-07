@@ -371,6 +371,15 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
         "created as part of the download)."
     ),
 )
+@click.option(
+    "--extra-cols",
+    type=click.Choice(["none", "meta", "sys", "all"]),
+    help=(
+        "Which non-user columns to show on top of the user ones: 'meta' adds the "
+        "'@td.' connector metadata, 'sys' adds the '$td.' system columns, 'all' adds "
+        "both. Defaults to 'none'."
+    ),
+)
 @format_option
 @click.pass_context
 def data(
@@ -384,6 +393,7 @@ def data(
     at: str,
     at_trx: str,
     version: str,
+    extra_cols: str,
 ):
     """Show rows of data from the table"""
     verify_login_or_prompt(ctx)
@@ -404,6 +414,7 @@ def data(
             len=len,
             offset=offset,
             sql=sql,
+            extra_cols=extra_cols,
         )
 
         def _table():
@@ -474,6 +485,15 @@ def data(
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at", "at-trx"],
 )
+@click.option(
+    "--extra-cols",
+    type=click.Choice(["none", "meta", "sys", "all"]),
+    help=(
+        "Which non-user columns to show on top of the user ones: 'meta' adds the "
+        "'@td.' connector metadata, 'sys' adds the '$td.' system columns, 'all' adds "
+        "both. Defaults to 'none'."
+    ),
+)
 @format_option
 @click.pass_context
 def schema(
@@ -483,6 +503,7 @@ def schema(
     at: str,
     at_trx: str,
     version: str,
+    extra_cols: str,
 ):
     """Show table schema"""
     verify_login_or_prompt(ctx)
@@ -500,6 +521,7 @@ def schema(
             at=at,
             at_trx=at_trx,
             version=version,
+            extra_cols=extra_cols,
         )
 
         def _table():

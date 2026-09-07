@@ -188,13 +188,18 @@ always shows one).
 
 ```
 table list                 [--proj PROJECT] [--col COLLECTION] [--name PATTERN] [--at TS] [--at-trx TRX] [-o]
-table schema   --name NAME  [--proj PROJECT] [--col COLLECTION] [--at TS|--at-trx TRX|--version V] [-o]
+table schema   --name NAME  [--proj PROJECT] [--col COLLECTION] [--at TS|--at-trx TRX|--version V]
+                            [--extra-cols none|meta|sys|all] [-o]
 table versions --name NAME  [--proj PROJECT] [--col COLLECTION] [--details] [-o]
 table data     --name NAME  [--proj PROJECT] [--col COLLECTION] [--sql SQL] [--len N] [--offset N]
-                            [--at TS|--at-trx TRX|--version V] [--file FILE] [-o]
+                            [--at TS|--at-trx TRX|--version V] [--extra-cols none|meta|sys|all]
+                            [--file FILE] [-o]
                             #   --sql: server-side SQL query over the table, which is the
                             #          only queryable relation and is named after itself
                             #   --len: defaults to 100 rows, cannot exceed 1000
+                            #   --extra-cols: non-user columns to add: 'meta' the '@td.'
+                            #          connector metadata, 'sys' the '$td.' system ones,
+                            #          'all' both; defaults to 'none'
 table download --name NAME  [--proj PROJECT] [--col COLLECTION] --file FILE [--at TS|--at-trx TRX|--version V]
 table delete   --name NAME  [--proj PROJECT] [--col COLLECTION] [-y]
 ```

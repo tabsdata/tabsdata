@@ -2798,12 +2798,17 @@ class Table:
         at: int | str = None,
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
+        extra_cols: str = None,
     ) -> List[dict]:
         """
         Get the schema of a table for a given version. The version can be a
             fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
 
         Args:
+            extra_cols (str, optional): Which non-user columns to include on top
+                of the user ones: 'none' (the server default), 'meta' (the
+                '@td.' connector metadata), 'sys' (the '$td.' system columns)
+                or 'all'.
 
         Returns:
             list: The schema of the table.
@@ -2841,6 +2846,7 @@ class Table:
                 self.collection.name,
                 self.name,
                 at=at,
+                extra_cols=extra_cols,
             )
             .json()
             .get("data")
@@ -2861,6 +2867,7 @@ class Table:
         offset: int = None,
         len: int = None,
         sql: str = None,
+        extra_cols: str = None,
     ) -> pl.DataFrame:
         """
         Get a sample of a table for a given version as a parquet file. The
@@ -2875,6 +2882,10 @@ class Table:
                 is the only queryable relation and is referenced by its own
                 name. The offset is applied before the query and the length caps
                 its result.
+            extra_cols (str, optional): Which non-user columns to return on top
+                of the user ones: 'none' (the server default), 'meta' (the
+                '@td.' connector metadata), 'sys' (the '$td.' system columns)
+                or 'all'.
         Raises:
             APIServerError: If the sample could not be obtained.
         """
@@ -2909,6 +2920,7 @@ class Table:
             offset=offset,
             len=len,
             sql=sql,
+            extra_cols=extra_cols,
         ).content
         return pl.read_parquet(parquet_frame)
 
@@ -5091,6 +5103,7 @@ class TabsdataServer:
         at: int | str = None,
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
+        extra_cols: str = None,
     ) -> List[dict]:
         """
         Get the schema of a table for a given version. The version can be a
@@ -5099,6 +5112,10 @@ class TabsdataServer:
         Args:
             collection_name (str): The name of the collection.
             table_name (str): The name of the table.
+            extra_cols (str, optional): Which non-user columns to include on top
+                of the user ones: 'none' (the server default), 'meta' (the
+                '@td.' connector metadata), 'sys' (the '$td.' system columns)
+                or 'all'.
 
         Returns:
             list: The schema of the table.
@@ -5107,7 +5124,9 @@ class TabsdataServer:
             APIServerError: If the schema could not be obtained.
         """
         table = Table(self.connection, collection_name, table_name)
-        return table.get_schema(at=at, at_trx=at_trx, version=version)
+        return table.get_schema(
+            at=at, at_trx=at_trx, version=version, extra_cols=extra_cols
+        )
 
     def list_tables(
         self,
@@ -5165,6 +5184,7 @@ class TabsdataServer:
         offset: int = None,
         len: int = None,
         sql: str = None,
+        extra_cols: str = None,
     ) -> pl.DataFrame:
         """
         Get a sample of a table for a given version as a parquet file. The
@@ -5181,6 +5201,10 @@ class TabsdataServer:
                 is the only queryable relation and is referenced by its own
                 name. The offset is applied before the query and the length caps
                 its result.
+            extra_cols (str, optional): Which non-user columns to return on top
+                of the user ones: 'none' (the server default), 'meta' (the
+                '@td.' connector metadata), 'sys' (the '$td.' system columns)
+                or 'all'.
         Raises:
             APIServerError: If the sample could not be obtained.
         """
@@ -5192,6 +5216,7 @@ class TabsdataServer:
             offset=offset,
             len=len,
             sql=sql,
+            extra_cols=extra_cols,
         )
 
     def cancel_transaction(self, transaction_id: str) -> requests.Response:
