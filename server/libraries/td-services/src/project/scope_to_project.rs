@@ -4,11 +4,11 @@
 
 //! Scope the connection to the just-created project.
 
+use td_database::access::ServiceDbError;
+use td_database::connection::PgConnectionExt;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::types::basic::ProjectId;
-use td_tower::error::ConnectionError;
-use td_tower::extractors::{MutRef, Ref};
 
 /// Re-scope the connection from global/bypass to the freshly-created project,
 /// so the system-group seeds (and any later project-scoped write in this
@@ -23,13 +23,11 @@ use td_tower::extractors::{MutRef, Ref};
 /// `seed_default_groups`' field-less `GroupDB` rows default to the new project
 /// and RLS `WITH CHECK` genuinely enforces it. No-op on non-PostgreSQL backends.
 pub async fn scope_to_created_project(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    project_id: Ref<ProjectId>,
+    conn: &mut DomainConnection<Apiserver>,
+    project_id: &ProjectId,
 ) -> Result<(), TdError> {
-    conn.get()
-        .await?
-        .set_project_scope(&project_id.to_string())
+    conn.set_project_scope(&project_id.to_string())
         .await
-        .map_err(ConnectionError::CannotSetProjectScope)?;
+        .map_err(ServiceDbError::CannotSetProjectScope)?;
     Ok(())
 }

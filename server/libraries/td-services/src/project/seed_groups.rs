@@ -2,16 +2,13 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
+use td_objects::dxo::group::{GroupCreate, GroupDB};
 use td_objects::types::basic::{Description, GroupId, GroupName, System};
-use td_objects::{Buildable, TryUpdater};
 use td_queries::ChunkedQueries;
 use td_security::SYSTEM_GROUPS;
-use td_tower::extractors::{MutRef, Ref};
 
 /// Seed a freshly-created project with the system groups (`default`, `source`,
 /// `destination`). A collection resolves its group within its own project, so
@@ -27,20 +24,25 @@ use td_tower::extractors::{MutRef, Ref};
 /// `project_id` from that GUC. Bypass (`Global` scope) keeps RLS `WITH CHECK`
 /// satisfied; the GUC only feeds the column default.
 pub async fn seed_default_groups(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    context: Ref<RequestContext>,
+    conn: &mut DomainConnection<Apiserver>,
+    context: &RequestContext,
 ) -> Result<(), TdError> {
     let mut rows = Vec::with_capacity(SYSTEM_GROUPS.len());
     for (id, name, description) in SYSTEM_GROUPS {
-        let group_create = GroupCreate::builder()
-            .name(GroupName::try_from(name)?)
-            .description(Description::try_from(description)?)
-            .build()?;
-        let group = GroupDBBuilder::try_from(&group_create)?
-            .try_update_from(context.deref())?
-            .id(GroupId::try_from(id)?)
-            .system(System::TRUE)
-            .build()?;
+        let group_create = GroupCreate {
+            name: GroupName::try_from(name)?,
+            description: Description::try_from(description)?,
+        };
+        let group = GroupDB {
+            id: GroupId::try_from(id)?,
+            name: group_create.name,
+            description: group_create.description,
+            created_on: context.time,
+            created_by_id: context.user_id,
+            modified_on: context.time,
+            modified_by_id: context.user_id,
+            system: System::TRUE,
+        };
         rows.push(group);
     }
     conn.insert_vec::<GroupDB>(&rows).await?;

@@ -6,39 +6,32 @@
 //! service (create -> read -> list -> update -> delete) so the scaffold is
 //! exercised on real Postgres.
 
-use crate::project::service::create::CreateProjectService;
-use crate::project::service::delete::DeleteProjectService;
-use crate::project::service::list::ListProjectsService;
-use crate::project::service::read::ReadProjectService;
-use crate::project::service::update::UpdateProjectService;
-use ta_services::service::TdService;
+use crate::Services;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::Buildable;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::permission::PermissionDB;
+use td_objects::dxo::project::ProjectParam;
 use td_objects::dxo::project::{ProjectCreate, ProjectUpdate};
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::errors::SqlError;
-use td_objects::rest_urls::ProjectParam;
 use td_objects::types::basic::{
-    AccessTokenId, BasePath, Description, EntityId, PermissionEntityType, PermissionType,
-    ProjectId, ProjectIdName, ProjectName, RoleKind, RoleName, UserEnabled, UserId, UserName,
+    AccessTokenId, BasePath, Description, EntityId, GroupName, PermissionEntityType,
+    PermissionType, ProjectId, ProjectIdName, ProjectName, RoleKind, RoleName, UserEnabled, UserId,
+    UserName,
 };
 use td_queries::LiveEntry;
 use td_queries::test_utils::SeedEntry;
-use td_tower::ctx_service::RawOneshot;
 
 fn admin_ctx() -> RequestContext {
     RequestContext::with(AccessTokenId::default(), UserId::admin())
 }
 
 fn project_param(name: &str) -> ProjectParam {
-    ProjectParam::builder()
-        .project(ProjectIdName::Name(ProjectName::try_from(name).unwrap()))
-        .build()
-        .unwrap()
+    ProjectParam {
+        project: ProjectIdName::Name(ProjectName::try_from(name).unwrap()),
+    }
 }
 
 #[td_test::test(db)]
@@ -50,53 +43,50 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
 
     // Create with an explicit base_path (the default would be `/`).
     let base_path = BasePath::try_from("/payments")?;
-    let create = ProjectCreate::builder()
-        .name(&initial_name)
-        .description(&initial_desc)
-        .base_path(&base_path)
-        .build()?;
-    let created = CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create))
-        .await?;
+    let create = ProjectCreate {
+        name: initial_name.clone(),
+        description: initial_desc.clone(),
+        base_path: base_path.clone(),
+    };
+    let created = Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create))
+        .await?
+        .data;
     assert_eq!(created.name, initial_name);
     assert_eq!(created.description, initial_desc);
     assert_eq!(created.base_path, base_path);
 
-    // Read by name.
-    let read = ReadProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().read(project_param("payments")))
-        .await?;
+    let read = Services::with_defaults(db.clone())
+        .read_project(admin_ctx().read(project_param("payments")))
+        .await?
+        .data;
     assert_eq!(read.id, created.id);
     assert_eq!(
         read.base_path, base_path,
         "base_path round-trips through read"
     );
 
-    // Update.
-    let upd = ProjectUpdate::builder()
-        .name(Some(updated_name.clone()))
-        .description(Some(updated_desc.clone()))
-        .build()?;
-    let updated = UpdateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().update(project_param("payments"), upd))
-        .await?;
+    let upd = ProjectUpdate {
+        name: Some(updated_name.clone()),
+        description: Some(updated_desc.clone()),
+    };
+    let updated = Services::with_defaults(db.clone())
+        .update_project(admin_ctx().update(project_param("payments"), upd))
+        .await?
+        .data;
     assert_eq!(updated.name, updated_name);
     assert_eq!(updated.description, updated_desc);
 
-    // Delete (soft).
-    DeleteProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().delete(project_param("payments_v2")))
-        .await?;
+    Services::with_defaults(db.clone())
+        .delete_project(admin_ctx().delete(project_param("payments_v2")))
+        .await?
+        .data;
 
     // After delete the row is gone from the active view.
-    let list = ListProjectsService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().list((), ListParams::default()))
-        .await?;
+    let list = Services::with_defaults(db.clone())
+        .list_projects(admin_ctx().list((), ListParams::default()))
+        .await?
+        .data;
     assert_eq!(list.len, 0, "no project remains after delete");
 
     Ok(())
@@ -116,7 +106,7 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
     // the list endpoint) plus a role granting `view_project` on `alpha` only.
     let bob = db
         .seed()
-        .user(&UserName::try_from("bob")?, &UserEnabled::from(true))
+        .user(&UserName::try_from("bob")?, &UserEnabled::TRUE)
         .await?;
     let default_role = db
         .live()
@@ -142,10 +132,10 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
 
     // Bob sees only `alpha`.
     let bob_ctx = RequestContext::with(AccessTokenId::default(), bob.id);
-    let bob_list = ListProjectsService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(bob_ctx.list((), ListParams::default()))
-        .await?;
+    let bob_list = Services::with_defaults(db.clone())
+        .list_projects(bob_ctx.list((), ListParams::default()))
+        .await?
+        .data;
     let bob_names: Vec<_> = bob_list.data.iter().map(|p| p.name.to_string()).collect();
     assert_eq!(
         bob_names,
@@ -154,10 +144,10 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
     );
 
     // The admin (sys_admin) sees both.
-    let admin_list = ListProjectsService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().list((), ListParams::default()))
-        .await?;
+    let admin_list = Services::with_defaults(db.clone())
+        .list_projects(admin_ctx().list((), ListParams::default()))
+        .await?
+        .data;
     assert_eq!(admin_list.len, 2, "admin should see every project");
 
     Ok(())
@@ -169,26 +159,22 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
 #[td_test::test(db)]
 async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
     let name = ProjectName::try_from("billing")?;
-    let create = || {
-        ProjectCreate::builder()
-            .name(&name)
-            .description(Description::try_from("Billing").unwrap())
-            .build()
-            .unwrap()
+    let create = || ProjectCreate {
+        name: name.clone(),
+        description: Description::try_from("Billing").unwrap(),
+        base_path: BasePath::default(),
     };
 
-    // First create succeeds.
-    CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create()))
-        .await?;
+    Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create()))
+        .await?
+        .data;
 
     // Second create with the same name fails up front with a clean
     // `EntityAlreadyExists` (via the `By::<ProjectName>::assert_not_exists`
     // pre-check) rather than the raw unique-constraint violation.
-    let second = CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create()))
+    let second = Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create()))
         .await;
     let err = second.expect_err("duplicate project name must be rejected");
     assert!(
@@ -201,14 +187,14 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
 
     // Soft-delete frees the name: the row is renamed to `deleted_<id>` so the
     // unique constraint on `name` no longer blocks reuse.
-    DeleteProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().delete(project_param("billing")))
-        .await?;
-    CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create()))
-        .await?;
+    Services::with_defaults(db.clone())
+        .delete_project(admin_ctx().delete(project_param("billing")))
+        .await?
+        .data;
+    Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create()))
+        .await?
+        .data;
     Ok(())
 }
 
@@ -219,27 +205,25 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError> {
     db.seed().test_project().await?;
-    CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(
-            admin_ctx().create(
-                (),
-                ProjectCreate::builder()
-                    .name(&ProjectName::try_from("billing")?)
-                    .description(&Description::try_from("Billing")?)
-                    .build()?,
-            ),
-        )
-        .await?;
+    Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create(
+            (),
+            ProjectCreate {
+                name: ProjectName::try_from("billing")?,
+                description: Description::try_from("Billing")?,
+                base_path: BasePath::default(),
+            },
+        ))
+        .await?
+        .data;
 
     // Renaming `test` to the taken name `billing` collides.
-    let upd = ProjectUpdate::builder()
-        .name(Some(ProjectName::try_from("billing")?))
-        .description(None)
-        .build()?;
-    let res = UpdateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().update(project_param("test"), upd))
+    let upd = ProjectUpdate {
+        name: Some(ProjectName::try_from("billing")?),
+        description: None,
+    };
+    let res = Services::with_defaults(db.clone())
+        .update_project(admin_ctx().update(project_param("test"), upd))
         .await;
     let err = res.expect_err("rename to an existing name must be rejected");
     assert!(
@@ -266,14 +250,15 @@ async fn project_roles(db: &TdPool, project_id: ProjectId) -> Result<Vec<RoleDB>
 #[td_test::test(db)]
 async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> {
     let name = ProjectName::try_from("rocket")?;
-    let create = ProjectCreate::builder()
-        .name(&name)
-        .description(Description::try_from("Rocket project")?)
-        .build()?;
-    let created = CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create))
-        .await?;
+    let create = ProjectCreate {
+        name,
+        description: Description::try_from("Rocket project")?,
+        base_path: BasePath::default(),
+    };
+    let created = Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create))
+        .await?
+        .data;
 
     let roles = project_roles(&db, created.id).await?;
     assert_eq!(roles.len(), 3, "exactly three per-project roles are minted");
@@ -351,24 +336,25 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
 #[td_test::test(db)]
 async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdError> {
     let name = ProjectName::try_from("comet")?;
-    let create = ProjectCreate::builder()
-        .name(&name)
-        .description(Description::try_from("Comet project")?)
-        .build()?;
-    let created = CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create))
-        .await?;
+    let create = ProjectCreate {
+        name,
+        description: Description::try_from("Comet project")?,
+        base_path: BasePath::default(),
+    };
+    let created = Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create))
+        .await?
+        .data;
 
     // Collect the role ids before delete.
     let roles = project_roles(&db, created.id).await?;
     assert_eq!(roles.len(), 3);
     let role_ids: Vec<_> = roles.iter().map(|r| r.id).collect();
 
-    DeleteProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().delete(project_param("comet")))
-        .await?;
+    Services::with_defaults(db.clone())
+        .delete_project(admin_ctx().delete(project_param("comet")))
+        .await?
+        .data;
 
     // Role rows for the project are gone.
     let roles_after = project_roles(&db, created.id).await?;
@@ -386,14 +372,15 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
     }
 
     // The freed names can be reused: re-creating `comet` mints them again.
-    let create = ProjectCreate::builder()
-        .name(ProjectName::try_from("comet")?)
-        .description(Description::try_from("Comet again")?)
-        .build()?;
-    let recreated = CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create))
-        .await?;
+    let create = ProjectCreate {
+        name: ProjectName::try_from("comet")?,
+        description: Description::try_from("Comet again")?,
+        base_path: BasePath::default(),
+    };
+    let recreated = Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create))
+        .await?
+        .data;
     let roles = project_roles(&db, recreated.id).await?;
     assert_eq!(roles.len(), 3, "re-create mints the roles again");
 
@@ -404,14 +391,15 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
 /// names and keeping ids/kind/project_id/fixed.
 #[td_test::test(db)]
 async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError> {
-    let create = ProjectCreate::builder()
-        .name(&ProjectName::try_from("orbit")?)
-        .description(Description::try_from("Orbit project")?)
-        .build()?;
-    let created = CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create))
-        .await?;
+    let create = ProjectCreate {
+        name: ProjectName::try_from("orbit")?,
+        description: Description::try_from("Orbit project")?,
+        base_path: BasePath::default(),
+    };
+    let created = Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create))
+        .await?
+        .data;
 
     let before = project_roles(&db, created.id).await?;
     let admin_before_id = before
@@ -420,14 +408,14 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
         .expect("admin role")
         .id;
 
-    let upd = ProjectUpdate::builder()
-        .name(Some(ProjectName::try_from("galaxy")?))
-        .description(None)
-        .build()?;
-    UpdateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().update(project_param("orbit"), upd))
-        .await?;
+    let upd = ProjectUpdate {
+        name: Some(ProjectName::try_from("galaxy")?),
+        description: None,
+    };
+    Services::with_defaults(db.clone())
+        .update_project(admin_ctx().update(project_param("orbit"), upd))
+        .await?
+        .data;
 
     let after = project_roles(&db, created.id).await?;
     assert_eq!(after.len(), 3, "still exactly three roles");
@@ -487,79 +475,42 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
 /// succeeds (previously collided on the stranded `<name>_*` role names).
 #[td_test::test(db)]
 async fn test_rename_then_recreate_old_name(db: TdPool) -> Result<(), TdError> {
-    let create_foo = || {
-        ProjectCreate::builder()
-            .name(ProjectName::try_from("foo").unwrap())
-            .description(Description::try_from("Foo").unwrap())
-            .build()
-            .unwrap()
+    let create_foo = || ProjectCreate {
+        name: ProjectName::try_from("foo").unwrap(),
+        description: Description::try_from("Foo").unwrap(),
+        base_path: BasePath::default(),
     };
 
-    CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create_foo()))
-        .await?;
+    Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create_foo()))
+        .await?
+        .data;
 
-    let upd = ProjectUpdate::builder()
-        .name(Some(ProjectName::try_from("bar")?))
-        .description(None)
-        .build()?;
-    UpdateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().update(project_param("foo"), upd))
-        .await?;
+    let upd = ProjectUpdate {
+        name: Some(ProjectName::try_from("bar")?),
+        description: None,
+    };
+    Services::with_defaults(db.clone())
+        .update_project(admin_ctx().update(project_param("foo"), upd))
+        .await?
+        .data;
 
-    let new_foo = CreateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().create((), create_foo()))
-        .await?;
+    let new_foo = Services::with_defaults(db.clone())
+        .create_project(admin_ctx().create((), create_foo()))
+        .await?
+        .data;
     let roles = project_roles(&db, new_foo.id).await?;
     assert_eq!(roles.len(), 3, "new foo mints its own three roles");
     Ok(())
 }
 
-#[cfg(sqlite)]
-mod sqlite_single_project {
+/// Delete guards: a seeded project is deletable once empty, and a project that
+/// still owns collections cannot be deleted.
+mod delete_guards {
     use super::*;
+    use crate::Services;
     use crate::project::ProjectError;
-    use td_error::TdDomainError;
-
-    /// SQLite does not support projects: create is rejected.
-    #[tokio::test]
-    async fn test_create_rejected_on_sqlite() {
-        let db = td_database::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
-        let create = ProjectCreate::builder()
-            .name(ProjectName::try_from("anything").unwrap())
-            .description(Description::try_from("nope").unwrap())
-            .build()
-            .unwrap();
-        let err = CreateProjectService::with_defaults(db.serving.clone())
-            .service()
-            .raw_oneshot(admin_ctx().create((), create))
-            .await
-            .unwrap_err();
-        assert_eq!(
-            err.code(),
-            ProjectError::SingleProjectBackend.code(),
-            "got {}",
-            err.code()
-        );
-    }
-}
-
-/// PostgreSQL-only delete guards: a seeded project is deletable once empty, and
-/// a project that still owns collections cannot be deleted (additional projects
-/// only exist on Postgres, so these can only be exercised there).
-#[cfg(postgres)]
-mod postgres_delete_guards {
-    use super::*;
-    use crate::Context;
-    use crate::collection::service::CollectionServices;
-    use crate::project::ProjectError;
-    use ta_services::factory::ServiceFactory;
-    use td_database::pool::scoped::InProject;
-    use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
+    use td_database::pool::scoped::ScopedExt;
     use td_error::TdDomainError;
     use td_objects::dxo::collection::CollectionCreate;
     use td_objects::types::basic::CollectionName;
@@ -568,19 +519,16 @@ mod postgres_delete_guards {
     /// in the schema requires it to keep existing.
     #[td_test::test(db)]
     async fn test_delete_seeded_project_allowed_on_postgres(db: TdPool) -> Result<(), TdError> {
-        if !matches!(db.kind(), DatabaseBackend::Postgres) {
-            return Ok(());
-        }
         db.seed().test_project().await?;
-        DeleteProjectService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(admin_ctx().delete(project_param("test")))
-            .await?;
+        Services::with_defaults(db.clone())
+            .delete_project(admin_ctx().delete(project_param("test")))
+            .await?
+            .data;
         // It's gone from the active registry.
-        let list = ListProjectsService::with_defaults(db)
-            .service()
-            .raw_oneshot(admin_ctx().list((), ListParams::default()))
-            .await?;
+        let list = Services::with_defaults(db)
+            .list_projects(admin_ctx().list((), ListParams::default()))
+            .await?
+            .data;
         assert!(
             !list
                 .data
@@ -595,36 +543,36 @@ mod postgres_delete_guards {
     /// once emptied it can.
     #[td_test::test(db)]
     async fn test_delete_non_empty_project_rejected(db: TdPool) -> Result<(), TdError> {
-        if !matches!(db.kind(), DatabaseBackend::Postgres) {
-            return Ok(());
-        }
-
         // Create a project and a collection inside it (scoping the collection
         // create to the new project, the way the apiserver's resolver would).
-        let create = ProjectCreate::builder()
-            .name(&ProjectName::try_from("warehouse")?)
-            .description(&Description::try_from("WH")?)
-            .build()?;
-        let project = CreateProjectService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(admin_ctx().create((), create))
-            .await?;
+        let create = ProjectCreate {
+            name: ProjectName::try_from("warehouse")?,
+            description: Description::try_from("WH")?,
+            base_path: BasePath::default(),
+        };
+        let project = Services::with_defaults(db.clone())
+            .create_project(admin_ctx().create((), create))
+            .await?
+            .data;
 
-        let coll = CollectionCreate::builder()
-            .name(&CollectionName::try_from("c0")?)
-            .description(&Description::try_from("c0")?)
-            .build()?;
-        let collections = CollectionServices::build(&Context::with_defaults(db.clone()));
+        let coll = CollectionCreate {
+            name: CollectionName::try_from("c0")?,
+            description: Description::try_from("c0")?,
+            group: GroupName::default_group(),
+            base_path: None,
+            connection: None,
+            secrets: None,
+            vars: None,
+        };
+        let collections = Services::with_defaults(db.clone());
         collections
-            .create
-            .service()
-            .raw_oneshot(admin_ctx().create((), coll).in_project(project.id))
-            .await?;
+            .create_collection(admin_ctx().create((), coll).in_project(project.id))
+            .await?
+            .data;
 
         // Delete is refused while the project still owns a collection.
-        let err = DeleteProjectService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(admin_ctx().delete(project_param("warehouse")))
+        let err = Services::with_defaults(db.clone())
+            .delete_project(admin_ctx().delete(project_param("warehouse")))
             .await
             .unwrap_err();
         assert_eq!(

@@ -21,7 +21,6 @@
 //! `users_roles.role_id` are likewise `ON DELETE RESTRICT`, so those rows are
 //! deleted before the role rows.
 
-use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
@@ -29,16 +28,15 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::ProjectId;
 use td_queries::LiveEntry;
-use td_tower::extractors::{MutRef, Ref};
 
 pub async fn delete_project_roles(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    project_id: Ref<ProjectId>,
+    conn: &mut DomainConnection<Apiserver>,
+    project_id: &ProjectId,
 ) -> Result<(), TdError> {
     // The `roles.project_id` column is `Option<ProjectId>`; its SQL condition
     // is keyed on `Option<ProjectId>` (the column's registered type), so match
     // it with `Some(project_id)` rather than the bare id.
-    let by_project: Option<ProjectId> = Some(*project_id.deref());
+    let by_project: Option<ProjectId> = Some(*project_id);
     let roles: Vec<RoleDB> = conn.live().fetch_all::<RoleDB>(by_project).await?;
 
     // Drop the dependent rows first (FK `ON DELETE RESTRICT`), per role.
