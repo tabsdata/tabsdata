@@ -21,7 +21,7 @@ use td_objects::types::basic::{
     PermissionType, ProjectId, ProjectIdName, ProjectName, RoleKind, RoleName, UserEnabled, UserId,
     UserName,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
 fn admin_ctx() -> RequestContext {
@@ -108,7 +108,6 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
         .user(&UserName::try_from("bob")?, &UserEnabled::TRUE)
         .await?;
     let default_role = db
-        .live()
         .fetch_one::<RoleDB>(&RoleName::try_from("default")?)
         .await?;
     db.seed().user_role(&bob.id, &default_role.id).await?;
@@ -169,7 +168,7 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
         .await?;
 
     // Second create with the same name fails up front with a clean
-    // `EntityAlreadyExists` (via the `By::<ProjectName>::assert_not_exists`
+    // `EntityAlreadyExists` (via the `assert_not_exists`
     // pre-check) rather than the raw unique-constraint violation.
     let second = Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create()))
@@ -235,7 +234,7 @@ async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError
 /// kind. Returns the three `RoleDB` rows whose `project_id` is the project.
 async fn project_roles(db: &TdPool, project_id: ProjectId) -> Result<Vec<RoleDB>, TdError> {
     let by_project: Option<ProjectId> = Some(project_id);
-    Ok(db.live().fetch_all::<RoleDB>(by_project).await?)
+    Ok(db.fetch_all::<RoleDB>(by_project).await?)
 }
 
 /// Creating a project mints exactly three system-managed per-project roles
@@ -287,7 +286,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
         assert!(*role.fixed, "{role_name} must be system-managed (fixed)");
 
         // Exactly one permission row, fixed, on the project entity.
-        let perms = db.live().fetch_all::<PermissionDB>(role.id).await?;
+        let perms = db.fetch_all::<PermissionDB>(role.id).await?;
         assert_eq!(perms.len(), 1, "{role_name} has exactly one permission");
         let perm = &perms[0];
         assert_eq!(
@@ -307,7 +306,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
         .iter()
         .find(|r| r.kind == RoleKind::ProjectAdmin)
         .expect("admin role");
-    let memberships = db.live().fetch_all::<UserRoleDB>(admin_role.id).await?;
+    let memberships = db.fetch_all::<UserRoleDB>(admin_role.id).await?;
     assert_eq!(memberships.len(), 1, "one creator membership on admin role");
     assert_eq!(memberships[0].user_id, UserId::admin());
     assert!(
@@ -318,7 +317,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
     // `_dev` / `_view` start empty.
     for kind in [RoleKind::ProjectDev, RoleKind::ProjectView] {
         let role = roles.iter().find(|r| r.kind == kind).unwrap();
-        let memberships = db.live().fetch_all::<UserRoleDB>(role.id).await?;
+        let memberships = db.fetch_all::<UserRoleDB>(role.id).await?;
         assert!(memberships.is_empty(), "{kind:?} role starts empty");
     }
 
@@ -359,9 +358,9 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
 
     // Their permission and membership rows are gone too.
     for role_id in role_ids {
-        let perms = db.live().fetch_all::<PermissionDB>(role_id).await?;
+        let perms = db.fetch_all::<PermissionDB>(role_id).await?;
         assert!(perms.is_empty(), "permissions cascaded");
-        let memberships = db.live().fetch_all::<UserRoleDB>(role_id).await?;
+        let memberships = db.fetch_all::<UserRoleDB>(role_id).await?;
         assert!(memberships.is_empty(), "memberships cascaded");
     }
 
@@ -454,8 +453,7 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
 
     for old in ["orbit_admin", "orbit_dev", "orbit_view"] {
         assert!(
-            db.live()
-                .fetch_optional::<RoleDB>(&RoleName::try_from(old)?)
+            db.fetch_optional::<RoleDB>(&RoleName::try_from(old)?)
                 .await?
                 .is_none(),
             "{old} freed"

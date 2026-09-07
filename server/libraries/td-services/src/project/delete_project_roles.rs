@@ -21,33 +21,34 @@
 //! `users_roles.role_id` are likewise `ON DELETE RESTRICT`, so those rows are
 //! deleted before the role rows.
 
+use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::ProjectId;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
-pub async fn delete_project_roles(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn delete_project_roles<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     project_id: &ProjectId,
 ) -> Result<(), TdError> {
     // The `roles.project_id` column is `Option<ProjectId>`; its SQL condition
     // is keyed on `Option<ProjectId>` (the column's registered type), so match
     // it with `Some(project_id)` rather than the bare id.
     let by_project: Option<ProjectId> = Some(*project_id);
-    let roles: Vec<RoleDB> = conn.live().fetch_all::<RoleDB>(by_project).await?;
+    let roles: Vec<RoleDB> = conn.fetch_all::<RoleDB>(by_project).await?;
 
     // Drop the dependent rows first (FK `ON DELETE RESTRICT`), per role.
     for role in &roles {
-        conn.live().delete::<PermissionDB>(role.id).await?;
-        conn.live().delete::<UserRoleDB>(role.id).await?;
+        conn.delete::<PermissionDB>(role.id).await?;
+        conn.delete::<UserRoleDB>(role.id).await?;
     }
 
     // Then the role rows themselves.
     if !roles.is_empty() {
-        conn.live().delete::<RoleDB>(by_project).await?;
+        conn.delete::<RoleDB>(by_project).await?;
     }
 
     Ok(())

@@ -13,6 +13,7 @@
 //! See [`services`] for the per-endpoint translation + authz, and
 //! the shared validation/resolution helpers below.
 
+use td_database::access::DbScope;
 use td_error::td_error;
 
 pub mod services;
@@ -63,7 +64,7 @@ use td_objects::types::basic::{
     PermissionEntityType, PermissionType, ProjectId, ProjectIdName, ProjectName, RoleId, RoleName,
     SimplePermissionType, UserId, UserName, UserSystem,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_security::{PROJECT_CREATOR_ROLE, SYS_ADMIN_ROLE};
 
 /// The concrete RBAC target a Simple grant/revoke resolves to: the user, the
@@ -112,15 +113,14 @@ pub fn assert_simple_permission_valid(grant: &SimplePermissionGrant) -> Result<(
 /// - `create_projects`: the `project_creator` role;
 /// - `manage_system`: the `sys_admin` role, which holds the whole system bundle
 ///   (user/role administration plus authority over all projects).
-pub async fn resolve_grant(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn resolve_grant<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     grant: &SimplePermissionGrant,
 ) -> Result<ResolvedGrant, TdError> {
     // Resolve the user by name (the grant surface carries a UserName).
     // System users (the built-in `system` user and other service users) are not
     // grantable: filter them out so the fetch fails for them.
     let user = conn
-        .live()
         .fetch_one::<UserDB>(and!(&grant.user, UserSystem::FALSE))
         .await?;
 
@@ -136,13 +136,9 @@ pub async fn resolve_grant(
                 .project
                 .clone()
                 .expect("project-scoped permission carries a project (validated)");
-            let project = conn
-                .live()
-                .fetch_one::<ActiveProjectDB>(&project_id_name)
-                .await?;
+            let project = conn.fetch_one::<ActiveProjectDB>(&project_id_name).await?;
             let role_name = per_project_role_name(&project.name, suffix)?;
             let role = conn
-                .live()
                 .fetch_optional::<RoleDB>(&role_name)
                 .await?
                 .ok_or_else(|| SimplePermissionError::ProjectRoleNotFound(role_name.to_string()))?;
@@ -154,7 +150,6 @@ pub async fn resolve_grant(
         }
         SimplePermissionType::CreateProjects => {
             let role = conn
-                .live()
                 .fetch_one::<RoleDB>(&RoleName::try_from(PROJECT_CREATOR_ROLE.to_string())?)
                 .await?;
             Ok(ResolvedGrant {
@@ -165,7 +160,6 @@ pub async fn resolve_grant(
         }
         SimplePermissionType::ManageSystem => {
             let role = conn
-                .live()
                 .fetch_one::<RoleDB>(&RoleName::try_from(SYS_ADMIN_ROLE.to_string())?)
                 .await?;
             Ok(ResolvedGrant {
@@ -205,10 +199,10 @@ pub fn project_role_permission(role: &RoleDB) -> Option<SimplePermissionType> {
 
 /// `project_id -> project_name`, for resolving project-scoped permission rows
 /// to a human name without an extra query per row.
-async fn project_names(
-    conn: &mut DomainConnection<Apiserver>,
+async fn project_names<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
 ) -> Result<HashMap<ProjectId, ProjectName>, TdError> {
-    let projects = conn.live().fetch_all::<ActiveProjectDB>(()).await?;
+    let projects = conn.fetch_all::<ActiveProjectDB>(()).await?;
     Ok(projects.into_iter().map(|p| (p.id, p.name)).collect())
 }
 
@@ -232,26 +226,22 @@ fn list_response<T: Clone>(data: Vec<T>) -> Result<ListResponse<T>, TdError> {
 ///
 /// The target user is taken as an already-resolved `UserId` (the service
 /// resolves it up front for the scope/authz check).
-pub async fn flatten_user_permissions(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn flatten_user_permissions<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     user_id: &UserId,
 ) -> Result<ListResponse<SimplePermission>, TdError> {
-    let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
-    let role_ids: HashSet<RoleId> = user_roles
-        .into_iter()
-        .filter(|ur| ur.user_id == *user_id)
-        .map(|ur| ur.role_id)
-        .collect();
+    let user_roles = conn.fetch_all::<UserRoleDB>(user_id).await?;
+    let role_ids: Vec<RoleId> = user_roles.into_iter().map(|ur| ur.role_id).collect();
 
-    let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
+    let permissions = conn
+        .chunked()
+        .fetch_all::<PermissionDB>(&role_ids, ())
+        .await?;
     let projects = project_names(conn).await?;
 
     let mut seen: HashSet<SimplePermission> = HashSet::new();
     let mut out = Vec::new();
-    for perm in permissions
-        .into_iter()
-        .filter(|p| role_ids.contains(&p.role_id))
-    {
+    for perm in permissions {
         if let Some(simple) = simple_permission_of(&perm, &projects)?
             && seen.insert(simple.clone())
         {
@@ -313,21 +303,22 @@ fn simple_permission_of(
 /// - `source = system (manage_system)` — members of any role holding
 ///   `(project:__all__, manage_project)` (i.e. system admins), mapped to
 ///   `manage_system`.
-pub async fn list_project_access(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn list_project_access<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     project_id_name: &ProjectIdName,
 ) -> Result<ListResponse<SimpleProjectAccess>, TdError> {
-    let project = conn
-        .live()
-        .fetch_one::<ActiveProjectDB>(project_id_name)
-        .await?;
+    let project = conn.fetch_one::<ActiveProjectDB>(project_id_name).await?;
 
-    let roles = conn.live().fetch_all::<RoleDB>(()).await?;
-    let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
-    let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
+    let roles = conn.fetch_all::<RoleDB>(()).await?;
+    let permissions = conn
+        .fetch_all::<PermissionDB>(and!(
+            PermissionEntityType::project(),
+            PermissionType::manage_project()
+        ))
+        .await?;
     // Exclude system users (built-in `system` and other service users) from the
     // project roster.
-    let users = conn.live().fetch_all::<UserDB>(UserSystem::FALSE).await?;
+    let users = conn.fetch_all::<UserDB>(UserSystem::FALSE).await?;
     let user_names: HashMap<UserId, UserName> = users.into_iter().map(|u| (u.id, u.name)).collect();
 
     // Project-source roles: the three per-project roles bound to this project,
@@ -344,13 +335,20 @@ pub async fn list_project_access(
         }
     }
     for perm in &permissions {
-        if perm.entity_type == PermissionEntityType::project()
-            && perm.entity_id.is_all_entities()
-            && perm.permission_type == PermissionType::manage_project()
-        {
+        if perm.entity_id.is_all_entities() {
             system_source_roles.insert(perm.role_id);
         }
     }
+
+    let role_ids: Vec<RoleId> = project_source
+        .keys()
+        .chain(system_source_roles.iter())
+        .cloned()
+        .collect();
+    let user_roles = conn
+        .chunked()
+        .fetch_all::<UserRoleDB>(&role_ids, ())
+        .await?;
 
     let mut seen: HashSet<SimpleProjectAccess> = HashSet::new();
     let mut out = Vec::new();

@@ -18,7 +18,7 @@ use td_objects::dxo::project::ProjectParam;
 use td_objects::dxo::project::{
     ActiveProjectDB, ActiveProjectDBWithNames, ProjectRead, ProjectUpdate, ProjectUpdateDB,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn update_project(
@@ -29,7 +29,7 @@ async fn update_project(
     let (ctx, param, update) = request.into_parts();
     let id_name = param.project;
     let conn = gated_trx.get(authz.none());
-    let current: ActiveProjectDB = conn.live().fetch_one(&id_name).await?;
+    let current: ActiveProjectDB = conn.fetch_one(&id_name).await?;
     // Renaming a project requires `manage_project` on that project.
     let _grant = authz
         .require::<Project, ManageProject>(conn, &ctx, &current.id)
@@ -54,11 +54,10 @@ async fn update_project(
     if let Some(description) = &update.description {
         update_db.description = description.clone();
     }
-    conn.live()
-        .update::<ProjectUpdateDB, ActiveProjectDB>(&update_db, current_id)
+    conn.update::<ProjectUpdateDB>(&update_db, current_id)
         .await?;
 
-    let with_names: ActiveProjectDBWithNames = conn.live().fetch_one(&current_id).await?;
+    let with_names: ActiveProjectDBWithNames = conn.fetch_one(&current_id).await?;
     let read = ProjectRead::from_dao(with_names)?;
     Ok(read)
 }

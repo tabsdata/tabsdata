@@ -12,7 +12,7 @@ use td_error::TdError;
 use td_objects::dxo::crudl::ListResponse;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::simple_permission::{ListByProjectRequest, SimpleProjectAccess};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn list_simple_permission_by_project(
@@ -23,7 +23,7 @@ async fn list_simple_permission_by_project(
     // resolve the project and authorize against it: manage_access (system)
     // OR manage_project on the project (a project admin can see the roster).
     let conn = gated_conn.get(authz.none());
-    let project: ActiveProjectDB = conn.live().fetch_one(&request.project).await?;
+    let project: ActiveProjectDB = conn.fetch_one(&request.project).await?;
     let _grant = authz
         .require::<Project, (ManageAccess, ManageProject)>(conn, &request.context, &project.id)
         .await?;
@@ -44,7 +44,7 @@ mod tests {
         AccessTokenId, BasePath, Description, EntityId, EntityName, PermissionType, ProjectName,
         RoleId, RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     fn req(requester: UserId, _role: RoleId, project: ProjectName) -> ListByProjectRequest {
@@ -86,7 +86,6 @@ mod tests {
             .user(&UserName::try_from("alice")?, &UserEnabled::TRUE)
             .await?;
         let admin_role = db
-            .live()
             .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_admin")?)
             .await?;
         db.seed().user_role(&alice.id, &admin_role.id).await?;
@@ -134,7 +133,6 @@ mod tests {
         create_project(&db, "p0").await?;
 
         let admin_role = db
-            .live()
             .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_admin")?)
             .await?;
         db.seed()

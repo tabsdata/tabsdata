@@ -8,17 +8,17 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project, RbacSource};
-use td_database::access::{DbPool, Global};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::project::{ActiveProjectDB, ProjectDeleteDB, ProjectParam};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn delete_project(
     authz: Ctx<AuthzContext>,
-    db: DbPool<Global>,
+    db: DbPool<AcrossProjects>,
     request: DeleteRequest<ProjectParam>,
 ) -> Result<(), TdError> {
     let (ctx, param) = request.into_parts();
@@ -26,19 +26,18 @@ async fn delete_project(
     let id_name = param.project;
     // FOR UPDATE: the emptiness guard must not race collection create.
     let conn = trx.get(authz.none());
-    let current: ActiveProjectDB = conn.live().fetch_one_for_update(&id_name).await?;
+    let current: ActiveProjectDB = conn.for_update().fetch_one(&id_name).await?;
     // Deleting a project requires `manage_project` on that project.
     let grant = authz
         .require::<Project, ManageProject>(conn, &ctx, &current.id)
         .await?;
 
     // Guard before the soft-delete: never strand a non-empty project's data.
-    let collections: Vec<ActiveCollectionDB> = conn.live().fetch_all(current.id).await?;
+    let collections: Vec<ActiveCollectionDB> = conn.fetch_all(current.id).await?;
     reject_delete_non_empty_project(&current.id, &collections)?;
 
     let delete_db = current.to_delete_dao(&ctx);
-    conn.live()
-        .update::<ProjectDeleteDB, ActiveProjectDB>(&delete_db, current.id)
+    conn.update::<ProjectDeleteDB>(&delete_db, current.id)
         .await?;
     // System cascade: drop the project's three per-project roles together
     // with their permission + membership rows (bypasses the `fixed` guard;

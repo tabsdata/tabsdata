@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use td_database::access::DbScope;
 use td_error::td_error;
 
 pub mod services;
@@ -38,15 +39,15 @@ use td_objects::types::basic::{
     EntityId, PermissionEntityType, ProjectId, ProjectName, RoleIdName,
 };
 use td_objects::types::basic::{Fixed, PermissionId};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 /// Finish a permission row from its create request: derive the entity type
 /// from the authorization registry — a kind owns its permissions — so this
 /// works for built-in *and* extension permissions without a hard-coded
 /// mapping; resolve a named target project to its id.
-pub async fn build_permission_db(
+pub async fn build_permission_db<S: DbScope>(
     source: &AuthzContext,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
     context: &RequestContext,
     role: &RoleDB,
     permission_create: &PermissionCreate,
@@ -61,10 +62,7 @@ pub async fn build_permission_db(
 
     let entity_id = if let Some(entity_name) = entity_name {
         let project_name = ProjectName::try_from(entity_name.to_string())?;
-        let project = conn
-            .live()
-            .fetch_one::<ActiveProjectDB>(&project_name)
-            .await?;
+        let project = conn.fetch_one::<ActiveProjectDB>(&project_name).await?;
 
         EntityId::try_from(project.id)?
     } else {
@@ -172,9 +170,9 @@ impl PermissionTarget for PermissionDBWithNames {
 ///
 /// The decision is the pure [`enforce`] over the requester's effective grants,
 /// so no [`Scope`](td_authz::rbac::Scope) is involved.
-pub async fn authorize_permission_target<P>(
+pub async fn authorize_permission_target<P, S: DbScope>(
     source: &AuthzContext,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
     request: &RequestContext,
     permission: &P,
 ) -> Result<(), TdError>

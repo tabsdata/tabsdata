@@ -11,6 +11,7 @@ pub mod services;
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use td_database::access::SeesProjectRows;
 
 use td_common::bucket::{WindowUnit as BucketUnit, floor_unit_ms};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -27,38 +28,33 @@ use td_objects::types::basic::{
     ProjectId, ProjectName, RowCount, TableId, TableVersionCount,
 };
 use td_objects::types::visible_projects::VisibleProjects;
-use td_queries::MetricsEntry;
+use td_queries::Queries;
 
-pub(crate) async fn inflight_response(
+pub(crate) async fn inflight_response<S: SeesProjectRows>(
     req: &InflightRequest,
     visible: &VisibleProjects,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
 ) -> Result<InflightResponse, TdError> {
-    let mut rows = conn.metrics().inflight(req).await?;
-    // Cross-project (global) reads span every tenant; drop rows for projects
-    // the requester cannot view. Scoped reads pass `All` (RLS already filtered).
-    rows.retain(|r| visible.contains(&r.project_id));
+    let mut rows = conn.metrics().inflight(req, visible).await?;
     rows.sort_by_key(|r| (r.project_id, r.collection_id, r.group_id, r.status));
     Ok(InflightResponse { rows })
 }
 
-pub(crate) async fn metrics_response(
+pub(crate) async fn metrics_response<S: SeesProjectRows>(
     req: &MetricsRequest,
     visible: &VisibleProjects,
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, S>,
 ) -> Result<MetricsResponse, TdError> {
-    let mut raw_nodes = conn.metrics().metrics_nodes(req).await?;
-    let mut raw_edges = conn.metrics().metrics_edges(req).await?;
-    let mut raw_out_tables = conn.metrics().metrics_node_output_tables(req).await?;
-    let mut raw_edge_tables = conn.metrics().metrics_edge_tables(req).await?;
-    // Cross-project (global) reads span every tenant; drop rows for projects
-    // the requester cannot view, before synthesizing external nodes from edges
-    // (so the synthetic singletons reflect only viewable flow). Scoped reads
-    // pass `All` (RLS already filtered).
-    raw_nodes.retain(|n| n.project_id.is_none_or(|p| visible.contains(&p)));
-    raw_edges.retain(|e| e.project_id.is_none_or(|p| visible.contains(&p)));
-    raw_out_tables.retain(|t| t.project_id.is_none_or(|p| visible.contains(&p)));
-    raw_edge_tables.retain(|t| t.project_id.is_none_or(|p| visible.contains(&p)));
+    // Narrowed in the entry: a cross-project read spans every tenant, so the
+    // requester's viewable set is an argument, not a step a caller can skip.
+    // External nodes are synthesized from the already-narrowed edges.
+    let raw_nodes = conn.metrics().metrics_nodes(req, visible).await?;
+    let raw_edges = conn.metrics().metrics_edges(req, visible).await?;
+    let raw_out_tables = conn
+        .metrics()
+        .metrics_node_output_tables(req, visible)
+        .await?;
+    let raw_edge_tables = conn.metrics().metrics_edge_tables(req, visible).await?;
     let mut nodes = fold_to_coarse(raw_nodes, req.unit)?;
     let mut edges = fold_to_coarse(raw_edges, req.unit)?;
     // Fill the non-summable distinct-table counts from the listings, folding to

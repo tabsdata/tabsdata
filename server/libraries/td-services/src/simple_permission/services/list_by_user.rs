@@ -12,7 +12,7 @@ use td_error::TdError;
 use td_objects::dxo::crudl::ListResponse;
 use td_objects::dxo::simple_permission::{ListByUserRequest, SimplePermission};
 use td_objects::dxo::user::UserDB;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn list_simple_permission_by_user(
@@ -23,7 +23,7 @@ async fn list_simple_permission_by_user(
     let conn = gated_conn.get(authz.none());
     // resolve the target user (errors NotFound for an unknown user) so the
     // listing can be scoped to it.
-    let user: UserDB = conn.live().fetch_one(&request.user).await?;
+    let user: UserDB = conn.fetch_one(&request.user).await?;
     // accessible to a manage_access holder, or the target user themselves.
     let _grant = authz
         .require::<User, (SelfUser, ManageAccess)>(conn, &request.context, &user.id)
@@ -45,7 +45,7 @@ mod tests {
         AccessTokenId, BasePath, ProjectName, RoleId, RoleName, SimplePermissionType, UserEnabled,
         UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     fn req_as(requester: UserId, target: UserName) -> ListByUserRequest {
@@ -88,7 +88,6 @@ mod tests {
             .await?;
         // develop p0 + create_projects
         let dev_role = db
-            .live()
             .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_dev")?)
             .await?;
         db.seed().user_role(&user.id, &dev_role.id).await?;
@@ -160,7 +159,6 @@ mod tests {
             .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
         let dev_role = db
-            .live()
             .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_dev")?)
             .await?;
         db.seed().user_role(&user.id, &dev_role.id).await?;

@@ -18,24 +18,25 @@
 //! and `ProjectId` is in context.
 
 use crate::project::per_project_roles::{PER_PROJECT_ROLES, per_project_role_name};
+use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::PermissionDB;
-use td_objects::dxo::project::ProjectCreateDB;
+use td_objects::dxo::project::ProjectInsertDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{
     Description, EntityId, Fixed, PermissionEntityType, PermissionId, PermissionType, ProjectId,
     RoleId, RoleKind,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
-pub async fn seed_project_roles(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn seed_project_roles<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     context: &RequestContext,
     project_id: &ProjectId,
-    project: &ProjectCreateDB,
+    project: &ProjectInsertDB,
 ) -> Result<(), TdError> {
     let project_id = *project_id;
     let project_name = &project.name;
@@ -73,8 +74,8 @@ pub async fn seed_project_roles(
             fixed: Fixed::TRUE,
         };
 
-        conn.live().insert::<RoleDB>(&role).await?;
-        conn.live().insert::<PermissionDB>(&permission).await?;
+        conn.insert::<RoleDB>(&role).await?;
+        conn.insert::<PermissionDB>(&permission).await?;
 
         if is_admin {
             admin_role_id = Some(role.id);
@@ -87,7 +88,7 @@ pub async fn seed_project_roles(
     // `manage_project` holder.
     let admin_role_id = admin_role_id.expect("ProjectAdmin role minted above");
     let user_role = UserRoleDB::new(context.user_id, admin_role_id, context, Fixed::FALSE);
-    conn.live().insert::<UserRoleDB>(&user_role).await?;
+    conn.insert::<UserRoleDB>(&user_role).await?;
 
     Ok(())
 }

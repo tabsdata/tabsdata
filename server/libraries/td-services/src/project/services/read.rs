@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::project::{ActiveProjectDBWithNames, ProjectParam, ProjectRead};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn read_project(
@@ -22,7 +22,7 @@ async fn read_project(
     let (ctx, param) = request.into_parts();
     let id_name = param.project;
     let conn = gated_conn.get(authz.none());
-    let row: ActiveProjectDBWithNames = conn.live().fetch_one(&id_name).await?;
+    let row: ActiveProjectDBWithNames = conn.fetch_one(&id_name).await?;
     // Reading a project's metadata requires `view_project` on that project.
     let _grant = authz
         .require::<Project, ViewProject>(conn, &ctx, &row.base.id)

@@ -14,7 +14,7 @@ use td_error::TdError;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames, PermissionParam};
 use td_objects::dxo::role::RoleParam;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn delete_permission(
@@ -27,15 +27,14 @@ async fn delete_permission(
     let mut trx = db.begin().await?;
     let conn = trx.get(grant);
 
-    let permission: PermissionDBWithNames =
-        conn.live().fetch_one(&permission_param.permission).await?;
+    let permission: PermissionDBWithNames = conn.fetch_one(&permission_param.permission).await?;
     assert_role_in_permission(&role_param.role, &permission)?;
     // Authorize by the permission's target: manage_access on the system, or
     // manage_project on the target project (single-project permissions only).
     authorize_permission_target(&authz, conn, &ctx, &permission).await?;
     assert_permission_is_not_fixed(&permission)?;
 
-    conn.live().delete::<PermissionDB>(permission.id).await?;
+    conn.delete::<PermissionDB>(permission.id).await?;
     trx.commit().await?;
 
     // Revoked a permission; with the transaction committed, invalidate the
@@ -64,7 +63,7 @@ mod tests {
         AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleName,
         UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
     use td_security::{
         ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
@@ -98,7 +97,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         service.delete_permission(request).await?;
 
-        let not_found = db.live().fetch_one::<PermissionDB>(&seeded.id).await;
+        let not_found = db.fetch_one::<PermissionDB>(&seeded.id).await;
         assert!(not_found.is_err());
         Ok(())
     }
@@ -281,10 +280,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         assert!(service.delete_permission(request).await.is_ok());
 
-        let not_found = db
-            .live()
-            .fetch_one::<PermissionDB>(project_dev_perm.id)
-            .await;
+        let not_found = db.fetch_one::<PermissionDB>(project_dev_perm.id).await;
         assert!(not_found.is_err());
         Ok(())
     }
@@ -454,7 +450,7 @@ mod tests {
             ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
         ]);
 
-        let permissions = db.live().fetch_all::<PermissionDB>(()).await?;
+        let permissions = db.fetch_all::<PermissionDB>(()).await?;
 
         for permission in permissions {
             let service = Services::with_defaults(db.clone());

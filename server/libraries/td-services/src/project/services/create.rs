@@ -2,7 +2,6 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::project::scope_to_project::scope_to_created_project;
 use crate::project::seed_groups::seed_default_groups;
 use crate::project::seed_project_roles::seed_project_roles;
 use ta_services::factory::service_factory;
@@ -16,7 +15,7 @@ use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::project::{
     ActiveProjectDB, ActiveProjectDBWithNames, ProjectCreate, ProjectRead,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn create_project(
@@ -34,14 +33,15 @@ async fn create_project(
     let project = create.to_dao(&ctx);
     // A duplicate project name reports a clean "already exists" error
     // instead of the raw unique-constraint violation from the insert.
-    conn.live()
-        .assert_not_exists::<ActiveProjectDB>(&project.name)
+    conn.assert_not_exists::<ActiveProjectDB>(&project.name)
         .await?;
-    conn.live().insert(&project).await?;
+    conn.insert(&project).await?;
 
-    // Scope the connection to the new project so the group seeds default
-    // `project_id` from the GUC instead of stamping it by hand.
-    scope_to_created_project(conn, &project.id).await?;
+    // Enter the new project for the rest of the unit of work: the seeds below
+    // default `project_id` from the GUC instead of stamping it by hand, and
+    // the connection is typed for it.
+    let mut trx = trx.enter_project(&project.id).await?;
+    let conn = trx.get(grant);
     // A collection resolves its group within its own project, so seed the
     // system groups (default/source/destination) into the new project.
     seed_default_groups(conn, &ctx).await?;
@@ -49,7 +49,7 @@ async fn create_project(
     // the creating user to `<name>_admin`.
     seed_project_roles(conn, &ctx, &project.id, &project).await?;
 
-    let with_names: ActiveProjectDBWithNames = conn.live().fetch_one(&project.id).await?;
+    let with_names: ActiveProjectDBWithNames = conn.fetch_one(&project.id).await?;
     let read = ProjectRead::from_dao(with_names)?;
     trx.commit().await?;
 

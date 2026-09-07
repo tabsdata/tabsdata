@@ -15,7 +15,7 @@ use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::permission::{Permission, PermissionCreate, PermissionDBWithNames};
 use td_objects::dxo::role::{RoleDB, RoleParam};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn create_permission(
@@ -28,7 +28,7 @@ async fn create_permission(
     let mut trx = db.begin().await?;
     let conn = trx.get(grant);
 
-    let role: RoleDB = conn.live().fetch_one(&param.role).await?;
+    let role: RoleDB = conn.fetch_one(&param.role).await?;
     // A system-managed (fixed) role's permission set is immutable; reject
     // adding a permission to it from the user surface.
     assert_role_is_not_fixed(&role)?;
@@ -39,9 +39,9 @@ async fn create_permission(
     // Authorize by the permission's target: manage_access on the system, or
     // manage_project on the target project (single-project permissions only).
     authorize_permission_target(&authz, conn, &ctx, &permission).await?;
-    conn.live().insert(&permission).await?;
+    conn.insert(&permission).await?;
 
-    let with_names: PermissionDBWithNames = conn.live().fetch_one(&permission.id).await?;
+    let with_names: PermissionDBWithNames = conn.fetch_one(&permission.id).await?;
     let read = Permission::from_dao(with_names)?;
     trx.commit().await?;
 
@@ -68,7 +68,7 @@ mod tests {
         AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleName,
         UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -89,7 +89,7 @@ mod tests {
         let response = service.create_permission(request).await;
         let response = response?;
 
-        let found = db.live().fetch_one::<PermissionDB>(&response.id).await?;
+        let found = db.fetch_one::<PermissionDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.role_id, found.role_id);
         assert_eq!(response.permission_type, found.permission_type);
@@ -140,7 +140,7 @@ mod tests {
         let response = service.create_permission(request).await;
         let response = response?;
 
-        let found = db.live().fetch_one::<PermissionDB>(&response.id).await?;
+        let found = db.fetch_one::<PermissionDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.role_id, found.role_id);
         assert_eq!(response.permission_type, found.permission_type);

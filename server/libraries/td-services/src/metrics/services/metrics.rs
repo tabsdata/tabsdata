@@ -7,7 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
-use td_database::access::{GatedConnection, InProject, RO};
+use td_database::access::{AcrossProjects, GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::metrics::{MetricsRequest, MetricsResponse};
@@ -41,7 +41,7 @@ async fn metrics(
 #[service_factory]
 async fn metrics_global(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    gated_conn: &mut GatedConnection<RO, AcrossProjects>,
     request: ReadRequest<MetricsRequest>,
 ) -> Result<MetricsResponse, TdError> {
     let (ctx, param) = request.into_parts();

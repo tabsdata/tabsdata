@@ -12,7 +12,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::project::ProjectRead;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn list_projects(
@@ -30,6 +30,6 @@ async fn list_projects(
     let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<ProjectRead>::try_from(&list_params)?;
-    let rows = conn.live().list(&visible, &query_params).await?;
+    let rows = conn.list(&visible, &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }

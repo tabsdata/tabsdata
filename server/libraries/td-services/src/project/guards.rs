@@ -18,7 +18,7 @@ use td_objects::types::basic::ProjectId;
 /// soft-deleted no request can ever set the GUC back to it.
 ///
 /// The delete-project service spans projects (bypass scope), so the
-/// `By::<ProjectId>` fetch sees the target project's collections regardless of
+/// collections fetch sees the target project's collections regardless of
 /// the request's own scope.
 pub fn reject_delete_non_empty_project(
     project_id: &ProjectId,

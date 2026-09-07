@@ -15,7 +15,7 @@ use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::Fixed;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn grant_simple_permission(
@@ -38,12 +38,11 @@ async fn grant_simple_permission(
 
     // a duplicate grant reports the membership already exists instead of
     // surfacing the raw user_role unique-constraint SQL error.
-    conn.live()
-        .assert_not_exists::<UserRoleDB>(and!(&resolved.role_id, &resolved.user_id))
+    conn.assert_not_exists::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
         .await?;
     // membership add (same as user_role create).
     let user_role = UserRoleDB::new(resolved.user_id, resolved.role_id, &ctx, Fixed::FALSE);
-    conn.live().insert(&user_role).await?;
+    conn.insert(&user_role).await?;
     trx.commit().await?;
 
     // Role membership changed; with the transaction committed, invalidate the
@@ -70,7 +69,7 @@ mod tests {
         AccessTokenId, BasePath, EntityId, EntityName, PermissionType, ProjectIdName, ProjectName,
         RoleId, RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     fn grant_request(
@@ -100,8 +99,7 @@ mod tests {
     }
 
     async fn user_role_count(db: &TdPool, user: &UserId, role: &RoleId) -> usize {
-        db.live()
-            .fetch_all::<UserRoleDB>(())
+        db.fetch_all::<UserRoleDB>(())
             .await
             .unwrap()
             .into_iter()
@@ -129,7 +127,6 @@ mod tests {
 
         // resolved to `p0_dev`
         let dev_role = db
-            .live()
             .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_dev")?)
             .await?;
         assert_eq!(user_role_count(&db, &user.id, &dev_role.id).await, 1);
@@ -320,7 +317,6 @@ mod tests {
     ) -> Result<(), TdError> {
         create_project(&db, "p0").await?;
         let p0 = db
-            .live()
             .fetch_one::<td_objects::dxo::project::ActiveProjectDB>(&ProjectName::try_from("p0")?)
             .await?;
         // requester only develops p0 (via a custom role), so cannot manage access.

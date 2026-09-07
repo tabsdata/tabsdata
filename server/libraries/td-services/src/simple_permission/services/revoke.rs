@@ -15,7 +15,7 @@ use td_objects::and;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBWithNames};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn revoke_simple_permission(
@@ -38,17 +38,14 @@ async fn revoke_simple_permission(
     // revoking a permission the user does not hold reports a clear
     // "not found" error instead of the opaque user_role row-not-found
     // SQL error from the fetch.
-    conn.live()
-        .assert_exists::<UserRoleDB>(and!(&resolved.role_id, &resolved.user_id))
+    conn.assert_exists::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
         .await?;
     // membership remove, reusing the user_role delete fixed-row guard.
     let row: UserRoleDBWithNames = conn
-        .live()
-        .fetch_one(and!(&resolved.role_id, &resolved.user_id))
+        .fetch_one(and!(&resolved.user_id, &resolved.role_id))
         .await?;
     assert_not_fixed(&row)?;
-    conn.live()
-        .delete::<UserRoleDB>(and!(&resolved.role_id, &resolved.user_id))
+    conn.delete::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
         .await?;
     trx.commit().await?;
 
@@ -75,12 +72,11 @@ mod tests {
         AccessTokenId, BasePath, ProjectIdName, ProjectName, RoleId, RoleName,
         SimplePermissionType, UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     async fn user_role_count(db: &TdPool, user: &UserId, role: &RoleId) -> usize {
-        db.live()
-            .fetch_all::<UserRoleDB>(())
+        db.fetch_all::<UserRoleDB>(())
             .await
             .unwrap()
             .into_iter()
@@ -113,7 +109,6 @@ mod tests {
             .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
         let dev_role = db
-            .live()
             .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_dev")?)
             .await?;
         db.seed().user_role(&user.id, &dev_role.id).await?;

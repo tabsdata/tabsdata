@@ -7,7 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
-use td_database::access::{GatedConnection, InProject, RO};
+use td_database::access::{AcrossProjects, GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::metrics::{InflightRequest, InflightResponse};
@@ -32,12 +32,12 @@ async fn inflight(
 }
 
 /// `GET /inflight` (global) — the same point-in-time aggregation across every
-/// project. `DbPool<Global>` bypasses RLS so the query spans all tenants; the
-/// result is then narrowed to the projects the requester may view.
+/// project, an `AcrossProjects` read narrowed to the projects the requester
+/// may view.
 #[service_factory]
 async fn inflight_global(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    gated_conn: &mut GatedConnection<RO, AcrossProjects>,
     request: ReadRequest<InflightRequest>,
 ) -> Result<InflightResponse, TdError> {
     let (ctx, param) = request.into_parts();
@@ -62,7 +62,7 @@ mod tests {
         FunctionRuntimeValues, GroupId, GroupName, LogicalFunctionRunStatus, ProjectName,
         TableNameDto, TransactionKey, UserId,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -278,13 +278,12 @@ mod tests {
             .await?;
         let coll_b: ActiveCollectionDB = db
             .scoped(&project_b_id)
-            .live()
             .fetch_one::<ActiveCollectionDB>(&coll_b_name)
             .await?;
         seed_inflight_run(&db, &coll_b).await?;
 
-        // Global request is project-free (bare InflightRequest) → bypass RLS →
-        // both projects' runs are visible in one response.
+        // The global request is project-free (bare InflightRequest) and reads
+        // across projects, so both projects' runs land in one response.
         let response = Services::with_defaults(db.clone())
             .inflight_global(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
