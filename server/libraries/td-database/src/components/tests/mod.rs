@@ -6,6 +6,7 @@
 //! real [`ApiserverComponent`](crate::components::ApiserverComponent) +
 //! [`TestDb`](crate::test_utils::TestDb), grouped by concern:
 //!
+//! * [`delta_data`] — deltas that migrate data, over real rows.
 //! * [`seeded`] — the bootstrap-seeded data (users, roles, permissions).
 //! * [`structure`] — the live schema's table/view/index inventory + version
 //!   and edition gates.
@@ -17,6 +18,7 @@
 //! This module holds the shared query helpers; the submodules reach them via
 //! `super::`.
 
+mod delta_data;
 mod migration;
 mod provisioning;
 mod rls;

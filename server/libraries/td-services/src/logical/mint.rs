@@ -23,10 +23,10 @@ use td_objects::types::basic::{
 };
 use td_queries::{ChunkedQueries, LfrEntry, LiveEntry};
 
-/// Effective storage prefix for a function run's output table data:
+/// Effective storage prefix for a function run and its output table data:
 /// the function version's `base_path` override if set, else the
-/// collection's `base_path`. Stamped (frozen) onto every output TDV at
-/// mint so reads never recompute it.
+/// collection's `base_path`. Stamped (frozen) onto the FR and every output
+/// TDV at mint so reads never recompute it.
 pub async fn resolve_output_base_path(
     conn: &mut DomainConnection<Apiserver>,
     function_version_id: &FunctionVersionId,
@@ -48,6 +48,7 @@ pub fn build_function_run(
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: &AtTime,
+    base_path: &BasePath,
 ) -> Result<PhysicalFunctionRunDB, TdError> {
     let triggered_on = TriggeredOn::try_from(at)?;
     // FR is born `Requested`: mint and run-request happen in the same
@@ -64,6 +65,7 @@ pub fn build_function_run(
         triggered_on,
         triggered_by_id: lfr.triggered_by_id,
         trigger: lfr.trigger.clone(),
+        base_path: base_path.clone(),
         dispatched_on: None,
         started_on: None,
         ended_on: None,
@@ -85,7 +87,8 @@ pub async fn mint_function_run(
     runnable: &RunnableVersion,
     at: &AtTime,
 ) -> Result<PhysicalFunctionRunDB, TdError> {
-    let fr = build_function_run(lfr, runnable, at)?;
+    let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
+    let fr = build_function_run(lfr, runnable, at, &base_path)?;
     conn.live().insert::<PhysicalFunctionRunDB>(&fr).await?;
     Ok(fr)
 }
@@ -282,7 +285,7 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: None,
         };
-        let built = build_function_run(&fx.lfr, &runnable, &AtTime::now())?;
+        let built = build_function_run(&fx.lfr, &runnable, &AtTime::now(), &BasePath::default())?;
 
         assert_eq!(built.collection_id, fx.lfr.collection_id);
         assert_eq!(built.execution_id, fx.lfr.execution_id);
@@ -302,7 +305,7 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: Some(patch_id.clone()),
         };
-        let built = build_function_run(&fx.lfr, &runnable, &AtTime::now())?;
+        let built = build_function_run(&fx.lfr, &runnable, &AtTime::now(), &BasePath::default())?;
 
         assert_eq!(built.function_version_id, fx.func.id);
         assert_eq!(built.function_version_patch_id, Some(patch_id.clone()));

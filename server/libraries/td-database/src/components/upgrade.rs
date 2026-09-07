@@ -37,10 +37,18 @@ impl AdminPool {
 
     /// Open the upgrade transaction. Public for components that compose their
     /// own step sequence; [`Self::upgrade`] is the normal entry.
+    ///
+    /// The transaction runs outside project scope: an upgrade is cross-tenant
+    /// work, and it connects as the schema owner, whom `FORCE ROW LEVEL
+    /// SECURITY` binds like anyone else. Without this a data delta over a
+    /// project-scoped table would match no rows and still report success.
     pub async fn begin_upgrade(&self) -> Result<UpgradeTransaction<'_>, DbError> {
-        let conn = self
+        let mut conn = self
             .pool
             .begin()
+            .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        conn.bypass_project_scope()
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         Ok(UpgradeTransaction { admin: self, conn })

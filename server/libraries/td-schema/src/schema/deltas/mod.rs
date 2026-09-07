@@ -19,9 +19,8 @@
 //! }
 //! ```
 //!
-//! Tabsdata 2.0 resets the ladder: `current/` is the v1 baseline of the 2.x
-//! line and there are no deltas yet. The first upgrade
-//! (`current::VERSION` bumped to 2) creates `v1_to_v2.rs` here — see
+//! Tabsdata 2.0 reset the ladder: `current/` was the v1 baseline of the 2.x
+//! line. Each further bump of `current::VERSION` adds one delta here — see
 //! the workflow below.
 //!
 //! ## Adding a new delta
@@ -45,6 +44,7 @@
 use crate::schema::version::SchemaDelta;
 
 pub(crate) mod v1_to_v2;
+pub(crate) mod v2_to_v3;
 
 /// Returns the SQL statements to upgrade from version `target_version - 1` to
 /// `target_version`.
@@ -55,6 +55,7 @@ pub(crate) mod v1_to_v2;
 pub fn get(target_version: usize) -> Vec<String> {
     match target_version {
         2 => v1_to_v2::Migration::up(),
+        3 => v2_to_v3::Migration::up(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

@@ -185,7 +185,7 @@ pub(crate) async fn resolve_input_tables(
     f: &PhysicalFunctionRunToExecute,
     prefetch: &DispatchPrefetch,
 ) -> Result<(Vec<InputTable>, Vec<InputTable>), TdError> {
-    let storage_location = StorageLocation::from(&f.storage_version);
+    let storage_location = StorageLocation::from(&f.base.storage_version);
 
     let empty_inputs = Vec::new();
     let lfr_id = prefetch.lfr_id_for(f);

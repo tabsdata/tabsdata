@@ -10,11 +10,10 @@
 //! it existed at that version. Archives are used together with deltas to test
 //! the migration invariant: `archive(N) + delta(N→N+1) ≡ current(N+1)`.
 //!
-//! Tabsdata 2.0 reset the schema ladder: `v1/` is the frozen 2.x baseline,
-//! archived when `current::VERSION` was bumped to 2. Follow the workflow
-//! below for each further bump.
+//! Tabsdata 2.0 reset the schema ladder: `v1/` is the frozen 2.x baseline.
+//! Follow the workflow below for each further bump.
 //!
-//! ## Creating an archive (on the first upgrade)
+//! ## Creating an archive
 //!
 //! When bumping to version N+1:
 //!
@@ -34,6 +33,7 @@
 use crate::schema::source::{SchemaSource, install_script};
 
 pub(crate) mod v1;
+pub(crate) mod v2;
 
 /// The [`SchemaSource`] for an archived version.
 ///
@@ -43,6 +43,7 @@ pub(crate) mod v1;
 pub fn source(version: usize) -> &'static dyn SchemaSource {
     match version {
         1 => &v1::Source,
+        2 => &v2::Source,
         _ => panic!("No archived schema for version {version}"),
     }
 }

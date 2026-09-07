@@ -37,6 +37,10 @@ pub struct PhysicalFunctionRunDB {
     pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
     pub trigger: Trigger,
+    // The run's effective prefix (function-version override, else the
+    // collection's), frozen at mint so the run's own content survives a
+    // later base_path move. Same resolution its output TDVs stamp.
+    pub base_path: BasePath,
     // Stamped at dispatch; basis for the stuck-run sweep.
     pub dispatched_on: Option<AtTime>,
     pub started_on: Option<AtTime>,
@@ -75,6 +79,7 @@ pub struct PhysicalFunctionRunDBWithNames {
     pub connection: Option<ConnectionKind>,
     pub execution: Option<ExecutionName>,
     pub execution_function_version_id: FunctionVersionId,
+    pub storage_version: StorageVersion,
     pub triggered_by: UserName,
 }
 
@@ -83,7 +88,6 @@ pub struct PhysicalFunctionRunDBWithNames {
 pub struct PhysicalFunctionRunToExecute {
     #[sqlx(flatten)]
     pub base: PhysicalFunctionRunDBWithNames,
-    pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub defined_on: AtTime,
     pub decorator: Decorator,
@@ -91,12 +95,11 @@ pub struct PhysicalFunctionRunToExecute {
     // joined in function_run_to_execute_select for the dispatch request.
     pub connection_id: Option<ConnectionId>,
     // Joined base paths (see function_run_to_execute_select): the effective
-    // bundle's stamped prefix, the function version's stage identity + stamped
-    // stage prefix, and the collection's live prefix (for run-content).
+    // bundle's stamped prefix, and the function version's stage identity +
+    // stamped stage prefix. The run's own prefix is `base.base.base_path`.
     pub bundle_base_path: BasePath,
     pub stage_id: StageId,
     pub stage_base_path: BasePath,
-    pub collection_base_path: BasePath,
 }
 
 #[ta_objects::Dto]

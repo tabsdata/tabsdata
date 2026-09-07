@@ -94,6 +94,10 @@ pub(crate) async fn seed_physical_function_run(
         triggered_on: transaction.triggered_on,
         triggered_by_id: transaction.triggered_by_id,
         trigger: Trigger::Manual,
+        base_path: function_version
+            .base_path
+            .clone()
+            .unwrap_or_else(|| collection.effective_base_path.clone()),
         dispatched_on: None,
         started_on: None,
         ended_on: None,

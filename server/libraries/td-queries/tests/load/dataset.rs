@@ -420,6 +420,7 @@ async fn build_unit(
         triggered_on: trx.triggered_on,
         triggered_by_id: trx.triggered_by_id,
         trigger: Trigger::Manual,
+        base_path: collection.effective_base_path.clone(),
         dispatched_on: None,
         started_on: None,
         ended_on: None,

@@ -37,6 +37,10 @@ pub enum PhysicalFunctionRuns {
     TriggeredOn,
     TriggeredById,
     Trigger,
+    // The run's effective prefix (function-version override, else the
+    // collection's), frozen at mint so the run's own content survives a
+    // later base_path move. Same resolution its output TDVs stamp.
+    BasePath,
     // Stamped at dispatch; NULL until then. Basis for the stuck-run sweep.
     DispatchedOn,
     StartedOn,
@@ -100,6 +104,9 @@ impl Entity for Defs {
                 .col(ColumnDef::new(PhysicalFunctionRuns::MetricTableVersions).big_integer().null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::MetricRows).big_integer().null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::MetricDataBytes).big_integer().null())
+                // Declared last so the appending delta lands on the same attnum a
+                // fresh install does: the with-names view expands `*`.
+                .col(ColumnDef::new(PhysicalFunctionRuns::BasePath).text().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId)
@@ -185,6 +192,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Executions::Table, Executions::FunctionVersionId)), Alias::new("execution_function_version_id"))
+                .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
                 .expr_as(
                     name_or_id((Users::Table, Users::Name), (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::TriggeredById)),
                     Alias::new("triggered_by"),

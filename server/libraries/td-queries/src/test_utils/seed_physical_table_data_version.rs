@@ -18,8 +18,8 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AtTime, BasePath, HasData, LogicalPointerReason, LogicalPointerStatus,
-    LogicalTableDataVersionId, PhysicalTableDataVersionId, TableFunctionParamPos,
+    AtTime, HasData, LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
+    PhysicalTableDataVersionId, TableFunctionParamPos,
 };
 
 pub(crate) async fn seed_physical_table_data_version_with_data(
@@ -85,7 +85,8 @@ pub async fn _seed_physical_table_data_version(
         physical_function_run_id: physical_function_run.id.clone(),
         function_param_pos: TableFunctionParamPos::try_from(0)?,
         triggered_on: physical_function_run.triggered_on,
-        base_path: BasePath::default(),
+        // Mirror the mint: an FR and its output TDVs stamp the same prefix.
+        base_path: physical_function_run.base_path.clone(),
         has_data: has_data.cloned(),
         schema_changed: None,
         column_count: None,

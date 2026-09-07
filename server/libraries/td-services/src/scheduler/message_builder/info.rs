@@ -18,7 +18,7 @@ pub(crate) fn build_function_info(
     storage: &Storage,
     f: &PhysicalFunctionRunToExecute,
 ) -> Result<FunctionInfo, TdError> {
-    let storage_location = StorageLocation::from(&f.storage_version);
+    let storage_location = StorageLocation::from(&f.base.storage_version);
 
     // Bundle location — the effective bundle's stamped base_path (from the to_execute join).
     let (path, _) = storage_location
@@ -47,9 +47,9 @@ pub(crate) fn build_function_info(
         .as_ref()
         .unwrap_or(&f.base.base.function_version_id);
 
-    // Function run content location — the collection's (live) base_path.
+    // Function run content location — the prefix stamped on the run at mint.
     let (path, _) = storage_location
-        .builder(&f.collection_base_path)
+        .builder(&f.base.base.base_path)
         .collection(&f.base.base.collection_id)
         .transaction(&f.base.base.transaction_id)
         .function_version(effective_fvid)
@@ -62,7 +62,7 @@ pub(crate) fn build_function_info(
     let function_raw = match f.decorator {
         Decorator::Publisher => {
             let (path, _) = storage_location
-                .builder(&f.collection_base_path)
+                .builder(&f.base.base.base_path)
                 .collection(&f.base.base.collection_id)
                 .function_run(&f.base.base.id)
                 .raw()
@@ -109,9 +109,9 @@ mod tests {
 
     /// Proves each stamped base_path on `PhysicalFunctionRunToExecute` is routed
     /// to the CORRECT storage location (no cross-wiring): bundle → `bundle_base_path`,
-    /// staging → `stage_base_path`, function-run content → `collection_base_path`.
-    /// With distinct prefixes `/b`, `/s`, `/c` we assert each produced URI carries
-    /// its own prefix and not another's.
+    /// staging → `stage_base_path`, function-run content and raw data → the
+    /// prefix stamped on the run itself. With distinct prefixes `/b`, `/s`, `/r`
+    /// we assert each produced URI carries its own prefix and not another's.
     #[test]
     fn test_function_info_uses_stamped_base_paths() {
         // Storage mounted at "/" over a temp dir, so a path "/b/..." renders to
@@ -131,6 +131,7 @@ mod tests {
                     triggered_on: TriggeredOn::now(),
                     triggered_by_id: UserId::admin(),
                     trigger: Trigger::Manual,
+                    base_path: BasePath::try_from("/r").unwrap(),
                     dispatched_on: None,
                     started_on: None,
                     ended_on: None,
@@ -149,10 +150,10 @@ mod tests {
                 project: Some(ProjectName::try_from("p0").unwrap()),
                 execution: None,
                 execution_function_version_id: FunctionVersionId::new(),
+                storage_version: StorageVersion::V1,
                 triggered_by: UserName::try_from("u0").unwrap(),
                 connection: None,
             },
-            storage_version: StorageVersion::V1,
             bundle_id: BundleId::default(),
             defined_on: AtTime::now(),
             decorator: Decorator::Transformer,
@@ -160,7 +161,6 @@ mod tests {
             bundle_base_path: BasePath::try_from("/b").unwrap(),
             stage_id: StageId::default(),
             stage_base_path: BasePath::try_from("/s").unwrap(),
-            collection_base_path: BasePath::try_from("/c").unwrap(),
         };
 
         let info = build_function_info(&storage, &f).unwrap();
@@ -179,8 +179,8 @@ mod tests {
             "stage path should carry stage_base_path '/s': {stage}"
         );
         assert!(
-            data.contains("/c/c/"),
-            "function-run content path should carry collection_base_path '/c': {data}"
+            data.contains("/r/c/"),
+            "function-run content path should carry the run's stamped prefix '/r': {data}"
         );
 
         // Only publishers ingest, so only they are given a raw-data location.
@@ -198,8 +198,12 @@ mod tests {
             .expect("a publisher is given a raw-data location");
         let raw = raw.uri.path();
         assert!(
-            raw.contains(&format!("/w/{}/r", f.base.base.id)),
-            "raw data must hang off the physical run that ingested it: {raw}"
+            raw.contains(&format!(
+                "/r/c/{}/w/{}/r",
+                f.base.base.collection_id, f.base.base.id
+            )),
+            "raw data must hang off the physical run that ingested it, under the \
+             prefix stamped on that run: {raw}"
         );
 
         // No cross-wiring: the bundle/stage prefixes must not leak into other paths.
@@ -208,16 +212,16 @@ mod tests {
             "bundle path leaked stage prefix: {bundle}"
         );
         assert!(
-            !bundle.contains("/c/c/"),
-            "bundle path leaked collection prefix: {bundle}"
+            !bundle.contains("/r/c/"),
+            "bundle path leaked the run prefix: {bundle}"
         );
         assert!(
             !stage.contains("/b/"),
             "stage path leaked bundle prefix: {stage}"
         );
         assert!(
-            !stage.contains("/c/c/"),
-            "stage path leaked collection prefix: {stage}"
+            !stage.contains("/r/c/"),
+            "stage path leaked the run prefix: {stage}"
         );
         assert!(
             !data.contains("/b/"),
