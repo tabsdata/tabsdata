@@ -2,22 +2,15 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-// The DaoType derive macro generates an Iden enum from struct field names.
-// Given a struct field `defined_on`, the generated variant is `DefinedOn`
-// (UpperCamelCase via heck). We must use the same conversion when referencing
-// variants from the macro, otherwise the generated code won't compile.
-//
-// Field idents (snake_case) → Iden variants (UpperCamelCase):
-//   id           → Id
-//   defined_on   → DefinedOn
-//   table_id     → TableId
-//   partition_by → PartitionBy
-//
-// The Iden enum itself is named <StructName>Iden and has a leading Table variant:
-//   struct TableDB { id, defined_on } → enum TableDBIden { Table, Id, DefinedOn }
+// Iden variants derive from field names via heck's UpperCamelCase
+// (`defined_on` → `DefinedOn`); every macro-side column reference must use
+// the same conversion.
 
+use crate::dao_marks::{FieldMarks, field_ident, field_type, option_inner_type, type_names};
+use crate::dao_unique::{Under, addresses};
 use crate::dxo_fields::{callback_ident, fields_callback};
 use crate::type_builder::parse_input_item_struct;
+use darling::ast::NestedMeta;
 use darling::util::{Flag, PathList};
 use darling::{FromDeriveInput, FromMeta};
 use heck::ToUpperCamelCase;
@@ -25,153 +18,157 @@ use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
-use syn::{DeriveInput, Fields, ItemStruct, Type, parse_macro_input};
+use syn::{DeriveInput, Field, Fields, ItemStruct, Type, parse_macro_input};
 
-// ---- Darling argument structs ----------------------------------------------
-
+/// `#[dao(table = "..", ops(select, insert, update(RowDao), delete, upsert(A, B)))]`
+/// or `#[dao(view = "..")]`, plus `db(Domain)`, `unique(A, B)` (repeatable;
+/// unique across the whole relation, index-backed), `unique_at(A, B)`
+/// (repeatable, `scd2` only; unique among the versions visible at one instant,
+/// so it addresses one version but not one row of the history), `scd2` |
+/// `timeline`, `recursive`, and `project_scoped` /
+/// `project_scoped(unique(A, B), unique_at(A, B))`.
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(dao))]
 pub struct DaoArguments {
-    update: Flag,
-    sql_table: Option<String>,
-    /// The table's `DbDomain`; absent = `ta_objects::Apiserver`.
-    db: Option<syn::Path>,
-    order_by: Option<OrderByArguments>,
-    versioned: Option<VersionedArguments>,
-    recursive: Option<RecursiveArguments>,
-    data_version: Flag,
-    /// Opt-out: this DAO is a truly append-only event log (multiple rows
-    /// per partition). Skip the `Dao` impl so callers can't reach for the
-    /// bare `BasicQueries::fetch_*` methods — they must walk through
-    /// `current()` / `versioned(...)` / `historic(...)`.
-    event_log: Flag,
-    logical_pointer: Option<LogicalPointerArguments>,
-    /// The row's logical key. Emits a `KeyedDao` impl (key = these columns,
-    /// values = every other DAO column), unlocking the generic
-    /// upsert / insert-or-ignore surface. Must back a `UNIQUE` constraint.
-    #[darling(default)]
-    key: PathList,
+    ops: Option<OpsArguments>,
+    table: Option<String>,
+    view: Option<String>,
+    db: Option<PathArg>,
+    #[darling(default, multiple, rename = "unique")]
+    unique_types: Vec<PathList>,
+    #[darling(default, multiple, rename = "unique_at")]
+    unique_at_types: Vec<PathList>,
+    scd2: Flag,
+    timeline: Flag,
+    recursive: Flag,
+    project_scoped: Option<ProjectScopedArguments>,
 }
 
-#[derive(Debug, FromMeta)]
-struct OrderByArguments {
-    col: String,
-    #[darling(default = "default_order_dir")]
-    dir: String,
+#[derive(Debug, Default, FromMeta)]
+struct OpsArguments {
+    select: Flag,
+    insert: Flag,
+    delete: Flag,
+    update: Option<UpdateArguments>,
+    upsert: Option<PathList>,
 }
 
-fn default_order_dir() -> String {
-    "desc".into()
+impl OpsArguments {
+    fn writes(&self) -> bool {
+        self.insert.is_present() || self.delete.is_present() || self.upsert.is_some()
+    }
+
+    fn any(&self) -> bool {
+        self.select.is_present() || self.writes() || self.update.is_some()
+    }
 }
 
-#[derive(Debug, FromMeta)]
-struct VersionedArguments {
-    pk: Option<String>,
-    version_by: Option<String>,
-    partition_by: Option<String>,
-    current: Option<String>,
+#[derive(Debug, Default)]
+struct ProjectScopedArguments {
+    unique: Vec<PathList>,
+    unique_at: Vec<PathList>,
 }
 
-#[derive(Debug, FromMeta)]
-struct RecursiveArguments {
-    up: String,
-    down: String,
-}
+impl FromMeta for ProjectScopedArguments {
+    fn from_word() -> darling::Result<Self> {
+        Ok(Self::default())
+    }
 
-#[derive(Debug, FromMeta)]
-struct LogicalPointerArguments {
-    /// Column on this pointer-event table holding the logical identity
-    /// (e.g. `logical_function_run_id`).
-    logical_id_col: String,
-    /// Column holding the concrete-binding FK (Option-typed); NULL on
-    /// Pending / Voided events (e.g. `physical_function_run_id`).
-    concrete_id_col: String,
-    /// The insert-once identity-row DAO type.
-    identity: syn::Path,
-    /// Human-readable kind tag for error messages ("LFR" / "LTDV").
-    kind: String,
-}
-
-// ---- Helpers ---------------------------------------------------------------
-
-/// Look up a field's type by name, returning a compile error if not found.
-/// Use inside functions that return `TokenStream` — the `return` unwinds to the
-/// enclosing function on error.
-macro_rules! require_field {
-    ($fields:expr, $name:expr, $context:expr, $span:expr) => {
-        match field_type_by_name($fields, $name) {
-            Some(ty) => ty,
-            None => {
-                return syn::Error::new_spanned(
-                    $span,
-                    format!(concat!($context, ": field '{}' not found in struct"), $name),
-                )
-                .to_compile_error()
-                .into();
+    fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
+        let mut unique = Vec::new();
+        let mut unique_at = Vec::new();
+        for item in items {
+            match item {
+                NestedMeta::Meta(meta) if meta.path().is_ident("unique") => {
+                    unique.push(PathList::from_meta(meta)?);
+                }
+                NestedMeta::Meta(meta) if meta.path().is_ident("unique_at") => {
+                    unique_at.push(PathList::from_meta(meta)?);
+                }
+                other => {
+                    return Err(darling::Error::custom(
+                        "project_scoped takes `unique(A, B)` / `unique_at(A, B)` sets, as in \
+                         `project_scoped(unique(CollectionName))`",
+                    )
+                    .with_span(other));
+                }
             }
         }
-    };
+        Ok(Self { unique, unique_at })
+    }
 }
 
-// ---- Entry points ----------------------------------------------------------
+#[derive(Debug)]
+struct PathArg(syn::Path);
 
-/// Attribute macro that wraps a struct with DAO derives (DaoType, Builder, and
-/// optionally FromRow).  When the struct carries `#[dao(update, …)]` the type
-/// is update-only and `sqlx::FromRow` is skipped (never read from DB).
+impl FromMeta for PathArg {
+    fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
+        single_path(items, "db(SomeDomain)").map(Self)
+    }
+}
+
+#[derive(Debug, Default)]
+struct UpdateArguments {
+    filter_by: Option<syn::Path>,
+}
+
+impl FromMeta for UpdateArguments {
+    fn from_word() -> darling::Result<Self> {
+        Ok(Self::default())
+    }
+
+    fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
+        single_path(items, "update(RowDao)").map(|p| Self { filter_by: Some(p) })
+    }
+}
+
+fn single_path(items: &[NestedMeta], form: &str) -> darling::Result<syn::Path> {
+    match items {
+        [NestedMeta::Meta(syn::Meta::Path(path))] => Ok(path.clone()),
+        _ => Err(darling::Error::custom(format!(
+            "expected one type in parentheses, as in `{form}`"
+        ))),
+    }
+}
+
+/// An update payload's `Option` fields mean "leave the column alone", so it is
+/// the one shape that gets no `sqlx::FromRow`.
 pub fn dao(_args: TokenStream, item: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(item as ItemStruct);
-    let is_update = is_dao_update_attr(&input);
-    // A `#[dao(flatten)]` field decodes by delegating to the base DAO's
-    // FromRow impl on the same row.
+    let parsed = match DaoArguments::from_derive_input(&DeriveInput::from(input.clone())) {
+        Ok(p) => p,
+        Err(e) => return e.write_errors().into(),
+    };
+    let marks = match FieldMarks::parse(&input.fields) {
+        Ok(m) => m,
+        Err(e) => return e.to_compile_error().into(),
+    };
+    let flattened: Vec<usize> = input
+        .fields
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| marks.has(f, "flatten"))
+        .map(|(i, _)| i)
+        .collect();
     if let Fields::Named(named) = &mut input.fields {
-        for f in named.named.iter_mut() {
-            if is_dao_flatten(f) {
+        for (i, f) in named.named.iter_mut().enumerate() {
+            if flattened.contains(&i) {
                 f.attrs.push(syn::parse_quote! { #[sqlx(flatten)] });
             }
         }
     }
-    if is_update {
-        quote! {
-            #[derive(Debug, Clone, ta_objects::DaoType)]
-            #input
-        }
-        .into()
-    } else {
-        quote! {
-            #[derive(Debug, Clone, ta_objects::DaoType, sqlx::FromRow)]
-            #input
-        }
-        .into()
+    let from_row = match parsed.ops.as_ref().and_then(|ops| ops.update.as_ref()) {
+        Some(_) => quote! {},
+        None => quote! { , sqlx::FromRow },
+    };
+    quote! {
+        #[derive(Debug, Clone, ta_objects::DaoType #from_row)]
+        #[allow(clippy::duplicated_attributes)]
+        #input
     }
+    .into()
 }
 
-/// Check whether any `#[dao(...)]` attribute on the struct contains `update`.
-fn is_dao_update_attr(input: &ItemStruct) -> bool {
-    input.attrs.iter().any(|a| {
-        if !a.path().is_ident("dao") {
-            return false;
-        }
-        // Parse the token list inside #[dao(...)]; look for a bare `update` ident.
-        a.parse_args_with(|tokens: syn::parse::ParseStream| {
-            while !tokens.is_empty() {
-                if tokens.peek(syn::Ident) {
-                    let ident: Ident = tokens.parse()?;
-                    if ident == "update" {
-                        return Ok(true);
-                    }
-                } else {
-                    // Skip non-ident tokens (commas, nested groups, etc.)
-                    let _: proc_macro2::TokenTree = tokens.parse()?;
-                }
-            }
-            Ok(false)
-        })
-        .unwrap_or(false)
-    })
-}
-
-/// Derive macro that generates the Iden enum, DaoCore, TypedColumns, and trait
-/// impls (Dao, VersionedDao, Recursive, States) for a DAO struct.
 pub fn dao_type(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let parsed = match DaoArguments::from_derive_input(&input) {
@@ -182,75 +179,219 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         Ok(item) => item,
         Err(e) => return e.to_compile_error().into(),
     };
+    match expand(&parsed, &item) {
+        Ok(ts) => ts.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
 
+struct Column<'a> {
+    name: &'a Ident,
+    ty: &'a Type,
+    variant: Ident,
+}
+
+fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::TokenStream> {
     let ident = &item.ident;
     let vis = &item.vis;
     let fields = &item.fields;
-    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
-
-    // At most one `#[dao(flatten)]` field: an embedded base DAO whose columns
-    // this DAO also projects. All column metadata delegates to it, base first
-    // (matching the merged-field order the flattened struct would have).
-    let flatten_fields: Vec<&syn::Field> = fields.iter().filter(|f| is_dao_flatten(f)).collect();
-    if flatten_fields.len() > 1 {
-        return syn::Error::new_spanned(ident, "at most one #[dao(flatten)] field is supported")
-            .to_compile_error()
-            .into();
+    if !item.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &item.generics,
+            "a DAO cannot be generic: it maps to one relation",
+        ));
     }
-    let flatten = match flatten_fields.first().map(|f| FlattenInfo::of(f)) {
-        Some(Ok(fi)) => Some(fi),
-        Some(Err(e)) => return e.to_compile_error().into(),
-        None => None,
+    let marks = FieldMarks::parse(fields)?;
+    let flatten = flatten_info(&marks)?;
+    let base_ty = flatten.as_ref().map(|fi| &fi.base_ty);
+    let columns: Vec<Column> = fields
+        .iter()
+        .filter(|f| !is_sqlx_skip(f) && !marks.has(f, "flatten"))
+        .map(|f| Column {
+            name: field_ident(f),
+            ty: &f.ty,
+            variant: iden_variant(field_ident(f)),
+        })
+        .collect();
+    let field_names: Vec<&Ident> = columns.iter().map(|c| c.name).collect();
+    let field_types: Vec<&Type> = columns.iter().map(|c| c.ty).collect();
+    let field_iden_variants: Vec<&Ident> = columns.iter().map(|c| &c.variant).collect();
+
+    let (relation, is_table) = match (&parsed.table, &parsed.view) {
+        (Some(t), None) => (t.clone(), true),
+        (None, Some(v)) => (v.clone(), false),
+        _ => {
+            return Err(syn::Error::new_spanned(
+                ident,
+                "a DAO must declare exactly one of `table = \"...\"` / `view = \"...\"`",
+            ));
+        }
     };
-    if flatten.is_some() && parsed.update.is_present() {
-        return syn::Error::new_spanned(ident, "#[dao(flatten)] is not supported in update DAOs")
-            .to_compile_error()
-            .into();
-    }
-    if flatten.is_some() && parsed.logical_pointer.is_some() {
-        return syn::Error::new_spanned(
+    let view_ops = OpsArguments {
+        select: Flag::present(),
+        ..Default::default()
+    };
+    let ops = match (&parsed.ops, is_table) {
+        (Some(ops), true) if ops.any() => ops,
+        (None, false) => &view_ops,
+        (_, true) => {
+            return Err(syn::Error::new_spanned(
+                ident,
+                "a table DAO must declare what it may be the subject of, \
+                 as in `ops(select, insert)`",
+            ));
+        }
+        (Some(_), false) => {
+            return Err(syn::Error::new_spanned(
+                ident,
+                "a view is readable by construction and cannot be written to, so it takes no `ops`",
+            ));
+        }
+    };
+    let is_scd2 = parsed.scd2.is_present();
+    let is_timeline = parsed.timeline.is_present();
+    let is_versioned = is_scd2 || is_timeline;
+    let is_update = ops.update.is_some();
+    if is_update && (ops.select.is_present() || ops.writes()) {
+        return Err(syn::Error::new_spanned(
             ident,
-            "#[dao(flatten)] is not supported with logical_pointer",
-        )
-        .to_compile_error()
-        .into();
+            "`update` is the only op of an update payload: its `Option` fields mean \
+             \"leave the column alone\", which a readable or insertable DAO reads as \
+             \"the column is nullable\"",
+        ));
+    }
+    if ops.upsert.is_some() && !ops.insert.is_present() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "`upsert` is a conflicting `insert`, so it needs one",
+        ));
+    }
+    if is_scd2 && is_timeline {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "`scd2` and `timeline` are mutually exclusive",
+        ));
+    }
+    if is_versioned && ops.upsert.is_some() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "a versioned row is superseded, never conflict-replaced: `upsert` needs an \
+             unversioned relation",
+        ));
+    }
+    if is_versioned && ops.delete.is_present() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "a versioned row is closed by the trigger, never deleted: `delete` needs an \
+             unversioned relation",
+        ));
+    }
+    let version_mark = if is_scd2 { "valid_from" } else { "version_by" };
+    if !is_versioned
+        && (marks.any("partition_by") || marks.any("valid_from") || marks.any("version_by"))
+    {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "#[dao(partition_by)] / #[dao(valid_from)] / #[dao(version_by)] \
+             require `scd2` or `timeline`",
+        ));
+    }
+    if is_scd2 && marks.any("version_by") {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "an SCD2 table orders by its interval start: mark it #[dao(valid_from)]",
+        ));
+    }
+    if is_timeline && marks.any("valid_from") {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "a timeline has no interval chain: mark its ordering column #[dao(version_by)]",
+        ));
+    }
+    if !parsed.recursive.is_present() && (marks.any("recurse_up") || marks.any("recurse_down")) {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "#[dao(recurse_up)] / #[dao(recurse_down)] require `recursive`",
+        ));
     }
 
-    // snake_case field idents, excluding #[sqlx(skip)] and #[dao(flatten)] fields.
-    // These are used for struct field access: self.defined_on, self.id, etc.
-    let field_names = field_idents(fields);
-
-    // The Rust types of each field — independent of the field name.
-    // AccessTokenId, AtTime, etc. Used only in TypedColumns for TypeId matching.
-    let field_types = field_types(fields);
-
-    // Iden variant idents derived from FIELD NAMES (not type names) via UpperCamelCase.
-    // "id" → Id, "defined_on" → DefinedOn, regardless of whether the type is
-    // AccessTokenId, AtTime, or anything else.
-    let field_iden_variants: Vec<Ident> = field_names.iter().map(|f| iden_variant(f)).collect();
-
-    // ---- sql_table ---------------------------------------------------------
-
-    let sql_table = parsed
-        .sql_table
-        .unwrap_or_else(|| ident.to_string().to_lowercase());
-
-    // ---- Iden enum ---------------------------------------------------------
     let table_iden = format_ident!("{}Iden", ident);
+    let col_ref = |field: &Field| -> proc_macro2::TokenStream {
+        let variant = iden_variant(field_ident(field));
+        quote! { #table_iden::#variant }
+    };
+
+    let valid_to_field = marks.marked_once("valid_to")?;
+    if let Some(f) = valid_to_field {
+        if !is_scd2 {
+            return Err(syn::Error::new_spanned(
+                f,
+                "#[dao(valid_to)] requires `scd2`: only an interval table has an interval end",
+            ));
+        }
+        if !type_names(&f.ty, "ValidTo") {
+            return Err(syn::Error::new_spanned(
+                f,
+                "#[dao(valid_to)] marks the `ValidTo` column",
+            ));
+        }
+    }
+    if valid_to_field.is_none()
+        && let Some(c) = columns
+            .iter()
+            .find(|c| type_names(c.ty, "ValidTo") || c.name == "valid_to")
+    {
+        return Err(syn::Error::new_spanned(
+            c.name,
+            "the interval end must be marked #[dao(valid_to)]",
+        ));
+    }
+    if ops.insert.is_present()
+        && let Some(f) = valid_to_field
+    {
+        return Err(syn::Error::new_spanned(
+            f,
+            "a write DAO cannot carry the interval end: the close-out trigger owns it. \
+             Project it from the row DAO, which declares `select` only",
+        ));
+    }
+    if parsed.project_scoped.is_some()
+        && ops.insert.is_present()
+        && let Some(c) = columns.iter().find(|c| type_names(c.ty, "ProjectId"))
+    {
+        return Err(syn::Error::new_spanned(
+            c.name,
+            "a `project_scoped` insert DAO cannot carry a `ProjectId` column: the \
+             `project_isolation` policy defaults it from the connection. Keep it \
+             on the row DAO, which declares `select` only",
+        ));
+    }
+
+    let synthetic_valid_to = is_scd2 && valid_to_field.is_none() && base_ty.is_none();
+    let valid_to_col = match (valid_to_field, base_ty) {
+        (Some(f), _) => col_ref(f),
+        (None, Some(b)) => quote! { #table_iden::Base(<#b as ta_objects::Scd2Dao>::VALID_TO) },
+        (None, None) => quote! { #table_iden::ValidTo },
+    };
+    let synthetic_variant = synthetic_valid_to.then(|| quote! { ValidTo, });
+    let synthetic_from_str =
+        synthetic_valid_to.then(|| quote! { "valid_to" => Ok(Self::ValidTo), });
     let field_name_strs: Vec<String> = field_names.iter().map(|f| f.to_string()).collect();
     let iden_enum = match &flatten {
         None => quote! {
             #[derive(Debug, Clone, Copy, PartialEq, Eq, sea_query::Iden)]
             #vis enum #table_iden {
-                #[iden = #sql_table]
+                #[iden = #relation]
                 Table,
+                #synthetic_variant
                 #(#field_iden_variants,)*
             }
             impl std::str::FromStr for #table_iden {
                 type Err = td_error::TdError;
                 fn from_str(s: &str) -> Result<Self, Self::Err> {
                     match s {
-                        #sql_table => Ok(Self::Table),
+                        #relation => Ok(Self::Table),
+                        #synthetic_from_str
                         #(#field_name_strs => Ok(Self::#field_iden_variants),)*
                         _ => Err(td_error::api_error!(
                             td_error::ApiError::InputError,
@@ -261,14 +402,12 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                 }
             }
         },
-        // The base's columns ride along in a `Base(..)` variant, rendered by
-        // delegation via sea_query's `#[iden(flatten)]`.
         Some(fi) => {
             let base_iden = &fi.base_iden;
             quote! {
                 #[derive(Debug, Clone, Copy, PartialEq, Eq, sea_query::Iden)]
                 #vis enum #table_iden {
-                    #[iden = #sql_table]
+                    #[iden = #relation]
                     Table,
                     #[iden(flatten)]
                     Base(#base_iden),
@@ -278,7 +417,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                     type Err = td_error::TdError;
                     fn from_str(s: &str) -> Result<Self, Self::Err> {
                         match s {
-                            #sql_table => Ok(Self::Table),
+                            #relation => Ok(Self::Table),
                             #(#field_name_strs => Ok(Self::#field_iden_variants),)*
                             _ => <#base_iden as std::str::FromStr>::from_str(s).map(Self::Base),
                         }
@@ -288,81 +427,75 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
     };
 
-    // Resolve a `#[dao(...)]` column name: own field, else a column of the
-    // flattened base, resolved through `FromStr` so it reaches any nesting
-    // depth (chained flattens).
-    let col_ref = |name: &str| -> proc_macro2::TokenStream {
-        let variant = iden_variant_from_str(name);
-        match &flatten {
-            Some(_) if !field_name_strs.iter().any(|f| f == name) => {
-                let expect = format!("`{name}` is a column of the flattened base");
-                quote! {
-                    <#table_iden as std::str::FromStr>::from_str(#name).expect(#expect)
-                }
-            }
-            _ => quote! { #table_iden::#variant },
-        }
-    };
-
-    // ---- order_by ----------------------------------------------------------
-    let order_by_items = match &parsed.order_by {
-        Some(o) => {
-            let col = col_ref(&o.col);
-            let dir = match o.dir.as_str() {
-                "asc" => quote! { sea_query::Order::Asc },
-                _ => quote! { sea_query::Order::Desc },
+    let order_by_items = match marks.order_by()? {
+        Some((name, asc)) => {
+            let variant = iden_variant(name);
+            let dir = if asc {
+                quote! { sea_query::Order::Asc }
+            } else {
+                quote! { sea_query::Order::Desc }
             };
-            quote! { [(#col, #dir)] }
+            quote! { [(#table_iden::#variant, #dir)] }
         }
-        None => match &flatten {
-            // Default ordering follows the base, like the first-field default
-            // would on the merged struct.
-            Some(fi) => {
-                let base_ty = &fi.base_ty;
-                quote! {
-                    <#base_ty as ta_objects::Dao>::order_by()
-                        .into_iter()
-                        .map(|(c, o)| (#table_iden::Base(c), o))
-                }
-            }
+        None => match base_ty {
+            Some(b) => quote! {
+                <#b as ta_objects::Dao>::order_by()
+                    .into_iter()
+                    .map(|(c, o)| (#table_iden::Base(c), o))
+            },
             None => {
-                let first = match field_iden_variants.first() {
-                    Some(f) => f,
-                    None => {
-                        return syn::Error::new_spanned(
-                            ident,
-                            "DAO struct must have at least one non-skipped field",
-                        )
-                        .to_compile_error()
-                        .into();
-                    }
-                };
+                let first = field_iden_variants.first().ok_or_else(|| {
+                    syn::Error::new_spanned(ident, "a DAO needs at least one column")
+                })?;
                 quote! { [(#table_iden::#first, sea_query::Order::Desc)] }
             }
         },
     };
 
-    // ---- DaoCore (minimal) -------------------------------------------------
     let display_name = struct_name_to_display_name(&ident.to_string());
     let db_domain = match &parsed.db {
-        Some(path) => quote! { #path },
+        Some(PathArg(path)) => quote! { #path },
         None => quote! { ta_objects::Apiserver },
     };
-    let display_values_base = match &flatten {
-        None => quote! { let mut __values: Vec<(String, String)> = Vec::new(); },
+    let (display_values_base, columns_items, insert_items) = match &flatten {
+        None => (
+            quote! { let mut __values: Vec<(String, String)> = Vec::new(); },
+            quote! { [#(#table_iden::#field_iden_variants),*] },
+            quote! { [#(self.#field_names.as_sea_value().into()),*] },
+        ),
         Some(fi) => {
+            let b = &fi.base_ty;
             let bf = &fi.field;
-            quote! { let mut __values = self.#bf.column_display_values(); }
+            (
+                quote! { let mut __values = self.#bf.column_display_values(); },
+                quote! {
+                    <#b as ta_objects::Dao>::columns()
+                        .into_iter()
+                        .map(#table_iden::Base)
+                        .chain([#(#table_iden::#field_iden_variants),*])
+                },
+                quote! {
+                    ta_objects::InsertDao::insert_values(&self.#bf)
+                        .into_iter()
+                        .chain([#(self.#field_names.as_sea_value().into()),*])
+                },
+            )
         }
     };
     let dao_core = quote! {
-        impl #impl_generics ta_objects::DaoCore for #ident #ty_generics #where_clause {
+        impl ta_objects::Dao for #ident {
+            type Iden = #table_iden;
             type Db = #db_domain;
-            fn table() -> Self::Iden {
-                #table_iden::Table
-            }
+            const RELATION: &'static str = #relation;
+            const TABLE: Self::Iden = #table_iden::Table;
             fn display_name() -> &'static str {
                 #display_name
+            }
+            fn columns() -> impl IntoIterator<Item = Self::Iden> {
+                #columns_items
+            }
+            fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)> {
+                #order_by_items
             }
             fn column_display_values(&self) -> Vec<(String, String)> {
                 #[allow(unused_imports)]
@@ -381,65 +514,68 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
     };
 
-    // ---- TypedColumns ------------------------------------------------------
-    // Base first: matches the merged-field order, so a domain type present in
-    // both base and own fields resolves to the base column.
-    let col_for_type_base = match &flatten {
-        None => quote! {},
-        Some(fi) => {
-            let base_ty = &fi.base_ty;
-            quote! {
-                if let Some(c) = <#base_ty as ta_objects::TypedColumns>::col_for_type(type_id) {
-                    return Some(#table_iden::Base(c));
-                }
-            }
+    let is_project_scoped = parsed.project_scoped.is_some();
+    let reachable = if is_project_scoped {
+        quote! {
+            impl ta_objects::ProjectScoped for #ident {}
+            impl<__S: td_database::access::SeesProjectRows> ta_objects::ReachableFrom<__S> for #ident {}
+        }
+    } else {
+        quote! {
+            impl<__S: td_database::access::DbScope> ta_objects::ReachableFrom<__S> for #ident {}
         }
     };
-    let typed_columns = quote! {
-        impl #impl_generics ta_objects::TypedColumns for #ident #ty_generics #where_clause {
-            type Iden = #table_iden;
-            fn col_for_type(
-                type_id: std::any::TypeId,
-            ) -> Option<Self::Iden> {
-                #col_for_type_base
-                match type_id {
-                    #(
-                        t if t == std::any::TypeId::of::<#field_types>() =>
-                            Some(#table_iden::#field_iden_variants),
-                    )*
-                    _ => None,
-                }
-            }
-        }
+    let insertable = match (ops.insert.is_present(), is_project_scoped) {
+        (false, _) => quote! {},
+        (true, true) => quote! {
+            impl ta_objects::InsertableFrom<td_database::access::InProject> for #ident {}
+        },
+        (true, false) => quote! {
+            impl<__S: td_database::access::DbScope> ta_objects::InsertableFrom<__S> for #ident {}
+        },
     };
+    let table_dao = is_table.then(|| quote! { impl ta_objects::TableDao for #ident {} });
 
-    // ---- HasColumn -----------------------------------------------------
-    // With a flatten base the merged field list is only visible when the
-    // base's `__dxo_fields_*` callback expands, so ban + impls delegate to
-    // `__dao_has_columns` through it.
     let has_columns = match &flatten {
         None => {
             let mut seen: HashMap<String, &Ident> = HashMap::new();
-            for (name, ty) in field_names.iter().copied().zip(field_types.iter().copied()) {
-                if let Some(first) = seen.insert(quote!(#ty).to_string(), name) {
-                    let ty_str = quote!(#ty).to_string();
-                    return syn::Error::new_spanned(
-                        name,
+            for c in &columns {
+                let ty = c.ty;
+                if let Some(first) = seen.insert(quote!(#ty).to_string(), c.name) {
+                    return Err(syn::Error::new_spanned(
+                        c.name,
                         format!(
-                            "duplicate column type `{ty_str}` on fields `{first}` and `{name}` \
-                             — give each column a distinct newtype",
+                            "duplicate column type `{}` on fields `{first}` and `{}`: give \
+                             each column a distinct newtype",
+                            quote!(#ty),
+                            c.name
                         ),
-                    )
-                    .to_compile_error()
-                    .into();
+                    ));
                 }
             }
+            let mut inner_seen: HashMap<String, &Ident> = HashMap::new();
+            let nullable: Vec<(&Type, &Ident)> = columns
+                .iter()
+                .filter_map(|c| {
+                    let inner = option_inner_type(c.ty)?;
+                    let key = quote!(#inner).to_string();
+                    if seen.contains_key(&key) || inner_seen.insert(key, c.name).is_some() {
+                        return None;
+                    }
+                    Some((inner, &c.variant))
+                })
+                .collect();
+            let nullable_tys = nullable.iter().map(|(t, _)| *t);
+            let nullable_variants = nullable.iter().map(|(_, v)| *v);
             quote! {
                 #(
-                    impl #impl_generics ta_objects::HasColumn<#field_types>
-                        for #ident #ty_generics #where_clause
-                    {
+                    impl ta_objects::HasColumn<#field_types> for #ident {
                         const COL: Self::Iden = #table_iden::#field_iden_variants;
+                    }
+                )*
+                #(
+                    impl ta_objects::HasColumn<#nullable_tys> for #ident {
+                        const COL: Self::Iden = #table_iden::#nullable_variants;
                     }
                 )*
             }
@@ -447,557 +583,409 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         Some(fi) => {
             let base_cb = callback_ident(&fi.base_last_ident());
             let base_iden = &fi.base_iden;
+            let bans_project_id = is_project_scoped && ops.insert.is_present();
+            let bans_valid_to = ops.insert.is_present();
             quote! {
                 #base_cb! {
-                    ta_objects::__dao_has_columns => { #ident, #table_iden } [#base_iden]
+                    ta_objects::__dao_has_columns => { #ident, #table_iden, #bans_project_id, #bans_valid_to }
+                    [#base_iden]
                     #( [] { #field_names : #field_types } )*
                 }
             }
         }
     };
 
-    // ---- fields callback -------------------------------------------------
-    let fields_cb = if item.generics.params.is_empty() {
-        let pairs: Vec<(&Ident, &Type)> = field_names
-            .iter()
-            .copied()
-            .zip(field_types.iter().copied())
-            .collect();
-        let forward = flatten
+    let pairs: Vec<(&Ident, &Type)> = columns.iter().map(|c| (c.name, c.ty)).collect();
+    let fields_cb = fields_callback(
+        ident,
+        &pairs,
+        flatten
             .as_ref()
-            .map(|fi| (callback_ident(&fi.base_last_ident()), &fi.base_iden));
-        fields_callback(ident, &pairs, forward)
-    } else {
-        quote! {}
-    };
+            .map(|fi| (callback_ident(&fi.base_last_ident()), &fi.base_iden)),
+    );
 
-    // ---- DaoUpdate (update_values) -----------------------------------------
-    //
-    // For `Option<T>` fields (non-immutable): skip them when `None` so that
-    // partial-update DTOs don't SET columns to NULL.
-    let update_stmts: Vec<proc_macro2::TokenStream> = fields
-        .iter()
-        .filter(|f| !is_sqlx_skip(f))
-        .map(|f| {
-            let name = f.ident.as_ref().unwrap();
-            let variant = iden_variant(name);
-            if is_dao_flatten(f) {
-                return quote! {
-                    __values.extend(
-                        ta_objects::DaoUpdate::update_values(&self.#name)
-                            .into_iter()
-                            .map(|(c, e)| (#table_iden::Base(c), e)),
-                    );
-                };
-            }
-            if is_dao_immutable(f) {
-                // CASE WHEN col IS NULL THEN ? ELSE col END — set-once semantics.
-                quote! {
-                    __values.push((
-                        #table_iden::#variant,
-                        sea_query::Expr::case(
-                            sea_query::Expr::col(#table_iden::#variant).is_null(),
-                            self.#name.as_sea_value()
-                        )
-                        .finally(sea_query::Expr::col(#table_iden::#variant))
-                        .into()
-                    ));
-                }
-            } else if is_option_type(f) {
-                // Only include the column when the value is Some.
-                quote! {
-                    if let Some(ref __v) = self.#name {
-                        __values.push((
-                            #table_iden::#variant,
-                            __v.as_sea_value().into()
-                        ));
+    let update_impl = match &ops.update {
+        None => quote! {},
+        Some(update) => {
+            let stmts = fields
+                .iter()
+                .filter(|f| !is_sqlx_skip(f))
+                .map(|f| update_statement(f, &marks, &table_iden));
+            let (filter_by, assert) = match &update.filter_by {
+                None => (quote! { Self }, quote! {}),
+                Some(path) => (
+                    quote! { #path },
+                    quote! {
+                        const _: () = assert!(
+                            ta_objects::relations_match(
+                                <#ident as ta_objects::Dao>::RELATION,
+                                <#path as ta_objects::Dao>::RELATION,
+                            ),
+                            concat!(
+                                "update(...) must name a DAO over the same relation as ",
+                                stringify!(#ident),
+                            ),
+                        );
+                    },
+                ),
+            };
+            quote! {
+                #assert
+                impl ta_objects::UpdateDao for #ident {
+                    type FilterBy = #filter_by;
+                    fn update_values(&self) -> impl IntoIterator<Item = (Self::Iden, sea_query::Expr)> {
+                        #[allow(unused_imports)]
+                        use ta_objects::SeaValue;
+                        use sea_query::ExprTrait;
+                        let mut __values = Vec::new();
+                        #(#stmts)*
+                        __values
                     }
                 }
-            } else {
-                quote! {
-                    __values.push((
-                        #table_iden::#variant,
-                        self.#name.as_sea_value().into()
-                    ));
-                }
             }
-        })
-        .collect();
+        }
+    };
 
-    let dao_update_impl = quote! {
-        impl #impl_generics ta_objects::DaoUpdate
-            for #ident #ty_generics #where_clause {
-                fn update_values(&self) -> impl IntoIterator<Item = (Self::Iden, sea_query::Expr)>
-                {
+    let select_impl = ops
+        .select
+        .is_present()
+        .then(|| quote! { impl ta_objects::SelectDao for #ident {} });
+    let insert_impl = ops.insert.is_present().then(|| {
+        quote! {
+            impl ta_objects::InsertDao for #ident {
+                fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr> {
                     #[allow(unused_imports)]
-                use ta_objects::SeaValue;
-                    use sea_query::ExprTrait;
-                    let mut __values = Vec::new();
-                    #(#update_stmts)*
-                    __values
+                    use ta_objects::SeaValue;
+                    #insert_items
                 }
-        }
-    };
-
-    // ---- Update-only path: skip Dao, VersionedDao, States, Recursive -------
-    if parsed.update.is_present() && parsed.versioned.is_some() {
-        return syn::Error::new_spanned(
-            ident,
-            "`update` and `versioned` are incompatible — update DAOs cannot be versioned",
-        )
-        .to_compile_error()
-        .into();
-    }
-    if parsed.update.is_present() {
-        return quote! {
-            #iden_enum
-            #typed_columns
-            #has_columns
-            #fields_cb
-            #dao_core
-            #dao_update_impl
-        }
-        .into();
-    }
-
-    // ---- Dao: column metadata + read/insert capability for all DAOs ------
-    // With a flatten field, base columns/values come first, own fields after —
-    // the same order the merged struct would have.
-    let (columns_items, insert_items) = match &flatten {
-        None => (
-            quote! { [#(#table_iden::#field_iden_variants),*] },
-            quote! { [#(self.#field_names.as_sea_value().into()),*] },
-        ),
-        Some(fi) => {
-            let base_ty = &fi.base_ty;
-            let bf = &fi.field;
-            (
-                quote! {
-                    <#base_ty as ta_objects::Dao>::columns()
-                        .into_iter()
-                        .map(#table_iden::Base)
-                        .chain([#(#table_iden::#field_iden_variants),*])
-                },
-                quote! {
-                    ta_objects::Dao::insert_values(&self.#bf)
-                        .into_iter()
-                        .chain([#(self.#field_names.as_sea_value().into()),*])
-                },
-            )
-        }
-    };
-    let dao_read = quote! {
-        impl #impl_generics ta_objects::Dao for #ident #ty_generics #where_clause {
-            fn columns() -> impl IntoIterator<Item = Self::Iden>
-            {
-                #columns_items
-            }
-            fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr>
-            {
-                #[allow(unused_imports)]
-                use ta_objects::SeaValue;
-                #insert_items
-            }
-            fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)>
-            {
-                #order_by_items
             }
         }
-    };
-
-    // ---- LiveDao marker (opt out via `#[dao(event_log, ...)]`). See the
-    // `LiveDao` trait doc for the contract and the insert-once footgun.
-    let live_dao_marker = if parsed.event_log.is_present() {
-        quote! {}
-    } else {
+    });
+    let delete_impl = ops
+        .delete
+        .is_present()
+        .then(|| quote! { impl ta_objects::DeleteDao for #ident {} });
+    let unversioned_impl = (!is_versioned).then(|| {
+        let base_agrees = base_ty.map(|b| {
+            quote! {
+                const _: () = {
+                    fn base_must_be_unversioned<T: ta_objects::UnversionedDao>() {}
+                    let _ = base_must_be_unversioned::<#b>;
+                };
+            }
+        });
         quote! {
-            impl #impl_generics ta_objects::LiveDao for #ident #ty_generics #where_clause {}
+            #base_agrees
+            impl ta_objects::UnversionedDao for #ident {}
         }
-    };
-
-    // ---- KeyedDao (emitted from `#[dao(key(cols...))]`). Key = the declared
-    // columns; values = every other DAO column, derived so the update set
-    // can't drift when columns are added. See the `KeyedDao` trait doc.
-    let is_keyed = !parsed.key.is_empty();
-    let is_versioned = parsed.versioned.is_some();
-    let is_recursive = parsed.recursive.is_some();
-
-    let keyed_dao_marker = if parsed.key.is_empty() {
-        quote! {}
-    } else {
-        let mut key_names: Vec<Ident> = Vec::new();
-        for path in parsed.key.iter() {
-            let Some(name) = path.get_ident() else {
-                return syn::Error::new_spanned(path, "key: expected a plain column name")
-                    .to_compile_error()
-                    .into();
-            };
-            if !field_names.contains(&name) && flatten.is_none() {
-                return syn::Error::new_spanned(
-                    path,
-                    format!("key: `{name}` is not a column of this DAO"),
-                )
-                .to_compile_error()
-                .into();
-            }
-            key_names.push(name.clone());
-        }
-        let key_cols: Vec<proc_macro2::TokenStream> =
-            key_names.iter().map(|n| col_ref(&n.to_string())).collect();
-        let value_cols = match &flatten {
-            // Runtime filter: base columns aren't enumerable at macro time.
-            Some(_) => quote! {
-                let __keys = [#(#key_cols),*];
-                <Self as ta_objects::Dao>::columns()
-                    .into_iter()
-                    .filter(move |c| !__keys.contains(c))
-            },
-            None => {
-                let key_variants: Vec<Ident> = key_names.iter().map(iden_variant).collect();
-                let value_variants: Vec<&Ident> = field_iden_variants
-                    .iter()
-                    .filter(|v| !key_variants.contains(v))
-                    .collect();
-                quote! { [#(#table_iden::#value_variants),*] }
-            }
-        };
+    });
+    let upsert_impl = ops.upsert.as_ref().map(|types| {
+        let key_cols = types
+            .iter()
+            .map(|t| quote! { <Self as ta_objects::HasColumn<#t>>::COL });
         quote! {
-            impl #impl_generics ta_objects::KeyedDao for #ident #ty_generics #where_clause {
+            impl ta_objects::UpsertDao for #ident {
                 fn key_columns() -> impl IntoIterator<Item = Self::Iden> {
                     [#(#key_cols),*]
                 }
                 fn value_columns() -> impl IntoIterator<Item = Self::Iden> {
-                    #value_cols
+                    let __keys: Vec<_> =
+                        <Self as ta_objects::UpsertDao>::key_columns().into_iter().collect();
+                    <Self as ta_objects::Dao>::columns()
+                        .into_iter()
+                        .filter(move |c| !__keys.contains(c))
                 }
             }
         }
+    });
+
+    let role = |mark: &str, base_const: &str, base_assoc: &str, base_trait: &str| {
+        let base_const = format_ident!("{}", base_const);
+        let base_assoc = format_ident!("{}", base_assoc);
+        let base_trait = format_ident!("{}", base_trait);
+        marks.marked_once(mark).map(|field| match (field, base_ty) {
+            (Some(f), _) => {
+                let ty = field_type(f);
+                Some((col_ref(f), quote! { #ty }))
+            }
+            (None, Some(b)) => Some((
+                quote! { #table_iden::Base(<#b as ta_objects::#base_trait>::#base_const) },
+                quote! { <#b as ta_objects::#base_trait>::#base_assoc },
+            )),
+            (None, None) => None,
+        })
     };
 
-    // ---- Access trait: DaoUpdate, VersionedDao, or both --------------------
-    let access_trait = match (&parsed.versioned, parsed.data_version.is_present()) {
-        (None, false) => dao_update_impl,
-        (Some(v), is_data_version) => {
-            let pk_str = match &v.pk {
-                Some(s) => s,
-                None => {
-                    return syn::Error::new_spanned(ident, "versioned: `pk` is required")
-                        .to_compile_error()
-                        .into();
-                }
-            };
-            let version_by_str = match &v.version_by {
-                Some(s) => s,
-                None => {
-                    return syn::Error::new_spanned(ident, "versioned: `version_by` is required")
-                        .to_compile_error()
-                        .into();
-                }
-            };
-            let partition_by_str = match &v.partition_by {
-                Some(s) => s,
-                None => {
-                    return syn::Error::new_spanned(ident, "versioned: `partition_by` is required")
-                        .to_compile_error()
-                        .into();
-                }
-            };
-            let pk_col = col_ref(pk_str);
-            let version_col = col_ref(version_by_str);
-            let partition_col = col_ref(partition_by_str);
-            // Structural column types: own field, else the flattened base's
-            // corresponding VersionedDao associated type — correct because a
-            // base-resolved structural column re-declares the base's own.
-            let is_own = |name: &str| field_name_strs.iter().any(|f| f == name);
-            let base_ty = flatten.as_ref().map(|fi| &fi.base_ty);
-            let pk_type = match (is_own(pk_str), base_ty) {
-                (false, Some(b)) => quote! { <#b as ta_objects::VersionedDao>::Pk },
-                _ => {
-                    let t = require_field!(fields, pk_str, "versioned", ident);
-                    quote! { #t }
-                }
-            };
-            let version_type = match (is_own(version_by_str), base_ty) {
-                (false, Some(b)) => quote! { <#b as ta_objects::VersionedDao>::VersionOrder },
-                _ => {
-                    let t = require_field!(fields, version_by_str, "versioned", ident);
-                    quote! { #t }
-                }
-            };
-            let partition_type = match (is_own(partition_by_str), base_ty) {
-                (false, Some(b)) => quote! { <#b as ta_objects::VersionedDao>::Partition },
-                _ => {
-                    let t = require_field!(fields, partition_by_str, "versioned", ident);
-                    quote! { #t }
-                }
-            };
+    let pk = if is_update {
+        None
+    } else {
+        role("pk", "PK", "Pk", "PkDao")?
+    };
+    let pk_impl = pk.as_ref().map(|(col, ty)| {
+        quote! {
+            impl ta_objects::PkDao for #ident {
+                type Pk = #ty;
+                const PK: Self::Iden = #col;
+            }
+        }
+    });
+    if is_versioned && pk.is_none() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "scd2/timeline: mark the pk column with #[dao(pk)]",
+        ));
+    }
 
-            let current_impl = v.current.as_ref().map(|current_table| {
+    let partition = role("partition_by", "PARTITION", "Partition", "TimelineDao")?;
+    let version_order = role(version_mark, "VERSION_ORDER", "VersionOrder", "TimelineDao")?;
+    let timeline_impl = is_versioned
+        .then(|| {
+            let kind = if is_scd2 { "scd2" } else { "timeline" };
+            let (partition_col, partition_ty) = partition.clone().ok_or_else(|| {
+                syn::Error::new_spanned(
+                    ident,
+                    format!("{kind}: mark the partition column with #[dao(partition_by)]"),
+                )
+            })?;
+            let (version_col, version_ty) = version_order.clone().ok_or_else(|| {
+                syn::Error::new_spanned(
+                    ident,
+                    format!("{kind}: mark the version column with #[dao({version_mark})]"),
+                )
+            })?;
+            let scd2_impl = is_scd2.then(|| {
                 quote! {
-                    impl #impl_generics ta_objects::CurrentDao
-                        for #ident #ty_generics #where_clause
-                    {
-                        fn current_table_name() -> &'static str {
-                            #current_table
-                        }
+                    impl ta_objects::Scd2Dao for #ident {
+                        const VALID_TO: Self::Iden = #valid_to_col;
                     }
                 }
             });
-
-            let versioned_impl = quote! {
-                impl #impl_generics ta_objects::VersionedDao
-                    for #ident #ty_generics #where_clause
-                {
-                    type Pk = #pk_type;
-                    fn pk_col() -> Self::Iden {
-                        #pk_col
-                    }
-
-                    type Partition = #partition_type;
-                    fn partition_col() -> Self::Iden {
-                        #partition_col
-                    }
-
-                    type VersionOrder = #version_type;
-                    fn version_order_col() -> Self::Iden {
-                        #version_col
-                    }
+            Ok::<_, syn::Error>(quote! {
+                impl ta_objects::TimelineDao for #ident {
+                    type Partition = #partition_ty;
+                    const PARTITION: Self::Iden = #partition_col;
+                    type VersionOrder = #version_ty;
+                    const VERSION_ORDER: Self::Iden = #version_col;
                 }
-                #current_impl
-            };
+                #scd2_impl
+            })
+        })
+        .transpose()?;
 
-            if is_data_version {
-                let data_version_impl = quote! {
-                    impl #impl_generics ta_objects::DataVersionDao
-                        for #ident #ty_generics #where_clause {}
-                };
-                quote! { #versioned_impl #dao_update_impl #data_version_impl }
-            } else {
-                versioned_impl
-            }
+    let addressing = if is_update {
+        quote! {}
+    } else {
+        let as_types = |list: &PathList| -> Vec<Type> {
+            list.iter().map(|p| syn::parse_quote! { #p }).collect()
+        };
+        let mut global_sets: Vec<Vec<Type>> = parsed.unique_types.iter().map(as_types).collect();
+        if let Some((_, ty)) = &pk {
+            global_sets.push(vec![syn::parse_quote! { #ty }]);
         }
-        (None, true) => {
-            return syn::Error::new_spanned(
-                ident,
-                "data_version requires versioned(...) to be set",
+        if let Some(types) = &ops.upsert {
+            global_sets.push(as_types(types));
+        }
+        let project_sets: Vec<Vec<Type>> = parsed
+            .project_scoped
+            .iter()
+            .flat_map(|s| s.unique.iter().map(as_types))
+            .collect();
+        let at_sets: Vec<Vec<Type>> = parsed
+            .unique_at_types
+            .iter()
+            .chain(
+                parsed
+                    .project_scoped
+                    .iter()
+                    .flat_map(|s| s.unique_at.iter()),
             )
-            .to_compile_error()
-            .into();
+            .map(as_types)
+            .collect();
+        if !at_sets.is_empty() && !is_scd2 {
+            return Err(syn::Error::new_spanned(
+                ident,
+                "`unique_at(..)` is unique among the versions visible at one instant, \
+                 which only an `scd2` relation has; an unversioned set is `unique(..)`",
+            ));
         }
-    };
-
-    // ---- Recursive ---------------------------------------------------------
-    let recursive = match parsed.recursive {
-        None => quote! {},
-        Some(r) => {
-            let is_own = |name: &str| field_name_strs.iter().any(|f| f == name);
-            // Key is the down column's domain type — the reference into the
-            // traversal's reference DAO. The up column may be a distinct
-            // newtype (it must share the SQL representation).
-            let key_type = match (&flatten, is_own(&r.down)) {
-                (Some(fi), false) => {
-                    let base_ty = &fi.base_ty;
-                    quote! { <#base_ty as ta_objects::Recursive>::Key }
-                }
-                _ => {
-                    let down_type = require_field!(fields, &r.down, "recursive", ident);
-                    quote! { #down_type }
-                }
-            };
-            let up_col = col_ref(&r.up);
-            let down_col = col_ref(&r.down);
-            quote! {
-                impl #impl_generics ta_objects::Recursive
-                    for #ident #ty_generics #where_clause
-                {
-                    type Key = #key_type;
-                    fn recurse_up() -> Self::Iden {
-                        #up_col
-                    }
-                    fn recurse_down() -> Self::Iden {
-                        #down_col
-                    }
-                }
+        let global_sets = minimal_sets(global_sets);
+        let project_sets = minimal_sets(project_sets);
+        let at_sets = minimal_sets(at_sets);
+        let type_key = |t: &Type| quote!(#t).to_string();
+        if let Some(shared) = global_sets.iter().flatten().find(|t| {
+            project_sets
+                .iter()
+                .flatten()
+                .any(|p| type_key(p) == type_key(t))
+        }) {
+            return Err(syn::Error::new_spanned(
+                ident,
+                format!(
+                    "`{}` is in both a `unique(..)` set and a `project_scoped(unique(..))` \
+                     set: a column is unique under one scope, so the impls would overlap",
+                    quote!(#shared)
+                ),
+            ));
+        }
+        let row = addresses(
+            ident,
+            &global_sets,
+            &format_ident!("AddressesOneRow"),
+            Under::AnyScope,
+        );
+        let project_row = addresses(
+            ident,
+            &project_sets,
+            &format_ident!("AddressesOneRow"),
+            Under::InProject,
+        );
+        let version = match (is_scd2, &partition) {
+            (true, Some((_, partition_ty))) => {
+                let partition_ty: Type = syn::parse_quote! { #partition_ty };
+                let key = type_key(&partition_ty);
+                let mut sets: Vec<Vec<Type>> = global_sets
+                    .iter()
+                    .chain(project_sets.iter())
+                    .chain(at_sets.iter())
+                    .filter(|set| !set.iter().any(|t| type_key(t) == key))
+                    .cloned()
+                    .collect();
+                sets.push(vec![partition_ty]);
+                addresses(
+                    ident,
+                    &sets,
+                    &format_ident!("AddressesOneVersion"),
+                    Under::NoScope,
+                )
             }
-        }
+            _ => quote! {},
+        };
+        quote! { #row #project_row #version }
     };
 
-    // ---- LogicalPointerDao impl (emitted from `logical_pointer(...)`) ----
-    let logical_pointer_impl = match &parsed.logical_pointer {
-        None => quote! {},
-        Some(fp) => {
-            let logical_id_field = format_ident!("{}", fp.logical_id_col);
-            let concrete_id_field = format_ident!("{}", fp.concrete_id_col);
-            let logical_id_variant = iden_variant_from_str(&fp.logical_id_col);
-            let concrete_id_variant = iden_variant_from_str(&fp.concrete_id_col);
-            let status_variant = iden_variant_from_str("status");
-            let logical_id_type =
-                require_field!(fields, &fp.logical_id_col, "logical_pointer", ident);
-            let concrete_id_type =
-                require_field!(fields, &fp.concrete_id_col, "logical_pointer", ident);
-            let identity_type = &fp.identity;
-            let kind = &fp.kind;
-            quote! {
-                impl #impl_generics td_objects::dxo::logical::LogicalPointerDao
-                    for #ident #ty_generics #where_clause
-                {
-                    type LogicalId = #logical_id_type;
-                    type ConcreteId = #concrete_id_type;
-                    type IdentityDB = #identity_type;
-                    const KIND: &'static str = #kind;
-
-                    fn logical_id_col() -> Self::Iden {
-                        #table_iden::#logical_id_variant
-                    }
-                    fn concrete_id_col() -> Self::Iden {
-                        #table_iden::#concrete_id_variant
-                    }
-                    fn status_col() -> Self::Iden {
-                        #table_iden::#status_variant
-                    }
-
-                    fn status(&self) -> td_objects::types::basic::LogicalPointerStatus {
-                        self.status.clone()
-                    }
-                    fn logical_id(&self) -> &Self::LogicalId {
-                        &self.#logical_id_field
-                    }
-                    fn concrete_id(&self) -> Option<&Self::ConcreteId> {
-                        self.#concrete_id_field.as_ref()
-                    }
-                    fn build_event(
-                        project_id: td_objects::types::basic::ProjectId,
-                        logical_id: &Self::LogicalId,
-                        status: td_objects::types::basic::LogicalPointerStatus,
-                        concrete_id: Option<Self::ConcreteId>,
-                        set_on: td_objects::types::basic::AtTime,
-                        set_by_id: td_objects::types::basic::UserId,
-                        reason: td_objects::types::basic::LogicalPointerReason,
-                    ) -> Result<Self, td_error::TdError> {
-                        Ok(Self {
-                            id: Default::default(),
-                            project_id,
-                            #logical_id_field: logical_id.clone(),
-                            status,
-                            #concrete_id_field: concrete_id,
-                            set_on,
-                            set_by_id,
-                            reason,
-                        })
-                    }
-                    fn initial_mint_for(
-                        identity: &Self::IdentityDB,
-                    ) -> Result<Self, td_error::TdError> {
-                        Self::build_event(
-                            identity.project_id.clone(),
-                            &identity.id,
-                            td_objects::types::basic::LogicalPointerStatus::Pending,
-                            None,
-                            td_objects::types::basic::AtTime::try_from(identity.triggered_on)?,
-                            identity.triggered_by_id,
-                            td_objects::types::basic::LogicalPointerReason::InitialMint,
-                        )
-                    }
+    let recursive_impl = parsed
+        .recursive
+        .is_present()
+        .then(|| {
+            let up = role("recurse_up", "UP", "Key", "RecursiveDao")?;
+            let down = role("recurse_down", "DOWN", "Key", "RecursiveDao")?;
+            let ((up_col, _), (down_col, key_ty)) = up.zip(down).ok_or_else(|| {
+                syn::Error::new_spanned(
+                    ident,
+                    "recursive: mark both #[dao(recurse_up)] and #[dao(recurse_down)]",
+                )
+            })?;
+            Ok::<_, syn::Error>(quote! {
+                impl ta_objects::RecursiveDao for #ident {
+                    type Key = #key_ty;
+                    const UP: Self::Iden = #up_col;
+                    const DOWN: Self::Iden = #down_col;
                 }
-            }
-        }
-    };
+            })
+        })
+        .transpose()?;
 
-    // Forces the column references a flatten base resolves at runtime, so a
-    // typo panics in the registry-walking test, not on first live use.
-    let mut validate_stmts = vec![quote! {
-        let _ = <#ident as ta_objects::Dao>::order_by().into_iter().count();
-    }];
-    if is_keyed {
-        validate_stmts.push(quote! {
-            let _ = <#ident as ta_objects::KeyedDao>::key_columns().into_iter().count();
-            let _ = <#ident as ta_objects::KeyedDao>::value_columns().into_iter().count();
-        });
-    }
-    if is_versioned {
-        validate_stmts.push(quote! {
-            let _ = <#ident as ta_objects::VersionedDao>::pk_col();
-            let _ = <#ident as ta_objects::VersionedDao>::partition_col();
-            let _ = <#ident as ta_objects::VersionedDao>::version_order_col();
-        });
-    }
-    if is_recursive {
-        validate_stmts.push(quote! {
-            let _ = <#ident as ta_objects::Recursive>::recurse_up();
-            let _ = <#ident as ta_objects::Recursive>::recurse_down();
-        });
-    }
-
-    // Generic DAOs have no single concrete type to register against;
-    // `cfg(not(test))` keeps a crate's own test-fixture DAOs out of the
-    // registry while dependency crates (compiled with cfg(test) off) register.
-    let dao_registration = if item.generics.params.is_empty() {
+    // `cfg(not(test))` keeps a crate's own test fixtures out of the registry
+    // while dependency crates still register.
+    let registration = ops.select.is_present().then(|| {
+        let describe = if is_project_scoped {
+            quote! { ta_objects::scoped_dao_projection }
+        } else {
+            quote! { ta_objects::dao_projection }
+        };
         quote! {
             #[cfg(not(test))]
             ta_objects::inventory::submit! {
-                ta_objects::RegisteredDao {
-                    describe: ta_objects::dao_projection::<#ident>,
-                    validate: || { #(#validate_stmts)* },
-                }
+                ta_objects::RegisteredDao { describe: #describe::<#ident> }
             }
         }
-    } else {
-        quote! {}
-    };
+    });
 
-    quote! {
+    Ok(quote! {
         #iden_enum
-        #typed_columns
         #has_columns
         #fields_cb
         #dao_core
-        #dao_read
-        #live_dao_marker
-        #keyed_dao_marker
-        #access_trait
-        #recursive
-        #logical_pointer_impl
-        #dao_registration
+        #table_dao
+        #reachable
+        #insertable
+        #pk_impl
+        #addressing
+        #select_impl
+        #insert_impl
+        #unversioned_impl
+        #delete_impl
+        #upsert_impl
+        #update_impl
+        #timeline_impl
+        #recursive_impl
+        #registration
+    })
+}
+
+fn update_statement(f: &Field, marks: &FieldMarks, table_iden: &Ident) -> proc_macro2::TokenStream {
+    let name = field_ident(f);
+    let variant = iden_variant(name);
+    if marks.has(f, "flatten") {
+        return quote! {
+            __values.extend(
+                ta_objects::UpdateDao::update_values(&self.#name)
+                    .into_iter()
+                    .map(|(c, e)| (#table_iden::Base(c), e)),
+            );
+        };
     }
-    .into()
+    if marks.has(f, "immutable") {
+        return quote! {
+            __values.push((
+                #table_iden::#variant,
+                sea_query::Expr::case(
+                    sea_query::Expr::col(#table_iden::#variant).is_null(),
+                    self.#name.as_sea_value()
+                )
+                .finally(sea_query::Expr::col(#table_iden::#variant))
+                .into()
+            ));
+        };
+    }
+    if option_inner_type(&f.ty).is_some() {
+        return quote! {
+            if let Some(ref __v) = self.#name {
+                __values.push((#table_iden::#variant, __v.as_sea_value().into()));
+            }
+        };
+    }
+    quote! {
+        __values.push((#table_iden::#variant, self.#name.as_sea_value().into()));
+    }
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/// Convert a snake_case field name string to the UpperCamelCase Iden variant
-/// ident that sea_query::enum_def generates.
-pub fn iden_variant_from_str(field_name: &str) -> Ident {
-    format_ident!("{}", field_name.to_upper_camel_case())
+/// A set containing another adds nothing, and their impls would overlap.
+fn minimal_sets(sets: Vec<Vec<Type>>) -> Vec<Vec<Type>> {
+    let type_key = |t: &Type| quote!(#t).to_string();
+    let keys: Vec<Vec<String>> = sets
+        .iter()
+        .map(|s| s.iter().map(type_key).collect())
+        .collect();
+    let mut minimal: Vec<Vec<Type>> = Vec::new();
+    for (i, set) in sets.iter().enumerate() {
+        let redundant = keys.iter().enumerate().any(|(j, other)| {
+            i != j && other.len() < keys[i].len() && other.iter().all(|t| keys[i].contains(t))
+        });
+        let duplicate = minimal
+            .iter()
+            .any(|m| m.len() == set.len() && m.iter().map(type_key).eq(set.iter().map(type_key)));
+        if !redundant && !duplicate {
+            minimal.push(set.clone());
+        }
+    }
+    minimal
 }
 
-/// Same but from an existing Ident.
 pub fn iden_variant(field_ident: &Ident) -> Ident {
-    iden_variant_from_str(&field_ident.to_string())
+    format_ident!("{}", field_ident.to_string().to_upper_camel_case())
 }
 
-/// All non-skipped field idents (snake_case, as written in the struct).
-/// A `#[dao(flatten)]` field is not a column of its own — excluded here,
-/// its base's columns are delegated to instead.
-pub fn field_idents(fields: &Fields) -> Vec<&Ident> {
-    fields
-        .iter()
-        .filter(|f| !is_sqlx_skip(f) && !is_dao_flatten(f))
-        .filter_map(|f| f.ident.as_ref())
-        .collect()
-}
-
-/// All non-skipped field types.
-pub fn field_types(fields: &Fields) -> Vec<&Type> {
-    fields
-        .iter()
-        .filter(|f| !is_sqlx_skip(f) && !is_dao_flatten(f))
-        .map(|f| &f.ty)
-        .collect()
-}
-
-/// The `#[dao(flatten)]` field: its ident, base DAO type, and the base's
-/// Iden enum path (`<Base>Iden`, keeping any module prefix).
 struct FlattenInfo {
     field: Ident,
     base_ty: syn::Path,
@@ -1005,7 +993,6 @@ struct FlattenInfo {
 }
 
 impl FlattenInfo {
-    /// The base type's bare name — the `__dxo_fields_*` callback ident stem.
     fn base_last_ident(&self) -> Ident {
         self.base_ty
             .segments
@@ -1014,82 +1001,47 @@ impl FlattenInfo {
             .ident
             .clone()
     }
-
-    fn of(f: &syn::Field) -> syn::Result<FlattenInfo> {
-        let field = f
-            .ident
-            .clone()
-            .ok_or_else(|| syn::Error::new_spanned(f, "#[dao(flatten)] requires a named field"))?;
-        let Type::Path(tp) = &f.ty else {
-            return Err(syn::Error::new_spanned(
-                &f.ty,
-                "#[dao(flatten)] field must be a plain DAO struct type",
-            ));
-        };
-        let base_ty = tp.path.clone();
-        let mut base_iden = base_ty.clone();
-        let last = base_iden.segments.last_mut().expect("non-empty type path");
-        last.ident = format_ident!("{}Iden", last.ident);
-        Ok(FlattenInfo {
-            field,
-            base_ty,
-            base_iden,
-        })
-    }
 }
 
-fn is_dao_flatten(f: &syn::Field) -> bool {
+fn flatten_info(marks: &FieldMarks) -> syn::Result<Option<FlattenInfo>> {
+    let mut flattened = marks.fields_marked("flatten");
+    let Some(f) = flattened.next() else {
+        return Ok(None);
+    };
+    if let Some(second) = flattened.next() {
+        return Err(syn::Error::new_spanned(
+            second,
+            "at most one #[dao(flatten)] field is supported",
+        ));
+    }
+    let Type::Path(tp) = &f.ty else {
+        return Err(syn::Error::new_spanned(
+            &f.ty,
+            "#[dao(flatten)] field must be a plain DAO struct type",
+        ));
+    };
+    let base_ty = tp.path.clone();
+    let mut base_iden = base_ty.clone();
+    let last = base_iden.segments.last_mut().expect("non-empty type path");
+    last.ident = format_ident!("{}Iden", last.ident);
+    Ok(Some(FlattenInfo {
+        field: field_ident(f).clone(),
+        base_ty,
+        base_iden,
+    }))
+}
+
+fn is_sqlx_skip(f: &Field) -> bool {
     f.attrs.iter().any(|a| {
-        if !a.path().is_ident("dao") {
-            return false;
-        }
-        a.parse_args::<Ident>()
-            .map(|ident| ident == "flatten")
-            .unwrap_or(false)
+        a.path().is_ident("sqlx")
+            && a.parse_args::<Ident>()
+                .map(|ident| ident == "skip")
+                .unwrap_or(false)
     })
 }
 
-/// Resolve the type of a named field, unwrapping `Option<T>` → `T`.
-/// NULL comparisons in SQL are always false, so Option and T are equivalent
-/// for column matching purposes.
-/// Returns `None` if the field is not found.
-pub fn field_type_by_name<'a>(fields: &'a Fields, name: &str) -> Option<&'a Type> {
-    let ty = fields
-        .iter()
-        .find_map(|f| f.ident.as_ref().filter(|i| *i == name).map(|_| &f.ty))?;
-    Some(option_inner_type(ty).unwrap_or(ty))
-}
-
-/// The `T` of an `Option<T>` type, else `None`.
-pub fn option_inner_type(ty: &Type) -> Option<&Type> {
-    if let Type::Path(tp) = ty
-        && let Some(seg) = tp.path.segments.last()
-        && seg.ident == "Option"
-        && let syn::PathArguments::AngleBracketed(args) = &seg.arguments
-        && let Some(syn::GenericArgument::Type(inner)) = args.args.first()
-    {
-        return Some(inner);
-    }
-    None
-}
-
-fn is_sqlx_skip(f: &syn::Field) -> bool {
-    f.attrs.iter().any(|a| {
-        if !a.path().is_ident("sqlx") {
-            return false;
-        }
-        // Parse #[sqlx(skip)] — the inner token is just the ident "skip"
-        a.parse_args::<Ident>()
-            .map(|ident| ident == "skip")
-            .unwrap_or(false)
-    })
-}
-
-/// Convert a DAO struct name to a human-readable display name.
-/// Strips from the first `DB` occurrence onwards, then inserts spaces
-/// before uppercase-to-lowercase transitions (CamelCase word boundaries).
-/// `UserDB` → `"User"`, `PhysicalFunctionRunDB` → `"Function Run"`,
-/// `FunctionDBWithNames` → `"Function"`.
+/// `UserDB` → `"User"`, `PhysicalFunctionRunDB` → `"Physical Function Run"`,
+/// `FunctionDBWithNames` → `"Function"`; consecutive capitals stay joined.
 fn struct_name_to_display_name(name: &str) -> String {
     let name = match name.find("DB") {
         Some(pos) if pos > 0 => &name[..pos],
@@ -1099,9 +1051,6 @@ fn struct_name_to_display_name(name: &str) -> String {
     let chars: Vec<char> = name.chars().collect();
     for (i, &c) in chars.iter().enumerate() {
         if i > 0 && c.is_uppercase() {
-            // Only add a space at a real word boundary:
-            // uppercase followed by lowercase (e.g. "Run" in "PhysicalFunctionRun")
-            // or preceded by lowercase (e.g. "R" after "function")
             let prev_lower = chars[i - 1].is_lowercase();
             let next_lower = chars.get(i + 1).is_some_and(|c| c.is_lowercase());
             if prev_lower || next_lower {
@@ -1111,25 +1060,4 @@ fn struct_name_to_display_name(name: &str) -> String {
         result.push(c);
     }
     result
-}
-
-fn is_dao_immutable(f: &syn::Field) -> bool {
-    f.attrs.iter().any(|a| {
-        if !a.path().is_ident("dao") {
-            return false;
-        }
-        a.parse_args::<Ident>()
-            .map(|ident| ident == "immutable")
-            .unwrap_or(false)
-    })
-}
-
-/// Returns `true` when the field type is `Option<…>`.
-fn is_option_type(f: &syn::Field) -> bool {
-    if let Type::Path(tp) = &f.ty
-        && let Some(seg) = tp.path.segments.last()
-    {
-        return seg.ident == "Option";
-    }
-    false
 }

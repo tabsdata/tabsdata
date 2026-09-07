@@ -5,7 +5,7 @@
 //! Brand expansion for the `Typed*` facet derives: `Name<T>(pub T)` (single
 //! type parameter as the single field) distinguishes same-typed columns by
 //! row role. Everything delegates to the inner type except
-//! `SeaValue::as_type_id`/`SqlCondition`, which key on the brand.
+//! `SqlCondition`, which keys on the brand.
 
 use proc_macro2::Ident;
 use quote::quote;
@@ -102,9 +102,6 @@ pub fn expand_typed(name: &Ident, t: &Ident) -> proc_macro2::TokenStream {
         {
             fn as_sea_value(&self) -> sea_query::Value {
                 self.0.as_sea_value()
-            }
-            fn as_type_id(&self) -> std::any::TypeId {
-                std::any::TypeId::of::<Self>()
             }
         }
 

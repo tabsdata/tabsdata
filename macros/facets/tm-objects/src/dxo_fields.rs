@@ -7,8 +7,10 @@
 //! list (a flattened struct's forwards through its base's, tagging base
 //! fields with their `Iden`-enum chain). A flattened derive invokes the
 //! base's callback with a continuation below, which thus sees the merged
-//! list: `__dao_has_columns` bans duplicate field types/names and emits the
-//! `HasColumn<T>` impls; `__dxo_check_flat_names` bans duplicate names only
+//! list: `__dao_has_columns` bans duplicate field types/names and the
+//! database-owned column types on a write DAO, emits the
+//! `HasColumn<T>` impls and re-names each base column as a flat associated
+//! const on the derived `Iden`; `__dxo_check_flat_names` bans duplicate names only
 //! (the serde/sqlx flatten aliasing net for DLOs/DTOs).
 //!
 //! ```text
@@ -18,6 +20,7 @@
 //! ```
 
 use crate::dao::iden_variant;
+use crate::dao_marks::{option_inner_type, type_names};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::quote;
@@ -77,6 +80,8 @@ fn duplicate_name_errors(
 struct HasColumnsInput {
     derived: Ident,
     derived_iden: Path,
+    bans_project_id: bool,
+    bans_valid_to: bool,
     fields: Vec<MergedField>,
 }
 
@@ -87,10 +92,16 @@ impl Parse for HasColumnsInput {
         let derived: Ident = ctx.parse()?;
         ctx.parse::<syn::Token![,]>()?;
         let derived_iden: Path = ctx.parse()?;
+        ctx.parse::<syn::Token![,]>()?;
+        let bans_project_id: syn::LitBool = ctx.parse()?;
+        ctx.parse::<syn::Token![,]>()?;
+        let bans_valid_to: syn::LitBool = ctx.parse()?;
         let fields = parse_merged_fields(input)?;
         Ok(HasColumnsInput {
             derived,
             derived_iden,
+            bans_project_id: bans_project_id.value(),
+            bans_valid_to: bans_valid_to.value(),
             fields,
         })
     }
@@ -102,10 +113,29 @@ pub fn dao_has_columns(input: TokenStream) -> TokenStream {
     let HasColumnsInput {
         derived,
         derived_iden,
+        bans_project_id,
+        bans_valid_to,
         fields,
     } = parse_macro_input!(input as HasColumnsInput);
 
     let mut out = duplicate_name_errors(&derived, &fields, "merged (flattened)");
+
+    if bans_valid_to && fields.iter().any(|f| type_names(&f.ty, "ValidTo")) {
+        let msg = format!(
+            "a write DAO cannot carry a `ValidTo` column (here through a flattened \
+             base) on `{derived}`: the close-out trigger owns the interval end",
+        );
+        out.push(quote! { compile_error!(#msg); });
+    }
+
+    if bans_project_id && fields.iter().any(|f| type_names(&f.ty, "ProjectId")) {
+        let msg = format!(
+            "a `project_scoped` insert DAO cannot carry a `ProjectId` column (here \
+             through a flattened base) on `{derived}`: the `project_isolation` policy \
+             defaults it from the connection",
+        );
+        out.push(quote! { compile_error!(#msg); });
+    }
 
     let mut seen_types: HashMap<String, &Ident> = HashMap::new();
     for f in &fields {
@@ -121,6 +151,7 @@ pub fn dao_has_columns(input: TokenStream) -> TokenStream {
     }
 
     if out.is_empty() {
+        let mut inner_seen: HashMap<String, &Ident> = HashMap::new();
         for f in &fields {
             let ty = &f.ty;
             let variant = iden_variant(&f.name);
@@ -139,6 +170,28 @@ pub fn dao_has_columns(input: TokenStream) -> TokenStream {
                     const COL: Self::Iden = #col;
                 }
             });
+            // A base column is named on the flattened DAO's own `Iden` too, so
+            // raw sea_query spells it `XIden::Col`, not `XIden::Base(YIden::Col)`.
+            if !f.markers.is_empty() {
+                out.push(quote! {
+                    #[allow(non_upper_case_globals)]
+                    impl #derived_iden {
+                        pub const #variant: Self = #col;
+                    }
+                });
+            }
+            // A nullable column answers to its inner type as well, unless
+            // another column already claims that type.
+            if let Some(inner) = option_inner_type(ty) {
+                let key = type_key(inner);
+                if !seen_types.contains_key(&key) && inner_seen.insert(key, &f.name).is_none() {
+                    out.push(quote! {
+                        impl ta_objects::HasColumn<#inner> for #derived {
+                            const COL: Self::Iden = #col;
+                        }
+                    });
+                }
+            }
         }
     }
 

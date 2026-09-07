@@ -162,6 +162,7 @@ enum Kind {
     Id,
     IdL(Ident),
     Timestamp,
+    IntervalEnd,
     Composed,
 }
 
@@ -228,6 +229,7 @@ fn detect_kind(inner: &Type) -> syn::Result<Kind> {
             }
         }
         "Timestamp" => Kind::Timestamp,
+        "IntervalEnd" => Kind::IntervalEnd,
         _ => Kind::Composed,
     })
 }
@@ -504,7 +506,7 @@ fn expand_primitive(
 ) -> proc_macro2::TokenStream {
     let copy = matches!(
         kind,
-        Kind::Numeric | Kind::Bool | Kind::Id | Kind::Timestamp
+        Kind::Numeric | Kind::Bool | Kind::Id | Kind::Timestamp | Kind::IntervalEnd
     )
     .then(|| impl_copy(name));
     let identity = matches!(kind, Kind::Id | Kind::IdL(_)).then(|| impl_identity(name));
@@ -566,11 +568,24 @@ fn expand_primitive(
                 fn from(v: chrono::DateTime<chrono::Utc>) -> Self { Self(<#inner>::from(v)) }
             }
         },
+        Kind::IntervalEnd => quote! {
+            impl From<#inner> for #name {
+                fn from(v: #inner) -> Self { Self(v) }
+            }
+            impl From<td_common::datetime::Timestamp> for #name {
+                fn from(v: td_common::datetime::Timestamp) -> Self { Self(<#inner>::from(v)) }
+            }
+        },
         _ => quote! {},
     };
 
     let sea_value = impl_sea_value_typed(name, inner);
-    let sql_condition = impl_sql_condition(name);
+    // An interval end's Infinity has no bindable value: as a condition leaf
+    // it would render `= NULL` and match nothing, so it gets none.
+    let sql_condition = match kind {
+        Kind::IntervalEnd => quote! {},
+        _ => impl_sql_condition(name),
+    };
     let common = impl_common_traits(name, inner, args.secret);
     let try_from_str = impl_try_from_str(name);
 
@@ -678,7 +693,6 @@ fn expand_composed(name: &Ident, inner: &Type) -> proc_macro2::TokenStream {
                 use ta_objects::ComposedString;
                 sea_query::Value::String(Some(self.compose()))
             }
-            fn as_type_id(&self) -> std::any::TypeId { std::any::TypeId::of::<Self>() }
         }
         impl ta_objects::NullableSeaValue for #name {
             fn null_sea_value() -> sea_query::Value { sea_query::Value::String(None) }
@@ -947,8 +961,7 @@ fn impl_identity(name: &Ident) -> proc_macro2::TokenStream {
     }
 }
 
-/// Emits a compact `Debug` impl that delegates to the inner value's Debug.
-/// Unlike `#[derive(Debug)]`, this does NOT expand to multi-line with `{:#?}`.
+/// Unlike `#[derive(Debug)]`, does NOT expand to multi-line with `{:#?}`.
 fn impl_compact_debug(name: &Ident) -> proc_macro2::TokenStream {
     quote! {
         impl std::fmt::Debug for #name {
@@ -959,7 +972,6 @@ fn impl_compact_debug(name: &Ident) -> proc_macro2::TokenStream {
     }
 }
 
-/// Emits a redacted `Debug` impl that hides the inner value.
 fn impl_redacted_debug(name: &Ident) -> proc_macro2::TokenStream {
     quote! {
         impl std::fmt::Debug for #name {
@@ -970,14 +982,12 @@ fn impl_redacted_debug(name: &Ident) -> proc_macro2::TokenStream {
     }
 }
 
-/// Emits SeaValue + NullableSeaValue delegating to the inner's `TypedInner`.
 fn impl_sea_value_typed(name: &Ident, inner: &Type) -> proc_macro2::TokenStream {
     quote! {
         impl ta_objects::SeaValue for #name {
             fn as_sea_value(&self) -> sea_query::Value {
                 ta_objects::TypedInner::sea_value(&self.0)
             }
-            fn as_type_id(&self) -> std::any::TypeId { std::any::TypeId::of::<Self>() }
         }
         impl ta_objects::NullableSeaValue for #name {
             fn null_sea_value() -> sea_query::Value {
@@ -1058,7 +1068,6 @@ fn impl_try_from_str(name: &Ident) -> proc_macro2::TokenStream {
     }
 }
 
-/// Emits utoipa ComposeSchema + ToSchema with the given schema expression.
 fn impl_utoipa(name: &Ident, schema_expr: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     quote! {
         impl utoipa::__dev::ComposeSchema for #name {
@@ -1214,7 +1223,6 @@ fn expand_typed_enum(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             fn as_sea_value(&self) -> sea_query::Value {
                 sea_query::Value::String(Some(self.to_string()))
             }
-            fn as_type_id(&self) -> std::any::TypeId { std::any::TypeId::of::<Self>() }
         }
 
         impl ta_objects::NullableSeaValue for #name {
@@ -1238,8 +1246,7 @@ fn expand_typed_enum(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
 
 /// The serde facet for plain enums: serialize the canonical form; accept the
 /// canonical form plus the case-insensitive ergonomics (lowercased ident and
-/// lowercased renames) — NOT the raw ident when renamed, matching the old
-/// serde(rename)+alias behavior exactly.
+/// lowercased renames) — NOT the raw ident when renamed.
 fn expand_enum_serde(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let name = &input.ident;
     let variants = plain_enum_variants(input)?;
@@ -1287,7 +1294,7 @@ fn expand_enum_serde(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
 }
 
 /// The OpenAPI facet for plain enums: a string schema enumerating the
-/// canonical values (what the old derived `ToSchema` emitted).
+/// canonical values.
 fn expand_enum_openapi(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let name = &input.ident;
     let variants = plain_enum_variants(input)?;
@@ -1437,10 +1444,6 @@ fn expand_typed_tag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream
         let ident = &v.ident;
         quote! { Self::#ident(inner) => inner.as_sea_value(), }
     });
-    let type_id_arms = variants.iter().map(|v| {
-        let (ident, ty) = (&v.ident, &v.ty);
-        quote! { Self::#ident(_) => std::any::TypeId::of::<#ty>(), }
-    });
 
     // FromStr: try longer tags first so the empty-tag variant is the catch-all.
     let mut sorted: Vec<usize> = (0..variants.len()).collect();
@@ -1486,10 +1489,22 @@ fn expand_typed_tag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream
                 ta_objects::sql_condition::leaf_display_values::<D, #ty>(inner),
         }
     });
+    // A tagged lookup addresses one row exactly when each variant's column
+    // does — an id-or-name param is an identity lookup either way.
+    let addresses_one_row = quote! {
+        impl<D, __S> ta_objects::AddressesOneRow<D, __S> for #name
+        where
+            D: ta_objects::Dao,
+            __S: td_database::access::DbScope,
+            Self: ta_objects::sql_condition::SqlCondition<D>,
+            #(#variant_tys: ta_objects::AddressesOneRow<D, __S>,)*
+        {
+        }
+    };
     let sql_condition = quote! {
         impl<D> ta_objects::sql_condition::SqlCondition<D> for #name
         where
-            D: ta_objects::DaoCore #(+ ta_objects::HasColumn<#variant_tys>)*,
+            D: ta_objects::Dao #(+ ta_objects::HasColumn<#variant_tys>)*,
         {
             fn resolve(&self) -> sea_query::Condition {
                 match self {
@@ -1506,6 +1521,8 @@ fn expand_typed_tag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream
     };
 
     Ok(quote! {
+        #addresses_one_row
+
         impl Clone for #name {
             fn clone(&self) -> Self {
                 match self { #(Self::#idents(inner) => Self::#idents(inner.clone()),)* }
@@ -1542,11 +1559,6 @@ fn expand_typed_tag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream
             fn as_sea_value(&self) -> sea_query::Value {
                 match self {
                     #(#sea_value_arms)*
-                }
-            }
-            fn as_type_id(&self) -> std::any::TypeId {
-                match self {
-                    #(#type_id_arms)*
                 }
             }
         }

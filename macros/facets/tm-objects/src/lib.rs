@@ -8,12 +8,13 @@
 //!
 //! | Macro    | Layer | Maps to                          |
 //! |----------|-------|----------------------------------|
-//! | [`Dao`]  | data  | one SQL table (`sqlx::FromRow`)  |
+//! | [`Dao`]  | data  | one SQL table or view            |
 //! | [`Dlo`]  | logic | an in-memory domain/logic object |
 //! | [`Dto`]  | API   | a request/response contract      |
 //!
 //! Each layer macro generates the relevant trait impls (for `Dao`: an
-//! `Iden` column enum, `FromRow`, and the `Dao` trait); the layer macros
+//! `Iden` column enum, `FromRow` on every shape but an update payload, and
+//! the `Dao` trait plus the capability traits `ops` names); the layer macros
 //! differ only in which extra impls they add.
 //!
 //! # Typed values
@@ -42,9 +43,11 @@
 //! A DAO field marked `#[dao(flatten)]` embeds another DAO whose columns this
 //! DAO also projects (base first): row decoding delegates via
 //! `#[sqlx(flatten)]`, and all column metadata (`Iden`, `columns()`,
-//! `insert_values()`, `col_for_type`, …) delegates to the base. A structural
+//! `order_by()`, `insert_values()`, …) delegates to the base. A structural
 //! column named in `#[dao(...)]` args that isn't an own field resolves into
-//! the flattened base at any nesting depth.
+//! the flattened base at any nesting depth, and each base column is re-named
+//! as a flat associated const on the derived `Iden`, so raw sea_query spells
+//! it `XIden::Col` rather than `XIden::Base(YIden::Col)`.
 //!
 //! Collisions across the flatten boundary are compile errors: the merged
 //! (base + own) field list may not repeat a field name (serde/sqlx flatten
@@ -56,6 +59,8 @@ use proc_macro::TokenStream;
 
 mod brand;
 mod dao;
+mod dao_marks;
+mod dao_unique;
 mod dlo;
 mod dto;
 mod dxo_fields;
@@ -68,9 +73,11 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
     dao::dao_type(input)
 }
 
-/// Define a DAO: the data-layer type mapping to one SQL table. Requires
-/// `#[dao(sql_table = "…")]`. Generates an `Iden` column enum, `FromRow`,
-/// and the `Dao` trait. See the crate docs.
+/// Define a DAO: the data-layer type mapping to one SQL relation. Requires
+/// `#[dao(table = "…", ops(…))]` or `#[dao(view = "…")]` — a table declares
+/// what it may be the subject of, a view is readable by construction.
+/// Generates an `Iden` column enum, `FromRow`, the structural traits, and the
+/// capability traits `ops` names. See the crate docs.
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn Dao(args: TokenStream, item: TokenStream) -> TokenStream {
