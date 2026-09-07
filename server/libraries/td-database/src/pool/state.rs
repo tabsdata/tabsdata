@@ -11,16 +11,14 @@
 //! [`AdminPool`](crate::components::AdminPool) reuses them to decide what to upgrade.
 
 use crate::components::sql::is_undefined_table_error;
-use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::executor::SeaExecutor;
-use crate::sea_query::kind::DatabaseKind;
 use sea_query::{Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
+use sqlx::PgPool;
 use std::cmp::Ordering;
 use td_schema::SchemaSource;
-use td_schema::schema::backend::Backend;
 use td_schema::{
     CURRENT_TABSDATA_VERSION, DB_EDITION_NAME, DB_VERSION_NAME, TABSDATA_VERSION_NAME,
     TabsdataSystem,
@@ -36,7 +34,7 @@ const MIN_PG_VERSION_NUM: i32 = 150_000;
 fn map_system_db_error(err: Error) -> DbError {
     match &err {
         Error::Database(database_err) => {
-            if is_undefined_table_error(database_err.code().as_deref(), database_err.message()) {
+            if is_undefined_table_error(database_err.code().as_deref()) {
                 DbError::DatabaseSchemaDoesNotExist
             } else {
                 DbError::SqlError(err)
@@ -80,10 +78,7 @@ pub(crate) async fn db_version(exec: impl SeaExecutor) -> Result<Option<usize>, 
     }
 }
 
-pub(crate) async fn check_db_version(
-    pool: &DynamicPool,
-    source: &dyn SchemaSource,
-) -> Result<(), DbError> {
+pub async fn check_db_version(pool: &PgPool, source: &dyn SchemaSource) -> Result<(), DbError> {
     let current = source.current_version();
     // An installed schema must carry the row; absence here is corruption — unlike
     // the lenient `db_version`, which reads absence as not-yet-installed.
@@ -104,7 +99,7 @@ pub(crate) async fn check_db_version(
 
 /// Read the major Tabsdata version. Pre-2.0 databases lack this row; a missing
 /// row maps to `1` so the startup gate can refuse them with a clear message.
-async fn read_tabsdata_version(pool: &DynamicPool) -> Result<usize, DbError> {
+async fn read_tabsdata_version(pool: &PgPool) -> Result<usize, DbError> {
     match read_system_value(pool, TABSDATA_VERSION_NAME).await? {
         None => Ok(1),
         Some(raw) => raw.parse::<usize>().map_err(|_| {
@@ -115,7 +110,7 @@ async fn read_tabsdata_version(pool: &DynamicPool) -> Result<usize, DbError> {
     }
 }
 
-pub(crate) async fn check_tabsdata_version(pool: &DynamicPool) -> Result<(), DbError> {
+pub async fn check_tabsdata_version(pool: &PgPool) -> Result<(), DbError> {
     let version = read_tabsdata_version(pool).await?;
     if version == CURRENT_TABSDATA_VERSION {
         Ok(())
@@ -132,7 +127,7 @@ pub(crate) async fn edition(exec: impl SeaExecutor) -> Result<Option<String>, Db
     read_system_value(exec, DB_EDITION_NAME).await
 }
 
-pub(crate) async fn check_tabsdata_edition(pool: &DynamicPool) -> Result<(), DbError> {
+pub async fn check_tabsdata_edition(pool: &PgPool) -> Result<(), DbError> {
     let instance_edition = edition(pool).await?;
     let runtime_edition = TabsdataEdition;
     match instance_edition {
@@ -160,11 +155,8 @@ pub(crate) async fn check_tabsdata_edition(pool: &DynamicPool) -> Result<(), DbE
 
 /// Refuse to run on a PostgreSQL server older than [`MIN_PG_VERSION_NUM`]. A
 /// plain read of `server_version_num`; relevant both at upgrade time (the build
-/// needs 15+) and at runtime (the floor must still hold). PostgreSQL only.
-pub(crate) async fn check_pg_min_version(pool: &DynamicPool) -> Result<(), DbError> {
-    if !matches!(pool.kind().into(), Backend::Postgres) {
-        return Ok(());
-    }
+/// needs 15+) and at runtime (the floor must still hold).
+pub async fn check_pg_min_version(pool: &PgPool) -> Result<(), DbError> {
     let version: Option<i32> = Query::select()
         .expr(Expr::cust("current_setting('server_version_num')::int"))
         .build_query_scalar()

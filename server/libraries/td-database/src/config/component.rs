@@ -7,15 +7,9 @@
 //! `database_server:` section reuses the same shape (see [`crate::server`]).
 
 use super::Schema;
-use super::backend::BackendConfig;
 use super::connection::app_role_or_default;
-#[cfg(mysql)]
-use super::mysql::MySqlConfig;
-use super::pool::PoolConfig;
-#[cfg(postgres)]
+use super::pool::PoolsConfig;
 use super::postgres::PostgresConfig;
-#[cfg(sqlite)]
-use super::sqlite::SqliteConfig;
 use crate::error::DbError;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -28,19 +22,25 @@ pub type DatabaseComponents = BTreeMap<String, ComponentConfig>;
 /// credentials". An absent field is absent — never a silent fallback to these.
 pub const EMBEDDED_CREDENTIAL: &str = "${embedded}";
 
-/// One named database connection: a backend-keyed block of connect options
-/// (credentials included, where the backend has them) and its own pool.
-/// Nothing is inherited between entries.
+/// One named database connection: a block of connect options (credentials
+/// included) and its own pool. Nothing is inherited between entries.
 ///
-/// Deserialization goes through [`ComponentConfigShape`], which rejects
-/// unknown entry-level keys (stale keys from older config shapes fail loudly
-/// instead of being silently dropped) and requires exactly one backend key.
+/// ```yaml
+/// postgres:
+///   host: 127.0.0.1
+///   port: 5432
+///   database: postgres
+///   username: td_apiserver
+///   password: ${embedded}
+/// ```
+///
+/// Unknown entry-level keys are rejected, so stale keys from older config
+/// shapes fail loudly instead of being silently dropped.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "ComponentConfigShape")]
+#[serde(deny_unknown_fields)]
 pub struct ComponentConfig {
-    /// Connection target, selected by the backend key (`postgres:`, ...).
-    #[serde(flatten)]
-    pub conn: BackendConfig,
+    /// Connection target.
+    pub postgres: PostgresConfig,
     /// Schema (and owner-role) override; defaults to `<database>_<key>` — see
     /// [`Self::schema`]. Not allowed on the `database_server:` entry.
     #[serde(default)]
@@ -51,7 +51,7 @@ pub struct ComponentConfig {
     pub app_role: Option<String>,
     /// Connection pool settings.
     #[serde(default)]
-    pub pool: PoolConfig,
+    pub pool: PoolsConfig,
 }
 
 /// PostgreSQL truncates longer identifiers silently (`NAMEDATALEN`), so the
@@ -69,10 +69,9 @@ impl ComponentConfig {
     /// The entry's schema (and owner-role) name: the explicit `schema:`, else
     /// `<database>_<key>` — cluster-global role names derived from the
     /// database name keep instances sharing a PostgreSQL cluster from
-    /// colliding — else the component's static default (backends without a
-    /// database name).
+    /// colliding — else the component's static default (no database name).
     pub fn schema(&self, key: &str, default_schema: &str) -> Result<String, DbError> {
-        checked_identifier(match (&self.schema, self.conn.database()) {
+        checked_identifier(match (&self.schema, self.postgres.database.as_deref()) {
             (Some(schema), _) => schema.to_string(),
             (None, Some(database)) => format!("{database}_{key}"),
             (None, None) => default_schema.to_owned(),
@@ -82,62 +81,11 @@ impl ComponentConfig {
     /// The entry's RLS app role: the explicit `app_role:`, else
     /// `<database>_app` (see [`Self::schema`]), else the global
     /// [`APP_ROLE`](crate::APP_ROLE).
-    pub fn app_role(&self) -> Result<String, DbError> {
-        checked_identifier(match (&self.app_role, self.conn.database()) {
+    pub(crate) fn app_role(&self) -> Result<String, DbError> {
+        checked_identifier(match (&self.app_role, self.postgres.database.as_deref()) {
             (Some(app_role), _) => app_role.clone(),
             (None, Some(database)) => format!("{database}_app"),
             (None, None) => app_role_or_default(None).to_owned(),
-        })
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ComponentConfigShape {
-    #[cfg(sqlite)]
-    #[serde(default)]
-    sqlite: Option<SqliteConfig>,
-    #[cfg(postgres)]
-    #[serde(default)]
-    postgres: Option<PostgresConfig>,
-    #[cfg(mysql)]
-    #[serde(default)]
-    mysql: Option<MySqlConfig>,
-    #[serde(default)]
-    schema: Option<Schema>,
-    #[serde(default)]
-    app_role: Option<String>,
-    #[serde(default)]
-    pool: PoolConfig,
-}
-
-impl TryFrom<ComponentConfigShape> for ComponentConfig {
-    type Error = DbError;
-
-    fn try_from(shape: ComponentConfigShape) -> Result<Self, DbError> {
-        let mut backends = Vec::new();
-        #[cfg(sqlite)]
-        if let Some(c) = shape.sqlite {
-            backends.push(BackendConfig::Sqlite(c));
-        }
-        #[cfg(postgres)]
-        if let Some(c) = shape.postgres {
-            backends.push(BackendConfig::Postgres(c));
-        }
-        #[cfg(mysql)]
-        if let Some(c) = shape.mysql {
-            backends.push(BackendConfig::MySql(c));
-        }
-        let mut backends = backends.into_iter();
-        let conn = backends.next().ok_or(DbError::MissingBackend)?;
-        if backends.next().is_some() {
-            return Err(DbError::MultipleBackends);
-        }
-        Ok(ComponentConfig {
-            conn,
-            schema: shape.schema,
-            app_role: shape.app_role,
-            pool: shape.pool,
         })
     }
 }
@@ -146,7 +94,6 @@ impl TryFrom<ComponentConfigShape> for ComponentConfig {
 mod tests {
     use super::*;
 
-    #[cfg(postgres)]
     #[test]
     fn component_config_shape() {
         let yaml = "
@@ -158,51 +105,30 @@ postgres:
 schema: td_apiserver
 app_role: td_app_i1
 pool:
-  max_connections: 10
+  regular:
+    min_connections: 1
+    max_connections: 10
 ";
         let entry: ComponentConfig = serde_yaml::from_str(yaml).unwrap();
-        let pg = entry.conn.postgres().unwrap();
-        assert_eq!(pg.port, 7432);
-        assert!(pg.username.is_none());
-        assert_eq!(pg.password.as_deref(), Some("owner_secret"));
+        assert_eq!(entry.postgres.port, 7432);
+        assert!(entry.postgres.username.is_none());
+        assert_eq!(entry.postgres.password.as_deref(), Some("owner_secret"));
         assert_eq!(entry.schema.as_deref(), Some("td_apiserver"));
         assert_eq!(entry.app_role.as_deref(), Some("td_app_i1"));
-        assert_eq!(entry.pool.max_connections, 10);
-        assert_eq!(
-            entry.pool.min_connections,
-            PoolConfig::default().min_connections
-        );
+        assert_eq!(entry.pool.regular.as_ref().unwrap().max_connections, 10);
+        assert!(entry.pool.exclusive.is_none());
     }
 
     #[test]
-    fn component_config_requires_backend() {
-        let yaml = "
-schema: td_apiserver
-";
-        let error = serde_yaml::from_str::<ComponentConfig>(yaml)
+    fn component_config_requires_connect_options() {
+        let error = serde_yaml::from_str::<ComponentConfig>("schema: td_apiserver\n")
             .unwrap_err()
             .to_string();
-        assert!(error.contains("exactly one backend key"), "{error}");
-    }
-
-    #[cfg(all(postgres, sqlite))]
-    #[test]
-    fn component_config_rejects_multiple_backends() {
-        let yaml = "
-postgres:
-  host: localhost
-sqlite:
-  path: /tmp/test.db
-";
-        let error = serde_yaml::from_str::<ComponentConfig>(yaml)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("more than one backend key"), "{error}");
+        assert!(error.contains("missing field `postgres`"), "{error}");
     }
 
     /// Stale keys from the old flat shape (or any typo) fail loudly instead of
     /// being silently dropped.
-    #[cfg(postgres)]
     #[test]
     fn component_config_rejects_stale_flat_keys() {
         for stale in ["max_connections: 50", "username: td", "url: postgres://x/y"] {
@@ -220,38 +146,6 @@ postgres:
         }
     }
 
-    #[cfg(sqlite)]
-    #[test]
-    fn component_config_sqlite_by_key() {
-        let yaml = "
-sqlite:
-  path: /tmp/test.db
-";
-        let entry: ComponentConfig = serde_yaml::from_str(yaml).unwrap();
-        #[allow(irrefutable_let_patterns)]
-        let BackendConfig::Sqlite(c) = &entry.conn else {
-            panic!("expected sqlite variant");
-        };
-        assert_eq!(c.path.as_deref(), Some("/tmp/test.db".as_ref()));
-    }
-
-    #[cfg(mysql)]
-    #[test]
-    fn component_config_mysql_by_key() {
-        let yaml = "
-mysql:
-  host: db.example.com
-";
-        let entry: ComponentConfig = serde_yaml::from_str(yaml).unwrap();
-        #[allow(irrefutable_let_patterns)]
-        let BackendConfig::MySql(c) = &entry.conn else {
-            panic!("expected mysql variant");
-        };
-        assert_eq!(c.host, "db.example.com");
-    }
-
-    /// Serialization keeps the single-key backend map shape the parser reads.
-    #[cfg(postgres)]
     #[test]
     fn component_config_round_trip() {
         let yaml = "
@@ -261,7 +155,9 @@ postgres:
   password: secret
 schema: td_apiserver
 pool:
-  max_connections: 7
+  regular:
+    min_connections: 1
+    max_connections: 7
 ";
         let entry: ComponentConfig = serde_yaml::from_str(yaml).unwrap();
         let restored: ComponentConfig =
@@ -271,8 +167,7 @@ pool:
 
     /// Names derive from the database (`<db>_<key>`, `<db>_app`) so instances
     /// sharing a cluster never collide on cluster-global role names; explicit
-    /// config wins; backends without a database name keep the static defaults.
-    #[cfg(postgres)]
+    /// config wins; an entry with no database name keeps the static defaults.
     #[test]
     fn component_config_derived_names() {
         let entry: ComponentConfig = serde_yaml::from_str(
@@ -334,7 +229,6 @@ postgres:
     }
 
     /// The placeholder must survive yaml as a plain string.
-    #[cfg(postgres)]
     #[test]
     fn embedded_placeholder_is_a_plain_string() {
         let yaml = "
@@ -343,7 +237,7 @@ postgres:
 ";
         let entry: ComponentConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
-            entry.conn.postgres().unwrap().password.as_deref(),
+            entry.postgres.password.as_deref(),
             Some(EMBEDDED_CREDENTIAL)
         );
     }

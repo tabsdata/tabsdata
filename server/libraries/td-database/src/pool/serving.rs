@@ -5,35 +5,39 @@
 //! [`TdPool`] — the serving application pool handed to the running server.
 
 use crate::config::DatabaseConfig;
-use crate::dynamic::{DynamicConnection, DynamicPool, DynamicTransaction};
+use crate::connection::PgConnectionExt;
 use crate::error::DbError;
-use crate::pool::connect::ConnectRole;
+use crate::pool::PoolKind;
 use crate::sea_query::builder::SeaQueryExt;
-use crate::sea_query::kind::DatabaseKind;
 use sea_query::{Alias, Expr, Query};
-use sqlx::Error;
-use td_schema::schema::backend::Backend;
-use tracing::{debug, info, instrument, warn};
+use sqlx::PgPool;
+use sqlx::{Error, Postgres, Transaction};
+use std::time::Duration;
+use tracing::{debug, info, instrument};
 
 /// Serving pool handed to the running server and its services. On PostgreSQL its
 /// connections run as the non-bypass [`APP_ROLE`](crate::APP_ROLE), so every
 /// request is enforced by row-level security. It deliberately carries **no**
 /// privileged connection: schema creation/upgrade/checks live in the `components`
-/// module's [`AdminPool`](crate::components::AdminPool), built from
-/// [`DatabaseConfig::connect`] with [`ConnectRole::Admin`].
+/// module's [`AdminPool`](crate::components::AdminPool).
 #[derive(Debug, Clone)]
 pub struct TdPool {
-    pub(crate) pool: DynamicPool,
+    pub(crate) pool: PgPool,
+    /// Warn/lock identity: the component key ("db" outside the serving map).
+    pub component: &'static str,
+    /// Warn/lock identity: which of the component's pools this is.
+    pub kind: PoolKind,
+    /// Also bounds how long an exclusive connection queues on its project's
+    /// lock.
+    pub(crate) acquire_timeout: Duration,
 }
 
-impl AsRef<DynamicPool> for TdPool {
-    fn as_ref(&self) -> &DynamicPool {
+impl AsRef<PgPool> for TdPool {
+    fn as_ref(&self) -> &PgPool {
         &self.pool
     }
 }
 
-/// Specialized [`Pool`] that uses two pools, one for read-only operations and one for
-/// read-write operations.
 impl TdPool {
     /// Connects to an already-running database as the **serving** role
     /// (RLS-enforced `td_app` on PostgreSQL). This is a pure application pool: it
@@ -42,12 +46,35 @@ impl TdPool {
     /// (`td_dbmanager start`), and this pool connects to it like any other
     /// server. The schema is
     /// assumed to be up to date.
-    #[instrument(name = "db.pool.connect", skip_all, level = "info", err(Debug))]
     pub async fn connect(config: &DatabaseConfig) -> Result<Self, DbError> {
+        Self::connect_as(config, PoolKind::Regular).await
+    }
+
+    /// [`Self::connect`] opening `kind`'s pool — a `TdPool` is always one of
+    /// a component's serving pools, never the admin connection.
+    #[instrument(name = "db.pool.connect", skip(config), level = "info", err(Debug))]
+    pub(crate) async fn connect_as(
+        config: &DatabaseConfig,
+        kind: PoolKind,
+    ) -> Result<Self, DbError> {
         info!("db.pool.connect: opening serving pool");
-        let out = config.connect(ConnectRole::Serving).await?;
+        let out = config.connect_serving(kind).await?;
         debug!("Connected to database pool: {:#?}", out.pool);
-        Ok(Self { pool: out.pool })
+        Ok(Self {
+            pool: out.pool,
+            component: "db",
+            kind,
+            acquire_timeout: out.acquire_timeout,
+        })
+    }
+
+    pub fn of_component(mut self, component: &'static str) -> Self {
+        self.component = component;
+        self
+    }
+
+    pub fn acquire_timeout(&self) -> Duration {
+        self.acquire_timeout
     }
 
     /// Verify the **serving** pool's connections are correctly scoped for RLS:
@@ -59,10 +86,7 @@ impl TdPool {
     /// silently. The query runs on the serving pool, so `current_user` is the
     /// after_connect role. Fail closed at startup
     /// ([`DbError::ConnectedRoleBypassesRls`]). PostgreSQL only (no RLS elsewhere).
-    pub async fn check_rls_posture(&self) -> Result<(), DbError> {
-        if !matches!(self.kind().into(), Backend::Postgres) {
-            return Ok(());
-        }
+    pub(crate) async fn check_rls_posture(&self) -> Result<(), DbError> {
         let bypasses: Option<bool> = Query::select()
             .expr(Expr::cust("rolsuper OR rolbypassrls"))
             .from(Alias::new("pg_roles"))
@@ -78,21 +102,13 @@ impl TdPool {
         Ok(())
     }
 
-    /// This pool's [`Backend`], resolved from its live connection kind.
-    pub fn backend(&self) -> Backend {
-        self.kind().into()
-    }
-
     /// Run `stmts` as one committed transaction on the serving pool — used by a
     /// component's [`seed`](crate::components::SchemaComponent::seed) to apply
     /// its idempotent baseline-content sync.
     pub async fn execute_batch(&self, stmts: &[String]) -> Result<(), DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::SqlError)?;
-        tx.as_mut_conn()
-            .execute_batch(stmts)
-            .await
-            .map_err(DbError::SqlError)?;
-        tx.commit().await.map_err(DbError::SqlError)?;
+        let mut conn = self.begin().await.map_err(DbError::SqlError)?;
+        conn.execute_batch(stmts).await.map_err(DbError::SqlError)?;
+        conn.commit().await.map_err(DbError::SqlError)?;
         Ok(())
     }
 
@@ -112,12 +128,12 @@ impl TdPool {
     }
 
     /// Verify the recorded major Tabsdata version is the one this binary speaks.
-    pub async fn check_tabsdata_version(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_tabsdata_version(&self) -> Result<(), DbError> {
         crate::pool::state::check_tabsdata_version(&self.pool).await
     }
 
     /// Verify the recorded edition is compatible with and current for this binary.
-    pub async fn check_tabsdata_edition(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_tabsdata_edition(&self) -> Result<(), DbError> {
         crate::pool::state::check_tabsdata_edition(&self.pool).await
     }
 
@@ -126,31 +142,14 @@ impl TdPool {
         crate::pool::state::check_pg_min_version(&self.pool).await
     }
 
-    /// Delegates to the read-only pool's [`Pool::acquire`] method.
-    pub async fn acquire<'c>(&self) -> Result<DynamicConnection<'c>, Error> {
-        let start = std::time::Instant::now();
-        let result = self.pool.acquire().await;
-        let elapsed_ms = start.elapsed().as_millis() as u64;
-        if elapsed_ms > 100 {
-            warn!(elapsed_ms, "db.pool.acquire: slow acquisition");
-        }
-        result
+    pub async fn begin(&self) -> Result<Transaction<'static, Postgres>, Error> {
+        self.pool.begin().await
     }
 
-    /// Delegates to [`DynamicPool::acquire_for_read`].
-    pub async fn acquire_for_read<'c>(&self) -> Result<DynamicConnection<'c>, Error> {
-        self.pool.acquire_for_read().await
-    }
-
-    /// Delegates to the read-write pool's [`Pool::begin`] method.
-    pub async fn begin<'c>(&self) -> Result<DynamicTransaction<'c>, Error> {
-        let start = std::time::Instant::now();
-        let result = self.pool.begin().await;
-        let elapsed_ms = start.elapsed().as_millis() as u64;
-        if elapsed_ms > 100 {
-            warn!(elapsed_ms, "db.pool.begin: slow transaction start");
-        }
-        result
+    /// `READ ONLY`, which the RLS `SET LOCAL` needs to scope to and in which a
+    /// stray write fails loudly.
+    pub async fn begin_ro(&self) -> Result<Transaction<'static, Postgres>, Error> {
+        self.pool.begin_with("BEGIN READ ONLY").await
     }
 
     /// Returns if the pool is closed.

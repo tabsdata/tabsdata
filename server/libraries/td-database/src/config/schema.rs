@@ -9,16 +9,9 @@ use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 
-/// Schema the tests isolate their objects in. Uses the real apiserver schema so
-/// tests run against the same schema name the production manager and resolver
-/// expect, avoiding a test-only schema that diverges from production. Single
-/// source for the test fixtures and the config unit tests.
-#[cfg(any(test, feature = "test-utils"))]
-pub const TEST_SCHEMA: &str = "td_apiserver";
-
-/// PostgreSQL schema name. Mandatory on the PostgreSQL path — there is no
+/// PostgreSQL schema name. Mandatory on the serving path — there is no
 /// `public` default, so each component's objects stay isolated in their own
-/// schema. SQLite and MySQL have no `search_path` and never carry one.
+/// schema.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Schema(String);
 

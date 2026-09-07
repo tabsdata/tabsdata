@@ -3,36 +3,19 @@
 //
 
 //! [`DatabaseConfig`] — a single **connectable** database target: its resolved
-//! [`ConnectConfig`], schema, and [`PoolConfig`]. Produced by component/server
-//! resolution and consumed by [`crate::pool::connect`]. Not config surface —
-//! it never deserializes; the declarative shape is [`ComponentConfig`]
-//! (see [`super::component`]).
+//! [`PostgresConnect`], schema, and [`PoolsConfig`]. Produced by
+//! component/server resolution and consumed by [`crate::pool::connect`]. Not
+//! config surface — it never deserializes; the declarative shape is
+//! [`ComponentConfig`](super::ComponentConfig) (see [`super::component`]).
 
-#[cfg(mysql)]
-use super::MySqlConfig;
-#[cfg(postgres)]
 use super::PostgresConfig;
 use super::Schema;
-#[cfg(sqlite)]
-use super::SqliteConfig;
-use super::pool::PoolConfig;
+use super::pool::PoolsConfig;
 use crate::error::DbError;
 
-/// A resolved, connectable backend target. Unlike the declarative
-/// [`BackendConfig`](super::BackendConfig), the backends that authenticate
-/// carry mandatory credentials — resolution already ran.
-#[derive(Debug, Clone)]
-pub enum ConnectConfig {
-    #[cfg(sqlite)]
-    Sqlite(SqliteConfig),
-    #[cfg(postgres)]
-    Postgres(PostgresConnect),
-    #[cfg(mysql)]
-    MySql(MySqlConnect),
-}
-
-/// PostgreSQL connect options with the resolved login identity.
-#[cfg(postgres)]
+/// PostgreSQL connect options with the resolved login identity. Unlike the
+/// declarative [`PostgresConfig`], the credentials are mandatory — resolution
+/// already ran.
 #[derive(Debug, Clone)]
 pub struct PostgresConnect {
     pub options: PostgresConfig,
@@ -40,24 +23,17 @@ pub struct PostgresConnect {
     pub password: String,
 }
 
-/// MySQL connect options with the resolved login identity.
-#[cfg(mysql)]
-#[derive(Debug, Clone)]
-pub struct MySqlConnect {
-    pub options: MySqlConfig,
-    pub username: String,
-    pub password: String,
-}
-
 /// Configuration for a connectable database pool.
 #[derive(Debug, Clone)]
 pub struct DatabaseConfig {
-    /// The resolved backend target.
-    pub conn: ConnectConfig,
-    /// PostgreSQL schema the connection's `search_path` is pinned to. Mandatory on
-    /// the PostgreSQL path (no `public` default, so each component stays isolated);
-    /// [`Self::connect`] fails with [`DbError::MissingSchema`] when unset. Ignored
-    /// by SQLite and MySQL, which have no `search_path`.
+    /// The resolved connect target.
+    pub conn: PostgresConnect,
+    /// Schema the connection's `search_path` is pinned to. Mandatory on the
+    /// serving path (no `public` default, so each component stays isolated);
+    /// [`connect_serving`](DatabaseConfig::connect_serving) fails with
+    /// [`DbError::MissingSchema`] when unset. The privileged system entry runs
+    /// without a home schema — it provisions across schemas with explicit,
+    /// schema-qualified DDL.
     pub schema: Option<Schema>,
     /// The RLS app role serving connections `SET ROLE` to. `None` means the
     /// global default [`APP_ROLE`](crate::APP_ROLE) (`td_app`). Deployments
@@ -67,12 +43,12 @@ pub struct DatabaseConfig {
     /// on the shared server.
     pub app_role: Option<String>,
     /// Connection pool settings.
-    pub pool: PoolConfig,
+    pub pool: PoolsConfig,
 }
 
 /// The single home of the app-role default: provisioning and serving must
 /// resolve the same role or `SET ROLE` targets one that was never created.
-pub(crate) fn app_role_or_default(app_role: Option<&str>) -> &str {
+pub fn app_role_or_default(app_role: Option<&str>) -> &str {
     app_role.unwrap_or(crate::APP_ROLE)
 }
 
@@ -83,10 +59,8 @@ impl DatabaseConfig {
         app_role_or_default(self.app_role.as_deref())
     }
 
-    /// The configured PostgreSQL schema, or [`DbError::MissingSchema`] when
-    /// unset. Only meaningful on the PostgreSQL path; SQLite/MySQL connect
-    /// without consulting it.
-    pub fn require_schema(&self) -> Result<&Schema, DbError> {
+    /// The configured schema, or [`DbError::MissingSchema`] when unset.
+    pub(crate) fn require_schema(&self) -> Result<&Schema, DbError> {
         self.schema.as_ref().ok_or(DbError::MissingSchema)
     }
 }
