@@ -1,73 +1,40 @@
 //
-// Copyright 2026 Tabsdata Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
-//! List function runs.
-//!
-//! Returns one row per `(execution_id, function_id)` pair — the
-//! plan-time logical identity (LFR) merged with the currently-bound
-//! PFR's per-attempt fields (started_on, ended_on, the PFR id itself).
-//! `status` is the canonical LFR-level (sticky-Committed) flow-control
-//! status. PFR-derived fields are NULL when no PFR is currently bound
-//! (Pending/Voided).
-
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::Visible;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::logical::FunctionRun;
 use td_objects::list::params::ListQueryParams;
-use td_objects::tower_service::with::With;
-use td_queries::By;
-use td_queries::list_filter::VisibleProjectsFilter;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = FunctionRunListService,
-    request = ListRequest<()>,
-    response = ListResponse<FunctionRun>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Visible::projects),
-        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
-        from_fn(By::<()>::list::<VisibleProjectsFilter, FunctionRun>),
-    )
+#[service_factory]
+async fn function_run_list(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest,
+) -> Result<ListResponse<FunctionRun>, TdError> {
+    let (ctx, _, list_params) = request.into_parts();
+    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    let conn = gated_conn.get(grant);
+    let query_params = ListQueryParams::<FunctionRun>::try_from(&list_params)?;
+    let rows = conn.live().list(&visible, &query_params).await?;
+    build_list_response(&list_params, &query_params, rows)
 }
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::dxo::crudl::ListParams;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, ProjectName, UserId};
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_function_run(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        FunctionRunListService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<()>, ListResponse<FunctionRun>>(&[
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Visible::projects),
-                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
-                type_of_val(&By::<()>::list::<VisibleProjectsFilter, FunctionRun>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_function_run_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
@@ -76,13 +43,14 @@ mod tests {
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         seed_run(&db, alpha.id).await?;
 
-        let service = FunctionRunListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let wildcard = service
-            .raw_oneshot(
+            .function_run_list(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .list((), ListParams::default()),
             )
-            .await?;
+            .await?
+            .data;
 
         // The wildcard spans both projects and each row resolves its own name.
         let projects: Vec<_> = wildcard
@@ -106,13 +74,14 @@ mod tests {
 
         let user = seed_project_viewer(&db, base.id).await?;
 
-        let service = FunctionRunListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .raw_oneshot(
+            .function_run_list(
                 RequestContext::with(AccessTokenId::default(), user.id)
                     .list((), ListParams::default()),
             )
-            .await?;
+            .await?
+            .data;
 
         let projects: Vec<_> = response
             .data

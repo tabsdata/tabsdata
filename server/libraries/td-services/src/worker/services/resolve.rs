@@ -6,46 +6,39 @@ use crate::scheduler::message_builder::{
     build_cron_input, build_function_v2, build_streamer_input, prefetch_dispatch,
 };
 use ta_services::factory::service_factory;
-use td_authz::rbac::enter_project_scope;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::scope_to_project;
+use td_database::access::{GatedConnection, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::dxo::worker::WorkerIdParam;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames};
 use td_objects::dxo::yaml::WorkerInput;
-use td_objects::rest_urls::internal::WorkerIdParam;
-use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, PhysicalFunctionRunStatus, ProjectId, WorkerId, WorkerStatus, WorkerType,
+    AtTime, PhysicalFunctionRunStatus, WorkerId, WorkerStatus, WorkerType,
 };
-use td_queries::{By, LfrEntry, LiveEntry};
+use td_queries::{LfrEntry, LiveEntry};
 use td_storage::Storage;
-use td_tower::default_services::TransactionProvider;
-use td_tower::extractors::{MutRef, Ref};
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 use tracing::instrument;
 
-#[service_factory(
-    name = ResolveWorkerMessageService,
-    request = ReadRequest<WorkerIdParam>,
-    response = WorkerInput,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = Storage,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ReadRequest<WorkerIdParam>>::extract_name::<WorkerIdParam>),
-        from_fn(With::<WorkerIdParam>::extract::<WorkerId>),
-        // Find worker; pivot into its project's scope.
-        from_fn(By::<WorkerId>::fetch_one::<WorkerDB>),
-        from_fn(With::<WorkerDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        from_fn(With::<ReadRequest<WorkerIdParam>>::extract::<RequestContext>),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(resolve_worker_message),
-    )
+#[service_factory]
+async fn resolve_worker_message(
+    storage: Ctx<Storage>,
+    authz: Ctx<AuthzContext>,
+    gated_trx: &mut GatedConnection<RW>,
+    request: ReadRequest<WorkerIdParam>,
+) -> Result<WorkerInput, TdError> {
+    let (ctx, param) = request.into_parts();
+    let conn = gated_trx.get(authz.none());
+    let worker_id = param.worker_id;
+    let worker: WorkerDB = conn.live().fetch_one(&worker_id).await?;
+    scope_to_project(conn, &worker.project_id).await?;
+    let at = ctx.time;
+    let input = resolve_worker_message(conn, &storage, &worker_id, &at).await?;
+    Ok(input)
 }
 
 /// Resolve any worker's message on demand: the single yaml generator the
@@ -60,13 +53,11 @@ fn service() {
     err(Debug)
 )]
 pub async fn resolve_worker_message(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    storage: Ref<Storage>,
-    worker_id: Ref<WorkerId>,
-    at: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    storage: &Storage,
+    worker_id: &WorkerId,
+    at: &AtTime,
 ) -> Result<WorkerInput, TdError> {
-    let worker_id = &*worker_id;
-
     // 404 guard + type dispatch: a rolled-back request leaves no worker
     // row, so an orphan pod resolving its message gets a clean not-found.
     let worker: WorkerDBWithNames = conn
@@ -74,15 +65,20 @@ pub async fn resolve_worker_message(
         .fetch_one::<WorkerDBWithNames>(worker_id)
         .await?;
 
-    let input = match worker.worker_type {
+    let input = match worker.base.worker_type {
         WorkerType::FunctionRunner => {
-            let function_run_id = worker.physical_function_run_id.clone().ok_or_else(|| {
-                api_error!(
-                    ApiError::InternalError,
-                    "function-runner worker [{}] has no physical_function_run_id",
-                    worker_id,
-                )
-            })?;
+            let function_run_id =
+                worker
+                    .base
+                    .physical_function_run_id
+                    .clone()
+                    .ok_or_else(|| {
+                        api_error!(
+                            ApiError::InternalError,
+                            "function-runner worker [{}] has no physical_function_run_id",
+                            worker_id,
+                        )
+                    })?;
 
             // A pod resolving a terminalized attempt gets a clean
             // not-found instead of work.
@@ -113,8 +109,8 @@ pub async fn resolve_worker_message(
 
             // Resolve as of the request time — late binding against the
             // upstream versions committed by the time the pod asked.
-            let prefetch = prefetch_dispatch(&mut conn, std::slice::from_ref(&f), &at).await?;
-            let function_input = build_function_v2(&mut conn, &storage, &f, &prefetch).await?;
+            let prefetch = prefetch_dispatch(&mut *conn, std::slice::from_ref(&f), at).await?;
+            let function_input = build_function_v2(&mut *conn, storage, &f, &prefetch).await?;
             WorkerInput::Function(Box::new(function_input))
         }
         WorkerType::StageTrigger | WorkerType::CronTrigger => {
@@ -122,7 +118,7 @@ pub async fn resolve_worker_message(
             // row at Failed/Done while recovery restarts the workload, and
             // the restarted pod's re-pull must succeed.
             if matches!(
-                worker.status,
+                worker.base.status,
                 WorkerStatus::StopScheduled | WorkerStatus::StopRequested | WorkerStatus::Stopped
             ) {
                 return Err(api_error!(
@@ -131,13 +127,13 @@ pub async fn resolve_worker_message(
                     worker_id,
                 ));
             }
-            match worker.worker_type {
+            match worker.base.worker_type {
                 WorkerType::StageTrigger => {
-                    let streamer_input = build_streamer_input(&mut conn, &storage, &worker).await?;
+                    let streamer_input = build_streamer_input(&mut *conn, storage, worker).await?;
                     WorkerInput::Streamer(Box::new(streamer_input))
                 }
                 _ => {
-                    let cron_input = build_cron_input(&worker)?;
+                    let cron_input = build_cron_input(worker)?;
                     WorkerInput::Cron(Box::new(cron_input))
                 }
             }
@@ -146,7 +142,7 @@ pub async fn resolve_worker_message(
 
     // Flip Locked → Unlocked — the "make ready" the dispatch tick did for
     // the supervisor path. Idempotent: a pod restart can re-pull.
-    let update = UpdateWorkerMessageStatusDB::unlocked().await?;
+    let update = UpdateWorkerMessageStatusDB::unlocked();
     conn.live()
         .update::<_, WorkerDB>(&update, worker_id)
         .await?;
@@ -157,18 +153,17 @@ pub async fn resolve_worker_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
         LogicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, WorkerMessageStatus,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     /// Seed a publisher + a Locked function-runner worker, then resolve its
     /// message via the endpoint service: it returns a resolved Function
@@ -181,18 +176,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("c_resolve")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("fr_resolve")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "fr_resolve".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(p.id)
             .seed()
@@ -221,23 +222,20 @@ mod tests {
             .function_runner_worker(&execution, &transaction, &pfr, &WorkerMessageStatus::Locked)
             .await?;
 
-        // Resolve the message via the endpoint service (worker-scoped).
         let param = WorkerIdParam {
             worker_id: worker.id.clone(),
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(param);
-        let response = ResolveWorkerMessageService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(read)
-            .await?;
+        let response = Services::with_defaults(db.clone())
+            .resolve_worker_message(read)
+            .await?
+            .data;
 
-        // Returns a resolved Function for this FR.
         let WorkerInput::Function(message) = response else {
             panic!("expected Function");
         };
         assert_eq!(message.info.function_run_id, pfr.id);
 
-        // Status flipped Locked -> Unlocked.
         let worker_after: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker.id).await?;
         assert_eq!(worker_after.message_status, WorkerMessageStatus::Unlocked);
 

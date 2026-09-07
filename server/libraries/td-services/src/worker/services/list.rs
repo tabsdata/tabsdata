@@ -3,68 +3,43 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::Visible;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::worker::Worker;
 use td_objects::list::params::ListQueryParams;
-use td_objects::tower_service::with::With;
-use td_queries::By;
-use td_queries::list_filter::VisibleProjectsFilter;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = WorkerListService,
-    request = ListRequest<()>,
-    response = ListResponse<Worker>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Visible::projects),
-        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Worker>, _>),
-        from_fn(By::<()>::list::<VisibleProjectsFilter, Worker>),
-    )
+#[service_factory]
+async fn worker_list(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest,
+) -> Result<ListResponse<Worker>, TdError> {
+    let (ctx, _, list_params) = request.into_parts();
+    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    let conn = gated_conn.get(grant);
+    let query_params = ListQueryParams::<Worker>::try_from(&list_params)?;
+    let rows = conn.live().list(&visible, &query_params).await?;
+    build_list_response(&list_params, &query_params, rows)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectName,
         TransactionKey, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_workers(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        WorkerListService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<()>, ListResponse<Worker>>(&[
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Visible::projects),
-                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Worker>, _>),
-                type_of_val(&By::<()>::list::<VisibleProjectsFilter, Worker>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_workers(db: TdPool) -> Result<(), TdError> {
@@ -79,18 +54,24 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -165,11 +146,11 @@ mod tests {
                 .await?,
         ];
 
-        let service = WorkerListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default());
 
-        let response = service.raw_oneshot(request).await?;
+        let response = service.worker_list(request).await?.data;
         assert_eq!(response.len, workers.len());
         assert_eq!(response.data[0].id, workers[0].id);
         assert_eq!(response.data[0].message_status, workers[0].message_status);
@@ -201,13 +182,14 @@ mod tests {
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let alpha_worker = seed_run(&db, alpha.id).await?.worker;
 
-        let service = WorkerListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let wildcard = service
-            .raw_oneshot(
+            .worker_list(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .list((), ListParams::default()),
             )
-            .await?;
+            .await?
+            .data;
 
         // The wildcard spans both projects and each row resolves to its own.
         let base_row = wildcard.data.iter().find(|w| w.id == base_worker).unwrap();
@@ -226,13 +208,14 @@ mod tests {
 
         let user = seed_project_viewer(&db, base.id).await?;
 
-        let service = WorkerListService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .raw_oneshot(
+            .worker_list(
                 RequestContext::with(AccessTokenId::default(), user.id)
                     .list((), ListParams::default()),
             )
-            .await?;
+            .await?
+            .data;
 
         assert!(response.data.iter().any(|w| w.id == base_worker));
         assert!(!response.data.iter().any(|w| w.id == alpha_worker));

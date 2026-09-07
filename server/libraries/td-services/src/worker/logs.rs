@@ -8,11 +8,9 @@ use td_bridge::BridgeProviderHandle;
 use td_bridge::worker::{WorkerLogStream, WorkerLogTarget};
 use td_common::worker::WorkerName;
 use td_error::TdError;
-use td_objects::dxo::worker::WorkerDB;
-use td_objects::rest_urls::LogsExtension;
+use td_objects::dxo::worker::{LogsExtension, WorkerDB};
 use td_objects::types::basic::{LogsCastNumber, WorkerType};
 use td_objects::types::stream::BoxedSyncStream;
-use td_tower::extractors::Ref;
 use tokio::sync::mpsc;
 
 fn worker_log_target(
@@ -51,10 +49,10 @@ fn into_boxed_sync_stream(stream: WorkerLogStream) -> BoxedSyncStream {
 }
 
 pub async fn worker_logs(
-    bridge: Ref<BridgeProviderHandle>,
-    worker: Ref<WorkerDB>,
-    extensions: Ref<Vec<LogsExtension>>,
-    casts: Ref<Vec<LogsCastNumber>>,
+    bridge: &BridgeProviderHandle,
+    worker: &WorkerDB,
+    extensions: &Vec<LogsExtension>,
+    casts: &Vec<LogsCastNumber>,
 ) -> Result<BoxedSyncStream, TdError> {
     let target = worker_log_target(&worker, &extensions, &casts);
     let stream = bridge.worker_handler().logs(&target).await?;
@@ -62,10 +60,10 @@ pub async fn worker_logs(
 }
 
 pub async fn worker_logs_tail(
-    bridge: Ref<BridgeProviderHandle>,
-    worker: Ref<WorkerDB>,
-    extensions: Ref<Vec<LogsExtension>>,
-    casts: Ref<Vec<LogsCastNumber>>,
+    bridge: &BridgeProviderHandle,
+    worker: &WorkerDB,
+    extensions: &Vec<LogsExtension>,
+    casts: &Vec<LogsCastNumber>,
 ) -> Result<BoxedSyncStream, TdError> {
     let target = worker_log_target(&worker, &extensions, &casts);
     let stream = bridge.worker_handler().logs_tail(&target).await?;

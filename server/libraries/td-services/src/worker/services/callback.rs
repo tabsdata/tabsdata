@@ -2,109 +2,57 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::update_status::update_worker_status;
+use crate::execution::update_status::update_worker_status;
 use ta_services::factory::service_factory;
-use td_authz::rbac::enter_project_scope;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::scope_to_project;
+use td_database::access::{GatedConnection, RW};
+use td_error::TdError;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::worker::{
-    CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution, WorkerDB,
+    CallbackRequest, UpdateWorkerDB, UpdateWorkerExecution, WorkerDB, WorkerIdParam,
 };
-use td_objects::rest_urls::internal::WorkerIdParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{ProjectId, WorkerId};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = WorkerCallbackService,
-    request = UpdateRequest<WorkerIdParam, CallbackRequest>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-)]
-fn service() {
-    layers!(
-        // Extract from request.
-        from_fn(
-            With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_name::<WorkerIdParam>
-        ),
-        from_fn(
-            With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_data::<CallbackRequest>
-        ),
-        // Convert callback request to status update request.
-        from_fn(With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
-        // Extract worker_id.
-        from_fn(With::<WorkerIdParam>::extract::<WorkerId>),
-        // Find worker; pivot into its project's scope.
-        from_fn(By::<WorkerId>::fetch_one::<WorkerDB>),
-        from_fn(With::<WorkerDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        // Update worker status.
-        from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
-        from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
-        from_fn(update_worker_status),
-    )
+#[service_factory]
+async fn worker_callback(
+    authz: Ctx<AuthzContext>,
+    gated_trx: &mut GatedConnection<RW>,
+    request: UpdateRequest<CallbackRequest, WorkerIdParam>,
+) -> Result<(), TdError> {
+    let (_, param, callback) = request.into_parts();
+    let conn = gated_trx.get(authz.none());
+    let update = UpdateWorkerExecution::try_from(&callback)?;
+
+    let worker_id = param.worker_id;
+    let worker: WorkerDB = conn.live().fetch_one(&worker_id).await?;
+    scope_to_project(conn, &worker.project_id).await?;
+
+    let worker_update: UpdateWorkerDB = UpdateWorkerDB::try_from(&update)?;
+    update_worker_status(conn, &worker_update, &worker_id).await?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::status::ExitStatus;
     use td_common::worker::{MessageAction, ResponseMessagePayload};
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::worker::WorkerDBWithNames;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_worker_callback(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        WorkerCallbackService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<UpdateRequest<WorkerIdParam, CallbackRequest>, ()>(&[
-                // Extract from request.
-                type_of_val(
-                    &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_name::<
-                        WorkerIdParam,
-                    >,
-                ),
-                type_of_val(
-                    &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_data::<
-                        CallbackRequest,
-                    >,
-                ),
-                // Convert callback request to status update request.
-                type_of_val(&With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
-                // Extract worker_id.
-                type_of_val(&With::<WorkerIdParam>::extract::<WorkerId>),
-                // Find worker; pivot into its project's scope.
-                type_of_val(&By::<WorkerId>::fetch_one::<WorkerDB>),
-                type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                // Update worker status.
-                type_of_val(
-                    &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
-                ),
-                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
-                type_of_val(&update_worker_status),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_worker_callback(db: TdPool) -> Result<(), TdError> {
@@ -114,18 +62,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(p.id)
             .seed()
@@ -161,15 +115,15 @@ mod tests {
             response,
         );
 
-        let service = WorkerCallbackService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.worker_callback(request).await?.data;
 
         let worker: WorkerDBWithNames =
             db.live().fetch_one::<WorkerDBWithNames>(&worker.id).await?;
-        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.status, WorkerStatus::Running);
-        assert_eq!(worker.started_on, Some(started_on));
-        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.status, WorkerStatus::Running);
+        assert_eq!(worker.base.started_on, Some(started_on));
+        assert_eq!(worker.base.ended_on, None);
 
         let ended_on = AtTime::now();
         let response: CallbackRequest = ResponseMessagePayload {
@@ -184,20 +138,22 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
             WorkerIdParam {
-                worker_id: worker.id.clone(),
+                worker_id: worker.base.id.clone(),
             },
             response,
         );
 
-        let service = WorkerCallbackService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.worker_callback(request).await?.data;
 
-        let worker: WorkerDBWithNames =
-            db.live().fetch_one::<WorkerDBWithNames>(&worker.id).await?;
-        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.status, WorkerStatus::Done);
-        assert_eq!(worker.started_on, Some(started_on));
-        assert_eq!(worker.ended_on, Some(ended_on));
+        let worker: WorkerDBWithNames = db
+            .live()
+            .fetch_one::<WorkerDBWithNames>(&worker.base.id)
+            .await?;
+        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.status, WorkerStatus::Done);
+        assert_eq!(worker.base.started_on, Some(started_on));
+        assert_eq!(worker.base.ended_on, Some(ended_on));
 
         Ok(())
     }

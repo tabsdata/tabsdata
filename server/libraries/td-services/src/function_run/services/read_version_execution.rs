@@ -2,108 +2,57 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function_run::layers::resolve_bound_function_run;
+use crate::function_run::resolve_bound_function_run;
 use ta_services::factory::service_factory;
-use td_authz::rbac::enter_project_scope;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::scope_to_project;
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::FromDao;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
-use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::physical_function_run::{
-    PhysicalFunctionRun, PhysicalFunctionRunBuilder, PhysicalFunctionRunDBWithNames,
-};
-use td_objects::rest_urls::internal::FunctionVersionExecution;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, ExecutionId, FunctionVersionId, ProjectId};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::dxo::execution::{ExecutionDB, ExecutionParam};
+use td_objects::dxo::function::FunctionVersionIdParam;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
+use td_queries::LiveEntry;
 
-// Similar to FunctionRunReadService, but with different parameters (function_version + execution)
-#[service_factory(
-    name = FunctionVersionExecutionReadService,
-    request = ReadRequest<FunctionVersionExecution>,
-    response = PhysicalFunctionRun,
-    connection = ConnectionProvider,
-    scope = "Global",
-)]
-fn service() {
-    layers!(
-        from_fn(
-            With::<ReadRequest<FunctionVersionExecution>>::extract_name::<FunctionVersionExecution>
-        ),
-        from_fn(With::<FunctionVersionExecution>::extract::<FunctionVersionId>),
-        from_fn(With::<FunctionVersionExecution>::extract::<ExecutionId>),
-        // Find execution and pivot into its project's scope via the collection.
-        from_fn(By::<ExecutionId>::fetch_one::<ExecutionDB>),
-        from_fn(With::<ExecutionDB>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        // find function run via LFR pointer: replays mint multiple FRs
-        // under one LFR identity; the canonical one is whatever the
-        // pointer currently binds to.
-        from_fn(resolve_bound_function_run),
-        // Build PhysicalFunctionRun
-        from_fn(
-            With::<PhysicalFunctionRunDBWithNames>::try_convert_to::<PhysicalFunctionRunBuilder, _>
-        ),
-        from_fn(With::<PhysicalFunctionRunBuilder>::build::<PhysicalFunctionRun>),
-    )
+#[service_factory]
+async fn function_version_execution_read(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ReadRequest<(FunctionVersionIdParam, ExecutionParam)>,
+) -> Result<PhysicalFunctionRun, TdError> {
+    let (_, (version, execution)) = request.into_parts();
+    let conn = gated_conn.get(authz.none());
+    let function_version_id = version.function_version_id;
+    let execution_id = execution.execution;
+
+    // Find execution and pivot into its project's scope via the collection.
+    let execution: ExecutionDB = conn.live().fetch_one(&execution_id).await?;
+    let collection: CollectionDB = conn.live().fetch_one(&execution.collection_id).await?;
+    scope_to_project(conn, &collection.base.project_id).await?;
+
+    // find function run via LFR pointer: replays mint multiple FRs
+    // under one LFR identity; the canonical one is whatever the
+    // pointer currently binds to.
+    let run = resolve_bound_function_run(conn, &execution_id, &function_version_id).await?;
+    PhysicalFunctionRun::from_dao(run)
 }
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::execution::ExecutionParam;
+    use td_objects::dxo::function::{FunctionRegister, FunctionVersionIdParam};
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
         PhysicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_read_version_execution(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        FunctionVersionExecutionReadService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ReadRequest<FunctionVersionExecution>, PhysicalFunctionRun>(&[
-                type_of_val(
-                    &With::<ReadRequest<FunctionVersionExecution>>::extract_name::<
-                        FunctionVersionExecution,
-                    >,
-                ),
-                type_of_val(&With::<FunctionVersionExecution>::extract::<FunctionVersionId>),
-                type_of_val(&With::<FunctionVersionExecution>::extract::<ExecutionId>),
-                // Find execution and pivot into its project's scope via the collection.
-                type_of_val(&By::<ExecutionId>::fetch_one::<ExecutionDB>),
-                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                // find function run via LFR pointer: replays mint multiple FRs
-                // under one LFR identity; the canonical one is whatever the
-                // pointer currently binds to.
-                type_of_val(&resolve_bound_function_run),
-                // Build PhysicalFunctionRun
-                type_of_val(
-                    &With::<PhysicalFunctionRunDBWithNames>::try_convert_to::<
-                        PhysicalFunctionRunBuilder,
-                        _,
-                    >,
-                ),
-                type_of_val(&With::<PhysicalFunctionRunBuilder>::build::<PhysicalFunctionRun>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_read_function_version_execution_run(db: TdPool) -> Result<(), TdError> {
@@ -117,18 +66,24 @@ mod tests {
         let dependencies = None;
         let triggers = None;
         let tables = vec![TableNameDto::try_from("table_version")?];
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables.clone())
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables: Some(tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -154,16 +109,17 @@ mod tests {
             )
             .await?;
 
-        // Test
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            FunctionVersionExecution::builder()
-                .function_version_id(function_version.id)
-                .execution(execution.id.clone())
-                .build()?,
-        );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+            FunctionVersionIdParam {
+                function_version_id: function_version.id,
+            },
+            ExecutionParam {
+                execution: execution.id.clone(),
+            },
+        ));
 
-        let service = FunctionVersionExecutionReadService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.function_version_execution_read(request).await;
         let response = response?;
         assert_eq!(response.id, physical_function_run.id);
         assert_eq!(response.collection_id, physical_function_run.collection_id);
