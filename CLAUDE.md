@@ -45,8 +45,8 @@ exist in both repos, and after dependency changes here ee needs re-locking
   import from `_`-prefixed paths in examples, docs, or tests of public behavior.
 - Rust errors: thiserror-style domain enums mapped to `td-error`'s `ApiError`
   via the `td_error!` / `api_error!` macros — follow existing crates.
-- Tests named `test_logging*` and tower-metadata tests run isolated under
-  dedicated features — don't rename them casually.
+- Tests named `test_logging*` run isolated under a dedicated feature —
+  don't rename them casually.
 
 ## Build / test
 
