@@ -5,7 +5,10 @@
 use crate::auth::AuthError;
 use crate::auth::assert_current_password::assert_current_password;
 use crate::auth::assert_user_enabled::assert_user_enabled;
-use crate::auth::create_password_hash::create_password_hash;
+use argon2::PasswordHasher;
+use argon2::password_hash::SaltString;
+use argon2::password_hash::rand_core::OsRng;
+use std::ops::Deref;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::session_provider::Sessions;
@@ -15,6 +18,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::auth::{PasswordChange, SessionInvalidateDB};
 use td_objects::dxo::user::{UserDB, UserUpdateDB};
+use td_objects::types::basic::PasswordHash;
 use td_objects::types::basic::{AtTime, PasswordChangeTime, PasswordMustChange, SessionStatus};
 use td_queries::Queries;
 use td_security::config::PasswordHashingConfig;
@@ -72,6 +76,19 @@ async fn authenticate<S: DbScope>(
     let user: UserDB = conn.fetch_one(&request.name).await?;
     assert_current_password(&user.password_hash, &request.old_password)?;
     Ok(user)
+}
+
+pub fn create_password_hash<P: Deref<Target = String>>(
+    password_hashing_config: &PasswordHashingConfig,
+    password: &P,
+) -> Result<PasswordHash, TdError> {
+    let hash = password_hashing_config
+        .password_hasher()
+        .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
+        .unwrap()
+        .to_string();
+
+    PasswordHash::try_from(hash)
 }
 
 #[cfg(test)]

@@ -241,7 +241,7 @@ pub(crate) async fn put_stage_trigger_start(
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_stage_trigger_workers_stop_request(
+pub fn create_locked_stage_trigger_workers_stop_request(
     orchestrator: Orchestrator,
     internal_api: &InternalApi,
     stage_trigger_workers: Vec<WorkerDBWithNames>,

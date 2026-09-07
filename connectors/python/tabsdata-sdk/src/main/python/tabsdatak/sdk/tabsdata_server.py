@@ -148,7 +148,6 @@ class Collection:
         base_path: str | None = None,
         connection_document: str | None = None,
         secrets: list | None = None,
-        variables: list | None = None,
         **kwargs,
     ):
         """
@@ -172,7 +171,6 @@ class Collection:
         # only used at create time.
         self._connection_document = connection_document
         self._secrets = secrets
-        self._variables = variables
         # Logical storage prefix for the collection's artifacts. None at read time
         # falls back to the server value via the data dict / kwargs.
         self._base_path = base_path
@@ -218,7 +216,6 @@ class Collection:
             base_path=self._base_path,
             connection=self._connection_document,
             secrets=self._secrets,
-            variables=self._variables,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -652,14 +649,12 @@ class Collection:
         self,
         connection: str,
         secrets: list | None = None,
-        variables: list | None = None,
         raise_for_status: bool = True,
     ) -> Collection:
         self.connection.collection_connection_upsert(
             self.name,
             connection,
             secrets=secrets,
-            variables=variables,
             raise_for_status=raise_for_status,
         )
         return self
@@ -3670,7 +3665,6 @@ class TabsdataServer:
         base_path: str | None = None,
         connection: str | None = None,
         secrets: list | None = None,
-        variables: list | None = None,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3686,7 +3680,6 @@ class TabsdataServer:
                 (it is created WITH its connection, 1:1).
             secrets (list, optional): ``{key, value}`` covering every
                 ``env:`` reference in the connection document.
-            variables (list, optional): ``{key, value}`` non-secret values.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -3701,7 +3694,6 @@ class TabsdataServer:
             base_path=base_path,
             connection_document=connection,
             secrets=secrets,
-            variables=variables,
         )
         collection.create(raise_for_status=raise_for_status)
         return collection
@@ -3869,7 +3861,6 @@ class TabsdataServer:
         name: str,
         connection: str,
         secrets: list | None = None,
-        variables: list | None = None,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3885,7 +3876,6 @@ class TabsdataServer:
                 (same wire form as create).
             secrets (list, optional): ``{key, value}`` covering every ``secret:``
                 reference in the connection document.
-            variables (list, optional): ``{key, value}`` non-secret values.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -3896,7 +3886,6 @@ class TabsdataServer:
         return collection.upsert_connection(
             connection,
             secrets=secrets,
-            variables=variables,
             raise_for_status=raise_for_status,
         )
 
@@ -3907,7 +3896,7 @@ class TabsdataServer:
         Read the connection of a source/destination collection.
 
         Returns the dehydrated connection document plus the NAMES (never the
-        values) of its secrets and vars.
+        values) of its secrets.
 
         Args:
             name (str): The name of the collection.
@@ -3915,7 +3904,7 @@ class TabsdataServer:
                 request was not successful. Defaults to True.
 
         Returns:
-            dict: ``{id, connection, secret_names, var_names}``.
+            dict: ``{id, connection, secret_names}``.
 
         Raises:
             APIServerError: If the connection could not be read.

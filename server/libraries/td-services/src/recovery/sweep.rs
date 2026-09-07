@@ -129,12 +129,6 @@ pub async fn fail_stale_abandoned_attempts<S: SeesProjectRows>(
     Ok(())
 }
 
-pub async fn stuck_lfrs_from_stale(
-    stale: &StaleDispatchedRuns,
-) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
-    Ok(stale.stuck_lfrs.clone())
-}
-
 /// The time-based sweep, in one write transaction: stale `Dispatched` PFRs →
 /// `Failed`, and those under a `Requested` LFR additionally get the
 /// operator-recover flow.
@@ -147,7 +141,7 @@ pub async fn sweep_stale_runs<S: SeesProjectRows>(
 ) -> Result<(), TdError> {
     let stale = fetch_stale_dispatched_runs(conn, at, config).await?;
     fail_stale_abandoned_attempts(conn, at, &stale).await?;
-    let stuck_lfrs = stuck_lfrs_from_stale(&stale).await?;
+    let stuck_lfrs = stale.stuck_lfrs.clone();
     abandon_requested_physical_runs(conn, at, &stuck_lfrs).await?;
     let recover = LogicalFunctionRunStatusUpdateDB::recover();
     update_function_run_status(msgs, conn, &stuck_lfrs, &recover).await?;

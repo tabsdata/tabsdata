@@ -41,7 +41,7 @@ def _localfile_doc():
 
 def test_load_connection_fetches_and_deserializes():
     from_cls, doc = _localfile_doc()
-    api = _Api({"data": {"connection": doc, "secret_names": [], "var_names": []}})
+    api = _Api({"data": {"connection": doc, "secret_names": []}})
 
     conn = load_connection(api, "mycoll")
 
@@ -55,7 +55,7 @@ def test_load_connection_accepts_a_plain_dict_return():
     # Some clients return the parsed body rather than a requests.Response.
     from_cls, doc = _localfile_doc()
     api = _Api(
-        {"data": {"connection": doc, "secret_names": [], "var_names": []}},
+        {"data": {"connection": doc, "secret_names": []}},
         as_response=False,
     )
 
@@ -68,7 +68,7 @@ def test_load_connection_hydrate_false_skips_env():
     # With hydrate=False, no environment lookup happens (and a secret-free doc
     # still round-trips cleanly).
     from_cls, doc = _localfile_doc()
-    api = _Api({"data": {"connection": doc, "secret_names": [], "var_names": []}})
+    api = _Api({"data": {"connection": doc, "secret_names": []}})
 
     conn = load_connection(api, "mycoll", hydrate=False)
 

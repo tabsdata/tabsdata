@@ -347,7 +347,6 @@ mod tests {
                 key: "CREDENTIALS_PASSWORD".to_string(),
                 value: secret_value.map(str::to_string),
             }]),
-            vars: Some(vec![]),
         }
     }
 

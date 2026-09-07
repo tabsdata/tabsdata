@@ -13,9 +13,9 @@ use ta_services::service::Ctx;
 use td_common::jwt::{JwtConfig, encode_internal_token};
 use td_common::worker::{Callback, HttpCallback, HttpRequest};
 use td_error::td_error;
-use td_objects::dxo::function::FunctionVersionIdParam;
-use td_objects::dxo::physical_function_run::FunctionRunIdParam;
-use td_objects::dxo::worker::WorkerIdParam;
+use td_objects::dxo::function::FunctionVersionParam;
+use td_objects::dxo::physical_function_run::FunctionRunParam;
+use td_objects::dxo::worker::WorkerParam;
 use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::{FunctionVersionId, PhysicalFunctionRunId, WorkerId};
 use td_objects::{PathParams, Route};
@@ -26,12 +26,12 @@ use url::Url;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct InternalRoutes {
     pub base: &'static str,
-    pub worker_callback: Route<WorkerIdParam>,
-    pub worker_message: Route<WorkerIdParam>,
-    pub function_run_callback: Route<(FunctionRunIdParam, WorkerIdParam)>,
-    pub function_version_execute: Route<FunctionVersionIdParam>,
-    pub function_version_execution_status: Route<FunctionVersionIdParam>,
-    pub download_function_state: Route<FunctionVersionIdParam>,
+    pub worker_callback: Route<WorkerParam>,
+    pub worker_message: Route<WorkerParam>,
+    pub function_run_callback: Route<(FunctionRunParam, WorkerParam)>,
+    pub function_version_execute: Route<FunctionVersionParam>,
+    pub function_version_execution_status: Route<FunctionVersionParam>,
+    pub download_function_state: Route<FunctionVersionParam>,
 }
 
 #[td_error]
@@ -121,8 +121,8 @@ impl InternalApi {
     pub fn worker_responder(&self, worker_id: &WorkerId) -> Result<Callback, WorkerRequestError> {
         self.post_callback(
             self.routes.worker_callback,
-            &WorkerIdParam {
-                worker_id: worker_id.clone(),
+            &WorkerParam {
+                worker: worker_id.clone(),
             },
         )
     }
@@ -131,8 +131,8 @@ impl InternalApi {
     pub fn worker_resolver(&self, worker_id: &WorkerId) -> Result<Callback, WorkerRequestError> {
         self.get_callback(
             self.routes.worker_message,
-            &WorkerIdParam {
-                worker_id: worker_id.clone(),
+            &WorkerParam {
+                worker: worker_id.clone(),
             },
         )
     }
@@ -146,11 +146,11 @@ impl InternalApi {
         self.post_callback(
             self.routes.function_run_callback,
             &(
-                FunctionRunIdParam {
-                    function_run_id: function_run_id.clone(),
+                FunctionRunParam {
+                    function_run: function_run_id.clone(),
                 },
-                WorkerIdParam {
-                    worker_id: worker_id.clone(),
+                WorkerParam {
+                    worker: worker_id.clone(),
                 },
             ),
         )
@@ -165,8 +165,8 @@ impl InternalApi {
         self.request(
             Method::POST,
             self.routes.function_version_execute,
-            &FunctionVersionIdParam {
-                function_version_id: function_version_id.clone(),
+            &FunctionVersionParam {
+                function_version: function_version_id.clone(),
             },
             headers,
             true,
@@ -181,8 +181,8 @@ impl InternalApi {
         self.request(
             Method::GET,
             self.routes.download_function_state,
-            &FunctionVersionIdParam {
-                function_version_id: function_version_id.clone(),
+            &FunctionVersionParam {
+                function_version: function_version_id.clone(),
             },
             HashMap::new(),
             false,
@@ -197,8 +197,8 @@ impl InternalApi {
         self.request(
             Method::GET,
             self.routes.function_version_execution_status,
-            &FunctionVersionIdParam {
-                function_version_id: function_version_id.clone(),
+            &FunctionVersionParam {
+                function_version: function_version_id.clone(),
             },
             HashMap::new(),
             true,

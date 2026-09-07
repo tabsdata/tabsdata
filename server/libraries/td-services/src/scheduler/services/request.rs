@@ -161,8 +161,7 @@ async fn tick_project(
         internal_api,
         to_stop,
         &mut messages,
-    )
-    .await?;
+    )?;
     update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
 
     let to_start = claim_trigger_workers(
@@ -175,8 +174,7 @@ async fn tick_project(
         internal_api,
         to_start,
         &mut messages,
-    )
-    .await?;
+    )?;
     update_worker_message_statuses(conn, orchestrator, at, &to_start, false).await?;
 
     let to_stop =
@@ -186,8 +184,7 @@ async fn tick_project(
         internal_api,
         to_stop,
         &mut messages,
-    )
-    .await?;
+    )?;
     update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
 
     let to_start = claim_trigger_workers(
@@ -245,7 +242,7 @@ async fn update_worker_message_statuses<S: SeesProjectRows>(
 ) -> Result<(), TdError> {
     let worker_ids: Vec<WorkerId> = workers.iter().map(|x| x.base.base.id.clone()).collect();
     let status_update: WorkerUpdateDB = if stopping {
-        stop_worker_update(orchestrator, at).await?
+        stop_worker_update(orchestrator, at)?
     } else {
         WorkerUpdateDB::requested()
     };
@@ -759,7 +756,7 @@ mod tests {
         assert_eq!(claims.method, "GET");
         assert!(claims.scope.ends_with("/message"));
         assert_eq!(
-            claims.bindings.get("worker_id").unwrap(),
+            claims.bindings.get("worker").unwrap(),
             &worker_id.to_string()
         );
 

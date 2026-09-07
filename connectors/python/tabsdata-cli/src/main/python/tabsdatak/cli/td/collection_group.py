@@ -160,10 +160,8 @@ def _connection_system(doc: dict) -> str:
 
 def _public_connection(conn_read: dict) -> dict:
     """The connection view safe to display: just the dehydrated document, never
-    the secret or var names."""
-    return {
-        k: v for k, v in conn_read.items() if k not in ("secret_names", "var_names")
-    }
+    the secret names."""
+    return {k: v for k, v in conn_read.items() if k != "secret_names"}
 
 
 def _load_connection_document(conn_file, group):

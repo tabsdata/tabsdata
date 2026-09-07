@@ -21,7 +21,7 @@ use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::logical::FunctionRun;
 use td_objects::dxo::physical_function_run::{
-    FunctionRunIdParam, InputIdxParam, PhysicalFunctionRun,
+    FunctionRunParam, InputIdxParam, PhysicalFunctionRun,
 };
 use td_services::Services;
 
@@ -72,7 +72,7 @@ pub async fn read_run(
 #[apiserver_path(
     mount(project),
     method(get),
-    path = "/projects/{project}/collections/{collection}/function-runs/{function_run_id}/inputs/{input_idx}/raw-data",
+    path = "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/raw-data",
     tag(FUNCTION_RUNS_TAG),
     content_type = "application/vnd.apache.parquet",
     doc = "Download one stamped raw-data file a publisher run ingested"
@@ -82,7 +82,7 @@ pub async fn raw_data(
     Extension(context): Extension<RequestContext>,
     Project(project_id): Project,
     Path(collection): Path<CollectionParam>,
-    Path(function_run): Path<FunctionRunIdParam>,
+    Path(function_run): Path<FunctionRunParam>,
     Path(input_idx): Path<InputIdxParam>,
 ) -> Result<DownloadResponse, ErrorStatus> {
     let request = context

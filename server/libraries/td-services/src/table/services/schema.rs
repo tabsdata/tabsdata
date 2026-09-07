@@ -2,18 +2,24 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::table::columns::drop_extra_columns;
 use crate::table::find_data_version_location_at;
-use crate::table::schema::get_table_schema;
+use crate::table::storage::StorageServiceError;
+use polars::prelude::cloud::CloudOptions;
+use polars::prelude::{Field, LazyFrame, PlPath, PolarsError, ScanArgsParquet, SchemaExt};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
+use td_error::td_error;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::crudl::{AtTimeParam, WithinProject};
+use td_objects::dxo::table::{ExtraCols, SchemaField};
 use td_objects::dxo::table::{ExtraColsParam, TableParam, TableSchema, UncommittedParam};
+use td_storage::SPath;
 use td_storage::Storage;
 
 type TableSchemaRequest = WithinProject<
@@ -47,7 +53,58 @@ async fn table_schema(
         &uncommitted.uncommitted,
     )
     .await?;
-    get_table_schema(&storage, &extra_cols.extra_cols, &location).await
+    get_table_schema(&storage, &extra_cols.extra_cols, &location)
+}
+
+#[td_error]
+enum SchemaError {
+    #[error("Could not get schema: {0}")]
+    CouldNotGetSchema(#[source] PolarsError) = 5000,
+}
+
+pub fn get_table_schema(
+    storage: &Storage,
+    extra_cols: &ExtraCols,
+    table_path: &Option<SPath>,
+) -> Result<TableSchema, TdError> {
+    fn get_schema(mut lazy_frame: LazyFrame) -> Result<TableSchema, TdError> {
+        let schema = lazy_frame
+            .collect_schema()
+            .map_err(SchemaError::CouldNotGetSchema)?;
+        let schema: Vec<SchemaField> = schema
+            .iter_fields()
+            .map(Field::try_into)
+            .collect::<Result<_, _>>()?;
+        Ok(TableSchema { fields: schema })
+    }
+
+    if let Some(table_path) = table_path {
+        let (url, mount_def) = storage.to_external_uri(table_path)?;
+        let url_str = url.to_string();
+        let pl_path = PlPath::new(url_str.as_str());
+        let cloud_config =
+            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), mount_def.options())
+                .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
+        let parquet_config = ScanArgsParquet {
+            cloud_options: Some(cloud_config),
+            ..ScanArgsParquet::default()
+        };
+
+        tokio::task::block_in_place(move || {
+            let lazy_frame = LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)
+                .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+
+            let lazy_frame = drop_extra_columns(lazy_frame, extra_cols)
+                .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+
+            get_schema(lazy_frame)
+        })
+    } else {
+        tokio::task::block_in_place(move || {
+            let lazy_frame = LazyFrame::default();
+            get_schema(lazy_frame)
+        })
+    }
 }
 
 #[cfg(test)]

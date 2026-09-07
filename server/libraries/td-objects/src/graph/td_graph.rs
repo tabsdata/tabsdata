@@ -405,7 +405,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_functions() -> Result<(), TdError> {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let actual = graph
             .functions()
             .into_iter()
@@ -419,7 +419,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tables() -> Result<(), TdError> {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let actual = graph.tables().into_iter().cloned().collect::<HashSet<_>>();
         let expected = expected_table_nodes();
 
@@ -429,7 +429,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_edges_types() {
-        let graph = test_graph().await;
+        let graph = test_graph();
 
         for node in graph.inner.node_indices() {
             let edges = graph.inner.edges(node);
@@ -456,7 +456,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_edges() {
-        let graph = test_graph().await;
+        let graph = test_graph();
 
         for node in graph.inner.node_indices() {
             let edges = graph.inner.edges(node);
@@ -519,7 +519,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_relations() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let relations = graph.relations();
 
         assert_eq!(relations.len(), 8);
@@ -553,7 +553,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_trigger_graph() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let trigger_graph = PartialGraph::trigger_graph(&graph).unwrap();
         assert_eq!(trigger_graph.inner.node_count(), 3);
         assert_eq!(trigger_graph.inner.edge_count(), 1);
@@ -581,7 +581,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dependency_graph() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let dependency_graph = PartialGraph::dependency_graph(&graph, true).unwrap();
         assert_eq!(dependency_graph.inner.node_count(), TABLE_NAMES.len());
         assert_eq!(dependency_graph.inner.edge_count(), 3);
@@ -622,7 +622,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_transaction_graph() {
-        let graph = test_graph().await;
+        let graph = test_graph();
 
         let transaction_by = TestTransactionBy::Name;
         let transaction_graph = PartialGraph::transaction_graph(&graph, &transaction_by).unwrap();
@@ -668,7 +668,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_map_graph_versioned_structure() -> Result<(), TdError> {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let functions = graph.functions();
         let tables = graph.tables();
 

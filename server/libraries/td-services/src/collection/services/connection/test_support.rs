@@ -129,7 +129,6 @@ impl ConnectionStore for KeepStore {
             id: None,
             connection: json!({"kind": "mysqlSrcConn"}),
             secret_names: self.stored_secret_names.clone(),
-            var_names: Vec::<String>::new(),
         })
     }
     async fn fetch_hydrated(
@@ -149,7 +148,6 @@ fn stored_read() -> ConnectionRead {
         id: None,
         connection: json!({"kind": "mysqlSrcConn"}),
         secret_names: vec!["CREDENTIALS_PASSWORD".to_string()],
-        var_names: Vec::<String>::new(),
     }
 }
 
@@ -180,7 +178,6 @@ pub fn create_request(
         base_path: None,
         connection: None,
         secrets: None,
-        vars: None,
     };
     if let Some(group) = group {
         let kind = if group == GroupName::destination() {
@@ -191,7 +188,6 @@ pub fn create_request(
         if group == GroupName::source() || group == GroupName::destination() {
             create.connection = Some(document(name, kind));
             create.secrets = Some(secrets());
-            create.vars = Some(vec![]);
         }
         create.group = group;
     }
@@ -312,7 +308,6 @@ pub fn upsert_request_kind(
     let body = ConnectionUpsert {
         connection: Some(document(collection, kind)),
         secrets: Some(secrets()),
-        vars: Some(vec![]),
     };
     upsert_request_body(project, collection, body)
 }

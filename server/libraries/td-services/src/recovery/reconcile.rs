@@ -105,16 +105,6 @@ impl RecoveryActions {
     }
 }
 
-pub async fn cron_candidates(workers: &Vec<WorkerDBWithNames>) -> Result<CronCandidates, TdError> {
-    Ok(CronCandidates((*workers).clone()))
-}
-
-pub async fn stage_candidates(
-    workers: &Vec<WorkerDBWithNames>,
-) -> Result<StageCandidates, TdError> {
-    Ok(StageCandidates((*workers).clone()))
-}
-
 #[instrument(name = "recovery.fn_candidates", skip_all, level = "debug", err(Debug))]
 pub async fn fn_candidates<S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S>,
@@ -214,7 +204,7 @@ pub async fn current_trigger_versions<S: SeesProjectRows>(
     ))
 }
 
-pub async fn build_recovery_snapshot(
+pub fn build_recovery_snapshot(
     at: &AtTime,
     cron: &CronCandidates,
     stage: &StageCandidates,
@@ -654,7 +644,7 @@ pub async fn finalize_recovery_actions<S: SeesProjectRows>(
     Ok(RecoveryActions { fn_actions })
 }
 
-pub async fn failed_worker_update(at: &AtTime) -> Result<WorkerUpdateDB, TdError> {
+pub fn failed_worker_update(at: &AtTime) -> Result<WorkerUpdateDB, TdError> {
     Ok(WorkerUpdateDB {
         started_on: None,
         ended_on: Some((*at).into()),
@@ -662,7 +652,7 @@ pub async fn failed_worker_update(at: &AtTime) -> Result<WorkerUpdateDB, TdError
     })
 }
 
-pub async fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdError> {
+pub fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdError> {
     Ok(actions
         .fn_actions
         .iter()
@@ -700,7 +690,7 @@ pub async fn fail_recovered_attempts<S: SeesProjectRows>(
 /// Running LFRs with a recover verdict: `Running → ReScheduled` is not a
 /// legal transition, so these are failed first (same transaction) and then
 /// recovered as Failed.
-pub async fn fail_running_lfrs_for_recover(
+pub fn fail_running_lfrs_for_recover(
     actions: &RecoveryActions,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     Ok(actions
@@ -713,7 +703,7 @@ pub async fn fail_running_lfrs_for_recover(
         .collect())
 }
 
-pub async fn recover_lfrs_from_actions(
+pub fn recover_lfrs_from_actions(
     actions: &RecoveryActions,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     Ok(actions
@@ -743,7 +733,7 @@ pub async fn recover_lfrs_from_actions(
         .collect())
 }
 
-pub async fn fail_lfrs_from_actions(
+pub fn fail_lfrs_from_actions(
     actions: &RecoveryActions,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     Ok(actions

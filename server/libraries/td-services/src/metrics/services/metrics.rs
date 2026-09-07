@@ -45,8 +45,8 @@ async fn metrics_global(
     request: ReadRequest<MetricsRequest>,
 ) -> Result<MetricsResponse, TdError> {
     let (ctx, param) = request.into_parts();
-    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
-    metrics_response(&param, &visible, gated_conn.get(grant)).await
+    let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
+    metrics_response(&param, &visible_projects, gated_conn.get(grant)).await
 }
 
 #[cfg(test)]

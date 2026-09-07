@@ -271,8 +271,8 @@ impl TryFrom<&WorkerExecutionUpdate> for PhysicalFunctionRunUpdateDB {
 }
 
 #[ta_objects::UrlParam]
-pub struct FunctionRunIdParam {
-    pub function_run_id: PhysicalFunctionRunId,
+pub struct FunctionRunParam {
+    pub function_run: PhysicalFunctionRunId,
 }
 
 /// Names one stamped raw-data file of a run. The runner assigns the index as a

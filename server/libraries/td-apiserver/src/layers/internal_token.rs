@@ -136,51 +136,39 @@ mod tests {
             .collect()
     }
 
-    const SCOPE: &str = "/api/v1/internal/function-runs/{function_run_id}/workers/{worker_id}";
+    const SCOPE: &str = "/api/v1/internal/function-runs/{function_run}/workers/{worker}";
 
     #[test]
     fn authorizes_matching_request() {
-        let c = claims(
-            "POST",
-            SCOPE,
-            &[("function_run_id", "F"), ("worker_id", "W")],
-        );
+        let c = claims("POST", SCOPE, &[("function_run", "F"), ("worker", "W")]);
         assert!(token_authorizes_request(
             &c,
             "POST",
             Some(SCOPE),
-            Some(&params(&[("function_run_id", "F"), ("worker_id", "W")])),
+            Some(&params(&[("function_run", "F"), ("worker", "W")])),
         ));
     }
 
     #[test]
     fn rejects_wrong_method() {
-        let c = claims(
-            "POST",
-            SCOPE,
-            &[("function_run_id", "F"), ("worker_id", "W")],
-        );
+        let c = claims("POST", SCOPE, &[("function_run", "F"), ("worker", "W")]);
         assert!(!token_authorizes_request(
             &c,
             "GET",
             Some(SCOPE),
-            Some(&params(&[("function_run_id", "F"), ("worker_id", "W")])),
+            Some(&params(&[("function_run", "F"), ("worker", "W")])),
         ));
     }
 
     #[test]
     fn rejects_wrong_binding() {
         // A token for worker W must not authorize worker W2.
-        let c = claims(
-            "POST",
-            SCOPE,
-            &[("function_run_id", "F"), ("worker_id", "W")],
-        );
+        let c = claims("POST", SCOPE, &[("function_run", "F"), ("worker", "W")]);
         assert!(!token_authorizes_request(
             &c,
             "POST",
             Some(SCOPE),
-            Some(&params(&[("function_run_id", "F"), ("worker_id", "W2")])),
+            Some(&params(&[("function_run", "F"), ("worker", "W2")])),
         ));
     }
 
@@ -188,12 +176,12 @@ mod tests {
     fn rejects_extra_binding() {
         // A token bound only to function_run_id must not authorize a request
         // whose route also binds worker_id (param sets differ).
-        let c = claims("POST", SCOPE, &[("function_run_id", "F")]);
+        let c = claims("POST", SCOPE, &[("function_run", "F")]);
         assert!(!token_authorizes_request(
             &c,
             "POST",
             Some(SCOPE),
-            Some(&params(&[("function_run_id", "F"), ("worker_id", "W")])),
+            Some(&params(&[("function_run", "F"), ("worker", "W")])),
         ));
     }
 
@@ -203,26 +191,22 @@ mod tests {
         // though both bind only function_version_id: the matched template differs.
         let c = claims(
             "GET",
-            "/api/v1/internal/function-versions/{function_version_id}/execution-status",
-            &[("function_version_id", "FV")],
+            "/api/v1/internal/function-versions/{function_version}/execution-status",
+            &[("function_version", "FV")],
         );
         assert!(!token_authorizes_request(
             &c,
             "GET",
-            Some("/api/v1/internal/function-versions/{function_version_id}/download-state"),
-            Some(&params(&[("function_version_id", "FV")])),
+            Some("/api/v1/internal/function-versions/{function_version}/download-state"),
+            Some(&params(&[("function_version", "FV")])),
         ));
     }
 
     #[test]
     fn rejects_missing_match_or_params() {
         // Fail closed if the router gave us no matched path or no path params.
-        let c = claims(
-            "GET",
-            SCOPE,
-            &[("function_run_id", "F"), ("worker_id", "W")],
-        );
-        let p = params(&[("function_run_id", "F"), ("worker_id", "W")]);
+        let c = claims("GET", SCOPE, &[("function_run", "F"), ("worker", "W")]);
+        let p = params(&[("function_run", "F"), ("worker", "W")]);
         assert!(!token_authorizes_request(&c, "GET", None, Some(&p)));
         assert!(!token_authorizes_request(&c, "GET", Some(SCOPE), None));
     }
@@ -234,8 +218,8 @@ mod tests {
         // Mint the token the same way the scheduler does for this endpoint.
         let scope = format!("{BASE_URL}{FUNCTION_RUN_CALLBACK_PATH}");
         let bindings = BTreeMap::from([
-            ("function_run_id".to_string(), "F".to_string()),
-            ("worker_id".to_string(), "W".to_string()),
+            ("function_run".to_string(), "F".to_string()),
+            ("worker".to_string(), "W".to_string()),
         ]);
         let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
 
@@ -266,8 +250,8 @@ mod tests {
 
         let scope = format!("{BASE_URL}{FUNCTION_RUN_CALLBACK_PATH}");
         let bindings = BTreeMap::from([
-            ("function_run_id".to_string(), "F".to_string()),
-            ("worker_id".to_string(), "W".to_string()),
+            ("function_run".to_string(), "F".to_string()),
+            ("worker".to_string(), "W".to_string()),
         ]);
         let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
 

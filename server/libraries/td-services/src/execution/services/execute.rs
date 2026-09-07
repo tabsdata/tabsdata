@@ -3,7 +3,6 @@
 //
 
 use crate::execution::execute;
-use crate::execution::plan::trigger_type_manual;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -17,6 +16,7 @@ use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionParam};
+use td_objects::types::basic::TriggerType;
 use td_queries::Queries;
 
 #[service_factory]
@@ -46,8 +46,6 @@ async fn execute_function(
         .as_of(&ctx.time)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
-    let trigger_type = trigger_type_manual().await?;
-
     let response = execute(
         conn,
         msgs,
@@ -55,7 +53,7 @@ async fn execute_function(
         ctx,
         execution_request,
         function,
-        trigger_type,
+        TriggerType::Manual,
     )
     .await?;
     trx.commit().await?;
@@ -153,7 +151,6 @@ pub(crate) mod tests {
                             base_path: None,
                             connection: None,
                             secrets: None,
-                            vars: None,
                         },
                     )
                     .in_project(project.id),

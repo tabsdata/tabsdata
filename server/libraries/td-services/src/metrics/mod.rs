@@ -32,29 +32,32 @@ use td_queries::Queries;
 
 pub(crate) async fn inflight_response<S: SeesProjectRows>(
     req: &InflightRequest,
-    visible: &VisibleProjects,
+    visible_projects: &VisibleProjects,
     conn: &mut DomainConnection<Apiserver, S>,
 ) -> Result<InflightResponse, TdError> {
-    let mut rows = conn.metrics().inflight(req, visible).await?;
+    let mut rows = conn.metrics().inflight(req, visible_projects).await?;
     rows.sort_by_key(|r| (r.project_id, r.collection_id, r.group_id, r.status));
     Ok(InflightResponse { rows })
 }
 
 pub(crate) async fn metrics_response<S: SeesProjectRows>(
     req: &MetricsRequest,
-    visible: &VisibleProjects,
+    visible_projects: &VisibleProjects,
     conn: &mut DomainConnection<Apiserver, S>,
 ) -> Result<MetricsResponse, TdError> {
     // Narrowed in the entry: a cross-project read spans every tenant, so the
     // requester's viewable set is an argument, not a step a caller can skip.
     // External nodes are synthesized from the already-narrowed edges.
-    let raw_nodes = conn.metrics().metrics_nodes(req, visible).await?;
-    let raw_edges = conn.metrics().metrics_edges(req, visible).await?;
+    let raw_nodes = conn.metrics().metrics_nodes(req, visible_projects).await?;
+    let raw_edges = conn.metrics().metrics_edges(req, visible_projects).await?;
     let raw_out_tables = conn
         .metrics()
-        .metrics_node_output_tables(req, visible)
+        .metrics_node_output_tables(req, visible_projects)
         .await?;
-    let raw_edge_tables = conn.metrics().metrics_edge_tables(req, visible).await?;
+    let raw_edge_tables = conn
+        .metrics()
+        .metrics_edge_tables(req, visible_projects)
+        .await?;
     let mut nodes = fold_to_coarse(raw_nodes, req.unit)?;
     let mut edges = fold_to_coarse(raw_edges, req.unit)?;
     // Fill the non-summable distinct-table counts from the listings, folding to

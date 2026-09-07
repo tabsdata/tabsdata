@@ -2,8 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::project::ProjectError;
 use crate::project::delete_project_roles::delete_project_roles;
-use crate::project::guards::reject_delete_non_empty_project;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -13,6 +13,7 @@ use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::project::{ActiveProjectDB, ProjectDeleteDB, ProjectParam};
+use td_objects::types::basic::ProjectId;
 use td_queries::Queries;
 
 #[service_factory]
@@ -50,5 +51,25 @@ async fn delete_project(
     let mut conn = db.read().await?;
     authz.refresh(conn.get(grant)).await?;
 
+    Ok(())
+}
+
+/// Reject deleting a project that still owns collections. Collections are the
+/// top of the project-scoped data tree (functions, tables, runs, … all hang
+/// off a collection), so "no collections" means "no project-scoped data".
+/// Deleting a non-empty project would leave those rows in place but
+/// unreachable — the resolver reads `projects_active`, so once the project is
+/// soft-deleted no request can ever set the GUC back to it.
+///
+/// The delete-project service spans projects (bypass scope), so the
+/// collections fetch sees the target project's collections regardless of
+/// the request's own scope.
+pub fn reject_delete_non_empty_project(
+    project_id: &ProjectId,
+    collections: &[ActiveCollectionDB],
+) -> Result<(), TdError> {
+    if !collections.is_empty() {
+        Err(ProjectError::ProjectNotEmpty(project_id.to_string()))?;
+    }
     Ok(())
 }

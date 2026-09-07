@@ -2,9 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::auth::AuthError;
 use crate::auth::assert_current_password::assert_current_password;
-use crate::auth::assert_login_user::assert_login_user;
-use crate::auth::assert_no_password_change_required::assert_no_password_change_required;
 use crate::auth::assert_user_enabled::assert_user_enabled;
 use crate::auth::create_access_token::create_access_token;
 use crate::auth::set_session_expiration::session_expiration;
@@ -55,6 +54,18 @@ async fn login(
     sessions.invalidate().await;
 
     Ok(token)
+}
+
+pub fn assert_login_user(user: Option<UserDB>) -> Result<UserDB, TdError> {
+    user.ok_or_else(|| AuthError::AuthenticationFailed.into())
+}
+
+pub fn assert_no_password_change_required(user: &UserDB) -> Result<(), TdError> {
+    if *user.password_must_change {
+        Err(AuthError::UserMustChangePassword)?
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

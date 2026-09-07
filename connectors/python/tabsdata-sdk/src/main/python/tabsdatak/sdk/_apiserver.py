@@ -512,7 +512,6 @@ class APIServer:
         base_path: str | None = None,
         connection: str | None = None,
         secrets: list | None = None,
-        variables: list | None = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped("/collections")
@@ -523,10 +522,9 @@ class APIServer:
             data["base_path"] = base_path
         if connection is not None:
             # Source/destination collections are created WITH their
-            # connection (1:1) — the triple rides on the create payload.
+            # connection (1:1) — the pair rides on the create payload.
             data["connection"] = connection
             data["secrets"] = secrets or []
-            data["vars"] = variables or []
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -540,14 +538,12 @@ class APIServer:
         collection_name: str,
         connection: str,
         secrets: list | None = None,
-        variables: list | None = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(f"/collections/{collection_name}/connection")
         data = {
             "connection": connection,
             "secrets": secrets or [],
-            "vars": variables or [],
         }
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)

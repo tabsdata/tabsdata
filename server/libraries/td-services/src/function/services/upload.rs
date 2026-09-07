@@ -2,21 +2,28 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::upload::upload_function_write_to_storage;
+use futures::TryStreamExt;
+use sha2::{Digest, Sha256};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{GatedConnection, InProject, RW};
 use td_error::TdError;
+use td_error::td_error;
 use td_objects::dxo::bundle::{Bundle, BundleInsertDB};
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function_upload::FunctionUpload;
+use td_objects::types::basic::{BasePath, BundleHash, CollectionId};
 use td_objects::types::basic::{BundleId, BundleStatus, StorageVersion};
 use td_queries::Queries;
 use td_storage::Storage;
+use td_storage::StorageError;
+use td_storage::location::StorageLocation;
+use tokio::io::BufWriter;
+use tokio_util::io::StreamReader;
 
 #[service_factory]
 async fn upload_function(
@@ -65,6 +72,52 @@ async fn upload_function(
 
     let read: Bundle = Bundle::from(&bundle);
     Ok(read)
+}
+
+#[td_error]
+enum UploadError {
+    #[error("Function bundle request has no body")]
+    MissingBody = 5001,
+    #[error("Function bundle buffering failed: {0}")]
+    Buffering(#[from] std::io::Error) = 5002,
+    #[error("Function bundle save failed: {0}")]
+    Save(#[from] StorageError) = 5003,
+}
+
+pub async fn upload_function_write_to_storage(
+    storage: &Storage,
+    bundle_id: &BundleId,
+    storage_version: &StorageVersion,
+    base_path: &BasePath,
+    collection_id: &CollectionId,
+    request: &FunctionUpload,
+) -> Result<BundleHash, TdError> {
+    let stream = request.stream().await.ok_or(UploadError::MissingBody)?; //cannot easily test this error
+
+    let body_with_io_error = stream.map_err(std::io::Error::other);
+    let body_reader = StreamReader::new(body_with_io_error);
+    futures::pin_mut!(body_reader);
+
+    let mut buffer = BufWriter::new(Vec::<u8>::with_capacity(1024 * 1024)); // 1MB
+    tokio::io::copy(&mut body_reader, &mut buffer)
+        .await
+        .map_err(UploadError::Buffering)?; //cannot easily test this error
+    let bytes = buffer.into_inner();
+    let hash = hex::encode(&Sha256::digest(&bytes)[..]);
+
+    let storage_location = StorageLocation::from(storage_version);
+    let (location, _) = storage_location
+        .builder(base_path)
+        .collection(collection_id)
+        .function(bundle_id)
+        .build()?;
+
+    storage
+        .write(&location, bytes)
+        .await
+        .map_err(UploadError::Save)?; //cannot easily test this error
+
+    BundleHash::try_from(hash.as_str())
 }
 
 #[cfg(test)]

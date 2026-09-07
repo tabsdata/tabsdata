@@ -272,7 +272,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execution_plan_map_async() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let graph = graph
             .with_trigger(&function_node(&FUNCTION_NAMES[0]))
             .unwrap();
@@ -344,7 +344,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_validate_dag_trigger_ok() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let graph = graph
             .with_trigger(&function_node(&FUNCTION_NAMES[0]))
             .unwrap();
@@ -353,7 +353,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_validate_dag_dependency_ok() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let graph = graph
             .with_trigger(&function_node(&FUNCTION_NAMES[0]))
             .unwrap();
@@ -362,7 +362,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_validate_dag_transaction_ok() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let graph = graph
             .with_trigger(&function_node(&FUNCTION_NAMES[0]))
             .unwrap();
@@ -380,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_manual_trigger_function_matches() -> Result<(), TdError> {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let expected_trigger_fn = function_node(&FUNCTION_NAMES[0]);
         let graph = graph.with_trigger(&expected_trigger_fn)?;
         assert_eq!(graph.main_trigger().name, expected_trigger_fn.name);
@@ -389,7 +389,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_function_table_input_versions_and_table_function_output_versions() {
-        let graph = test_graph().await;
+        let graph = test_graph();
         let graph = graph
             .with_trigger(&function_node(&FUNCTION_NAMES[0]))
             .unwrap();

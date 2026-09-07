@@ -394,11 +394,6 @@ pub struct WorkerParam {
     pub worker: WorkerId,
 }
 
-#[ta_objects::UrlParam]
-pub struct WorkerIdParam {
-    pub worker_id: WorkerId,
-}
-
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Default)]
 pub enum LogsExtension {
     #[default]

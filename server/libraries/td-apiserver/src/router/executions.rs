@@ -18,7 +18,7 @@ use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::execution::{
     AllowDisabledParam, Execution, ExecutionDetails, ExecutionParam, ExecutionResponse,
 };
-use td_objects::dxo::function::FunctionVersionIdParam;
+use td_objects::dxo::function::FunctionVersionParam;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionParam;
 use td_services::Services;
 
@@ -78,14 +78,14 @@ pub async fn lists(
 #[apiserver_path(
     mount(global),
     method(get),
-    path = "/function-versions/{function_version_id}/executions",
+    path = "/function-versions/{function_version}/executions",
     tag(EXECUTION_TAG),
     doc = "List executions by function version"
 )]
 pub async fn list_by_function_version(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
-    Path(function_version_id): Path<FunctionVersionIdParam>,
+    Path(function_version_id): Path<FunctionVersionParam>,
     Query(list_params): Query<ListParams>,
 ) -> Result<ListStatus<Execution>, ErrorStatus> {
     let request = context.list(function_version_id, list_params);

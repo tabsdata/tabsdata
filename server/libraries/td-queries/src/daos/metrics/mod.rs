@@ -123,9 +123,9 @@ where
     pub async fn inflight(
         self,
         req: &InflightRequest,
-        visible: &VisibleProjects,
+        visible_projects: &VisibleProjects,
     ) -> Result<Vec<InflightRow>, SqlError> {
-        inflight_query(req, visible)
+        inflight_query(req, visible_projects)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -138,10 +138,10 @@ where
     pub async fn metrics_nodes(
         self,
         req: &MetricsRequest,
-        visible: &VisibleProjects,
+        visible_projects: &VisibleProjects,
     ) -> Result<Vec<NodeRow>, SqlError> {
         let bounds = WindowBounds::try_from(&req.window)?;
-        node_aggregates_query(req, &bounds, visible)
+        node_aggregates_query(req, &bounds, visible_projects)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -154,10 +154,10 @@ where
     pub async fn metrics_edges(
         self,
         req: &MetricsRequest,
-        visible: &VisibleProjects,
+        visible_projects: &VisibleProjects,
     ) -> Result<Vec<EdgeRow>, SqlError> {
         let bounds = WindowBounds::try_from(&req.window)?;
-        edge_aggregates_query(req, &bounds, visible)
+        edge_aggregates_query(req, &bounds, visible_projects)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -169,10 +169,10 @@ where
     pub async fn metrics_node_output_tables(
         self,
         req: &MetricsRequest,
-        visible: &VisibleProjects,
+        visible_projects: &VisibleProjects,
     ) -> Result<Vec<NodeOutputTableRow>, SqlError> {
         let bounds = WindowBounds::try_from(&req.window)?;
-        node_output_tables_query(req, &bounds, visible)
+        node_output_tables_query(req, &bounds, visible_projects)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -184,10 +184,10 @@ where
     pub async fn metrics_edge_tables(
         self,
         req: &MetricsRequest,
-        visible: &VisibleProjects,
+        visible_projects: &VisibleProjects,
     ) -> Result<Vec<EdgeTableRow>, SqlError> {
         let bounds = WindowBounds::try_from(&req.window)?;
-        edge_tables_query(req, &bounds, visible)
+        edge_tables_query(req, &bounds, visible_projects)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -199,24 +199,24 @@ where
 #[cfg(feature = "td-test")]
 pub fn metrics_plan_sql(req: &MetricsRequest) -> [(&'static str, String); 4] {
     use sea_query::PostgresQueryBuilder;
-    let visible = &VisibleProjects::All;
+    let visible_projects = &VisibleProjects::All;
     let bounds = &WindowBounds::try_from(&req.window).expect("valid window");
     [
         (
             "nodes",
-            node_aggregates_query(req, bounds, visible).to_string(PostgresQueryBuilder),
+            node_aggregates_query(req, bounds, visible_projects).to_string(PostgresQueryBuilder),
         ),
         (
             "edges",
-            edge_aggregates_query(req, bounds, visible).to_string(PostgresQueryBuilder),
+            edge_aggregates_query(req, bounds, visible_projects).to_string(PostgresQueryBuilder),
         ),
         (
             "node_output_tables",
-            node_output_tables_query(req, bounds, visible).to_string(PostgresQueryBuilder),
+            node_output_tables_query(req, bounds, visible_projects).to_string(PostgresQueryBuilder),
         ),
         (
             "edge_tables",
-            edge_tables_query(req, bounds, visible).to_string(PostgresQueryBuilder),
+            edge_tables_query(req, bounds, visible_projects).to_string(PostgresQueryBuilder),
         ),
     ]
 }

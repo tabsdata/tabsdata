@@ -2,7 +2,7 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
-use crate::user::delete::delete_user_validate;
+use crate::user::UserError;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -13,6 +13,7 @@ use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user::UserParam;
 use td_objects::dxo::user_role::UserRoleDB;
+use td_objects::types::basic::UserId;
 use td_queries::Queries;
 
 #[service_factory]
@@ -40,6 +41,16 @@ async fn delete_user(
     // grants like every other membership-mutating service.
     let mut conn = db.read().await?;
     authz.refresh(conn.get(grant)).await?;
+    Ok(())
+}
+
+pub fn delete_user_validate(user_db: &UserDB, user_id: &UserId) -> Result<(), TdError> {
+    if *user_db.system {
+        Err(UserError::SystemUserProtected)?
+    }
+    if user_db.id == *user_id {
+        Err(UserError::NotAllowedToDeleteThemselves)?
+    }
     Ok(())
 }
 

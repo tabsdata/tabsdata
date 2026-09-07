@@ -2,8 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::read::{map_create_worker, vec_create_table_dependency};
 use std::collections::HashMap;
+use std::ops::Deref;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -18,8 +18,11 @@ use td_objects::dxo::function::{Function, FunctionDBWithNames, FunctionWithTable
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::dxo::worker::WorkerDBWithNames;
+use td_objects::types::basic::WorkerType;
 use td_objects::types::basic::{TableId, TableName, WorkerId, WorkerTypeDto};
+use td_objects::types::composed::TableDependency;
 use td_objects::types::composed::TableTrigger;
+use td_objects::types::table_ref::VersionedTableRef;
 use td_objects::{FromDao, and};
 use td_queries::Queries;
 
@@ -87,7 +90,7 @@ async fn read_function(
         .chunked()
         .fetch_all(&dependency_table_ids, ())
         .await?;
-    let table_dependencies = vec_create_table_dependency(&dependencies, &dependency_tables).await?;
+    let table_dependencies = vec_create_table_dependency(&dependencies, &dependency_tables)?;
 
     let workers: Vec<WorkerDBWithNames> = conn
         .fetch_all::<WorkerDBWithNames>(and!(
@@ -95,7 +98,7 @@ async fn read_function(
             WorkerDBWithNames::enabled_triggers()
         ))
         .await?;
-    let worker_map: HashMap<WorkerTypeDto, WorkerId> = map_create_worker(&workers).await?;
+    let worker_map: HashMap<WorkerTypeDto, WorkerId> = map_create_worker(&workers)?;
 
     Ok(FunctionWithTables {
         function: read,
@@ -104,6 +107,44 @@ async fn read_function(
         workers: worker_map,
         tables: table_names,
     })
+}
+
+pub fn vec_create_table_dependency(
+    dependencies: &[DependencyDBWithNames],
+    tables: &[TableDBWithNames],
+) -> Result<Vec<TableDependency>, TdError> {
+    let tables = tables
+        .iter()
+        .map(|t| (t.base.base.table_id, t))
+        .collect::<HashMap<_, _>>();
+
+    let table_deps = dependencies
+        .iter()
+        .filter_map(|d| {
+            let table = tables.get(&d.base.base.table_id)?;
+            let versions = d.base.base.table_versions.deref().clone();
+            Some(TableDependency::new(VersionedTableRef::new(
+                Some(table.collection.clone()),
+                table.base.base.name.clone(),
+                versions,
+            )))
+        })
+        .collect::<Vec<_>>();
+    Ok(table_deps)
+}
+
+pub fn map_create_worker(
+    workers: &[WorkerDBWithNames],
+) -> Result<HashMap<WorkerTypeDto, WorkerId>, TdError> {
+    let workers = workers
+        .iter()
+        .filter_map(|w| match w.base.base.worker_type {
+            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.base.base.id.clone())),
+            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.base.base.id.clone())),
+            _ => None,
+        })
+        .collect();
+    Ok(workers)
 }
 
 #[cfg(test)]

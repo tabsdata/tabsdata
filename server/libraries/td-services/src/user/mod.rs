@@ -25,9 +25,6 @@ pub enum UserError {
     SystemUserProtected = 2001,
 }
 
-pub mod delete;
-pub mod update;
-
 use td_error::TdError;
 use td_objects::dxo::user::{UserDB, UserDBWithNames};
 

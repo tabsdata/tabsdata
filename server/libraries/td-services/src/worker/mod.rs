@@ -4,8 +4,6 @@
 
 pub mod services;
 
-pub(crate) mod logs;
-
 #[cfg(test)]
 pub(crate) mod tests {
     use std::env;

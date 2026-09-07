@@ -10,11 +10,6 @@ use td_objects::dxo::graph::GraphNode;
 use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::types::composed::TableVersions;
-use td_objects::types::recursion::RecursionOptions;
-
-pub async fn with_recursion_options() -> Result<RecursionOptions, TdError> {
-    Ok(RecursionOptions::new(None, None))
-}
 
 // similar to execution response
 pub async fn build_response(

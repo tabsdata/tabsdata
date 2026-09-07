@@ -13,7 +13,7 @@ use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::function::FunctionVersionDBWithNames;
-use td_objects::dxo::function::FunctionVersionIdParam;
+use td_objects::dxo::function::FunctionVersionParam;
 use td_objects::list::params::ListQueryParams;
 use td_queries::Queries;
 
@@ -21,10 +21,10 @@ use td_queries::Queries;
 async fn execution_list_by_function_version(
     authz: Ctx<AuthzContext>,
     db: DbPool<AcrossProjects>,
-    request: ListRequest<FunctionVersionIdParam>,
+    request: ListRequest<FunctionVersionParam>,
 ) -> Result<ListResponse<Execution>, TdError> {
     let (ctx, param, list_params) = request.into_parts();
-    let function_version_id = param.function_version_id;
+    let function_version_id = param.function_version;
 
     // Resolve the anchor — a head version or a patch, the union view
     // serves both — into its owning project via its collection;
@@ -278,8 +278,8 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let list = async |fvid: &FunctionVersionId| -> Result<ListResponse<Execution>, TdError> {
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-                FunctionVersionIdParam {
-                    function_version_id: fvid.clone(),
+                FunctionVersionParam {
+                    function_version: fvid.clone(),
                 },
                 ListParams::default(),
             );
@@ -344,8 +344,8 @@ mod tests {
         // No function requirements exist for this function version.
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-            FunctionVersionIdParam {
-                function_version_id: function_version.base.id.clone(),
+            FunctionVersionParam {
+                function_version: function_version.base.id.clone(),
             },
             ListParams::default(),
         );

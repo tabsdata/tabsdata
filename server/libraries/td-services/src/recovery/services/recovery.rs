@@ -5,18 +5,27 @@
 use crate::internal_api::InternalApi;
 use crate::project::active::active_project_ids;
 use crate::recovery::{
+    CronCandidates, RecoverySnapshot, StageCandidates, build_recovery_snapshot,
+    current_trigger_versions, fn_candidates, stage_trigger_functions,
+};
+use crate::recovery::{
     apply_recovery_actions, classify_divergence, execute_workload_removals,
-    recreate_trigger_workloads, sweep_stale_runs, take_recovery_snapshot,
+    recreate_trigger_workloads, sweep_stale_runs,
 };
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::BridgeProviderHandle;
+use td_database::access::SeesProjectRows;
 use td_database::access::{AcrossProjects, DbPool, Grant};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{RecoveryConfig, SchedulerNotify};
+use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::AtTime;
+use td_queries::Queries;
 use td_storage::Storage;
+use tracing::instrument;
 use tracing::{error, warn};
 
 /// The recovery tick, over short DB phases so no connection is held during
@@ -97,6 +106,28 @@ async fn recovery(
     // transaction has already committed here.
     scheduler_notify.notify_scheduler();
     Ok(())
+}
+
+/// One read-only pass over the DB: reconciliation candidates plus the stage
+/// function/bundle locations the recreates need, so the orchestrator then runs
+/// every Kubernetes call with no connection held.
+#[instrument(name = "recovery.snapshot", skip_all, level = "debug", err(Debug))]
+pub async fn take_recovery_snapshot<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    at: &AtTime,
+) -> Result<RecoverySnapshot, TdError> {
+    let cron_workers: Vec<WorkerDBWithNames> = conn
+        .fetch_all(WorkerDBWithNames::cron_triggers_in_flight())
+        .await?;
+    let cron = CronCandidates(cron_workers);
+    let stage_workers: Vec<WorkerDBWithNames> = conn
+        .fetch_all(WorkerDBWithNames::stage_triggers_in_flight())
+        .await?;
+    let stage = StageCandidates(stage_workers);
+    let current = current_trigger_versions(conn, &cron, &stage).await?;
+    let fn_attempts = fn_candidates(conn).await?;
+    let stage_functions = stage_trigger_functions(conn, &stage).await?;
+    build_recovery_snapshot(at, &cron, &stage, &fn_attempts, &stage_functions, &current)
 }
 
 #[cfg(test)]

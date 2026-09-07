@@ -10,7 +10,7 @@ use td_common::provider::Provider;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
 use td_objects::dxo::auth::SessionInvalidateDB;
-use td_objects::dxo::crudl::UpdateRequest;
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::SessionStatus;
 use td_queries::Queries;
 
@@ -19,9 +19,8 @@ async fn logout(
     authz: Ctx<AuthzContext>,
     sessions: Ctx<Sessions>,
     db: DbPool<Global>,
-    request: UpdateRequest<()>,
+    ctx: RequestContext,
 ) -> Result<(), TdError> {
-    let (ctx, _, _) = request.into_parts();
     let mut gated_trx = db.begin().await?;
     let conn = gated_trx.get(authz.none());
 
@@ -68,8 +67,8 @@ mod tests {
 
         let service = auth_services.clone();
 
-        let request = RequestContext::with(access_token_id, UserId::admin()).update((), ());
-        let res = service.logout(request).await;
+        let ctx = RequestContext::with(access_token_id, UserId::admin());
+        let res = service.logout(ctx).await;
         assert!(res.is_ok());
 
         let session = db.fetch_optional::<SessionDB>(access_token_id).await?;

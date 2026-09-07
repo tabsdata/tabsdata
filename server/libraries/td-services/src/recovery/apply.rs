@@ -33,8 +33,8 @@ pub async fn apply_recovery_actions<S: SeesProjectRows>(
     let actions = finalize_recovery_actions(conn, actions).await?;
 
     // Worker rows → Failed (informational record).
-    let worker_update = failed_worker_update(at).await?;
-    let worker_ids = failed_worker_ids(&actions).await?;
+    let worker_update = failed_worker_update(at)?;
+    let worker_ids = failed_worker_ids(&actions)?;
     conn.chunked().update(&worker_update, &worker_ids).await?;
 
     // Attempts → Failed; late callbacks drop at the in-flight filter.
@@ -42,18 +42,18 @@ pub async fn apply_recovery_actions<S: SeesProjectRows>(
 
     // Running LFRs with a recover verdict → Failed first; ReScheduled is only
     // reachable from Failed/OnHold/Requested.
-    let running = fail_running_lfrs_for_recover(&actions).await?;
+    let running = fail_running_lfrs_for_recover(&actions)?;
     let failed = LogicalFunctionRunStatusUpdateDB::failed();
     update_function_run_status(msgs, conn, &running, &failed).await?;
 
     // Requested and just-failed LFRs with a recover verdict → ReScheduled.
-    let to_recover = recover_lfrs_from_actions(&actions).await?;
+    let to_recover = recover_lfrs_from_actions(&actions)?;
     abandon_requested_physical_runs(conn, at, &to_recover).await?;
     let recover = LogicalFunctionRunStatusUpdateDB::recover();
     update_function_run_status(msgs, conn, &to_recover, &recover).await?;
 
     // The rest → Failed, with the downstream on-hold cascade.
-    let to_fail = fail_lfrs_from_actions(&actions).await?;
+    let to_fail = fail_lfrs_from_actions(&actions)?;
     update_function_run_status(msgs, conn, &to_fail, &failed).await?;
     Ok(())
 }

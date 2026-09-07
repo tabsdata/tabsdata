@@ -10,7 +10,7 @@ use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::worker::{
-    CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerIdParam, WorkerUpdateDB,
+    CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerParam, WorkerUpdateDB,
 };
 use td_queries::Queries;
 
@@ -18,12 +18,12 @@ use td_queries::Queries;
 async fn worker_callback(
     authz: Ctx<AuthzContext>,
     db: DbPool<AcrossProjects>,
-    request: UpdateRequest<CallbackRequest, WorkerIdParam>,
+    request: UpdateRequest<CallbackRequest, WorkerParam>,
 ) -> Result<(), TdError> {
     let (_, param, callback) = request.into_parts();
     let update = WorkerExecutionUpdate::try_from(&callback)?;
 
-    let worker_id = param.worker_id;
+    let worker_id = param.worker;
     let mut trx = db.begin().await?;
     let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
     let mut trx = trx.enter_project(&worker.project_id).await?;
@@ -109,8 +109,8 @@ mod tests {
         };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-            WorkerIdParam {
-                worker_id: worker.base.id.clone(),
+            WorkerParam {
+                worker: worker.base.id.clone(),
             },
             response,
         );
@@ -136,8 +136,8 @@ mod tests {
         };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-            WorkerIdParam {
-                worker_id: worker.base.base.id.clone(),
+            WorkerParam {
+                worker: worker.base.base.id.clone(),
             },
             response,
         );

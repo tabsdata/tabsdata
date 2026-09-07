@@ -4,13 +4,14 @@
 
 use crate::function::engine::{FunctionSpec, FunctionState, register_version};
 use crate::function::register::ensure_connection_kind_matches;
-use crate::function::update::assert_function_name_not_exists;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
+use td_database::access::SeesProjectRows;
 use td_database::access::{DbPool, InProject};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::bundle::BundleStatusUpdateDB;
@@ -18,6 +19,7 @@ use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionPa
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{Function, FunctionDB, FunctionDBWithNames, FunctionUpdate};
+use td_objects::types::basic::CollectionId;
 use td_objects::{FromDao, and};
 use td_queries::Queries;
 
@@ -89,6 +91,22 @@ async fn update_function(
     scheduler_notify.notify_scheduler();
 
     Ok(read)
+}
+
+pub async fn assert_function_name_not_exists<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    collection_id: &CollectionId,
+    function: &FunctionDBWithNames,
+    function_update: &FunctionUpdate,
+) -> Result<(), TdError> {
+    if let Some(name) = &function_update.name
+        && *name != function.base.base.name
+    {
+        conn.latest()
+            .assert_not_exists::<FunctionDBWithNames>(and!(collection_id, name))
+            .await?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

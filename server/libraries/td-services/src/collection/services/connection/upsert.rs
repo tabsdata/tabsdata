@@ -77,7 +77,7 @@ async fn verify_kept_keys(
     resolution: &ConnectionResolution,
 ) -> Result<(), TdError> {
     let document = &resolution.document;
-    if document.kept_secrets.is_empty() && document.kept_vars.is_empty() {
+    if document.kept_secrets.is_empty() {
         return Ok(());
     }
     let stored = store.fetch(project, &resolution.row.base.id).await?;
@@ -85,17 +85,11 @@ async fn verify_kept_keys(
         .kept_secrets
         .iter()
         .filter(|k| !stored.secret_names.contains(k))
-        .chain(
-            document
-                .kept_vars
-                .iter()
-                .filter(|k| !stored.var_names.contains(k)),
-        )
         .collect();
     if !missing.is_empty() {
         return Err(api_error!(
             ApiError::InputError,
-            "secrets/vars marked 'keep the stored value' are not in the store: {}",
+            "secrets marked 'keep the stored value' are not in the store: {}",
             missing
                 .iter()
                 .map(|s| s.as_str())
@@ -178,7 +172,6 @@ mod tests {
         let body = ConnectionUpsert {
             connection: None,
             secrets: Some(secrets()),
-            vars: None,
         };
         let result = upsert_service(&db, MockStore::default())
             .connection_upsert(upsert_request_body(p.id, "src3", body))
@@ -199,7 +192,6 @@ mod tests {
         let body = ConnectionUpsert {
             connection: Some(document("src2", "mysqlSrcConn")),
             secrets: Some(secrets()),
-            vars: Some(vec![]),
         };
         let request = RequestContext::with(AccessTokenId::default(), outsider.id)
             .update(collection_param("src2"), body)
@@ -221,7 +213,6 @@ mod tests {
         let body = ConnectionUpsert {
             connection: Some(document("srcm", "mysqlSrcConn")),
             secrets: Some(secrets()),
-            vars: Some(vec![]),
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(collection_param("srcm"), body)
@@ -263,15 +254,18 @@ mod tests {
     async fn test_upsert_rejects_duplicate_keys(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         create_collection(&db, p.id, "srcd", Some(GroupName::source())).await;
-        // Same key twice (here once in secrets, once in vars) — which value
-        // applies would be backend-dependent.
+        // Same key twice — which value applies would be backend-dependent.
         let body = ConnectionUpsert {
             connection: Some(document("srcd", "mysqlSrcConn")),
-            secrets: Some(secrets()),
-            vars: Some(vec![KeyValue {
-                key: "CREDENTIALS_PASSWORD".to_string(),
-                value: Some("other".to_string()),
-            }]),
+            secrets: Some(
+                secrets()
+                    .into_iter()
+                    .chain([KeyValue {
+                        key: "CREDENTIALS_PASSWORD".to_string(),
+                        value: Some("other".to_string()),
+                    }])
+                    .collect(),
+            ),
         };
         let err = upsert_service(&db, MockStore::default())
             .connection_upsert(upsert_request_body(p.id, "srcd", body))
@@ -298,7 +292,6 @@ mod tests {
                 key: "CREDENTIALS_PASSWORD".to_string(),
                 value: None,
             }]),
-            vars: Some(vec![]),
         };
         service
             .connection_upsert(upsert_request_body(p.id, "srcv", keep_stored))
@@ -318,7 +311,6 @@ mod tests {
                     value: None,
                 },
             ]),
-            vars: Some(vec![]),
         };
         let err = service
             .connection_upsert(upsert_request_body(p.id, "srcv", keep_missing))

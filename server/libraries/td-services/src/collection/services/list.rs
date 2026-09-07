@@ -20,9 +20,12 @@ async fn list_collections(
     request: ListRequest,
 ) -> Result<ListResponse<CollectionRead>, TdError> {
     let (ctx, _, list_params) = request.into_parts();
-    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
     let query_params = ListQueryParams::try_from(&list_params)?;
-    let rows = gated_conn.get(grant).list(&visible, &query_params).await?;
+    let rows = gated_conn
+        .get(grant)
+        .list(&visible_projects, &query_params)
+        .await?;
     build_list_response(&list_params, &query_params, rows)
 }
 

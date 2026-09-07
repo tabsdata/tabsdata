@@ -550,7 +550,6 @@ mod delete_guards {
             base_path: None,
             connection: None,
             secrets: None,
-            vars: None,
         };
         let collections = Services::with_defaults(db.clone());
         collections

@@ -138,7 +138,7 @@ pub struct CollectionCreate {
     // Omitted (`None`) inherits the owning project's base_path.
     #[serde(default)]
     pub base_path: Option<BasePath>,
-    /// The connection triple — REQUIRED for source/destination collections
+    /// The connection pair — REQUIRED for source/destination collections
     /// (they are 1:1 with their connection and cannot exist without it),
     /// forbidden for a DataFactory. On the wire it is a YAML string (the
     /// dehydrated connection document); it is parsed into the connection
@@ -151,8 +151,6 @@ pub struct CollectionCreate {
     pub connection: Option<serde_json::Value>,
     #[serde(default)]
     pub secrets: Option<Vec<KeyValue>>,
-    #[serde(default)]
-    pub vars: Option<Vec<KeyValue>>,
 }
 
 #[ta_objects::Dto]

@@ -5,14 +5,15 @@
 use crate::execution::plan::{
     build_execution_plan, build_response, resolve_execution_plan_versions,
 };
-use crate::execution::read::{build_existing_transaction_map, with_existing_recursion_options};
 use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
+use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
+use td_execution::EXECUTION_GRAPH_OPTIONS;
 use td_execution::TransactionBy;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
@@ -23,9 +24,12 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunInputInsertDB,
     LogicalFunctionRunInsertDB,
 };
+use td_objects::dxo::transaction::TransactionValue;
 use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
 use td_objects::sql_condition::SqlCondition;
+use td_objects::transaction::map::TransactionMap;
 use td_objects::types::basic::{AllowDisabled, AtTime};
+use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
 #[service_factory]
@@ -53,7 +57,7 @@ async fn execution_read(
     let function: FunctionDBWithNames = conn.fetch_one(&execution.base.function_version_id).await?;
     let function_id = function.base.base.function_id;
     let entrypoint = FunctionOrTable::from(&function_id);
-    let recursion_options = with_existing_recursion_options(&execution).await?;
+    let recursion_options = with_existing_recursion_options(&execution)?;
     let function_state: Box<dyn SqlCondition<FunctionDB>> = if *allow_disabled {
         Box::new(FunctionDB::active())
     } else {
@@ -67,7 +71,7 @@ async fn execution_read(
     };
     let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion_options).await?;
 
-    let execution_plan = build_execution_plan(&graph, &function).await?;
+    let execution_plan = build_execution_plan(&graph, &function)?;
     let transactions: Vec<TransactionInsertDB> = conn
         .fetch_all::<TransactionDB>(&execution_id)
         .await?
@@ -102,6 +106,47 @@ async fn execution_read(
         &inputs,
     )
     .await
+}
+
+pub fn with_existing_recursion_options(
+    execution: &ExecutionDB,
+) -> Result<RecursionOptions, TdError> {
+    // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
+    let options = execution
+        .base
+        .recursion_options
+        .as_deref()
+        .cloned()
+        .unwrap_or(EXECUTION_GRAPH_OPTIONS);
+    Ok(options)
+}
+
+// Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
+pub fn build_existing_transaction_map(
+    transaction_by: &TransactionBy,
+    transactions: &[TransactionInsertDB],
+) -> Result<TransactionMap<TransactionBy>, TdError> {
+    let mut mapped_transactions = HashMap::new();
+    for transaction in transactions.iter() {
+        if !mapped_transactions.contains_key(&transaction.transaction_key) {
+            mapped_transactions.insert(
+                transaction.transaction_key.clone(),
+                TransactionValue::from(transaction),
+            );
+        }
+    }
+
+    // We should always have at least one transaction, and all transactions should have the same transaction_by.
+    // In case it differs with the one configured in the system, we prioritize the one from the transaction.
+    // This can happen when loading transactions from previous executions.
+    let transaction_by_str = transactions.first().map(|t| t.transaction_by.clone());
+    let transaction_by = if let Some(transaction_by_str) = transaction_by_str {
+        transaction_by_str.parse().unwrap_or(transaction_by.clone())
+    } else {
+        transaction_by.clone()
+    };
+    let transaction_map = TransactionMap::from_map(mapped_transactions, transaction_by);
+    Ok(transaction_map)
 }
 
 #[cfg(test)]

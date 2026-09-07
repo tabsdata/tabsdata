@@ -32,7 +32,7 @@ use td_objects::types::visible_projects::VisibleProjects;
 pub(crate) fn node_aggregates_query(
     req: &MetricsRequest,
     bounds: &WindowBounds,
-    visible: &VisibleProjects,
+    visible_projects: &VisibleProjects,
 ) -> SelectStatement {
     let by_collection = matches!(req.dim, Dimension::Collection);
 
@@ -158,7 +158,7 @@ pub(crate) fn node_aggregates_query(
             Sq::Pr,
             Expr::col((Sq::Pr, ActiveProjectDBIden::Id)).equals((Sq::A, Col::ProjectId)),
         )
-        .cond_where(visible.narrows(Expr::col((Sq::A, Col::ProjectId))))
+        .cond_where(visible_projects.narrows(Expr::col((Sq::A, Col::ProjectId))))
         .order_by((Sq::A, Col::Bucket), Order::Desc);
     outer
 }
@@ -251,7 +251,7 @@ fn per_lfr_output_aggregates_lateral() -> SelectStatement {
 pub(crate) fn node_output_tables_query(
     req: &MetricsRequest,
     bounds: &WindowBounds,
-    visible: &VisibleProjects,
+    visible_projects: &VisibleProjects,
 ) -> SelectStatement {
     let mut stmt = Query::select();
     from_windowed_runs(&mut stmt, bounds);
@@ -273,6 +273,6 @@ pub(crate) fn node_output_tables_query(
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
     apply_run_status_filter(&mut stmt, req);
     apply_run_dim_filters(&mut stmt, req);
-    stmt.cond_where(visible.narrows(fr_col(LogicalFunctionRunDBIden::ProjectId)));
+    stmt.cond_where(visible_projects.narrows(fr_col(LogicalFunctionRunDBIden::ProjectId)));
     stmt
 }

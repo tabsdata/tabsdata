@@ -47,13 +47,13 @@ async fn replay_logical_function_run(
 
     // The concurrent-replay gate only matters for sticky-Committed LFRs;
     // other terminal statuses cannot have a prior replay.
-    assert_lfr_terminal(&lfr).await?;
+    assert_lfr_terminal(&lfr)?;
     let bound = load_current_function_run_id(conn, &lfr).await?;
     assert_no_concurrent_replay(conn, &lfr).await?;
     let runnable = resolve_replay_function_version_id(conn, &lfr, &at).await?;
     let fr_new = mint_replay_function_run(conn, &lfr, &runnable, &at).await?;
     mint_replay_table_data_versions(conn, &lfr, &runnable, &fr_new).await?;
-    let response = build_replay_response(&lfr, &bound, &fr_new, &runnable).await?;
+    let response = build_replay_response(&lfr, &bound, &fr_new, &runnable)?;
     trx.commit().await?;
 
     // Wake the scheduler so the next tick fires immediately instead of

@@ -13,7 +13,7 @@ use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::{
-    FunctionRunIdParam, InputIdxParam, PhysicalFunctionRunDBWithNames,
+    FunctionRunParam, InputIdxParam, PhysicalFunctionRunDBWithNames,
 };
 use td_objects::types::basic::Decorator;
 use td_objects::types::stream::BoxedSyncStream;
@@ -25,7 +25,7 @@ async fn function_run_raw_data(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<ReadRequest<(CollectionParam, FunctionRunIdParam, InputIdxParam)>>,
+    request: WithinProject<ReadRequest<(CollectionParam, FunctionRunParam, InputIdxParam)>>,
 ) -> Result<BoxedSyncStream, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, function_run, input_idx)) = request.into_parts();
@@ -35,7 +35,7 @@ async fn function_run_raw_data(
     let conn = gated_conn.get(grant);
 
     let collection: ActiveCollectionDB = conn.fetch_one(&collection.collection).await?;
-    let run_id = function_run.function_run_id;
+    let run_id = function_run.function_run;
     let run: PhysicalFunctionRunDBWithNames = conn.fetch_one(&run_id).await?;
     if run.base.base.collection_id != collection.id {
         return Err(api_error!(
@@ -180,8 +180,8 @@ mod tests {
                 CollectionParam {
                     collection: CollectionIdName::from_str(collection)?,
                 },
-                FunctionRunIdParam {
-                    function_run_id: run.base.id.clone(),
+                FunctionRunParam {
+                    function_run: run.base.id.clone(),
                 },
                 InputIdxParam {
                     input_idx: *input_idx,

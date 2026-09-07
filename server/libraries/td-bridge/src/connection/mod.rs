@@ -29,11 +29,11 @@ pub trait ConnectionStore: Send + Sync {
     /// connection id — the worker artifact path is derived from the name, so
     /// a second owner would hijack the first one's artifact.
     ///
-    /// Secret/var entries with `value: None` mean "keep the stored value": the
+    /// Secret entries with `value: None` mean "keep the stored value": the
     /// store MUST substitute the value it already holds for that key, and MUST
     /// reject the write if it holds none. The server pre-validates kept keys
     /// against [`fetch`](ConnectionStore::fetch), but the store is the one
-    /// merging — collection renames rely on this (the full triple is
+    /// merging — collection renames rely on this (the full pair is
     /// re-upserted with every value sent as kept).
     async fn upsert(
         &self,
@@ -44,14 +44,14 @@ pub trait ConnectionStore: Send + Sync {
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError>;
 
-    /// Read the stored connection (dehydrated + secret/var names, no values).
+    /// Read the stored connection (dehydrated + secret names, no values).
     async fn fetch(
         &self,
         project_id: &ProjectId,
         connection_id: &ConnectionId,
     ) -> Result<ConnectionRead, TdError>;
 
-    /// Privileged read: the stored connection WITH secret/var values.
+    /// Privileged read: the stored connection WITH secret values.
     async fn fetch_hydrated(
         &self,
         project_id: &ProjectId,
@@ -72,22 +72,20 @@ pub mod file;
 pub mod memory;
 pub mod noop;
 
-/// Names-only view of a stored triple (values never leave the store).
+/// Names-only view of a stored pair (values never leave the store).
 pub fn read_of(upsert: &ConnectionUpsert) -> ConnectionRead {
     ConnectionRead {
         id: None,
         connection: upsert.connection.clone().unwrap_or(serde_json::Value::Null),
         secret_names: keys(upsert.secrets.as_deref()),
-        var_names: keys(upsert.vars.as_deref()),
     }
 }
 
-/// Full-values view of a stored triple — for privileged reads only.
+/// Full-values view of a stored pair — for privileged reads only.
 pub fn hydrated_of(upsert: &ConnectionUpsert) -> ConnectionHydrated {
     ConnectionHydrated {
         connection: upsert.connection.clone().unwrap_or(serde_json::Value::Null),
         secrets: upsert.secrets.clone().unwrap_or_default(),
-        vars: upsert.vars.clone().unwrap_or_default(),
     }
 }
 
@@ -100,24 +98,15 @@ fn keys(entries: Option<&[KeyValue]>) -> Vec<String> {
 }
 
 /// Resolve `value: None` entries ("keep the stored value") against the
-/// previously stored triple. The server verifies this before calling; the
+/// previously stored pair. The server verifies this before calling; the
 /// store re-checks because the kept value must actually be substituted here.
 pub fn merge_kept(
     connection: &ConnectionUpsert,
     previous: Option<&ConnectionUpsert>,
 ) -> Result<ConnectionUpsert, TdError> {
     let mut merged = connection.clone();
-    for (entries, stored) in [
-        (
-            merged.secrets.as_mut(),
-            previous.and_then(|p| p.secrets.as_deref()),
-        ),
-        (
-            merged.vars.as_mut(),
-            previous.and_then(|p| p.vars.as_deref()),
-        ),
-    ] {
-        let Some(entries) = entries else { continue };
+    let stored = previous.and_then(|p| p.secrets.as_deref());
+    if let Some(entries) = merged.secrets.as_mut() {
         for entry in entries.iter_mut().filter(|kv| kv.value.is_none()) {
             let kept = stored
                 .unwrap_or(&[])

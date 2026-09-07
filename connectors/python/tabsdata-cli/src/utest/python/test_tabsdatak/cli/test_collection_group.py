@@ -286,7 +286,6 @@ def test_connection_view_calls_sdk_and_renders(tmp_path):
             "spec": {"uri": "mysql://h:3306/db"},
         },
         "secret_names": ["S1", "S2"],
-        "var_names": [],
     }
     result = _invoke(
         ["collection", "connection", "-n", "c", "-o", "json"],
@@ -297,6 +296,5 @@ def test_connection_view_calls_sdk_and_renders(tmp_path):
     client.get_collection_connection.assert_called_once_with("c")
     out = json.loads(result.output)
     assert out["connection"]["type"] == "tabsdatak.conn.mysql:MySQLSrcConn"
-    # Neither secret names nor var names are ever surfaced.
+    # Secret names are never surfaced.
     assert "secret_names" not in out
-    assert "var_names" not in out

@@ -3,7 +3,7 @@
 //
 
 use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
-use crate::table::flow::{build_response, with_recursion_options};
+use crate::table::flow::build_response;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -14,6 +14,7 @@ use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse, TableParam};
+use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
 #[service_factory]
@@ -40,7 +41,7 @@ async fn table_flow_graph(
 
     let table_id = table.base.base.table_id;
     let entrypoint = FunctionOrTable::from(&table_id);
-    let recursion = with_recursion_options().await?;
+    let recursion = RecursionOptions::new(None, None);
     let config = GraphConfig {
         include_dependency_functions: true,
         ..GraphConfig::defaults(())

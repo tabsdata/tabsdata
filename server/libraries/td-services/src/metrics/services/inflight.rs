@@ -41,8 +41,8 @@ async fn inflight_global(
     request: ReadRequest<InflightRequest>,
 ) -> Result<InflightResponse, TdError> {
     let (ctx, param) = request.into_parts();
-    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
-    inflight_response(&param, &visible, gated_conn.get(grant)).await
+    let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
+    inflight_response(&param, &visible_projects, gated_conn.get(grant)).await
 }
 
 #[cfg(test)]
@@ -270,7 +270,6 @@ mod tests {
                             base_path: None,
                             connection: None,
                             secrets: None,
-                            vars: None,
                         },
                     )
                     .in_project(project_b.id),

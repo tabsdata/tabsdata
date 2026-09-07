@@ -8,7 +8,7 @@ use td_authz::AuthzContext;
 use td_database::access::{GatedConnection, RO};
 use td_error::TdError;
 use td_objects::FromDao;
-use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::role::{Role, RoleDBWithNames};
 use td_objects::dxo::user::{UserDBWithNames, UserInfo};
 use td_objects::dxo::user_role::UserRoleDBWithNames;
@@ -19,9 +19,8 @@ use td_queries::Queries;
 async fn user_info(
     authz: Ctx<AuthzContext>,
     gated_conn: &mut GatedConnection<RO>,
-    request: ReadRequest,
+    ctx: RequestContext,
 ) -> Result<UserInfo, TdError> {
-    let (ctx, _) = request.into_parts();
     let conn = gated_conn.get(authz.none());
     let user_id = ctx.user_id;
 
@@ -82,8 +81,8 @@ mod tests {
 
         let service = auth_services.clone();
 
-        let request = RequestContext::with(access_token_id, UserId::admin()).read(());
-        let res = service.user_info(request).await;
+        let ctx = RequestContext::with(access_token_id, UserId::admin());
+        let res = service.user_info(ctx).await;
         let user_info = res?;
         assert_eq!(user_info.name, UserName::try_from("admin")?);
         assert_eq!(user_info.user_roles.len(), 2);

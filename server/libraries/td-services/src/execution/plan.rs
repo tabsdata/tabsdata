@@ -34,19 +34,14 @@ use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
     AtTime, DependencyPos, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
     LogicalFunctionRunId, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
-    LogicalTableDataVersionId, OverrideDisabledTrigger, TableId, Trigger, TriggerType, TriggeredOn,
-    VersionPos,
+    LogicalTableDataVersionId, OverrideDisabledTrigger, TableId, Trigger, TriggeredOn, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
 use td_queries::Queries;
 use tracing::{debug, instrument};
 
-pub async fn trigger_type_manual() -> Result<TriggerType, TdError> {
-    Ok(TriggerType::Manual)
-}
-
-pub async fn assert_function_status(
+pub fn assert_function_status(
     msgs: &mut ReqCtx,
     function: &FunctionDBWithNames,
     override_disabled_trigger: &OverrideDisabledTrigger,
@@ -76,7 +71,7 @@ pub async fn assert_function_status(
     Ok(())
 }
 
-pub async fn with_recursion_options(
+pub fn with_recursion_options(
     function_only: &FunctionOnly,
     override_disabled_trigger: &OverrideDisabledTrigger,
 ) -> Result<RecursionOptions, TdError> {
@@ -89,7 +84,7 @@ pub async fn with_recursion_options(
     Ok(recursion_options)
 }
 
-pub async fn build_execution_plan(
+pub fn build_execution_plan(
     td_graph: &TdGraph,
     trigger_function: &FunctionDBWithNames,
 ) -> Result<ExecutionPlan, TdError> {
@@ -108,7 +103,7 @@ pub fn validate_execution_plan(
     Ok(())
 }
 
-pub async fn build_transaction_map(
+pub fn build_transaction_map(
     transaction_by: &TransactionBy,
     execution: &ExecutionInsertDB,
     execution_plan: &ExecutionPlan,
@@ -147,7 +142,7 @@ pub fn build_transactions(
 }
 
 /// One LFR per triggered function; dispatch mints its first attempt.
-pub async fn build_logical_function_runs(
+pub fn build_logical_function_runs(
     transaction_by: &TransactionBy,
     transaction_map: &TransactionMap<TransactionBy>,
     execution_plan: &ExecutionPlan,

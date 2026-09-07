@@ -13,7 +13,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::dxo::worker::WorkerIdParam;
+use td_objects::dxo::worker::WorkerParam;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB};
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::types::basic::{
@@ -28,10 +28,10 @@ async fn resolve_worker_message(
     storage: Ctx<Storage>,
     authz: Ctx<AuthzContext>,
     db: DbPool<AcrossProjects>,
-    request: ReadRequest<WorkerIdParam>,
+    request: ReadRequest<WorkerParam>,
 ) -> Result<WorkerInput, TdError> {
     let (ctx, param) = request.into_parts();
-    let worker_id = param.worker_id;
+    let worker_id = param.worker;
     let mut trx = db.begin().await?;
     let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
     let mut trx = trx.enter_project(&worker.project_id).await?;
@@ -216,8 +216,8 @@ mod tests {
             .function_runner_worker(&execution, &transaction, &pfr, &WorkerMessageStatus::Locked)
             .await?;
 
-        let param = WorkerIdParam {
-            worker_id: worker.base.id.clone(),
+        let param = WorkerParam {
+            worker: worker.base.id.clone(),
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(param);
         let response = Services::with_defaults(db.clone())

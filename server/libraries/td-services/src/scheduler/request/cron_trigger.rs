@@ -24,7 +24,7 @@ use tracing::{instrument, warn};
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_cron_trigger_workers_start_request(
+pub fn create_locked_cron_trigger_workers_start_request(
     orchestrator: Orchestrator,
     internal_api: &InternalApi,
     cron_trigger_workers: Vec<WorkerDBWithNames>,
@@ -168,7 +168,7 @@ pub(crate) async fn put_cron_trigger_start(
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_cron_trigger_workers_stop_request(
+pub fn create_locked_cron_trigger_workers_stop_request(
     orchestrator: Orchestrator,
     internal_api: &InternalApi,
     cron_trigger_workers: Vec<WorkerDBWithNames>,

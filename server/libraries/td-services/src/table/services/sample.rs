@@ -68,7 +68,6 @@ async fn table_sample(
         &table_name,
         &location,
     )
-    .await
 }
 
 #[cfg(test)]

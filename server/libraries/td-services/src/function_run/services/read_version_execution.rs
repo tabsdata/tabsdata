@@ -12,7 +12,7 @@ use td_objects::FromDao;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionParam};
-use td_objects::dxo::function::{FunctionDB, FunctionVersionIdParam};
+use td_objects::dxo::function::{FunctionDB, FunctionVersionParam};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
 use td_queries::Queries;
 
@@ -20,10 +20,10 @@ use td_queries::Queries;
 async fn function_version_execution_read(
     authz: Ctx<AuthzContext>,
     db: DbPool<AcrossProjects>,
-    request: ReadRequest<(FunctionVersionIdParam, ExecutionParam)>,
+    request: ReadRequest<(FunctionVersionParam, ExecutionParam)>,
 ) -> Result<PhysicalFunctionRun, TdError> {
     let (_, (version, execution)) = request.into_parts();
-    let function_version_id = version.function_version_id;
+    let function_version_id = version.function_version;
     let execution_id = execution.execution;
 
     let mut trx = db.read().await?;
@@ -45,7 +45,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
-    use td_objects::dxo::function::{FunctionRegister, FunctionVersionIdParam};
+    use td_objects::dxo::function::{FunctionRegister, FunctionVersionParam};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
@@ -109,8 +109,8 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
-            FunctionVersionIdParam {
-                function_version_id: function_version.base.id,
+            FunctionVersionParam {
+                function_version: function_version.base.id,
             },
             ExecutionParam {
                 execution: execution.base.id.clone(),

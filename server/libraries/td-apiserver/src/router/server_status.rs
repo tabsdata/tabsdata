@@ -2,12 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use axum::Extension;
 use axum::extract::State;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::ok_status::GetStatus;
 use td_apiforge::apiserver_path;
-use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::runtime_info::RuntimeInfo;
 use td_objects::dxo::system::ApiStatus;
 use td_services::Services;
@@ -33,12 +31,8 @@ pub async fn status(State(state): State<Services>) -> Result<GetStatus<ApiStatus
     tag(SYSTEM_TAG),
     doc = "Runtime information"
 )]
-pub async fn info(
-    State(state): State<Services>,
-    Extension(context): Extension<RequestContext>,
-) -> Result<GetStatus<RuntimeInfo>, ErrorStatus> {
-    let request = context.read(());
-    let response = state.runtime_info(request).await?;
+pub async fn info(State(state): State<Services>) -> Result<GetStatus<RuntimeInfo>, ErrorStatus> {
+    let response = state.runtime_info(()).await?;
     Ok(GetStatus::OK(response))
 }
 

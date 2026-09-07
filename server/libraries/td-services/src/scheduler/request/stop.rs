@@ -12,7 +12,7 @@ use td_objects::types::basic::AtTime;
 /// invokes the stop responder — so a worker whose stop message was enqueued is
 /// terminal `Stopped`. The supervisor stop is asynchronous: the row waits in
 /// `StopRequested` until the exiting worker's callback flips it to `Stopped`.
-pub async fn stop_worker_update(
+pub fn stop_worker_update(
     orchestrator: Orchestrator,
     at: &AtTime,
 ) -> Result<WorkerUpdateDB, TdError> {

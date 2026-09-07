@@ -805,22 +805,22 @@ mod tests {
         let grants = ProjectRole::View
             .grants(p0)
             .union(&ProjectRole::Dev.grants(p1));
-        let visible = VisibleProjects::from_grants(&grants);
-        assert!(visible.contains(&p0));
-        assert!(visible.contains(&p1));
-        assert!(!visible.contains(&ProjectId::default()));
-        assert_ne!(visible, VisibleProjects::All);
+        let visible_projects = VisibleProjects::from_grants(&grants);
+        assert!(visible_projects.contains(&p0));
+        assert!(visible_projects.contains(&p1));
+        assert!(!visible_projects.contains(&ProjectId::default()));
+        assert_ne!(visible_projects, VisibleProjects::All);
     }
 
     #[test]
     fn test_visible_projects_none_for_default_role() {
         // `default` carries only create_projects (a system permission) — no
         // project grants, so nothing is viewable.
-        let visible = VisibleProjects::from_grants(&SystemRole::Default.grants());
+        let visible_projects = VisibleProjects::from_grants(&SystemRole::Default.grants());
         assert_eq!(
-            visible,
+            visible_projects,
             VisibleProjects::Only(std::collections::HashSet::new())
         );
-        assert!(!visible.contains(&ProjectId::default()));
+        assert!(!visible_projects.contains(&ProjectId::default()));
     }
 }

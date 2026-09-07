@@ -17,7 +17,7 @@ use td_objects::types::basic::{
 use td_queries::Queries;
 use tracing::{debug, instrument};
 
-pub async fn assert_function_version(
+pub fn assert_function_version(
     function_version_id: &FunctionVersionId,
     function: &FunctionDBWithNames,
 ) -> Result<(), TdError> {

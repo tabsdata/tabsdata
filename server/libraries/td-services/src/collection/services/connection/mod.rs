@@ -33,7 +33,7 @@ pub(crate) async fn drop_connection_best_effort(
 
 /// Rewrite the stored document's `name` — the connection is named by its
 /// collection, so it follows a collection rename. Values never leave the
-/// store: secrets/vars ride as kept (`value: None`) entries the store
+/// store: secrets ride as kept (`value: None`) entries the store
 /// resolves against what it holds. Idempotent like any store write.
 pub(crate) async fn rename_stored_connection(
     store: &dyn ConnectionStore,
@@ -57,7 +57,6 @@ pub(crate) async fn rename_stored_connection(
     let payload = ConnectionUpsert {
         connection: Some(document),
         secrets: Some(kept(stored.secret_names)),
-        vars: Some(kept(stored.var_names)),
     };
     store
         .upsert(project, connection_id, new_name, collection_id, &payload)
@@ -134,17 +133,16 @@ pub fn ensure_connectable(collection: &ActiveCollectionDB) -> Result<(), TdError
     }
 }
 
-/// Until subset updates (just-secrets / just-vars with fetch-and-align) are
-/// supported, an upsert must carry the full triple — connection, secrets and
-/// vars (the lists may be empty). Absent fields would leave "keep existing?"
-/// semantics to the store backend; requiring them keeps the contract exact.
+/// Until subset updates (just-secrets with fetch-and-align) are supported, an
+/// upsert must carry the full pair — connection and secrets (the list may be
+/// empty). Absent fields would leave "keep existing?" semantics to the store
+/// backend; requiring them keeps the contract exact.
 pub fn validate_upsert(connection: &ConnectionUpsert) -> Result<(), TdError> {
-    if connection.connection.is_none() || connection.secrets.is_none() || connection.vars.is_none()
-    {
+    if connection.connection.is_none() || connection.secrets.is_none() {
         return Err(api_error!(
             ApiError::InputError,
-            "a connection upsert must include the dehydrated connection, its secrets \
-             and its vars (the lists may be empty)"
+            "a connection upsert must include the dehydrated connection and its \
+             secrets (the list may be empty)"
         ));
     }
     Ok(())
@@ -158,8 +156,6 @@ pub struct ConnectionDocument {
     /// Secret keys carried with `value: None` ("keep the stored value") — the
     /// orchestrator must verify the store actually holds them.
     pub kept_secrets: Vec<String>,
-    /// Var keys carried with `value: None`, same rule.
-    pub kept_vars: Vec<String>,
 }
 
 /// [`validate_connection_document`] over an upsert payload.
@@ -170,11 +166,7 @@ pub fn validate_document(connection: &ConnectionUpsert) -> Result<ConnectionDocu
             "a connection upsert must include the dehydrated connection"
         )
     })?;
-    validate_connection_document(
-        document,
-        connection.secrets.as_deref().unwrap_or(&[]),
-        connection.vars.as_deref().unwrap_or(&[]),
-    )
+    validate_connection_document(document, connection.secrets.as_deref().unwrap_or(&[]))
 }
 
 /// The only field the server reads off a dehydrated document; the rest stays
@@ -195,15 +187,14 @@ struct RawConnectionDocument {
 /// Validates a dehydrated document and the payload's internal consistency:
 ///
 /// - the document is an object with a `name` and a valid `kind`;
-/// - secret/var keys are unique across both lists (a duplicate would make
-///   "which value applies" backend-dependent).
+/// - secret keys are unique (a duplicate would make "which value applies"
+///   backend-dependent).
 ///
 /// Keys with `value: None` mean "keep the stored value"; whether the store
 /// actually holds them is verified by the orchestrator (it owns store access).
 pub fn validate_connection_document(
     document: &serde_json::Value,
     secrets: &[KeyValue],
-    vars: &[KeyValue],
 ) -> Result<ConnectionDocument, TdError> {
     let raw = RawConnectionDocument::deserialize(document)
         .map_err(|e| api_error!(ApiError::InputError, "invalid dehydrated connection: {e}"))?;
@@ -211,7 +202,7 @@ pub fn validate_connection_document(
 
     let mut seen: HashSet<&str> = HashSet::new();
     let mut duplicated: Vec<&str> = Vec::new();
-    for entry in secrets.iter().chain(vars.iter()) {
+    for entry in secrets.iter() {
         if !seen.insert(entry.key.as_str()) {
             duplicated.push(entry.key.as_str());
         }
@@ -219,8 +210,7 @@ pub fn validate_connection_document(
     if !duplicated.is_empty() {
         return Err(api_error!(
             ApiError::InputError,
-            "duplicate secret/var keys (a key must appear once across secrets \
-             and vars): {}",
+            "duplicate secret keys (a key must appear once): {}",
             duplicated.join(", ")
         ));
     }
@@ -228,7 +218,6 @@ pub fn validate_connection_document(
     Ok(ConnectionDocument {
         kind,
         kept_secrets: kept_keys(secrets),
-        kept_vars: kept_keys(vars),
     })
 }
 
@@ -316,7 +305,7 @@ pub async fn plan_collection_create<S: SeesProjectRows>(
     ensure_collection_name_free(conn, &create.name).await?;
     let connection_row = match collection_type {
         CollectionType::DataFactory => {
-            if create.connection.is_some() || create.secrets.is_some() || create.vars.is_some() {
+            if create.connection.is_some() || create.secrets.is_some() {
                 return Err(api_error!(
                     ApiError::InputError,
                     "collection '{}' resolves to a DataFactory and cannot carry \
@@ -327,21 +316,19 @@ pub async fn plan_collection_create<S: SeesProjectRows>(
             None
         }
         CollectionType::Source | CollectionType::Destination => {
-            let (Some(document), Some(secrets), Some(vars)) =
-                (&create.connection, &create.secrets, &create.vars)
-            else {
+            let (Some(document), Some(secrets)) = (&create.connection, &create.secrets) else {
                 return Err(api_error!(
                     ApiError::InputError,
                     "a source/destination collection is created WITH its connection: \
-                     the payload must include the dehydrated connection, its secrets \
-                     and its vars (the lists may be empty)"
+                     the payload must include the dehydrated connection and its \
+                     secrets (the list may be empty)"
                 ));
             };
-            let document = validate_connection_document(document, secrets, vars)?;
-            if !document.kept_secrets.is_empty() || !document.kept_vars.is_empty() {
+            let document = validate_connection_document(document, secrets)?;
+            if !document.kept_secrets.is_empty() {
                 return Err(api_error!(
                     ApiError::InputError,
-                    "secrets/vars without a value mean 'keep the stored value', but \
+                    "secrets without a value mean 'keep the stored value', but \
                      nothing is stored yet for a new collection"
                 ));
             }

@@ -261,7 +261,7 @@ fn edge_inner_union(req: &MetricsRequest, bounds: &WindowBounds) -> SelectStatem
 pub(crate) fn edge_aggregates_query(
     req: &MetricsRequest,
     bounds: &WindowBounds,
-    visible: &VisibleProjects,
+    visible_projects: &VisibleProjects,
 ) -> SelectStatement {
     let (dim_table, dim_id, dim_name) = match req.dim {
         Dimension::Collection => (
@@ -354,7 +354,7 @@ pub(crate) fn edge_aggregates_query(
             Sq::Proj,
             Expr::col((Sq::Proj, ActiveProjectDBIden::Id)).equals((Sq::A, Col::ProjectId)),
         )
-        .cond_where(visible.narrows(Expr::col((Sq::A, Col::ProjectId))))
+        .cond_where(visible_projects.narrows(Expr::col((Sq::A, Col::ProjectId))))
         .order_by((Sq::A, Col::Bucket), Order::Desc)
         .order_by_with_nulls((Sq::A, Col::Source), Order::Asc, NullOrdering::Last)
         .order_by_with_nulls((Sq::A, Col::Target), Order::Asc, NullOrdering::Last)
@@ -365,7 +365,7 @@ pub(crate) fn edge_aggregates_query(
 pub(crate) fn edge_tables_query(
     req: &MetricsRequest,
     bounds: &WindowBounds,
-    visible: &VisibleProjects,
+    visible_projects: &VisibleProjects,
 ) -> SelectStatement {
     let mut outer = Query::select();
     outer.distinct();
@@ -383,6 +383,6 @@ pub(crate) fn edge_tables_query(
     }
     outer
         .from_subquery(edge_inner_union(req, bounds), Sq::E)
-        .cond_where(visible.narrows(Expr::col((Sq::E, Col::ProjectId))));
+        .cond_where(visible_projects.narrows(Expr::col((Sq::E, Col::ProjectId))));
     outer
 }

@@ -95,7 +95,7 @@ pub async fn assert_no_concurrent_replay<S: SeesProjectRows>(
 ///   ("replay healed a failed run"); see the `Failed → Done` arm in
 ///   `update_function_run_status`.
 #[instrument(name = "replay.assert_terminal", skip_all, level = "debug", err(Debug))]
-pub async fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
+pub fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
     match lfr.base.status {
         LogicalFunctionRunStatus::Done
         | LogicalFunctionRunStatus::Committed
@@ -151,7 +151,7 @@ pub async fn mint_replay_table_data_versions(
 }
 
 #[instrument(name = "replay.response", skip_all, level = "debug")]
-pub async fn build_replay_response(
+pub fn build_replay_response(
     lfr: &LogicalFunctionRunDB,
     previous_function_run_id: &PhysicalFunctionRunId,
     fr_new: &PhysicalFunctionRunInsertDB,

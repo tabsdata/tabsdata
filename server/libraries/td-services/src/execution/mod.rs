@@ -30,8 +30,6 @@ use td_queries::Queries;
 pub(crate) mod execution_version;
 pub(crate) mod list;
 pub(crate) mod plan;
-pub(crate) mod read;
-pub(crate) mod runtime_info;
 pub(crate) mod update_status;
 
 /// Pre-execution trigger gates shared by the function- and version-trigger
@@ -93,17 +91,16 @@ pub(crate) async fn execute(
     )
     .await?;
     let override_disabled_trigger = request.override_disabled_trigger;
-    assert_function_status(msgs, &function, &override_disabled_trigger).await?;
+    assert_function_status(msgs, &function, &override_disabled_trigger)?;
 
     let entrypoint = FunctionOrTable::from(&function_id);
     let function_only = request.function_only;
-    let recursion_options =
-        with_recursion_options(&function_only, &override_disabled_trigger).await?;
+    let recursion_options = with_recursion_options(&function_only, &override_disabled_trigger)?;
     let at = request_context.time;
     let config = GraphConfig::defaults(FunctionDB::executable());
     let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion_options).await?;
 
-    let execution_plan = build_execution_plan(&graph, &function).await?;
+    let execution_plan = build_execution_plan(&graph, &function)?;
     validate_execution_plan(transaction_by, &execution_plan)?;
 
     let execution = ExecutionInsertDB {
@@ -120,8 +117,7 @@ pub(crate) async fn execute(
     };
     conn.insert(&execution).await?;
 
-    let transaction_map =
-        build_transaction_map(transaction_by, &execution, &execution_plan).await?;
+    let transaction_map = build_transaction_map(transaction_by, &execution, &execution_plan)?;
     let transactions = build_transactions(&transaction_map, &execution)?;
     conn.chunked().insert(&transactions).await?;
 
@@ -130,8 +126,7 @@ pub(crate) async fn execute(
         &transaction_map,
         &execution_plan,
         &execution,
-    )
-    .await?;
+    )?;
     conn.chunked().insert(&logical_function_runs).await?;
 
     let logical_table_data_versions = build_logical_table_data_versions(

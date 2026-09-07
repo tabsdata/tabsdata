@@ -20,10 +20,10 @@ async fn transaction_list(
     request: ListRequest,
 ) -> Result<ListResponse<Transaction>, TdError> {
     let (ctx, _, list_params) = request.into_parts();
-    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Transaction>::try_from(&list_params)?;
-    let rows = conn.list(&visible, &query_params).await?;
+    let rows = conn.list(&visible_projects, &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 

@@ -2,10 +2,8 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
+use crate::user::UserError;
 use crate::user::assert_user_is_not_system;
-use crate::user::update::{
-    update_user_validate, update_user_validate_enabled, update_user_validate_password_change,
-};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -17,6 +15,7 @@ use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::{
     UserDB, UserDBWithNames, UserParam, UserRead, UserUpdate, UserUpdateDB,
 };
+use td_objects::types::basic::UserId;
 use td_queries::Queries;
 use td_security::config::PasswordHashingConfig;
 
@@ -47,6 +46,44 @@ async fn update_user(
     let with_names: UserDBWithNames = conn.fetch_one(&user_id).await?;
     let read = UserRead::from_dao(with_names)?;
     Ok(read)
+}
+
+pub fn update_user_validate(update: &UserUpdate) -> Result<(), TdError> {
+    if update.full_name.is_none()
+        && update.email.is_none()
+        && update.password.is_none()
+        && update.enabled.is_none()
+    {
+        Err(UserError::UpdateRequestHasNothingToUpdate)?;
+    }
+    Ok(())
+}
+
+pub fn update_user_validate_password_change(
+    request_user_id: &UserId,
+    update: &UserUpdate,
+    user_db: &UserDB,
+) -> Result<(), TdError> {
+    #[allow(clippy::collapsible_if)]
+    if update.password.is_some() {
+        if *request_user_id == user_db.id {
+            // a self password change must be done via de password_change endpoint
+            Err(UserError::PasswordChangeNotAllowed)?;
+        }
+        // only a manage_access holder can make it here without being the requester
+    }
+    Ok(())
+}
+
+pub fn update_user_validate_enabled(
+    request_user_id: &UserId,
+    user_db: &UserDB,
+    update: &UserUpdate,
+) -> Result<(), TdError> {
+    if update.enabled.is_some() && *request_user_id == user_db.id {
+        Err(UserError::UserCannotEnableDisableThemselves)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

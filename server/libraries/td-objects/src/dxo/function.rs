@@ -588,6 +588,6 @@ pub struct FunctionParam {
 }
 
 #[ta_objects::UrlParam]
-pub struct FunctionVersionIdParam {
-    pub function_version_id: FunctionVersionId,
+pub struct FunctionVersionParam {
+    pub function_version: FunctionVersionId,
 }

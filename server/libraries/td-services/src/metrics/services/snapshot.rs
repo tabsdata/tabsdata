@@ -44,10 +44,10 @@ async fn snapshot_global(
     request: ReadRequest<SnapshotRequest>,
 ) -> Result<SnapshotResponse, TdError> {
     let (ctx, param) = request.into_parts();
-    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
     let conn = gated_conn.get(grant);
-    let metrics = metrics_response(&param.metrics, &visible, conn).await?;
-    let inflight = inflight_response(&param.inflight, &visible, conn).await?;
+    let metrics = metrics_response(&param.metrics, &visible_projects, conn).await?;
+    let inflight = inflight_response(&param.inflight, &visible_projects, conn).await?;
     Ok(SnapshotResponse { metrics, inflight })
 }
 

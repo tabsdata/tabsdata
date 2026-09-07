@@ -66,7 +66,7 @@ fn stringify_nested_columns(dataframe: DataFrame) -> Result<DataFrame, PolarsErr
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn get_table_sample(
+pub fn get_table_sample(
     storage: &Storage,
     offset: &SampleOffset,
     len: &SampleLen,
@@ -233,8 +233,7 @@ mod tests {
             &extra_cols,
             &TableName::try_from("my_table").unwrap(),
             &Some(table_path),
-        )
-        .await?;
+        )?;
 
         let stream = stream.into_inner();
         let bytes = stream.try_collect::<Vec<_>>().await?;
@@ -582,8 +581,7 @@ mod tests {
             &ExtraCols::None,
             &TableName::try_from("my_table").unwrap(),
             &None,
-        )
-        .await?;
+        )?;
 
         let stream = stream.into_inner();
         let bytes = stream.try_collect::<Vec<_>>().await?;

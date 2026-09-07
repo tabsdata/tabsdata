@@ -133,7 +133,7 @@ pub struct InternalTokenClaims {
     /// HTTP method this token authorizes.
     pub method: String,
     /// Route pattern this token authorizes (the matched-path pattern, e.g.
-    /// `/api/v1/internal/function-versions/{function_version_id}/execute`).
+    /// `/api/v1/internal/function-versions/{function_version}/execute`).
     pub scope: String,
     /// Path-param name → value bindings the request must match exactly.
     pub bindings: BTreeMap<String, String>,
@@ -221,25 +221,21 @@ mod internal_token_tests {
     #[test]
     fn round_trip() {
         let jwt = config();
-        let scope = "/api/v1/internal/function-versions/{function_version_id}/execute";
-        let token = encode_internal_token(
-            &jwt,
-            "POST",
-            scope,
-            bindings(&[("function_version_id", "FV")]),
-        )
-        .unwrap();
+        let scope = "/api/v1/internal/function-versions/{function_version}/execute";
+        let token =
+            encode_internal_token(&jwt, "POST", scope, bindings(&[("function_version", "FV")]))
+                .unwrap();
         let claims = decode_internal_token(&jwt, &token).unwrap();
         assert_eq!(claims.kind, INTERNAL_TOKEN_KIND);
         assert_eq!(claims.method, "POST");
         assert_eq!(claims.scope, scope);
-        assert_eq!(claims.bindings.get("function_version_id").unwrap(), "FV");
+        assert_eq!(claims.bindings.get("function_version").unwrap(), "FV");
     }
 
     #[test]
     fn rejects_wrong_signature() {
         let token =
-            encode_internal_token(&config(), "GET", "/s", bindings(&[("worker_id", "W")])).unwrap();
+            encode_internal_token(&config(), "GET", "/s", bindings(&[("worker", "W")])).unwrap();
         let other = JwtConfig::new("different-secret".to_string(), 3600);
         assert!(decode_internal_token(&other, &token).is_err());
     }
@@ -257,7 +253,7 @@ mod internal_token_tests {
         // And an internal token (no `exp`) must not verify as a user token.
         let jwt = config();
         let internal =
-            encode_internal_token(&jwt, "GET", "/s", bindings(&[("worker_id", "W")])).unwrap();
+            encode_internal_token(&jwt, "GET", "/s", bindings(&[("worker", "W")])).unwrap();
         assert!(decode_token(&jwt, &internal).is_err());
     }
 

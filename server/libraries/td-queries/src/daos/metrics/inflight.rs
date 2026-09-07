@@ -18,7 +18,10 @@ use td_objects::types::visible_projects::VisibleProjects;
 /// joins this endpoint doesn't need. The inner joins on the `*_active` views
 /// drop runs of soft-deleted collections and projects; the group join also
 /// matches `project_id` because group ids are only unique per project.
-pub(crate) fn inflight_query(req: &InflightRequest, visible: &VisibleProjects) -> SelectStatement {
+pub(crate) fn inflight_query(
+    req: &InflightRequest,
+    visible_projects: &VisibleProjects,
+) -> SelectStatement {
     let lfr = |c: LogicalFunctionRunDBIden| (LogicalFunctionRunDBIden::Table, c);
     let mut stmt = Query::select();
     stmt.column(lfr(LogicalFunctionRunDBIden::CollectionId))
@@ -68,7 +71,7 @@ pub(crate) fn inflight_query(req: &InflightRequest, visible: &VisibleProjects) -
                     .map(SeaValue::as_sea_value),
             ),
         )
-        .cond_where(visible.narrows(Expr::col(lfr(LogicalFunctionRunDBIden::ProjectId))))
+        .cond_where(visible_projects.narrows(Expr::col(lfr(LogicalFunctionRunDBIden::ProjectId))))
         .group_by_col(lfr(LogicalFunctionRunDBIden::CollectionId))
         .group_by_col((ActiveCollectionDBIden::Table, ActiveCollectionDBIden::Name))
         .group_by_col(lfr(LogicalFunctionRunDBIden::GroupId))

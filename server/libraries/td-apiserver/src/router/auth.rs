@@ -27,8 +27,7 @@ pub async fn logout(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
 ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-    let request = context.update((), ());
-    let response = state.logout(request).await?;
+    let response = state.logout(context).await?;
     Ok(UpdateStatus::OK(response))
 }
 
@@ -60,8 +59,7 @@ pub async fn user_info(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
 ) -> Result<GetStatus<UserInfo>, ErrorStatus> {
-    let request = context.read(());
-    let response = state.user_info(request).await?;
+    let response = state.user_info(context).await?;
     Ok(GetStatus::OK(response))
 }
 

@@ -119,7 +119,7 @@ pub async fn delete_collection(
 
 // Connection info of a source/destination collection (1:1 — created with the
 // collection, named by it, deleted with it). The apiserver forwards the
-// dehydrated connection + secrets + vars to the opaque store, keyed by
+// dehydrated connection + secrets to the opaque store, keyed by
 // connection id. POST updates an existing connection; GET reads back names
 // only. Both require manage_project ("CRUD sources and destinations").
 #[apiserver_path(
@@ -477,7 +477,6 @@ mod tests {
                 body["connection"] =
                     json!(format!("kind: connectionDef\ntype: mysql{suffix}Conn\n"));
                 body["secrets"] = json!([{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}]);
-                body["vars"] = json!([]);
             }
         }
         let response = to_route(router, db)
@@ -519,8 +518,7 @@ mod tests {
         let conn_body = json!({
             "connection": "type: mysqlSrcConn\nname: src_coll\n\
                 conn_configs:\n  \"env:password\": CREDENTIALS_PASSWORD\n",
-            "secrets": [{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}],
-            "vars": []
+            "secrets": [{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}]
         });
 
         // Upsert persists through the bridge's connection store; the response

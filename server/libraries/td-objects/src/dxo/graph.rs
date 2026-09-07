@@ -234,8 +234,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_node_from_table() -> Result<(), TdError> {
-        let function = function(&FUNCTION_NAMES[0]).await;
-        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
+        let function = function(&FUNCTION_NAMES[0]);
+        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]);
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Function(function) = function_node {
@@ -267,9 +267,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_node_from_dependency() -> Result<(), TdError> {
-        let dependency = dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
-        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
-        let function = function(&FUNCTION_NAMES[0]).await;
+        let dependency = dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]);
+        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]);
+        let function = function(&FUNCTION_NAMES[0]);
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
@@ -301,9 +301,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_node_from_trigger() -> Result<(), TdError> {
-        let trigger = trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
-        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
-        let function = function(&FUNCTION_NAMES[0]).await;
+        let trigger = trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[0]);
+        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]);
+        let function = function(&FUNCTION_NAMES[0]);
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {

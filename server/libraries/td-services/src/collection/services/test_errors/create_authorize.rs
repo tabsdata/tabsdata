@@ -44,7 +44,6 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
         base_path: None,
         connection: None,
         secrets: None,
-        vars: None,
     };
 
     let request = RequestContext::with(AccessTokenId::default(), user.id)

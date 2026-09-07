@@ -2,14 +2,12 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::runtime_info::runtime_info;
 use getset::Getters;
 use serde::de::DeserializeOwned;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::catalog::{EtcContent, ServerCatalog};
 use td_error::{TdError, td_error};
-use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::runtime_info::{PythonVersions, RuntimeInfo, ServerVersion};
 use td_objects::types::basic::{BuildManifest, TabsdataVersion};
 use tracing::error;
@@ -17,9 +15,9 @@ use tracing::error;
 #[service_factory]
 async fn runtime_info(
     runtime_context: Ctx<RuntimeContext>,
-    _request: ReadRequest,
+    _request: (),
 ) -> Result<RuntimeInfo, TdError> {
-    runtime_info(&runtime_context).await
+    Ok(runtime_context.info().clone())
 }
 
 #[derive(Debug, Getters)]

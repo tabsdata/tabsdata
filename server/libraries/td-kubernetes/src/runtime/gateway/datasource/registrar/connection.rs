@@ -49,7 +49,6 @@ impl KubernetesConnectionStore {
         Ok(Some(ConnectionUpsert {
             connection: None,
             secrets: Some(decode_secret_entries(stored_secrets)?),
-            vars: None,
         }))
     }
 }
@@ -69,10 +68,8 @@ impl ConnectionStore for KubernetesConnectionStore {
             .as_ref()
             .ok_or(KubeConnectionError::MissingDocument)?;
 
-        let mut connection = connection.clone();
-        connection.vars = None;
         let old_object = self.read_object(connection_id).await?;
-        let new_object = merge_kept(&connection, old_object.as_ref())?;
+        let new_object = merge_kept(connection, old_object.as_ref())?;
         let name = self.name_object(connection_id)?;
         let labels = connection_labels(project_id, connection_id, collection, collection_id);
         let document_yaml = serde_yaml::to_string(document).map_err(|error| {
@@ -120,7 +117,6 @@ impl ConnectionStore for KubernetesConnectionStore {
             id: None,
             connection: parse_document(&document)?,
             secret_names,
-            var_names: Vec::new(),
         })
     }
 
@@ -141,7 +137,6 @@ impl ConnectionStore for KubernetesConnectionStore {
         Ok(ConnectionHydrated {
             connection: parse_document(&document)?,
             secrets,
-            vars: Vec::new(),
         })
     }
 

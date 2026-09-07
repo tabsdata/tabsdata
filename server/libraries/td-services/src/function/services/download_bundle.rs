@@ -2,29 +2,37 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-pub use crate::function::download_bundle::BundleDownload;
-use crate::function::download_bundle::{build_bundle_download, resolve_function_version};
+use futures::TryStreamExt;
+use sync_wrapper::SyncStream;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::SeesProjectRows;
 use td_database::access::{AcrossProjects, DbPool};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_error::td_error;
+use td_objects::dxo::bundle::BundleDB;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
-use td_objects::dxo::function::FunctionVersionIdParam;
+use td_objects::dxo::function::FunctionVersionParam;
+use td_objects::dxo::function::{FunctionDB, FunctionVersionDBWithNames};
+use td_objects::types::basic::{BundleHash, FunctionName, FunctionVersionId};
+use td_objects::types::stream::BoxedSyncStream;
 use td_queries::Queries;
 use td_storage::Storage;
+use td_storage::location::StorageLocation;
 
 #[service_factory]
 async fn download_bundle(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
     db: DbPool<AcrossProjects>,
-    request: ReadRequest<FunctionVersionIdParam>,
+    request: ReadRequest<FunctionVersionParam>,
 ) -> Result<BundleDownload, TdError> {
     let (ctx, param) = request.into_parts();
-    let function_version_id = param.function_version_id;
+    let function_version_id = param.function_version;
 
     // The version id is globally unique; resolve it, then enter its
     // project via the collection before the authz check.
@@ -39,6 +47,77 @@ async fn download_bundle(
         .await?;
 
     build_bundle_download(trx.get(grant), &storage, &version).await
+}
+
+#[td_error]
+enum DownloadBundleError {
+    #[error("Function version '{0}' not found")]
+    FunctionVersionNotFound(FunctionVersionId) = 1000,
+}
+
+pub struct BundleDownload {
+    pub stream: BoxedSyncStream,
+    /// Strong ETag: the bundle's content hash, so identical code
+    /// re-registered under a new bundle id still revalidates.
+    pub etag: BundleHash,
+    /// A patch carries its parent's name.
+    pub function_name: FunctionName,
+    pub function_version_id: FunctionVersionId,
+}
+
+/// Resolves a function version id — a head version or a patch, the union
+/// view serves both. A missing id, or one whose function has been
+/// deleted, surfaces as not found.
+pub async fn resolve_function_version<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    function_version_id: &FunctionVersionId,
+) -> Result<FunctionVersionDBWithNames, TdError> {
+    let version = conn
+        .fetch_optional::<FunctionVersionDBWithNames>(function_version_id)
+        .await?
+        .ok_or_else(|| {
+            TdError::from(DownloadBundleError::FunctionVersionNotFound(
+                function_version_id.clone(),
+            ))
+        })?;
+
+    // Deleting a function closes its open interval but leaves prior versions
+    // readable, so a prior version still resolves above. Aliveness is
+    // whether a current row exists.
+    let current = conn
+        .latest()
+        .fetch_optional::<FunctionDB>(&version.function_id)
+        .await?;
+    if current.is_none() {
+        return Err(
+            DownloadBundleError::FunctionVersionNotFound(function_version_id.clone()).into(),
+        );
+    }
+
+    Ok(version)
+}
+
+pub async fn build_bundle_download<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    storage: &Storage,
+    function: &FunctionVersionDBWithNames,
+) -> Result<BundleDownload, TdError> {
+    // The bundle row is durable: it self-locates its artifact via the
+    // storage prefix frozen at upload.
+    let bundle = conn.fetch_one::<BundleDB>(&function.bundle_id).await?;
+    let (path, _) = StorageLocation::from(&function.storage_version)
+        .builder(&bundle.base.base_path)
+        .collection(&bundle.base.collection_id)
+        .function(&bundle.base.id)
+        .build()?;
+    let stream = storage.read_stream(&path).await?.map_err(TdError::from);
+    let stream = SyncStream::new(stream);
+    Ok(BundleDownload {
+        stream: BoxedSyncStream::new(stream),
+        etag: bundle.base.hash.clone(),
+        function_name: function.name.clone(),
+        function_version_id: function.id.clone(),
+    })
 }
 
 #[cfg(test)]
@@ -136,8 +215,8 @@ mod tests {
         ];
         for (expected_fn, expected_bundle, expected_payload) in cases {
             let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(FunctionVersionIdParam {
-                    function_version_id: expected_fn.id.clone(),
+                .read(FunctionVersionParam {
+                    function_version: expected_fn.id.clone(),
                 });
             let response = service
                 .clone()
@@ -178,8 +257,8 @@ mod tests {
         db.scoped(p.id).insert(&patch).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            FunctionVersionIdParam {
-                function_version_id: patch.id.clone(),
+            FunctionVersionParam {
+                function_version: patch.id.clone(),
             },
         );
         let response = service.clone().download_bundle(request).await?.data;
@@ -201,8 +280,8 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            FunctionVersionIdParam {
-                function_version_id: v1.base.id.clone(),
+            FunctionVersionParam {
+                function_version: v1.base.id.clone(),
             },
         );
         let err = service
@@ -231,8 +310,8 @@ mod tests {
         db.scoped(p.id).insert(&orphan).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            FunctionVersionIdParam {
-                function_version_id: orphan.id.clone(),
+            FunctionVersionParam {
+                function_version: orphan.id.clone(),
             },
         );
         let err = service
@@ -244,8 +323,8 @@ mod tests {
         assert_eq!(err.api_error(), ApiError::NotFound);
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            FunctionVersionIdParam {
-                function_version_id: FunctionVersionId::new(),
+            FunctionVersionParam {
+                function_version: FunctionVersionId::new(),
             },
         );
         let err = service
@@ -301,8 +380,8 @@ mod tests {
 
         let download = |id: FunctionVersionId| {
             RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-                FunctionVersionIdParam {
-                    function_version_id: id,
+                FunctionVersionParam {
+                    function_version: id,
                 },
             )
         };

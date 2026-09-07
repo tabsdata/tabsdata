@@ -126,7 +126,6 @@ fn connection_payload(plan: &CollectionCreatePlan) -> Result<ConnectionUpsert, T
     Ok(ConnectionUpsert {
         connection,
         secrets: plan.create.secrets.clone(),
-        vars: plan.create.vars.clone(),
     })
 }
 
@@ -178,7 +177,6 @@ mod tests {
             base_path: None,
             connection: None,
             secrets: None,
-            vars: None,
         };
 
         let before = AtTime::now();
@@ -228,7 +226,6 @@ mod tests {
             base_path: None,
             connection: None,
             secrets: None,
-            vars: None,
         };
         let response = Services::with_defaults(db.clone())
             .create_collection(request(p.id, create))
@@ -261,7 +258,6 @@ mod tests {
             base_path: None,
             connection: None,
             secrets: None,
-            vars: None,
         };
 
         let service = Services::with_defaults(db.clone());
@@ -371,7 +367,6 @@ mod tests {
             base_path: None,
             connection: Some(serde_json::json!({"type": "mysqlSrcConn"})),
             secrets: Some(vec![]),
-            vars: Some(vec![]),
         };
 
         create
@@ -398,7 +393,6 @@ mod tests {
             base_path: None,
             connection: None,
             secrets: None,
-            vars: None,
         };
         let err = Services::with_defaults(db.clone())
             .create_collection(request(p.id, create))
@@ -420,7 +414,6 @@ mod tests {
             base_path: None,
             connection: Some(document("fac_conn", "mysqlSrcConn")),
             secrets: Some(secrets()),
-            vars: Some(vec![]),
         };
         let err = Services::with_defaults(db.clone())
             .create_collection(request(p.id, create))
@@ -449,7 +442,6 @@ mod tests {
             base_path: None,
             connection: Some(document("src_fail", "mysqlSrcConn")),
             secrets: Some(secrets()),
-            vars: Some(vec![]),
         };
         let bridge = Ctx::new(BridgeProviderHandle::new(Arc::new(
             td_bridge::test::TestBridgeProvider::default().with_connection_store(FailingStore),
@@ -494,7 +486,6 @@ mod tests {
                 base_path: None,
                 connection: None,
                 secrets: None,
-                vars: None,
             };
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create((), create)
@@ -540,7 +531,6 @@ mod tests {
             base_path: None,
             connection: None,
             secrets: None,
-            vars: None,
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
@@ -557,7 +547,6 @@ mod tests {
             base_path: None,
             connection: Some(document("dev_src", "mysqlSrcConn")),
             secrets: Some(secrets()),
-            vars: Some(vec![]),
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)

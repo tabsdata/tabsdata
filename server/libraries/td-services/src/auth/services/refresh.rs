@@ -2,16 +2,16 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::assert_session_active::assert_session_active;
+use crate::auth::AuthError;
 use crate::auth::assert_user_enabled::assert_user_enabled;
 use crate::auth::create_access_token::create_access_token;
-use crate::auth::decode_refresh_token::decode_refresh_token;
 use crate::auth::set_session_expiration::session_expiration;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
+use td_common::jwt::decode_token;
 use td_common::provider::Provider;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
@@ -20,6 +20,7 @@ use td_objects::dxo::auth::{SessionDB, SessionInvalidateDB, TokenResponse};
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::RefreshToken;
+use td_objects::types::basic::RefreshTokenId;
 use td_objects::types::basic::SessionStatus;
 use td_queries::Queries;
 
@@ -64,6 +65,25 @@ async fn refresh(
     sessions.invalidate().await;
 
     Ok(token)
+}
+
+pub fn assert_session_active(session: &SessionDB) -> Result<(), TdError> {
+    if session.status == SessionStatus::Active {
+        Ok(())
+    } else {
+        Err(AuthError::InvalidRefreshToken)?
+    }
+}
+
+pub fn decode_refresh_token(
+    jwt_config: &JwtConfig,
+    refresh_token: &RefreshToken,
+) -> Result<RefreshTokenId, TdError> {
+    let token = refresh_token.as_str();
+    let token = decode_token(jwt_config, token)
+        .map_err(|_| TdError::from(AuthError::InvalidRefreshToken))?;
+    let refresh_token_id: RefreshTokenId = token.jti.into();
+    Ok(refresh_token_id)
 }
 
 #[cfg(test)]

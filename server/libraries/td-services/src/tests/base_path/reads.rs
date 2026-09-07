@@ -18,7 +18,7 @@ use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
-use td_objects::dxo::physical_function_run::{FunctionRunIdParam, InputIdxParam};
+use td_objects::dxo::physical_function_run::{FunctionRunParam, InputIdxParam};
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::table::{TableDB, TableParam, UncommittedParam};
 use td_objects::types::basic::{
@@ -53,8 +53,8 @@ async fn get_raw_data(
             CollectionParam {
                 collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
             },
-            FunctionRunIdParam {
-                function_run_id: run_id.clone(),
+            FunctionRunParam {
+                function_run: run_id.clone(),
             },
             InputIdxParam {
                 input_idx: *input_idx,

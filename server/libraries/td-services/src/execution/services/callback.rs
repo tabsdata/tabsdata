@@ -14,10 +14,10 @@ use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
-use td_objects::dxo::physical_function_run::FunctionRunIdParam;
+use td_objects::dxo::physical_function_run::FunctionRunParam;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
 use td_objects::dxo::worker::{
-    CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerIdParam, WorkerUpdateDB,
+    CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerParam, WorkerUpdateDB,
 };
 use td_objects::types::basic::PhysicalFunctionRunStatus;
 use td_queries::Queries;
@@ -28,14 +28,14 @@ async fn execution_callback(
     scheduler_notify: Ctx<SchedulerNotify>,
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
-    request: UpdateRequest<CallbackRequest, (FunctionRunIdParam, WorkerIdParam)>,
+    request: UpdateRequest<CallbackRequest, (FunctionRunParam, WorkerParam)>,
 ) -> Result<(), TdError> {
     let (_ctx, (function_run_param, worker_param), callback) = request.into_parts();
 
     let update: WorkerExecutionUpdate = WorkerExecutionUpdate::try_from(&callback)?;
 
     let grant = authz.none();
-    let worker_id = worker_param.worker_id;
+    let worker_id = worker_param.worker;
     let project = {
         let mut trx = db.read().await?;
         let worker: WorkerDB = trx.get(grant).fetch_one(&worker_id).await?;
@@ -44,7 +44,7 @@ async fn execution_callback(
     let mut trx = db.in_project(&project).begin_exclusive().await?;
 
     let conn = trx.get(grant);
-    let physical_function_run_id = function_run_param.function_run_id;
+    let physical_function_run_id = function_run_param.function_run;
     let physical_run: PhysicalFunctionRunDB = conn.fetch_one(&physical_function_run_id).await?;
     let lfr: LogicalFunctionRunDB = conn
         .fetch_one(&physical_run.base.logical_function_run_id)
@@ -138,11 +138,11 @@ mod tests {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(
                         (
-                            FunctionRunIdParam {
-                                function_run_id: physical_function_run.into(),
+                            FunctionRunParam {
+                                function_run: physical_function_run.into(),
                             },
-                            WorkerIdParam {
-                                worker_id: worker.into(),
+                            WorkerParam {
+                                worker: worker.into(),
                             },
                         ),
                         response,
@@ -859,11 +859,11 @@ mod tests {
             let request = || {
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
                     (
-                        FunctionRunIdParam {
-                            function_run_id: (*f[&test_function].base.id).clone().into(),
+                        FunctionRunParam {
+                            function_run: (*f[&test_function].base.id).clone().into(),
                         },
-                        WorkerIdParam {
-                            worker_id: (*w[&test_function].base.id).clone().into(),
+                        WorkerParam {
+                            worker: (*w[&test_function].base.id).clone().into(),
                         },
                     ),
                     done_callback(),
@@ -925,11 +925,11 @@ mod tests {
                 .map(|test_function| {
                     RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
                         (
-                            FunctionRunIdParam {
-                                function_run_id: (*f[&test_function].base.id).clone().into(),
+                            FunctionRunParam {
+                                function_run: (*f[&test_function].base.id).clone().into(),
                             },
-                            WorkerIdParam {
-                                worker_id: (*w[&test_function].base.id).clone().into(),
+                            WorkerParam {
+                                worker: (*w[&test_function].base.id).clone().into(),
                             },
                         ),
                         done_callback(),

@@ -22,7 +22,7 @@ use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
 use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::function::{
     Function, FunctionEnable, FunctionParam, FunctionPatch, FunctionPatchRecord, FunctionRegister,
-    FunctionUpdate, FunctionVersion, FunctionVersionIdParam, FunctionWithTables,
+    FunctionUpdate, FunctionVersion, FunctionVersionParam, FunctionWithTables,
 };
 use td_objects::dxo::function_upload::FunctionUpload;
 use td_services::Services;
@@ -292,7 +292,7 @@ pub async fn upload(
 #[apiserver_path(
     mount(global),
     method(get),
-    path = "/function-versions/{function_version_id}/bundle",
+    path = "/function-versions/{function_version}/bundle",
     tag(FUNCTIONS_TAG),
     content_type = "application/octet-stream",
     doc = "Download the bundle for a function version. Only Active or Frozen \
@@ -302,7 +302,7 @@ pub async fn upload(
 pub async fn download_bundle(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
-    Path(function_version_id): Path<FunctionVersionIdParam>,
+    Path(function_version_id): Path<FunctionVersionParam>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> Result<DownloadResponse, ErrorStatus> {
     let request = context.read(function_version_id);

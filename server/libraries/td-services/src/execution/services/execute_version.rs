@@ -15,7 +15,7 @@ use td_execution::{SchedulerNotify, TransactionBy};
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse, InternalExecutionRequest};
-use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionIdParam};
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionParam};
 use td_queries::Queries;
 
 #[service_factory]
@@ -25,10 +25,10 @@ async fn execute_function_version(
     scheduler_notify: Ctx<SchedulerNotify>,
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
-    request: CreateRequest<InternalExecutionRequest, FunctionVersionIdParam>,
+    request: CreateRequest<InternalExecutionRequest, FunctionVersionParam>,
 ) -> Result<ExecutionResponse, TdError> {
     let (ctx, param, internal_request) = request.into_parts();
-    let function_version_id = param.function_version_id;
+    let function_version_id = param.function_version;
 
     let (requested, project, grant) = {
         let mut trx = db.read().await?;
@@ -53,7 +53,7 @@ async fn execute_function_version(
         .as_of(&ctx.time)
         .fetch_one(&requested.base.base.function_id)
         .await?;
-    assert_function_version(&function_version_id, &function).await?;
+    assert_function_version(&function_version_id, &function)?;
 
     let trigger_type = internal_request.trigger_type.clone();
     let execution_request = ExecutionRequest::from(&internal_request);
@@ -328,8 +328,8 @@ mod tests {
         }
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            FunctionVersionIdParam {
-                function_version_id: function.base.id.clone(),
+            FunctionVersionParam {
+                function_version: function.base.id.clone(),
             },
             InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),
@@ -405,8 +405,8 @@ mod tests {
         let updated = service.update_function(request).await?.data;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            FunctionVersionIdParam {
-                function_version_id: function.base.id.clone(),
+            FunctionVersionParam {
+                function_version: function.base.id.clone(),
             },
             InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),
@@ -467,8 +467,8 @@ mod tests {
         external_uid: Option<ExternalUid>,
     ) -> Result<ExecutionResponse, TdError> {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            FunctionVersionIdParam {
-                function_version_id: function_version_id.clone(),
+            FunctionVersionParam {
+                function_version: function_version_id.clone(),
             },
             InternalExecutionRequest {
                 name: Some(ExecutionName::try_from("test_execution")?),

@@ -18,10 +18,8 @@ use td_storage::SPath;
 
 pub mod columns;
 pub mod download;
-pub mod download_state;
 pub mod flow;
 pub mod sample;
-pub mod schema;
 pub mod storage;
 
 /// Resolve a `(collection, table, at, uncommitted)`-shaped parameter to the

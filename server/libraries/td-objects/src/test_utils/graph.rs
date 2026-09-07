@@ -94,17 +94,17 @@ pub static TABLE_VERSION_IDS: LazyLock<HashMap<TableName, TableVersionId>> = Laz
     map
 });
 
-pub async fn test_graph() -> TdGraph {
+pub fn test_graph() -> TdGraph {
     let all_tables = vec![
-        table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
-        table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
-        table(&FUNCTION_NAMES[1], &TABLE_NAMES[2]).await,
-        table(&FUNCTION_NAMES[2], &TABLE_NAMES[3]).await,
+        table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]),
+        table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]),
+        table(&FUNCTION_NAMES[1], &TABLE_NAMES[2]),
+        table(&FUNCTION_NAMES[2], &TABLE_NAMES[3]),
     ];
     let all_functions = [
-        function(&FUNCTION_NAMES[0]).await,
-        function(&FUNCTION_NAMES[1]).await,
-        function(&FUNCTION_NAMES[2]).await,
+        function(&FUNCTION_NAMES[0]),
+        function(&FUNCTION_NAMES[1]),
+        function(&FUNCTION_NAMES[2]),
     ];
 
     let all_tables_map = all_tables
@@ -118,11 +118,11 @@ pub async fn test_graph() -> TdGraph {
 
     let output_tables = all_tables;
     let dependencies = vec![
-        dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await,
-        dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
-        dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[2]).await,
+        dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]),
+        dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]),
+        dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[2]),
     ];
-    let triggers = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await];
+    let triggers = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1])];
 
     let graph = TdGraphBuilder::new(&all_tables_map, &all_functions_map)
         .with_triggers(&triggers)
@@ -176,7 +176,7 @@ pub fn table_node(table: &TableName) -> TableNode {
     }
 }
 
-pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
+pub fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
     TableDBWithNames {
         base: TableDB {
             base: TableInsertDB {
@@ -204,7 +204,7 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
     }
 }
 
-pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
+pub fn function(function: &FunctionName) -> FunctionDBWithNames {
     FunctionDBWithNames {
         base: FunctionDB {
             base: FunctionInsertDB {
@@ -237,7 +237,7 @@ pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
     }
 }
 
-pub async fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWithNames {
+pub fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWithNames {
     let table_function = FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))
@@ -267,7 +267,7 @@ pub async fn dependency(table: &TableName, function: &FunctionName) -> Dependenc
     }
 }
 
-pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames {
+pub fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames {
     let table_function = FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))

@@ -10,7 +10,6 @@
 //! repairs; the connection row itself stays (the soft-deleted collection
 //! still references it).
 
-use crate::collection::delete::update_deleted_workers;
 use crate::collection::services::connection::{
     drop_connection_best_effort, escalate_for_connected,
 };
@@ -20,7 +19,9 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
+use td_database::access::SeesProjectRows;
 use td_database::access::{DbPool, InProject};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionDeleteDB};
@@ -30,8 +31,12 @@ use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDB;
+use td_objects::dxo::worker::WorkerUpdateDB;
 use td_objects::types::basic::TableId;
+use td_objects::types::basic::{CollectionId, WorkerType};
+use td_objects::{and, or};
 use td_queries::Queries;
+use tracing::debug;
 
 #[service_factory]
 async fn delete_collection(
@@ -96,6 +101,30 @@ async fn delete_collection(
     if let Some(connection_id) = &collection.connection_id {
         drop_connection_best_effort(bridge.connection_store(), &project, connection_id).await;
     }
+    Ok(())
+}
+
+pub async fn update_deleted_workers<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    collection_id: &CollectionId,
+) -> Result<(), TdError> {
+    let update = WorkerUpdateDB::stop_scheduled();
+
+    let res = conn
+        .update(
+            &update,
+            and!(
+                *collection_id,
+                or!(WorkerType::CronTrigger, WorkerType::StageTrigger)
+            ),
+        )
+        .await?;
+    debug!(
+        "Set stopped status in {} workers for collection {}.",
+        res.rows_affected(),
+        collection_id
+    );
+
     Ok(())
 }
 
