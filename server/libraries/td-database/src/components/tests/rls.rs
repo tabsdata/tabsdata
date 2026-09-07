@@ -4,34 +4,47 @@
 
 //! td-database's row-level-security machinery, once the apiserver schema is
 //! applied: project isolation end-to-end, the serving-role bypass guard, the
-//! maintain-current trigger under RLS, and the scope GUC primitives. PostgreSQL
+//! SCD2 close-out trigger under RLS, and the scope primitives. PostgreSQL
 //! only.
 
 use crate::components::{ApiserverComponent, SchemaComponent};
-use crate::config::PostgresConnect;
+use crate::config::{PostgresConnect, RlsRoles};
 use crate::connection::PgConnectionExt;
 use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
 use crate::test_utils::server;
 use sqlx::postgres::PgPoolOptions;
+use td_schema::ACROSS_PROJECTS_ROLE;
+
+/// Scope one transaction the way a serving connection does.
+async fn scope(tx: &mut sqlx::Transaction<'static, sqlx::Postgres>, tenant: &str, project: &str) {
+    sqlx::query(&format!("SET LOCAL ROLE \"{tenant}\""))
+        .execute(&mut **tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT set_config('app.project_id', $1, true)")
+        .bind(project)
+        .execute(&mut **tx)
+        .await
+        .unwrap();
+}
 
 /// Row-level security end to end on real Postgres: reads are scoped to the
 /// project, `WITH CHECK` rejects a cross-project insert, an unset GUC fails
-/// closed, and `app.bypass_rls` spans projects.
+/// closed, and the `across_projects` role spans projects.
 #[tokio::test]
 async fn test_rls_project_isolation() {
     const INSERT: &str = "INSERT INTO collections \
         (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
         VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g', '/', 'F')";
-    const SET_PROJECT: &str = "SELECT set_config('app.project_id', $1, true)";
     const COUNT: &str = "SELECT count(*) FROM collections";
 
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
 
-    // Provision a NOBYPASSRLS app role and connect a second pool as it, via a
-    // raw connection as the pool's bootstrap (superuser) role.
+    // Mirror the serving shape: a login that can switch into either RLS role
+    // but inherits neither, so an unswitched transaction is fail-closed.
     let su = PgPoolOptions::new()
         .max_connections(1)
         .connect_with(pg_connect_options(&server::admin_base()))
@@ -40,12 +53,25 @@ async fn test_rls_project_isolation() {
     let schema = db.schema();
     // A unique login role (roles are cluster-global on the shared server, so a fixed
     // name would collide across tests/runs); NOBYPASSRLS so RLS actually applies.
-    let app_user = format!("u_{}", td_common::id::id());
+    let uid = td_common::id::id();
+    let app_user = format!("u_{uid}");
+    let tenant = format!("ip_{uid}");
+    let across = format!("ap_{uid}");
     for stmt in [
         format!("CREATE ROLE \"{app_user}\" LOGIN PASSWORD 'app_pw' NOBYPASSRLS"),
-        format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{app_user}\""),
+        format!("CREATE ROLE \"{tenant}\" NOBYPASSRLS"),
+        format!("CREATE ROLE \"{across}\" NOBYPASSRLS"),
+        format!("GRANT \"{ACROSS_PROJECTS_ROLE}\" TO \"{across}\""),
+        // Switchable but not inherited, so an unswitched transaction is
+        // fail-closed and pins the policies alone. Provisioning grants the
+        // owner inheriting memberships instead (upgrades need them); the
+        // owner half is covered in `delta_data`.
+        format!("GRANT \"{tenant}\" TO \"{app_user}\" WITH INHERIT FALSE, SET TRUE"),
+        format!("GRANT \"{across}\" TO \"{app_user}\" WITH INHERIT FALSE, SET TRUE"),
+        format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{tenant}\", \"{across}\", \"{app_user}\""),
         format!(
-            "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{app_user}\""
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" \
+             TO \"{tenant}\", \"{across}\", \"{app_user}\""
         ),
         format!("ALTER ROLE \"{app_user}\" SET search_path TO \"{schema}\""),
         // Collections FK groups(project_id, id); the schema seeds no project on
@@ -75,11 +101,7 @@ async fn test_rls_project_isolation() {
     // Project A inserts a collection, omitting project_id — the column default
     // reads app.project_id, so the row is tagged 'A'.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT)
-        .bind("A")
-        .execute(&mut *t)
-        .await
-        .unwrap();
+    scope(&mut t, &tenant, "A").await;
     sqlx::query(INSERT)
         .bind("c_a")
         .bind("ca")
@@ -93,24 +115,14 @@ async fn test_rls_project_isolation() {
     assert_eq!(pid, "A", "omitted project_id should default to the GUC");
     t.commit().await.unwrap();
 
-    // Project B cannot see A's row.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT)
-        .bind("B")
-        .execute(&mut *t)
-        .await
-        .unwrap();
+    scope(&mut t, &tenant, "B").await;
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
     assert_eq!(n, 0, "project B must not see project A rows");
     t.rollback().await.unwrap();
 
-    // WITH CHECK rejects an insert tagged for another project.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT)
-        .bind("B")
-        .execute(&mut *t)
-        .await
-        .unwrap();
+    scope(&mut t, &tenant, "B").await;
     let bad = sqlx::query(
         "INSERT INTO collections \
          (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type, project_id) \
@@ -124,13 +136,8 @@ async fn test_rls_project_isolation() {
     );
     t.rollback().await.unwrap();
 
-    // Project B inserts its own collection.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT)
-        .bind("B")
-        .execute(&mut *t)
-        .await
-        .unwrap();
+    scope(&mut t, &tenant, "B").await;
     sqlx::query(INSERT)
         .bind("c_b")
         .bind("cb")
@@ -139,19 +146,17 @@ async fn test_rls_project_isolation() {
         .unwrap();
     t.commit().await.unwrap();
 
-    // Project A sees only its own row.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT)
-        .bind("A")
-        .execute(&mut *t)
-        .await
-        .unwrap();
+    scope(&mut t, &tenant, "A").await;
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
     assert_eq!(n, 1, "project A should see exactly its own collection");
     t.rollback().await.unwrap();
 
-    // Unset GUC fails closed: zero rows, no error.
     let mut t = app.begin().await.unwrap();
+    sqlx::query(&format!("SET LOCAL ROLE \"{tenant}\""))
+        .execute(&mut *t)
+        .await
+        .unwrap();
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
     assert_eq!(
         n, 0,
@@ -159,26 +164,25 @@ async fn test_rls_project_isolation() {
     );
     t.rollback().await.unwrap();
 
-    // Bypass spans projects.
     let mut t = app.begin().await.unwrap();
-    sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)")
+    sqlx::query(&format!("SET LOCAL ROLE \"{across}\""))
         .execute(&mut *t)
         .await
         .unwrap();
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
-    assert_eq!(n, 2, "bypass should see every project's rows");
+    assert_eq!(n, 2, "the across-projects role sees every project's rows");
     t.rollback().await.unwrap();
 
-    // Scope GUCs are transaction-local: on an autocommit connection they do
-    // not outlive their own statement, and the next read runs fail-closed.
-    sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)")
+    // The scope switch is transaction-local: on an autocommit connection it
+    // does not outlive its own statement, and the next read runs fail-closed.
+    sqlx::query(&format!("SET LOCAL ROLE \"{across}\""))
         .execute(&app)
         .await
         .unwrap();
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&app).await.unwrap();
     assert_eq!(
         n, 0,
-        "an autocommit-set bypass must not outlive its statement (fail-closed)"
+        "an autocommit-set role switch must not outlive its statement (fail-closed)"
     );
 
     // Drop the per-test login role. Its privileges depend on the schema's tables,
@@ -188,13 +192,17 @@ async fn test_rls_project_isolation() {
     for stmt in [
         format!("DROP OWNED BY \"{app_user}\""),
         format!("DROP ROLE \"{app_user}\""),
+        format!("DROP OWNED BY \"{across}\""),
+        format!("DROP ROLE \"{across}\""),
+        format!("DROP OWNED BY \"{tenant}\""),
+        format!("DROP ROLE \"{tenant}\""),
     ] {
         sqlx::query(&stmt).execute(&su).await.unwrap();
     }
 }
 
 /// `check()` refuses to start if the **serving** role bypasses RLS. A
-/// misconfigured `td_app` with `BYPASSRLS` would silently collapse project
+/// misconfigured tenant role with `BYPASSRLS` would silently collapse project
 /// isolation; `check_rls_posture` on the serving pool must catch it.
 #[tokio::test]
 async fn test_check_rejects_bypassing_serving_role() {
@@ -202,7 +210,6 @@ async fn test_check_rejects_bypassing_serving_role() {
 
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
-    // The serving role is NOBYPASSRLS, so check passes.
     ApiserverComponent
         .check(&db.serving)
         .await
@@ -227,7 +234,10 @@ async fn test_check_rejects_bypassing_serving_role() {
     let cfg = DatabaseConfig {
         conn: (server::admin_base()),
         schema: Some(db.schema().clone()),
-        app_role: Some(bypassing.clone()),
+        roles: Some(RlsRoles {
+            in_project: bypassing.clone(),
+            across_projects: bypassing.clone(),
+        }),
         pool: crate::test_utils::test_pool_config(),
     };
     let other = TdPool::connect(&cfg).await.unwrap();
@@ -245,17 +255,17 @@ async fn test_check_rejects_bypassing_serving_role() {
         .unwrap();
 }
 
-/// A maintain-current trigger's write into the `_current` table succeeds under
-/// RLS, and FK validation across RLS tables works; project B then sees neither
-/// row.
+/// The SCD2 close-out trigger's predecessor UPDATE succeeds under RLS (the
+/// scoped role sees the row it must close), and FK validation across RLS
+/// tables works; project B then sees no rows.
 #[tokio::test]
-async fn test_rls_maintain_current_trigger_under_role() {
+async fn test_rls_scd2_close_out_trigger_under_role() {
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
 
     let mut c = db.begin().await.unwrap();
     {
-        c.set_project_scope("A").await.unwrap();
+        c.scope_in_project("A").await.unwrap();
         // Collections FK groups(project_id, id); project_id defaults to the scope
         // GUC ('A'), satisfying RLS WITH CHECK and the collection's FK.
         sqlx::query(
@@ -272,83 +282,101 @@ async fn test_rls_maintain_current_trigger_under_role() {
         .execute(&mut *c)
         .await
         .unwrap();
-        sqlx::query(
-            "INSERT INTO functions \
-             (id, collection_id, name, description, decorator, runtime_values, function_id, \
-              stage_id, stage_base_path, storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
-             VALUES ('fn1', 'col', 'f', 'd', 'dec', '{}', 'fid', 'stg', '/', '1', 'bun', 'snip', now(), 'u', 'active')",
-        )
-        .execute(&mut *c)
-        .await
-        .unwrap();
-        let cur: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current")
+        for (id, on) in [
+            ("fn1", "2026-01-01T00:00:00Z"),
+            ("fn2", "2026-01-02T00:00:00Z"),
+        ] {
+            sqlx::query(&format!(
+                "INSERT INTO functions \
+                 (id, collection_id, name, description, decorator, runtime_values, function_id, \
+                  stage_id, stage_base_path, storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
+                 VALUES ('{id}', 'col', 'f', 'd', 'dec', '{{}}', 'fid', 'stg', '/', '1', 'bun', 'snip', '{on}', 'u', 'active')",
+            ))
+            .execute(&mut *c)
+            .await
+            .unwrap();
+        }
+        let open: Vec<String> =
+            sqlx::query_scalar("SELECT id FROM functions WHERE valid_to = 'infinity'")
+                .fetch_all(&mut *c)
+                .await
+                .unwrap();
+        assert_eq!(
+            open,
+            ["fn2"],
+            "the close-out trigger's UPDATE closed the predecessor under RLS"
+        );
+        let pid: String = sqlx::query_scalar("SELECT project_id FROM functions WHERE id = 'fn2'")
             .fetch_one(&mut *c)
             .await
             .unwrap();
-        assert_eq!(
-            cur, 1,
-            "maintain-current trigger wrote functions_current under RLS"
-        );
-        let pid: String = sqlx::query_scalar(
-            "SELECT project_id FROM functions_current WHERE function_id = 'fid'",
-        )
-        .fetch_one(&mut *c)
-        .await
-        .unwrap();
-        assert_eq!(pid, "A", "trigger copied the source project_id");
+        assert_eq!(pid, "A", "the scope GUC stamped the source project_id");
     }
     c.commit().await.unwrap();
 
     let mut c = db.begin().await.unwrap();
     {
-        c.set_project_scope("B").await.unwrap();
+        c.scope_in_project("B").await.unwrap();
         let f: i64 = sqlx::query_scalar("SELECT count(*) FROM functions")
             .fetch_one(&mut *c)
             .await
             .unwrap();
-        let fc: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current")
-            .fetch_one(&mut *c)
-            .await
-            .unwrap();
-        assert_eq!(
-            (f, fc),
-            (0, 0),
-            "project B sees neither functions nor functions_current rows"
-        );
+        assert_eq!(f, 0, "project B sees no function rows");
     }
     c.rollback().await.unwrap();
 }
 
-/// The scope GUC primitives set the expected session variables, and
-/// `set_project_scope` clears a prior bypass.
+/// The scope primitives switch the transaction's role, `scope_in_project`
+/// switches back from a prior cross-project scope, and `scope_global` is the
+/// tenant role with no project.
 #[tokio::test]
-async fn test_set_rls_guc_primitive() {
+async fn test_set_rls_scope_primitive() {
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
+    let roles = crate::test_utils::postgres::test_rls_roles();
 
     {
         let mut conn = db.begin().await.unwrap();
-        conn.bypass_project_scope().await.unwrap();
-        conn.set_project_scope("PROJ_X").await.unwrap();
-        let project: String = sqlx::query_scalar("SELECT current_setting('app.project_id', true)")
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-        let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
+        conn.scope_across_projects().await.unwrap();
+        conn.scope_in_project("PROJ_X").await.unwrap();
+        let (role, project): (String, String) =
+            sqlx::query_as("SELECT current_user::text, current_setting('app.project_id', true)")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
         assert_eq!(project, "PROJ_X");
-        assert_eq!(bypass, "off", "set_project_scope must clear bypass");
+        assert_eq!(
+            role, roles.in_project,
+            "scope_in_project must switch back from the bypass role"
+        );
     }
 
     {
         let mut conn = db.begin().await.unwrap();
-        conn.bypass_project_scope().await.unwrap();
-        let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
+        conn.scope_across_projects().await.unwrap();
+        let role: String = sqlx::query_scalar("SELECT current_user::text")
             .fetch_one(&mut *conn)
             .await
             .unwrap();
-        assert_eq!(bypass, "on");
+        assert_eq!(role, roles.across_projects);
+    }
+
+    {
+        let mut conn = db.begin().await.unwrap();
+        conn.scope_across_projects().await.unwrap();
+        conn.scope_global().await.unwrap();
+        let (role, project): (String, Option<String>) =
+            sqlx::query_as("SELECT current_user::text, current_setting('app.project_id', true)")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(
+            role, roles.in_project,
+            "scope_global runs as the tenant role"
+        );
+        assert!(
+            project.as_deref().unwrap_or("").is_empty(),
+            "scope_global leaves no project set"
+        );
     }
 }

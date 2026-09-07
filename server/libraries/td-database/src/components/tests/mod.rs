@@ -10,6 +10,8 @@
 //! * [`seeded`] — the bootstrap-seeded data (users, roles, permissions).
 //! * [`structure`] — the live schema's table/view/index inventory + version
 //!   and edition gates.
+//! * [`scd2`] — the SCD2 close-out trigger's runtime behavior (postgres
+//!   only).
 //! * [`rls`] — td-database's row-level-security machinery once the schema is
 //!   applied (postgres only).
 //! * [`provisioning`] — [`AdminPool::provision_schema`](crate::components::AdminPool)
@@ -25,6 +27,7 @@ mod delta_data;
 mod migration;
 mod provisioning;
 mod rls;
+mod scd2;
 mod seeded;
 mod shared_schema;
 mod structure;
@@ -220,6 +223,7 @@ apiserver:
   postgres:
     host: localhost
     port: 7432
+    database: postgres
 {extra}"
         ))
         .unwrap()
@@ -227,20 +231,16 @@ apiserver:
     let postgres_connect =
         |config: &DatabaseConfig| (config.conn.username.clone(), config.conn.password.clone());
 
-    // Explicit credentials pass through; username defaults to the owner role.
     let config = serving_config(&parse("    password: owner_secret"), &ApiserverComponent).unwrap();
     let (username, password) = postgres_connect(&config);
-    assert_eq!(username, "td_apiserver");
+    assert_eq!(username, "postgres_apiserver");
     assert_eq!(password, "owner_secret");
 
-    // An absent password fails at resolution — the resolved config requires
-    // credentials, so a passwordless connect can never be attempted.
     assert!(matches!(
         serving_config(&parse(""), &ApiserverComponent),
         Err(DbError::MissingCredentials)
     ));
 
-    // `${embedded}` is not a valid username source for a component.
     assert!(matches!(
         serving_config(
             &parse("    username: ${embedded}\n    password: x"),
@@ -249,12 +249,11 @@ apiserver:
         Err(DbError::EmbeddedUsernameNotAllowed)
     ));
 
-    // `${embedded}` password reads the persisted owner file...
     let base = std::env::temp_dir().join(format!("td-embedded-cred-{}", std::process::id()));
     let data_dir = base.join("data");
     std::fs::create_dir_all(&data_dir).unwrap();
     std::fs::write(
-        base.join(".td_embedded_owner_password.td_apiserver"),
+        base.join(".td_embedded_owner_password.postgres_apiserver"),
         "from_file",
     )
     .unwrap();
@@ -263,7 +262,6 @@ apiserver:
     let (_, password) = postgres_connect(&config);
     assert_eq!(password, "from_file");
 
-    // ...and an unresolvable placeholder is a hard error, like absence.
     unsafe { std::env::remove_var("TD_DATABASE_DIR") };
     unsafe { std::env::remove_var("TD_URI_REPOSITORY") };
     assert!(matches!(

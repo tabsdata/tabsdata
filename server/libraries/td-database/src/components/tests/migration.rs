@@ -18,9 +18,9 @@ use crate::test_utils::TestDb;
 use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, JoinType, Order, Query, SelectStatement, Table,
 };
-use td_schema::schema::Derived;
 use td_schema::schema::archive;
 use td_schema::schema::render::{render_query, render_schema};
+use td_schema::schema::{Delta, Derived};
 use td_schema::{CURRENT_VERSION, CurrentSource, SchemaSource};
 
 fn current_schema() -> Expr {
@@ -54,6 +54,55 @@ fn postgres_fingerprint() -> Vec<SelectStatement> {
             .from(Alias::new("pg_indexes"))
             .and_where(Expr::col(Alias::new("schemaname")).eq(current_schema()))
             .order_by(Alias::new("indexname"), Order::Asc)
+            .to_owned(),
+        // Indexes cover primary and unique keys; foreign keys, checks and
+        // their names only show up here.
+        Query::select()
+            .expr(Expr::cust(
+                "'constraint ' || c.relname || '.' || con.conname || ' ' \
+                 || replace(pg_get_constraintdef(con.oid), current_schema() || '.', '')",
+            ))
+            .from_as(Alias::new("pg_constraint"), Alias::new("con"))
+            .join_as(
+                JoinType::Join,
+                Alias::new("pg_class"),
+                Alias::new("c"),
+                Expr::cust("c.oid = con.conrelid"),
+            )
+            .join_as(
+                JoinType::Join,
+                Alias::new("pg_namespace"),
+                Alias::new("n"),
+                Expr::cust("n.oid = c.relnamespace"),
+            )
+            .and_where(Expr::cust("n.nspname").eq(current_schema()))
+            .order_by((Alias::new("c"), Alias::new("relname")), Order::Asc)
+            .order_by((Alias::new("con"), Alias::new("conname")), Order::Asc)
+            .to_owned(),
+        Query::select()
+            .expr(Expr::cust(
+                "'policy ' || tablename || '.' || policyname || ' ' || permissive \
+                 || ' to=' || array_to_string(roles, ',') || ' for=' || cmd \
+                 || ' using=' || COALESCE(qual, '') \
+                 || ' check=' || COALESCE(with_check, '')",
+            ))
+            .from(Alias::new("pg_policies"))
+            .and_where(Expr::col(Alias::new("schemaname")).eq(current_schema()))
+            .order_by(Alias::new("tablename"), Order::Asc)
+            .order_by(Alias::new("policyname"), Order::Asc)
+            .to_owned(),
+        // A policy is inert on a table with row security off, and `FORCE` is
+        // what extends it to the owner, so both flags belong in the shape.
+        Query::select()
+            .expr(Expr::cust(
+                "'rls ' || c.relname || ' enabled=' || c.relrowsecurity \
+                 || ' forced=' || c.relforcerowsecurity",
+            ))
+            .from_as(Alias::new("pg_class"), Alias::new("c"))
+            .and_where(Expr::cust(
+                "c.relkind = 'r' AND c.relnamespace = current_schema()::regnamespace",
+            ))
+            .order_by((Alias::new("c"), Alias::new("relname")), Order::Asc)
             .to_owned(),
         // `pg_get_triggerdef` stops at `EXECUTE FUNCTION x_fn()`, so a trigger
         // body that pins a stale column list is invisible without the function.
@@ -215,14 +264,17 @@ impl SchemaSource for DestructiveFixture {
         vec![render_schema(table)]
     }
 
-    fn delta(&self, target: usize) -> Vec<String> {
+    fn delta(&self, target: usize) -> Delta {
         assert_eq!(target, 2);
-        vec![render_schema(
-            Table::alter()
-                .table(Alias::new("fixture"))
-                .drop_column(Alias::new("b"))
-                .to_owned(),
-        )]
+        Delta {
+            up: vec![render_schema(
+                Table::alter()
+                    .table(Alias::new("fixture"))
+                    .drop_column(Alias::new("b"))
+                    .to_owned(),
+            )],
+            retired: vec![],
+        }
     }
 
     fn views(&self) -> Vec<Derived> {
@@ -347,15 +399,18 @@ impl SchemaSource for FailingFixture {
         DestructiveFixture(3).views()
     }
 
-    fn delta(&self, target: usize) -> Vec<String> {
+    fn delta(&self, target: usize) -> Delta {
         match target {
             2 => DestructiveFixture(2).delta(2),
-            3 => vec![render_schema(
-                Table::alter()
-                    .table(Alias::new("fixture"))
-                    .drop_column(Alias::new("absent"))
-                    .to_owned(),
-            )],
+            3 => Delta {
+                up: vec![render_schema(
+                    Table::alter()
+                        .table(Alias::new("fixture"))
+                        .drop_column(Alias::new("absent"))
+                        .to_owned(),
+                )],
+                retired: vec![],
+            },
             other => panic!("unexpected target {other}"),
         }
     }
@@ -389,4 +444,150 @@ async fn destructive_delta_clears_standing_views_postgres() {
         crate::test_utils::postgres::pool().await
     })
     .await;
+}
+
+/// A v1 -> v2 bump that retires a view, a trigger (with its function) and an
+/// index from a table that survives. None of them appear in v2's own drop list,
+/// so only [`SchemaSource::retired`] can clear them — and the delta's
+/// `DROP COLUMN` cannot even run while the view stands.
+struct RetiringFixture(usize);
+
+impl RetiringFixture {
+    const VIEW: &'static str = "retired_view";
+    const TRIGGER: &'static str = "retired_trigger";
+    const INDEX: &'static str = "retired_index";
+}
+
+impl SchemaSource for RetiringFixture {
+    fn current_version(&self) -> usize {
+        self.0
+    }
+
+    fn tables(&self) -> Vec<String> {
+        DestructiveFixture(self.0).tables()
+    }
+
+    fn views(&self) -> Vec<Derived> {
+        if self.0 != 1 {
+            return vec![];
+        }
+        let select = Query::select()
+            .expr(Expr::col(Asterisk))
+            .from(Alias::new("fixture"))
+            .to_owned();
+        vec![Derived {
+            create: vec![format!(
+                "CREATE VIEW {} AS {}",
+                Self::VIEW,
+                render_query(select)
+            )],
+            drop: vec![format!("DROP VIEW IF EXISTS {}", Self::VIEW)],
+        }]
+    }
+
+    fn triggers(&self) -> Vec<Derived> {
+        if self.0 != 1 {
+            return vec![];
+        }
+        vec![Derived {
+            create: vec![
+                format!(
+                    "CREATE OR REPLACE FUNCTION {}_fn() RETURNS TRIGGER AS $$ \
+                     BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql",
+                    Self::TRIGGER
+                ),
+                format!(
+                    "CREATE TRIGGER {} BEFORE INSERT ON fixture \
+                     FOR EACH ROW EXECUTE FUNCTION {}_fn()",
+                    Self::TRIGGER,
+                    Self::TRIGGER
+                ),
+            ],
+            drop: vec![
+                format!("DROP TRIGGER IF EXISTS {} ON fixture", Self::TRIGGER),
+                format!("DROP FUNCTION IF EXISTS {}_fn()", Self::TRIGGER),
+            ],
+        }]
+    }
+
+    fn indexes(&self) -> Vec<Derived> {
+        if self.0 != 1 {
+            return vec![];
+        }
+        vec![Derived {
+            create: vec![format!("CREATE INDEX {} ON fixture (a)", Self::INDEX)],
+            drop: vec![format!("DROP INDEX IF EXISTS {}", Self::INDEX)],
+        }]
+    }
+
+    fn delta(&self, target: usize) -> Delta {
+        Delta {
+            up: DestructiveFixture(self.0).delta(target).up,
+            retired: vec![
+                format!("DROP VIEW IF EXISTS {}", Self::VIEW),
+                format!("DROP TRIGGER IF EXISTS {} ON fixture", Self::TRIGGER),
+                format!("DROP FUNCTION IF EXISTS {}_fn()", Self::TRIGGER),
+                format!("DROP INDEX IF EXISTS {}", Self::INDEX),
+            ],
+        }
+    }
+}
+
+#[tokio::test]
+async fn retired_derived_objects_are_dropped_postgres() {
+    let db = crate::test_utils::postgres::pool().await;
+    db.admin.upgrade_source(&RetiringFixture(1)).await.unwrap();
+    assert_eq!(
+        view_columns(&db.serving, RetiringFixture::VIEW).await,
+        ["a", "b"]
+    );
+
+    db.admin.upgrade_source(&RetiringFixture(2)).await.unwrap();
+    assert_eq!(db.admin.db_version().await.unwrap(), Some(2));
+
+    let views = super::scalars(
+        &db.serving,
+        "SELECT table_name FROM information_schema.views \
+         WHERE table_schema = current_schema()",
+    )
+    .await;
+    assert!(
+        !views.contains(&RetiringFixture::VIEW.to_string()),
+        "{views:?}"
+    );
+
+    let triggers = super::scalars(
+        &db.serving,
+        "SELECT t.tgname FROM pg_trigger t \
+         JOIN pg_class c ON c.oid = t.tgrelid \
+         JOIN pg_namespace n ON n.oid = c.relnamespace \
+         WHERE n.nspname = current_schema() AND NOT t.tgisinternal",
+    )
+    .await;
+    assert!(
+        !triggers.contains(&RetiringFixture::TRIGGER.to_string()),
+        "{triggers:?}"
+    );
+
+    let functions = super::scalars(
+        &db.serving,
+        "SELECT p.proname FROM pg_proc p \
+         JOIN pg_namespace n ON n.oid = p.pronamespace \
+         WHERE n.nspname = current_schema()",
+    )
+    .await;
+    assert!(
+        !functions.contains(&format!("{}_fn", RetiringFixture::TRIGGER)),
+        "{functions:?}"
+    );
+
+    let indexes = super::scalars(
+        &db.serving,
+        "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()",
+    )
+    .await;
+    assert!(
+        !indexes.contains(&RetiringFixture::INDEX.to_string()),
+        "{indexes:?}"
+    );
 }

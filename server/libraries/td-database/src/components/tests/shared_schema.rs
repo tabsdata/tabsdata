@@ -11,7 +11,7 @@
 use crate::test_utils::TestDb;
 use crate::test_utils::postgres::pool;
 use td_schema::SchemaSource;
-use td_schema::schema::SchemaDelta;
+use td_schema::schema::{Delta, SchemaDelta};
 
 /// The v1→v2 migration of the component's own content. Real deltas bump
 /// `db_version` themselves; this one omits it so the assertions below prove the
@@ -21,6 +21,9 @@ struct WidgetV1ToV2;
 impl SchemaDelta for WidgetV1ToV2 {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
+    fn retired() -> Vec<String> {
+        vec![]
+    }
     fn up() -> Vec<String> {
         vec!["ALTER TABLE widget ADD COLUMN note TEXT".to_string()]
     }
@@ -39,13 +42,16 @@ impl SchemaSource for WidgetSource {
     fn tables(&self) -> Vec<String> {
         vec!["CREATE TABLE widget (id TEXT PRIMARY KEY)".to_string()]
     }
-    fn delta(&self, target: usize) -> Vec<String> {
+    fn delta(&self, target: usize) -> Delta {
         assert_eq!(
             target,
             WidgetV1ToV2::TO_VERSION,
             "only the v2 delta is defined"
         );
-        WidgetV1ToV2::up()
+        Delta {
+            up: WidgetV1ToV2::up(),
+            retired: WidgetV1ToV2::retired(),
+        }
     }
 }
 

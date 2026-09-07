@@ -9,18 +9,25 @@
 use crate::components::{APISERVER_COMPONENT_KEY, AdminPool, provision_all};
 use crate::config::{
     ComponentConfig, DatabaseComponents, DatabaseConfig, PoolConfig, PoolsConfig, PostgresConfig,
-    Schema,
+    RlsRoles, Schema,
 };
 use crate::error::DbError;
 use crate::test_utils::server;
 use std::time::Duration;
 
+fn roles(uid: &impl std::fmt::Display) -> RlsRoles {
+    RlsRoles {
+        in_project: format!("ip_{uid}"),
+        across_projects: format!("ap_{uid}"),
+    }
+}
+
 /// The privileged pool `db create` provisions with.
-fn admin_config(app_role: &str) -> DatabaseConfig {
+fn admin_config(roles: &RlsRoles) -> DatabaseConfig {
     DatabaseConfig {
         conn: server::admin_base(),
         schema: None,
-        app_role: Some(app_role.to_owned()),
+        roles: Some(roles.clone()),
         pool: PoolsConfig {
             admin: Some(PoolConfig {
                 min_connections: 1,
@@ -34,7 +41,7 @@ fn admin_config(app_role: &str) -> DatabaseConfig {
 }
 
 /// A `database:` map holding the one component this crate's registry carries.
-fn components(schema: &str, app_role: &str) -> DatabaseComponents {
+fn components(schema: &str, roles: &RlsRoles) -> DatabaseComponents {
     DatabaseComponents::from([(
         APISERVER_COMPONENT_KEY.to_owned(),
         ComponentConfig {
@@ -43,7 +50,8 @@ fn components(schema: &str, app_role: &str) -> DatabaseComponents {
                 ..server::admin_base().options
             },
             schema: Some(Schema::new(schema)),
-            app_role: Some(app_role.to_owned()),
+            in_project_role: Some(roles.in_project.clone()),
+            across_projects_role: Some(roles.across_projects.clone()),
             pool: PoolsConfig::default(),
         },
     )])
@@ -54,9 +62,9 @@ async fn test_provision_all_refuses_an_already_provisioned_component() {
     server::ensure_started().await;
     let uid = td_common::id::id();
     let schema = format!("own_{uid}");
-    let app_role = format!("app_{uid}");
-    let components = components(&schema, &app_role);
-    let admin = AdminPool::connect(&admin_config(&app_role)).await.unwrap();
+    let roles = roles(&uid);
+    let components = components(&schema, &roles);
+    let admin = AdminPool::connect(&admin_config(&roles)).await.unwrap();
 
     provision_all(&components, &admin).await.unwrap();
     assert!(admin.schema_exists(&schema).await.unwrap());
@@ -72,6 +80,7 @@ async fn test_provision_all_refuses_an_already_provisioned_component() {
     );
 
     admin.drop_schema(&schema, &schema).await.unwrap();
-    admin.drop_app_role(&app_role).await.unwrap();
+    admin.drop_rls_role(&roles.in_project).await.unwrap();
+    admin.drop_rls_role(&roles.across_projects).await.unwrap();
     admin.close().await;
 }

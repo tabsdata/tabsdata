@@ -8,8 +8,8 @@
 //! membership gating convergence) are invisible to a superuser. PostgreSQL
 //! only.
 
-use crate::components::{AdminPool, ProvisionSpec};
-use crate::config::{DatabaseConfig, PoolConfig, PoolsConfig, PostgresConnect, Schema};
+use crate::components::{AdminPool, ApiserverComponent, ProvisionSpec, UpgradeAction};
+use crate::config::{DatabaseConfig, PoolConfig, PoolsConfig, PostgresConnect, RlsRoles, Schema};
 use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
@@ -35,11 +35,11 @@ fn login(username: &str, password: &str) -> PostgresConnect {
     }
 }
 
-fn config(conn: PostgresConnect, schema: &str, app_role: &str) -> DatabaseConfig {
+fn config(conn: PostgresConnect, schema: &str, roles: &RlsRoles) -> DatabaseConfig {
     DatabaseConfig {
         conn,
         schema: Some(Schema::new(schema)),
-        app_role: Some(app_role.to_owned()),
+        roles: Some(roles.clone()),
         pool: {
             let pool = PoolConfig {
                 min_connections: 1,
@@ -97,8 +97,8 @@ async fn owner_password_hash(su: &PgPool, owner: &str) -> String {
 
 /// The serving path the apiserver takes: log in as the owner and `SET ROLE`
 /// to the app role.
-async fn owner_login(owner: &str, password: &str, app_role: &str) -> Result<(), DbError> {
-    let mut config = config(login(owner, password), owner, app_role);
+async fn owner_login(owner: &str, password: &str, roles: &RlsRoles) -> Result<(), DbError> {
+    let mut config = config(login(owner, password), owner, roles);
     config.pool.regular.as_mut().unwrap().acquire_timeout = Duration::from_secs(3);
     TdPool::connect(&config).await?.close().await;
     Ok(())
@@ -111,17 +111,20 @@ async fn test_provision_as_non_superuser_admin() {
     let uid = td_common::id::id();
     let admin_role = format!("adm_{uid}");
     let owner = format!("own_{uid}");
-    let app_role = format!("app_{uid}");
+    let roles = RlsRoles {
+        in_project: format!("ip_{uid}"),
+        across_projects: format!("ap_{uid}"),
+    };
     create_admin(&su, &admin_role).await;
 
-    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &owner, &app_role))
+    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &owner, &roles))
         .await
         .unwrap();
     let spec = ProvisionSpec {
         schema: &owner,
         owner: &owner,
         password: "owner_pw1",
-        app_role: &app_role,
+        roles: &roles,
     };
     admin.provision_schema(&spec).await.unwrap();
 
@@ -133,13 +136,19 @@ async fn test_provision_as_non_superuser_admin() {
     assert_eq!(schema_owner, owner);
     let bypass = scalar(
         &su,
-        &format!("SELECT rolbypassrls::text FROM pg_roles WHERE rolname = '{app_role}'"),
+        &format!(
+            "SELECT rolbypassrls::text FROM pg_roles WHERE rolname = '{}'",
+            roles.in_project
+        ),
     )
     .await;
     assert_eq!(bypass, "false");
     let member = scalar(
         &su,
-        &format!("SELECT pg_has_role('{owner}', '{app_role}', 'MEMBER')::text"),
+        &format!(
+            "SELECT pg_has_role('{owner}', '{}', 'MEMBER')::text",
+            roles.in_project
+        ),
     )
     .await;
     assert_eq!(member, "true");
@@ -148,7 +157,7 @@ async fn test_provision_as_non_superuser_admin() {
     // fresh salt even for an identical password, so hashes can't express
     // "unchanged".
     admin.provision_schema(&spec).await.unwrap();
-    owner_login(&owner, "owner_pw1", &app_role).await.unwrap();
+    owner_login(&owner, "owner_pw1", &roles).await.unwrap();
 
     // Quote and backslash exercise the `format(%L)` quoting of the staged
     // password GUC.
@@ -158,17 +167,96 @@ async fn test_provision_as_non_superuser_admin() {
         ..spec
     };
     admin.provision_schema(&drifted).await.unwrap();
-    owner_login(&owner, hostile_pw, &app_role).await.unwrap();
+    owner_login(&owner, hostile_pw, &roles).await.unwrap();
     assert!(
-        owner_login(&owner, "owner_pw1", &app_role).await.is_err(),
+        owner_login(&owner, "owner_pw1", &roles).await.is_err(),
         "stale password must stop authenticating after convergence"
     );
 
     admin.drop_schema(&owner, &owner).await.unwrap();
     for stmt in [
-        format!("DROP ROLE IF EXISTS \"{app_role}\""),
+        format!("DROP ROLE IF EXISTS \"{}\"", roles.in_project),
+        format!("DROP ROLE IF EXISTS \"{}\"", roles.across_projects),
         format!("DROP OWNED BY \"{admin_role}\""),
         format!("DROP ROLE \"{admin_role}\""),
+    ] {
+        execute_retrying(&su, &stmt).await;
+    }
+    su.close().await;
+}
+
+/// A deployment provisioned before the `across_projects` role existed: owner
+/// and schema only, no RLS roles, no marker membership. `db upgrade` runs the
+/// role phase on the privileged entry, after which the owner — who holds no
+/// `CREATEROLE` — installs a schema whose policies name those roles. Without
+/// the phase the owner's preflight refuses and names every missing object.
+#[tokio::test]
+async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
+    let su = su_pool().await;
+    let uid = td_common::id::id();
+    let owner = format!("own_{uid}");
+    let roles = RlsRoles {
+        in_project: format!("ip_{uid}"),
+        across_projects: format!("ap_{uid}"),
+    };
+    for stmt in [
+        format!("CREATE ROLE \"{owner}\" LOGIN PASSWORD 'own_pw'"),
+        format!("CREATE SCHEMA \"{owner}\" AUTHORIZATION \"{owner}\""),
+    ] {
+        sqlx::query(&stmt).execute(&su).await.unwrap();
+    }
+    let as_owner = AdminPool::connect(&config(login(&owner, "own_pw"), &owner, &roles))
+        .await
+        .unwrap();
+
+    let refused = as_owner.upgrade(&ApiserverComponent).await.unwrap_err();
+    let DbError::MissingAcrossProjectsMembership(sql) = &refused else {
+        panic!("expected MissingAcrossProjectsMembership, got {refused:?}");
+    };
+    for role in [&roles.in_project, &roles.across_projects] {
+        assert!(
+            sql.contains(&format!("CREATE ROLE \"{role}\"")),
+            "the refusal must name the missing role {role}: {sql}"
+        );
+    }
+
+    let privileged = AdminPool::connect(&DatabaseConfig {
+        conn: server::admin_base(),
+        schema: None,
+        roles: None,
+        pool: crate::test_utils::test_pool_config(),
+    })
+    .await
+    .unwrap();
+    privileged
+        .ensure_rls_roles_for(&owner, &roles)
+        .await
+        .unwrap();
+    privileged.close().await;
+
+    let action = as_owner.upgrade(&ApiserverComponent).await.unwrap();
+    assert!(
+        matches!(action, Some(UpgradeAction::Install { .. })),
+        "the owner installs once the roles exist, got {action:?}"
+    );
+    for role in [&roles.in_project, &roles.across_projects] {
+        let member = scalar(
+            &su,
+            &format!("SELECT pg_has_role('{owner}', '{role}', 'MEMBER')::text"),
+        )
+        .await;
+        assert_eq!(member, "true", "the owner must hold {role}");
+    }
+
+    as_owner.close().await;
+    for stmt in [
+        format!("DROP SCHEMA \"{owner}\" CASCADE"),
+        format!("DROP OWNED BY \"{}\"", roles.in_project),
+        format!("DROP OWNED BY \"{}\"", roles.across_projects),
+        format!("DROP OWNED BY \"{owner}\""),
+        format!("DROP ROLE \"{}\"", roles.in_project),
+        format!("DROP ROLE \"{}\"", roles.across_projects),
+        format!("DROP ROLE \"{owner}\""),
     ] {
         execute_retrying(&su, &stmt).await;
     }
@@ -187,7 +275,10 @@ async fn test_provision_leaves_foreign_owner_role_untouched() {
     let uid = td_common::id::id();
     let admin_role = format!("adm_{uid}");
     let foreign = format!("own_{uid}");
-    let app_role = format!("app_{uid}");
+    let roles = RlsRoles {
+        in_project: format!("ip_{uid}"),
+        across_projects: format!("ap_{uid}"),
+    };
     create_admin(&su, &admin_role).await;
     execute_retrying(
         &su,
@@ -196,14 +287,14 @@ async fn test_provision_leaves_foreign_owner_role_untouched() {
     .await;
     let hash = owner_password_hash(&su, &foreign).await;
 
-    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &foreign, &app_role))
+    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &foreign, &roles))
         .await
         .unwrap();
     let spec = ProvisionSpec {
         schema: &foreign,
         owner: &foreign,
         password: "mine",
-        app_role: &app_role,
+        roles: &roles,
     };
     for _ in 0..2 {
         admin.provision_schema(&spec).await.unwrap_err();
@@ -224,7 +315,8 @@ async fn test_provision_leaves_foreign_owner_role_untouched() {
         .await
         .unwrap();
     for stmt in [
-        format!("DROP ROLE IF EXISTS \"{app_role}\""),
+        format!("DROP ROLE IF EXISTS \"{}\"", roles.in_project),
+        format!("DROP ROLE IF EXISTS \"{}\"", roles.across_projects),
         format!("DROP ROLE \"{foreign}\""),
         format!("DROP OWNED BY \"{admin_role}\""),
         format!("DROP ROLE \"{admin_role}\""),
@@ -242,7 +334,10 @@ async fn test_superuser_provision_leaves_colliding_role_untouched() {
     let su = su_pool().await;
     let uid = td_common::id::id();
     let foreign = format!("own_{uid}");
-    let app_role = format!("app_{uid}");
+    let roles = RlsRoles {
+        in_project: format!("ip_{uid}"),
+        across_projects: format!("ap_{uid}"),
+    };
     execute_retrying(
         &su,
         &format!("CREATE ROLE \"{foreign}\" NOLOGIN PASSWORD 'theirs'"),
@@ -250,14 +345,14 @@ async fn test_superuser_provision_leaves_colliding_role_untouched() {
     .await;
     let hash = owner_password_hash(&su, &foreign).await;
 
-    let admin = AdminPool::connect(&config(server::admin_base(), &foreign, &app_role))
+    let admin = AdminPool::connect(&config(server::admin_base(), &foreign, &roles))
         .await
         .unwrap();
     let spec = ProvisionSpec {
         schema: &foreign,
         owner: &foreign,
         password: "mine",
-        app_role: &app_role,
+        roles: &roles,
     };
     admin.provision_schema(&spec).await.unwrap();
 
@@ -273,7 +368,16 @@ async fn test_superuser_provision_leaves_colliding_role_untouched() {
     );
 
     admin.drop_schema(&foreign, &foreign).await.unwrap();
-    execute_retrying(&su, &format!("DROP ROLE IF EXISTS \"{app_role}\"")).await;
+    execute_retrying(
+        &su,
+        &format!("DROP ROLE IF EXISTS \"{}\"", roles.in_project),
+    )
+    .await;
+    execute_retrying(
+        &su,
+        &format!("DROP ROLE IF EXISTS \"{}\"", roles.across_projects),
+    )
+    .await;
     su.close().await;
 }
 
@@ -291,15 +395,18 @@ async fn test_provision_without_create_privilege_fails() {
     .await;
 
     let owner = format!("own_{uid}");
-    let app_role = format!("app_{uid}");
-    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &owner, &app_role))
+    let roles = RlsRoles {
+        in_project: format!("ip_{uid}"),
+        across_projects: format!("ap_{uid}"),
+    };
+    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &owner, &roles))
         .await
         .unwrap();
     let spec = ProvisionSpec {
         schema: &owner,
         owner: &owner,
         password: "owner_pw",
-        app_role: &app_role,
+        roles: &roles,
     };
     let error = admin.provision_schema(&spec).await.unwrap_err();
     assert!(
