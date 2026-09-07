@@ -71,14 +71,14 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::{ExtraCols, ExtraColsParam, TableParam, UncommittedParam};
-    use td_objects::dxo::table::{SchemaField, TableDB};
+    use td_objects::dxo::table::{SchemaField, TableDB, TableDBWithNames};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
         ProjectId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
         UncommittedStatus, UserId,
     };
     use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
@@ -157,8 +157,14 @@ mod tests {
 
             for table in &created_tables {
                 let table = TableName::try_from(table)?;
-                let table_version: TableDB =
-                    db.live().fetch_one(and!(collection.id, &table)).await?;
+                let table_version: TableDB = db
+                    .latest()
+                    .fetch_one::<TableDBWithNames>(and!(
+                        &collection.id,
+                        &TableIdName::Name(table.clone())
+                    ))
+                    .await?
+                    .base;
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
@@ -174,12 +180,12 @@ mod tests {
                         .await?;
 
                     let (path, _) = StorageLocation::from(&storage_location)
-                        .builder(&physical_table_data_version.base_path)
-                        .collection(&physical_table_data_version.collection_id)
-                        .data(&physical_table_data_version.id)
+                        .builder(&physical_table_data_version.base.base_path)
+                        .collection(&physical_table_data_version.base.collection_id)
+                        .data(&physical_table_data_version.base.id)
                         .table(
-                            &physical_table_data_version.table_id,
-                            &physical_table_data_version.table_version_id,
+                            &physical_table_data_version.base.table_id,
+                            &physical_table_data_version.base.table_version_id,
                         )
                         .build()?;
 

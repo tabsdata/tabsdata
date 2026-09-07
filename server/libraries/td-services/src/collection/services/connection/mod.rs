@@ -84,18 +84,20 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use td_authz::rbac::{ManageProject, Project, SqlRbacSource};
 use td_database::access::Gated;
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
-use td_objects::DaoCore;
+use td_objects::Dao;
 use td_objects::FromDao;
 use td_objects::dxo::collection::{
-    ActiveCollectionDB, ActiveCollectionDBWithNames, CollectionCreate, CollectionCreateDB,
+    ActiveCollectionDB, ActiveCollectionDBWithNames, CollectionCreate, CollectionInsertDB,
     CollectionRead,
 };
 use td_objects::dxo::connection::ConnectionDB;
+use td_objects::dxo::connection::ConnectionInsertDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
 use td_objects::types::basic::{CollectionType, ConnectionKind, GroupId};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 /// Source/destination collections carry connection config — `ManageProject`
 /// territory per the permission model ("CRUD sources and destinations");
@@ -252,8 +254,8 @@ pub struct ConnectionResolution {
 /// Resolves the collection's connection ROW for an update. The connection
 /// exists by construction (created with the collection); its connector kind
 /// is immutable — content was stored under it.
-pub async fn resolve_connection(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn resolve_connection<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     collection: &ActiveCollectionDB,
     document: &ConnectionDocument,
 ) -> Result<ConnectionResolution, TdError> {
@@ -263,7 +265,7 @@ pub async fn resolve_connection(
             "the collection has no connection configured"
         )
     })?;
-    let existing: ConnectionDB = conn.live().fetch_one(connection_id).await?;
+    let existing: ConnectionDB = conn.fetch_one(connection_id).await?;
     ensure_same_kind(&existing, &document.kind)?;
     Ok(ConnectionResolution {
         row: existing,
@@ -274,12 +276,12 @@ pub async fn resolve_connection(
 }
 
 fn ensure_same_kind(existing: &ConnectionDB, kind: &ConnectionKind) -> Result<(), TdError> {
-    if existing.kind != *kind {
+    if existing.base.kind != *kind {
         return Err(api_error!(
             ApiError::InputError,
             "the connection's connector kind is '{}' and cannot change (got '{}'); \
              delete and recreate the collection to use a different connector",
-            existing.kind,
+            existing.base.kind,
             kind
         ));
     }
@@ -300,8 +302,8 @@ pub fn require_connection_id(collection: &ActiveCollectionDB) -> Result<Connecti
 /// orchestrator persists nothing until the store write succeeds).
 /// Source/Destination collections REQUIRE a connection — they are 1:1 with
 /// it and cannot exist without one; a DataFactory cannot carry one.
-pub async fn plan_collection_create(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn plan_collection_create<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     request_context: &RequestContext,
     create: &CollectionCreate,
     group_id: &GroupId,
@@ -343,7 +345,7 @@ pub async fn plan_collection_create(
                      nothing is stored yet for a new collection"
                 ));
             }
-            Some(ConnectionDB {
+            Some(ConnectionInsertDB {
                 id: ConnectionId::default(),
                 kind: document.kind.clone(),
                 created_on: request_context.time.into(),
@@ -368,16 +370,16 @@ pub async fn plan_collection_create(
 /// collection's artifact before the TX uniqueness check fires (the failure
 /// cleanup would then delete it). The store's own name-ownership guard covers
 /// the remaining race.
-pub(crate) async fn ensure_collection_name_free(
-    conn: &mut DomainConnection<Apiserver>,
+pub(crate) async fn ensure_collection_name_free<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     name: &CollectionName,
 ) -> Result<(), TdError> {
-    let existing: Vec<ActiveCollectionDB> = conn.live().fetch_all(name).await?;
+    let existing: Vec<ActiveCollectionDB> = conn.fetch_all(name).await?;
     if existing.is_empty() {
         Ok(())
     } else {
         // Clean "already exists" (input-error/400), matching the
-        // `By::<Name>::assert_not_exists` errors used for the other entities.
+        // `assert_not_exists` errors used for the other entities.
         Err(SqlError::EntityAlreadyExists(
             ActiveCollectionDB::display_name().to_string(),
             format!(" for 'name' = '{name}'"),
@@ -394,20 +396,20 @@ pub struct CollectionCreatePlan {
     pub collection_id: CollectionId,
     pub group_id: GroupId,
     pub collection_type: CollectionType,
-    pub connection_row: Option<ConnectionDB>,
+    pub connection_row: Option<ConnectionInsertDB>,
 }
 
 /// The create transaction: insert the (store-confirmed) connection row, then
 /// the collection pointing at it, and read the result back.
 pub async fn insert_collection_with_connection(
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     request_context: &RequestContext,
     plan: &CollectionCreatePlan,
 ) -> Result<CollectionRead, TdError> {
     if let Some(row) = &plan.connection_row {
-        conn.live().insert(row).await?;
+        conn.insert(row).await?;
     }
-    let collection = CollectionCreateDB {
+    let collection = CollectionInsertDB {
         id: plan.collection_id,
         name: plan.create.name.clone(),
         description: plan.create.description.clone(),
@@ -421,7 +423,7 @@ pub async fn insert_collection_with_connection(
         collection_type: plan.collection_type.clone(),
         connection_id: plan.connection_row.as_ref().map(|row| row.id),
     };
-    conn.live().insert(&collection).await?;
-    let with_names: ActiveCollectionDBWithNames = conn.live().fetch_one(collection.id).await?;
+    conn.insert(&collection).await?;
+    let with_names: ActiveCollectionDBWithNames = conn.fetch_one(collection.id).await?;
     CollectionRead::from_dao(with_names)
 }

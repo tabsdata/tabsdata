@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::function::engine::dependants_of_tables;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -9,15 +10,14 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{GatedConnection, InProject, RW};
 use td_error::{TdError, td_error};
 use td_objects::and;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB, CollectionParam};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
-use td_objects::dxo::dependency::DependencyDB;
-use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::table::TableParam;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDB;
-use td_objects::types::basic::{CollectionName, FunctionId, TableName, TableStatus};
-use td_queries::{ChunkedQueries, HistoricEntry, LiveEntry};
+use td_objects::types::basic::{CollectionName, TableName, TableStatus};
+use td_queries::Queries;
 
 #[td_error]
 enum DeleteTableError {
@@ -42,57 +42,36 @@ async fn table_delete(
     let table_id_name = table_param.table;
     // Bare-table row lock: the freeze-dependents scan must not race
     // function register/update, which lock this row too.
-    let locked: CollectionCreateDB = conn
-        .live()
-        .fetch_one_for_update(&collection_id_name)
-        .await?;
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&locked.id).await?;
+    let locked: CollectionDB = conn.for_update().fetch_one(&collection_id_name).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    // Get table (must be frozen to delete).
     let at = ctx.time;
     let table: TableDBWithNames = conn
-        .historic(&at)
-        .state(TableDBWithNames::frozen())
-        .fetch_one(and!(&collection_id_name, &table_id_name))
+        .as_of(&at)
+        .fetch_one(and!(
+            &collection_id_name,
+            &table_id_name,
+            TableDBWithNames::frozen()
+        ))
         .await?;
-    let table_id = table.base.table_id;
+    let table_id = table.base.base.table_id;
 
-    // Freeze all functions with status=Active that have the table as a
-    // dependency at the current time.
-    let dependencies: Vec<DependencyDB> = conn
-        .historic(&at)
-        .state(DependencyDB::active())
-        .fetch_all(&table_id)
-        .await?;
-    let function_ids: Vec<FunctionId> = dependencies.iter().map(|x| x.function_id).collect();
-    let functions: Vec<FunctionDB> = conn
-        .historic(&at)
-        .state(FunctionDB::active())
-        .fetch_all_chunked::<FunctionId>(&function_ids)
-        .await?;
-    let frozen: Vec<FunctionDB> = functions.iter().map(|f| f.frozen(&ctx)).collect();
-    conn.insert_vec::<FunctionDB>(&frozen).await?;
+    let functions = dependants_of_tables(conn, &[table_id], &at).await?;
+    let frozen: Vec<FunctionInsertDB> = functions.iter().map(|f| f.frozen_version(&ctx)).collect();
+    conn.chunked().insert(&frozen).await?;
 
-    // Delete all triggers that have the table as dependency at the current time.
-    let triggers: Vec<TriggerDB> = conn
-        .historic(&at)
-        .state(TriggerDB::available())
-        .fetch_all(&table_id)
-        .await?;
-    let deleted: Vec<TriggerDB> = triggers.iter().map(|t| t.deleted(&ctx)).collect();
-    conn.insert_vec::<TriggerDB>(&deleted).await?;
+    conn.close::<TriggerDB>(&table_id, &ctx.time).await?;
 
-    let previous: TableDB = conn.live().fetch_one(&table.base.id).await?;
-    // Only frozen tables can be deleted.
-    if !matches!(previous.status, TableStatus::Frozen) {
+    let previous: TableDB = conn.fetch_one(&table.base.base.id).await?;
+    // Re-check on the live row: only frozen tables can be deleted.
+    if !matches!(previous.base.status, TableStatus::Frozen) {
         Err(DeleteTableError::TableNotFrozen(
-            previous.name.clone(),
+            previous.base.name.clone(),
             collection.name.clone(),
-            previous.status.to_string(),
+            previous.base.status.to_string(),
         ))?
     }
-    let deleted_table = previous.deleted(&ctx);
-    conn.live().insert(&deleted_table).await?;
+    conn.close::<TableDB>(&table_id, &ctx.time).await?;
     Ok(())
 }
 

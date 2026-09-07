@@ -68,7 +68,7 @@ pub(crate) mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::project::ActiveProjectDB;
-    use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::table::TableDBWithNames;
     use td_objects::dxo::table::{TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
@@ -76,7 +76,7 @@ pub(crate) mod tests {
         UserId,
     };
     use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
 
@@ -223,9 +223,13 @@ pub(crate) mod tests {
 
             for table in tables {
                 let table_version = db
-                    .live()
-                    .fetch_one::<TableDB>(and!(collection.id, table))
-                    .await?;
+                    .latest()
+                    .fetch_one::<TableDBWithNames>(and!(
+                        &collection.id,
+                        &TableIdName::Name(table.clone())
+                    ))
+                    .await?
+                    .base;
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
@@ -241,12 +245,12 @@ pub(crate) mod tests {
                         .await?;
 
                     let (path, _) = StorageLocation::from(&storage_location)
-                        .builder(&physical_table_data_version.base_path)
-                        .collection(&physical_table_data_version.collection_id)
-                        .data(&physical_table_data_version.id)
+                        .builder(&physical_table_data_version.base.base_path)
+                        .collection(&physical_table_data_version.base.collection_id)
+                        .data(&physical_table_data_version.base.id)
                         .table(
-                            &physical_table_data_version.table_id,
-                            &physical_table_data_version.table_version_id,
+                            &physical_table_data_version.base.table_id,
+                            &physical_table_data_version.base.table_version_id,
                         )
                         .build()?;
 

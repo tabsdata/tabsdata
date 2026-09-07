@@ -67,7 +67,7 @@ pub async fn build_response(
         });
 
     let response = TableFlowGraphResponse {
-        table: table.base.id,
+        table: table.base.base.id,
         all_functions,
         all_tables,
         system_tables,

@@ -12,7 +12,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::CurrentEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn table_list(
@@ -22,16 +22,15 @@ async fn table_list(
 ) -> Result<ListResponse<Table>, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, _, list_params) = request.into_parts();
-    // check requester has project permissions (sees all collections in the project)
+    // A project viewer sees all collections in the project.
     let grant = authz
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
     let rows = conn
-        .current()
-        .state(TableDBWithNames::user())
-        .list(&(), &query_params)
+        .latest()
+        .list(TableDBWithNames::user(), &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -108,7 +107,6 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_table_versions_unauthorized(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        // Create new role without permissions
         let user = db
             .seed()
             .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
@@ -169,7 +167,6 @@ mod tests {
         assert_eq!(data[0].name, TableName::try_from("table_1")?);
         assert_eq!(data[1].name, TableName::try_from("table_2")?);
 
-        // A user whose role carries no view_project on the project is forbidden.
         let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
             .in_project(p.id);

@@ -3,11 +3,12 @@
 //
 
 use polars::prelude::PolarsError;
+use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
 use td_objects::types::basic::{TableId, TriggeredOn, UncommittedStatus};
-use td_queries::LtdvEntry;
+use td_queries::Queries;
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
 
@@ -21,15 +22,15 @@ pub enum StorageServiceError {
     CouldNotGetSchema(#[source] PolarsError) = 5002,
 }
 
-pub async fn resolve_table_location(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn resolve_table_location<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     triggered_on: &TriggeredOn,
     table_id: &TableId,
     uncommitted: &UncommittedStatus,
 ) -> Result<Option<SPath>, TdError> {
     let committed_only = !**uncommitted;
     let data_version = conn
-        .ltdv()
+        .table_data_versions()
         .latest_bound_tdv_with_data_for_table(table_id, triggered_on, committed_only)
         .await?;
 
@@ -45,12 +46,12 @@ fn get_spath(
     data_version: &PhysicalTableDataVersionDBWithNames,
 ) -> Result<(SPath, StorageLocation), TdError> {
     Ok(StorageLocation::from(&data_version.base.storage_version)
-        .builder(&data_version.base.base.base_path)
-        .collection(&data_version.base.base.collection_id)
-        .data(&data_version.base.base.id)
+        .builder(&data_version.base.base.base.base_path)
+        .collection(&data_version.base.base.base.collection_id)
+        .data(&data_version.base.base.base.id)
         .table(
-            &data_version.base.base.table_id,
-            &data_version.base.base.table_version_id,
+            &data_version.base.base.base.table_id,
+            &data_version.base.base.base.table_version_id,
         )
         .build()?)
 }
@@ -59,7 +60,9 @@ fn get_spath(
 mod tests {
     use super::*;
     use crate::Services;
+    use std::collections::HashMap;
     use std::str::FromStr;
+    use td_database::access::InProject;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_objects::and;
@@ -72,14 +75,15 @@ mod tests {
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
     use td_objects::dxo::project::ActiveProjectDB;
-    use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDB;
     use td_objects::types::basic::ReuseFrozen;
+    use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        LogicalFunctionRunStatus, TableName, TableNameDto, TransactionKey, UserId,
+        LogicalFunctionRunStatus, TableIdName, TableNameDto, TransactionKey, UserId,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -147,9 +151,9 @@ mod tests {
             )
             .await?;
         // The no-data current version must come from its own execution: within
-        // one execution a second seed rebinds the same LTDV, superseding the
+        // one execution a second seed re-materializes the same LTDV, superseding the
         // with-data version instead of leaving it as a prior logical version.
-        let function: FunctionDB = db.live().fetch_one(&table.function_version_id).await?;
+        let function: FunctionDB = db.fetch_one(&table.base.function_version_id).await?;
         let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction = db
             .scoped(p.id)
@@ -179,8 +183,8 @@ mod tests {
             )
             .await?;
         assert_eq!(
-            previous_with_data.table_version_id,
-            current_without_data.table_version_id
+            previous_with_data.base.table_version_id,
+            current_without_data.base.table_version_id
         );
         _run_test(db, Some(current_without_data), Some(previous_with_data)).await
     }
@@ -218,8 +222,8 @@ mod tests {
             )
             .await?;
         assert_ne!(
-            previous_with_data.table_version_id,
-            current_without_data.table_version_id
+            previous_with_data.base.table_version_id,
+            current_without_data.base.table_version_id
         );
         _run_test(db, Some(current_without_data), Some(previous_with_data)).await
     }
@@ -243,6 +247,19 @@ mod tests {
                 &table,
             )
             .await;
+        // Its own run: a run writes each of its tables exactly once.
+        let function: FunctionDB = db.fetch_one(&table.base.function_version_id).await?;
+        let physical_function_run = db
+            .scoped(p.id)
+            .seed()
+            .physical_function_run(
+                &collection,
+                &function,
+                &execution,
+                &transaction,
+                &LogicalFunctionRunStatus::Scheduled,
+            )
+            .await?;
         let current_without_data = db
             .scoped(p.id)
             .seed()
@@ -290,8 +307,8 @@ mod tests {
             )
             .await?;
         assert_ne!(
-            previous_with_data.table_version_id,
-            current_without_data.table_version_id
+            previous_with_data.base.table_version_id,
+            current_without_data.base.table_version_id
         );
         _run_test(db, Some(current_without_data), None).await
     }
@@ -359,7 +376,11 @@ mod tests {
             )
             .await?;
 
-        let table: TableDB = db.live().fetch_one(&function.id).await?;
+        let table: TableDB = db
+            .latest()
+            .fetch_first(&function.base.id)
+            .await?
+            .expect("row must exist");
         Ok((
             collection,
             execution,
@@ -374,13 +395,15 @@ mod tests {
         collection: &ActiveCollectionDB,
         p: &ActiveProjectDB,
     ) -> Result<(ExecutionDB, TransactionDB, PhysicalFunctionRunDB, TableDB), TdError> {
-        // Update the function to change the table version (TODO make this a seed function)
+        // Change the table's definition, so the update versions it.
+        let table_1 = TableNameDto::try_from("table_1")?;
         let update = FunctionUpdate {
             name: Some("joaquin_2".try_into()?),
             description: Some("function_foo description".try_into()?),
             snippet: Some("function_foo snippet".try_into()?),
             decorator: Some(Decorator::Transformer),
-            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            tables: vec![table_1.clone()].into(),
+            table_types: Some(HashMap::from([(table_1, TableType::DQData)])),
             ..Default::default()
         };
 
@@ -401,7 +424,7 @@ mod tests {
         let response = service.update_function(request).await;
         let response = response?;
 
-        let function: FunctionDB = db.live().fetch_one(&(response.id)).await?;
+        let function: FunctionDB = db.fetch_one(&(response.id)).await?;
         let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
@@ -423,9 +446,13 @@ mod tests {
             .await?;
 
         let table = db
-            .live()
-            .fetch_one(and!(function.id, &TableName::try_from("table_1")?))
-            .await?;
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
+                &function.base.collection_id,
+                &TableIdName::from_str("table_1")?
+            ))
+            .await?
+            .base;
 
         Ok((execution, transaction, physical_function_run, table))
     }
@@ -435,7 +462,8 @@ mod tests {
         table_id: TableId,
         uncommitted: bool,
     ) -> Result<Option<SPath>, TdError> {
-        let mut connection = DomainConnection::new(db.begin().await.unwrap());
+        let mut connection =
+            DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
         resolve_table_location(
             &mut connection,
             &TriggeredOn::now(),
@@ -455,14 +483,14 @@ mod tests {
         expected_data_version: Option<PhysicalTableDataVersionDB>,
     ) -> Result<(), TdError> {
         let found = if let Some(lookup_data_version) = lookup_data_version {
-            _resolve(&db, lookup_data_version.table_id, true).await?
+            _resolve(&db, lookup_data_version.base.table_id, true).await?
         } else {
             None
         };
 
         let expected = if let Some(expected_data_version) = expected_data_version {
             let expected_data_version: PhysicalTableDataVersionDBWithNames =
-                db.live().fetch_one(&expected_data_version.id).await?;
+                db.fetch_one(&expected_data_version.base.id).await?;
             let (expected, _) = get_spath(&expected_data_version)?;
             Some(expected)
         } else {
@@ -535,7 +563,11 @@ mod tests {
             )
             .await?;
 
-        let table: TableDB = db.live().fetch_one(&function.id).await?;
+        let table: TableDB = db
+            .latest()
+            .fetch_first(&function.base.id)
+            .await?
+            .expect("row must exist");
         Ok((
             collection,
             execution,
@@ -565,7 +597,7 @@ mod tests {
             )
             .await?;
 
-        let found = _resolve(&db, dv.table_id, true).await?;
+        let found = _resolve(&db, dv.base.table_id, true).await?;
         assert!(found.is_some());
         Ok(())
     }
@@ -590,7 +622,7 @@ mod tests {
             )
             .await?;
 
-        let found = _resolve(&db, dv.table_id, false).await?;
+        let found = _resolve(&db, dv.base.table_id, false).await?;
         assert!(found.is_some());
         Ok(())
     }
@@ -615,7 +647,7 @@ mod tests {
             )
             .await?;
 
-        let found = _resolve(&db, dv.table_id, true).await?;
+        let found = _resolve(&db, dv.base.table_id, true).await?;
         assert!(found.is_some());
         Ok(())
     }
@@ -640,7 +672,7 @@ mod tests {
             )
             .await?;
 
-        let found = _resolve(&db, dv.table_id, false).await?;
+        let found = _resolve(&db, dv.base.table_id, false).await?;
         assert!(found.is_none());
         Ok(())
     }

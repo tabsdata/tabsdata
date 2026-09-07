@@ -4,6 +4,7 @@
 
 use crate::collection::CollectionError;
 use crate::collection::services::connection::ensure_collection_name_free;
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::FromDao;
@@ -12,7 +13,7 @@ use td_objects::dxo::collection::{
     CollectionUpdateDB,
 };
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 pub fn update_collection_validate(update: &CollectionUpdate) -> Result<(), TdError> {
     if update.name.is_none() && update.description.is_none() && update.base_path.is_none() {
@@ -43,8 +44,8 @@ pub struct ConnectionRename {
     pub new_name: CollectionName,
 }
 
-pub async fn plan_collection_update(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn plan_collection_update<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     collection: &ActiveCollectionDB,
     update: &CollectionUpdate,
     update_db: &CollectionUpdateDB,
@@ -78,13 +79,12 @@ pub async fn plan_collection_update(
 
 /// The update transaction: apply the (store-confirmed) update and read the
 /// result back.
-pub async fn apply_collection_update(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn apply_collection_update<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     plan: &CollectionUpdatePlan,
 ) -> Result<CollectionRead, TdError> {
-    conn.live()
-        .update::<CollectionUpdateDB, ActiveCollectionDB>(&plan.update, plan.collection_id)
+    conn.update::<CollectionUpdateDB>(&plan.update, plan.collection_id)
         .await?;
-    let with_names: ActiveCollectionDBWithNames = conn.live().fetch_one(plan.collection_id).await?;
+    let with_names: ActiveCollectionDBWithNames = conn.fetch_one(plan.collection_id).await?;
     CollectionRead::from_dao(with_names)
 }

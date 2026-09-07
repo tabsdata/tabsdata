@@ -23,7 +23,7 @@ use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::connection::ConnectionRead;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn connection_read(
@@ -41,8 +41,7 @@ async fn connection_read(
         let grant = authz
             .require::<Project, ManageProject>(&mut conn, &ctx, &project)
             .await?;
-        let collection: ActiveCollectionDB =
-            conn.get(grant).live().fetch_one(&param.collection).await?;
+        let collection: ActiveCollectionDB = conn.get(grant).fetch_one(&param.collection).await?;
         ensure_connectable(&collection)?;
         require_connection_id(&collection)?
     };

@@ -30,7 +30,7 @@ use td_objects::types::basic::{
     AccessTokenId, CollectionId, CollectionIdName, CollectionName, ConnectionId, Description,
     EntityId, GroupName, PermissionType, ProjectId, RoleName, UserEnabled, UserId, UserName,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
 /// Records upserts; fetch/delete are unreachable — a test reaching them
@@ -219,14 +219,12 @@ pub async fn linked_connection(
 ) -> Option<ConnectionDB> {
     let collection: ActiveCollectionDB = db
         .scoped(project)
-        .live()
         .fetch_one::<ActiveCollectionDB>(&CollectionName::try_from(collection).unwrap())
         .await
         .unwrap();
     match collection.connection_id {
         Some(id) => Some(
             db.scoped(project)
-                .live()
                 .fetch_one::<ConnectionDB>(&id)
                 .await
                 .unwrap(),

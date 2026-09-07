@@ -12,7 +12,7 @@ use td_objects::FromDao;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::collection::{ActiveCollectionDBWithNames, CollectionRead};
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn read_collection(
@@ -27,7 +27,7 @@ async fn read_collection(
         .await?;
     let conn = gated_conn.get(grant);
     let id_name = param.collection;
-    let with_names: ActiveCollectionDBWithNames = conn.live().fetch_one(&id_name).await?;
+    let with_names: ActiveCollectionDBWithNames = conn.fetch_one(&id_name).await?;
     CollectionRead::from_dao(with_names)
 }
 

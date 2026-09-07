@@ -36,7 +36,7 @@ use td_objects::dxo::collection::{
     ActiveCollectionDB, CollectionRead, CollectionUpdate, CollectionUpdateDB,
 };
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use tracing::warn;
 
 #[service_factory]
@@ -56,7 +56,7 @@ async fn update_collection(
             .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
             .await?;
         let conn = conn.get(grant);
-        let collection: ActiveCollectionDB = conn.live().fetch_one(&param.collection).await?;
+        let collection: ActiveCollectionDB = conn.fetch_one(&param.collection).await?;
         // source/destination collections carry connection config: manage_project
         escalate_for_connected(&authz, conn, &ctx, &project, &collection.collection_type).await?;
         update_collection_validate(&update)?;
@@ -142,7 +142,7 @@ mod tests {
         FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, UserName,
     };
     use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     // The orchestrator's metadata is its resolve pipeline (the store/tx
@@ -239,12 +239,12 @@ mod tests {
     /// The current Active version of the function named `name`.
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
         let active: Vec<FunctionDB> = db
-            .live()
+            .history()
             .fetch_all::<FunctionDB>(&FunctionStatus::Active)
             .await?;
         let function = active
             .into_iter()
-            .find(|f| f.name == *name)
+            .find(|f| f.base.name == *name)
             .expect("matching active function exists");
         Ok(function)
     }
@@ -273,18 +273,14 @@ mod tests {
         )
         .await?;
 
-        let reloaded: ActiveCollectionDB = db
-            .live()
-            .fetch_one::<ActiveCollectionDB>(&collection.id)
-            .await?;
+        let reloaded: ActiveCollectionDB =
+            db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
         assert_eq!(reloaded.base_path, Some(data.clone()));
 
         // Clearing it (base_path = null) reverts to inheriting the project.
         update_collection(&db, p.id, &collection_name, None, None, Some(None)).await?;
-        let reloaded: ActiveCollectionDB = db
-            .live()
-            .fetch_one::<ActiveCollectionDB>(&collection.id)
-            .await?;
+        let reloaded: ActiveCollectionDB =
+            db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
         assert_eq!(reloaded.base_path, None, "cleared back to inherit");
         Ok(())
     }
@@ -421,11 +417,11 @@ mod tests {
         // Both artifacts are stamped with the old "/a" prefix at create time.
         let function_name = FunctionName::try_from("artifact_fn")?;
         let function = active_function(&db, &function_name).await?;
-        assert_eq!(function.stage_base_path, a);
+        assert_eq!(function.base.stage_base_path, a);
         let bundle_before: Vec<BundleDB> =
-            db.live().fetch_all::<BundleDB>(&function.bundle_id).await?;
+            db.fetch_all::<BundleDB>(&function.base.bundle_id).await?;
         assert_eq!(bundle_before.len(), 1);
-        assert_eq!(bundle_before[0].base_path, a);
+        assert_eq!(bundle_before[0].base.base_path, a);
 
         let b = BasePath::try_from("/b")?;
         update_collection(
@@ -437,30 +433,27 @@ mod tests {
             Some(Some(b.clone())),
         )
         .await?;
-        let reloaded: ActiveCollectionDB = db
-            .live()
-            .fetch_one::<ActiveCollectionDB>(&collection.id)
-            .await?;
+        let reloaded: ActiveCollectionDB =
+            db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
         assert_eq!(reloaded.base_path, Some(b));
 
         // The previously-generated artifacts still carry "/a": the move did not
         // relocate them, and no new function version was created.
         let function_after = active_function(&db, &function_name).await?;
         assert_eq!(
-            function_after.id, function.id,
+            function_after.base.id, function.base.id,
             "collection update must not bump the function version"
         );
         assert_eq!(
-            function_after.stage_base_path, a,
+            function_after.base.stage_base_path, a,
             "function stage_base_path stays on the prefix it was stamped with"
         );
         let bundle_after: Vec<BundleDB> = db
-            .live()
-            .fetch_all::<BundleDB>(&function_after.bundle_id)
+            .fetch_all::<BundleDB>(&function_after.base.bundle_id)
             .await?;
         assert_eq!(bundle_after.len(), 1);
         assert_eq!(
-            bundle_after[0].base_path, a,
+            bundle_after[0].base.base_path, a,
             "bundle base_path stays on the prefix it was stamped with"
         );
 
@@ -470,14 +463,14 @@ mod tests {
         use futures::StreamExt;
         let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read(FunctionVersionIdParam {
-                function_version_id: function_after.id.clone(),
+                function_version_id: function_after.base.id.clone(),
             });
         let response = context
             .clone()
             .download_bundle(download_request)
             .await?
             .data;
-        assert_eq!(response.etag, bundle_after[0].hash.clone());
+        assert_eq!(response.etag, bundle_after[0].base.hash.clone());
         let mut stream = response.stream.into_inner();
         let mut buf = Vec::new();
         while let Some(chunk) = stream.next().await {
@@ -518,7 +511,7 @@ mod tests {
         let connection = linked_connection(&db, p.id, "src1").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.id)
+            .fetch(&p.id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src1");
@@ -558,7 +551,7 @@ mod tests {
         let connection = linked_connection(&db, p.id, "src0").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.id)
+            .fetch(&p.id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src0");

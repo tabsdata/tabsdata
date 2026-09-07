@@ -8,42 +8,39 @@ use crate::table::find_data_version_location_at;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::scope_to_project;
-use td_database::access::{GatedConnection, RO};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::and;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::{AtTimeParam, ReadRequest};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionIdParam};
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::types::stream::BoxedSyncStream;
-use td_queries::{HistoricEntry, LiveEntry};
+use td_queries::Queries;
 use td_storage::Storage;
 
 #[service_factory]
 async fn table_state_download(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<(FunctionVersionIdParam, AtTimeParam)>,
 ) -> Result<BoxedSyncStream, TdError> {
     let (_, (version, at)) = request.into_parts();
-    let conn = gated_conn.get(authz.none());
     let at = at.at;
     let function_version_id = version.function_version_id;
 
-    let function: FunctionDBWithNames = conn
-        .historic(&at)
-        .state(FunctionDBWithNames::available())
-        .fetch_one(&function_version_id)
-        .await?;
-    // pivot into the function's project scope via the collection
-    let collection: CollectionDB = conn.live().fetch_one(&function.base.collection_id).await?;
-    scope_to_project(conn, &collection.base.project_id).await?;
+    let mut trx = db.read().await?;
+    let conn = trx.get(authz.none());
+    let function: FunctionDBWithNames = conn.as_of(&at).fetch_one(&function_version_id).await?;
+    let collection: ResolvedCollectionDB =
+        conn.fetch_one(&function.base.base.collection_id).await?;
+    let mut trx = trx.enter_project(&collection.base.project_id).await?;
+    let conn = trx.get(authz.none());
 
     let system_tables: Vec<TableDBWithNames> = conn
-        .historic(&at)
-        .state(TableDBWithNames::system())
-        .fetch_all(&function.base.id)
+        .as_of(&at)
+        .fetch_all(and!(&function.base.base.id, TableDBWithNames::system()))
         .await?;
     let (collection, table, version_at, uncommitted) =
         get_table_at_id_name(&at, &function, &system_tables).await?;
@@ -117,10 +114,10 @@ mod tests {
         let system_tables = db.scoped(p.id).seed().system_tables(&function).await?;
         let td_fn_state_table = system_tables
             .iter()
-            .find(|t| t.name.starts_with(TD_FN_STATE_PREFIX))
+            .find(|t| t.base.name.starts_with(TD_FN_STATE_PREFIX))
             .unwrap();
 
-        let function_version_id = function.id.clone();
+        let function_version_id = function.base.id.clone();
 
         let get_download = async move |context: &Services,
                                        _table: &str, // not using table because always getting state table of the fn
@@ -156,7 +153,7 @@ mod tests {
             Ok(bytes_with_ids)
         };
 
-        let tables = std::slice::from_ref(&td_fn_state_table.name);
+        let tables = std::slice::from_ref(&td_fn_state_table.base.name);
         test_download_tables(
             &db,
             &context,

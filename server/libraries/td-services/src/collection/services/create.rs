@@ -32,7 +32,7 @@ use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::types::basic::CollectionType;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn create_collection(
@@ -51,11 +51,12 @@ async fn create_collection(
             .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
             .await?;
         let conn = conn.get(grant);
-        let group: GroupDB = conn.live().fetch_one(&create.group).await?;
-        let collection_type = CollectionType::from_group_id(&group.id);
+        let group: GroupDB = conn.fetch_one(&create.group).await?;
+        let collection_type = CollectionType::from_group_id(&group.base.id);
         // source/destination collections carry connection config: manage_project
         escalate_for_connected(&authz, conn, &ctx, &project, &collection_type).await?;
-        let plan = plan_collection_create(conn, &ctx, &create, &group.id, &collection_type).await?;
+        let plan =
+            plan_collection_create(conn, &ctx, &create, &group.base.id, &collection_type).await?;
         (plan, grant)
     };
 
@@ -80,7 +81,7 @@ async fn create_collection(
         let mut trx = db.begin().await?;
         let conn = trx.get(grant);
         // FOR UPDATE + liveness check against project delete's emptiness guard.
-        let _: ActiveProjectDB = conn.live().fetch_one_for_update(&project).await?;
+        let _: ActiveProjectDB = conn.for_update().fetch_one(&project).await?;
         let read = insert_collection_with_connection(conn, &ctx, &plan).await?;
         trx.commit().await?;
         Ok::<_, TdError>(read)
@@ -142,14 +143,14 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::ApiError;
-    use td_objects::dxo::collection::CollectionCreateDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::{ListParams, RequestContext, WithinProject};
     use td_objects::dxo::project::ProjectParam;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, CollectionType, Description, GroupName, ProjectId,
         ProjectIdName, ProjectName, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     // The orchestrator's metadata is its resolve pipeline (the store/tx
@@ -201,11 +202,7 @@ mod tests {
         assert_eq!(*created.modified_by_id, UserId::admin());
         assert_eq!(*created.modified_by, UserName::admin());
 
-        let found: Vec<CollectionCreateDB> = db
-            .live()
-            .fetch_all::<CollectionCreateDB>(&name)
-            .await
-            .unwrap();
+        let found: Vec<CollectionDB> = db.fetch_all::<CollectionDB>(&name).await.unwrap();
         assert_eq!(found.len(), 1);
     }
 
@@ -274,12 +271,11 @@ mod tests {
             .unwrap();
 
         let found = db
-            .live()
             .fetch_one::<td_objects::dxo::collection::ActiveCollectionDBWithNames>(&name)
             .await
             .unwrap();
-        assert_eq!(found.base.group_id, group.id);
-        assert_eq!(found.group, group.name);
+        assert_eq!(found.base.group_id, group.base.id);
+        assert_eq!(found.group, group.base.name);
     }
 
     #[td_test::test(db)]
@@ -314,7 +310,6 @@ mod tests {
             ("c_fac", CollectionType::DataFactory),
         ] {
             let found = db
-                .live()
                 .fetch_one::<td_objects::dxo::collection::ActiveCollectionDBWithNames>(
                     &CollectionName::try_from(name).unwrap(),
                 )
@@ -350,7 +345,7 @@ mod tests {
         let connection = linked_connection(&db, p.id, "dup").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.id)
+            .fetch(&p.id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "dup");
@@ -387,7 +382,7 @@ mod tests {
         let connection = linked_connection(&db, p.id, "nameless").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.id)
+            .fetch(&p.id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "nameless");
@@ -441,7 +436,7 @@ mod tests {
         let row = linked_connection(&db, p.id, "src_new")
             .await
             .expect("the collection must be born linked");
-        assert_eq!(row.kind.to_string(), "mysqlSrcConn");
+        assert_eq!(row.base.kind.to_string(), "mysqlSrcConn");
     }
 
     #[td_test::test(db)]
@@ -467,9 +462,8 @@ mod tests {
         .await
         .expect_err("store failure must surface");
         assert!(err.to_string().contains("store unreachable"), "got: {err}");
-        let found: Vec<CollectionCreateDB> = db
-            .live()
-            .fetch_all::<CollectionCreateDB>(&CollectionName::try_from("src_fail").unwrap())
+        let found: Vec<CollectionDB> = db
+            .fetch_all::<CollectionDB>(&CollectionName::try_from("src_fail").unwrap())
             .await
             .unwrap();
         assert!(found.is_empty(), "store-first: nothing persisted");

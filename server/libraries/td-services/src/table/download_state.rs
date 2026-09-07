@@ -17,7 +17,7 @@ pub async fn get_table_at_id_name(
 ) -> Result<(CollectionParam, TableParam, AtTimeParam, UncommittedParam), TdError> {
     let state_tables = system_tables
         .iter()
-        .filter(|t| t.base.name.starts_with(TD_FN_STATE_PREFIX))
+        .filter(|t| t.base.base.name.starts_with(TD_FN_STATE_PREFIX))
         .collect::<Vec<_>>();
     let state_table = match state_tables.len() {
         1 => state_tables[0],
@@ -28,10 +28,10 @@ pub async fn get_table_at_id_name(
     };
     Ok((
         CollectionParam {
-            collection: CollectionIdName::Id(function.base.collection_id),
+            collection: CollectionIdName::Id(function.base.base.collection_id),
         },
         TableParam {
-            table: TableIdName::Id(state_table.base.table_id),
+            table: TableIdName::Id(state_table.base.base.table_id),
         },
         AtTimeParam { at: *at_time },
         // Internal path: allow uncommitted versions for now.

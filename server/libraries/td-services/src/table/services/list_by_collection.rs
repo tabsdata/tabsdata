@@ -8,13 +8,14 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
+use td_objects::and;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::{CurrentEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn table_list_by_collection(
@@ -30,12 +31,14 @@ async fn table_list_by_collection(
     let conn = gated_conn.get(grant);
 
     let collection_id_name = param.collection;
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&collection_id_name).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
     let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
     let rows = conn
-        .current()
-        .state(TableDBWithNames::user())
-        .list(&collection.id, &query_params)
+        .latest()
+        .list(
+            and!(&collection.id, TableDBWithNames::user()),
+            &query_params,
+        )
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }

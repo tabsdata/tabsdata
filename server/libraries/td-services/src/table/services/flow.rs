@@ -13,9 +13,8 @@ use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
-use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse, TableParam};
-use td_queries::HistoricEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn table_flow_graph(
@@ -35,17 +34,16 @@ async fn table_flow_graph(
     let at = ctx.time;
 
     let table: TableDBWithNames = conn
-        .historic(&at)
-        .state(TableDBWithNames::available())
+        .as_of(&at)
         .fetch_one(and!(&collection_id_name, &table_id_name))
         .await?;
 
-    let table_id = table.base.table_id;
+    let table_id = table.base.base.table_id;
     let entrypoint = FunctionOrTable::from(&table_id);
     let recursion = with_recursion_options().await?;
     let config = GraphConfig {
         include_dependency_functions: true,
-        ..GraphConfig::defaults(FunctionDB::available())
+        ..GraphConfig::defaults(())
     };
     let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion).await?;
 
@@ -63,7 +61,6 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::and;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::graph::GraphEdge;
@@ -74,7 +71,7 @@ mod tests {
     };
     use td_objects::types::basic::{CollectionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_queries::CurrentEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     static FUNCTION_NAMES: LazyLock<Vec<FunctionName>> = LazyLock::new(|| {
@@ -140,14 +137,17 @@ mod tests {
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table = db
-            .current()
-            .fetch_one::<TableDBWithNames>(and!(&function_0.id, TableName::try_from("table_0")?))
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
+                &function_0.base.collection_id,
+                &TableIdName::from_str("table_0")?
+            ))
             .await?;
-        assert_eq!(response.table, central_table.base.id);
+        assert_eq!(response.table, central_table.base.base.id);
 
         let expected_functions = [&function_0]
             .iter()
-            .map(|f| (f.id.clone(), f.name.clone()))
+            .map(|f| (f.base.id.clone(), f.base.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .all_functions
@@ -168,7 +168,6 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tables, expected_tables);
 
-        // All tables are user in this test
         assert!(response.system_tables.is_empty());
         assert_eq!(expected_tables.len(), response.user_tables.len());
 
@@ -176,8 +175,7 @@ mod tests {
         assert_eq!(relations.len(), 2);
         for (f, t, edge) in relations {
             let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
-            // function_0 depends on table_0 and creates table_0
-            if f == function_0.id && t == expected_tables[0] {
+            if f == function_0.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
@@ -291,14 +289,17 @@ mod tests {
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table: TableDBWithNames = db
-            .current()
-            .fetch_one::<TableDBWithNames>(and!(&function_0.id, TableName::try_from("table_0")?))
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
+                &function_0.base.collection_id,
+                &TableIdName::from_str("table_0")?
+            ))
             .await?;
-        assert_eq!(response.table, central_table.base.id);
+        assert_eq!(response.table, central_table.base.base.id);
 
         let expected_functions = [&function_0, &function_1, &function_2]
             .iter()
-            .map(|f| (f.id.clone(), f.name.clone()))
+            .map(|f| (f.base.id.clone(), f.base.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .all_functions
@@ -321,7 +322,6 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tables, expected_tables);
 
-        // All tables are user in this test
         assert!(response.system_tables.is_empty());
         assert_eq!(expected_tables.len(), response.user_tables.len());
 
@@ -329,32 +329,29 @@ mod tests {
         assert_eq!(relations.len(), 8);
         for (f, t, edge) in relations {
             let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
-            // function_0 depends on table_0 and creates table_0
-            if f == function_0.id && t == expected_tables[0] {
+            if f == function_0.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
                 ));
             }
-            // function_1 depends on and gets triggered by table_0 and creates table_1 and table_2
-            if f == function_1.id && t == expected_tables[0] {
+            if f == function_1.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
                 ));
             }
-            if f == function_1.id && t == expected_tables[1] {
+            if f == function_1.base.id && t == expected_tables[1] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
-            if f == function_1.id && t == expected_tables[2] {
+            if f == function_1.base.id && t == expected_tables[2] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
 
-            // function_2 depends on table_0 and creates table_3
-            if f == function_2.id && t == expected_tables[0] {
+            if f == function_2.base.id && t == expected_tables[0] {
                 assert!(matches!(edge, GraphEdge::Dependency { .. }));
             }
-            if f == function_2.id && t == expected_tables[3] {
+            if f == function_2.base.id && t == expected_tables[3] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
         }
@@ -465,14 +462,17 @@ mod tests {
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table = db
-            .current()
-            .fetch_one::<TableDBWithNames>(and!(&function_2.id, TableName::try_from("table_3")?))
+            .latest()
+            .fetch_one::<TableDBWithNames>(and!(
+                &function_2.base.collection_id,
+                &TableIdName::from_str("table_3")?
+            ))
             .await?;
-        assert_eq!(response.table, central_table.base.id);
+        assert_eq!(response.table, central_table.base.base.id);
 
         let expected_functions = [&function_0, &function_2]
             .iter()
-            .map(|f| (f.id.clone(), f.name.clone()))
+            .map(|f| (f.base.id.clone(), f.base.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .all_functions
@@ -497,21 +497,19 @@ mod tests {
         assert_eq!(relations.len(), 4);
         for (f, t, edge) in relations {
             let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
-            // function_0 depends on table_0 and creates table_0
-            if f == function_0.id && t == expected_tables[0] {
+            if f == function_0.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
                 ));
             }
-            // function_2 depends on table_0 and creates table_3
-            if f == function_2.id && t == expected_tables[0] {
+            if f == function_2.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
                 ));
             }
-            if f == function_2.id && t == expected_tables[1] {
+            if f == function_2.base.id && t == expected_tables[1] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
         }

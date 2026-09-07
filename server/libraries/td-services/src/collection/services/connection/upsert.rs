@@ -27,7 +27,7 @@ use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::types::basic::ProjectId;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn connection_upsert(
@@ -46,7 +46,7 @@ async fn connection_upsert(
             .require::<Project, ManageProject>(&mut conn, &ctx, &project)
             .await?;
         let conn = conn.get(grant);
-        let collection: ActiveCollectionDB = conn.live().fetch_one(&param.collection).await?;
+        let collection: ActiveCollectionDB = conn.fetch_one(&param.collection).await?;
         ensure_connectable(&collection)?;
         validate_upsert(&payload)?;
         let document = validate_document(&payload)?;
@@ -59,13 +59,13 @@ async fn connection_upsert(
     let mut read = store
         .upsert(
             &project,
-            &resolution.row.id,
+            &resolution.row.base.id,
             &resolution.collection,
             &resolution.collection_id,
             &payload,
         )
         .await?;
-    read.id = Some(resolution.row.id);
+    read.id = Some(resolution.row.base.id);
     Ok(read)
 }
 
@@ -80,7 +80,7 @@ async fn verify_kept_keys(
     if document.kept_secrets.is_empty() && document.kept_vars.is_empty() {
         return Ok(());
     }
-    let stored = store.fetch(project, &resolution.row.id).await?;
+    let stored = store.fetch(project, &resolution.row.base.id).await?;
     let missing: Vec<&String> = document
         .kept_secrets
         .iter()
@@ -149,14 +149,14 @@ mod tests {
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].0, p.id);
         assert_eq!(
-            recorded[0].1, row.id,
+            recorded[0].1, row.base.id,
             "store keyed by the row minted at create"
         );
         assert_eq!(
             response.secret_names,
             vec!["CREDENTIALS_PASSWORD".to_string()]
         );
-        assert_eq!(response.id, Some(row.id));
+        assert_eq!(response.id, Some(row.base.id));
     }
 
     #[td_test::test(db)]
