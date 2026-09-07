@@ -2,102 +2,82 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Grant a flat Simple permission to a user (`tdk permission grant`).
-//!
-//! Translation:
-//!
-//! | permission                         | membership add                 | authz scope |
-//! |------------------------------------|--------------------------------|-------------|
-//! | `view/develop/manage_project` on P | `<P>_view`/`_dev`/`_admin`     | project P   |
-//! | `create_projects`                  | `project_creator`              | system      |
-//! | `manage_system`                    | `sys_admin`                    | system      |
-//!
-//! Authz: a project permission requires `manage_access` (system) OR
-//! `manage_project` on P; a system permission requires `manage_access`.
-
 use crate::permission::authorize_permission_target;
-use crate::simple_permission::layers::{
-    ResolvedGrant, assert_simple_permission_valid, resolve_grant, resolved_role_id,
-    resolved_user_id,
-};
+use crate::simple_permission::{assert_simple_permission_valid, resolve_grant};
 use ta_services::factory::service_factory;
-use td_authz::{AuthzContext, refresh_authz_context};
-use td_objects::And;
-use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::RbacSource;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_objects::and;
+use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
-use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBBuilder};
-use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{RoleId, UserId};
-use td_queries::{By, insert};
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::dxo::user_role::UserRoleDB;
+use td_objects::types::basic::Fixed;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = GrantSimplePermissionService,
-    request = CreateRequest<(), SimplePermissionGrant>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<CreateRequest<(), SimplePermissionGrant>>::extract::<RequestContext>),
-        from_fn(
-            With::<CreateRequest<(), SimplePermissionGrant>>::extract_data::<SimplePermissionGrant>
-        ),
-        // validate (reject org-wide wildcards; project required/forbidden)
-        from_fn(assert_simple_permission_valid),
-        // resolve the target role membership (and project for authz)
-        from_fn(resolve_grant),
-        // authz by target: project perm -> manage_access | manage_project on P;
-        // system perm -> manage_access on the system (shared with the raw API).
-        from_fn(authorize_permission_target::<ResolvedGrant>),
-        // resolve the membership identity (role + user) for the existence
-        // check and the insert.
-        from_fn(resolved_role_id),
-        from_fn(resolved_user_id),
-        // a duplicate grant reports the membership already exists instead of
-        // surfacing the raw user_role unique-constraint SQL error.
-        from_fn(By::<And![RoleId, UserId]>::assert_not_exists::<UserRoleDB>),
-        // membership add (same as user_role create).
-        from_fn(builder::<UserRoleDB>),
-        from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
-        from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
-        from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-        from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB>),
-        from_fn(insert::<UserRoleDB>),
-        // refresh the authz cache (role membership changed)
-        from_fn(refresh_authz_context),
-    )
+#[service_factory]
+async fn grant_simple_permission(
+    authz: Ctx<AuthzContext>,
+    db: DbPool<Global>,
+    request: CreateRequest<SimplePermissionGrant>,
+) -> Result<(), TdError> {
+    let (ctx, _, grant) = request.into_parts();
+    let token = authz.none();
+    let mut trx = db.begin().await?;
+    let conn = trx.get(token);
+
+    // validate (reject org-wide wildcards; project required/forbidden)
+    assert_simple_permission_valid(&grant)?;
+    // resolve the target role membership (and project for authz)
+    let resolved = resolve_grant(conn, &grant).await?;
+    // authz by target: project perm -> manage_access | manage_project on P;
+    // system perm -> manage_access on the system (shared with the raw API).
+    authorize_permission_target(&authz, conn, &ctx, &resolved).await?;
+
+    // a duplicate grant reports the membership already exists instead of
+    // surfacing the raw user_role unique-constraint SQL error.
+    conn.live()
+        .assert_not_exists::<UserRoleDB>(and!(&resolved.role_id, &resolved.user_id))
+        .await?;
+    // membership add (same as user_role create).
+    let user_role = UserRoleDB::new(resolved.user_id, resolved.role_id, &ctx, Fixed::FALSE);
+    conn.live().insert(&user_role).await?;
+    trx.commit().await?;
+
+    // Role membership changed; with the transaction committed, invalidate the
+    // cached authz grants.
+    let mut conn = db.read().await?;
+    authz.refresh(conn.get(token)).await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::simple_permission::SimplePermissionError;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::user_role::UserRoleDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
-        AccessTokenId, EntityId, EntityName, PermissionType, ProjectIdName, ProjectName, RoleId,
-        RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
+        AccessTokenId, BasePath, EntityId, EntityName, PermissionType, ProjectIdName, ProjectName,
+        RoleId, RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     fn grant_request(
         user: UserId,
         _role: RoleId,
         grant: SimplePermissionGrant,
-    ) -> CreateRequest<(), SimplePermissionGrant> {
+    ) -> CreateRequest<SimplePermissionGrant> {
         RequestContext::with(AccessTokenId::default(), user).create((), grant)
     }
 
@@ -105,18 +85,18 @@ mod tests {
     /// roles (`<name>_admin`/`_dev`/`_view`) are minted — `db.seed().project`
     /// alone does not mint them.
     async fn create_project(db: &TdPool, name: &str) -> Result<(), TdError> {
-        use crate::project::service::create::CreateProjectService;
         use td_objects::dxo::project::ProjectCreate;
-        let create = ProjectCreate::builder()
-            .name(&ProjectName::try_from(name)?)
-            .description(&td_objects::types::basic::Description::try_from("d")?)
-            .build()?;
-        CreateProjectService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(
+        let create = ProjectCreate {
+            name: ProjectName::try_from(name)?,
+            description: td_objects::types::basic::Description::try_from("d")?,
+            base_path: BasePath::default(),
+        };
+        Services::with_defaults(db.clone())
+            .create_project(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
-            .await?;
+            .await?
+            .data;
         Ok(())
     }
 
@@ -135,18 +115,18 @@ mod tests {
         create_project(&db, "p0").await?;
         let user = db
             .seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::DevelopProject)
-            .project(Some(ProjectIdName::from_str("p0")?))
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::DevelopProject,
+            project: Some(ProjectIdName::from_str("p0")?),
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        service.raw_oneshot(request).await?;
+        service.grant_simple_permission(request).await?.data;
 
         // resolved to `p0_dev`
         let dev_role = db
@@ -161,18 +141,18 @@ mod tests {
     async fn test_grant_create_projects_adds_to_project_creator(db: TdPool) -> Result<(), TdError> {
         let user = db
             .seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::CreateProjects)
-            .project(None)
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::CreateProjects,
+            project: None,
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        service.raw_oneshot(request).await?;
+        service.grant_simple_permission(request).await?.data;
 
         assert_eq!(
             user_role_count(&db, &user.id, &RoleId::project_creator()).await,
@@ -185,18 +165,18 @@ mod tests {
     async fn test_grant_manage_system_adds_to_sys_admin(db: TdPool) -> Result<(), TdError> {
         let user = db
             .seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::ManageSystem)
-            .project(None)
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::ManageSystem,
+            project: None,
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        service.raw_oneshot(request).await?;
+        service.grant_simple_permission(request).await?.data;
 
         assert_eq!(
             user_role_count(&db, &user.id, &RoleId::sys_admin()).await,
@@ -211,30 +191,30 @@ mod tests {
     #[td_test::test(db)]
     async fn test_grant_already_granted_reports_already_exists(db: TdPool) -> Result<(), TdError> {
         db.seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
         let grant = || -> Result<SimplePermissionGrant, TdError> {
-            Ok(SimplePermissionGrant::builder()
-                .user(UserName::try_from("joaquin")?)
-                .permission(SimplePermissionType::CreateProjects)
-                .project(None)
-                .build()?)
+            Ok(SimplePermissionGrant {
+                user: UserName::try_from("joaquin")?,
+                permission: SimplePermissionType::CreateProjects,
+                project: None,
+            })
         };
 
-        // first grant succeeds
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant()?);
-        service.raw_oneshot(request).await?;
+        service.grant_simple_permission(request).await?.data;
 
-        // second grant of the same permission errors EntityAlreadyExists
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant()?);
-        assert_service_error(service, request, |err| match err {
-            SqlError::EntityAlreadyExists(_, _) => {}
-            other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
-        })
-        .await;
+        assert_service_error(
+            service.grant_simple_permission(request).await,
+            |err| match err {
+                SqlError::EntityAlreadyExists(_, _) => {}
+                other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
+            },
+        );
         Ok(())
     }
 
@@ -242,63 +222,69 @@ mod tests {
     /// resolves to no user, so the grant fails with a not-found error.
     #[td_test::test(db)]
     async fn test_grant_to_system_user_rejected(db: TdPool) -> Result<(), TdError> {
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::system())
-            .permission(SimplePermissionType::ManageSystem)
-            .project(None)
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::system(),
+            permission: SimplePermissionType::ManageSystem,
+            project: None,
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        assert_service_error(service, request, |err| match err {
-            SqlError::RowNotFound(_, _) => {}
-            other => panic!("Expected 'RowNotFound', got {other:?}"),
-        })
-        .await;
+        assert_service_error(
+            service.grant_simple_permission(request).await,
+            |err| match err {
+                SqlError::RowNotFound(_, _) => {}
+                other => panic!("Expected 'RowNotFound', got {other:?}"),
+            },
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_grant_view_all_projects_rejected(db: TdPool) -> Result<(), TdError> {
         db.seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::ViewAllProjects)
-            .project(None)
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::ViewAllProjects,
+            project: None,
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        assert_service_error(service, request, |err| match err {
-            SimplePermissionError::RbacOnlyWildcard(_) => {}
-            other => panic!("Expected 'RbacOnlyWildcard', got {other:?}"),
-        })
-        .await;
+        assert_service_error(
+            service.grant_simple_permission(request).await,
+            |err| match err {
+                SimplePermissionError::RbacOnlyWildcard(_) => {}
+                other => panic!("Expected 'RbacOnlyWildcard', got {other:?}"),
+            },
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_grant_project_permission_requires_project(db: TdPool) -> Result<(), TdError> {
         db.seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::DevelopProject)
-            .project(None)
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::DevelopProject,
+            project: None,
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        assert_service_error(service, request, |err| match err {
-            SimplePermissionError::ProjectRequired(_) => {}
-            other => panic!("Expected 'ProjectRequired', got {other:?}"),
-        })
-        .await;
+        assert_service_error(
+            service.grant_simple_permission(request).await,
+            |err| match err {
+                SimplePermissionError::ProjectRequired(_) => {}
+                other => panic!("Expected 'ProjectRequired', got {other:?}"),
+            },
+        );
         Ok(())
     }
 
@@ -306,22 +292,24 @@ mod tests {
     async fn test_grant_system_permission_forbids_project(db: TdPool) -> Result<(), TdError> {
         db.seed().project(ProjectName::try_from("p0")?).await?;
         db.seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::CreateProjects)
-            .project(Some(ProjectIdName::from_str("p0")?))
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::CreateProjects,
+            project: Some(ProjectIdName::from_str("p0")?),
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        assert_service_error(service, request, |err| match err {
-            SimplePermissionError::ProjectForbidden(_) => {}
-            other => panic!("Expected 'ProjectForbidden', got {other:?}"),
-        })
-        .await;
+        assert_service_error(
+            service.grant_simple_permission(request).await,
+            |err| match err {
+                SimplePermissionError::ProjectForbidden(_) => {}
+                other => panic!("Expected 'ProjectForbidden', got {other:?}"),
+            },
+        );
         Ok(())
     }
 
@@ -355,27 +343,29 @@ mod tests {
             .await?;
         let requester = db
             .seed()
-            .user(&UserName::try_from("requester")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("requester")?, &UserEnabled::TRUE)
             .await?;
         db.seed().user_role(&requester.id, &dev_only.id).await?;
 
         let target = db
             .seed()
-            .user(&UserName::try_from("target")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("target")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("target")?)
-            .permission(SimplePermissionType::ViewProject)
-            .project(Some(ProjectIdName::from_str("p0")?))
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("target")?,
+            permission: SimplePermissionType::ViewProject,
+            project: Some(ProjectIdName::from_str("p0")?),
+        };
 
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = grant_request(requester.id, dev_only.id, grant);
-        assert_service_error(service, request, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-        })
-        .await;
+        assert_service_error(
+            service.grant_simple_permission(request).await,
+            |err| match err {
+                RbacError::Forbidden(_, _) => {}
+            },
+        );
         let _ = target;
         Ok(())
     }

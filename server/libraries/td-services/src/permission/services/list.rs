@@ -3,80 +3,49 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageRoles, Rbac, Scope, System};
-use td_objects::NoFilter;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_authz::rbac::{ManageRoles, System, SystemEntity};
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::permission::Permission;
 use td_objects::dxo::role::RoleDB;
+use td_objects::dxo::role::RoleParam;
 use td_objects::list::params::ListQueryParams;
-use td_objects::rest_urls::RoleParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{RoleId, RoleIdName};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ListPermissionService,
-    request = ListRequest<RoleParam>,
-    response = ListResponse<Permission>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<RoleParam>>::extract::<RequestContext>),
-        from_fn(With::<ListRequest<RoleParam>>::extract_name::<RoleParam>),
-        from_fn(With::<RoleParam>::extract::<RoleIdName>),
-        from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
-        from_fn(With::<RoleDB>::extract::<RoleId>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, ManageRoles>::check),
-        from_fn(With::<ListRequest<RoleParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Permission>, _>),
-        from_fn(By::<RoleId>::list::<NoFilter, Permission>),
-    )
+#[service_factory]
+async fn list_permission(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest<RoleParam>,
+) -> Result<ListResponse<Permission>, TdError> {
+    let (ctx, param, list_params) = request.into_parts();
+    let grant = authz
+        .require::<System, ManageRoles>(gated_conn, &ctx, &SystemEntity)
+        .await?;
+    let conn = gated_conn.get(grant);
+    let role: RoleDB = conn.live().fetch_one(&param.role).await?;
+    let query_params = ListQueryParams::<Permission>::try_from(&list_params)?;
+    let rows = conn.live().list(&role.id, &query_params).await?;
+    build_list_response(&list_params, &query_params, rows)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::types::basic::RoleIdName;
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, PermissionType, RoleName, UserId,
     };
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_permission(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ListPermissionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<RoleParam>, ListResponse<Permission>>(&[
-                type_of_val(&With::<ListRequest<RoleParam>>::extract::<RequestContext>),
-                type_of_val(&With::<ListRequest<RoleParam>>::extract_name::<RoleParam>),
-                type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-                type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
-                type_of_val(&With::<RoleDB>::extract::<RoleId>),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, ManageRoles>::check),
-                type_of_val(&With::<ListRequest<RoleParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Permission>, _>),
-                type_of_val(&By::<RoleId>::list::<NoFilter, Permission>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_permissions(db: TdPool) -> Result<(), TdError> {
@@ -93,15 +62,15 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-            RoleParam::builder()
-                .role(RoleIdName::from_str("king")?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str("king")?,
+            },
             ListParams::default(),
         );
 
-        let service = ListPermissionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.list_permission(request).await;
+        let response = response?.data;
 
         assert_eq!(response.len, 1);
         let permission = response.data.first().unwrap();

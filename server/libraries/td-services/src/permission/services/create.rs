@@ -2,137 +2,91 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::permission::layers::{
-    PermissionBuildService, assert_role_is_not_fixed, authorize_permission_target,
+use crate::permission::{
+    assert_role_is_not_fixed, authorize_permission_target, build_permission_db,
 };
 use ta_services::factory::service_factory;
-use td_authz::{AuthzContext, refresh_authz_context};
-use td_objects::dxo::crudl::{CreateRequest, RequestContext};
-use td_objects::dxo::permission::{
-    Permission, PermissionBuilder, PermissionCreate, PermissionDB, PermissionDBBuilder,
-    PermissionDBWithNames,
-};
-use td_objects::dxo::role::RoleDB;
-use td_objects::rest_urls::RoleParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{PermissionId, RoleIdName};
-use td_queries::By;
-use td_queries::insert;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::RbacSource;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_objects::FromDao;
+use td_objects::dxo::crudl::CreateRequest;
+use td_objects::dxo::permission::{Permission, PermissionCreate, PermissionDBWithNames};
+use td_objects::dxo::role::{RoleDB, RoleParam};
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = CreatePermissionService,
-    request = CreateRequest<RoleParam, PermissionCreate>,
-    response = Permission,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
-        from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
-        from_fn(
-            With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>
-        ),
-        from_fn(With::<PermissionCreate>::try_convert_to::<PermissionDBBuilder, _>),
-        from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
-        from_fn(With::<RoleParam>::extract::<RoleIdName>),
-        from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
-        // A system-managed (fixed) role's permission set is immutable; reject
-        // adding a permission to it from the user surface.
-        from_fn(assert_role_is_not_fixed),
-        from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
-        // build_permission_db derives entity_type from the authorization
-        // registry, so an unregistered permission is already rejected here.
-        from_fn(With::<PermissionDBBuilder>::build_permission_db),
-        // Authorize by the permission's target: manage_access on the system, or
-        // manage_project on the target project (single-project permissions only).
-        from_fn(authorize_permission_target::<PermissionDB>),
-        from_fn(insert::<PermissionDB>),
-        from_fn(With::<PermissionDB>::extract::<PermissionId>),
-        from_fn(By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
-        from_fn(With::<PermissionDBWithNames>::try_convert_to::<PermissionBuilder, _>),
-        from_fn(With::<PermissionBuilder>::build::<Permission>),
-        // refresh the permissions authz cache
-        from_fn(refresh_authz_context),
-    )
+#[service_factory]
+async fn create_permission(
+    authz: Ctx<AuthzContext>,
+    db: DbPool<Global>,
+    request: CreateRequest<PermissionCreate, RoleParam>,
+) -> Result<Permission, TdError> {
+    let (ctx, param, create) = request.into_parts();
+    let grant = authz.none();
+    let mut trx = db.begin().await?;
+    let conn = trx.get(grant);
+
+    let role: RoleDB = conn.live().fetch_one(&param.role).await?;
+    // A system-managed (fixed) role's permission set is immutable; reject
+    // adding a permission to it from the user surface.
+    assert_role_is_not_fixed(&role)?;
+
+    // build_permission_db derives entity_type from the authorization
+    // registry, so an unregistered permission is already rejected here.
+    let permission = build_permission_db(&authz, conn, &ctx, &role, &create).await?;
+    // Authorize by the permission's target: manage_access on the system, or
+    // manage_project on the target project (single-project permissions only).
+    authorize_permission_target(&authz, conn, &ctx, &permission).await?;
+    conn.live().insert(&permission).await?;
+
+    let with_names: PermissionDBWithNames = conn.live().fetch_one(&permission.id).await?;
+    let read = Permission::from_dao(with_names)?;
+    trx.commit().await?;
+
+    // Gated a permission; with the transaction committed, invalidate the
+    // cached authz grants.
+    let mut conn = db.read().await?;
+    authz.refresh(conn.get(grant)).await?;
+
+    Ok(read)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::permission::PermissionDB;
+    use td_objects::types::basic::RoleIdName;
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleName,
         UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_create_permission(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        CreatePermissionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<CreateRequest<RoleParam, PermissionCreate>, Permission>(&[
-                type_of_val(
-                    &With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>,
-                ),
-                type_of_val(
-                    &With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>,
-                ),
-                type_of_val(
-                    &With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<
-                        PermissionCreate,
-                    >,
-                ),
-                type_of_val(&With::<PermissionCreate>::try_convert_to::<PermissionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
-                type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-                type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
-                type_of_val(&assert_role_is_not_fixed),
-                type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
-                type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
-                type_of_val(&authorize_permission_target::<PermissionDB>),
-                type_of_val(&insert::<PermissionDB>),
-                type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
-                type_of_val(&By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
-                type_of_val(&With::<PermissionDBWithNames>::try_convert_to::<PermissionBuilder, _>),
-                type_of_val(&With::<PermissionBuilder>::build::<Permission>),
-                type_of_val(&refresh_authz_context),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_create_permission(db: TdPool) -> Result<(), TdError> {
-        let create = PermissionCreate::builder()
-            .permission_type(PermissionType::manage_access())
-            .try_entity_name(None)
-            .unwrap()
-            .build()?;
+        let create = PermissionCreate {
+            permission_type: PermissionType::manage_access(),
+            entity_name: None.try_into().unwrap(),
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            RoleParam::builder()
-                .role(RoleIdName::from_str(&RoleName::default_role().to_string())?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str(&RoleName::default_role().to_string())?,
+            },
             create,
         );
 
-        let service = CreatePermissionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.create_permission(request).await;
         let response = response?;
 
         let found = db.live().fetch_one::<PermissionDB>(&response.id).await?;
@@ -169,22 +123,21 @@ mod tests {
             )
             .await?;
 
-        let create = PermissionCreate::builder()
-            .permission_type(PermissionType::view_project())
-            .try_entity_name(Some(EntityName::try_from("p0")?))
-            .unwrap()
-            .build()?;
+        let create = PermissionCreate {
+            permission_type: PermissionType::view_project(),
+            entity_name: Some(EntityName::try_from("p0")?).try_into().unwrap(),
+        };
 
         // `admin` holds manage_project on `__all__`, so it can grant on any project.
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            RoleParam::builder()
-                .role(RoleIdName::from_str("r0")?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str("r0")?,
+            },
             create,
         );
 
-        let service = CreatePermissionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.create_permission(request).await;
         let response = response?;
 
         let found = db.live().fetch_one::<PermissionDB>(&response.id).await?;
@@ -225,29 +178,27 @@ mod tests {
         // admin can never be forbidden, so the requester must be this user.
         let user = db
             .seed()
-            .user(&UserName::try_from("u0")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("u0")?, &UserEnabled::TRUE)
             .await?;
         db.seed().user_role(&user.id, &role.id).await?;
 
-        let create = PermissionCreate::builder()
-            .permission_type(PermissionType::view_project())
-            .try_entity_name(Some(EntityName::try_from("p1")?))
-            .unwrap()
-            .build()?;
+        let create = PermissionCreate {
+            permission_type: PermissionType::view_project(),
+            entity_name: Some(EntityName::try_from("p1")?).try_into().unwrap(),
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), user.id).create(
-            RoleParam::builder()
-                .role(RoleIdName::from_str("r0")?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str("r0")?,
+            },
             create,
         );
 
-        let service = CreatePermissionService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
 
-        assert_service_error(service, request, |err| match err {
+        assert_service_error(service.create_permission(request).await, |err| match err {
             RbacError::Forbidden(_, _) => {}
-        })
-        .await;
+        });
         Ok(())
     }
 
@@ -258,25 +209,23 @@ mod tests {
     async fn test_create_permission_on_fixed_role_rejected(db: TdPool) -> Result<(), TdError> {
         use crate::permission::PermissionError;
 
-        let create = PermissionCreate::builder()
-            .permission_type(PermissionType::create_projects())
-            .try_entity_name(None)
-            .unwrap()
-            .build()?;
+        let create = PermissionCreate {
+            permission_type: PermissionType::create_projects(),
+            entity_name: None.try_into().unwrap(),
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            RoleParam::builder()
-                .role(RoleIdName::from_str(&RoleName::sys_admin().to_string())?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str(&RoleName::sys_admin().to_string())?,
+            },
             create,
         );
 
-        let service = CreatePermissionService::with_defaults(db.clone()).service();
-        assert_service_error(service, request, |err| match err {
+        let service = Services::with_defaults(db.clone());
+        assert_service_error(service.create_permission(request).await, |err| match err {
             PermissionError::RoleIsFixed(_) => {}
             other => panic!("Expected 'RoleIsFixed', got {other:?}"),
-        })
-        .await;
+        });
         Ok(())
     }
 }

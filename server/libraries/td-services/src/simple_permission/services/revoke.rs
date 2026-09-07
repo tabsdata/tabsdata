@@ -2,85 +2,81 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Revoke a flat Simple permission from a user (`tdk permission revoke`).
-//!
-//! The inverse of [`grant`](super::grant): resolves the same target role and
-//! removes the `user_role` membership, reusing the user_role delete behavior
-//! including the fixed-row guard (e.g. the `admin` user cannot be removed from
-//! `sys_admin`). Same authz as grant.
-
 use crate::permission::authorize_permission_target;
-use crate::simple_permission::layers::{
-    ResolvedGrant, assert_simple_permission_valid, resolve_grant, resolved_role_id,
-    resolved_user_id,
-};
-use crate::user_role::layers::assert_not_fixed;
+use crate::simple_permission::{assert_simple_permission_valid, resolve_grant};
+use crate::user_role::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::{AuthzContext, refresh_authz_context};
-use td_objects::And;
-use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::RbacSource;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_objects::and;
+use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBWithNames};
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{RoleId, UserId};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = RevokeSimplePermissionService,
-    request = DeleteRequest<SimplePermissionGrant>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<DeleteRequest<SimplePermissionGrant>>::extract::<RequestContext>),
-        from_fn(
-            With::<DeleteRequest<SimplePermissionGrant>>::extract_name::<SimplePermissionGrant>
-        ),
-        // validate (reject org-wide wildcards; project required/forbidden)
-        from_fn(assert_simple_permission_valid),
-        // resolve the target role membership (and project for authz)
-        from_fn(resolve_grant),
-        // authz by target (shared with grant and the raw permission API).
-        from_fn(authorize_permission_target::<ResolvedGrant>),
-        // membership remove, reusing the user_role delete fixed-row guard.
-        from_fn(resolved_role_id),
-        from_fn(resolved_user_id),
-        // revoking a permission the user does not hold reports a clear
-        // "not found" error instead of the opaque user_role row-not-found
-        // SQL error from the fetch.
-        from_fn(By::<And![RoleId, UserId]>::assert_exists::<UserRoleDB>),
-        from_fn(By::<And![RoleId, UserId]>::fetch_one::<UserRoleDBWithNames>),
-        from_fn(assert_not_fixed),
-        from_fn(By::<And![RoleId, UserId]>::delete::<UserRoleDB>),
-        // refresh the authz cache (role membership changed)
-        from_fn(refresh_authz_context),
-    )
+#[service_factory]
+async fn revoke_simple_permission(
+    authz: Ctx<AuthzContext>,
+    db: DbPool<Global>,
+    request: DeleteRequest<SimplePermissionGrant>,
+) -> Result<(), TdError> {
+    let (ctx, grant) = request.into_parts();
+    let token = authz.none();
+    let mut trx = db.begin().await?;
+    let conn = trx.get(token);
+
+    // validate (reject org-wide wildcards; project required/forbidden)
+    assert_simple_permission_valid(&grant)?;
+    // resolve the target role membership (and project for authz)
+    let resolved = resolve_grant(conn, &grant).await?;
+    // authz by target (shared with grant and the raw permission API).
+    authorize_permission_target(&authz, conn, &ctx, &resolved).await?;
+
+    // revoking a permission the user does not hold reports a clear
+    // "not found" error instead of the opaque user_role row-not-found
+    // SQL error from the fetch.
+    conn.live()
+        .assert_exists::<UserRoleDB>(and!(&resolved.role_id, &resolved.user_id))
+        .await?;
+    // membership remove, reusing the user_role delete fixed-row guard.
+    let row: UserRoleDBWithNames = conn
+        .live()
+        .fetch_one(and!(&resolved.role_id, &resolved.user_id))
+        .await?;
+    assert_not_fixed(&row)?;
+    conn.live()
+        .delete::<UserRoleDB>(and!(&resolved.role_id, &resolved.user_id))
+        .await?;
+    trx.commit().await?;
+
+    // Role membership changed; with the transaction committed, invalidate the
+    // cached authz grants.
+    let mut conn = db.read().await?;
+    authz.refresh(conn.get(token)).await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::user_role::UserRoleError;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::user_role::UserRoleDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
-        AccessTokenId, ProjectIdName, ProjectName, RoleId, RoleName, SimplePermissionType,
-        UserEnabled, UserId, UserName,
+        AccessTokenId, BasePath, ProjectIdName, ProjectName, RoleId, RoleName,
+        SimplePermissionType, UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     async fn user_role_count(db: &TdPool, user: &UserId, role: &RoleId) -> usize {
         db.live()
@@ -95,18 +91,18 @@ mod tests {
     /// Create a project through the real create service so the per-project
     /// roles are minted.
     async fn create_project(db: &TdPool, name: &str) -> Result<(), TdError> {
-        use crate::project::service::create::CreateProjectService;
         use td_objects::dxo::project::ProjectCreate;
-        let create = ProjectCreate::builder()
-            .name(&ProjectName::try_from(name)?)
-            .description(&td_objects::types::basic::Description::try_from("d")?)
-            .build()?;
-        CreateProjectService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(
+        let create = ProjectCreate {
+            name: ProjectName::try_from(name)?,
+            description: td_objects::types::basic::Description::try_from("d")?,
+            base_path: BasePath::default(),
+        };
+        Services::with_defaults(db.clone())
+            .create_project(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
-            .await?;
+            .await?
+            .data;
         Ok(())
     }
 
@@ -115,7 +111,7 @@ mod tests {
         create_project(&db, "p0").await?;
         let user = db
             .seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
         let dev_role = db
             .live()
@@ -124,16 +120,16 @@ mod tests {
         db.seed().user_role(&user.id, &dev_role.id).await?;
         assert_eq!(user_role_count(&db, &user.id, &dev_role.id).await, 1);
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::DevelopProject)
-            .project(Some(ProjectIdName::from_str("p0")?))
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::DevelopProject,
+            project: Some(ProjectIdName::from_str("p0")?),
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(grant);
 
-        let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.revoke_simple_permission(request).await?.data;
 
         assert_eq!(user_role_count(&db, &user.id, &dev_role.id).await, 0);
         Ok(())
@@ -144,23 +140,25 @@ mod tests {
     #[td_test::test(db)]
     async fn test_revoke_not_granted_reports_not_found(db: TdPool) -> Result<(), TdError> {
         db.seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
 
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::CreateProjects)
-            .project(None)
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::try_from("joaquin")?,
+            permission: SimplePermissionType::CreateProjects,
+            project: None,
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(grant);
 
-        let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
-        assert_service_error(service, request, |err| match err {
-            SqlError::CouldNotFindEntity(_, _) => {}
-            other => panic!("Expected 'CouldNotFindEntity', got {other:?}"),
-        })
-        .await;
+        let service = Services::with_defaults(db.clone());
+        assert_service_error(
+            service.revoke_simple_permission(request).await,
+            |err| match err {
+                SqlError::CouldNotFindEntity(_, _) => {}
+                other => panic!("Expected 'CouldNotFindEntity', got {other:?}"),
+            },
+        );
         Ok(())
     }
 
@@ -168,20 +166,22 @@ mod tests {
     /// (reuses the user_role delete guard).
     #[td_test::test(db)]
     async fn test_revoke_fixed_membership_rejected(db: TdPool) -> Result<(), TdError> {
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::admin())
-            .permission(SimplePermissionType::ManageSystem)
-            .project(None)
-            .build()?;
+        let grant = SimplePermissionGrant {
+            user: UserName::admin(),
+            permission: SimplePermissionType::ManageSystem,
+            project: None,
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(grant);
 
-        let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
-        assert_service_error(service, request, |err| match err {
-            UserRoleError::FixedUserRole(_, _) => {}
-            other => panic!("Expected FixedUserRole, got {other:?}"),
-        })
-        .await;
+        let service = Services::with_defaults(db.clone());
+        assert_service_error(
+            service.revoke_simple_permission(request).await,
+            |err| match err {
+                UserRoleError::FixedUserRole(_, _) => {}
+                other => panic!("Expected FixedUserRole, got {other:?}"),
+            },
+        );
         Ok(())
     }
 }

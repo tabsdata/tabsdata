@@ -2,91 +2,75 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! List everyone with authority on a project (`tdk permission list
-//! --project P`), with a source label:
-//!
-//! - `source = project (<rolename>)` — members of `<P>_admin|_dev|_view`;
-//! - `source = system (manage_system)` — members of any role holding
-//!   `(project:__all__, manage_project)` (i.e. system admins).
-
-use crate::simple_permission::layers::list_project_access;
+use crate::simple_permission::list_project_access;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageAccess, ManageProject, Project, Rbac, Scope};
-use td_objects::dxo::crudl::{ListResponse, RequestContext};
+use td_authz::rbac::{ManageAccess, ManageProject, Project};
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::ListResponse;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::simple_permission::{ListByProjectRequest, SimpleProjectAccess};
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{ProjectId, ProjectIdName};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ListSimplePermissionByProjectService,
-    request = ListByProjectRequest,
-    response = ListResponse<SimpleProjectAccess>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListByProjectRequest>::extract::<RequestContext>),
-        // resolve the project and authorize against it: manage_access (system)
-        // OR manage_project on the project (a project admin can see the roster).
-        from_fn(With::<ListByProjectRequest>::extract::<ProjectIdName>),
-        from_fn(By::<ProjectIdName>::fetch_one::<ActiveProjectDB>),
-        from_fn(With::<ActiveProjectDB>::extract::<ProjectId>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
-        from_fn(list_project_access),
-    )
+#[service_factory]
+async fn list_simple_permission_by_project(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListByProjectRequest,
+) -> Result<ListResponse<SimpleProjectAccess>, TdError> {
+    // resolve the project and authorize against it: manage_access (system)
+    // OR manage_project on the project (a project admin can see the roster).
+    let conn = gated_conn.get(authz.none());
+    let project: ActiveProjectDB = conn.live().fetch_one(&request.project).await?;
+    let _grant = authz
+        .require::<Project, (ManageAccess, ManageProject)>(conn, &request.context, &project.id)
+        .await?;
+    list_project_access(conn, &request.project).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::Buildable;
-    use td_objects::rest_urls::PermissionGrantProjectQuery;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::project::ProjectParam;
+    use td_objects::types::basic::ProjectIdName;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleId,
-        RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
+        AccessTokenId, BasePath, Description, EntityId, EntityName, PermissionType, ProjectName,
+        RoleId, RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     fn req(requester: UserId, _role: RoleId, project: ProjectName) -> ListByProjectRequest {
         ListByProjectRequest::new(
             RequestContext::with(AccessTokenId::default(), requester),
-            PermissionGrantProjectQuery::builder()
-                .project(ProjectIdName::Name(project))
-                .build()
-                .unwrap(),
+            ProjectParam {
+                project: ProjectIdName::Name(project),
+            },
         )
     }
 
     /// Create a project through the real create service so the per-project
     /// roles are minted.
     async fn create_project(db: &TdPool, name: &str) -> Result<(), TdError> {
-        use crate::project::service::create::CreateProjectService;
         use td_objects::dxo::project::ProjectCreate;
-        let create = ProjectCreate::builder()
-            .name(&ProjectName::try_from(name)?)
-            .description(&Description::try_from("d")?)
-            .build()?;
-        CreateProjectService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(
+        let create = ProjectCreate {
+            name: ProjectName::try_from(name)?,
+            description: Description::try_from("d")?,
+            base_path: BasePath::default(),
+        };
+        Services::with_defaults(db.clone())
+            .create_project(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
-            .await?;
+            .await?
+            .data;
         Ok(())
     }
 
@@ -100,7 +84,7 @@ mod tests {
         // project-source: alice in p0_admin
         let alice = db
             .seed()
-            .user(&UserName::try_from("alice")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("alice")?, &UserEnabled::TRUE)
             .await?;
         let admin_role = db
             .live()
@@ -111,18 +95,19 @@ mod tests {
         // system-source: carol in sys_admin (holds (project:__all__, manage_project))
         let carol = db
             .seed()
-            .user(&UserName::try_from("carol")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("carol")?, &UserEnabled::TRUE)
             .await?;
         db.seed().user_role(&carol.id, &RoleId::sys_admin()).await?;
 
-        let service = ListSimplePermissionByProjectService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .raw_oneshot(req(
+            .list_simple_permission_by_project(req(
                 UserId::admin(),
                 RoleId::sys_admin(),
                 ProjectName::try_from("p0")?,
             ))
-            .await?;
+            .await?
+            .data;
 
         let alice_row = response
             .data
@@ -160,14 +145,15 @@ mod tests {
             .user_role(&UserId::system(), &RoleId::sys_admin())
             .await?;
 
-        let service = ListSimplePermissionByProjectService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .raw_oneshot(req(
+            .list_simple_permission_by_project(req(
                 UserId::admin(),
                 RoleId::sys_admin(),
                 ProjectName::try_from("p0")?,
             ))
-            .await?;
+            .await?
+            .data;
 
         assert!(
             response.data.iter().all(|r| r.user != UserName::system()),
@@ -196,16 +182,18 @@ mod tests {
             .await?;
         let requester = db
             .seed()
-            .user(&UserName::try_from("requester")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("requester")?, &UserEnabled::TRUE)
             .await?;
         db.seed().user_role(&requester.id, &dev_only.id).await?;
 
-        let service = ListSimplePermissionByProjectService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = req(requester.id, dev_only.id, ProjectName::try_from("p0")?);
-        assert_service_error(service, request, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-        })
-        .await;
+        assert_service_error(
+            service.list_simple_permission_by_project(request).await,
+            |err| match err {
+                RbacError::Forbidden(_, _) => {}
+            },
+        );
         Ok(())
     }
 }
