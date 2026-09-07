@@ -3,43 +3,39 @@
 //
 
 /// Tests for the `#[Dao]` proc macro: verifies that `DaoCore`, `Dao`,
-/// `VersionedDao`, `States`, and `Recursive` trait impls are generated
+/// `VersionedDao` and `Recursive` trait impls and state-filter methods are generated
 /// correctly.
 #[cfg(test)]
 mod tests {
     use crate as ta_objects;
+    use crate::dxo::StateFilter;
+    use tm_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
-    use crate::dxo::{Dao, DaoCore, DaoUpdate, Recursive, States, TypedColumns, VersionedDao};
+    use crate::and;
+    use crate::dxo::{Dao, DaoCore, DaoUpdate, Recursive, TypedColumns, VersionedDao};
     use crate::or;
     use crate::sql_condition::resolve_condition;
-    use crate::{Buildable, and};
-    use sea_query::{Iden, Order, Query, SqliteQueryBuilder};
+    use sea_query::{Iden, Order, PostgresQueryBuilder, Query};
     use std::any::TypeId;
 
     // ---- Test types ----------------------------------------------------------
 
-    #[tm_objects::typed(string)]
-    #[derive(Eq, PartialEq)]
-    struct Name;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct Name(String);
 
-    #[tm_objects::typed(string)]
-    #[derive(Eq, PartialEq)]
-    struct Description;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct Description(String);
 
-    #[tm_objects::typed(i64)]
-    #[derive(Eq, PartialEq)]
-    struct DefinedOn;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct DefinedOn(i64);
 
-    #[tm_objects::typed(string)]
-    #[derive(Eq, PartialEq)]
-    struct ItemId;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct ItemId(String);
 
-    #[tm_objects::typed(string)]
-    #[derive(Eq, PartialEq)]
-    struct RecursionKey;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct RecursionKey(String);
 
-    #[tm_objects::typed_enum]
-    #[derive(Eq, PartialEq)]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     enum ItemStatus {
         #[typed_enum(rename = "A")]
         Active,
@@ -49,13 +45,11 @@ mod tests {
         Deleted,
     }
 
-    #[tm_objects::typed(bool)]
-    #[derive(Eq, PartialEq)]
-    struct System;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct System(bool);
 
-    #[tm_objects::typed(i64)]
-    #[derive(Eq, PartialEq)]
-    struct StartedOn;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct StartedOn(i64);
 
     // ---- Plain Dao -----------------------------------------------------------
 
@@ -63,9 +57,9 @@ mod tests {
     #[derive(Eq, PartialEq)]
     #[dao(sql_table = "items")]
     struct ItemDao {
-        id: ItemId,
-        name: Name,
-        description: Option<Description>,
+        pub id: ItemId,
+        pub name: Name,
+        pub description: Option<Description>,
     }
 
     #[test]
@@ -107,24 +101,22 @@ mod tests {
 
     #[test]
     fn test_insert_values() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Description::try_from("d1").unwrap())
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(Description::try_from("d1").unwrap()),
+        };
         let vals: Vec<_> = dao.insert_values().into_iter().collect();
         assert_eq!(vals.len(), 3);
     }
 
     #[test]
     fn test_update_values() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Description::try_from("d1").unwrap())
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(Description::try_from("d1").unwrap()),
+        };
         let vals: Vec<_> = dao.update_values().into_iter().collect();
         assert_eq!(vals.len(), 3);
         assert_eq!(vals[0].0.quoted(), "id");
@@ -135,8 +127,8 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(sql_table = "ordered_items", order_by(col = "name", dir = "asc"))]
     struct OrderedDao {
-        id: ItemId,
-        name: Name,
+        pub id: ItemId,
+        pub name: Name,
     }
 
     #[test]
@@ -156,7 +148,7 @@ mod tests {
             .column(ItemDaoIden::Id)
             .from(ItemDaoIden::Table)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(q.contains(r#""name" = 'hello'"#), "{q}");
     }
 
@@ -167,7 +159,7 @@ mod tests {
             .column(ItemDaoIden::Id)
             .from(ItemDaoIden::Table)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         // Empty condition renders as WHERE TRUE (no actual filter).
         assert!(
             !q.contains("WHERE") || q.contains("WHERE TRUE"),
@@ -206,19 +198,28 @@ mod tests {
     #[derive(Eq, PartialEq)]
     #[dao(
         sql_table = "versioned_items",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "item_id"),
-        states(
-            Active = ItemStatus::Active,
-            Available = or!(ItemStatus::Active, ItemStatus::Frozen),
-            Executable = and!(ItemStatus::Active, System::FALSE),
-        )
+        versioned(pk = "id", version_by = "defined_on", partition_by = "item_id")
     )]
     struct VersionedItemDao {
-        id: ItemId,
-        item_id: Name,
-        status: ItemStatus,
-        system: System,
-        defined_on: DefinedOn,
+        pub id: ItemId,
+        pub item_id: Name,
+        pub status: ItemStatus,
+        pub system: System,
+        pub defined_on: DefinedOn,
+    }
+
+    impl VersionedItemDao {
+        pub fn active() -> StateFilter<Self> {
+            StateFilter::of(ItemStatus::Active)
+        }
+
+        pub fn available() -> StateFilter<Self> {
+            StateFilter::of(or!(ItemStatus::Active, ItemStatus::Frozen))
+        }
+
+        pub fn executable() -> StateFilter<Self> {
+            StateFilter::of(and!(ItemStatus::Active, System::FALSE))
+        }
     }
 
     #[test]
@@ -236,15 +237,12 @@ mod tests {
     #[test]
     fn test_state_all() {
         // S=0 is always the empty condition.
-        let cond = resolve_condition::<VersionedItemDao>(<VersionedItemDao as States<
-            { VersionedItemDao::All },
-        >>::state())
-        .unwrap();
+        let cond = StateFilter::<VersionedItemDao>::all().condition().clone();
         let q = Query::select()
             .column(VersionedItemDaoIden::Id)
             .from(VersionedItemDaoIden::Table)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         // Empty condition renders as WHERE TRUE (no actual filter).
         assert!(
             !q.contains("WHERE") || q.contains("WHERE TRUE"),
@@ -254,30 +252,24 @@ mod tests {
 
     #[test]
     fn test_state_active() {
-        let cond = resolve_condition::<VersionedItemDao>(<VersionedItemDao as States<
-            { VersionedItemDao::Active },
-        >>::state())
-        .unwrap();
+        let cond = VersionedItemDao::active().condition().clone();
         let q = Query::select()
             .column(VersionedItemDaoIden::Id)
             .from(VersionedItemDaoIden::Table)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(q.contains(r#""status" = 'A'"#), "{q}");
         assert!(!q.contains("OR"), "Active is a single condition: {q}");
     }
 
     #[test]
     fn test_state_available_any() {
-        let cond = resolve_condition::<VersionedItemDao>(<VersionedItemDao as States<
-            { VersionedItemDao::Available },
-        >>::state())
-        .unwrap();
+        let cond = VersionedItemDao::available().condition().clone();
         let q = Query::select()
             .column(VersionedItemDaoIden::Id)
             .from(VersionedItemDaoIden::Table)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(q.contains(r#""status" = 'A'"#), "{q}");
         assert!(q.contains(r#""status" = 'F'"#), "{q}");
         assert!(q.contains("OR"), "Available should be OR: {q}");
@@ -285,33 +277,15 @@ mod tests {
 
     #[test]
     fn test_state_executable_all() {
-        let cond = resolve_condition::<VersionedItemDao>(<VersionedItemDao as States<
-            { VersionedItemDao::Executable },
-        >>::state())
-        .unwrap();
+        let cond = VersionedItemDao::executable().condition().clone();
         let q = Query::select()
             .column(VersionedItemDaoIden::Id)
             .from(VersionedItemDaoIden::Table)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(q.contains(r#""status" = 'A'"#), "{q}");
         assert!(q.contains("AND"), "Executable should be AND: {q}");
         assert!(!q.contains("OR"), "Executable should not have OR: {q}");
-    }
-
-    // ---- State const values --------------------------------------------------
-
-    #[test]
-    fn test_state_consts() {
-        // All is always 0; named states are 1..N in HashMap iteration order.
-        assert_eq!(VersionedItemDao::All, 0u8);
-        assert_ne!(VersionedItemDao::Active, 0u8);
-        assert_ne!(VersionedItemDao::Available, 0u8);
-        assert_ne!(VersionedItemDao::Executable, 0u8);
-        // All three named states are distinct.
-        assert_ne!(VersionedItemDao::Active, VersionedItemDao::Available);
-        assert_ne!(VersionedItemDao::Active, VersionedItemDao::Executable);
-        assert_ne!(VersionedItemDao::Available, VersionedItemDao::Executable);
     }
 
     // ---- Recursive Dao -------------------------------------------------------
@@ -320,16 +294,15 @@ mod tests {
     #[dao(
         sql_table = "tree",
         versioned(pk = "id", version_by = "defined_on", partition_by = "item_id"),
-        recursive(up = "parent", down = "child"),
-        states(Active = ItemStatus::Active)
+        recursive(up = "parent", down = "child")
     )]
     struct TreeDao {
-        id: ItemId,
-        item_id: Name,
-        parent: RecursionKey,
-        child: RecursionKey,
-        status: ItemStatus,
-        defined_on: DefinedOn,
+        pub id: ItemId,
+        pub item_id: Name,
+        pub parent: RecursionKey,
+        pub child: RecursionKey,
+        pub status: ItemStatus,
+        pub defined_on: DefinedOn,
     }
 
     #[test]
@@ -344,27 +317,15 @@ mod tests {
         assert_eq!(col.quoted(), "child");
     }
 
-    // ---- Builder error: missing required field -------------------------------
-
-    #[test]
-    fn test_builder_missing_required_field() {
-        // Omit required `name` — build() should fail.
-        let result = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .build();
-        assert!(result.is_err());
-    }
-
     // ---- Column / value ordering consistency ---------------------------------
 
     #[test]
     fn test_insert_values_match_columns() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Description::try_from("d1").unwrap())
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(Description::try_from("d1").unwrap()),
+        };
         let cols: Vec<_> = ItemDao::columns().into_iter().collect();
         let vals: Vec<_> = dao.insert_values().into_iter().collect();
         assert_eq!(cols.len(), vals.len());
@@ -372,12 +333,11 @@ mod tests {
 
     #[test]
     fn test_update_values_match_columns() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Description::try_from("d1").unwrap())
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(Description::try_from("d1").unwrap()),
+        };
         let cols: Vec<_> = ItemDao::columns().into_iter().collect();
         let vals: Vec<_> = dao.update_values().into_iter().collect();
         assert_eq!(cols.len(), vals.len());
@@ -420,23 +380,21 @@ mod tests {
 
     #[test]
     fn test_option_field_explicit_none() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(None)
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: None,
+        };
         assert_eq!(dao.description, None);
     }
 
     #[test]
     fn test_option_field_some() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Description::try_from("d1").unwrap())
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(Description::try_from("d1").unwrap()),
+        };
         assert_eq!(dao.description, Some(Description::try_from("d1").unwrap()));
     }
 
@@ -444,16 +402,15 @@ mod tests {
 
     #[test]
     fn test_option_none_skipped_in_update_values() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(None)
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: None,
+        };
         let sql = Query::update()
             .table(ItemDaoIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             !sql.contains("description"),
             "None Option field should be skipped in UPDATE: {sql}"
@@ -462,16 +419,15 @@ mod tests {
 
     #[test]
     fn test_option_some_included_in_update_values() {
-        let dao = ItemDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Description::try_from("d1").unwrap())
-            .build()
-            .unwrap();
+        let dao = ItemDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(Description::try_from("d1").unwrap()),
+        };
         let sql = Query::update()
             .table(ItemDaoIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#""description" = 'd1'"#),
             "Some Option field should be included in UPDATE: {sql}"
@@ -483,24 +439,23 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(sql_table = "nullable_items")]
     struct NullableDao {
-        id: ItemId,
-        name: Name,
-        #[builder(default)]
-        description: Option<Option<Description>>,
+        pub id: ItemId,
+        pub name: Name,
+        pub description: Option<Option<Description>>,
     }
 
     #[test]
     fn test_double_option_none_skipped_in_update_values() {
         // None (outer) → column should be skipped entirely.
-        let dao = NullableDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .build()
-            .unwrap();
+        let dao = NullableDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: None,
+        };
         let sql = Query::update()
             .table(NullableDaoIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             !sql.contains("description"),
             "None (outer) should skip column in UPDATE: {sql}"
@@ -510,16 +465,15 @@ mod tests {
     #[test]
     fn test_double_option_some_none_sets_null_in_update_values() {
         // Some(None) → column should be SET to NULL.
-        let dao = NullableDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Some(None))
-            .build()
-            .unwrap();
+        let dao = NullableDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(None),
+        };
         let sql = Query::update()
             .table(NullableDaoIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#""description" = NULL"#),
             "Some(None) should SET column to NULL: {sql}"
@@ -529,16 +483,15 @@ mod tests {
     #[test]
     fn test_double_option_some_some_sets_value_in_update_values() {
         // Some(Some(v)) → column should be SET to the value.
-        let dao = NullableDao::builder()
-            .id(ItemId::try_from("i1").unwrap())
-            .name(Name::try_from("n1").unwrap())
-            .description(Some(Some(Description::try_from("d1").unwrap())))
-            .build()
-            .unwrap();
+        let dao = NullableDao {
+            id: ItemId::try_from("i1").unwrap(),
+            name: Name::try_from("n1").unwrap(),
+            description: Some(Some(Description::try_from("d1").unwrap())),
+        };
         let sql = Query::update()
             .table(NullableDaoIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#""description" = 'd1'"#),
             "Some(Some(v)) should SET column to value: {sql}"
@@ -550,25 +503,23 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(sql_table = "jobs")]
     struct ImmutableDao {
-        id: ItemId,
-        name: Name,
+        pub id: ItemId,
+        pub name: Name,
         #[dao(immutable)]
-        #[builder(default)]
-        started_on: Option<StartedOn>,
+        pub started_on: Option<StartedOn>,
     }
 
     #[test]
     fn test_immutable_update_generates_case_when() {
-        let dao = ImmutableDao::builder()
-            .id(ItemId::try_from("j1").unwrap())
-            .name(Name::try_from("job1").unwrap())
-            .started_on(StartedOn::try_from(100i64).unwrap())
-            .build()
-            .unwrap();
+        let dao = ImmutableDao {
+            id: ItemId::try_from("j1").unwrap(),
+            name: Name::try_from("job1").unwrap(),
+            started_on: Some(StartedOn::try_from(100i64).unwrap()),
+        };
         let sql = Query::update()
             .table(ImmutableDaoIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         // Immutable field should use CASE WHEN ... IS NULL THEN ... ELSE ... END.
         assert!(
             sql.contains(r#"CASE WHEN ("started_on" IS NULL) THEN"#),
@@ -582,16 +533,15 @@ mod tests {
 
     #[test]
     fn test_immutable_normal_fields_are_plain() {
-        let dao = ImmutableDao::builder()
-            .id(ItemId::try_from("j1").unwrap())
-            .name(Name::try_from("job1").unwrap())
-            .started_on(StartedOn::try_from(100i64).unwrap())
-            .build()
-            .unwrap();
+        let dao = ImmutableDao {
+            id: ItemId::try_from("j1").unwrap(),
+            name: Name::try_from("job1").unwrap(),
+            started_on: Some(StartedOn::try_from(100i64).unwrap()),
+        };
         let sql = Query::update()
             .table(ImmutableDaoIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         // Normal fields should NOT have CASE WHEN.
         assert!(
             sql.contains(r#""name" = 'job1'"#),
@@ -605,12 +555,11 @@ mod tests {
 
     #[test]
     fn test_immutable_columns_match_update_values() {
-        let dao = ImmutableDao::builder()
-            .id(ItemId::try_from("j1").unwrap())
-            .name(Name::try_from("job1").unwrap())
-            .started_on(StartedOn::try_from(100i64).unwrap())
-            .build()
-            .unwrap();
+        let dao = ImmutableDao {
+            id: ItemId::try_from("j1").unwrap(),
+            name: Name::try_from("job1").unwrap(),
+            started_on: Some(StartedOn::try_from(100i64).unwrap()),
+        };
         let cols: Vec<_> = ImmutableDao::columns().into_iter().collect();
         let vals: Vec<_> = dao.update_values().into_iter().collect();
         assert_eq!(cols.len(), vals.len());
@@ -624,10 +573,8 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(update, sql_table = "items")]
     struct UpdateItemDB {
-        #[builder(default)]
-        name: Option<Name>,
-        #[builder(default)]
-        description: Option<Description>,
+        pub name: Option<Name>,
+        pub description: Option<Description>,
     }
 
     #[test]
@@ -643,14 +590,14 @@ mod tests {
 
     #[test]
     fn test_update_dao_update_values() {
-        let dao = UpdateItemDB::builder()
-            .name(Name::try_from("n1").unwrap())
-            .build()
-            .unwrap();
+        let dao = UpdateItemDB {
+            name: Some(Name::try_from("n1").unwrap()),
+            description: None,
+        };
         let sql = Query::update()
             .table(UpdateItemDBIden::Table)
             .values(dao.update_values())
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#""name" = 'n1'"#),
             "update dao should produce SET: {sql}"

@@ -5,16 +5,17 @@
 #[cfg(test)]
 mod tests {
     use crate as ta_objects;
+    use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 
     use crate::And;
     use crate::Or;
     use crate::and;
     use crate::or;
     use crate::sql_condition::{SqlCondition, resolve_condition};
-    use sea_query::{Query, SqliteQueryBuilder};
+    use sea_query::{PostgresQueryBuilder, Query};
 
-    #[tm_objects::typed(string)]
-    struct VCol;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct VCol(String);
 
     /// Dummy DAO that maps every type to column `v`.
     #[ta_objects::Dao]
@@ -23,7 +24,7 @@ mod tests {
         v: VCol,
     }
 
-    /// Render a `SqlCondition` to the WHERE clause string (SQLite dialect).
+    /// Render a `SqlCondition` to the WHERE clause string.
     /// Returns `"TRUE"` when the condition is empty.
     fn sql(cond: impl SqlCondition) -> String {
         let cond = resolve_condition::<TestDao>(cond).unwrap();
@@ -31,7 +32,7 @@ mod tests {
             .column(TestDaoIden::V)
             .from(TestDaoIden::V)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         match q.find("WHERE ") {
             Some(pos) => q[pos + 6..].to_string(),
             None => "TRUE".to_string(),
@@ -211,8 +212,8 @@ mod tests {
 
     // ----- Error propagation --------------------------------------------------
 
-    #[tm_objects::typed(string)]
-    struct _UnmappedCol;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct _UnmappedCol(String);
 
     /// A DAO with no type mappings — resolving any typed value should fail.
     #[ta_objects::Dao]

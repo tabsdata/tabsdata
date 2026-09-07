@@ -7,23 +7,27 @@ mod tests {
     use crate as ta_objects;
 
     use crate::SeaValue;
+    use crate::typed::Typed as _;
+    use crate::typed::TypedError;
     use td_common::datetime::Timestamp;
     use td_common::id::{Id, id};
     use td_common::time::UniqueUtc;
     use td_error::td_error;
+    use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 
     macro_rules! typed_test {
         ($type_:ty, $value:expr) => {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower >]() -> Result<(), td_error::TdError> {
-                    #[ta_objects::typed([< $type_:lower >](default = $value))]
-                    struct TypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(default = $value)]
+                    struct TypedType($type_);
 
                     let typed = TypedType::default();
                     assert_eq!(*typed, $value);
 
-                    let typed = TypedType::parse($value)?;
+                    let typed = TypedType::try_new($value)?;
                     assert_eq!(*typed, $value);
 
                     let typed: TypedType = $value.try_into()?;
@@ -51,13 +55,13 @@ mod tests {
     // Complex types tests
     #[test]
     fn test_id() -> Result<(), td_error::TdError> {
-        #[ta_objects::typed(id)]
-        struct TypedType;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct TypedType(Id);
 
         let _ = TypedType::default();
 
         let id = id();
-        let typed = TypedType::parse(id)?;
+        let typed = TypedType::try_new(id)?;
         assert_eq!(*typed, id);
 
         let serialized = serde_json::to_string(&typed).unwrap();
@@ -71,8 +75,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_timestamp() -> Result<(), td_error::TdError> {
-        #[ta_objects::typed(timestamp)]
-        struct TypedType;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct TypedType(Timestamp);
 
         let before = UniqueUtc::now_millis();
         let typed = TypedType::default();
@@ -80,10 +84,10 @@ mod tests {
         assert!(**typed > before);
         assert!(after > **typed);
 
-        let typed = TypedType::parse(chrono::DateTime::<chrono::Utc>::default())?;
+        let typed = TypedType::try_new(chrono::DateTime::<chrono::Utc>::default())?;
         assert_eq!(**typed, chrono::DateTime::<chrono::Utc>::default());
 
-        let typed: TypedType = chrono::DateTime::<chrono::Utc>::default().try_into()?;
+        let typed: TypedType = chrono::DateTime::<chrono::Utc>::default().into();
         assert_eq!(**typed, chrono::DateTime::<chrono::Utc>::default());
         let serialized = serde_json::to_string(&typed).unwrap();
         let deserialized: TypedType = serde_json::from_str(&serialized).unwrap();
@@ -107,8 +111,9 @@ mod tests {
                 fn [< test_ $type_:lower _default_const >]() -> Result<(), td_error::TdError> {
                     const DEFAULT: $type_ = $default;
 
-                    #[ta_objects::typed([< $type_:lower >](default = DEFAULT))]
-                    struct TypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(default = DEFAULT)]
+                    struct TypedType($type_);
 
                     let typed = TypedType::default();
                     assert_eq!(*typed, $default);
@@ -123,8 +128,9 @@ mod tests {
                 fn [< test_ $type_:lower _default_const >]() -> Result<(), td_error::TdError> {
                     const DEFAULT: $const_type = $default;
 
-                    #[ta_objects::typed([< $type_:lower >](default = DEFAULT))]
-                    struct TypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(default = DEFAULT)]
+                    struct TypedType($type_);
 
                     let typed = TypedType::default();
                     assert_eq!(*typed, $default);
@@ -139,8 +145,9 @@ mod tests {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower _default >]() -> Result<(), td_error::TdError> {
-                    #[ta_objects::typed([< $type_:lower >](default = $default))]
-                    struct TypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(default = $default)]
+                    struct TypedType($type_);
 
                     let typed = TypedType::default();
                     assert_eq!(*typed, $default);
@@ -153,8 +160,9 @@ mod tests {
                         $default.into()
                     }
 
-                    #[ta_objects::typed([< $type_:lower >](default = default()))]
-                    struct TypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(default = default())]
+                    struct TypedType($type_);
 
                     let typed = TypedType::default();
                     assert_eq!(*typed, default());
@@ -193,21 +201,20 @@ mod tests {
             Id::try_from("00000000000000000000000000").unwrap()
         }
 
-        #[ta_objects::typed(id(default = default_id()))]
-        struct TypedId;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(default = default_id())]
+        struct TypedId(Id);
 
-        assert_eq!(
-            Id::try_from("00000000000000000000000000").unwrap(),
-            default_id()
-        );
+        assert_eq!(*TypedId::default(), default_id());
     }
 
     #[test]
     fn test_timestamp_default() {
         let before = UniqueUtc::now_millis();
 
-        #[ta_objects::typed(timestamp(default = Timestamp::default()))]
-        struct TypedTimestamp;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(default = Timestamp::default())]
+        struct TypedTimestamp(Timestamp);
 
         let default = TypedTimestamp::default();
 
@@ -221,11 +228,13 @@ mod tests {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower _try_from >]() -> Result<(), td_error::TdError> {
-                    #[ta_objects::typed([< $type_:lower >](default = $default))]
-                    struct TypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(default = $default)]
+                    struct TypedType($type_);
 
-                    #[ta_objects::typed([< $type_:lower >], try_from = TypedType)]
-                    struct NewTypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(try_from = TypedType)]
+                    struct NewTypedType($type_);
 
                     let typed = TypedType::default();
                     let new_typed: NewTypedType = typed.clone().try_into()?;
@@ -243,18 +252,19 @@ mod tests {
     try_from_typed_test!(i64, 15i64);
     try_from_typed_test!(f32, 15f32);
     try_from_typed_test!(f64, 15f64);
-    // bool typed types don't generate `parse`, so `try_from` is not supported.
+    try_from_typed_test!(bool, true);
 
     // Testing try_from implementations between different types (impl TryFrom inner types
     // must be implemented so this works).
 
     #[test]
     fn test_i16_i32_try_from() -> Result<(), td_error::TdError> {
-        #[ta_objects::typed(i16)]
-        struct TypedType;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct TypedType(i16);
 
-        #[ta_objects::typed(i32, try_from = TypedType)]
-        struct NewTypedType;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(try_from = TypedType)]
+        struct NewTypedType(i32);
 
         let typed = TypedType::default();
         let new_typed: NewTypedType = typed.try_into()?;
@@ -264,11 +274,12 @@ mod tests {
 
     #[test]
     fn test_id_string_try_from() -> Result<(), td_error::TdError> {
-        #[ta_objects::typed(id)]
-        struct TypedType;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct TypedType(Id);
 
-        #[ta_objects::typed(string, try_from = TypedType)]
-        struct NewTypedType;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(try_from = TypedType)]
+        struct NewTypedType(String);
 
         let typed = TypedType::default();
         let _new_typed: NewTypedType = typed.try_into()?;
@@ -279,55 +290,60 @@ mod tests {
     // Other String tests (min_len, max_len, len, regex, parser)
     #[test]
     fn test_string_min_len() {
-        #[ta_objects::typed(string(min_len = 5))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(min_len = 5)]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("1234").is_err());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("123456").is_ok());
+        assert!(TypedString::try_new("1234").is_err());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("123456").is_ok());
     }
 
     #[test]
     fn test_string_max_len() {
-        #[ta_objects::typed(string(max_len = 5))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(max_len = 5)]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("1234").is_ok());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("123456").is_err());
+        assert!(TypedString::try_new("1234").is_ok());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("123456").is_err());
     }
 
     #[test]
     fn test_string_min_max_len() {
-        #[ta_objects::typed(string(min_len = 4, max_len = 5))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(min_len = 4, max_len = 5)]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("123").is_err());
-        assert!(TypedString::parse("1234").is_ok());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("123456").is_err());
+        assert!(TypedString::try_new("123").is_err());
+        assert!(TypedString::try_new("1234").is_ok());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("123456").is_err());
     }
 
     #[test]
     fn test_string_len() {
-        #[ta_objects::typed(string(len = 5))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(len = 5)]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("1234").is_err());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("123456").is_err());
+        assert!(TypedString::try_new("1234").is_err());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("123456").is_err());
     }
 
     #[test]
     fn test_string_len_const() {
         const LEN_CONST: usize = 5;
 
-        #[ta_objects::typed(string(len = LEN_CONST))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(len = LEN_CONST)]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("1234").is_err());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("123456").is_err());
+        assert!(TypedString::try_new("1234").is_err());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("123456").is_err());
     }
 
     #[test]
@@ -336,32 +352,35 @@ mod tests {
             5
         }
 
-        #[ta_objects::typed(string(len = len()))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(len = len())]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("1234").is_err());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("123456").is_err());
+        assert!(TypedString::try_new("1234").is_err());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("123456").is_err());
     }
 
     #[test]
     fn test_string_regex() {
-        #[ta_objects::typed(string(regex = "^[0-9]"))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(regex = "^[0-9]")]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("abc").is_err());
-        assert!(TypedString::parse("12345").is_ok());
+        assert!(TypedString::try_new("abc").is_err());
+        assert!(TypedString::try_new("12345").is_ok());
     }
 
     #[test]
     fn test_string_regex_const() {
         const NAME_REGEX: &str = "^[0-9]";
 
-        #[ta_objects::typed(string(regex = NAME_REGEX))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(regex = NAME_REGEX)]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("abc").is_err());
-        assert!(TypedString::parse("12345").is_ok());
+        assert!(TypedString::try_new("abc").is_err());
+        assert!(TypedString::try_new("12345").is_ok());
     }
 
     #[td_error]
@@ -380,28 +399,30 @@ mod tests {
             }
         }
 
-        #[ta_objects::typed(string(parser = parser))]
-        struct TypedString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(parser = parser)]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("1234").is_ok());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("456").is_err());
+        assert!(TypedString::try_new("1234").is_ok());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("456").is_err());
     }
 
     #[test]
     fn test_string_parser_closure() {
-        #[ta_objects::typed(string(parser = |s| {
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(parser = |s| {
             if s.starts_with("123") {
                 Ok(s)
             } else {
                 Err(ParsingError::Parse(s, "must start with 123".to_string()))?
             }
-        }))]
-        struct TypedString;
+        })]
+        struct TypedString(String);
 
-        assert!(TypedString::parse("1234").is_ok());
-        assert!(TypedString::parse("12345").is_ok());
-        assert!(TypedString::parse("456").is_err());
+        assert!(TypedString::try_new("1234").is_ok());
+        assert!(TypedString::try_new("12345").is_ok());
+        assert!(TypedString::try_new("456").is_err());
     }
 
     // Numeric tests
@@ -410,15 +431,25 @@ mod tests {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower _default_numeric >]() -> Result<(), td_error::TdError> {
-                    #[ta_objects::typed([< $type_:lower >](min = [< 2 $type_:lower >], max = [< 4 $type_:lower >]))]
-                    struct TypedType;
+                    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+                    #[typed(min = [< 2 $type_:lower >], max = [< 4 $type_:lower >])]
+                    struct TypedType($type_);
 
-                    assert!(matches!(TypedType::parse([< 1 $type_:lower >]), Err(TypedTypeError::Min(_, _))));
-                    assert!(TypedType::parse([< 2 $type_:lower >]).is_ok());
-                    assert!(TypedType::parse([< 3 $type_:lower >]).is_ok());
-                    assert!(TypedType::parse([< 4 $type_:lower >]).is_ok());
-                    assert!(matches!(TypedType::parse([< 5 $type_:lower >]), Err(TypedTypeError::Max(_, _))));
-                    assert!(matches!(TypedType::parse([< 6 $type_:lower >]), Err(TypedTypeError::Max(_, _))));
+                    assert!(matches!(
+                        TypedType::try_new([< 1 $type_:lower >]).unwrap_err().domain_err::<TypedError>(),
+                        TypedError::Min(..)
+                    ));
+                    assert!(TypedType::try_new([< 2 $type_:lower >]).is_ok());
+                    assert!(TypedType::try_new([< 3 $type_:lower >]).is_ok());
+                    assert!(TypedType::try_new([< 4 $type_:lower >]).is_ok());
+                    assert!(matches!(
+                        TypedType::try_new([< 5 $type_:lower >]).unwrap_err().domain_err::<TypedError>(),
+                        TypedError::Max(..)
+                    ));
+                    assert!(matches!(
+                        TypedType::try_new([< 6 $type_:lower >]).unwrap_err().domain_err::<TypedError>(),
+                        TypedError::Max(..)
+                    ));
                     Ok(())
                 }
             }
@@ -433,8 +464,8 @@ mod tests {
 
     #[test]
     fn test_sqlx() {
-        #[ta_objects::typed(string)]
-        struct TypedType;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct TypedType(String);
 
         fn assert_sea_value<T: SeaValue>() {}
         assert_sea_value::<TypedType>();
@@ -444,8 +475,8 @@ mod tests {
 
     #[test]
     fn test_sea_value_string() {
-        #[ta_objects::typed(string)]
-        struct MyStr;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct MyStr(String);
 
         let v = MyStr::try_from("hello").unwrap();
         assert_eq!(
@@ -457,8 +488,8 @@ mod tests {
 
     #[test]
     fn test_sea_value_i32() {
-        #[ta_objects::typed(i32)]
-        struct MyI32;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct MyI32(i32);
 
         let v = MyI32::try_from(42i32).unwrap();
         assert_eq!(v.as_sea_value(), sea_query::Value::Int(Some(42)));
@@ -467,8 +498,8 @@ mod tests {
 
     #[test]
     fn test_sea_value_i64() {
-        #[ta_objects::typed(i64)]
-        struct MyI64;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct MyI64(i64);
 
         let v = MyI64::try_from(99i64).unwrap();
         assert_eq!(v.as_sea_value(), sea_query::Value::BigInt(Some(99)));
@@ -477,20 +508,20 @@ mod tests {
 
     #[test]
     fn test_sea_value_bool() {
-        #[ta_objects::typed(bool)]
-        struct MyBool;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct MyBool(bool);
 
-        let v = MyBool::from(true);
+        let v = MyBool::TRUE;
         assert_eq!(v.as_sea_value(), sea_query::Value::Bool(Some(true)));
-        let v = MyBool::from(false);
+        let v = MyBool::FALSE;
         assert_eq!(v.as_sea_value(), sea_query::Value::Bool(Some(false)));
         assert_eq!(v.as_type_id(), std::any::TypeId::of::<MyBool>());
     }
 
     #[test]
     fn test_sea_value_f64() {
-        #[ta_objects::typed(f64)]
-        struct MyF64;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct MyF64(f64);
 
         let v = MyF64::try_from(2.72f64).unwrap();
         assert_eq!(v.as_sea_value(), sea_query::Value::Double(Some(2.72)));
@@ -502,8 +533,8 @@ mod tests {
     fn test_nullable_sea_value_string() {
         use crate::NullableSeaValue;
 
-        #[ta_objects::typed(string)]
-        struct NStr;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct NStr(String);
 
         assert_eq!(NStr::null_sea_value(), sea_query::Value::String(None));
     }
@@ -512,8 +543,8 @@ mod tests {
     fn test_nullable_sea_value_i64() {
         use crate::NullableSeaValue;
 
-        #[ta_objects::typed(i64)]
-        struct NI64;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct NI64(i64);
 
         assert_eq!(NI64::null_sea_value(), sea_query::Value::BigInt(None));
     }
@@ -522,8 +553,8 @@ mod tests {
     fn test_nullable_sea_value_bool() {
         use crate::NullableSeaValue;
 
-        #[ta_objects::typed(bool)]
-        struct NBool;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct NBool(bool);
 
         assert_eq!(NBool::null_sea_value(), sea_query::Value::Bool(None));
     }
@@ -532,8 +563,8 @@ mod tests {
 
     #[test]
     fn test_option_sea_value_some() {
-        #[ta_objects::typed(string)]
-        struct OptStr;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct OptStr(String);
 
         let v: Option<OptStr> = Some(OptStr::try_from("val").unwrap());
         assert_eq!(
@@ -544,8 +575,8 @@ mod tests {
 
     #[test]
     fn test_option_sea_value_none() {
-        #[ta_objects::typed(string)]
-        struct OptStr2;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct OptStr2(String);
 
         let v: Option<OptStr2> = None;
         assert_eq!(v.as_sea_value(), sea_query::Value::String(None));
@@ -553,14 +584,14 @@ mod tests {
 
     // ---- SqlCondition for basic typed types ----------------------------------
 
-    #[tm_objects::typed(string)]
-    struct CondStr;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct CondStr(String);
 
-    #[tm_objects::typed(i64)]
-    struct CondI64;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct CondI64(i64);
 
-    #[tm_objects::typed(bool)]
-    struct CondBool;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct CondBool(bool);
 
     #[ta_objects::Dao]
     #[dao(sql_table = "test_cond")]
@@ -576,7 +607,7 @@ mod tests {
             .column(CondDaoIden::Col)
             .from(CondDaoIden::Table)
             .cond_where(cond)
-            .to_string(sea_query::SqliteQueryBuilder);
+            .to_string(sea_query::PostgresQueryBuilder);
         match q.find("WHERE ") {
             Some(pos) => q[pos + 6..].to_string(),
             None => "TRUE".to_string(),
@@ -597,7 +628,7 @@ mod tests {
 
     #[test]
     fn test_sql_condition_bool_type() {
-        let v = CondBool::from(true);
+        let v = CondBool::TRUE;
         assert_eq!(cond_sql(v), r#""flag" = TRUE"#);
     }
 
@@ -605,10 +636,10 @@ mod tests {
 
     #[test]
     fn test_string_compact_debug() {
-        #[ta_objects::typed(string)]
-        struct PublicString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct PublicString(String);
 
-        let s = PublicString::parse("visible").unwrap();
+        let s = PublicString::try_new("visible").unwrap();
         // Debug delegates to inner value, no newtype wrapper shown
         assert_eq!(format!("{:?}", s), r#""visible""#);
         assert_eq!(format!("{:#?}", s), r#""visible""#);
@@ -616,10 +647,11 @@ mod tests {
 
     #[test]
     fn test_string_secret_debug() {
-        #[ta_objects::typed(string(secret))]
-        struct SecretString;
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        #[typed(secret)]
+        struct SecretString(String);
 
-        let s = SecretString::parse("my_secret_value").unwrap();
+        let s = SecretString::try_new("my_secret_value").unwrap();
         assert_eq!(format!("{:?}", s), "***");
         assert!(!format!("{:?}", s).contains("my_secret_value"));
         // Inner value still accessible via Deref

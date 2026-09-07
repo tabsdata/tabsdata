@@ -23,13 +23,27 @@ pub struct DaoProjection {
     pub columns: Vec<String>,
 }
 
-/// Holds a monomorphized describer rather than the type itself so the
-/// registry is a plain, iterable collection.
+/// Holds monomorphized fns rather than the type itself so the registry is a
+/// plain, iterable collection.
 pub struct RegisteredDao {
     pub describe: fn() -> DaoProjection,
+    /// Forces every column reference the DAO resolves at runtime (a flatten
+    /// base's `order_by`/`key`/`versioned`/`recursive` columns), so a typo
+    /// panics in the registry-walking test instead of on first live use.
+    pub validate: fn(),
 }
 
 inventory::collect!(RegisteredDao);
+
+/// A list DTO's runtime-resolved column references (`pagination_by` and each
+/// filter/order role), forceable without a database — the `#[Dto]` macro
+/// registers one per non-generic `#[dto(list(on = ..))]` type.
+pub struct RegisteredListDto {
+    pub name: &'static str,
+    pub validate: fn(),
+}
+
+inventory::collect!(RegisteredListDto);
 
 /// Reads the identifiers straight off the DAO's own trait impl, so the
 /// registry cannot drift from what the DAO actually queries.
@@ -44,4 +58,9 @@ pub fn dao_projection<D: Dao>() -> DaoProjection {
 /// All registered read DAOs, in unspecified order.
 pub fn registered_daos() -> impl Iterator<Item = &'static RegisteredDao> {
     inventory::iter::<RegisteredDao>()
+}
+
+/// All registered list DTOs, in unspecified order.
+pub fn registered_list_dtos() -> impl Iterator<Item = &'static RegisteredListDto> {
+    inventory::iter::<RegisteredListDto>()
 }

@@ -5,16 +5,17 @@
 #[cfg(test)]
 mod tests {
     use crate as ta_objects;
+    use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx, TypedTag};
 
     use td_error::TdError;
 
-    #[tm_objects::typed(string)]
-    pub struct Id;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    pub struct Id(String);
 
-    #[tm_objects::typed(string)]
-    pub struct Name;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    pub struct Name(String);
 
-    #[tm_objects::typed_tag]
+    #[derive(TypedTag, TypedSerde, TypedOpenApi)]
     enum Foo {
         #[tag("~")]
         Id(Id),

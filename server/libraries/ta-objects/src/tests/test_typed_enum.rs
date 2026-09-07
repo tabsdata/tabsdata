@@ -5,15 +5,15 @@
 #[cfg(test)]
 mod tests {
     use crate as ta_objects;
+    use tm_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
     use crate::sql_condition::{SqlCondition, resolve_condition};
     use crate::{SeaValue, and, or};
-    use sea_query::{Query, SqliteQueryBuilder};
+    use sea_query::{PostgresQueryBuilder, Query};
 
     // ----- Basic typed_enum ---------------------------------------------------
 
-    #[tm_objects::typed_enum]
-    #[derive(Eq, PartialEq)]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     enum Color {
         Red,
         Green,
@@ -40,17 +40,9 @@ mod tests {
         assert!(err.is_err());
     }
 
-    #[test]
-    fn test_clone_from_ref() {
-        let r = &Color::Green;
-        let c: Color = r.into();
-        assert_eq!(c, Color::Green);
-    }
-
     // ----- Rename attribute ---------------------------------------------------
 
-    #[tm_objects::typed_enum]
-    #[derive(Eq, PartialEq)]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     enum Status {
         #[typed_enum(rename = "A")]
         Active,
@@ -118,9 +110,8 @@ mod tests {
 
     // ----- SqlCondition -------------------------------------------------------
 
-    #[tm_objects::typed(bool)]
-    #[derive(Eq, PartialEq)]
-    struct Enabled;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct Enabled(bool);
 
     #[ta_objects::Dao]
     #[dao(sql_table = "test_enum")]
@@ -135,7 +126,7 @@ mod tests {
             .column(EnumTestDaoIden::Status)
             .from(EnumTestDaoIden::Table)
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         match q.find("WHERE ") {
             Some(pos) => q[pos + 6..].to_string(),
             None => "TRUE".to_string(),

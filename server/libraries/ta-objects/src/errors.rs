@@ -44,50 +44,42 @@ pub enum SqlError {
     EmptyConditionRefused(String) = 5005,
 }
 
-/// Extra context extracted from a database error across all backends.
+/// Extra context extracted from a database error.
 struct DbErrorInfo {
     /// Column names involved in the violation.
     columns: Vec<String>,
-    /// Table name reported by the database (PostgreSQL only via trait).
+    /// Table name reported by the database.
     table: Option<String>,
-    /// Extra detail from the database (PostgreSQL `DETAIL` field).
+    /// Extra detail from the database (the `DETAIL` field).
     detail: Option<String>,
 }
 
 /// Extract column names, table, and detail from a database error.
 ///
-/// Uses a multi-strategy approach to work across all backends:
+/// Two strategies, in order:
 ///
-/// 1. **PostgreSQL**: downcast to `PgDatabaseError` for `column()` and `detail()`.
-///    The base trait provides `table()` (populated by PostgreSQL).
-/// 2. **Constraint name convention**: parse `<table>___<col(s)>___idx` (all backends).
-/// 3. **SQLite message parsing**: `"UNIQUE constraint failed: table.col"` etc.
-/// 4. **MySQL message parsing**: `"Column 'x' cannot be null"`,
-///    `"Duplicate entry 'v' for key 'k'"`.
+/// 1. Downcast to `PgDatabaseError` for `column()` and `detail()`. The base
+///    trait provides `table()`.
+/// 2. Constraint-name convention: parse `<table>___<col(s)>___idx`.
 fn parse_db_error_info(db_err: &dyn sqlx::error::DatabaseError) -> DbErrorInfo {
-    // table() is on the base DatabaseError trait (populated by PostgreSQL).
+    // table() is on the base DatabaseError trait.
     let table = db_err.table().map(|s| s.to_string());
-    #[allow(unused_mut)] // mutated inside #[cfg(postgres)] block
     let mut detail: Option<String> = None;
 
-    // Strategy 1: PostgreSQL — downcast for column() and detail().
-    #[cfg(postgres)]
-    {
-        if let Some(pg) = db_err.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
-            detail = pg.detail().map(|s| s.to_string());
-            if let Some(col) = pg.column() {
-                return DbErrorInfo {
-                    columns: vec![col.to_string()],
-                    table,
-                    detail,
-                };
-            }
-            // PostgreSQL may not set column but still have detail.
-            // Fall through to constraint parsing below.
+    if let Some(pg) = db_err.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
+        detail = pg.detail().map(|s| s.to_string());
+        if let Some(col) = pg.column() {
+            return DbErrorInfo {
+                columns: vec![col.to_string()],
+                table,
+                detail,
+            };
         }
+        // PostgreSQL may not set column but still have detail.
+        // Fall through to constraint parsing below.
     }
 
-    // Strategy 2: parse constraint name (e.g. "users___name___idx" → ["name"])
+    // Constraint name (e.g. "users___name___idx" → ["name"])
     if let Some(constraint) = db_err.constraint() {
         let parts: Vec<&str> = constraint.split("___").collect();
         if parts.len() >= 3 && parts.last() == Some(&"idx") {
@@ -96,45 +88,6 @@ fn parse_db_error_info(db_err: &dyn sqlx::error::DatabaseError) -> DbErrorInfo {
                     .iter()
                     .map(|s| s.to_string())
                     .collect(),
-                table,
-                detail,
-            };
-        }
-    }
-
-    // Strategy 3: SQLite message parsing
-    // e.g. "UNIQUE constraint failed: table.col1, table.col2"
-    #[cfg(sqlite)]
-    {
-        let msg = db_err.message();
-        if let Some(after) = msg
-            .strip_prefix("UNIQUE constraint failed: ")
-            .or_else(|| msg.strip_prefix("NOT NULL constraint failed: "))
-            .or_else(|| msg.strip_prefix("FOREIGN KEY constraint failed: "))
-            .or_else(|| msg.strip_prefix("CHECK constraint failed: "))
-        {
-            return DbErrorInfo {
-                columns: after
-                    .split(", ")
-                    .filter_map(|part| part.split('.').next_back())
-                    .map(|s| s.to_string())
-                    .collect(),
-                table,
-                detail,
-            };
-        }
-    }
-
-    // Strategy 4: MySQL message parsing
-    // NOT NULL: "Column 'name' cannot be null"
-    #[cfg(mysql)]
-    {
-        let msg = db_err.message();
-        if let Some(rest) = msg.strip_prefix("Column '")
-            && let Some(col) = rest.split('\'').next()
-        {
-            return DbErrorInfo {
-                columns: vec![col.to_string()],
                 table,
                 detail,
             };

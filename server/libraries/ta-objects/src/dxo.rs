@@ -2,76 +2,12 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-/// Any type with a `derive_builder`-generated builder.
-/// Implemented automatically by `#[Dao]`, `#[Dlo]`, `#[Dto]`.
-pub trait Buildable {
-    type Builder;
-
-    fn builder() -> Self::Builder;
-
-    fn into_builder(self) -> Self::Builder;
-
-    fn build(builder: &Self::Builder) -> Result<Self, td_error::TdError>
-    where
-        Self: Sized;
-}
-
-impl<E> Buildable for Vec<E>
-where
-    E: Buildable,
-{
-    type Builder = Vec<E::Builder>;
-
-    fn builder() -> Self::Builder {
-        Vec::new()
-    }
-
-    fn into_builder(self) -> Self::Builder {
-        self.into_iter().map(|e| e.into_builder()).collect()
-    }
-
-    fn build(builder: &Self::Builder) -> Result<Self, td_error::TdError> {
-        builder.iter().map(|b| E::build(b)).collect()
-    }
-}
-
-/// Extractor for reading values from objects.
-pub trait Extractor<T> {
-    fn extract(&self) -> T;
-}
-
-impl<T, E> Extractor<Vec<T>> for Vec<E>
-where
-    E: Extractor<T>,
-{
-    fn extract(&self) -> Vec<T> {
-        self.iter().map(|item| item.extract()).collect()
-    }
-}
-
-/// Setter for writing values into objects.
-pub trait Setter<T>: Sized {
-    fn set(&mut self, value: &T) -> &mut Self;
-}
-
-/// TryUpdater for fallible mutation.
-pub trait TryUpdater<T>: Sized {
-    type Error;
-    fn try_update_from(&mut self, value: &T) -> Result<&mut Self, Self::Error>;
-}
-
-impl<T, E> TryUpdater<T> for Vec<E>
-where
-    E: TryUpdater<T>,
-{
-    type Error = E::Error;
-
-    fn try_update_from(&mut self, value: &T) -> Result<&mut Self, Self::Error> {
-        for elem in self.iter_mut() {
-            elem.try_update_from(value)?;
-        }
-        Ok(self)
-    }
+/// Error for a field conversion inside a generated DAO->DTO mapping
+/// (`ListDto::from_dao`).
+#[td_error::td_error]
+pub enum DxoMappingError {
+    #[error("{0}")]
+    Field(String) = 5000,
 }
 
 /// Maps Rust domain types to Sea Query column references.
@@ -92,12 +28,11 @@ pub trait TypedColumns {
 }
 
 /// Minimal structural metadata shared by all DAO types (read, write, update).
-pub trait DaoCore: Buildable + TypedColumns + Send + Sync + std::fmt::Debug {
+pub trait DaoCore: TypedColumns + Send + Sync + std::fmt::Debug {
     /// The domain this DAO's table lives in; `#[dao(db = ...)]`, default
     /// [`Apiserver`](td_database::domain::Apiserver).
     type Db: td_database::domain::DbDomain;
 
-    /// Table identifier.
     fn table() -> Self::Iden;
 
     /// Human-readable entity name for error messages (e.g., "User", "Collection").
@@ -120,7 +55,7 @@ pub trait DaoUpdate: DaoCore {
 /// (`SELECT` column list, `INSERT` value list, default ordering) we bound
 /// on `Dao`. The "is it safe to read raw?" property lives on the more
 /// restrictive [`LiveDao`] marker.
-pub trait Dao: DaoCore + td_database::dynamic::DynamicFromRow + Unpin {
+pub trait Dao: DaoCore + for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Unpin {
     /// All columns in the same order as `insert_values()`.
     fn columns() -> impl IntoIterator<Item = Self::Iden>;
 
@@ -195,19 +130,10 @@ pub trait CurrentDao: VersionedDao {
     fn current_table_name() -> &'static str;
 }
 
-/// Internal const-generic state filter trait. Kept for the soon-to-die
-/// tower `By::<...>` handlers. New code should reach for
-/// [`StateFilter<D>`] via the per-DAO value methods (`D::all()`,
-/// `D::active()`) emitted by the `Dao` macro.
-#[doc(hidden)]
-pub trait States<const S: u8>: DaoCore {
-    fn state() -> impl crate::sql_condition::SqlCondition;
-}
-
-/// State filter value for queries. Each `Dao` with `versioned(...)` or
-/// `states(...)` gets a per-state value-returning method emitted by the
-/// `Dao` macro (e.g. `FunctionDB::all()`, `FunctionDB::active()`); each
-/// returns a [`StateFilter<Self>`] that pre-resolves the SQL condition.
+/// State filter value for queries. DAOs define their named states as plain
+/// inherent fns (e.g. `FunctionDB::active()`) built with [`StateFilter::of`];
+/// each returns a [`StateFilter<Self>`] that pre-resolves the SQL condition.
+/// [`StateFilter::all`] is the universal no-filter state.
 ///
 /// Pass the value to a query wrapper's `.state(filter)` to bind both
 /// the state filter *and* the DAO type:
@@ -218,6 +144,7 @@ pub trait States<const S: u8>: DaoCore {
 ///
 /// The default for the bare wrapper (no `.state(...)`) is the implicit
 /// All state — no extra WHERE clause beyond the user condition.
+#[derive(Debug, Clone)]
 pub struct StateFilter<D> {
     _phantom: std::marker::PhantomData<D>,
     condition: sea_query::Condition,
@@ -225,13 +152,17 @@ pub struct StateFilter<D> {
 
 impl<D> StateFilter<D> {
     /// Construct a filter from a pre-resolved sea-query condition.
-    /// Used by macro-generated state methods; callers should reach for
-    /// `D::all()` / `D::active()` etc. instead.
+    /// State fns should reach for [`StateFilter::of`] instead.
     pub fn new(condition: sea_query::Condition) -> Self {
         Self {
             _phantom: std::marker::PhantomData,
             condition,
         }
+    }
+
+    /// The state that admits every row (no extra WHERE).
+    pub fn all() -> Self {
+        Self::new(sea_query::Condition::all())
     }
 
     /// Borrow the cached condition for inclusion in a WHERE.
@@ -240,20 +171,14 @@ impl<D> StateFilter<D> {
     }
 }
 
-#[doc(hidden)]
 impl<D: DaoCore> StateFilter<D> {
-    /// Bridge for legacy tower handlers that still take `<const S: u8>`.
-    /// New code should not call this — use `D::all()` / `D::active()` etc.
-    pub fn from_states<const S: u8>() -> Self
-    where
-        D: States<S>,
-    {
-        let raw = <D as States<S>>::state();
-        let mut where_cond = sea_query::Condition::all();
-        if let Ok(resolved) = crate::sql_condition::resolve_condition::<D>(raw) {
-            where_cond = where_cond.add(resolved);
-        }
-        Self::new(where_cond)
+    /// Resolve `condition` against `D`'s columns into a state filter. For
+    /// the static conditions of DAO state fns, where a column mismatch is a
+    /// programming error.
+    pub fn of(condition: impl crate::sql_condition::SqlCondition) -> Self {
+        let resolved = crate::sql_condition::resolve_condition::<D>(condition)
+            .expect("static state condition must resolve");
+        Self::new(sea_query::Condition::all().add(resolved))
     }
 }
 
@@ -268,27 +193,31 @@ pub trait Recursive: Dao {
     fn recurse_down() -> Self::Iden;
 }
 
-pub trait Dlo: Buildable {}
-pub trait Dto: Buildable {}
+pub trait Dlo {}
+pub trait Dto {}
 
-/// DTO trait for list/filter endpoints.
-pub trait ListDto: Dto + Clone + Send + Sync {
+/// Explicit DAO-to-DTO conversion, hand-implemented next to the DTO (the
+/// counterpart of the hand-written `to_dao` constructors).
+pub trait FromDao: Sized {
     type Dao: Dao;
 
+    /// Convert a DAO row into this DTO, consuming it.
+    fn from_dao(dao: Self::Dao) -> Result<Self, td_error::TdError>;
+}
+
+/// DTO trait for list/filter endpoints.
+pub trait ListDto: Dto + Clone + Send + Sync + FromDao {
     /// Resolve a filter field name (eq/ne/gt/ge/lt/le/btw/is) to a DAO column.
     /// `None` = field not valid for this role.
     fn filter_col(field: &str) -> Option<<Self::Dao as TypedColumns>::Iden>;
 
-    /// Resolve a LIKE filter field name to a DAO column.
     fn filter_like_col(field: &str) -> Option<<Self::Dao as TypedColumns>::Iden>;
 
-    /// Resolve an order-by field name to a DAO column.
     fn order_by_col(field: &str) -> Option<<Self::Dao as TypedColumns>::Iden>;
 
     /// Natural pagination column and its default direction.
     fn pagination_col() -> (<Self::Dao as TypedColumns>::Iden, sea_query::Order);
 
-    /// Parse a string filter value into a typed `SeaValue` for the given field.
     fn parse_filter_value(
         field: &<Self::Dao as TypedColumns>::Iden,
         value: &str,
@@ -296,7 +225,4 @@ pub trait ListDto: Dto + Clone + Send + Sync {
 
     fn pagination_value(&self) -> String;
     fn order_by_value(&self, field: &<Self::Dao as TypedColumns>::Iden) -> Option<String>;
-
-    /// Convert a DAO row into this DTO.
-    fn from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError>;
 }

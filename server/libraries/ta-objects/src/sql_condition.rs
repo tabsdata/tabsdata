@@ -18,8 +18,6 @@
 //! | [`resolve_condition`] | Turns a `SqlCondition` into a `sea_query::Condition` for a given DAO |
 //! | `And![A, B]` / `and!(a, b)` | AND combinator (type-position / value-position) |
 //! | `Or![A, B]` / `or!(a, b)` | OR combinator (type-position / value-position) |
-//! | [`ConditionExtract`] | Extracts a `SqlCondition` from a tower [`Handler`] |
-//! | [`SqlRef`] | [`FromHandler`] extractor for use in `from_fn` service layers |
 //!
 //! # How it works
 //!
@@ -39,31 +37,20 @@
 //!    →  (status = 'A' AND system = false) OR (status = 'F' AND system = false)
 //!    ```
 //!
-//! 3. **DAO states** — Versioned DAOs declare named states in their `#[dao]`
-//!    attribute using these macros:
+//! 3. **DAO states** — DAOs define named states as plain inherent fns built
+//!    from these combinators via `StateFilter::of`:
 //!    ```text
-//!    states(
-//!        Active    = Status::Active,
-//!        Available = or!(Status::Active, Status::Frozen),
-//!        User      = and!(or!(Status::Active, Status::Frozen), System::FALSE),
-//!    )
+//!    impl FunctionDB {
+//!        pub fn available() -> StateFilter<Self> {
+//!            StateFilter::of(or!(Status::Active, Status::Frozen))
+//!        }
+//!    }
 //!    ```
-//!    These generate `States<N>` impls whose `state()` method returns the
-//!    condition.
-//!
-//! 4. **Tower extraction** — [`ConditionExtract`] lets the tower service layer
-//!    pull conditions from the handler. Leaf types extract via `Ref<T>`.
-//!    `And2<A, B>` extracts `Ref<A>` and `Ref<B>` separately, then
-//!    combines them. This powers `By::<And![A, B]>::fetch_one::<D>` in service
-//!    definitions — no manual `combine` layer needed.
 
 use crate::dxo::DaoCore;
 use crate::errors::SqlError;
 use crate::sea_value::{NullableSeaValue, SeaValue};
 use sea_query::{Expr, ExprTrait, IntoTableRef};
-use td_tower::error::FromHandlerError;
-use td_tower::extractors::{FromHandler, Ref};
-use td_tower::handler::Handler;
 
 // ---------------------------------------------------------------------------
 // SqlCondition — core trait
@@ -202,34 +189,11 @@ macro_rules! define_combinator {
     };
 }
 
-/// Generates `AndN` + `OrN` structs and their `SqlCondition` impls,
-/// plus `ConditionExtract` for `AndN` (tower extraction).
+/// Generates `AndN` + `OrN` structs and their `SqlCondition` impls.
 macro_rules! define_and_or {
     ($n:tt, $($T:ident),+) => {
         define_combinator!(And, all, $n, $($T),+);
         define_combinator!(Or, any, $n, $($T),+);
-
-        paste::paste! {
-            #[allow(non_snake_case)]
-            impl<$($T: ConditionExtract),+> ConditionExtract for [<And $n>]<$($T),+>
-            where
-                [<And $n>]<$($T::Storage),+>: SqlCondition,
-            {
-                type Storage = [<And $n>]<$($T::Storage),+>;
-
-                fn extract(handler: &mut Handler) -> Result<Self::Storage, FromHandlerError> {
-                    $(let $T = <$T as ConditionExtract>::extract(handler)?;)+
-                    Ok([<And $n>]($($T),+))
-                }
-
-                #[cfg(feature = "test_tower_metadata")]
-                fn metadata_used_types() -> Vec<String> {
-                    let mut types = Vec::new();
-                    $(types.extend(<$T as ConditionExtract>::metadata_used_types());)+
-                    types
-                }
-            }
-        }
     };
 }
 
@@ -350,138 +314,10 @@ macro_rules! Not {
       ($t:ty $(,)?) => { $crate::sql_condition::Not<$t> };
   }
 
-impl<T: ConditionExtract> ConditionExtract for Not<T>
-where
-    Not<T::Storage>: SqlCondition,
-{
-    type Storage = Not<T::Storage>;
-
-    fn extract(handler: &mut Handler) -> Result<Self::Storage, FromHandlerError> {
-        Ok(Not(<T as ConditionExtract>::extract(handler)?))
-    }
-
-    #[cfg(feature = "test_tower_metadata")]
-    fn metadata_used_types() -> Vec<String> {
-        <T as ConditionExtract>::metadata_used_types()
-    }
-}
 /// Value-position macro: `not!(a)` → `Not(a)`.
 #[macro_export]
 macro_rules! not {
     ($e:expr) => {
         $crate::sql_condition::Not($e)
     };
-}
-
-// ---------------------------------------------------------------------------
-// SqlCondition for Ref<T> — enables zero-clone extraction
-// ---------------------------------------------------------------------------
-
-impl<T: SqlCondition> SqlCondition for Ref<T> {
-    fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
-        (**self).resolve::<D>()
-    }
-
-    fn matches_all(&self) -> bool {
-        (**self).matches_all()
-    }
-
-    fn display_values<D: DaoCore>(&self) -> Vec<(String, String)> {
-        (**self).display_values::<D>()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ConditionExtract — tower Handler extraction (zero-clone)
-// ---------------------------------------------------------------------------
-
-/// Bridges `SqlCondition` (query-side) with the tower service layer
-/// (request-side). Each implementor declares a [`Storage`](Self::Storage)
-/// type that holds extracted `Ref<T>` arcs — no value clones needed.
-///
-/// - **Leaf types** (`T: SeaValue`): `Storage = Ref<T>` (Arc, not cloned).
-/// - **`AndN<A, B, …>`**: `Storage = AndN<A::Storage, B::Storage>`.
-/// - **`()`**: `Storage = ()`.
-/// - **`Vec<T>`**: `Storage = Ref<Vec<T>>`.
-pub trait ConditionExtract: Send + 'static {
-    type Storage: SqlCondition;
-
-    fn extract(handler: &mut Handler) -> Result<Self::Storage, FromHandlerError>;
-
-    /// Returns the handler types actually consumed by this extractor.
-    #[cfg(feature = "test_tower_metadata")]
-    fn metadata_used_types() -> Vec<String>;
-}
-
-/// Blanket impl for leaf types: `Storage = Ref<T>` (zero-clone).
-impl<T: SeaValue + SqlCondition + 'static> ConditionExtract for T {
-    type Storage = Ref<T>;
-
-    fn extract(handler: &mut Handler) -> Result<Ref<T>, FromHandlerError> {
-        Ref::<T>::from_handler(handler)
-    }
-
-    #[cfg(feature = "test_tower_metadata")]
-    fn metadata_used_types() -> Vec<String> {
-        Self::Storage::metadata_used_types()
-    }
-}
-
-impl ConditionExtract for () {
-    type Storage = ();
-
-    fn extract(_handler: &mut Handler) -> Result<(), FromHandlerError> {
-        Ok(())
-    }
-
-    #[cfg(feature = "test_tower_metadata")]
-    fn metadata_used_types() -> Vec<String> {
-        vec![]
-    }
-}
-
-// ---------------------------------------------------------------------------
-// SqlRef — FromHandler extractor (zero-clone)
-// ---------------------------------------------------------------------------
-
-/// Extracts a [`ConditionExtract`] from the tower [`Handler`].
-///
-/// Follows the same pattern as [`Ref`] / [`Owned`](td_tower::extractors::Owned):
-/// implements [`Deref`](std::ops::Deref) so the inner storage is accessed
-/// without destructuring. Stores `Ref` arcs internally — no value clones.
-pub struct SqlRef<E: ConditionExtract>(E::Storage);
-
-impl<E: ConditionExtract> SqlRef<E> {
-    pub fn new(storage: E::Storage) -> Self {
-        Self(storage)
-    }
-
-    pub fn display_values<D: DaoCore>(&self) -> Vec<(String, String)> {
-        self.0.display_values::<D>()
-    }
-}
-
-impl<E: ConditionExtract> std::ops::Deref for SqlRef<E> {
-    type Target = E::Storage;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<E: ConditionExtract> SqlCondition for SqlRef<E> {
-    fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
-        self.0.resolve::<D>()
-    }
-}
-
-impl<E: ConditionExtract> FromHandler for SqlRef<E> {
-    fn from_handler(handler: &mut Handler) -> Result<Self, FromHandlerError> {
-        Ok(SqlRef(E::extract(handler)?))
-    }
-
-    #[cfg(feature = "test_tower_metadata")]
-    fn metadata_used_types() -> Vec<String> {
-        E::metadata_used_types()
-    }
 }
