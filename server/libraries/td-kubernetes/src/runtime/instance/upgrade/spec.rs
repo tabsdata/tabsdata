@@ -67,6 +67,7 @@ pub enum Operation {
     ModifyLeafValueIf(ModifyLeafValueIf),
     ModifyTextIf(ModifyTextIf),
     InsertSiblingIfExisting(InsertSiblingIfExisting),
+    NestChildrenIfFlat(NestChildrenIfFlat),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -104,6 +105,13 @@ pub enum Scope {
     #[default]
     Addressed,
     Everywhere,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NestChildrenIfFlat {
+    pub leaf: String,
+    pub under: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -24,7 +24,8 @@ use crate::runtime::instance::profile::resolve_foreign_path;
 use crate::runtime::instance::upgrade::catalog::read_content;
 use crate::runtime::instance::upgrade::plan::Step;
 use crate::runtime::instance::upgrade::spec::{
-    Action, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf, Operation, Placement, Scope,
+    Action, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf, NestChildrenIfFlat,
+    Operation, Placement, Scope,
 };
 
 pub struct Outcome {
@@ -188,7 +189,59 @@ impl Operation {
             Self::ModifyTextIf(operation) => operation.replace(version, entry, current),
             Self::ModifyLeafValueIf(operation) => operation.replace(version, entry, current),
             Self::InsertSiblingIfExisting(operation) => operation.replace(version, entry, current),
+            Self::NestChildrenIfFlat(operation) => operation.replace(version, entry, current),
         }
+    }
+}
+
+impl NestChildrenIfFlat {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let mut document: serde_yaml::Value =
+            serde_yaml::from_str(current).map_err(|error| UpgradeError::ModifyParseFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        if !self.nest(&mut document) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' alone; leaf '{}' is absent or no longer \
+                 holds a flat block.",
+                self.leaf
+            );
+            return Ok((current.to_owned(), false));
+        }
+        let rendered =
+            serde_yaml::to_string(&document).map_err(|error| UpgradeError::ModifyRenderFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        Ok((rendered, true))
+    }
+
+    fn nest(&self, document: &mut serde_yaml::Value) -> bool {
+        let mut cursor = document;
+        for segment in split_leaf(&self.leaf) {
+            let Some(next) = cursor.get_mut(serde_yaml::Value::from(segment.as_str())) else {
+                return false;
+            };
+            cursor = next;
+        }
+        let serde_yaml::Value::Mapping(holder) = cursor else {
+            return false;
+        };
+        let flat = holder
+            .values()
+            .all(|value| !value.is_mapping() && !value.is_sequence());
+        if holder.is_empty() || !flat {
+            return false;
+        }
+        let children = std::mem::take(holder);
+        holder.insert(
+            serde_yaml::Value::from(self.under.as_str()),
+            serde_yaml::Value::Mapping(children),
+        );
+        true
     }
 }
 

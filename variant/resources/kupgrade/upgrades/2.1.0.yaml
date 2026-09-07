@@ -1,0 +1,35 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+schema: 1
+configs:
+  apiserver.database.yaml:
+    apiserver.database.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database.apiserver.pool
+          under: regular
+        - op: insert-sibling-if-existing
+          leaf: database.apiserver.pool.regular
+          sibling: exclusive
+          placement: after
+          value:
+            min_connections: 1
+            max_connections: 10
+            acquire_timeout: 30
+            max_lifetime: 3600
+            idle_timeout: 60
+            test_before_acquire: true
+  dbmanager.database.yaml:
+    dbmanager.database.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database_server.pool
+          under: admin
+        - op: modify-leaf-value-if
+          leaf: database_server.pool.admin.max_connections
+          from: 2
+          to: 1

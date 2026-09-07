@@ -238,6 +238,29 @@ configs:
 }
 
 #[test]
+fn a_nest_children_operation_parses() {
+    let yaml = "\
+schema: 1
+configs:
+  a.yaml:
+    a_kminus.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database_server.pool
+          under: admin
+";
+    let spec = deserialize_spec("2.1.0", yaml).expect("parses");
+    assert_eq!(
+        spec.configs["a.yaml"]["a_kminus.yaml"].changes(),
+        [Operation::NestChildrenIfFlat(NestChildrenIfFlat {
+            leaf: "database_server.pool".to_owned(),
+            under: "admin".to_owned(),
+        })]
+    );
+}
+
+#[test]
 fn the_shipped_specs_parse() {
     let folder = format!(
         "{}/../../../variant/resources/kupgrade/upgrades",

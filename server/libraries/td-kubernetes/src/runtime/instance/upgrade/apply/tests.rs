@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::base::constants::TABSDATA_REQUIREMENTS_LOCK_ASSET;
+use crate::runtime::instance::upgrade::spec::NestChildrenIfFlat;
 
 fn operation(leaf: &str, from: serde_yaml::Value, to: serde_yaml::Value) -> Operation {
     Operation::ModifyLeafValueIf(ModifyLeafValueIf {
@@ -753,4 +754,151 @@ fn a_foreign_asset_is_stamped_under_the_assets_family() {
             .version,
         "2.0.1"
     );
+}
+
+fn nest(leaf: &str, under: &str) -> Operation {
+    Operation::NestChildrenIfFlat(NestChildrenIfFlat {
+        leaf: leaf.to_owned(),
+        under: under.to_owned(),
+    })
+}
+
+const FLAT_POOL: &str = "database_server:\n  pool:\n    min_connections: 1\n    max_connections: \
+                          2\n    test_before_acquire: true\n";
+
+#[test]
+fn a_flat_block_nests_under_the_new_key() {
+    let (rendered, touched) = applied(FLAT_POOL, &[nest("database_server.pool", "admin")]);
+    assert!(touched);
+    let document: serde_yaml::Value = serde_yaml::from_str(&rendered).expect("parses");
+    let admin = document["database_server"]["pool"]["admin"].clone();
+    assert_eq!(admin["min_connections"], serde_yaml::Value::from(1));
+    assert_eq!(admin["max_connections"], serde_yaml::Value::from(2));
+    assert_eq!(admin["test_before_acquire"], serde_yaml::Value::from(true));
+    assert_eq!(
+        document["database_server"]["pool"]
+            .as_mapping()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn an_already_nested_block_is_left_alone() {
+    let nested = "database_server:\n  pool:\n    admin:\n      min_connections: 1\n";
+    let (rendered, touched) = applied(nested, &[nest("database_server.pool", "admin")]);
+    assert!(!touched);
+    assert_eq!(rendered, nested);
+}
+
+#[test]
+fn a_missing_block_nests_nothing() {
+    let (_, touched) = applied(FLAT_POOL, &[nest("database_server.absent", "admin")]);
+    assert!(!touched);
+}
+
+#[test]
+fn an_empty_block_nests_nothing() {
+    let (_, touched) = applied(
+        "database_server:\n  pool: {}\n",
+        &[nest("database_server.pool", "admin")],
+    );
+    assert!(!touched);
+}
+
+fn shipped(relative: &str) -> String {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join(relative);
+    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+}
+
+fn shipped_changes(group: &str, variant: &str) -> Vec<Operation> {
+    let yaml = shipped("variant/resources/kupgrade/upgrades/2.1.0.yaml");
+    let spec = crate::runtime::instance::upgrade::spec::deserialize_spec("2.1.0", &yaml)
+        .expect("the shipped spec parses");
+    spec.configs[group][variant].changes().to_vec()
+}
+
+fn parsed(yaml: &str) -> serde_yaml::Value {
+    serde_yaml::from_str(yaml).expect("parses")
+}
+
+/// The 2.0.2 shape of `configs/apiserver.database.yaml`, as every variant shipped it.
+const APISERVER_DATABASE_2_0_2: &str = "\
+database:
+  apiserver:
+    postgres:
+      password: ${{secretAuto:postgres_apiserver_password}}
+    pool:
+      min_connections: 5
+      max_connections: 50
+      acquire_timeout: 30
+      max_lifetime: 3600
+      idle_timeout: 60
+      test_before_acquire: true
+";
+
+/// The 2.0.2 shape of `configs/dbmanager.database.yaml`, as the kminus variant shipped it.
+const DBMANAGER_DATABASE_2_0_2: &str = "\
+database_server:
+  postgres:
+    host: 127.0.0.1
+    port: 2460
+    database: postgres
+    username: ${{secretAuto:postgres_system_user}}
+    password: ${{secretAuto:postgres_system_password}}
+    ssl_mode: prefer
+    ssl_root_cert: null
+  pool:
+    min_connections: 1
+    max_connections: 2
+    acquire_timeout: 30
+    max_lifetime: 1800
+    idle_timeout: 30
+    test_before_acquire: true
+";
+
+#[test]
+fn the_shipped_spec_carries_a_2_0_2_apiserver_config_to_the_2_1_0_shape() {
+    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database.yaml");
+    let (rendered, touched) = applied(APISERVER_DATABASE_2_0_2, &changes);
+    assert!(touched);
+    assert_eq!(
+        parsed(&rendered),
+        parsed(&shipped(
+            "variant/resources/kprofile/configs/apiserver.database_docker.yaml"
+        ))
+    );
+}
+
+#[test]
+fn the_shipped_spec_carries_a_2_0_2_dbmanager_config_to_the_2_1_0_shape() {
+    let changes = shipped_changes("dbmanager.database.yaml", "dbmanager.database.yaml");
+    let (rendered, touched) = applied(DBMANAGER_DATABASE_2_0_2, &changes);
+    assert!(touched);
+    let document = parsed(&rendered);
+    let admin = document["database_server"]["pool"]["admin"].clone();
+    assert_eq!(admin["min_connections"], serde_yaml::Value::from(1));
+    assert_eq!(admin["max_connections"], serde_yaml::Value::from(1));
+    assert_eq!(admin["max_lifetime"], serde_yaml::Value::from(1800));
+    assert_eq!(
+        document["database_server"]["postgres"]["host"],
+        serde_yaml::Value::from("127.0.0.1"),
+        "the staged values must survive the upgrade: {rendered}"
+    );
+    assert_eq!(
+        document["database_server"]["postgres"]["port"],
+        serde_yaml::Value::from(2460)
+    );
+}
+
+#[test]
+fn the_shipped_spec_is_idempotent_over_an_upgraded_config() {
+    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database.yaml");
+    let (once, _) = applied(APISERVER_DATABASE_2_0_2, &changes);
+    let (twice, touched) = applied(&once, &changes);
+    assert!(!touched);
+    assert_eq!(once, twice);
 }
