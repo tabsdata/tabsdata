@@ -16,7 +16,9 @@ use super::collections::{Collections, CollectionsResolved};
 use super::triggers_current::TriggersCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
+use crate::schema::archive::sql::{MaintainCurrentTriggerDef, SeedCurrent};
+use crate::schema::source::Derived;
+use crate::schema::sql::{ViewDef, cols_of};
 
 /// `triggers__with_names` view name. Re-used inside this file by
 /// `triggers__read` and exposed to consumers.
@@ -111,24 +113,30 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Triggers::Table.to_string()),
-            source_table: Triggers::Table.into_iden(),
-            target_table: TriggersCurrent::Table.into_iden(),
-            partition_col: Triggers::TriggerId.into_iden(),
-            columns: cols_of::<Triggers>(),
-        })]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            MaintainCurrentTriggerDef {
+                name: format!("{}__maintain_current", Triggers::Table.to_string()),
+                source_table: Triggers::Table.into_iden(),
+                target_table: TriggersCurrent::Table.into_iden(),
+                partition_col: Triggers::TriggerId.into_iden(),
+                columns: cols_of::<Triggers>(),
+            }
+            .derived(),
+        ]
     }
 
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: TriggersCurrent::Table.into_iden(),
-            source: Triggers::Table.into_iden(),
-            partition_col: Triggers::TriggerId.into_iden(),
-            version_col: Triggers::DefinedOn.into_iden(),
-            columns: cols_of::<Triggers>(),
-        }]
+    fn seed_statements(&self) -> Vec<String> {
+        vec![
+            SeedCurrent {
+                target: TriggersCurrent::Table.into_iden(),
+                source: Triggers::Table.into_iden(),
+                partition_col: Triggers::TriggerId.into_iden(),
+                version_col: Triggers::DefinedOn.into_iden(),
+                columns: cols_of::<Triggers>(),
+            }
+            .render(),
+        ]
     }
 }
 

@@ -31,7 +31,8 @@ use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::{json_object_agg, name_or_id};
-use crate::schema::sql::{StickyTerminalsTriggerDef, TriggerSpec, ViewDef};
+use crate::schema::source::Derived;
+use crate::schema::sql::{StickyTerminalsTriggerDef, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "function_runs__with_names"]
@@ -281,13 +282,16 @@ impl Entity for Defs {
         views
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::StickyTerminals(StickyTerminalsTriggerDef {
-            name: format!("{}__sticky_terminals", LogicalFunctionRuns::Table.to_string()),
-            source_table: LogicalFunctionRuns::Table.into_iden(),
-            status_col: LogicalFunctionRuns::Status.into_iden(),
-            terminal_values: &["C", "X", "Y"],
-        })]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            StickyTerminalsTriggerDef {
+                name: format!("{}__sticky_terminals", LogicalFunctionRuns::Table.to_string()),
+                source_table: LogicalFunctionRuns::Table.into_iden(),
+                status_col: LogicalFunctionRuns::Status.into_iden(),
+                terminal_values: &["C", "X", "Y"],
+            }
+            .derived(),
+        ]
     }
 }
 

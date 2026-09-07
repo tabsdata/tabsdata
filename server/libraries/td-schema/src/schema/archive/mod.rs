@@ -25,27 +25,34 @@
 //!    override (plus the now-unused imports) — an archive is only ever
 //!    installed as a starting point, so the default empty `delta` is correct.
 //! 3. Add `pub(crate) mod vN;` to this file.
-//! 4. Add a match arm to [`source`]: `N => &vN::Source,`.
+//! 4. Append `&vN::Source` to [`ARCHIVES`] — its length is tied to
+//!    `current::VERSION`, so the bump does not compile until you do.
 //!
 //! `test_archive_ddl_snapshots` then guards the frozen copy automatically.
 //! See the project README for a full guide and example.
 
+use crate::schema::current;
 use crate::schema::source::{SchemaSource, install_script};
 
+pub(crate) mod sql;
 pub(crate) mod v1;
 pub(crate) mod v2;
+pub(crate) mod v3;
+
+const ARCHIVED: usize = current::VERSION - 1;
+
+/// Every version below the current one, in ascending order. The length is tied
+/// to `current::VERSION`, so bumping the version without archiving the one it
+/// replaces does not compile.
+pub(crate) const ARCHIVES: [&'static dyn SchemaSource; ARCHIVED] = [&v1::Source, &v2::Source, &v3::Source];
 
 /// The [`SchemaSource`] for an archived version.
 ///
 /// # Panics
 ///
-/// Panics if no archive exists for the given version.
+/// Panics outside `1..current::VERSION`, which has no archive by construction.
 pub fn source(version: usize) -> &'static dyn SchemaSource {
-    match version {
-        1 => &v1::Source,
-        2 => &v2::Source,
-        _ => panic!("No archived schema for version {version}"),
-    }
+    ARCHIVES[version - 1]
 }
 
 /// The full install script for an archived version. Panics if no archive

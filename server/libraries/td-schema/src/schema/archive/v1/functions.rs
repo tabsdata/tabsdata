@@ -11,8 +11,10 @@ use super::collections::{Collections, CollectionsResolved};
 use super::functions_current::FunctionsCurrent;
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::archive::sql::{MaintainCurrentTriggerDef, SeedCurrent};
 use crate::schema::render::name_or_id;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
+use crate::schema::source::Derived;
+use crate::schema::sql::{ViewDef, cols_of};
 
 /// `FunctionStatus::Deleted` discriminant, hoisted as a `&str` because
 /// td-schema sits below td-objects in the dep graph.
@@ -132,23 +134,29 @@ impl Entity for Defs {
         )]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Functions::Table.to_string()),
-            source_table: Functions::Table.into_iden(),
-            target_table: FunctionsCurrent::Table.into_iden(),
-            partition_col: Functions::FunctionId.into_iden(),
-            columns: cols_of::<Functions>(),
-        })]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            MaintainCurrentTriggerDef {
+                name: format!("{}__maintain_current", Functions::Table.to_string()),
+                source_table: Functions::Table.into_iden(),
+                target_table: FunctionsCurrent::Table.into_iden(),
+                partition_col: Functions::FunctionId.into_iden(),
+                columns: cols_of::<Functions>(),
+            }
+            .derived(),
+        ]
     }
 
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: FunctionsCurrent::Table.into_iden(),
-            source: Functions::Table.into_iden(),
-            partition_col: Functions::FunctionId.into_iden(),
-            version_col: Functions::DefinedOn.into_iden(),
-            columns: cols_of::<Functions>(),
-        }]
+    fn seed_statements(&self) -> Vec<String> {
+        vec![
+            SeedCurrent {
+                target: FunctionsCurrent::Table.into_iden(),
+                source: Functions::Table.into_iden(),
+                partition_col: Functions::FunctionId.into_iden(),
+                version_col: Functions::DefinedOn.into_iden(),
+                columns: cols_of::<Functions>(),
+            }
+            .render(),
+        ]
     }
 }

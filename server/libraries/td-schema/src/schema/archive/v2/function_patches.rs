@@ -7,7 +7,9 @@ use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreat
 use super::function_patches_current::FunctionPatchesCurrent;
 use super::functions::Functions;
 use crate::schema::Entity;
-use crate::schema::sql::{ImmutableTriggerDef, TriggerSpec, VersionedTriggerDef, cols_of};
+use crate::schema::archive::sql::{ImmutableTriggerDef, VersionedTriggerDef};
+use crate::schema::source::Derived;
+use crate::schema::sql::cols_of;
 
 /// `function_patches` — code-only overrides of a parent
 /// `FunctionVersionId`. Lives in its own table so every "find latest
@@ -85,9 +87,9 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
+    fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
-            TriggerSpec::VersionedCurrent(VersionedTriggerDef {
+            VersionedTriggerDef {
                 name: format!("{}__maintain_current", FunctionPatches::Table.to_string()),
                 source_table: FunctionPatches::Table.into_iden(),
                 target_table: FunctionPatchesCurrent::Table.into_iden(),
@@ -95,12 +97,14 @@ impl Entity for Defs {
                 version_col: FunctionPatches::DefinedOn.into_iden(),
                 tie_break_col: FunctionPatches::Id.into_iden(),
                 columns: cols_of::<FunctionPatches>(),
-            }),
+            }
+            .derived(),
             // Patches are an event log of code amendments — never updated or deleted.
-            TriggerSpec::Immutable(ImmutableTriggerDef {
+            ImmutableTriggerDef {
                 name: format!("{}__immutable", FunctionPatches::Table.to_string()),
                 source_table: FunctionPatches::Table.into_iden(),
-            }),
+            }
+            .derived(),
         ]
     }
 }

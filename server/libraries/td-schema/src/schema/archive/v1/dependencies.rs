@@ -11,7 +11,9 @@ use super::collections::{Collections, CollectionsResolved};
 use super::dependencies_current::DependenciesCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
+use crate::schema::archive::sql::{MaintainCurrentTriggerDef, SeedCurrent};
+use crate::schema::source::Derived;
+use crate::schema::sql::{ViewDef, cols_of};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "dependencies__with_names"]
@@ -121,23 +123,29 @@ impl Entity for Defs {
         )]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Dependencies::Table.to_string()),
-            source_table: Dependencies::Table.into_iden(),
-            target_table: DependenciesCurrent::Table.into_iden(),
-            partition_col: Dependencies::DependencyId.into_iden(),
-            columns: cols_of::<Dependencies>(),
-        })]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            MaintainCurrentTriggerDef {
+                name: format!("{}__maintain_current", Dependencies::Table.to_string()),
+                source_table: Dependencies::Table.into_iden(),
+                target_table: DependenciesCurrent::Table.into_iden(),
+                partition_col: Dependencies::DependencyId.into_iden(),
+                columns: cols_of::<Dependencies>(),
+            }
+            .derived(),
+        ]
     }
 
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: DependenciesCurrent::Table.into_iden(),
-            source: Dependencies::Table.into_iden(),
-            partition_col: Dependencies::DependencyId.into_iden(),
-            version_col: Dependencies::DefinedOn.into_iden(),
-            columns: cols_of::<Dependencies>(),
-        }]
+    fn seed_statements(&self) -> Vec<String> {
+        vec![
+            SeedCurrent {
+                target: DependenciesCurrent::Table.into_iden(),
+                source: Dependencies::Table.into_iden(),
+                partition_col: Dependencies::DependencyId.into_iden(),
+                version_col: Dependencies::DefinedOn.into_iden(),
+                columns: cols_of::<Dependencies>(),
+            }
+            .render(),
+        ]
     }
 }

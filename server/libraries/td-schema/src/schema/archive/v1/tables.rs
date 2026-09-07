@@ -12,8 +12,10 @@ use super::functions::Functions;
 use super::tables_current::TablesCurrent;
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::archive::sql::{MaintainCurrentTriggerDef, SeedCurrent};
 use crate::schema::render::name_or_id;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
+use crate::schema::source::Derived;
+use crate::schema::sql::{ViewDef, cols_of};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "tables__with_names"]
@@ -124,23 +126,29 @@ impl Entity for Defs {
         )]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Tables::Table.to_string()),
-            source_table: Tables::Table.into_iden(),
-            target_table: TablesCurrent::Table.into_iden(),
-            partition_col: Tables::TableId.into_iden(),
-            columns: cols_of::<Tables>(),
-        })]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            MaintainCurrentTriggerDef {
+                name: format!("{}__maintain_current", Tables::Table.to_string()),
+                source_table: Tables::Table.into_iden(),
+                target_table: TablesCurrent::Table.into_iden(),
+                partition_col: Tables::TableId.into_iden(),
+                columns: cols_of::<Tables>(),
+            }
+            .derived(),
+        ]
     }
 
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: TablesCurrent::Table.into_iden(),
-            source: Tables::Table.into_iden(),
-            partition_col: Tables::TableId.into_iden(),
-            version_col: Tables::DefinedOn.into_iden(),
-            columns: cols_of::<Tables>(),
-        }]
+    fn seed_statements(&self) -> Vec<String> {
+        vec![
+            SeedCurrent {
+                target: TablesCurrent::Table.into_iden(),
+                source: Tables::Table.into_iden(),
+                partition_col: Tables::TableId.into_iden(),
+                version_col: Tables::DefinedOn.into_iden(),
+                columns: cols_of::<Tables>(),
+            }
+            .render(),
+        ]
     }
 }

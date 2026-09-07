@@ -40,9 +40,9 @@ mod with_status_views;
 mod workers;
 
 use crate::schema::Entity;
+use crate::schema::archive::sql::rls::policy_statements;
 use crate::schema::render::{render_query, render_schema};
-use crate::schema::source::{Derived, SchemaSource};
-use crate::schema::sql;
+use crate::schema::source::{Derived, SchemaSource, index_derived};
 use sea_query::{DynIden, IntoIden};
 
 /// Frozen schema revision of this archive.
@@ -153,14 +153,7 @@ impl SchemaSource for Source {
     }
 
     fn triggers(&self) -> Vec<Derived> {
-        ENTITIES
-            .iter()
-            .flat_map(|e| e.create_db_triggers())
-            .map(|t| Derived {
-                create: t.render(),
-                drop: t.render_drop(),
-            })
-            .collect()
+        ENTITIES.iter().flat_map(|e| e.create_db_triggers()).collect()
     }
 
     fn views(&self) -> Vec<Derived> {
@@ -174,19 +167,19 @@ impl SchemaSource for Source {
             .collect()
     }
 
-    fn indexes(&self) -> Vec<String> {
-        ENTITIES.iter().flat_map(|e| e.create_indices()).map(render_schema).collect()
+    fn indexes(&self) -> Vec<Derived> {
+        ENTITIES.iter().flat_map(|e| e.create_indices()).map(index_derived).collect()
     }
 
     fn seeds(&self) -> Vec<String> {
         let mut out: Vec<String> = ENTITIES.iter().flat_map(|e| e.seeds()).map(render_query).collect();
         // `_current` snapshot seeding after every event-log table is seeded,
         // so `ROW_NUMBER` ranks against the complete history.
-        out.extend(ENTITIES.iter().flat_map(|e| e.seed_current()).map(|spec| spec.render()));
+        out.extend(ENTITIES.iter().flat_map(|e| e.seed_statements()));
         out
     }
 
     fn rls(&self) -> Vec<String> {
-        project_scoped_tables().iter().flat_map(|t| sql::rls::policy_statements(&t.to_string())).collect()
+        project_scoped_tables().iter().flat_map(|t| policy_statements(&t.to_string())).collect()
     }
 }

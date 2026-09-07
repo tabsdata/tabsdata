@@ -14,7 +14,9 @@ use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreat
 use super::logical_function_run_pointers_current::LogicalFunctionRunPointersCurrent;
 use super::logical_function_runs::LogicalFunctionRuns;
 use crate::schema::Entity;
-use crate::schema::sql::{ImmutableTriggerDef, SeedCurrent, TriggerSpec, VersionedTriggerDef, cols_of};
+use crate::schema::archive::sql::{ImmutableTriggerDef, SeedCurrent, VersionedTriggerDef};
+use crate::schema::source::Derived;
+use crate::schema::sql::cols_of;
 
 /// `LogicalPointerStatus::Bound` discriminant, shared with the LTDV pointer
 /// log; hoisted as a `&str` because td-schema sits below td-objects in the
@@ -83,11 +85,11 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
+    fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
             // Latest event wins: a later Voided/Pending overwrites an earlier
             // Bound, so the current row reflects being bound *now*.
-            TriggerSpec::VersionedCurrent(VersionedTriggerDef {
+            VersionedTriggerDef {
                 name: format!("{}__maintain_current", LogicalFunctionRunPointers::Table.to_string()),
                 source_table: LogicalFunctionRunPointers::Table.into_iden(),
                 target_table: LogicalFunctionRunPointersCurrent::Table.into_iden(),
@@ -95,21 +97,26 @@ impl Entity for Defs {
                 version_col: LogicalFunctionRunPointers::SetOn.into_iden(),
                 tie_break_col: LogicalFunctionRunPointers::Id.into_iden(),
                 columns: cols_of::<LogicalFunctionRunPointers>(),
-            }),
-            TriggerSpec::Immutable(ImmutableTriggerDef {
+            }
+            .derived(),
+            ImmutableTriggerDef {
                 name: format!("{}__immutable", LogicalFunctionRunPointers::Table.to_string()),
                 source_table: LogicalFunctionRunPointers::Table.into_iden(),
-            }),
+            }
+            .derived(),
         ]
     }
 
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: LogicalFunctionRunPointersCurrent::Table.into_iden(),
-            source: LogicalFunctionRunPointers::Table.into_iden(),
-            partition_col: LogicalFunctionRunPointers::LogicalFunctionRunId.into_iden(),
-            version_col: LogicalFunctionRunPointers::SetOn.into_iden(),
-            columns: cols_of::<LogicalFunctionRunPointers>(),
-        }]
+    fn seed_statements(&self) -> Vec<String> {
+        vec![
+            SeedCurrent {
+                target: LogicalFunctionRunPointersCurrent::Table.into_iden(),
+                source: LogicalFunctionRunPointers::Table.into_iden(),
+                partition_col: LogicalFunctionRunPointers::LogicalFunctionRunId.into_iden(),
+                version_col: LogicalFunctionRunPointers::SetOn.into_iden(),
+                columns: cols_of::<LogicalFunctionRunPointers>(),
+            }
+            .render(),
+        ]
     }
 }
