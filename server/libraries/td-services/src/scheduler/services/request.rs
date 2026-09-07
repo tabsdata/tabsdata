@@ -2,264 +2,278 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::logical::layers::dispatch_mint::mint_function_runs_on_dispatch;
-use crate::scheduler::layers::dispatch::notify_dispatcher;
-use crate::scheduler::layers::request::{
-    create_locked_cron_trigger_workers_start_request,
+use crate::internal_api::InternalApi;
+use crate::logical::dispatch_mint::mint_function_runs_on_dispatch;
+use crate::project::active::active_project_ids;
+use crate::scheduler::request::{
+    WorkerMessages, create_locked_cron_trigger_workers_start_request,
     create_locked_cron_trigger_workers_stop_request,
     create_locked_function_runner_workers_start_request,
     create_locked_stage_trigger_workers_start_request,
-    create_locked_stage_trigger_workers_stop_request, dispatch_at_time, dispatch_saturated_flag,
-    enrich_minted_dispatch, fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch,
-    lfr_ids_from_minted_dispatch, materialize_replay_dispatch, notify_scheduler_if_saturated,
-    pfr_ids_from_dispatched_workers, stop_worker_update,
+    create_locked_stage_trigger_workers_stop_request, enrich_minted_dispatch,
+    fetch_lfr_to_dispatch, fetch_pfrs_to_dispatch, lfr_ids_from_minted_dispatch,
+    materialize_replay_dispatch, pfr_ids_from_dispatched_workers, put_worker_messages,
+    stop_worker_update,
 };
 use ta_services::factory::service_factory;
-use td_bridge::BridgeProviderHandle;
-use td_common::jwt::JwtConfig;
+use ta_services::service::Ctx;
+use td_bridge::{BridgeProviderHandle, Orchestrator};
+use td_database::access::{DbPool, Global, Grant};
+use td_database::domain::{Apiserver, DomainConnection};
+use td_error::TdError;
 use td_execution::{SchedulerConfig, SchedulerNotify};
+use td_objects::StateFilter;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::worker::{
     UpdateWorkerDB, UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames,
 };
-use td_objects::tower_service::with::With;
-use td_objects::types::addresses::InternalServerEndpoint;
-use td_objects::types::basic::{LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId};
-use td_queries::By;
-use td_queries::insert_vec;
+use td_objects::types::basic::{AtTime, ProjectId, WorkerId, WorkerType};
+use td_queries::{ChunkedQueries, LiveEntry};
 use td_storage::Storage;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::{layer, layers};
+use tracing::{debug, error};
 
-#[service_factory(
-    name = RequestService,
-    request = (),
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-    context = Storage,
-    context = BridgeProviderHandle,
-    context = InternalServerEndpoint,
-    context = SchedulerNotify,
-    context = JwtConfig,
-    context = SchedulerConfig,
-)]
-fn service() {
-    layers!(
-        // Capture the dispatch tick's AtTime once, before any sub-pipeline.
-        // Every readiness/mint/bind/yaml lookup in the tick shares this
-        // temporal point so the dispatch is consistent even if operator
-        // events arrive mid-tick.
-        from_fn(dispatch_at_time),
-        // Seed the saturation flag; the capped function-runner readiness
-        // fetches raise it when they return a full batch.
-        from_fn(dispatch_saturated_flag),
-        // Request function runners that need to be started — initial
-        // dispatch path (Scheduled/ReScheduled LFRs, mint + bind + flip
-        // LFR.status to Requested).
-        request_function_runners(),
-        // Request function runners for replay attempts — sticky LFRs
-        // whose pointer was flipped to Requested by the replay
-        // endpoint. No mint, no bind, no LFR.status flip.
-        request_replay_function_runners(),
-        // Stop cron trigger runners that need to be stopped
-        stop_cron_trigger_runners(),
-        // Request cron trigger runners that need to be started
-        request_cron_trigger_runners(),
-        // Stop stage trigger runners that need to be stopped
-        stop_stage_trigger_runners(),
-        // Request stage trigger runners that need to be started
-        request_stage_trigger_runners(),
-        // A capped tick re-notifies the scheduler (post-commit) so the
-        // remaining backlog drains without waiting for the failover timer.
-        from_fn(notify_scheduler_if_saturated),
-        from_fn(notify_dispatcher),
-    )
+#[service_factory]
+async fn request(
+    storage: Ctx<Storage>,
+    bridge: Ctx<BridgeProviderHandle>,
+    internal_api: Ctx<InternalApi>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    config: Ctx<SchedulerConfig>,
+    db: DbPool<Global>,
+    _request: (),
+) -> Result<(), TdError> {
+    let grant = Grant::asserted("scheduler dispatch tick");
+    // Capture the dispatch tick's AtTime once, before any sub-pipeline.
+    // Every readiness/mint/bind/yaml lookup in the tick shares this
+    // temporal point so the dispatch is consistent even if operator
+    // events arrive mid-tick — and every project of this tick shares it too.
+    let at = AtTime::now();
+    // The saturation flag; the capped function-runner readiness fetches raise
+    // it when they return a full batch, in any project.
+    let mut saturated = false;
+
+    // One transaction per project, each holding only that project's write
+    // lock. A project whose dispatch fails — a rejected job, a poisoned
+    // worker — no longer aborts every other project's tick with it.
+    for project in projects_to_tick(&db, grant).await? {
+        if let Err(e) = tick_project(
+            &project,
+            &at,
+            &storage,
+            &bridge,
+            &internal_api,
+            &config,
+            &db,
+            grant,
+            &mut saturated,
+        )
+        .await
+        {
+            error!(
+                project_id = %project,
+                "scheduler.dispatch_tick: project failed, continuing with the rest: {e:?}"
+            );
+        }
+    }
+
+    scheduler_notify.notify_dispatcher();
+    if saturated {
+        debug!("scheduler.dispatch_tick: capped; re-notifying the scheduler");
+        scheduler_notify.notify_scheduler();
+    }
+    Ok(())
 }
 
-// Requires:
-// - Transaction connection
-// - Storage
-// - T(MessageQueue)
-// - ServerUrl
-#[layer]
-pub fn request_function_runners() {
-    layers!(
-        // LFR-rooted readiness — Pending/ReScheduled LFRs whose logical
-        // chain has no blocked input. Patch resolution happens at mint,
-        // not here.
-        from_fn(fetch_lfr_to_dispatch),
-        // Mint FR + output TDV placeholders for each ready LFR (resolving
-        // latest patch or head per LFR), then bind the LFR pointer +
-        // each output LTDV pointer to the freshly-minted ids in this tx.
-        from_fn(mint_function_runs_on_dispatch),
-        // Project the minted set into the denormalized view the worker-yaml
-        // builder consumes (one round-trip; reuses the readiness projection).
-        from_fn(enrich_minted_dispatch),
-        // Create a locked message for each minted FR.
-        from_fn(create_locked_function_runner_workers_start_request),
-        // And insert generated messages.
-        from_fn(insert_vec::<WorkerDB>),
-        // Flip LFR.status Scheduled/ReScheduled → Requested.
-        from_fn(lfr_ids_from_minted_dispatch),
-        from_fn(UpdateLogicalFunctionRunDB::requested),
-        from_fn(
-            By::<Vec<LogicalFunctionRunId>>::update_chunked::<
-                UpdateLogicalFunctionRunDB,
-                LogicalFunctionRunDB,
-            >,
-        ),
-        // Flip PFR.status Requested → Dispatched so the replay-side
-        // readiness query (`Pfr::to_dispatch`) excludes these
-        // PFRs from the next tick.
-        from_fn(pfr_ids_from_dispatched_workers),
-        from_fn(UpdatePhysicalFunctionRunDB::dispatched),
-        from_fn(
-            By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
-                UpdatePhysicalFunctionRunDB,
-                PhysicalFunctionRunDB,
-            >,
-        ),
-    )
+/// Every live project gets a tick. Deliberately not "projects with pending
+/// work": that predicate would have to union every sub-pipeline's readiness
+/// condition, and missing one would silently stall a project forever, whereas
+/// an idle project's tick is a handful of indexed lookups that return nothing.
+async fn projects_to_tick(db: &DbPool<Global>, grant: Grant) -> Result<Vec<ProjectId>, TdError> {
+    active_project_ids(db, grant).await
 }
 
-// Replay-side request pipeline: PFRs in `Requested` status that the
-// replay endpoint minted without a WorkerDB. Shares enrich + worker-
-// message creation + the PFR.status → Dispatched flip with the
-// initial pipeline; skips mint (PFR + output TDVs already exist) and
-// skips the LFR.status flip (LFR is sticky-terminal).
-//
-// Requires:
-// - Transaction connection
-// - Storage
-// - T(MessageQueue)
-// - ServerUrl
-#[layer]
-pub fn request_replay_function_runners() {
-    layers!(
-        // Physical-side readiness — PFRs in `Requested` with no WorkerDB.
-        from_fn(fetch_pfrs_to_dispatch),
-        // Build the MintedDispatch shape from rows that already exist.
-        from_fn(materialize_replay_dispatch),
-        from_fn(enrich_minted_dispatch),
-        from_fn(create_locked_function_runner_workers_start_request),
-        from_fn(insert_vec::<WorkerDB>),
-        // Flip PFR.status Requested → Dispatched. No LFR.status flip
-        // (sticky terminal stays put).
-        from_fn(pfr_ids_from_dispatched_workers),
-        from_fn(UpdatePhysicalFunctionRunDB::dispatched),
-        from_fn(
-            By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
-                UpdatePhysicalFunctionRunDB,
-                PhysicalFunctionRunDB,
-            >,
-        ),
+/// One project's dispatch, in its own transaction.
+#[allow(clippy::too_many_arguments)]
+async fn tick_project(
+    project: &ProjectId,
+    at: &AtTime,
+    storage: &Storage,
+    bridge: &BridgeProviderHandle,
+    internal_api: &InternalApi,
+    config: &SchedulerConfig,
+    db: &DbPool<Global>,
+    grant: Grant,
+    saturated: &mut bool,
+) -> Result<(), TdError> {
+    let mut trx = db.in_project(project).begin_exclusive().await?;
+    let conn = trx.get(grant);
+    let mut messages = WorkerMessages::default();
+    let orchestrator = bridge.orchestrator();
+
+    // Request function runners that need to be started — initial dispatch
+    // path (Scheduled/ReScheduled LFRs, mint + bind + flip LFR.status to
+    // Requested).
+    let ready = fetch_lfr_to_dispatch(conn, at, config, saturated).await?;
+    let minted = mint_function_runs_on_dispatch(conn, &ready, at).await?;
+    let enriched = enrich_minted_dispatch(conn, &minted).await?;
+    let workers = create_locked_function_runner_workers_start_request(
+        orchestrator,
+        storage,
+        internal_api,
+        conn,
+        at,
+        &enriched,
+        &mut messages,
     )
+    .await?;
+    conn.insert_vec::<WorkerDB>(&workers).await?;
+    // Flip LFR.status Scheduled/ReScheduled -> Requested.
+    let lfr_ids = lfr_ids_from_minted_dispatch(&minted)?;
+    let requested = UpdateLogicalFunctionRunDB::requested();
+    conn.update_chunked::<_, LogicalFunctionRunDB, _>(&requested, &lfr_ids)
+        .await?;
+    // Flip PFR.status Requested -> Dispatched so the replay-side readiness
+    // query excludes these PFRs from the next tick.
+    let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
+    let dispatched = UpdatePhysicalFunctionRunDB::dispatched(at);
+    conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&dispatched, &pfr_ids)
+        .await?;
+
+    // Request function runners for replay attempts — sticky LFRs whose
+    // pointer was flipped to Requested by the replay endpoint. No mint, no
+    // bind, no LFR.status flip.
+    let replay_pfrs = fetch_pfrs_to_dispatch(conn, config, saturated).await?;
+    let minted = materialize_replay_dispatch(conn, &replay_pfrs).await?;
+    let enriched = enrich_minted_dispatch(conn, &minted).await?;
+    let workers = create_locked_function_runner_workers_start_request(
+        orchestrator,
+        storage,
+        internal_api,
+        conn,
+        at,
+        &enriched,
+        &mut messages,
+    )
+    .await?;
+    conn.insert_vec::<WorkerDB>(&workers).await?;
+    let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
+    conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&dispatched, &pfr_ids)
+        .await?;
+
+    let to_stop =
+        claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::CronTrigger)).await?;
+    let to_stop = create_locked_cron_trigger_workers_stop_request(
+        orchestrator,
+        internal_api,
+        to_stop,
+        &mut messages,
+    )
+    .await?;
+    update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
+
+    let to_start = claim_trigger_workers(
+        conn,
+        WorkerDB::triggers_to_schedule(WorkerType::CronTrigger),
+    )
+    .await?;
+    let to_start = create_locked_cron_trigger_workers_start_request(
+        orchestrator,
+        internal_api,
+        to_start,
+        &mut messages,
+    )
+    .await?;
+    update_worker_message_statuses(conn, orchestrator, at, &to_start, false).await?;
+
+    let to_stop =
+        claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::StageTrigger)).await?;
+    let to_stop = create_locked_stage_trigger_workers_stop_request(
+        orchestrator,
+        internal_api,
+        to_stop,
+        &mut messages,
+    )
+    .await?;
+    update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
+
+    let to_start = claim_trigger_workers(
+        conn,
+        WorkerDB::triggers_to_schedule(WorkerType::StageTrigger),
+    )
+    .await?;
+    let to_start = create_locked_stage_trigger_workers_start_request(
+        orchestrator,
+        storage,
+        internal_api,
+        conn,
+        to_start,
+        &mut messages,
+    )
+    .await?;
+    update_worker_message_statuses(conn, orchestrator, at, &to_start, false).await?;
+
+    trx.commit().await?;
+
+    put_worker_messages(bridge, messages).await;
+    Ok(())
 }
 
-// Requires:
-// - Transaction connection
-// - T(MessageQueue)
-// - ServerUrl
-#[layer]
-pub fn request_cron_trigger_runners() {
-    layers!(
-        from_fn(
-            By::<()>::fetch_all_in::<
-                { WorkerDBWithNames::CronTriggersToSchedule },
-                WorkerDBWithNames,
-            >
-        ),
-        from_fn(create_locked_cron_trigger_workers_start_request),
-        // Update statuses.
-        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-        from_fn(UpdateWorkerDB::requested),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-        from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
-    )
+/// Two steps because only a base table is lockable: PostgreSQL refuses `FOR
+/// UPDATE` through `workers__with_names`, which outer-joins. Worker rows are
+/// written outside the project's lock too — the worker callback, `resolve`,
+/// collection and function deletes — so the claim skips a worker one of them
+/// is mutating rather than enqueuing for it, and keeps the tick from blocking
+/// on it while holding the lock.
+async fn claim_trigger_workers(
+    conn: &mut DomainConnection<Apiserver>,
+    readiness: StateFilter<WorkerDB>,
+) -> Result<Vec<WorkerDBWithNames>, TdError> {
+    let claimed: Vec<WorkerDB> = conn.live().claim_all_in::<WorkerDB>(readiness, &()).await?;
+    if claimed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids: Vec<WorkerId> = claimed.into_iter().map(|w| w.id).collect();
+    let workers = conn
+        .fetch_all_chunked::<WorkerDBWithNames, WorkerId>(&ids)
+        .await?;
+    Ok(workers)
 }
 
-// Requires:
-// - Transaction connection
-// - T(MessageQueue)
-// - ServerUrl
-#[layer]
-pub fn stop_cron_trigger_runners() {
-    layers!(
-        from_fn(
-            By::<()>::fetch_all_in::<{ WorkerDBWithNames::CronTriggersToStop }, WorkerDBWithNames>
-        ),
-        from_fn(create_locked_cron_trigger_workers_stop_request),
-        // Update statuses.
-        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-        from_fn(stop_worker_update),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-        from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
-    )
-}
-
-// Requires:
-// - Transaction connection
-// - Storage
-// - T(MessageQueue)
-// - ServerUrl
-#[layer]
-pub fn request_stage_trigger_runners() {
-    layers!(
-        from_fn(
-            By::<()>::fetch_all_in::<
-                { WorkerDBWithNames::StageTriggersToSchedule },
-                WorkerDBWithNames,
-            >
-        ),
-        from_fn(create_locked_stage_trigger_workers_start_request),
-        // Update statuses.
-        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-        from_fn(UpdateWorkerDB::requested),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-        from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
-    )
-}
-
-// Requires:
-// - Transaction connection
-// - T(MessageQueue)
-// - ServerUrl
-#[layer]
-pub fn stop_stage_trigger_runners() {
-    layers!(
-        from_fn(
-            By::<()>::fetch_all_in::<{ WorkerDBWithNames::StageTriggersToStop }, WorkerDBWithNames>
-        ),
-        from_fn(create_locked_stage_trigger_workers_stop_request),
-        // Update statuses.
-        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-        from_fn(stop_worker_update),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-        from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
-    )
+/// Flip the trigger workers' status (Requested, or the orchestrator-specific
+/// stop status) and mark their messages Locked.
+async fn update_worker_message_statuses(
+    conn: &mut DomainConnection<Apiserver>,
+    orchestrator: Orchestrator,
+    at: &AtTime,
+    workers: &[WorkerDBWithNames],
+    stopping: bool,
+) -> Result<(), TdError> {
+    let worker_ids: Vec<WorkerId> = workers.iter().map(|x| x.base.id.clone()).collect();
+    let status_update: UpdateWorkerDB = if stopping {
+        stop_worker_update(orchestrator, at).await?
+    } else {
+        UpdateWorkerDB::requested()
+    };
+    conn.update_chunked::<_, WorkerDB, _>(&status_update, &worker_ids)
+        .await?;
+    let locked = UpdateWorkerMessageStatusDB::locked();
+    conn.update_chunked::<_, WorkerDB, _>(&locked, &worker_ids)
+        .await?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::services::execute::ExecuteFunctionService;
-    use crate::recovery::services::{RecoveryContext, RecoveryServices};
-    use crate::scheduler::services::SchedulerContext;
+    use crate::Services;
+    use crate::scheduler::test_wiring::dispatch_services;
     use http::Method;
     use std::collections::HashSet;
     use std::str::FromStr;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
     use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
     use td_bridge::messaging::{
         CronRequest, FunctionRequest, OrchestratorMessage, OrchestratorMessagePayload,
@@ -270,148 +284,29 @@ mod tests {
     use td_common::jwt::decode_internal_token;
     use td_common::worker::{Callback, Decorator as MessageDecorator, WorkerName};
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_execution::{MaxFunctionsPerTick, RecoveryConfig, StuckRequestedTimeout};
-    use td_objects::Buildable;
+    use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionRequest;
+    use td_objects::dxo::function::FunctionParam;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
     use td_objects::dxo::yaml::WorkerInput;
     use td_objects::dxo::yaml::function::{InputTable, OutputTable};
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, CronMask, Decorator, EnvPrefix,
-        ExecutionName, FunctionIdName, FunctionRuntimeValues, PhysicalFunctionRunStatus, ProjectId,
+        ExecutionName, FunctionIdName, FunctionOnly, FunctionRuntimeValues,
+        OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId, ProjectName, SkipIfRunning,
         TableName, TableNameDto, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
     use td_storage::SPath;
-    use td_tower::ctx_service::RawOneshot;
-    use tower::ServiceExt;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_schedule_request(db: TdPool) -> Result<(), TdError> {
-        use td_tower::metadata::type_of_val;
-
-        RequestService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<(), ()>(&[
-                type_of_val(&dispatch_at_time),
-                type_of_val(&dispatch_saturated_flag),
-                // Function — initial
-                type_of_val(&fetch_lfr_to_dispatch),
-                type_of_val(&mint_function_runs_on_dispatch),
-                type_of_val(&enrich_minted_dispatch),
-                type_of_val(&create_locked_function_runner_workers_start_request),
-                type_of_val(&insert_vec::<WorkerDB>),
-                type_of_val(&lfr_ids_from_minted_dispatch),
-                type_of_val(&UpdateLogicalFunctionRunDB::requested),
-                type_of_val(
-                    &By::<Vec<LogicalFunctionRunId>>::update_chunked::<
-                        UpdateLogicalFunctionRunDB,
-                        LogicalFunctionRunDB,
-                    >,
-                ),
-                type_of_val(&pfr_ids_from_dispatched_workers),
-                type_of_val(&UpdatePhysicalFunctionRunDB::dispatched),
-                type_of_val(
-                    &By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
-                        UpdatePhysicalFunctionRunDB,
-                        PhysicalFunctionRunDB,
-                    >,
-                ),
-                // Function — replay
-                type_of_val(&fetch_pfrs_to_dispatch),
-                type_of_val(&materialize_replay_dispatch),
-                type_of_val(&enrich_minted_dispatch),
-                type_of_val(&create_locked_function_runner_workers_start_request),
-                type_of_val(&insert_vec::<WorkerDB>),
-                type_of_val(&pfr_ids_from_dispatched_workers),
-                type_of_val(&UpdatePhysicalFunctionRunDB::dispatched),
-                type_of_val(
-                    &By::<Vec<PhysicalFunctionRunId>>::update_chunked::<
-                        UpdatePhysicalFunctionRunDB,
-                        PhysicalFunctionRunDB,
-                    >,
-                ),
-                // CronTrigger
-                // Stop
-                type_of_val(
-                    &By::<()>::fetch_all_in::<
-                        { WorkerDBWithNames::CronTriggersToStop },
-                        WorkerDBWithNames,
-                    >,
-                ),
-                type_of_val(&create_locked_cron_trigger_workers_stop_request),
-                // Update statuses.
-                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-                type_of_val(&stop_worker_update),
-                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-                type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(
-                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
-                ),
-                // Start
-                type_of_val(
-                    &By::<()>::fetch_all_in::<
-                        { WorkerDBWithNames::CronTriggersToSchedule },
-                        WorkerDBWithNames,
-                    >,
-                ),
-                type_of_val(&create_locked_cron_trigger_workers_start_request),
-                // Update statuses.
-                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-                type_of_val(&UpdateWorkerDB::requested),
-                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-                type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(
-                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
-                ),
-                // StageTrigger
-                // Stop
-                type_of_val(
-                    &By::<()>::fetch_all_in::<
-                        { WorkerDBWithNames::StageTriggersToStop },
-                        WorkerDBWithNames,
-                    >,
-                ),
-                type_of_val(&create_locked_stage_trigger_workers_stop_request),
-                // Update statuses.
-                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-                type_of_val(&stop_worker_update),
-                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-                type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(
-                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
-                ),
-                // Start
-                type_of_val(
-                    &By::<()>::fetch_all_in::<
-                        { WorkerDBWithNames::StageTriggersToSchedule },
-                        WorkerDBWithNames,
-                    >,
-                ),
-                type_of_val(&create_locked_stage_trigger_workers_start_request),
-                // Update statuses.
-                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
-                type_of_val(&UpdateWorkerDB::requested),
-                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
-                type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(
-                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
-                ),
-                type_of_val(&notify_scheduler_if_saturated),
-                type_of_val(&notify_dispatcher),
-            ]);
-        Ok(())
-    }
 
     #[td_test::test(db)]
     async fn test_schedule_request(db: TdPool) -> Result<(), TdError> {
@@ -423,22 +318,28 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        // Setup
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
-            .triggers(None)
-            .tables(vec![
+        let create = FunctionRegister {
+            name: "function_1".try_into()?,
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: vec![TableDependencyDto::try_from("table_1")?].into(),
+            triggers: None,
+            tables: vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
-            ])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]
+            .into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(p.id)
@@ -448,25 +349,29 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_1")?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: Some(ExecutionName::try_from("test_execution")?),
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(p.id);
 
-        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        let execution = service.raw_oneshot(request).await?;
+        let service = dispatch_services(&db);
+        let execution = service.execute_function(request).await?.data;
 
-        // Actual test
-        let context = SchedulerContext::with_defaults(db.clone());
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        let context = dispatch_services(&db);
+        context.clone().request(()).await?;
 
         let created_message = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created_message.len(), 1);
@@ -491,8 +396,6 @@ mod tests {
             panic!("Unexpected WorkerInput version")
         };
 
-        // V2 assertions
-        // Info
         let info = &message.info;
         let physical_function_runs: Vec<PhysicalFunctionRunDB> = db
             .live()
@@ -518,7 +421,7 @@ mod tests {
         assert_eq!(info.function_bundle.uri, uri);
         assert_eq!(
             info.function_bundle.env_prefix,
-            Some(EnvPrefix::try_from(&mount_def.id)?)
+            Some(EnvPrefix::try_from(mount_def.id.as_str())?)
         );
         assert_eq!(info.triggered_on, physical_function_run.triggered_on);
         assert!(*info.triggered_on < *info.scheduled_on);
@@ -538,10 +441,9 @@ mod tests {
         assert_eq!(info.function_data.uri, uri);
         assert_eq!(
             info.function_data.env_prefix,
-            Some(EnvPrefix::try_from(&mount_def.id)?)
+            Some(EnvPrefix::try_from(mount_def.id.as_str())?)
         );
 
-        // Input
         assert_eq!(message.input.len(), 1);
         let input_table = &message.input[0];
         match input_table {
@@ -557,7 +459,6 @@ mod tests {
             _ => panic!("Unexpected Input Table type"),
         }
 
-        // Output
         assert_eq!(message.output.len(), 2);
         for (index, output_table) in message.output.iter().enumerate() {
             match output_table {
@@ -569,29 +470,35 @@ mod tests {
                         )
                         .await?;
 
-                    assert_eq!(output.name, physical_table_data_version.name);
+                    assert_eq!(output.name, physical_table_data_version.base.base.name);
                     assert_eq!(output.collection_id, collection.id);
                     assert_eq!(output.collection, collection.name);
-                    assert_eq!(output.table_id, physical_table_data_version.table_id);
+                    assert_eq!(
+                        output.table_id,
+                        physical_table_data_version.base.base.table_id
+                    );
                     assert_eq!(
                         output.table_version_id,
-                        physical_table_data_version.table_version_id
+                        physical_table_data_version.base.base.table_version_id
                     );
-                    assert_eq!(output.table_data_version_id, physical_table_data_version.id);
+                    assert_eq!(
+                        output.table_data_version_id,
+                        physical_table_data_version.base.base.id
+                    );
 
                     let table_path = SPath::parse(format!(
                         "/c/{}/d/{}/t/{}/{}.t",
                         collection.id,
-                        physical_table_data_version.id,
-                        physical_table_data_version.table_id,
-                        physical_table_data_version.table_version_id,
+                        physical_table_data_version.base.base.id,
+                        physical_table_data_version.base.base.table_id,
+                        physical_table_data_version.base.base.table_version_id,
                     ))?;
                     let (uri, mount_def) = context.storage.to_external_uri(&table_path)?;
 
                     assert_eq!(output.location.uri, uri);
                     assert_eq!(
                         output.location.env_prefix,
-                        Some(EnvPrefix::try_from(&mount_def.id)?)
+                        Some(EnvPrefix::try_from(mount_def.id.as_str())?)
                     );
                     assert_eq!(*output.table_pos, index as i32);
                 }
@@ -626,10 +533,10 @@ mod tests {
     /// two (the seeded one + the replay one).
     #[td_test::test(db)]
     async fn test_schedule_request_replay(db: TdPool) -> Result<(), TdError> {
-        use crate::logical::services::replay::ReplayLogicalFunctionRunService;
         use td_objects::and;
-        use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunPointerDB};
-        use td_objects::rest_urls::LogicalFunctionRunParam;
+        use td_objects::dxo::logical::{
+            LogicalFunctionRunDB, LogicalFunctionRunParam, LogicalFunctionRunPointerDB,
+        };
         use td_objects::types::basic::{
             LogicalFunctionRunStatus, LogicalPointerStatus, PhysicalFunctionRunStatus,
             TransactionKey,
@@ -646,25 +553,31 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("c_replay")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("fr_replay")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "fr_replay".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
         let execution = db.scoped(p.id).seed().execution(&function).await?;
-        let txn = db
+        let trx = db
             .scoped(p.id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
@@ -676,7 +589,7 @@ mod tests {
                 &collection,
                 &function,
                 &execution,
-                &txn,
+                &trx,
                 &LogicalFunctionRunStatus::Committed,
             )
             .await?;
@@ -687,15 +600,15 @@ mod tests {
         let lfr_id = lfr.id.clone();
 
         // Call replay — mints FR_new + Requested(FR_new) pointer event.
-        let replay_param = LogicalFunctionRunParam::builder()
-            .logical_function_run(lfr_id.clone())
-            .build()?;
+        let replay_param = LogicalFunctionRunParam {
+            logical_function_run: lfr_id.clone(),
+        };
         let replay_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(replay_param, ());
-        let replay_response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(replay_request)
-            .await?;
+        let replay_response = dispatch_services(&db)
+            .replay_logical_function_run(replay_request)
+            .await?
+            .data;
         assert_ne!(replay_response.new_function_run_id, fr_old.id);
 
         // After replay-mint, two FRs exist under the LFR; LFR.status
@@ -709,11 +622,8 @@ mod tests {
         // Run the scheduler request service. It should pick up the
         // Requested pointer and create a locked worker message for
         // the new PFR. No status flip on the LFR.
-        let context = SchedulerContext::with_defaults(db.clone());
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        let context = dispatch_services(&db);
+        context.clone().request(()).await?;
 
         let messages = context.bridge.message_queue().locked_messages().await;
         assert_eq!(
@@ -722,7 +632,6 @@ mod tests {
             "expected exactly one worker message for the replay PFR"
         );
 
-        // The worker message references the new PFR.
         let payload = &messages[0].payload;
         let context_yaml = match payload {
             OrchestratorMessagePayload::OrchestratorRequestMessagePayload(m) => &m.context,
@@ -739,7 +648,6 @@ mod tests {
             replay_response.new_function_run_id
         );
 
-        // A WorkerDB row was created referencing the new PFR.
         let worker: WorkerDB = db
             .live()
             .fetch_one::<WorkerDB>(&Some(replay_response.new_function_run_id.clone()))
@@ -765,7 +673,6 @@ mod tests {
         assert!(matches!(latest.status, LogicalPointerStatus::Bound));
         assert_eq!(latest.physical_function_run_id, Some(fr_old.id.clone()));
 
-        // PFR.status flipped to Dispatched by the request layer.
         let pfr_new = db
             .live()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
@@ -776,10 +683,7 @@ mod tests {
         // message — `to_dispatch` filters on PFR.status=Requested,
         // and we just flipped to Dispatched.
         let prior_messages_count = messages.len();
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
         let messages_after = context.bridge.message_queue().locked_messages().await;
         assert_eq!(
             messages_after.len(),
@@ -801,18 +705,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from("c_k8s")?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_1")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "function_1".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: vec![TableDependencyDto::try_from("table_1")?].into(),
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _ = db
             .scoped(p.id)
             .seed()
@@ -821,32 +731,31 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("e_k8s")?))
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_1")?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: Some(ExecutionName::try_from("e_k8s")?),
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
             )
             .in_project(p.id);
-        ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(request)
-            .await?;
+        dispatch_services(&db).execute_function(request).await?;
 
-        // Run the request tick with the kubernetes orchestrator.
         let context = kubernetes_scheduler_context(&db);
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
 
         let created = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created.len(), 1);
 
-        // Kubernetes emits the per-action FunctionRequest kind, carrying the
-        // decorator + resolver, with no pre-resolved context.
         let OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
             FunctionRequest::Start(start),
         ) = &created[0].payload
@@ -855,14 +764,12 @@ mod tests {
         };
         assert_eq!(start.decorator, MessageDecorator::Publisher);
 
-        // Resolver is a GET to the resolve endpoint; responder is a POST.
         let Callback::Http(resolver) = &start.resolver;
         assert_eq!(resolver.method, Method::GET);
         assert!(resolver.url.path().ends_with("/message"));
         let Callback::Http(responder) = &start.responder;
         assert_eq!(responder.method, Method::POST);
 
-        // WorkerDB row still created Locked.
         let worker_id = WorkerId::try_from(created[0].id.as_str())?;
         let worker: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker_id).await?;
         assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
@@ -886,18 +793,100 @@ mod tests {
         Ok(())
     }
 
-    /// A `SchedulerContext` wired to the kubernetes orchestrator with an
+    /// Work ready in two projects dispatches in the same tick. The tick is a
+    /// loop over projects now — each with its own transaction and its own write
+    /// lock — so a bug that ticked only the first would strand the second
+    /// forever, and every single-project test above would still pass.
+    #[td_test::test(db)]
+    async fn test_tick_dispatches_every_project(db: TdPool) -> Result<(), TdError> {
+        let mut executions = Vec::new();
+        for (project, collection_name, function_name, table) in [
+            ("p_one", "c_one", "f_one", "t_one"),
+            ("p_two", "c_two", "f_two", "t_two"),
+        ] {
+            let p = db.seed().project(ProjectName::try_from(project)?).await?;
+            let collection = db
+                .scoped(p.id)
+                .seed()
+                .collection(
+                    &CollectionName::try_from(collection_name)?,
+                    &UserId::admin(),
+                )
+                .await?;
+            let create = FunctionRegister {
+                name: function_name.try_into()?,
+                description: "d".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into()?,
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: vec![].into(),
+                triggers: None,
+                tables: vec![TableNameDto::try_from(table)?].into(),
+                table_types: None,
+                runtime_values: FunctionRuntimeValues::try_from("rv")?,
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            };
+            db.scoped(p.id)
+                .seed()
+                .function(&collection, &create)
+                .await?;
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .create(
+                    (
+                        CollectionParam {
+                            collection: CollectionIdName::from_str(collection_name)?,
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str(function_name)?,
+                        },
+                    ),
+                    ExecutionRequest {
+                        name: None,
+                        function_only: FunctionOnly::default(),
+                        override_disabled_trigger: OverrideDisabledTrigger::default(),
+                        skip_if_running: SkipIfRunning::default(),
+                        external_uid: None,
+                    },
+                )
+                .in_project(p.id);
+            executions.push(dispatch_services(&db).execute_function(request).await?.data);
+        }
+
+        let context = kubernetes_scheduler_context(&db);
+        context.clone().request(()).await?;
+
+        assert_eq!(
+            context.bridge.message_queue().locked_messages().await.len(),
+            2,
+            "both projects must dispatch in one tick"
+        );
+        for execution in &executions {
+            let pfrs: Vec<PhysicalFunctionRunDB> = db
+                .live()
+                .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
+                .await?;
+            assert_eq!(pfrs.len(), 1, "each project must dispatch its own run");
+        }
+        Ok(())
+    }
+
+    /// `Services` wired to the kubernetes orchestrator with an
     /// in-memory queue (the file queue only accepts flat request messages).
-    fn kubernetes_scheduler_context(db: &TdPool) -> SchedulerContext {
+    fn kubernetes_scheduler_context(db: &TdPool) -> Services {
         kubernetes_scheduler_context_with_queue(db, InMemoryOrchestratorMessageQueue::default())
     }
 
     fn kubernetes_scheduler_context_with_queue(
         db: &TdPool,
         queue: impl OrchestratorMessageQueue + 'static,
-    ) -> SchedulerContext {
-        let mut context = SchedulerContext::with_defaults(db.clone());
-        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
+    ) -> Services {
+        let mut context = dispatch_services(db);
+        context.bridge = Ctx::new(BridgeProviderHandle::new(Arc::new(
             TestBridgeProvider::default()
                 .with_orchestrator(Orchestrator::Kubernetes)
                 .with_message_queue(queue),
@@ -993,18 +982,24 @@ mod tests {
                 &UserId::admin(),
             )
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_1")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "function_1".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: vec![TableDependencyDto::try_from("table_1")?].into(),
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(project_id)
             .seed()
@@ -1051,10 +1046,7 @@ mod tests {
         .await?;
 
         let context = kubernetes_scheduler_context(db);
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
 
         let mut created = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created.len(), 1);
@@ -1090,10 +1082,7 @@ mod tests {
 
         let queue = FailPutQueue::failing_ids([poisoned.id.to_string()]);
         let context = kubernetes_scheduler_context_with_queue(&db, queue);
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
 
         let skipped: WorkerDB = db.live().fetch_one::<WorkerDB>(&poisoned.id).await?;
         assert_eq!(skipped.status, WorkerStatus::StopScheduled);
@@ -1126,11 +1115,8 @@ mod tests {
         )
         .await?;
 
-        let context = SchedulerContext::with_defaults(db.clone());
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        let context = dispatch_services(&db);
+        context.clone().request(()).await?;
 
         let updated: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker.id).await?;
         assert_eq!(updated.status, WorkerStatus::StopRequested);
@@ -1159,45 +1145,58 @@ mod tests {
             .await?;
         let mut executions = Vec::new();
         for (name, table) in [("function_1", "table_1"), ("function_2", "table_2")] {
-            let create = FunctionRegister::builder()
-                .try_name(name)?
-                .try_description("d")?
-                .bundle_id(BundleId::default())
-                .try_snippet("s")?
-                .decorator(Decorator::Publisher)
-                .dependencies(vec![])
-                .triggers(None)
-                .tables(vec![TableNameDto::try_from(table)?])
-                .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-                .reuse_frozen_tables(false)
-                .build()?;
+            let create = FunctionRegister {
+                name: name.try_into()?,
+                description: "d".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into()?,
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: vec![].into(),
+                triggers: None,
+                tables: vec![TableNameDto::try_from(table)?].into(),
+                table_types: None,
+                runtime_values: FunctionRuntimeValues::try_from("rv")?,
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            };
             db.scoped(p.id)
                 .seed()
                 .function(&collection, &create)
                 .await?;
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str(name)?)
-                        .build()?,
-                    ExecutionRequest::builder().name(None).build()?,
+                    (
+                        CollectionParam {
+                            collection: CollectionIdName::from_str(&format!(
+                                "{}",
+                                collection.name
+                            ))?,
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str(name)?,
+                        },
+                    ),
+                    ExecutionRequest {
+                        name: None,
+                        function_only: FunctionOnly::default(),
+                        override_disabled_trigger: OverrideDisabledTrigger::default(),
+                        skip_if_running: SkipIfRunning::default(),
+                        external_uid: None,
+                    },
                 )
                 .in_project(p.id);
-            let execution = ExecuteFunctionService::with_defaults(db.clone())
-                .service()
-                .raw_oneshot(request)
-                .await?;
+            let execution = dispatch_services(&db).execute_function(request).await?.data;
             executions.push(execution);
         }
 
         // The first put fails post-commit: the tick still succeeds, the
         // other run's put goes through, and BOTH runs' rows are committed.
         let context = kubernetes_scheduler_context_with_queue(&db, FailPutQueue::failing_first(1));
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
         let created = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created.len(), 1);
         for execution in &executions {
@@ -1217,10 +1216,7 @@ mod tests {
         // The run with the lost put is NOT re-picked by the readiness
         // queries (its WorkerDB exists): a normal tick dispatches nothing.
         let context = kubernetes_scheduler_context(&db);
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
         assert!(
             context
                 .bridge
@@ -1233,21 +1229,14 @@ mod tests {
         // The stuck-dispatched sweep (recovery tick) is the recovery path:
         // it fails the pod-less attempts; the next request tick
         // re-dispatches fresh ones.
-        let mut recovery = RecoveryContext::with_defaults(db.clone());
-        recovery.recovery_config = Arc::new(RecoveryConfig {
+        let mut recovery = Services::with_defaults(db.clone());
+        recovery.recovery_config = Ctx::new(RecoveryConfig {
             stuck_requested_timeout: StuckRequestedTimeout(Duration::ZERO),
             ..RecoveryConfig::default()
         });
-        RecoveryServices::build(&recovery)
-            .recovery
-            .service()
-            .oneshot(())
-            .await?;
+        recovery.recovery(()).await?;
         let context = kubernetes_scheduler_context(&db);
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
                 .live()
@@ -1285,40 +1274,56 @@ mod tests {
             .await?;
         let mut executions = Vec::new();
         for (name, table) in [("function_1", "table_1"), ("function_2", "table_2")] {
-            let create = FunctionRegister::builder()
-                .try_name(name)?
-                .try_description("d")?
-                .bundle_id(BundleId::default())
-                .try_snippet("s")?
-                .decorator(Decorator::Publisher)
-                .dependencies(vec![])
-                .triggers(None)
-                .tables(vec![TableNameDto::try_from(table)?])
-                .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-                .reuse_frozen_tables(false)
-                .build()?;
+            let create = FunctionRegister {
+                name: name.try_into()?,
+                description: "d".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into()?,
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: vec![].into(),
+                triggers: None,
+                tables: vec![TableNameDto::try_from(table)?].into(),
+                table_types: None,
+                runtime_values: FunctionRuntimeValues::try_from("rv")?,
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            };
             db.scoped(p.id)
                 .seed()
                 .function(&collection, &create)
                 .await?;
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str(name)?)
-                        .build()?,
-                    ExecutionRequest::builder().name(None).build()?,
+                    (
+                        CollectionParam {
+                            collection: CollectionIdName::from_str(&format!(
+                                "{}",
+                                collection.name
+                            ))?,
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str(name)?,
+                        },
+                    ),
+                    ExecutionRequest {
+                        name: None,
+                        function_only: FunctionOnly::default(),
+                        override_disabled_trigger: OverrideDisabledTrigger::default(),
+                        skip_if_running: SkipIfRunning::default(),
+                        external_uid: None,
+                    },
                 )
                 .in_project(p.id);
-            let execution = ExecuteFunctionService::with_defaults(db.clone())
-                .service()
-                .raw_oneshot(request)
-                .await?;
+            let execution = dispatch_services(&db).execute_function(request).await?.data;
             executions.push(execution);
         }
 
         let mut context = kubernetes_scheduler_context(&db);
-        context.scheduler_config = Arc::new(SchedulerConfig {
+        context.scheduler_config = Ctx::new(SchedulerConfig {
             max_functions_per_tick: MaxFunctionsPerTick(1),
             ..SchedulerConfig::default()
         });
@@ -1331,10 +1336,7 @@ mod tests {
 
         // Tick 1: only the oldest ready run dispatches; the full batch
         // stores a scheduler re-notify.
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
         assert_eq!(
             context.bridge.message_queue().locked_messages().await.len(),
             1
@@ -1358,10 +1360,7 @@ mod tests {
 
         // Tick 2: the remaining run dispatches — still a full batch, so
         // the re-notify fires again.
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
         assert_eq!(
             context.bridge.message_queue().locked_messages().await.len(),
             2
@@ -1379,10 +1378,7 @@ mod tests {
         .expect("second full-batch tick must re-notify the scheduler");
 
         // Tick 3: nothing ready — under the cap, no re-notify.
-        RequestService::build(&context)
-            .service()
-            .oneshot(())
-            .await?;
+        context.clone().request(()).await?;
         assert_eq!(
             context.bridge.message_queue().locked_messages().await.len(),
             2
@@ -1458,7 +1454,6 @@ mod tests {
         };
         assert_eq!(stop.worker, WorkerName::StageTrigger);
         assert_http_post(&stop.responder);
-        // The message id is the worker id.
         assert_eq!(id, worker.id.to_string());
 
         Ok(())

@@ -7,13 +7,12 @@
 //! storage location, chasing the latest with-data row when needed.
 
 use super::{build_external_location, partition_and_sort};
-use crate::logical::layers::index_lfrs_by_exec_fn;
+use crate::logical::index_lfrs_by_exec_fn;
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::logical::{
@@ -36,7 +35,7 @@ use td_storage::location::StorageLocation;
 /// index (for `(execution_id, function_id) → LFR`), output PTDVs, LFR
 /// input rows, the latest LTDV pointer events at `at`, and the bound TDVs.
 ///
-/// Resolved once per dispatch (a batch for the supervisor request layer,
+/// Resolved once per dispatch (a batch for the supervisor request stage,
 /// a batch-of-one for the resolve endpoint) so the per-FR loop is pure
 /// map lookups except for the cold dep-fallback / has-data-chase paths.
 pub(crate) struct DispatchPrefetch {
@@ -50,8 +49,8 @@ pub(crate) struct DispatchPrefetch {
 impl DispatchPrefetch {
     fn lfr_id_for(&self, f: &PhysicalFunctionRunToExecute) -> Option<LogicalFunctionRunId> {
         self.lfr_by_fr_key
-            .get(&f.execution_id)
-            .and_then(|m| m.get(&f.function_id))
+            .get(&f.base.base.execution_id)
+            .and_then(|m| m.get(&f.base.base.function_id))
             .map(|l| l.id.clone())
     }
 
@@ -75,14 +74,14 @@ pub(crate) async fn prefetch_dispatch(
 ) -> Result<DispatchPrefetch, TdError> {
     let fr_ids: Vec<PhysicalFunctionRunId> = physical_function_runs
         .iter()
-        .map(|f| f.id.clone())
+        .map(|f| f.base.base.id.clone())
         .collect();
     // Derive each FR's LFR via (execution_id, function_id). Fetch all
     // LFRs for the tick's executions in one chunked query and index
     // them by (execution_id, function_id).
     let exec_ids: Vec<ExecutionId> = physical_function_runs
         .iter()
-        .map(|f| f.execution_id.clone())
+        .map(|f| f.base.base.execution_id.clone())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -97,8 +96,8 @@ pub(crate) async fn prefetch_dispatch(
         .iter()
         .filter_map(|f| {
             lfr_by_fr_key
-                .get(&f.execution_id)
-                .and_then(|m| m.get(&f.function_id))
+                .get(&f.base.base.execution_id)
+                .and_then(|m| m.get(&f.base.base.function_id))
                 .map(|l| l.id.clone())
         })
         .collect();
@@ -116,7 +115,7 @@ pub(crate) async fn prefetch_dispatch(
         Vec<PhysicalTableDataVersionDBWithNames>,
     > = all_output_tables
         .into_iter()
-        .into_group_map_by(|t| t.physical_function_run_id.clone());
+        .into_group_map_by(|t| t.base.base.physical_function_run_id.clone());
 
     let all_lfr_inputs: Vec<LogicalFunctionRunInputDB> = if lfr_ids.is_empty() {
         Vec::new()
@@ -165,7 +164,7 @@ pub(crate) async fn prefetch_dispatch(
             conn.fetch_all_chunked::<PhysicalTableDataVersionDBWithNames, PhysicalTableDataVersionId>(&bound_tdv_ids)
             .await?
             .into_iter()
-            .map(|t| (t.id.clone(), t))
+            .map(|t| (t.base.base.id.clone(), t))
             .collect()
         };
 
@@ -227,7 +226,6 @@ pub(crate) async fn resolve_input_tables(
             continue;
         };
 
-        // Resolve LTDV → bound TDV from the pre-fetched maps.
         let bound_tdv: Option<&PhysicalTableDataVersionDBWithNames> = lfri
             .requirement_logical_table_data_version_id
             .as_ref()
@@ -240,17 +238,17 @@ pub(crate) async fn resolve_input_tables(
         // version when no TDV is bound.
         let (name, collection_id, collection, table_id, table_version_id) = match bound_tdv {
             Some(tdv) => (
-                tdv.name.clone(),
-                tdv.collection_id,
+                tdv.base.base.name.clone(),
+                tdv.base.base.collection_id,
                 tdv.collection.clone(),
-                tdv.table_id,
-                tdv.table_version_id,
+                tdv.base.base.table_id,
+                tdv.base.base.table_version_id,
             ),
             None => {
                 if fallback_cache.is_none() {
                     let deps: HashMap<DependencyPos, DependencyDB> = conn
                         .dependencies()
-                        .active_for_function_at(&f.function_id, &f.defined_on)
+                        .active_for_function_at(&f.base.base.function_id, &f.defined_on)
                         .await?
                         .into_iter()
                         .map(|d| (d.dep_pos, d))
@@ -267,7 +265,7 @@ pub(crate) async fn resolve_input_tables(
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
-                    let triggered_at = AtTime::try_from(f.triggered_on)?;
+                    let triggered_at = AtTime::try_from(f.base.base.triggered_on)?;
                     let tables: HashMap<TableId, TableDB> = if table_ids.is_empty() {
                         HashMap::new()
                     } else {
@@ -284,7 +282,7 @@ pub(crate) async fn resolve_input_tables(
                         conn.fetch_all_chunked::<CollectionDB, CollectionId>(&coll_ids)
                             .await?
                             .into_iter()
-                            .map(|c| (c.id, c))
+                            .map(|c| (c.base.id, c))
                             .collect()
                     };
                     fallback_cache = Some(FallbackCache {
@@ -317,7 +315,7 @@ pub(crate) async fn resolve_input_tables(
                 (
                     table.name.clone(),
                     dep.table_collection_id,
-                    coll.name.clone(),
+                    coll.base.name.clone(),
                     dep.table_id,
                     table.id,
                 )
@@ -330,10 +328,13 @@ pub(crate) async fn resolve_input_tables(
             None => (None, None),
             Some(found_data_version) => {
                 let data_version_with_data =
-                    if matches!(found_data_version.has_data, Some(HasData::TRUE)) {
+                    if matches!(found_data_version.base.base.has_data, Some(HasData::TRUE)) {
                         Some(Cow::Borrowed(found_data_version))
                     } else {
-                        let key = (found_data_version.table_id, found_data_version.triggered_on);
+                        let key = (
+                            found_data_version.base.base.table_id,
+                            found_data_version.base.base.triggered_on,
+                        );
                         let res = if let Some(cached) = latest_with_data_cache.get(&key) {
                             cached.clone()
                         } else {
@@ -354,12 +355,12 @@ pub(crate) async fn resolve_input_tables(
 
                 if let Some(data_version_with_data) = data_version_with_data.as_ref() {
                     let (path, _) = storage_location
-                        .builder(&data_version_with_data.base_path)
-                        .collection(&data_version_with_data.collection_id)
-                        .data(&data_version_with_data.id)
+                        .builder(&data_version_with_data.base.base.base_path)
+                        .collection(&data_version_with_data.base.base.collection_id)
+                        .data(&data_version_with_data.base.base.id)
                         .table(
-                            &data_version_with_data.table_id,
-                            &data_version_with_data.table_version_id,
+                            &data_version_with_data.base.base.table_id,
+                            &data_version_with_data.base.base.table_version_id,
                         )
                         .build()?;
                     let (location, _) = build_external_location(storage, &path)?;
@@ -370,35 +371,31 @@ pub(crate) async fn resolve_input_tables(
             }
         };
 
-        let input_table = InputTableVersion::builder()
-            .name(name)
-            .collection_id(collection_id)
-            .collection(collection)
-            .table_id(table_id)
-            .table_version_id(table_version_id)
-            .execution_id(found_data_version.as_ref().map(|v| v.execution_id.clone()))
-            .transaction_id(
-                found_data_version
-                    .as_ref()
-                    .map(|v| v.transaction_id.clone()),
-            )
-            .function_run_id(
-                found_data_version
-                    .as_ref()
-                    .map(|v| v.physical_function_run_id.clone()),
-            )
-            .triggered_on(
-                found_data_version
-                    .as_ref()
-                    .map(|v| v.triggered_on.try_into())
-                    .transpose()?,
-            )
-            .table_data_version_id(found_data_version.as_ref().map(|v| v.id.clone()))
-            .location(location)
-            .input_idx(input_idx)
-            .table_pos(dependency_pos)
-            .version_pos(lfri.requirement_version_pos)
-            .build()?;
+        let input_table = InputTableVersion {
+            name,
+            collection_id,
+            collection,
+            table_id,
+            table_version_id,
+            execution_id: found_data_version
+                .as_ref()
+                .map(|v| v.base.base.execution_id.clone()),
+            transaction_id: found_data_version
+                .as_ref()
+                .map(|v| v.base.base.transaction_id.clone()),
+            function_run_id: found_data_version
+                .as_ref()
+                .map(|v| v.base.base.physical_function_run_id.clone()),
+            triggered_on: found_data_version
+                .as_ref()
+                .map(|v| v.base.base.triggered_on.try_into())
+                .transpose()?,
+            table_data_version_id: found_data_version.as_ref().map(|v| v.base.base.id.clone()),
+            location,
+            input_idx: *input_idx,
+            table_pos: *dependency_pos,
+            version_pos: lfri.requirement_version_pos,
+        };
 
         input_tables_map
             .entry(**dependency_pos)

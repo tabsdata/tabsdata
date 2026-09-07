@@ -11,15 +11,15 @@ use td_objects::types::basic::{AtTime, WorkerConfig};
 /// identity + the cron `config` (schedule), no `task` callback (the pod
 /// gets its trigger via env). Needs only the worker row -- no jwt, server
 /// addresses, or storage -- so the resolve endpoint can call it directly.
-pub(crate) fn build_cron_input(worker: &WorkerDBWithNames) -> Result<CronInput, TdError> {
+pub(crate) fn build_cron_input(worker: WorkerDBWithNames) -> Result<CronInput, TdError> {
     let info = CronInfo {
-        worker_id: worker.id.clone(),
-        collection_id: worker.collection_id,
-        collection: worker.collection.clone(),
-        function_version_id: worker.function_version_id.clone(),
-        function: worker.function.clone(),
+        worker_id: worker.base.id,
+        collection_id: worker.base.collection_id,
+        collection: worker.collection,
+        function_version_id: worker.base.function_version_id,
+        function: worker.function,
         scheduled_on: AtTime::now(),
-        config: WorkerConfig::serialize(&worker.worker_config)?,
+        config: WorkerConfig::serialize(&worker.base.worker_config)?,
     };
     Ok(CronInput { info })
 }

@@ -15,7 +15,7 @@ pub(crate) fn build_external_location(
     path: &SPath,
 ) -> Result<(Location, EnvPrefix), TdError> {
     let (external_path, mount_def) = storage.to_external_uri(path)?;
-    let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
+    let env_prefix = EnvPrefix::try_from(mount_def.id.as_str())?;
     let location = Location {
         uri: external_path,
         env_prefix: Some(env_prefix.clone()),

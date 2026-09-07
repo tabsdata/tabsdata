@@ -6,45 +6,26 @@
 //! All errors parsing or processing messages should be logged and the message should be removed from the queue.
 
 use serde_yaml::Value;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use td_bridge::BridgeProviderHandle;
 use td_bridge::messaging::{
     OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
 };
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerName};
+use td_database::access::{DbPool, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_execution::SchedulerNotify;
 use td_objects::and;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
 use td_objects::dxo::yaml::function::FunctionInput;
 use td_objects::types::basic::{
-    LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId, WorkerId,
+    LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId, ProjectId, WorkerId,
 };
-use td_queries::LiveEntry;
-use td_tower::extractors::{MutRef, Ref};
-use td_tower::post_commit::PostCommitActions;
+use td_queries::{ChunkedQueries, LiveEntry};
 use tracing::{debug, error, instrument, warn};
-
-/// Wakes the dispatcher only after the tick's transaction commits: the
-/// worker-message puts are post-commit actions registered before this one, so
-/// by the time the dispatcher runs, the messages exist and their rows are
-/// visible on other connections.
-#[instrument(name = "scheduler.notify_dispatcher", skip_all, level = "debug")]
-pub async fn notify_dispatcher(
-    notify: Ref<SchedulerNotify>,
-    mut post_commit: MutRef<PostCommitActions>,
-) -> Result<(), TdError> {
-    let notify = (*notify).clone();
-    post_commit.push(move || {
-        Box::pin(async move {
-            notify.notify_dispatcher();
-        })
-    });
-    Ok(())
-}
 
 #[instrument(
     name = "scheduler.dispatch_tick",
@@ -53,30 +34,105 @@ pub async fn notify_dispatcher(
     err(Debug)
 )]
 pub async fn unlock_workers_request(
-    bridge: Ref<BridgeProviderHandle>,
-    mut conn: MutRef<DomainConnection<Apiserver>>,
+    bridge: &BridgeProviderHandle,
+    db: &DbPool<Global>,
+    grant: Grant,
 ) -> Result<(), TdError> {
-    unlock_workers_request_infallible(bridge.message_queue(), &mut conn).await;
+    let message_queue = bridge.message_queue();
+    let messages = message_queue.locked_messages().await;
+    if messages.is_empty() {
+        return Ok(());
+    }
+    debug!(
+        locked_count = messages.len(),
+        "scheduler.dispatch_tick: {} locked message(s) to process",
+        messages.len()
+    );
+
+    let (by_project, unresolved) = messages_by_project(db, grant, &messages).await?;
+    // Rolled back, not dropped: a message left in the locked set is retried
+    // every tick forever.
+    for message in unresolved {
+        warn!(
+            message_id = %message.id,
+            "dispatch: locked message has no resolvable worker; rolling back"
+        );
+        message_queue.rollback(&message).await.unwrap_or_else(
+            |e| error!(message_id = %message.id, "dispatch: rollback failed: {e:#?}"),
+        );
+    }
+
+    // One transaction per project, so a project whose messages fail does not
+    // abort the others' unlocks.
+    for (project, messages) in by_project {
+        let mut trx = db.in_project(&project).begin_exclusive().await?;
+        debug!(
+            project_id = %project,
+            message_count = messages.len(),
+            "scheduler.dispatch_tick: unlocking one project's messages"
+        );
+        let failed =
+            unlock_workers_request_infallible(message_queue, trx.get(grant), messages).await;
+        trx.commit().await?;
+        // A rollback deletes the workload: no connection may be open for it.
+        for message in failed {
+            message_queue.rollback(&message).await.unwrap_or_else(
+                |e| error!(message_id = %message.id, "dispatch: rollback failed: {e:#?}"),
+            );
+        }
+    }
     Ok(())
+}
+
+/// Group the locked messages by the project owning their worker, returning the
+/// ones whose worker could not be resolved separately for the caller to
+/// dispose of.
+type GroupedMessages = (
+    Vec<(ProjectId, Vec<OrchestratorMessage<Value>>)>,
+    Vec<OrchestratorMessage<Value>>,
+);
+
+async fn messages_by_project(
+    db: &DbPool<Global>,
+    grant: Grant,
+    messages: &[OrchestratorMessage<Value>],
+) -> Result<GroupedMessages, TdError> {
+    let worker_ids: Vec<WorkerId> = messages
+        .iter()
+        .filter_map(|m| WorkerId::try_from(m.id.as_str()).ok())
+        .collect();
+    let mut conn = db.read().await?;
+    let workers: Vec<WorkerDB> = conn
+        .get(grant)
+        .fetch_all_chunked::<WorkerDB, WorkerId>(&worker_ids)
+        .await?;
+    let project_of: HashMap<&WorkerId, &ProjectId> =
+        workers.iter().map(|w| (&w.id, &w.project_id)).collect();
+
+    let mut grouped: BTreeMap<ProjectId, Vec<OrchestratorMessage<Value>>> = BTreeMap::new();
+    let mut unresolved = Vec::new();
+    for message in messages {
+        let project = WorkerId::try_from(message.id.as_str())
+            .ok()
+            .and_then(|id| project_of.get(&id).map(|p| (*p).clone()));
+        match project {
+            Some(project) => grouped.entry(project).or_default().push(message.clone()),
+            None => unresolved.push(message.clone()),
+        }
+    }
+    Ok((grouped.into_iter().collect(), unresolved))
 }
 
 async fn unlock_workers_request_infallible(
     message_queue: &dyn OrchestratorMessageQueue,
     conn: &mut DomainConnection<Apiserver>,
-) {
-    let messages = message_queue.locked_messages().await;
-
+    messages: Vec<OrchestratorMessage<Value>>,
+) -> Vec<OrchestratorMessage<Value>> {
     let message_count = messages.len();
-    if message_count > 0 {
-        debug!(
-            locked_count = message_count,
-            "scheduler.dispatch_tick: {} locked message(s) to process", message_count
-        );
-    }
-    let mut rollback_count: usize = 0;
+    let mut to_rollback = Vec::new();
 
     for message in messages {
-        if let Ok(worker_id) = WorkerId::try_from(&message.id)
+        if let Ok(worker_id) = WorkerId::try_from(message.id.as_str())
             && let OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload) =
                 &message.payload
         {
@@ -124,10 +180,7 @@ async fn unlock_workers_request_infallible(
                     reason = ?e,
                     "dispatch: rolling back worker"
                 );
-                rollback_count += 1;
-                message_queue.rollback(&message).await.unwrap_or_else(
-                    |e| error!(worker_id = %worker_id, "dispatch: rollback failed: {e:#?}"),
-                )
+                to_rollback.push(message);
             }
         } else {
             warn!(
@@ -140,10 +193,11 @@ async fn unlock_workers_request_infallible(
     if message_count > 0 {
         debug!(
             locked_count = message_count,
-            rollback_count = rollback_count,
+            rollback_count = to_rollback.len(),
             "scheduler.dispatch_tick: end"
         );
     }
+    to_rollback
 }
 
 #[instrument(
@@ -188,6 +242,7 @@ pub async fn unlock_function_runner_worker(
         .live()
         .fetch_one::<PhysicalFunctionRunDB>(&context.info.function_run_id)
         .await?;
+    // The branch below is decided from `lfr.status` and the rollback writes it.
     let lfr: LogicalFunctionRunDB = conn
         .live()
         .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
@@ -206,9 +261,11 @@ pub async fn unlock_function_runner_worker(
                 physical_function_run_id = %pfr.id,
                 lfr_id = %lfr.id,
                 lfr_status = %lfr.status,
-                "dispatch: LFR in unexpected state for dispatch; rolling back"
+                "dispatch: LFR in unexpected state for dispatch"
             );
-            rollback_initial_function_run(conn, &worker_id, &lfr.id).await;
+            // No rollback: every status reaching this arm is one that must not
+            // be forced back to Scheduled — Running or OnHold would re-dispatch
+            // a run that is live or blocked.
             return Err(api_error!(
                 ApiError::InternalError,
                 "Start function locked message [{}] for LFR [{}] in unexpected state: {}",
@@ -258,7 +315,7 @@ async fn commit_unlock(
     pfr_id: &PhysicalFunctionRunId,
     branch: DispatchBranch,
 ) -> Result<(), TdError> {
-    let update = UpdateWorkerMessageStatusDB::unlocked().await?;
+    let update = UpdateWorkerMessageStatusDB::unlocked();
     let outcome: Result<(), String> = async {
         conn.live()
             .update::<_, WorkerDB>(&update, worker_id)
@@ -305,24 +362,24 @@ async fn rollback_initial_function_run(
     message_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
 ) {
-    // Initial path: LFR status lives on the LFR row. Rollback flips
-    // it back to Scheduled so the next tick picks it up again.
-    let update = match UpdateLogicalFunctionRunDB::scheduled().await {
-        Ok(u) => u,
-        Err(e) => {
-            error!(
-                worker_id = %message_id,
-                lfr_id = %lfr_id,
-                "Failed to build rollback update: {e:#?}"
-            );
-            return;
-        }
-    };
+    // Conditional on `Requested`: the read feeding this was unlocked, and
+    // forcing a run that has since moved on back to Scheduled would re-run it.
+    let update = UpdateLogicalFunctionRunDB::scheduled();
     match conn
         .live()
-        .update::<_, LogicalFunctionRunDB>(&update, lfr_id)
+        .update::<_, LogicalFunctionRunDB>(
+            &update,
+            and!(lfr_id, LogicalFunctionRunStatus::Requested),
+        )
         .await
     {
+        Ok(result) if result.rows_affected() == 0 => {
+            warn!(
+                worker_id = %message_id,
+                lfr_id = %lfr_id,
+                "dispatch: LFR no longer Requested; nothing to roll back"
+            );
+        }
         Ok(_) => {
             error!(
                 "Rolled back LFR status to Scheduled for locked message [{message_id}] for LFR [{lfr_id}] in DB"
@@ -396,7 +453,7 @@ async fn unlock_simple_worker(
     error_label: &str,
     log_kind: &str,
 ) -> Result<(), TdError> {
-    let update = UpdateWorkerMessageStatusDB::unlocked().await?;
+    let update = UpdateWorkerMessageStatusDB::unlocked();
     conn.live()
         .update::<_, WorkerDB>(&update, &worker_id)
         .await

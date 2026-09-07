@@ -7,7 +7,6 @@ use super::inputs::{DispatchPrefetch, resolve_input_tables};
 use super::outputs::build_output_tables;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::Buildable;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::yaml::function::FunctionInput;
 use td_storage::Storage;
@@ -28,14 +27,14 @@ pub(crate) async fn build_function_v2(
     let info = build_function_info(storage, f)?;
     let (system_input, input) = resolve_input_tables(conn, storage, f, prefetch).await?;
     let (system_output, output) =
-        build_output_tables(storage, f, prefetch.output_tables_for(&f.id))?;
+        build_output_tables(storage, f, prefetch.output_tables_for(&f.base.base.id))?;
 
-    let function_input_v2 = FunctionInput::builder()
-        .info(info)
-        .system_input(system_input)
-        .input(input)
-        .system_output(system_output)
-        .output(output)
-        .build()?;
+    let function_input_v2 = FunctionInput {
+        info,
+        system_input,
+        input,
+        system_output,
+        output,
+    };
     Ok(function_input_v2)
 }

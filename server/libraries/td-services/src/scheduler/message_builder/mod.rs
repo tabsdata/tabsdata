@@ -5,7 +5,7 @@
 //! Builder for the function-runner worker message (`Function`).
 //!
 //! The version-resolution + message-assembly logic shared by the
-//! supervisor request layer (batch, at = dispatch tick) and the
+//! supervisor request stage (batch, at = dispatch tick) and the
 //! kubernetes resolve endpoint (single FR, at = now()).
 
 mod cron;

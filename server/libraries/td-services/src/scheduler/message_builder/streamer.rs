@@ -21,11 +21,11 @@ use td_storage::location::StorageLocation;
 pub(crate) async fn build_streamer_input(
     conn: &mut DomainConnection<Apiserver>,
     storage: &Storage,
-    worker: &WorkerDBWithNames,
+    worker: WorkerDBWithNames,
 ) -> Result<StreamerInput, TdError> {
     let f = conn
         .lfr()
-        .with_bundle_base_path(std::slice::from_ref(&worker.function_version_id))
+        .with_bundle_base_path(std::slice::from_ref(&worker.base.function_version_id))
         .await?
         .into_iter()
         .next()
@@ -33,40 +33,40 @@ pub(crate) async fn build_streamer_input(
             api_error!(
                 ApiError::InternalError,
                 "stage trigger worker [{}] references unknown function_version_id {}",
-                worker.id,
-                worker.function_version_id
+                worker.base.id,
+                worker.base.function_version_id
             )
         })?;
 
-    let storage_location = StorageLocation::from(&f.storage_version);
+    let storage_location = StorageLocation::from(&f.base.storage_version);
 
     // Function bundle (stamped bundle_base_path + bundle_id).
     let (path, _) = storage_location
         .builder(&f.bundle_base_path)
-        .collection(&f.collection_id)
-        .function(&f.bundle_id)
+        .collection(&f.base.collection_id)
+        .function(&f.base.bundle_id)
         .build()?;
     let (function_bundle, _) = build_external_location(storage, &path)?;
 
     // Function stage (stamped stage_base_path + stage_id).
     let (path, _) = storage_location
-        .builder(&f.stage_base_path)
-        .collection(&f.collection_id)
-        .stage(&f.stage_id)
+        .builder(&f.base.stage_base_path)
+        .collection(&f.base.collection_id)
+        .stage(&f.base.stage_id)
         .build()?;
     let (function_stage, _) = build_external_location(storage, &path)?;
 
     let info = StreamerInfo {
-        project_id: worker.project_id,
-        collection_id: worker.collection_id,
-        collection: worker.collection.clone(),
-        function_version_id: worker.function_version_id.clone(),
-        function_defined_on: f.defined_on,
-        function: worker.function.clone(),
+        project_id: worker.base.project_id,
+        collection_id: worker.base.collection_id,
+        collection: worker.collection,
+        function_version_id: worker.base.function_version_id,
+        function_defined_on: f.base.defined_on,
+        function: worker.function,
         function_bundle,
         function_stage,
         scheduled_on: AtTime::now(),
-        worker_id: worker.id.clone(),
+        worker_id: worker.base.id,
     };
     Ok(StreamerInput { info })
 }
