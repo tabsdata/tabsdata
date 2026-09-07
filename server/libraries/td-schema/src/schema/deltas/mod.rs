@@ -15,6 +15,7 @@
 //! impl SchemaDelta for Migration {
 //!     const FROM_VERSION: usize = N;
 //!     const TO_VERSION: usize = N + 1;
+//!     fn retired() -> Vec<String> { /* ... */ }
 //!     fn up() -> Vec<String> { /* ... */ }
 //! }
 //! ```
@@ -29,7 +30,7 @@
 //!    `impl SchemaDelta`.
 //! 2. Add `pub(crate) mod vN_to_v{N+1};` to this file.
 //! 3. Add a match arm to `get()`:
-//!    `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
+//!    `{N+1} => rung::<vN_to_v{N+1}::Migration>(),`.
 //! 4. Freeze its DDL snapshots under `snapshots/v{N}_to_v{N+1}/` by running
 //!    `test_delta_ddl_snapshots` with `TD_SNAPSHOT_UPDATE=1`.
 //!
@@ -41,21 +42,29 @@
 //!
 //! See the project README for a full guide and example.
 
+use crate::schema::source::Delta;
 use crate::schema::version::SchemaDelta;
 
 pub(crate) mod v1_to_v2;
 pub(crate) mod v2_to_v3;
+pub(crate) mod v3_to_v4;
 
-/// Returns the SQL statements to upgrade from version `target_version - 1` to
-/// `target_version`.
+/// The rung upgrading from version `target_version - 1` to `target_version`.
 ///
 /// # Panics
 ///
 /// Panics if no delta exists for the given target version.
-pub fn get(target_version: usize) -> Vec<String> {
+pub fn get(target_version: usize) -> Delta {
+    fn rung<D: SchemaDelta>() -> Delta {
+        Delta {
+            up: D::up(),
+            retired: D::retired(),
+        }
+    }
     match target_version {
-        2 => v1_to_v2::Migration::up(),
-        3 => v2_to_v3::Migration::up(),
+        2 => rung::<v1_to_v2::Migration>(),
+        3 => rung::<v2_to_v3::Migration>(),
+        4 => rung::<v3_to_v4::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

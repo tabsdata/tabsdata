@@ -24,6 +24,10 @@ impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
 
+    fn retired() -> Vec<String> {
+        vec![]
+    }
+
     fn up() -> Vec<String> {
         let unset_placeholder_email = Query::update()
             .table(Users::Table)

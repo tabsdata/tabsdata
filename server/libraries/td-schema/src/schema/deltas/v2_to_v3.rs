@@ -25,6 +25,10 @@ impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 2;
     const TO_VERSION: usize = 3;
 
+    fn retired() -> Vec<String> {
+        vec![]
+    }
+
     fn up() -> Vec<String> {
         // Nullable, then backfilled, then constrained: a NOT NULL DEFAULT
         // would linger as a default a fresh install does not have.
