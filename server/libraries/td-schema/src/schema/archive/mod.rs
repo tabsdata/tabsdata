@@ -40,13 +40,15 @@ pub(crate) mod v2;
 pub(crate) mod v3;
 pub(crate) mod v4;
 pub(crate) mod v5;
+pub(crate) mod v6;
 
 const ARCHIVED: usize = current::VERSION - 1;
 
 /// Every version below the current one, in ascending order. The length is tied
 /// to `current::VERSION`, so bumping the version without archiving the one it
 /// replaces does not compile.
-pub(crate) const ARCHIVES: [&'static dyn SchemaSource; ARCHIVED] = [&v1::Source, &v2::Source, &v3::Source, &v4::Source, &v5::Source];
+pub(crate) const ARCHIVES: [&'static dyn SchemaSource; ARCHIVED] =
+    [&v1::Source, &v2::Source, &v3::Source, &v4::Source, &v5::Source, &v6::Source];
 
 /// The [`SchemaSource`] for an archived version.
 ///

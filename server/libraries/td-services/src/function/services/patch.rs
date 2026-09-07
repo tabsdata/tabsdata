@@ -16,7 +16,7 @@ use td_objects::dxo::bundle::BundleStatusUpdateDB;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{
-    FunctionDB, FunctionParam, FunctionPatch, FunctionPatchDB, FunctionPatchInsertDB,
+    FunctionDB, FunctionParam, FunctionPatch, FunctionPatchDBWithNames, FunctionPatchInsertDB,
     FunctionPatchRecord,
 };
 use td_objects::types::basic::{CollectionId, FunctionIdName, FunctionVersionId};
@@ -52,7 +52,7 @@ async fn create_function_patch(
     conn.update::<BundleStatusUpdateDB>(&bundle_registered, patch.bundle_id)
         .await?;
 
-    let stored: FunctionPatchDB = conn.timeline().fetch_one(&patch.id).await?;
+    let stored: FunctionPatchDBWithNames = conn.timeline().fetch_one(&patch.id).await?;
     let record: FunctionPatchRecord = FunctionPatchRecord::from_dao(stored)?;
     Ok(record)
 }
@@ -114,6 +114,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionDB;
+    use td_objects::dxo::function::FunctionPatchDB;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,

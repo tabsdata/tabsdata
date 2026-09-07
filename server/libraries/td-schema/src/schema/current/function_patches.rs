@@ -3,20 +3,27 @@
 //
 
 use sea_query::{
-    ColumnDef, ConditionalStatement, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::functions::Functions;
+use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
 use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, cols_of_except};
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 
 /// `function_patches` — code-only overrides of a parent
 /// `FunctionVersionId`. Lives in its own table so every "find latest
 /// function version" query against `functions` is patch-blind by
 /// construction.
+#[derive(Iden, Clone, Copy)]
+#[iden = "function_patches__with_names"]
+pub struct FunctionPatchesWithNames;
+
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum FunctionPatches {
     Table,
@@ -92,6 +99,25 @@ impl Entity for Defs {
                 .and_where(open_interval(FunctionPatches::ValidTo))
                 .to_owned(),
         ]
+    }
+
+    fn create_views(&self) -> Vec<ViewDef> {
+        vec![ViewDef::new(
+            FunctionPatchesWithNames,
+            Query::select()
+                .expr(Expr::col((FunctionPatches::Table, Asterisk)))
+                .expr_as(
+                    name_or_id((Users::Table, Users::Name), (FunctionPatches::Table, FunctionPatches::DefinedById)),
+                    Alias::new("defined_by"),
+                )
+                .from(FunctionPatches::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((FunctionPatches::Table, FunctionPatches::DefinedById)).equals((Users::Table, Users::Id)),
+                )
+                .to_owned(),
+        )]
     }
 
     fn create_db_triggers(&self) -> Vec<Derived> {

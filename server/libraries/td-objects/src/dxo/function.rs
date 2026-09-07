@@ -305,8 +305,17 @@ impl FunctionPatchDB {
     }
 }
 
+/// The patch row with its author's name resolved, the list surface's source.
+#[ta_objects::Dao]
+#[dao(view = "function_patches__with_names", scd2, project_scoped)]
+pub struct FunctionPatchDBWithNames {
+    #[dao(flatten)]
+    pub base: FunctionPatchDB,
+    pub defined_by: UserName,
+}
+
 #[ta_objects::Dto]
-#[dto(list(on = FunctionPatchDB))]
+#[dto(list(on = FunctionPatchDBWithNames))]
 pub struct FunctionPatchRecord {
     #[dto(list(pagination_by = "-"))]
     pub id: FunctionVersionId,
@@ -327,24 +336,27 @@ pub struct FunctionPatchRecord {
     pub defined_by_id: UserId,
     #[dto(list(filter, order_by))]
     pub status: FunctionStatus,
+    #[dto(list(filter, filter_like, order_by))]
+    pub defined_by: UserName,
 }
 
 impl FromDao for FunctionPatchRecord {
-    type Dao = FunctionPatchDB;
+    type Dao = FunctionPatchDBWithNames;
 
-    fn from_dao(dao: FunctionPatchDB) -> Result<Self, TdError> {
+    fn from_dao(dao: FunctionPatchDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            parent_function_version_id: dao.base.parent_function_version_id,
-            function_id: dao.base.function_id,
-            collection_id: dao.base.collection_id,
-            snippet: dao.base.snippet,
-            bundle_id: dao.base.bundle_id,
-            runtime_values: dao.base.runtime_values,
-            description: dao.base.description,
-            defined_on: dao.interval.valid_from.into(),
-            defined_by_id: dao.base.defined_by_id,
-            status: dao.base.status,
+            id: dao.base.base.id,
+            parent_function_version_id: dao.base.base.parent_function_version_id,
+            function_id: dao.base.base.function_id,
+            collection_id: dao.base.base.collection_id,
+            snippet: dao.base.base.snippet,
+            bundle_id: dao.base.base.bundle_id,
+            runtime_values: dao.base.base.runtime_values,
+            description: dao.base.base.description,
+            defined_on: dao.base.interval.valid_from.into(),
+            defined_by_id: dao.base.base.defined_by_id,
+            status: dao.base.base.status,
+            defined_by: dao.defined_by,
         })
     }
 }

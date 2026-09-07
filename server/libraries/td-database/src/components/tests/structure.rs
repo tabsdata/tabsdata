@@ -62,6 +62,7 @@ fn expected_views() -> Vec<&'static str> {
         "execution_status_summary",
         "executions__with_names",
         "executions__with_status",
+        "function_patches__with_names",
         "function_runs__with_names",
         "function_versions__with_names",
         "functions__with_names",
