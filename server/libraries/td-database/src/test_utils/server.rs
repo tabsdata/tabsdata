@@ -34,7 +34,7 @@
 
 use crate::config::{PostgresConfig, PostgresConnect};
 use crate::error::DbError;
-use crate::pool::connect::pg_connect_options;
+use crate::pool::options::pg_connect_options;
 use crate::server::{BootConfig, load_password};
 use postgresql_embedded::Settings;
 use sqlx::postgres::PgPoolOptions;

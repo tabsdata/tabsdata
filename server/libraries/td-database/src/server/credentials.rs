@@ -8,7 +8,7 @@ use crate::config::EMBEDDED_CREDENTIAL;
 use crate::error::DbError;
 
 /// Which persisted password [`EMBEDDED_CREDENTIAL`] names.
-pub(crate) enum EmbeddedPassword<'a> {
+pub enum EmbeddedPassword<'a> {
     /// The superuser password baked in at first boot.
     Superuser,
     /// A schema owner's password (load-only, the serving path).
@@ -20,7 +20,7 @@ pub(crate) enum EmbeddedPassword<'a> {
 /// Explicit values pass through, [`EMBEDDED_CREDENTIAL`] loads the named
 /// persisted password (a hard error when it cannot resolve), absence stays
 /// `None`.
-pub(crate) fn resolve_password(
+pub fn resolve_password(
     value: Option<&str>,
     source: EmbeddedPassword<'_>,
 ) -> Result<Option<String>, DbError> {

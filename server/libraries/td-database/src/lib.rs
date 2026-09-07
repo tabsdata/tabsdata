@@ -9,10 +9,8 @@
 //! * [`server`] — runs the managed PostgreSQL server behind `database_server:`.
 //! * [`components`] — provisions, upgrades and checks the registry schema
 //!   components under `database:`.
-//! * [`pool`] / [`domain`] — the serving runtime.
-
-#[cfg(not(any(feature = "sqlite", feature = "postgres", feature = "mysql")))]
-compile_error!("You must enable at least one database feature: `sqlite`, `postgres` or `mysql`.");
+//! * [`pool`] / [`domain`] / [`connection`] — the serving runtime.
+//! * [`access`] — what service bodies hold: scoped, grant-gated connections.
 
 use crate::config::DatabaseConfig;
 use crate::error::DbError;
@@ -23,10 +21,11 @@ use crate::pool::TdPool;
 /// pool authenticated as a superuser.
 pub const APP_ROLE: &str = "td_app";
 
+pub mod access;
 pub mod components;
 pub mod config;
+pub mod connection;
 pub mod domain;
-pub mod dynamic;
 pub mod error;
 pub mod pool;
 pub mod sea_query;

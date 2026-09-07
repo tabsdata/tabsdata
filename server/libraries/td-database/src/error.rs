@@ -2,26 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sqlx::Error as SqlxError;
 use td_error::td_error;
 
 #[td_error]
 pub enum DbError {
-    #[error(
-        "A database entry needs exactly one backend key (`sqlite:`, `postgres:`, \
-         or `mysql:`) holding its connection options."
-    )]
-    MissingBackend = 0,
-    #[error(
-        "A database entry has more than one backend key. Keep exactly one of \
-         `sqlite:`, `postgres:`, or `mysql:`."
-    )]
-    MultipleBackends = 5013,
-    #[error(
-        "The `sqlite:` entry has no database file. Set `path:` (or \
-         `in_memory: true` for an ephemeral database)."
-    )]
-    MissingSqlitePath = 5028,
     #[error(
         "Invalid pool configuration: `max_connections` must be greater than 0 \
          (got {0}). Set `max_connections` to a positive value in the database \
@@ -34,6 +18,29 @@ pub enum DbError {
          lower `min_connections` in the database pool configuration."
     )]
     InvalidConnections(u32, u32) = 2,
+    #[error(
+        "Missing pool configuration: `pool.{0}` must be set explicitly (with \
+         `min_connections` and `max_connections`) in the database entry — \
+         pool blocks are never inherited or defaulted."
+    )]
+    MissingPoolConfig(&'static str) = 3,
+    #[error(
+        "Missing pool configuration: the `{0}` component declares the `{1}` \
+         pool, so its entry must carry an explicit `pool.{1}` block (with \
+         `min_connections` and `max_connections`) — pool blocks are never \
+         inherited or defaulted."
+    )]
+    MissingComponentPoolConfig(&'static str, &'static str) = 12,
+    #[error(
+        "The `{0}` component declares the `{1}` pool but no such pool was \
+         connected — the declared pools and the connected pools must agree."
+    )]
+    MissingComponentPool(&'static str, crate::pool::PoolKind) = 4,
+    #[error(
+        "Unexpected pool configuration: the `{0}` component has no `{1}` \
+         pool; remove the `pool.{1}` block from its entry."
+    )]
+    UnexpectedPoolConfig(&'static str, &'static str) = 5,
     #[error(
         "The Tabsdata database schema has not been created. Create it with \
          `tdkserver create` on a managed instance, or `td_dbmanager db create` \
@@ -70,12 +77,12 @@ pub enum DbError {
         "No schema resolved for the PostgreSQL connection. Component \
          connections derive it from the database name (`<database>_<component>`) \
          or take an explicit `schema:`; this connection was built with neither. \
-         Set `database:` on the backend entry, or an explicit `schema:`."
+         Set `database:` on the entry, or an explicit `schema:`."
     )]
     MissingSchema = 5023,
     #[error(
         "Missing database credentials. Set both `username` and `password` in the \
-         entry's backend configuration."
+         entry's connect configuration."
     )]
     MissingCredentials = 5029,
     #[error(
@@ -97,8 +104,8 @@ pub enum DbError {
     UpgradePreconditionFailed(String) = 5045,
     #[error(
         "No configuration entry for database component '{0}'. Every registered \
-         component needs its own entry under `database:` with its backend \
-         connection and credentials."
+         component needs its own entry under `database:` with its connect \
+         options and credentials."
     )]
     MissingComponentEntry(String) = 5033,
     #[error(
@@ -107,11 +114,6 @@ pub enum DbError {
          server here."
     )]
     NonLocalServerHost(String) = 5034,
-    #[error(
-        "The `database_server:` backend is not PostgreSQL, but the managed \
-         server is. Configure the entry under a `postgres:` key."
-    )]
-    ServerBackendNotPostgres = 5035,
     #[error(
         "The `database_server:` entry must not define a `schema:`. It is the \
          privileged server connection and has no home schema."
@@ -173,11 +175,6 @@ pub enum DbError {
          registrations. Add the anchor at the binary's top level."
     )]
     NoComponentsRegistered = 5032,
-    #[error(
-        "Unexpected database schema entries. Expected exactly: {expected}. Found: \
-         {actual}. Adjust the `database` configuration to define those entries."
-    )]
-    UnexpectedSchemaEntries { expected: String, actual: String } = 5031,
     #[error(
         "Failed to connect to the database: {0}. Verify the database server is \
          running and reachable, and that the configured host, port, credentials, \
@@ -259,6 +256,4 @@ pub enum DbError {
          that schema. (Missing: {0})"
     )]
     UpgraderLacksPermissions(String) = 5022,
-    #[error("Cannot get a connection from the domain's pool: {0}")]
-    CannotGetDomainConnection(SqlxError) = 5024,
 }

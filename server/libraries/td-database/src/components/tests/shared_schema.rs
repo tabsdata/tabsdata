@@ -7,15 +7,11 @@
 //! and advanced by shared logic — driven from a component's [`SchemaSource`] /
 //! `SchemaDelta`. The test source declares only its own content, never the ledger
 //! or the version row, proving those are the pool's responsibility.
-//!
-//! SQLite-only: the mechanism is backend-agnostic, so one backend exercises it.
 
-use crate::dynamic::DynamicConnection;
 use crate::test_utils::TestDb;
-use crate::test_utils::sqlite::pool;
+use crate::test_utils::postgres::pool;
 use td_schema::SchemaSource;
 use td_schema::schema::SchemaDelta;
-use td_schema::schema::backend::Backend;
 
 /// The v1→v2 migration of the component's own content. Real deltas bump
 /// `db_version` themselves; this one omits it so the assertions below prove the
@@ -25,7 +21,7 @@ struct WidgetV1ToV2;
 impl SchemaDelta for WidgetV1ToV2 {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
-    fn up(_backend: Backend) -> Vec<String> {
+    fn up() -> Vec<String> {
         vec!["ALTER TABLE widget ADD COLUMN note TEXT".to_string()]
     }
 }
@@ -40,26 +36,25 @@ impl SchemaSource for WidgetSource {
     fn current_version(&self) -> usize {
         self.version
     }
-    fn tables(&self, _backend: Backend) -> Vec<String> {
+    fn tables(&self) -> Vec<String> {
         vec!["CREATE TABLE widget (id TEXT PRIMARY KEY)".to_string()]
     }
-    fn delta(&self, target: usize, backend: Backend) -> Vec<String> {
+    fn delta(&self, target: usize) -> Vec<String> {
         assert_eq!(
             target,
             WidgetV1ToV2::TO_VERSION,
             "only the v2 delta is defined"
         );
-        WidgetV1ToV2::up(backend)
+        WidgetV1ToV2::up()
     }
 }
 
-/// Read a scalar `i64` on the serving pool (same sqlite file as the system pool).
+/// Read a scalar `i64` on the serving pool (same schema as the system pool).
 async fn scalar(db: &TestDb, sql: &str) -> i64 {
-    let mut conn = db.serving.acquire().await.unwrap();
-    let DynamicConnection::Sqlite(h) = &mut conn else {
-        unreachable!("sqlite test")
-    };
-    sqlx::query_scalar(sql).fetch_one(&mut **h).await.unwrap()
+    sqlx::query_scalar(sql)
+        .fetch_one(db.serving.as_ref())
+        .await
+        .unwrap()
 }
 
 /// On a fresh install the pool creates the `tabsdata_system` ledger and records
@@ -67,8 +62,7 @@ async fn scalar(db: &TestDb, sql: &str) -> i64 {
 #[tokio::test]
 async fn ledger_and_version_created_by_shared_logic() {
     // The source's own install script never touches the shared ledger.
-    let build =
-        td_schema::schema::install_script(&WidgetSource { version: 1 }, Backend::Sqlite).join("\n");
+    let build = td_schema::schema::install_script(&WidgetSource { version: 1 }).join("\n");
     assert!(
         !build.contains("tabsdata_system") && !build.contains("db_version"),
         "the source must declare only its own content, got: {build}"
@@ -120,7 +114,9 @@ async fn upgrade_advances_version_via_delta() {
     assert_eq!(
         scalar(
             &db,
-            "SELECT count(*) FROM pragma_table_info('widget') WHERE name = 'note'"
+            "SELECT count(*) FROM information_schema.columns \
+             WHERE table_schema = current_schema() AND table_name = 'widget' \
+             AND column_name = 'note'"
         )
         .await,
         1,

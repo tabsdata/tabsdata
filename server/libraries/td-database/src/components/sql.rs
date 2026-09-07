@@ -4,16 +4,15 @@
 
 //! Privileged provisioning DDL — session/DDL statements sea_query does not
 //! model — run on [`super::AdminPool`].
-
-use crate::dynamic::DynamicPool;
+use crate::connection::PgConnectionExt;
 use crate::error::DbError;
+use sqlx::PgPool;
 
 /// Transaction-local GUC the owner password is staged in (see
 /// [`execute_batch_tx_with_secrets`]): the batch reads it back with
 /// `current_setting` and quotes it with `format(%L)`, so the password never
 /// appears in any SQL text. Running the batch without staging it fails loudly
 /// (`current_setting` on an unset GUC errors).
-#[cfg(postgres)]
 pub(super) const OWNER_PASSWORD_GUC: &str = "td.owner_password";
 
 /// Create the owner role, or converge the password of an existing one we own.
@@ -34,7 +33,6 @@ pub(super) const OWNER_PASSWORD_GUC: &str = "td.owner_password";
 /// would silently no-op on an already-provisioned schema, hiding the
 /// collision until serving fails to authenticate. Adopting a pre-created role
 /// is an explicit operator step: `GRANT <owner> TO <admin>`.
-#[cfg(postgres)]
 pub(super) fn create_owner_role_sql(owner: &str) -> String {
     // Race-safe idempotent create: concurrent provisions can both pass an
     // `IF NOT EXISTS` check and one then hits the `pg_authid` unique index.
@@ -60,7 +58,6 @@ pub(super) fn create_owner_role_sql(owner: &str) -> String {
     )
 }
 
-#[cfg(postgres)]
 pub(super) fn create_schema_sql(schema: &str, owner: &str) -> String {
     format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\" AUTHORIZATION \"{owner}\"")
 }
@@ -69,7 +66,6 @@ pub(super) fn create_schema_sql(schema: &str, owner: &str) -> String {
 /// exist. Provisioning owns this: creating a cluster-global role must be a
 /// deliberate `db create` step, not a connect side effect — on a shared
 /// cluster the first creator holds `ADMIN` on it and everyone else does not.
-#[cfg(postgres)]
 pub(super) fn create_app_role_sql(app_role: &str) -> String {
     // Guard the create with an existence check so the common case (role
     // already present) is a lock-free read of `pg_roles`. Only the first,
@@ -90,7 +86,6 @@ pub(super) fn create_app_role_sql(app_role: &str) -> String {
 /// on it (PostgreSQL 16+), which a deployment sharing a cluster-global app role
 /// it did not create never has. Re-provisioning such a database then works
 /// without the grant, instead of failing on a privilege it does not need.
-#[cfg(postgres)]
 pub(super) fn grant_app_role_membership_sql(owner: &str, app_role: &str) -> String {
     format!(
         "DO $$ BEGIN \
@@ -110,7 +105,6 @@ pub(super) fn grant_app_role_membership_sql(owner: &str, app_role: &str) -> Stri
 /// on an app role a DBA wired externally, and `db upgrade` must not regress
 /// on shapes that served fine; the serving probe reports the real problem if
 /// `SET` is genuinely required and absent.
-#[cfg(postgres)]
 pub(super) fn grant_app_role_self_membership_sql(app_role: &str) -> String {
     format!(
         "DO $$ BEGIN \
@@ -134,7 +128,6 @@ pub(super) fn grant_app_role_self_membership_sql(app_role: &str) -> String {
 /// `DROP OWNED` clears its grants in this database first; a role that cannot
 /// be dropped (shared, or still referenced elsewhere) is warned and kept —
 /// teardown must not block on it.
-#[cfg(postgres)]
 pub(super) fn drop_app_role_sql(app_role: &str) -> String {
     format!(
         "DO $$ BEGIN \
@@ -155,7 +148,6 @@ pub(super) fn drop_app_role_sql(app_role: &str) -> String {
     )
 }
 
-#[cfg(postgres)]
 pub(super) fn grant_app_role_tables_sql(schema: &str, app_role: &str) -> String {
     format!(
         "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{app_role}\""
@@ -166,7 +158,7 @@ pub(super) fn grant_app_role_tables_sql(schema: &str, app_role: &str) -> String 
 /// keep the schema superuser-owned, so without `MAINTAIN` the app role's
 /// `ANALYZE` is skipped with a warning and statistics never update. `MAINTAIN`
 /// is PostgreSQL 16+, and 15 is still a supported server.
-#[cfg(all(postgres, any(test, feature = "test-utils")))]
+#[cfg(any(test, feature = "test-utils"))]
 pub(super) fn grant_app_role_maintain_sql(schema: &str, app_role: &str) -> String {
     format!(
         "DO $$ BEGIN \
@@ -177,7 +169,6 @@ pub(super) fn grant_app_role_maintain_sql(schema: &str, app_role: &str) -> Strin
     )
 }
 
-#[cfg(postgres)]
 pub(super) fn grant_app_role_privileges_sql(schema: &str, app_role: &str) -> [String; 3] {
     [
         format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{app_role}\""),
@@ -191,7 +182,7 @@ pub(super) fn grant_app_role_privileges_sql(schema: &str, app_role: &str) -> [St
 
 /// Run `stmts` as a single committed transaction on `pool`, mapping failures to
 /// [`DbError::FailedToCreateOrUpgradeDatabaseSchema`].
-pub(super) async fn execute_batch_tx(pool: &DynamicPool, stmts: &[String]) -> Result<(), DbError> {
+pub(super) async fn execute_batch_tx(pool: &PgPool, stmts: &[String]) -> Result<(), DbError> {
     execute_batch_tx_with_secrets(pool, &[], stmts).await
 }
 
@@ -199,71 +190,41 @@ pub(super) async fn execute_batch_tx(pool: &DynamicPool, stmts: &[String]) -> Re
 /// through a bound parameter — the statements read them back with
 /// `current_setting`, keeping the values out of every SQL text.
 pub(super) async fn execute_batch_tx_with_secrets(
-    pool: &DynamicPool,
+    pool: &PgPool,
     secrets: &[(&str, &str)],
     stmts: &[String],
 ) -> Result<(), DbError> {
-    let mut tx = pool
+    let mut trx = pool
         .begin()
         .await
         .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
     for (name, value) in secrets {
-        tx.as_mut_conn()
-            .set_local_secret(name, value)
+        trx.set_local_secret(name, value)
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
     }
-    tx.as_mut_conn()
-        .execute_batch(stmts)
+    trx.execute_batch(stmts)
         .await
         .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-    tx.commit()
+    trx.commit()
         .await
         .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
     Ok(())
 }
 
-/// True if a database error reports a missing `tabsdata_system` table for any
-/// backend enabled at compile time.
-pub(crate) fn is_undefined_table_error(code: Option<&str>, message: &str) -> bool {
-    #[cfg(postgres)]
-    if matches!(code, Some("42P01")) {
-        return true;
-    }
-    #[cfg(mysql)]
-    if matches!(code, Some("42S02")) {
-        return true;
-    }
-    #[cfg(sqlite)]
-    if message.contains("no such table") {
-        return true;
-    }
-    let _ = (code, message);
-    false
+/// True if a database error reports a missing table (`undefined_table`).
+pub fn is_undefined_table_error(code: Option<&str>) -> bool {
+    matches!(code, Some("42P01"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::is_undefined_table_error;
 
-    #[cfg(postgres)]
     #[test]
     fn undefined_table_error_pg_sqlstate() {
-        assert!(is_undefined_table_error(Some("42P01"), ""));
-        assert!(!is_undefined_table_error(Some("23505"), ""));
-    }
-
-    #[cfg(mysql)]
-    #[test]
-    fn undefined_table_error_mysql_sqlstate() {
-        assert!(is_undefined_table_error(Some("42S02"), ""));
-        assert!(!is_undefined_table_error(Some("HY000"), ""));
-    }
-
-    #[cfg(sqlite)]
-    #[test]
-    fn undefined_table_error_sqlite_message() {
-        assert!(is_undefined_table_error(None, "no such table: foo"));
-        assert!(!is_undefined_table_error(None, "syntax error near 'x'"));
+        assert!(is_undefined_table_error(Some("42P01")));
+        assert!(!is_undefined_table_error(Some("23505")));
+        assert!(!is_undefined_table_error(None));
     }
 }

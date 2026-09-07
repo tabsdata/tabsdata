@@ -2,21 +2,20 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! [`UpgradeTx`] — the single transaction a schema upgrade runs in, and the
+//! [`UpgradeTransaction`] — the single transaction a schema upgrade runs in, and the
 //! [`AdminPool`] entry points that open, drive and commit it.
 
 use crate::components::SchemaComponent;
-use crate::components::pool::AdminPool;
-#[cfg(postgres)]
+use crate::components::admin_pool::AdminPool;
 use crate::components::sql::grant_app_role_privileges_sql;
-use crate::dynamic::{DynamicConnection, DynamicTransaction};
+use crate::connection::PgConnectionExt;
 use crate::error::DbError;
 use crate::pool::state::{db_version, edition};
 use crate::sea_query::builder::SeaQueryExt;
-use crate::sea_query::kind::DatabaseKind;
 use sea_query::{Expr, ExprTrait, OnConflict, Query};
+use sqlx::postgres::PgConnection;
+use sqlx::{Postgres, Transaction};
 use td_schema::SchemaSource;
-use td_schema::schema::backend::Backend;
 use td_schema::schema::{derived_scripts, install_script};
 use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem, tabsdata_system_ddl};
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
@@ -38,13 +37,13 @@ impl AdminPool {
 
     /// Open the upgrade transaction. Public for components that compose their
     /// own step sequence; [`Self::upgrade`] is the normal entry.
-    pub async fn begin_upgrade(&self) -> Result<UpgradeTx<'_>, DbError> {
-        let tx = self
+    pub async fn begin_upgrade(&self) -> Result<UpgradeTransaction<'_>, DbError> {
+        let conn = self
             .pool
             .begin()
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-        Ok(UpgradeTx { admin: self, tx })
+        Ok(UpgradeTransaction { admin: self, conn })
     }
 
     /// [`Self::upgrade`] for a bare [`SchemaSource`] with no component around
@@ -63,19 +62,14 @@ impl AdminPool {
 /// goes through here, on one connection, so an upgrade that fails half way
 /// leaves the schema exactly as it was — version rows, seeds, and the derived
 /// objects the ladder had to drop included.
-pub struct UpgradeTx<'a> {
+pub struct UpgradeTransaction<'a> {
     admin: &'a AdminPool,
-    tx: DynamicTransaction<'a>,
+    conn: Transaction<'static, Postgres>,
 }
 
-impl UpgradeTx<'_> {
-    /// The backend this upgrade renders SQL for.
-    pub fn backend(&self) -> Backend {
-        self.admin.kind().into()
-    }
-
-    fn conn(&mut self) -> DynamicConnection<'_> {
-        self.tx.as_mut_conn()
+impl UpgradeTransaction<'_> {
+    fn conn(&mut self) -> &mut PgConnection {
+        &mut self.conn
     }
 
     /// Run `stmts` on the upgrade transaction.
@@ -97,25 +91,21 @@ impl UpgradeTx<'_> {
         self.ensure_system_table().await?;
         self.lock_system_table().await?;
 
-        let backend = self.backend();
         let current = source.current_version();
-        let stored = {
-            let mut conn = self.conn();
-            db_version(&mut conn).await?
-        };
+        let stored = db_version(self.conn()).await?;
         match stored {
             Some(version) if version == current => {
                 debug!(version, "Schema version is up to date");
             }
             Some(version) if version < current => {
                 info!(from = version, to = current, "Upgrading schema");
-                let (drop, create) = derived_scripts(source, backend);
+                let (drop, create) = derived_scripts(source);
                 if !drop.is_empty() {
                     self.execute_batch(&drop).await?;
                     debug!(count = drop.len(), "Derived objects dropped");
                 }
                 for target in (version + 1)..=current {
-                    let stmts = source.delta(target, backend);
+                    let stmts = source.delta(target);
                     self.execute_batch(&stmts).await?;
                     info!(target, "Schema delta applied");
                 }
@@ -138,7 +128,7 @@ impl UpgradeTx<'_> {
                     version = current,
                     "No existing schema found, creating fresh install"
                 );
-                let stmts = install_script(source, backend);
+                let stmts = install_script(source);
                 self.execute_batch(&stmts).await?;
                 self.set_db_version(current).await?;
                 info!(version = current, "Fresh schema created");
@@ -149,10 +139,7 @@ impl UpgradeTx<'_> {
 
     /// Stamp the edition, or refuse a database this binary cannot serve.
     pub async fn upgrade_tabsdata_edition(&mut self) -> Result<(), DbError> {
-        let instance_edition = {
-            let mut conn = self.conn();
-            edition(&mut conn).await?
-        };
+        let instance_edition = edition(self.conn()).await?;
         let runtime_edition = TabsdataEdition;
 
         match instance_edition {
@@ -166,7 +153,7 @@ impl UpgradeTx<'_> {
                     .to_owned();
                 query
                     .build_query()
-                    .execute(&mut self.conn())
+                    .execute(self.conn())
                     .await
                     .map_err(DbError::FailedToCreateOrUpgradeDatabaseEdition)?;
                 Ok(())
@@ -193,7 +180,7 @@ impl UpgradeTx<'_> {
                         .value(TabsdataSystem::Value, runtime_edition.label())
                         .and_where(Expr::col(TabsdataSystem::Name).eq(DB_EDITION_NAME))
                         .build_query()
-                        .execute(&mut self.conn())
+                        .execute(self.conn())
                         .await
                         .map_err(DbError::FailedToCreateOrUpgradeDatabaseEdition)?;
                     Ok(())
@@ -213,36 +200,26 @@ impl UpgradeTx<'_> {
     /// migration cannot silently leave the app role without access. The role
     /// itself is created before the transaction ([`AdminPool::ensure_app_role`]).
     pub async fn grant_app_role_privileges(&mut self) -> Result<(), DbError> {
-        if !matches!(self.backend(), Backend::Postgres) {
-            return Ok(());
-        }
-        #[cfg(postgres)]
-        {
-            let stmts = grant_app_role_privileges_sql(self.admin.schema(), &self.admin.app_role);
-            self.execute_batch(&stmts).await?;
-            debug!(
-                role = self.admin.app_role,
-                "Granted RLS app role privileges"
-            );
-        }
+        let stmts = grant_app_role_privileges_sql(self.admin.schema(), &self.admin.app_role);
+        self.execute_batch(&stmts).await?;
+        debug!(
+            role = self.admin.app_role,
+            "Granted RLS app role privileges"
+        );
         Ok(())
     }
 
     /// Create this schema's `tabsdata_system` ledger if absent — idempotent.
     async fn ensure_system_table(&mut self) -> Result<(), DbError> {
-        let ddl = tabsdata_system_ddl(self.backend());
+        let ddl = tabsdata_system_ddl();
         self.execute_batch(&[ddl]).await
     }
 
     /// Serialize concurrent upgraders of this schema: the second waits here,
     /// re-reads `db_version` once the first commits, and no-ops — instead of
     /// racing the ladder into a raw DDL error. A table lock, not `FOR UPDATE`:
-    /// on a fresh install there is no row to lock. PostgreSQL only — SQLite
-    /// writers already serialize on the database's write lock.
+    /// on a fresh install there is no row to lock.
     async fn lock_system_table(&mut self) -> Result<(), DbError> {
-        if !matches!(self.backend(), Backend::Postgres) {
-            return Ok(());
-        }
         self.execute_batch(&["LOCK TABLE tabsdata_system IN ACCESS EXCLUSIVE MODE".to_string()])
             .await
     }
@@ -259,7 +236,7 @@ impl UpgradeTx<'_> {
                     .to_owned(),
             )
             .build_query()
-            .execute(&mut self.conn())
+            .execute(self.conn())
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         Ok(())
@@ -267,7 +244,7 @@ impl UpgradeTx<'_> {
 
     /// Commit the upgrade.
     pub async fn commit(self) -> Result<(), DbError> {
-        self.tx
+        self.conn
             .commit()
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)

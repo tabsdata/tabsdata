@@ -6,11 +6,6 @@
 description = "Tabsdata Database Features"
 name = "td-database"
 build = "build.rs"
-# Required so `cargo::metadata=<key>=…` from build.rs is exposed to direct
-# dependents as `DEP_TD_DATABASE_FEATURES_<KEY>` env vars. Their build scripts
-# read these to set `#[cfg(sqlite|postgres|mysql)]` flags driven by *this*
-# crate's feature state — single source of truth for backend selection.
-links = "td_database_features"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -26,7 +21,7 @@ version = { workspace = true }
 
 [features]
 # embedded-postgres is enabled for DEV, remove on release
-default = ["postgres", "embedded-postgres"]
+default = ["embedded-postgres"]
 
 enterprise = []
 td-test = [
@@ -42,23 +37,13 @@ td-test = [
 dummy = []
 mock-env = []
 test_logging = []
-test_tower_metadata = []
-# `test-utils` exposes the per-backend test pool factories in
-# `td_database::test_utils`. Pulls in embedded postgres for the postgres
-# factory (and `fslock` to serialize the shared server's first boot across
-# processes); sqlite-only test builds can re-enable it via `--features sqlite`.
+# `test-utils` exposes the test pool factories in `td_database::test_utils`.
+# Pulls in embedded postgres (and `fslock` to serialize the shared server's
+# first boot across processes).
 test-utils = ["embedded-postgres", "dep:fslock"]
 # `embedded-postgres` enables the in-process Postgres server used by the
-# apiserver's default-when-no-URL path and by test_utils::postgres. Implies
-# the postgres backend (we need its sqlx driver to talk to the server).
-embedded-postgres = ["postgres", "dep:postgresql_embedded"]
-
-# Backend support features. td-database is the single source of truth — these
-# features pull in the sqlx/sea-query-sqlx pieces per backend and drive the
-# build script's metadata/cfg emission for the rest of the workspace.
-sqlite = ["sqlx/sqlite", "sea-query-sqlx/sqlx-sqlite"]
-postgres = ["sqlx/postgres", "sea-query-sqlx/sqlx-postgres"]
-mysql = ["sqlx/mysql", "sea-query-sqlx/sqlx-mysql"]
+# apiserver's default-when-no-URL path and by test_utils::postgres.
+embedded-postgres = ["dep:postgresql_embedded"]
 
 [package.metadata.cargo-machete]
 ignored = ["openssl", "strum", "td-build", "td-database", "thiserror", "toml"]
@@ -81,6 +66,7 @@ td-build = { workspace = true }
 
 ## Libraries
 
+ta-services = { workspace = true }
 td-error = { workspace = true }
 td-common = { workspace = true }
 td-schema = { workspace = true }
@@ -89,17 +75,16 @@ te-system = { workspace = true }
 
 # External dependencies
 
-async-stream = { workspace = true }
 async-trait = { workspace = true }
 fslock = { workspace = true, optional = true }
 futures-util = { workspace = true }
 inventory = { workspace = true }
 postgresql_embedded = { workspace = true, features = ["bundled", "tokio"], optional = true }
 sea-query = { workspace = true, features = ["derive", "sqlx-utils"] }
-sea-query-sqlx = { workspace = true }
+sea-query-sqlx = { workspace = true, features = ["sqlx-postgres"] }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true }
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["postgres"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

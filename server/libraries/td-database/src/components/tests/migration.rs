@@ -12,60 +12,19 @@
 use crate::components::{ApiserverComponent, SchemaComponent};
 use crate::pool::TdPool;
 use crate::sea_query::builder::SeaQueryExt;
-use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
 use crate::test_utils::TestDb;
-#[cfg(sqlite)]
-use sea_query::Func;
 use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, JoinType, Order, Query, SelectStatement, Table,
 };
 use td_schema::schema::Derived;
 use td_schema::schema::archive;
-use td_schema::schema::backend::Backend;
+use td_schema::schema::render::{render_query, render_schema};
 use td_schema::{CURRENT_VERSION, CurrentSource, SchemaSource};
 
-#[cfg(postgres)]
 fn current_schema() -> Expr {
     Expr::cust("current_schema()")
 }
 
-/// Ordered by name, not position: `ADD COLUMN` appends where a fresh install
-/// declares in place, and that difference is not a divergence.
-#[cfg(sqlite)]
-fn sqlite_fingerprint() -> Vec<SelectStatement> {
-    vec![
-        Query::select()
-            .expr(Expr::cust(
-                "'object ' || type || ' ' || name || ' ' || COALESCE(sql, '')",
-            ))
-            .from(Alias::new("sqlite_master"))
-            .and_where(Expr::col(Alias::new("name")).not_like("sqlite_%"))
-            .and_where(Expr::col(Alias::new("type")).ne("table"))
-            .order_by(Alias::new("type"), Order::Asc)
-            .order_by(Alias::new("name"), Order::Asc)
-            .to_owned(),
-        Query::select()
-            .expr(Expr::cust(
-                "'column ' || m.name || '.' || i.name || ':' || lower(i.type) \
-                 || ':notnull=' || i.\"notnull\" || ':pk=' || i.pk \
-                 || ':default=' || COALESCE(i.dflt_value, '')",
-            ))
-            .from_as(Alias::new("sqlite_master"), Alias::new("m"))
-            // A table-valued function correlated to the row on its left; no
-            // JOIN form of this exists in the builder.
-            .from_function(
-                Func::cust(Alias::new("pragma_table_info")).arg(Expr::cust("m.name")),
-                Alias::new("i"),
-            )
-            .and_where(Expr::cust("m.name").not_like("sqlite_%"))
-            .and_where(Expr::cust("m.type").is_in(["table", "view"]))
-            .order_by((Alias::new("m"), Alias::new("name")), Order::Asc)
-            .order_by((Alias::new("i"), Alias::new("name")), Order::Asc)
-            .to_owned(),
-    ]
-}
-
-#[cfg(postgres)]
 fn postgres_fingerprint() -> Vec<SelectStatement> {
     vec![
         Query::select()
@@ -167,14 +126,7 @@ fn postgres_fingerprint() -> Vec<SelectStatement> {
 }
 
 async fn fingerprint(db: &TdPool) -> Vec<String> {
-    let queries = match db.kind() {
-        #[cfg(sqlite)]
-        DatabaseBackend::Sqlite => sqlite_fingerprint(),
-        #[cfg(postgres)]
-        DatabaseBackend::Postgres => postgres_fingerprint(),
-        #[cfg(mysql)]
-        DatabaseBackend::MySql => vec![],
-    };
+    let queries = postgres_fingerprint();
     let mut out = Vec::new();
     for (i, mut query) in queries.into_iter().enumerate() {
         let rows: Vec<String> = query.build_query_scalar().fetch_all(db).await.unwrap();
@@ -235,13 +187,6 @@ async fn assert_ladder_matches_fresh_install(new_db: impl AsyncFn() -> TestDb) {
     }
 }
 
-#[cfg(sqlite)]
-#[tokio::test]
-async fn migrated_schema_matches_fresh_install_sqlite() {
-    assert_ladder_matches_fresh_install(async || crate::test_utils::sqlite::pool().await).await;
-}
-
-#[cfg(postgres)]
 #[tokio::test]
 async fn migrated_schema_matches_fresh_install_postgres() {
     assert_ladder_matches_fresh_install(async || crate::test_utils::postgres::pool().await).await;
@@ -257,7 +202,7 @@ impl SchemaSource for DestructiveFixture {
         self.0
     }
 
-    fn tables(&self, backend: Backend) -> Vec<String> {
+    fn tables(&self) -> Vec<String> {
         let mut table = Table::create();
         table
             .table(Alias::new("fixture"))
@@ -265,22 +210,20 @@ impl SchemaSource for DestructiveFixture {
         if self.0 == 1 {
             table.col(ColumnDef::new(Alias::new("b")).text());
         }
-        vec![backend.build_schema(table)]
+        vec![render_schema(table)]
     }
 
-    fn delta(&self, target: usize, backend: Backend) -> Vec<String> {
+    fn delta(&self, target: usize) -> Vec<String> {
         assert_eq!(target, 2);
-        vec![
-            backend.build_schema(
-                Table::alter()
-                    .table(Alias::new("fixture"))
-                    .drop_column(Alias::new("b"))
-                    .to_owned(),
-            ),
-        ]
+        vec![render_schema(
+            Table::alter()
+                .table(Alias::new("fixture"))
+                .drop_column(Alias::new("b"))
+                .to_owned(),
+        )]
     }
 
-    fn views(&self, backend: Backend) -> Vec<Derived> {
+    fn views(&self) -> Vec<Derived> {
         let select = Query::select()
             .expr(Expr::col(Asterisk))
             .from(Alias::new("fixture"))
@@ -288,7 +231,7 @@ impl SchemaSource for DestructiveFixture {
         vec![Derived {
             create: vec![format!(
                 "CREATE VIEW fixture_view AS {}",
-                backend.build_query(select)
+                render_query(select)
             )],
             drop: vec!["DROP VIEW IF EXISTS fixture_view".to_string()],
         }]
@@ -296,27 +239,14 @@ impl SchemaSource for DestructiveFixture {
 }
 
 async fn view_columns(db: &TdPool, view: &str) -> Vec<String> {
-    let sql = match db.kind() {
-        #[cfg(sqlite)]
-        DatabaseBackend::Sqlite => {
-            format!("SELECT name FROM pragma_table_info('{view}') ORDER BY name")
-        }
-        // `pg_catalog`, not `information_schema`, which filters by privilege.
-        #[cfg(postgres)]
-        DatabaseBackend::Postgres => format!(
-            "SELECT a.attname FROM pg_attribute a \
-             JOIN pg_class c ON c.oid = a.attrelid \
-             JOIN pg_namespace n ON n.oid = c.relnamespace \
-             WHERE n.nspname = current_schema() AND c.relname = '{view}' \
-             AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attname"
-        ),
-        #[cfg(mysql)]
-        DatabaseBackend::MySql => format!(
-            "SELECT column_name FROM information_schema.columns \
-             WHERE table_schema = DATABASE() AND table_name = '{view}' \
-             ORDER BY column_name"
-        ),
-    };
+    // `pg_catalog`, not `information_schema`, which filters by privilege.
+    let sql = format!(
+        "SELECT a.attname FROM pg_attribute a \
+         JOIN pg_class c ON c.oid = a.attrelid \
+         JOIN pg_namespace n ON n.oid = c.relnamespace \
+         WHERE n.nspname = current_schema() AND c.relname = '{view}' \
+         AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attname"
+    );
     super::scalars(db, &sql).await
 }
 
@@ -338,18 +268,8 @@ async fn assert_destructive_delta_clears_standing_views(new_db: impl AsyncFn() -
     assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a"]);
 }
 
-#[cfg(sqlite)]
-#[tokio::test]
-async fn destructive_delta_clears_standing_views_sqlite() {
-    assert_destructive_delta_clears_standing_views(async || {
-        crate::test_utils::sqlite::pool().await
-    })
-    .await;
-}
-
 /// Two upgraders racing the same fresh schema: the `tabsdata_system` lock
 /// makes the loser wait, re-read `db_version`, and no-op — both must succeed.
-#[cfg(postgres)]
 #[tokio::test]
 async fn concurrent_upgrades_serialize_postgres() {
     let db = crate::test_utils::postgres::pool().await;
@@ -374,25 +294,23 @@ impl SchemaSource for FailingFixture {
         3
     }
 
-    fn tables(&self, backend: Backend) -> Vec<String> {
-        DestructiveFixture(3).tables(backend)
+    fn tables(&self) -> Vec<String> {
+        DestructiveFixture(3).tables()
     }
 
-    fn views(&self, backend: Backend) -> Vec<Derived> {
-        DestructiveFixture(3).views(backend)
+    fn views(&self) -> Vec<Derived> {
+        DestructiveFixture(3).views()
     }
 
-    fn delta(&self, target: usize, backend: Backend) -> Vec<String> {
+    fn delta(&self, target: usize) -> Vec<String> {
         match target {
-            2 => DestructiveFixture(2).delta(2, backend),
-            3 => vec![
-                backend.build_schema(
-                    Table::alter()
-                        .table(Alias::new("fixture"))
-                        .drop_column(Alias::new("absent"))
-                        .to_owned(),
-                ),
-            ],
+            2 => DestructiveFixture(2).delta(2),
+            3 => vec![render_schema(
+                Table::alter()
+                    .table(Alias::new("fixture"))
+                    .drop_column(Alias::new("absent"))
+                    .to_owned(),
+            )],
             other => panic!("unexpected target {other}"),
         }
     }
@@ -415,19 +333,11 @@ async fn assert_failed_ladder_rolls_back(new_db: impl AsyncFn() -> TestDb) {
     assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a", "b"]);
 }
 
-#[cfg(sqlite)]
-#[tokio::test]
-async fn failed_ladder_rolls_back_sqlite() {
-    assert_failed_ladder_rolls_back(async || crate::test_utils::sqlite::pool().await).await;
-}
-
-#[cfg(postgres)]
 #[tokio::test]
 async fn failed_ladder_rolls_back_postgres() {
     assert_failed_ladder_rolls_back(async || crate::test_utils::postgres::pool().await).await;
 }
 
-#[cfg(postgres)]
 #[tokio::test]
 async fn destructive_delta_clears_standing_views_postgres() {
     assert_destructive_delta_clears_standing_views(async || {

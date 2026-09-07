@@ -6,13 +6,13 @@
 //! the external-database identity (e.g. an RDS domain user). The failures this
 //! guards against (PostgreSQL 16 splitting `SET` out of role `ADMIN OPTION`,
 //! membership gating convergence) are invisible to a superuser. PostgreSQL
-//! only — the module is `#[cfg(postgres)]`.
+//! only.
 
 use crate::components::{AdminPool, ProvisionSpec};
-use crate::config::{ConnectConfig, DatabaseConfig, PoolConfig, PostgresConnect, Schema};
+use crate::config::{DatabaseConfig, PoolConfig, PoolsConfig, PostgresConnect, Schema};
 use crate::error::DbError;
 use crate::pool::TdPool;
-use crate::pool::connect::pg_connect_options;
+use crate::pool::options::pg_connect_options;
 use crate::test_utils::server;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
@@ -37,13 +37,21 @@ fn login(username: &str, password: &str) -> PostgresConnect {
 
 fn config(conn: PostgresConnect, schema: &str, app_role: &str) -> DatabaseConfig {
     DatabaseConfig {
-        conn: ConnectConfig::Postgres(conn),
+        conn,
         schema: Some(Schema::new(schema)),
         app_role: Some(app_role.to_owned()),
-        pool: PoolConfig {
-            max_connections: 2,
-            acquire_timeout: Duration::from_secs(10),
-            ..Default::default()
+        pool: {
+            let pool = PoolConfig {
+                min_connections: 1,
+                max_connections: 2,
+                acquire_timeout: Duration::from_secs(10),
+                ..Default::default()
+            };
+            PoolsConfig {
+                regular: Some(pool.clone()),
+                exclusive: Some(pool.clone()),
+                admin: Some(pool),
+            }
         },
     }
 }
@@ -91,7 +99,7 @@ async fn owner_password_hash(su: &PgPool, owner: &str) -> String {
 /// to the app role.
 async fn owner_login(owner: &str, password: &str, app_role: &str) -> Result<(), DbError> {
     let mut config = config(login(owner, password), owner, app_role);
-    config.pool.acquire_timeout = Duration::from_secs(3);
+    config.pool.regular.as_mut().unwrap().acquire_timeout = Duration::from_secs(3);
     TdPool::connect(&config).await?.close().await;
     Ok(())
 }

@@ -29,7 +29,7 @@
 //! in tests. Use `db.scoped(p)` (or a service) to re-enforce RLS for a query.
 
 use crate::components::{AdminPool, SchemaComponent};
-use crate::config::{ConnectConfig, DatabaseConfig, PostgresConnect, Schema};
+use crate::config::{DatabaseConfig, PostgresConnect, Schema};
 use crate::pool::TdPool;
 #[cfg(test)]
 use crate::test_utils::TestDb;
@@ -52,9 +52,9 @@ fn unique_schema(index: usize) -> String {
 /// ([`AdminPool`]) and serving ([`TdPool`]) connects — the schema is
 /// superuser-owned, so there is no per-test owner role; serving `SET ROLE`s the
 /// shared `td_app`.
-fn schema_connectable(admin: &PostgresConnect, schema: &str) -> DatabaseConfig {
+pub(crate) fn schema_connectable(admin: &PostgresConnect, schema: &str) -> DatabaseConfig {
     DatabaseConfig {
-        conn: ConnectConfig::Postgres(admin.clone()),
+        conn: admin.clone(),
         schema: Some(Schema::new(schema)),
         app_role: None,
         pool: test_pool_config(),
@@ -65,7 +65,7 @@ fn schema_connectable(admin: &PostgresConnect, schema: &str) -> DatabaseConfig {
 /// teardown.
 fn admin_connectable(admin: &PostgresConnect) -> DatabaseConfig {
     DatabaseConfig {
-        conn: ConnectConfig::Postgres(admin.clone()),
+        conn: admin.clone(),
         schema: None,
         app_role: None,
         pool: test_pool_config(),
@@ -160,25 +160,28 @@ pub async fn pools(
     }
 }
 
-#[cfg(all(test, postgres))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::components::{ApiserverComponent, SchemaSource};
-    use crate::dynamic::DynamicConnection;
-    use td_schema::schema::backend::Backend;
+    use crate::pool::PoolKind;
 
     struct DummySource;
     impl SchemaSource for DummySource {
         fn current_version(&self) -> usize {
             1
         }
-        fn tables(&self, _backend: Backend) -> Vec<String> {
+        fn tables(&self) -> Vec<String> {
             vec!["CREATE TABLE IF NOT EXISTS dummy_kv (k TEXT PRIMARY KEY)".to_string()]
         }
     }
 
     struct DummyComponent;
     impl SchemaComponent for DummyComponent {
+        fn pools(&self) -> &'static [PoolKind] {
+            &[PoolKind::Regular]
+        }
+
         fn key(&self) -> &'static str {
             "dummy"
         }
@@ -191,14 +194,10 @@ mod tests {
     }
 
     async fn count(pool: &TdPool, sql: &str) -> i64 {
-        let mut conn = pool.acquire().await.unwrap();
-        #[allow(unreachable_patterns)]
-        match &mut conn {
-            DynamicConnection::Postgres(h) => {
-                sqlx::query_scalar(sql).fetch_one(&mut **h).await.unwrap()
-            }
-            _ => unreachable!("postgres-only test"),
-        }
+        sqlx::query_scalar(sql)
+            .fetch_one(pool.as_ref())
+            .await
+            .unwrap()
     }
 
     #[tokio::test]

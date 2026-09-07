@@ -16,15 +16,16 @@ mod knobs;
 #[cfg(feature = "embedded-postgres")]
 mod secrets;
 
-pub use entry::{bootable_server, is_local, server_connectable, validate_server};
+pub use entry::bootable_server;
+pub(crate) use entry::server_connectable;
 
 pub(crate) use credentials::{EmbeddedPassword, resolve_password};
 
 #[cfg(feature = "embedded-postgres")]
-pub use knobs::{BootConfig, boot_config, database_dir};
+pub(crate) use knobs::{BootConfig, boot_config, database_dir};
 
 #[cfg(feature = "embedded-postgres")]
-pub use boot::ServerHandle;
+pub(crate) use boot::ServerHandle;
 #[cfg(all(feature = "embedded-postgres", any(test, feature = "test-utils")))]
 pub(crate) use boot::boot_detached;
 #[cfg(feature = "embedded-postgres")]
@@ -36,7 +37,7 @@ use crate::error::DbError;
 /// No-op owning handle when embedded postgres is not built in: there is no
 /// in-process server to own, so `stop` does nothing.
 #[cfg(not(feature = "embedded-postgres"))]
-pub struct ServerHandle;
+pub(crate) struct ServerHandle;
 
 #[cfg(not(feature = "embedded-postgres"))]
 impl ServerHandle {

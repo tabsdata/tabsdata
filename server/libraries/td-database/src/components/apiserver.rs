@@ -5,9 +5,11 @@
 //! The built-in apiserver schema component.
 
 use crate::components::{
-    AdminPool, ComponentRegistration, SchemaComponent, SchemaSource, UpgradeTx,
+    AdminPool, ComponentRegistration, SchemaComponent, SchemaSource, UpgradeTransaction,
 };
+use crate::domain::{Apiserver, DbDomain};
 use crate::error::DbError;
+use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use async_trait::async_trait;
 use tracing::{debug, info};
@@ -32,6 +34,10 @@ impl SchemaComponent for ApiserverComponent {
         APISERVER_SCHEMA
     }
 
+    fn pools(&self) -> &'static [PoolKind] {
+        Apiserver::POOLS
+    }
+
     fn schema_source(&self) -> &'static dyn SchemaSource {
         &td_schema::CurrentSource
     }
@@ -42,7 +48,7 @@ impl SchemaComponent for ApiserverComponent {
         admin.check_upgrader_permissions().await
     }
 
-    async fn upgrade(&self, tx: &mut UpgradeTx<'_>) -> Result<(), DbError> {
+    async fn upgrade(&self, tx: &mut UpgradeTransaction<'_>) -> Result<(), DbError> {
         info!("Starting database upgrade");
         tx.upgrade_db_version(self.schema_source()).await?;
         tx.upgrade_tabsdata_edition().await?;

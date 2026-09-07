@@ -7,33 +7,8 @@
 
 use super::{schema_db_version, schema_index_names, schema_table_names, schema_view_names};
 use crate::components::{ApiserverComponent, SchemaComponent};
-use crate::pool::TdPool;
-use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
-// Used only by the sqlite-gated pre-2.0 rejection test below.
-#[cfg(sqlite)]
 use crate::error::DbError;
-#[cfg(sqlite)]
-use crate::raw_query;
-#[cfg(sqlite)]
-use crate::sea_query::builder::SeaQueryExt;
-
-#[cfg(sqlite)]
-#[tokio::test]
-async fn test_tabsdata_db_schema_creation() {
-    let db = crate::test_utils::sqlite::pool().await;
-    db.upgrade().await.unwrap();
-    ApiserverComponent.check(&db.serving).await.unwrap();
-}
-
-#[cfg(sqlite)]
-#[tokio::test]
-async fn test_schema_tables_sqlite() {
-    let db = crate::test_utils::sqlite::pool().await;
-    db.upgrade().await.unwrap();
-    assert_eq!(schema_table_names(&db.serving).await, expected_tables());
-}
-
-#[cfg(postgres)]
+use crate::pool::TdPool;
 #[tokio::test]
 async fn test_schema_tables_postgres() {
     let db = crate::test_utils::postgres::pool().await;
@@ -80,15 +55,6 @@ fn expected_tables() -> Vec<&'static str> {
     ]
 }
 
-#[cfg(sqlite)]
-#[tokio::test]
-async fn test_schema_views_sqlite() {
-    let db = crate::test_utils::sqlite::pool().await;
-    db.upgrade().await.unwrap();
-    assert_eq!(schema_view_names(&db.serving).await, expected_views());
-}
-
-#[cfg(postgres)]
 #[tokio::test]
 async fn test_schema_views_postgres() {
     let db = crate::test_utils::postgres::pool().await;
@@ -137,15 +103,6 @@ fn expected_views() -> Vec<&'static str> {
     ]
 }
 
-#[cfg(sqlite)]
-#[tokio::test]
-async fn test_schema_indices_sqlite() {
-    let db = crate::test_utils::sqlite::pool().await;
-    db.upgrade().await.unwrap();
-    assert_indices(&db.serving).await;
-}
-
-#[cfg(postgres)]
 #[tokio::test]
 async fn test_schema_indices_postgres() {
     let db = crate::test_utils::postgres::pool().await;
@@ -156,7 +113,6 @@ async fn test_schema_indices_postgres() {
 async fn assert_indices(db: &TdPool) {
     // Postgres silently truncates identifiers at 63 characters (NAMEDATALEN-1) —
     // several of our index names exceed that. The expected list is the full
-    // sqlite form; we apply the same truncation on postgres before comparing.
     let expected_full = vec![
         "bundles___collection_id___idx",
         "collections___group_id___idx",
@@ -235,33 +191,16 @@ async fn assert_indices(db: &TdPool) {
         "workers___physical_function_run_id___idx",
     ];
 
-    let backend_truncate = match db.kind() {
-        #[cfg(postgres)]
-        DatabaseBackend::Postgres => 63,
-        #[allow(unreachable_patterns)]
-        _ => usize::MAX,
-    };
+    // PostgreSQL truncates identifiers at NAMEDATALEN - 1.
     let mut expected: Vec<String> = expected_full
         .into_iter()
-        .map(|n| n.chars().take(backend_truncate).collect::<String>())
+        .map(|n| n.chars().take(63).collect::<String>())
         .collect();
     expected.sort();
 
     assert_eq!(schema_index_names(db).await, expected);
 }
 
-#[cfg(sqlite)]
-#[tokio::test]
-async fn test_schema_version_sqlite() {
-    let db = crate::test_utils::sqlite::pool().await;
-    db.upgrade().await.unwrap();
-    assert_eq!(
-        schema_db_version(&db).await,
-        td_schema::CURRENT_VERSION.to_string()
-    );
-}
-
-#[cfg(postgres)]
 #[tokio::test]
 async fn test_schema_version_postgres() {
     let db = crate::test_utils::postgres::pool().await;
@@ -272,18 +211,6 @@ async fn test_schema_version_postgres() {
     );
 }
 
-#[cfg(sqlite)]
-#[tokio::test]
-async fn test_schema_applies_sqlite() {
-    let db = crate::test_utils::sqlite::pool().await;
-    db.upgrade().await.expect("schema upgrade on sqlite");
-    ApiserverComponent
-        .check(&db.serving)
-        .await
-        .expect("schema check on sqlite");
-}
-
-#[cfg(postgres)]
 #[tokio::test]
 async fn test_schema_applies_postgres() {
     let db = crate::test_utils::postgres::pool().await;
@@ -296,20 +223,16 @@ async fn test_schema_applies_postgres() {
 
 /// A 1.x database lacks the `tabsdata_version` row and must be rejected by the
 /// major-version gate before any db_version comparison runs.
-#[cfg(sqlite)]
 #[tokio::test]
 async fn test_pre_2_0_database_rejected() {
-    let db = crate::test_utils::sqlite::pool().await;
+    let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
 
-    raw_query!(
-        db,
-        "DELETE FROM tabsdata_system WHERE name = 'tabsdata_version'"
+    super::execute(
+        &db.serving,
+        "DELETE FROM tabsdata_system WHERE name = 'tabsdata_version'",
     )
-    .build_query()
-    .execute(&db.serving)
-    .await
-    .unwrap();
+    .await;
 
     let res = ApiserverComponent.check(&db.serving).await;
     assert!(

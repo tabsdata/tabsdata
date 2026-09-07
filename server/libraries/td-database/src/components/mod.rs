@@ -7,33 +7,33 @@
 //! configured [`DatabaseComponents`]. Component registration is the edition
 //! extension's job (`te-database`), so this module stays edition-agnostic.
 
+mod admin_pool;
 mod apiserver;
 mod component;
-mod pool;
 pub(crate) mod sql;
 mod upgrade;
 
 #[cfg(test)]
 mod tests;
 
-pub use apiserver::{APISERVER_COMPONENT_KEY, ApiserverComponent};
-pub use component::*;
-pub use pool::AdminPool;
-pub use upgrade::UpgradeTx;
-
-#[cfg(mysql)]
-use crate::config::MySqlConnect;
-#[cfg(postgres)]
-use crate::config::PostgresConnect;
 use crate::config::{
-    BackendConfig, ComponentConfig, ConnectConfig, DatabaseComponents, DatabaseConfig,
-    EMBEDDED_CREDENTIAL, Schema,
+    ComponentConfig, DatabaseComponents, DatabaseConfig, EMBEDDED_CREDENTIAL, PostgresConnect,
+    Schema,
 };
 use crate::domain::DomainPools;
 use crate::error::DbError;
-use crate::pool::TdPool;
+use crate::pool::PoolKind;
+use crate::pool::{ComponentPools, TdPool};
 use crate::server::{EmbeddedPassword, resolve_password, server_connectable};
+pub use admin_pool::AdminPool;
+pub use apiserver::{APISERVER_COMPONENT_KEY, ApiserverComponent};
+pub use component::{
+    ComponentRegistration, ComponentStatus, ProvisionSpec, SchemaComponent, SchemaSource,
+    component, registered, validate_components,
+};
+use sqlx::Connection;
 use std::collections::{BTreeMap, BTreeSet};
+pub use upgrade::UpgradeTransaction;
 
 /// Copies the connection target of the `database_server:` entry onto every
 /// component. The server entry says where the database is; a component says
@@ -42,15 +42,10 @@ use std::collections::{BTreeMap, BTreeSet};
 ///
 /// Only the location travels: credentials stay per component, since the server
 /// entry logs in as the privileged admin and a component as its own owner role.
-#[cfg(postgres)]
 pub fn propagate_server_target(components: &mut DatabaseComponents, server: &ComponentConfig) {
-    let Some(source) = server.conn.postgres() else {
-        return;
-    };
+    let source = &server.postgres;
     for entry in components.values_mut() {
-        let Some(target) = entry.conn.postgres_mut() else {
-            continue;
-        };
+        let target = &mut entry.postgres;
         target.host = source.host.clone();
         target.port = source.port;
         target.socket = source.socket.clone();
@@ -66,7 +61,7 @@ pub fn propagate_server_target(components: &mut DatabaseComponents, server: &Com
 }
 
 /// The config entry for a component; every registered component must have one.
-pub(crate) fn component_entry<'a>(
+pub fn component_entry<'a>(
     components: &'a DatabaseComponents,
     component: &dyn SchemaComponent,
 ) -> Result<&'a ComponentConfig, DbError> {
@@ -91,7 +86,7 @@ pub fn resolved_schema(
 
 /// [`resolved_schema`] for a component identified by key alone, for callers
 /// reading a config whose components are not linked into their binary. The
-/// static default is only reachable on backends carrying no database name.
+/// static default is only reachable on an entry carrying no database name.
 pub fn resolved_schema_of(
     components: &DatabaseComponents,
     key: &str,
@@ -120,7 +115,7 @@ pub fn resolved_username(
 ) -> Result<String, DbError> {
     let entry = component_entry(components, component)?;
     let schema = schema_of(entry, component)?;
-    username_of(entry_username(&entry.conn), &schema)
+    username_of(entry.postgres.username.as_deref(), &schema)
 }
 
 /// [`resolved_username`] for a component identified by key alone — see
@@ -134,7 +129,7 @@ pub fn resolved_username_of(
         .get(key)
         .ok_or_else(|| DbError::MissingComponentEntry(key.to_owned()))?;
     let schema = resolved_schema_of(components, key, default_schema)?;
-    username_of(entry_username(&entry.conn), &schema)
+    username_of(entry.postgres.username.as_deref(), &schema)
 }
 
 /// The identity a component's serving connection logs in as: its
@@ -151,30 +146,6 @@ fn serving_credentials(
     Ok((username, password))
 }
 
-/// The entry's configured username, from the backends that authenticate.
-fn entry_username(conn: &BackendConfig) -> Option<&str> {
-    match conn {
-        #[cfg(sqlite)]
-        BackendConfig::Sqlite(_) => None,
-        #[cfg(postgres)]
-        BackendConfig::Postgres(c) => c.username.as_deref(),
-        #[cfg(mysql)]
-        BackendConfig::MySql(c) => c.username.as_deref(),
-    }
-}
-
-/// The entry's configured password, from the backends that authenticate.
-fn entry_password(conn: &BackendConfig) -> Option<&str> {
-    match conn {
-        #[cfg(sqlite)]
-        BackendConfig::Sqlite(_) => None,
-        #[cfg(postgres)]
-        BackendConfig::Postgres(c) => c.password.as_deref(),
-        #[cfg(mysql)]
-        BackendConfig::MySql(c) => c.password.as_deref(),
-    }
-}
-
 /// Serving connectable for a component: its entry, mounted on its resolved
 /// schema, logging in with its [`serving_credentials`].
 pub fn serving_config(
@@ -183,32 +154,15 @@ pub fn serving_config(
 ) -> Result<DatabaseConfig, DbError> {
     let entry = component_entry(components, component)?;
     let schema = schema_of(entry, component)?;
-    let conn = match &entry.conn {
-        #[cfg(sqlite)]
-        BackendConfig::Sqlite(c) => ConnectConfig::Sqlite(c.clone()),
-        #[cfg(postgres)]
-        BackendConfig::Postgres(c) => {
-            let (username, password) =
-                serving_credentials(c.username.as_deref(), c.password.as_deref(), &schema)?;
-            ConnectConfig::Postgres(PostgresConnect {
-                options: c.clone(),
-                username,
-                password,
-            })
-        }
-        #[cfg(mysql)]
-        BackendConfig::MySql(c) => {
-            let (username, password) =
-                serving_credentials(c.username.as_deref(), c.password.as_deref(), &schema)?;
-            ConnectConfig::MySql(MySqlConnect {
-                options: c.clone(),
-                username,
-                password,
-            })
-        }
-    };
+    let pg = &entry.postgres;
+    let (username, password) =
+        serving_credentials(pg.username.as_deref(), pg.password.as_deref(), &schema)?;
     Ok(DatabaseConfig {
-        conn,
+        conn: PostgresConnect {
+            options: pg.clone(),
+            username,
+            password,
+        },
         schema: Some(Schema::new(&schema)),
         app_role: Some(entry.app_role()?),
         pool: entry.pool.clone(),
@@ -223,7 +177,7 @@ fn owner_credentials(
 ) -> Result<(String, String), DbError> {
     let schema = schema_of(entry, component)?;
     let password = resolve_password(
-        entry_password(&entry.conn),
+        entry.postgres.password.as_deref(),
         EmbeddedPassword::OwnerCreate { schema: &schema },
     )?
     .ok_or(DbError::MissingCredentials)?;
@@ -359,6 +313,32 @@ pub async fn upgrade_all(components: &DatabaseComponents) -> Result<(), DbError>
     Ok(())
 }
 
+/// Every declared pool must have its `pool:` block and every serving block
+/// must be declared — a block for a pool the component does not have is a
+/// config error, same as a missing one.
+pub fn validate_component_pools(components: &DatabaseComponents) -> Result<(), DbError> {
+    for component in registered() {
+        let entry = component_entry(components, component)?;
+        for kind in [PoolKind::Regular, PoolKind::Exclusive] {
+            let declared = component.pools().contains(&kind);
+            let configured = entry.pool.get(kind).is_some();
+            if declared && !configured {
+                return Err(DbError::MissingComponentPoolConfig(
+                    component.key(),
+                    kind.as_str(),
+                ));
+            }
+            if configured && !declared {
+                return Err(DbError::UnexpectedPoolConfig(
+                    component.key(),
+                    kind.as_str(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Verify every registered component is serveable and up to date, on fresh
 /// serving pools opened from the config.
 pub async fn check_all(components: &DatabaseComponents) -> Result<(), DbError> {
@@ -385,7 +365,10 @@ pub async fn seed_all(components: &DatabaseComponents) -> Result<(), DbError> {
 /// apiserver's boot check.
 pub async fn check_pools(pools: &ServingPools) -> Result<(), DbError> {
     for component in registered() {
-        component.check(pools.get(component.key())?).await?;
+        let regular = pools.get(component.key())?.get(PoolKind::Regular).ok_or(
+            DbError::MissingComponentPool(component.key(), PoolKind::Regular),
+        )?;
+        component.check(regular).await?;
     }
     Ok(())
 }
@@ -461,20 +444,20 @@ fn auth_hint(error: DbError) -> DbError {
 /// Serving pools for every registered component, keyed by
 /// [`SchemaComponent::key`]. Built once at startup by [`connect_app_all`].
 #[derive(Clone)]
-pub struct ServingPools(BTreeMap<&'static str, TdPool>);
+pub struct ServingPools(BTreeMap<&'static str, ComponentPools>);
 
 impl ServingPools {
-    /// The serving pool for a registered component.
-    pub fn get(&self, key: &str) -> Result<&TdPool, DbError> {
+    /// The serving pools of a registered component.
+    pub fn get(&self, key: &str) -> Result<&ComponentPools, DbError> {
         self.0
             .get(key)
             .ok_or_else(|| DbError::UnknownSchemaEntry(key.to_owned()))
     }
 
-    /// Close every component's serving pool — on shutdown.
+    /// Close every component's serving pools — on shutdown.
     pub async fn shutdown(&self) {
-        for pool in self.0.values() {
-            pool.shutdown().await;
+        for pools in self.0.values() {
+            pools.shutdown().await;
         }
     }
 
@@ -485,21 +468,29 @@ impl ServingPools {
     }
 }
 
-/// An **app-only** serving pool for every registered component. The apiserver
+/// **App-only** serving pools for every registered component: one pool per
+/// declared kind, each sized by its own explicit `pool:` block. The apiserver
 /// never boots or manages the database, so it holds no privileged access.
 pub async fn connect_app_all(components: &DatabaseComponents) -> Result<ServingPools, DbError> {
+    validate_component_pools(components)?;
     let mut pools = BTreeMap::new();
     for component in registered() {
-        pools.insert(
-            component.key(),
-            connect_serving(components, component.key()).await?,
-        );
+        let key = component.key();
+        let config = serving_config(components, component)?;
+        let mut component_pools = ComponentPools::default();
+        let mut kinds = component.pools().to_vec();
+        kinds.sort_by_key(|kind| !matches!(kind, PoolKind::Regular));
+        for kind in kinds {
+            let pool = TdPool::connect_as(&config, kind).await?.of_component(key);
+            component_pools.set(kind, pool);
+        }
+        pools.insert(key, component_pools);
     }
     Ok(ServingPools(pools))
 }
 
-/// A component's serving pool straight from the config — the app-only path,
-/// the same way the apiserver reaches the database.
+/// One writable app-only pool straight from the component's `pool.regular`
+/// block — the dbmanager lifecycle path (check/seed/status/ping).
 pub async fn connect_serving(
     components: &DatabaseComponents,
     key: &str,
@@ -513,7 +504,7 @@ pub async fn ping_all(components: &DatabaseComponents) -> Result<(), DbError> {
     for component in registered() {
         connect_serving(components, component.key())
             .await?
-            .acquire()
+            .begin()
             .await?
             .ping()
             .await?;

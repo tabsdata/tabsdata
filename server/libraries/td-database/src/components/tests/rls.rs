@@ -5,14 +5,14 @@
 //! td-database's row-level-security machinery, once the apiserver schema is
 //! applied: project isolation end-to-end, the serving-role bypass guard, the
 //! maintain-current trigger under RLS, and the scope GUC primitives. PostgreSQL
-//! only — this whole module is `#[cfg(postgres)]`.
+//! only.
 
 use crate::components::{ApiserverComponent, SchemaComponent};
 use crate::config::PostgresConnect;
-use crate::dynamic::DynamicConnection;
+use crate::connection::PgConnectionExt;
 use crate::error::DbError;
 use crate::pool::TdPool;
-use crate::pool::connect::pg_connect_options;
+use crate::pool::options::pg_connect_options;
 use crate::test_utils::server;
 use sqlx::postgres::PgPoolOptions;
 
@@ -198,7 +198,7 @@ async fn test_rls_project_isolation() {
 /// isolation; `check_rls_posture` on the serving pool must catch it.
 #[tokio::test]
 async fn test_check_rejects_bypassing_serving_role() {
-    use crate::config::{ConnectConfig, DatabaseConfig};
+    use crate::config::DatabaseConfig;
 
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
@@ -225,10 +225,10 @@ async fn test_check_rejects_bypassing_serving_role() {
     // Pin the bypassing role so the pool's connections `SET ROLE` it (the
     // superuser may switch to any role).
     let cfg = DatabaseConfig {
-        conn: ConnectConfig::Postgres(server::admin_base()),
+        conn: (server::admin_base()),
         schema: Some(db.schema().clone()),
         app_role: Some(bypassing.clone()),
-        pool: Default::default(),
+        pool: crate::test_utils::test_pool_config(),
     };
     let other = TdPool::connect(&cfg).await.unwrap();
     let res = other.check_rls_posture().await;
@@ -249,32 +249,27 @@ async fn test_check_rejects_bypassing_serving_role() {
 /// RLS, and FK validation across RLS tables works; project B then sees neither
 /// row.
 #[tokio::test]
-#[allow(irrefutable_let_patterns)]
 async fn test_rls_maintain_current_trigger_under_role() {
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
 
-    let mut tx = db.begin().await.unwrap();
+    let mut c = db.begin().await.unwrap();
     {
-        let mut c = tx.as_mut_conn();
         c.set_project_scope("A").await.unwrap();
-        let DynamicConnection::Postgres(h) = &mut c else {
-            unreachable!()
-        };
         // Collections FK groups(project_id, id); project_id defaults to the scope
         // GUC ('A'), satisfying RLS WITH CHECK and the collection's FK.
         sqlx::query(
             "INSERT INTO groups (id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) \
              VALUES ('g', 'g', 'd', now(), 'u', now(), 'u', false)",
         )
-        .execute(&mut **h)
+        .execute(&mut *c)
         .await
         .unwrap();
         sqlx::query(
             "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
              VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g', '/', 'F')",
         )
-        .execute(&mut **h)
+        .execute(&mut *c)
         .await
         .unwrap();
         sqlx::query(
@@ -283,11 +278,11 @@ async fn test_rls_maintain_current_trigger_under_role() {
               stage_id, stage_base_path, storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
              VALUES ('fn1', 'col', 'f', 'd', 'dec', '{}', 'fid', 'stg', '/', '1', 'bun', 'snip', now(), 'u', 'active')",
         )
-        .execute(&mut **h)
+        .execute(&mut *c)
         .await
         .unwrap();
         let cur: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current")
-            .fetch_one(&mut **h)
+            .fetch_one(&mut *c)
             .await
             .unwrap();
         assert_eq!(
@@ -297,26 +292,22 @@ async fn test_rls_maintain_current_trigger_under_role() {
         let pid: String = sqlx::query_scalar(
             "SELECT project_id FROM functions_current WHERE function_id = 'fid'",
         )
-        .fetch_one(&mut **h)
+        .fetch_one(&mut *c)
         .await
         .unwrap();
         assert_eq!(pid, "A", "trigger copied the source project_id");
     }
-    tx.commit().await.unwrap();
+    c.commit().await.unwrap();
 
-    let mut tx = db.begin().await.unwrap();
+    let mut c = db.begin().await.unwrap();
     {
-        let mut c = tx.as_mut_conn();
         c.set_project_scope("B").await.unwrap();
-        let DynamicConnection::Postgres(h) = &mut c else {
-            unreachable!()
-        };
         let f: i64 = sqlx::query_scalar("SELECT count(*) FROM functions")
-            .fetch_one(&mut **h)
+            .fetch_one(&mut *c)
             .await
             .unwrap();
         let fc: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current")
-            .fetch_one(&mut **h)
+            .fetch_one(&mut *c)
             .await
             .unwrap();
         assert_eq!(
@@ -325,31 +316,26 @@ async fn test_rls_maintain_current_trigger_under_role() {
             "project B sees neither functions nor functions_current rows"
         );
     }
-    tx.rollback().await.unwrap();
+    c.rollback().await.unwrap();
 }
 
 /// The scope GUC primitives set the expected session variables, and
 /// `set_project_scope` clears a prior bypass.
 #[tokio::test]
-#[allow(irrefutable_let_patterns)]
 async fn test_set_rls_guc_primitive() {
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
 
     {
-        let mut tx = db.begin().await.unwrap();
-        let mut conn = tx.as_mut_conn();
+        let mut conn = db.begin().await.unwrap();
         conn.bypass_project_scope().await.unwrap();
         conn.set_project_scope("PROJ_X").await.unwrap();
-        let DynamicConnection::Postgres(h) = &mut conn else {
-            unreachable!()
-        };
         let project: String = sqlx::query_scalar("SELECT current_setting('app.project_id', true)")
-            .fetch_one(&mut **h)
+            .fetch_one(&mut *conn)
             .await
             .unwrap();
         let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
-            .fetch_one(&mut **h)
+            .fetch_one(&mut *conn)
             .await
             .unwrap();
         assert_eq!(project, "PROJ_X");
@@ -357,14 +343,10 @@ async fn test_set_rls_guc_primitive() {
     }
 
     {
-        let mut tx = db.begin().await.unwrap();
-        let mut conn = tx.as_mut_conn();
+        let mut conn = db.begin().await.unwrap();
         conn.bypass_project_scope().await.unwrap();
-        let DynamicConnection::Postgres(h) = &mut conn else {
-            unreachable!()
-        };
         let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
-            .fetch_one(&mut **h)
+            .fetch_one(&mut *conn)
             .await
             .unwrap();
         assert_eq!(bypass, "on");

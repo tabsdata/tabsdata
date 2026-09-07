@@ -6,23 +6,22 @@
 //! components at runtime; the edition extension (`te-database`) registers
 //! components via `inventory::submit!`.
 
-use crate::components::{AdminPool, UpgradeTx};
+use crate::components::{AdminPool, UpgradeTransaction};
 use crate::config::DatabaseComponents;
 use crate::error::DbError;
+use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use async_trait::async_trait;
-
 pub use td_schema::SchemaSource;
-pub use td_schema::schema::backend::Backend;
 
 /// Per-entry inputs to provisioning, resolved from the component's config entry.
 pub struct ProvisionSpec<'a> {
-    pub schema: &'a str,
-    pub owner: &'a str,
-    pub password: &'a str,
+    pub(crate) schema: &'a str,
+    pub(crate) owner: &'a str,
+    pub(crate) password: &'a str,
     /// The RLS app role this component's serving connections `SET ROLE` to —
     /// the entry's own, not the privileged server entry's.
-    pub app_role: &'a str,
+    pub(crate) app_role: &'a str,
 }
 
 /// One self-describing schema component. Each phase takes the handle whose
@@ -38,6 +37,11 @@ pub trait SchemaComponent: Send + Sync + 'static {
     /// The default schema name (also the default owner-role name); a
     /// deployment may mount the component elsewhere via its entry's `schema:`.
     fn default_schema(&self) -> &'static str;
+
+    /// The pools this component uses — cite the domain marker's
+    /// [`POOLS`](crate::domain::DbDomain::POOLS) so the declaration exists
+    /// once. Its config entry must carry exactly these `pool:` blocks.
+    fn pools(&self) -> &'static [PoolKind];
 
     /// This component's schema content.
     fn schema_source(&self) -> &'static dyn SchemaSource;
@@ -57,7 +61,7 @@ pub trait SchemaComponent: Send + Sync + 'static {
     /// Bring the schema to its current version, then grant the RLS app role.
     /// Runs inside the single upgrade transaction [`AdminPool::upgrade`] owns:
     /// every step here commits together or not at all.
-    async fn upgrade(&self, tx: &mut UpgradeTx<'_>) -> Result<(), DbError> {
+    async fn upgrade(&self, tx: &mut UpgradeTransaction<'_>) -> Result<(), DbError> {
         tx.upgrade_db_version(self.schema_source()).await?;
         tx.grant_app_role_privileges().await
     }

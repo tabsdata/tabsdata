@@ -19,17 +19,17 @@ use td_common::env::{DATABASE_DIR_ENV, REPOSITORY_URI_ENV};
 #[derive(Debug, Clone, Default)]
 pub struct BootConfig {
     /// `None` lets `postgresql_embedded` pick a temp directory.
-    pub data_dir: Option<PathBuf>,
+    pub(crate) data_dir: Option<PathBuf>,
     /// `None` requests a random ephemeral port (test use only).
-    pub port: Option<u16>,
+    pub(crate) port: Option<u16>,
     /// When `false`, the data directory is wiped on drop (tests).
-    pub persistent: bool,
+    pub(crate) persistent: bool,
     /// `None` falls back to the password file alongside `data_dir`.
-    pub password: Option<String>,
+    pub(crate) password: Option<String>,
 }
 
 impl BootConfig {
-    pub(crate) fn data_dir_or_default(&self) -> PathBuf {
+    pub fn data_dir_or_default(&self) -> PathBuf {
         self.data_dir
             .clone()
             .unwrap_or_else(|| Settings::default().data_dir)
@@ -75,7 +75,6 @@ mod tests {
     // These tests mutate process-global environment variables, so they run
     // serially to avoid racing each other under a shared test process.
 
-    #[cfg(postgres)]
     #[test]
     #[serial]
     fn boot_config_from_server_entry() {

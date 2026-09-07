@@ -128,7 +128,7 @@ async fn boot(mut server: PostgreSQL) -> Result<(), DbError> {
 /// Boot the server detached, unconditionally — no reuse check. The caller is
 /// responsible for not booting over a server it wants to keep; a boot that
 /// loses a race to a running postmaster fails cleanly (see [`boot`]).
-pub(crate) async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
+pub async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
     clear_stale_postmaster(&cfg.data_dir_or_default());
     let settings = boot_settings(cfg)?;
     let (host, port) = (settings.host.clone(), settings.port);

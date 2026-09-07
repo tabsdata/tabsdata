@@ -4,46 +4,37 @@
 
 //! Gates on the `database_server:` entry — the privileged admin connection
 //! and boot target, read only by `td_dbmanager`. It reuses the
-//! [`ComponentConfig`] shape: a dedicated schema-less struct would let
-//! `flatten` silently swallow a stray `schema:`; [`validate_server`] reports
-//! it instead.
+//! [`ComponentConfig`] shape, which carries a `schema:` key this entry must
+//! not set; [`validate_server`] reports it instead of silently ignoring it.
 
 use super::credentials::{EmbeddedPassword, resolve_password};
 use crate::config::{
-    ComponentConfig, ConnectConfig, DatabaseConfig, EMBEDDED_CREDENTIAL, PostgresConfig,
-    PostgresConnect,
+    ComponentConfig, DatabaseConfig, EMBEDDED_CREDENTIAL, PostgresConfig, PostgresConnect,
 };
 use crate::error::DbError;
 use std::net::IpAddr;
 
 /// The superuser the embedded boot always bakes in.
-pub(crate) const DEFAULT_SUPERUSER: &str = "postgres";
+pub const DEFAULT_SUPERUSER: &str = "postgres";
 
-/// Shape rules for the server entry: a PostgreSQL backend, no home schema.
+/// Shape rules for the server entry: no home schema, no app role.
 /// Returns the entry's postgres options as the evidence.
 pub fn validate_server(server: &ComponentConfig) -> Result<&PostgresConfig, DbError> {
-    let pg = server
-        .conn
-        .postgres()
-        .ok_or(DbError::ServerBackendNotPostgres)?;
     if server.schema.is_some() {
         return Err(DbError::ServerSchemaNotAllowed);
     }
     if server.app_role.is_some() {
         return Err(DbError::ServerAppRoleNotAllowed);
     }
-    Ok(pg)
+    Ok(&server.postgres)
 }
 
 /// The boot-path locality rule: loopback or `localhost` counts; no other host
 /// is inherently local (the config default is `localhost`).
 pub fn is_local(server: &ComponentConfig) -> bool {
-    let Some(pg) = server.conn.postgres() else {
-        return false;
-    };
-    match pg.host.parse::<IpAddr>() {
+    match server.postgres.host.parse::<IpAddr>() {
         Ok(ip) => ip.is_loopback(),
-        Err(_) => pg.host.eq_ignore_ascii_case("localhost"),
+        Err(_) => server.postgres.host.eq_ignore_ascii_case("localhost"),
     }
 }
 
@@ -79,11 +70,11 @@ pub fn server_connectable(server: &ComponentConfig) -> Result<DatabaseConfig, Db
     let password = resolve_password(pg.password.as_deref(), EmbeddedPassword::Superuser)?
         .ok_or(DbError::MissingCredentials)?;
     Ok(DatabaseConfig {
-        conn: ConnectConfig::Postgres(PostgresConnect {
+        conn: PostgresConnect {
             options: pg.clone(),
             username,
             password,
-        }),
+        },
         // The privileged pool never serves and never provisions an app role of
         // its own — each component's entry carries the app role it needs, and
         // `validate_server` rejects the key on this entry.
@@ -101,7 +92,6 @@ mod tests {
         serde_yaml::from_str(yaml).unwrap()
     }
 
-    #[cfg(postgres)]
     #[test]
     fn server_connectable_explicit_credentials() {
         let entry = server(
@@ -113,21 +103,18 @@ postgres:
   username: admin
   password: secret
 pool:
-  max_connections: 2
+  admin:
+    min_connections: 1
+    max_connections: 2
 ",
         );
         let config = server_connectable(&entry).unwrap();
-        #[allow(irrefutable_let_patterns)]
-        let ConnectConfig::Postgres(pg) = &config.conn else {
-            panic!("expected postgres connect");
-        };
-        assert_eq!(pg.username, "admin");
-        assert_eq!(pg.password, "secret");
+        assert_eq!(config.conn.username, "admin");
+        assert_eq!(config.conn.password, "secret");
         assert!(config.schema.is_none());
-        assert_eq!(config.pool.max_connections, 2);
+        assert_eq!(config.pool.admin.as_ref().unwrap().max_connections, 2);
     }
 
-    #[cfg(postgres)]
     #[test]
     fn server_connectable_requires_credentials() {
         let entry = server(
@@ -142,7 +129,6 @@ postgres:
         ));
     }
 
-    #[cfg(postgres)]
     #[test]
     fn server_connectable_embedded_username() {
         let entry = server(
@@ -153,27 +139,11 @@ postgres:
 ",
         );
         let config = server_connectable(&entry).unwrap();
-        #[allow(irrefutable_let_patterns)]
-        let ConnectConfig::Postgres(pg) = &config.conn else {
-            panic!("expected postgres connect");
-        };
-        assert_eq!(pg.username, DEFAULT_SUPERUSER);
+        assert_eq!(config.conn.username, DEFAULT_SUPERUSER);
     }
 
-    #[cfg(all(postgres, sqlite))]
     #[test]
     fn server_shape_rules() {
-        let entry = server(
-            "
-sqlite:
-  path: /tmp/server.db
-",
-        );
-        assert!(matches!(
-            validate_server(&entry),
-            Err(DbError::ServerBackendNotPostgres)
-        ));
-
         let entry = server(
             "
 postgres:
@@ -199,7 +169,6 @@ app_role: td_app_i1
         ));
     }
 
-    #[cfg(postgres)]
     #[test]
     fn server_locality() {
         for host in ["localhost", "LOCALHOST", "127.0.0.1", "127.0.0.2", "::1"] {
@@ -223,7 +192,6 @@ postgres:
         assert!(is_local(&server("postgres: {}")));
     }
 
-    #[cfg(postgres)]
     #[test]
     fn bootable_server_gate() {
         assert!(matches!(

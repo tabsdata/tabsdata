@@ -2,49 +2,32 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dynamic::{DynamicDecode, DynamicFromRow, DynamicQueryResult, DynamicRow, DynamicType};
 use crate::sea_query::executor::SeaExecutor;
-use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
-use crate::sea_query::raw::RawSeaQuery;
 use futures_util::future::BoxFuture;
-use futures_util::stream::BoxStream;
-use sea_query::QueryStatementWriter;
+use sea_query::{PostgresQueryBuilder, QueryStatementWriter};
 use sea_query_sqlx::SqlxValues;
-use sqlx::Error;
+use sqlx::postgres::{PgQueryResult, PgRow};
+use sqlx::{Decode, Error, FromRow, Postgres, Type};
 use std::marker::PhantomData;
 
 /// QueryBuilder trait to convert from SeaQuery to String/Values tuple for sqlx.
 pub trait SeaQuerySqlxBuild {
-    fn build_sea_query(self, db: impl DatabaseKind) -> (String, SqlxValues);
+    fn build_sea_query(self) -> (String, SqlxValues);
 }
 
 impl<T> SeaQuerySqlxBuild for &mut T
 where
     T: QueryStatementWriter,
 {
-    fn build_sea_query(self, db: impl DatabaseKind) -> (String, SqlxValues) {
-        let (sql, values) = match db.kind() {
-            #[cfg(sqlite)]
-            DatabaseBackend::Sqlite => self.build(sea_query::SqliteQueryBuilder),
-            #[cfg(postgres)]
-            DatabaseBackend::Postgres => self.build(sea_query::PostgresQueryBuilder),
-            #[cfg(mysql)]
-            DatabaseBackend::MySql => self.build(sea_query::MysqlQueryBuilder),
-        };
+    fn build_sea_query(self) -> (String, SqlxValues) {
+        let (sql, values) = self.build(PostgresQueryBuilder);
         (sql, SqlxValues(values))
     }
 }
 
 impl SeaQuerySqlxBuild for (String, SqlxValues) {
-    fn build_sea_query(self, _db: impl DatabaseKind) -> (String, SqlxValues) {
+    fn build_sea_query(self) -> (String, SqlxValues) {
         self
-    }
-}
-
-impl SeaQuerySqlxBuild for RawSeaQuery {
-    fn build_sea_query(self, _db: impl DatabaseKind) -> (String, SqlxValues) {
-        let (sql, values) = self.0.into_parts();
-        (sql, SqlxValues(values))
     }
 }
 
@@ -93,35 +76,25 @@ where
     pub fn execute<'q>(
         self,
         pool: impl SeaExecutor + 'q,
-    ) -> BoxFuture<'q, Result<DynamicQueryResult, Error>> {
+    ) -> BoxFuture<'q, Result<PgQueryResult, Error>> {
         pool.execute(self.query)
-    }
-
-    pub fn fetch<'q>(
-        self,
-        pool: impl SeaExecutor + 'q,
-    ) -> BoxStream<'q, Result<DynamicRow, Error>> {
-        pool.fetch(self.query)
     }
 
     pub fn fetch_all<'q>(
         self,
         pool: impl SeaExecutor + 'q,
-    ) -> BoxFuture<'q, Result<Vec<DynamicRow>, Error>> {
+    ) -> BoxFuture<'q, Result<Vec<PgRow>, Error>> {
         pool.fetch_all(self.query)
     }
 
-    pub fn fetch_one<'q>(
-        self,
-        pool: impl SeaExecutor + 'q,
-    ) -> BoxFuture<'q, Result<DynamicRow, Error>> {
+    pub fn fetch_one<'q>(self, pool: impl SeaExecutor + 'q) -> BoxFuture<'q, Result<PgRow, Error>> {
         pool.fetch_one(self.query)
     }
 
     pub fn fetch_optional<'q>(
         self,
         pool: impl SeaExecutor + 'q,
-    ) -> BoxFuture<'q, Result<Option<DynamicRow>, Error>> {
+    ) -> BoxFuture<'q, Result<Option<PgRow>, Error>> {
         pool.fetch_optional(self.query)
     }
 }
@@ -129,54 +102,59 @@ where
 impl<T, O> SeaQueryAsBuilder<T, O>
 where
     T: SeaQuerySqlxBuild,
-    O: Send + Unpin + DynamicFromRow,
+    O: Send + Unpin + for<'r> FromRow<'r, PgRow>,
 {
-    pub fn fetch_all<'c>(
-        self,
-        pool: impl SeaExecutor + 'c,
-    ) -> BoxFuture<'c, Result<Vec<O>, Error>> {
+    pub fn fetch_all<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<Vec<O>, Error>>
+    where
+        O: 'c,
+    {
         pool.fetch_all_as::<O>(self.query)
     }
 
-    pub fn fetch_one<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<O, Error>> {
+    pub fn fetch_one<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<O, Error>>
+    where
+        O: 'c,
+    {
         pool.fetch_one_as::<O>(self.query)
     }
 
     pub fn fetch_optional<'c>(
         self,
         pool: impl SeaExecutor + 'c,
-    ) -> BoxFuture<'c, Result<Option<O>, Error>> {
-        pool.fetch_optional_as::<O>(self.query)
-    }
-
-    pub fn fetch<'c>(self, pool: impl SeaExecutor + 'c) -> BoxStream<'c, Result<O, Error>>
+    ) -> BoxFuture<'c, Result<Option<O>, Error>>
     where
         O: 'c,
     {
-        pool.fetch_as::<O>(self.query)
+        pool.fetch_optional_as::<O>(self.query)
     }
 }
 
 impl<T, O> SeaQueryScalarBuilder<T, O>
 where
     T: SeaQuerySqlxBuild,
-    O: Send + Unpin + DynamicDecode + DynamicType,
+    O: Send + Unpin + for<'r> Decode<'r, Postgres> + Type<Postgres>,
 {
-    pub fn fetch_all<'c>(
-        self,
-        pool: impl SeaExecutor + 'c,
-    ) -> BoxFuture<'c, Result<Vec<O>, Error>> {
+    pub fn fetch_all<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<Vec<O>, Error>>
+    where
+        O: 'c,
+    {
         pool.fetch_all_scalar::<O>(self.query)
     }
 
-    pub fn fetch_one<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<O, Error>> {
+    pub fn fetch_one<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<O, Error>>
+    where
+        O: 'c,
+    {
         pool.fetch_one_scalar::<O>(self.query)
     }
 
     pub fn fetch_optional<'c>(
         self,
         pool: impl SeaExecutor + 'c,
-    ) -> BoxFuture<'c, Result<Option<O>, Error>> {
+    ) -> BoxFuture<'c, Result<Option<O>, Error>>
+    where
+        O: 'c,
+    {
         pool.fetch_optional_scalar::<O>(self.query)
     }
 }
