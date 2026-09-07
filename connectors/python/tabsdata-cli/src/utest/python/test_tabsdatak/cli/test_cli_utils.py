@@ -479,6 +479,28 @@ def test_dynamic_import_bundle_root_defaults_to_file_folder(tmp_path):
     assert fn.__module__ == "publisher"
 
 
+def test_dynamic_import_rejects_a_dotted_file_name(tmp_path):
+    (tmp_path / "publisher.good.py").write_text(
+        "def publish():\n    return 'OK'\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="not a valid Python module name"):
+        cli_utils._dynamic_import_function_from_path(
+            f"{tmp_path / 'publisher.good.py'}::publish"
+        )
+
+
+def test_dynamic_import_rejects_a_dotted_folder_name(tmp_path):
+    folder = tmp_path / "my.pkg"
+    folder.mkdir()
+    (folder / "publisher.py").write_text(
+        "def publish():\n    return 'OK'\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="not a valid Python module name"):
+        cli_utils._dynamic_import_function_from_path(
+            f"{folder / 'publisher.py'}::publish", bundle_root=str(tmp_path)
+        )
+
+
 def test_dynamic_import_unprefixes_class_from_sibling_module(tmp_path):
     """A user class imported into the entry from a sibling module has its
     ``__module__`` stamped as the bundle-relative dotted name (not the

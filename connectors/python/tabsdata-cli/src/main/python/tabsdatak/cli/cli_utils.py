@@ -820,10 +820,26 @@ def _bundle_relative_dotted_name(file_path: str, bundle_root: str) -> str:
     try:
         relative = os.path.relpath(file_path, bundle_root)
     except ValueError:
-        return leaf
+        return _importable_dotted_name([leaf], file_path)
     if relative.startswith(os.pardir + os.sep) or relative == os.pardir:
-        return leaf
+        return _importable_dotted_name([leaf], file_path)
     parts = os.path.splitext(relative)[0].split(os.sep)
+    return _importable_dotted_name(parts, file_path)
+
+
+def _importable_dotted_name(parts: Sequence[str], file_path: str) -> str:
+    """The dotted name `parts` spell, refused when a part cannot be imported
+    under that name at runtime (the runner imports the file from the bundle
+    tree, where a dot in a file or folder name reads as a package
+    separator)."""
+    for part in parts:
+        if not part.isidentifier():
+            raise ValueError(
+                f"'{file_path}' cannot be imported: '{part}' is not a valid "
+                f"Python module name. Rename the file or folder so every part "
+                f"of its path is a valid identifier (letters, digits and "
+                f"underscores, not starting with a digit)."
+            )
     return ".".join(parts)
 
 
