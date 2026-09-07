@@ -2,16 +2,17 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::LiveEntry;
+use crate::Queries;
 use crate::QueryExecutor;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::group::{GroupCreate, GroupDB};
+use td_objects::dxo::group::{GroupCreate, GroupDB, GroupInsertDB};
 use td_objects::types::basic::{AccessTokenId, Description, GroupId, GroupName, System, UserId};
 
 pub(crate) async fn seed_group(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     name: GroupName,
     description: Description,
 ) -> Result<GroupDB, TdError> {
@@ -19,7 +20,7 @@ pub(crate) async fn seed_group(
 
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
-    let group_db = GroupDB {
+    let group_db = GroupInsertDB {
         id: GroupId::default(),
         name: group_create.name,
         description: group_create.description,
@@ -32,13 +33,13 @@ pub(crate) async fn seed_group(
 
     // Runs on a project-scoped connection; the field-less `GroupDB` defaults
     // its `project_id` from that scope.
-    executor.reuse().live().insert(&group_db).await?;
-    Ok(group_db)
+    executor.reuse().insert(&group_db).await?;
+    Ok(executor.reuse().fetch_one(&group_db.id).await?)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::LiveEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
@@ -58,18 +59,17 @@ pub mod tests {
             .unwrap();
 
         let found = db
-            .live()
             .fetch_one::<GroupDB>(&GroupName::try_from("test_group").unwrap())
             .await
             .unwrap();
-        assert_eq!(group.id, found.id);
-        assert_eq!(group.name, found.name);
-        assert_eq!(group.description, found.description);
-        assert_eq!(group.created_on, found.created_on);
-        assert_eq!(group.created_by_id, found.created_by_id);
-        assert_eq!(group.modified_on, found.modified_on);
-        assert_eq!(group.modified_by_id, found.modified_by_id);
-        assert_eq!(group.system, found.system);
+        assert_eq!(group.base.id, found.base.id);
+        assert_eq!(group.base.name, found.base.name);
+        assert_eq!(group.base.description, found.base.description);
+        assert_eq!(group.base.created_on, found.base.created_on);
+        assert_eq!(group.base.created_by_id, found.base.created_by_id);
+        assert_eq!(group.base.modified_on, found.base.modified_on);
+        assert_eq!(group.base.modified_by_id, found.base.modified_by_id);
+        assert_eq!(group.base.system, found.base.system);
     }
 
     #[td_test::test(db)]
@@ -77,22 +77,16 @@ pub mod tests {
         // Seeding a project seeds its three system groups.
         db.seed().test_project().await.unwrap();
         let group = db
-            .live()
             .fetch_one::<GroupDB>(&GroupName::default_group())
             .await
             .unwrap();
-        assert!(*group.system);
-        let source = db
-            .live()
-            .fetch_one::<GroupDB>(&GroupName::source())
-            .await
-            .unwrap();
-        assert!(*source.system);
+        assert!(*group.base.system);
+        let source = db.fetch_one::<GroupDB>(&GroupName::source()).await.unwrap();
+        assert!(*source.base.system);
         let dest = db
-            .live()
             .fetch_one::<GroupDB>(&GroupName::destination())
             .await
             .unwrap();
-        assert!(*dest.system);
+        assert!(*dest.base.system);
     }
 }

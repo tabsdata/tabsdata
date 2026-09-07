@@ -2,38 +2,39 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::Queries;
 use crate::QueryExecutor;
-use crate::{CurrentEntry, LiveEntry};
 use ta_objects::and;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::dependency::DependencyDB;
-use td_objects::dxo::function::{FunctionDB, FunctionRegister};
-use td_objects::dxo::table::TableDB;
+use td_objects::dxo::dependency::DependencyInsertDB;
+use td_objects::dxo::function::{FunctionDB, FunctionInsertDB, FunctionRegister};
 use td_objects::dxo::table::TableDBWithNames;
-use td_objects::dxo::trigger::TriggerDB;
-use td_objects::dxo::worker::WorkerDB;
+use td_objects::dxo::table::TableInsertDB;
+use td_objects::dxo::trigger::TriggerInsertDB;
+use td_objects::dxo::worker::WorkerInsertDB;
 use td_objects::types::basic::{
-    AccessTokenId, BasePath, DependencyId, DependencyPos, DependencyStatus, DependencyVersionId,
-    FunctionId, FunctionStatus, FunctionVersionId, Partitioned, Private, Snippet, StageId,
-    StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType,
-    TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId,
-    WorkerMessageStatus, WorkerStatus,
+    AccessTokenId, BasePath, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
+    FunctionStatus, FunctionVersionId, Partitioned, Private, Snippet, StageId, StorageVersion,
+    System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType, TableVersionId,
+    TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId, WorkerMessageStatus,
+    WorkerStatus,
 };
 
 /// Runs every statement on the caller's executor; if it is project-scoped
 /// (`db.scoped(p)`), the field-less rows (function, tables, dependencies,
 /// triggers) default their `project_id` from that scope.
 pub(crate) async fn seed_function(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
-    let function_db = FunctionDB {
+    let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
         collection_id: collection.id,
         name: function_create.name.clone(),
@@ -55,15 +56,12 @@ pub(crate) async fn seed_function(
         enabled: function_create.enabled.unwrap_or_default(),
     };
 
-    // Insert function version
-    executor.reuse().live().insert(&function_db).await?;
+    executor.reuse().insert(&function_db).await?;
 
-    // Dependencies, tables, triggers
-    // Very similar to build_table_versions
     if let Some(tables) = &function_create.tables {
         for (pos, table_name) in tables.iter().enumerate() {
             let name = TableName::try_from(table_name)?;
-            let table = TableDB {
+            let table = TableInsertDB {
                 id: TableVersionId::default(),
                 collection_id: function_db.collection_id,
                 table_id: TableId::default(),
@@ -79,11 +77,10 @@ pub(crate) async fn seed_function(
                 table_type: TableType::default(),
             };
 
-            executor.reuse().live().insert(&table).await?;
+            executor.reuse().insert(&table).await?;
         }
     }
 
-    // Very similar to build_dependency_versions
     if let Some(dependency_tables) = &function_create.dependencies {
         for (pos, dependency_table) in dependency_tables.iter().enumerate() {
             let (table_collection, table_name) = {
@@ -99,31 +96,30 @@ pub(crate) async fn seed_function(
 
             let table_db: TableDBWithNames = executor
                 .reuse()
-                .current()
-                .fetch_one::<_>(and!(table_collection, table_name))
-                .await?;
+                .latest()
+                .fetch_first::<_>(and!(table_collection, table_name))
+                .await?
+                .expect("seeded dependency table must exist");
 
-            let dependency = DependencyDB {
+            let dependency = DependencyInsertDB {
                 id: DependencyVersionId::default(),
                 collection_id: function_db.collection_id,
                 dependency_id: DependencyId::default(),
                 function_id: function_db.function_id,
-                table_collection_id: table_db.base.collection_id.into(),
-                table_function_id: table_db.base.function_id.into(),
-                table_id: table_db.base.table_id,
+                table_collection_id: table_db.base.base.collection_id.into(),
+                table_function_id: table_db.base.base.function_id.into(),
+                table_id: table_db.base.base.table_id,
                 table_versions: dependency_table.versions.clone().into(),
                 dep_pos: DependencyPos::try_from(pos as i32)?,
-                status: DependencyStatus::Active,
                 defined_on: request_context.time,
                 defined_by_id: request_context.user_id,
                 system: System::FALSE,
             };
 
-            executor.reuse().live().insert(&dependency).await?;
+            executor.reuse().insert(&dependency).await?;
         }
     }
 
-    // Very similar to build_trigger_versions
     if let Some(trigger_tables) = &function_create.triggers {
         for trigger_table in trigger_tables {
             let (table_collection, table_name) = {
@@ -139,36 +135,35 @@ pub(crate) async fn seed_function(
 
             let table_db: TableDBWithNames = executor
                 .reuse()
-                .current()
-                .fetch_one::<_>(and!(table_collection, table_name))
-                .await?;
+                .latest()
+                .fetch_first::<_>(and!(table_collection, table_name))
+                .await?
+                .expect("seeded trigger table must exist");
 
-            let trigger = TriggerDB {
+            let trigger = TriggerInsertDB {
                 id: TriggerVersionId::default(),
                 collection_id: function_db.collection_id,
                 trigger_id: TriggerId::default(),
                 function_id: function_db.function_id,
-                trigger_by_collection_id: table_db.base.collection_id.into(),
-                trigger_by_function_id: table_db.base.function_id.into(),
-                trigger_by_table_id: table_db.base.table_id,
+                trigger_by_collection_id: table_db.base.base.collection_id.into(),
+                trigger_by_function_id: table_db.base.base.function_id.into(),
+                trigger_by_table_id: table_db.base.base.table_id,
                 status: TriggerStatus::Active,
                 defined_on: request_context.time,
                 defined_by_id: request_context.user_id,
                 system: System::FALSE,
             };
 
-            executor.reuse().live().insert(&trigger).await?;
+            executor.reuse().insert(&trigger).await?;
         }
     }
 
-    // Very similar to build_worker
     if let Some(workers) = &function_create.workers {
         for (worker_type, worker_config) in workers {
-            let worker = WorkerDB {
+            let worker = WorkerInsertDB {
                 id: WorkerId::new(),
                 // `WorkerDB.project_id` is not derived from the function; stamp
                 // it from the collection.
-                project_id: collection.project_id,
                 collection_id: function_db.collection_id,
                 execution_id: None,
                 transaction_id: None,
@@ -183,16 +178,16 @@ pub(crate) async fn seed_function(
                 worker_config: Some(worker_config.clone()),
             };
 
-            executor.reuse().live().insert(&worker).await?;
+            executor.reuse().insert(&worker).await?;
         }
     }
 
-    Ok(function_db)
+    Ok(executor.reuse().fetch_one(&function_db.id).await?)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::HistoricEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -243,23 +238,23 @@ mod tests {
             .await
             .unwrap();
         let found = db
-            .historic(&AtTime::now())
-            .fetch_one::<FunctionDB>(())
+            .as_of(&AtTime::now())
+            .fetch_one::<FunctionDB>(&function.base.id)
             .await
             .unwrap();
 
-        assert_eq!(function.id, found.id);
-        assert_eq!(function.collection_id, found.collection_id);
-        assert_eq!(function.name, found.name);
-        assert_eq!(function.description, found.description);
-        assert_eq!(function.runtime_values, found.runtime_values);
-        assert_eq!(function.function_id, found.function_id);
-        assert_eq!(function.storage_version, found.storage_version);
-        assert_eq!(function.bundle_id, found.bundle_id);
-        assert_eq!(function.snippet, found.snippet);
-        assert_eq!(function.defined_on, found.defined_on);
-        assert_eq!(function.defined_by_id, found.defined_by_id);
-        assert_eq!(function.status, found.status);
-        assert_eq!(function.enabled, found.enabled);
+        assert_eq!(function.base.id, found.base.id);
+        assert_eq!(function.base.collection_id, found.base.collection_id);
+        assert_eq!(function.base.name, found.base.name);
+        assert_eq!(function.base.description, found.base.description);
+        assert_eq!(function.base.runtime_values, found.base.runtime_values);
+        assert_eq!(function.base.function_id, found.base.function_id);
+        assert_eq!(function.base.storage_version, found.base.storage_version);
+        assert_eq!(function.base.bundle_id, found.base.bundle_id);
+        assert_eq!(function.base.snippet, found.base.snippet);
+        assert_eq!(function.base.defined_on, found.base.defined_on);
+        assert_eq!(function.base.defined_by_id, found.base.defined_by_id);
+        assert_eq!(function.base.status, found.base.status);
+        assert_eq!(function.base.enabled, found.base.enabled);
     }
 }

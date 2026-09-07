@@ -2,17 +2,19 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::LiveEntry;
+use crate::Queries;
 use crate::QueryExecutor;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::TransactionDB;
+use td_objects::dxo::transaction::TransactionInsertDB;
 use td_objects::types::basic::{TransactionId, TransactionKey};
 
 pub(crate) async fn seed_transaction(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     execution: &ExecutionDB,
     transaction_key: &TransactionKey,
 ) -> Result<TransactionDB, TdError> {
@@ -20,24 +22,23 @@ pub(crate) async fn seed_transaction(
     // resolve it from the collection rather than assuming the global default.
     let collection: ActiveCollectionDB = executor
         .reuse()
-        .live()
-        .fetch_one::<ActiveCollectionDB>(&execution.collection_id)
+        .fetch_one::<ActiveCollectionDB>(&execution.base.collection_id)
         .await?;
-    let transaction_db = TransactionDB {
+    let transaction_db = TransactionInsertDB {
         id: TransactionId::new(),
-        collection_id: execution.collection_id,
-        execution_id: execution.id.clone(),
+        collection_id: execution.base.collection_id,
+        execution_id: execution.base.id.clone(),
         transaction_by: "ANY".try_into()?,
         transaction_key: transaction_key.clone(),
-        triggered_on: execution.triggered_on,
-        triggered_by_id: execution.triggered_by_id,
+        triggered_on: execution.base.triggered_on,
+        triggered_by_id: execution.base.triggered_by_id,
         group_id: collection.group_id,
     };
 
     // Field-less row; runs on a project-scoped connection so `project_id`
     // defaults from the scope.
-    executor.reuse().live().insert(&transaction_db).await?;
-    Ok(transaction_db)
+    executor.reuse().insert(&transaction_db).await?;
+    Ok(executor.reuse().fetch_one(&transaction_db.id).await?)
 }
 
 #[cfg(test)]
@@ -107,10 +108,13 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(transaction.collection_id, execution.collection_id);
-        assert_eq!(transaction.execution_id, execution.id);
-        assert_eq!(transaction.transaction_key, transaction_key);
-        assert_eq!(transaction.triggered_on, execution.triggered_on);
-        assert_eq!(transaction.triggered_by_id, execution.triggered_by_id);
+        assert_eq!(transaction.base.collection_id, execution.base.collection_id);
+        assert_eq!(transaction.base.execution_id, execution.base.id);
+        assert_eq!(transaction.base.transaction_key, transaction_key);
+        assert_eq!(transaction.base.triggered_on, execution.base.triggered_on);
+        assert_eq!(
+            transaction.base.triggered_by_id,
+            execution.base.triggered_by_id
+        );
     }
 }

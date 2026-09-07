@@ -2,38 +2,37 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::LiveEntry;
+use crate::Queries;
 use crate::QueryExecutor;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionInsertDB};
 use td_objects::dxo::group::GroupDB;
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, CollectionType, Description, GroupId, GroupName, UserId,
 };
 
 pub(crate) async fn seed_collection(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> Result<ActiveCollectionDB, TdError> {
-    // Assign the collection to its project's own `default` group. On a
-    // project-scoped executor (`db.scoped(p)`) the group resolves by name within
-    // that project, so a hardcoded id could belong to the wrong project.
+    // Assign the collection to its project's own `default` group: the name is
+    // unique only within the project, hence the `InProject` executor.
     let default_group = executor
         .reuse()
-        .live()
         .fetch_one::<GroupDB>(&GroupName::default_group())
         .await?;
-    seed_collection_in_group(executor, collection_name, created_by, default_group.id).await
+    seed_collection_in_group(executor, collection_name, created_by, default_group.base.id).await
 }
 
 /// Seed a collection assigned to a specific group. The plain
 /// [`seed_collection`] entrypoint delegates here with the `default` group. The
-/// field-less `CollectionCreateDB` defaults its `project_id` from the
+/// field-less `CollectionInsertDB` defaults its `project_id` from the
 /// executor's scope, so the caller picks the project via `db.scoped(p)`.
 pub(crate) async fn seed_collection_in_group(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection_name: &CollectionName,
     created_by: &UserId,
     group_id: GroupId,
@@ -43,7 +42,7 @@ pub(crate) async fn seed_collection_in_group(
     let collection_type = CollectionType::from_group_id(&group_id);
 
     let created_on = AtTime::now();
-    let collection = CollectionCreateDB {
+    let collection = CollectionInsertDB {
         id: CollectionId::default(),
         name: collection_name.clone(),
         description: Description::default(),
@@ -58,20 +57,19 @@ pub(crate) async fn seed_collection_in_group(
         connection_id: None,
     };
 
-    executor.reuse().live().insert(&collection).await?;
+    executor.reuse().insert(&collection).await?;
 
     // Read the row back so the returned model carries the DB-assigned
     // `project_id` (the scope's project), rather than guessing it. The `?`
     // converts `SqlError` into `TdError`.
     Ok(executor
-        .live()
         .fetch_one::<ActiveCollectionDB>(&collection.id)
         .await?)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::LiveEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::collection::ActiveCollectionDB;
@@ -92,9 +90,8 @@ mod tests {
             .unwrap();
 
         // Read it back through a project-scoped executor: serving connections
-        // run as `td_app` under RLS, so an unscoped `db.live()` would see nothing.
+        // run as `td_app` under RLS, so an unscoped read would see nothing.
         let found = db
-            .live()
             .fetch_one::<ActiveCollectionDB>(&collection.id)
             .await
             .unwrap();

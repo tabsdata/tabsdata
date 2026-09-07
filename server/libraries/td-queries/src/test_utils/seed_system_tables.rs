@@ -2,22 +2,22 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::Queries;
 use crate::QueryExecutor;
-use crate::{CurrentEntry, LiveEntry};
 use ta_objects::and;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::dependency::DependencyDB;
+use td_objects::dxo::dependency::DependencyInsertDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::table::{TableDB, TableDBWithNames};
+use td_objects::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
 };
 use td_objects::types::basic::{
-    AccessTokenId, DependencyId, DependencyPos, DependencyStatus, DependencyVersionId, Partitioned,
-    Private, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType,
-    TableVersionId, UserId,
+    AccessTokenId, DependencyId, DependencyPos, DependencyVersionId, Partitioned, Private, System,
+    TableFunctionParamPos, TableId, TableName, TableStatus, TableType, TableVersionId, UserId,
 };
 use td_objects::types::composed::TableVersions;
 use td_objects::types::table_ref::Versions;
@@ -27,7 +27,7 @@ use td_objects::types::table_ref::Versions;
 // (`db.scoped(p)`), the field-less rows default their `project_id` from that
 // scope.
 pub(crate) async fn seed_system_tables(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
@@ -35,13 +35,13 @@ pub(crate) async fn seed_system_tables(
     // System tables
     let mut system_tables = vec![];
     for (pos, prefix) in SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES.iter().enumerate() {
-        let table = TableDB {
+        let table = TableInsertDB {
             id: TableVersionId::default(),
-            collection_id: function.collection_id,
+            collection_id: function.base.collection_id,
             table_id: TableId::default(),
-            name: TableName::try_from(format!("{prefix}__{}", function.function_id))?,
-            function_id: function.function_id,
-            function_version_id: function.id.clone(),
+            name: TableName::try_from(format!("{prefix}__{}", function.base.function_id))?,
+            function_id: function.base.function_id,
+            function_version_id: function.base.id.clone(),
             function_param_pos: Some(TableFunctionParamPos::try_from(-(pos as i32 + 1))?),
             private: Private::FALSE,
             partitioned: Partitioned::FALSE,
@@ -51,48 +51,54 @@ pub(crate) async fn seed_system_tables(
             table_type: TableType::default(),
         };
 
-        executor.reuse().live().insert(&table).await?;
+        executor.reuse().insert(&table).await?;
         system_tables.push(table);
     }
 
     // System dependencies
     for (pos, prefix) in SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES.iter().enumerate() {
         let (table_collection, table_name) = (
-            function.collection_id,
-            TableName::try_from(format!("{prefix}__{}", function.function_id))?,
+            function.base.collection_id,
+            TableName::try_from(format!("{prefix}__{}", function.base.function_id))?,
         );
 
         let table_db = executor
             .reuse()
-            .current()
-            .fetch_one::<TableDBWithNames>(and!(table_collection, table_name))
-            .await?;
+            .latest()
+            .fetch_first::<TableDBWithNames>(and!(table_collection, table_name))
+            .await?
+            .expect("seeded system table must exist");
 
-        let dependency = DependencyDB {
+        let dependency = DependencyInsertDB {
             id: DependencyVersionId::default(),
-            collection_id: function.collection_id,
+            collection_id: function.base.collection_id,
             dependency_id: DependencyId::default(),
-            function_id: function.function_id,
-            table_collection_id: table_db.base.collection_id.into(),
-            table_function_id: table_db.base.function_id.into(),
-            table_id: table_db.base.table_id,
+            function_id: function.base.function_id,
+            table_collection_id: table_db.base.base.collection_id.into(),
+            table_function_id: table_db.base.base.function_id.into(),
+            table_id: table_db.base.base.table_id,
             table_versions: TableVersions::new(Versions::None),
             dep_pos: DependencyPos::try_from(-(pos as i32 + 1))?,
-            status: DependencyStatus::Active,
             defined_on: request_context.time,
             defined_by_id: request_context.user_id,
             system: System::TRUE,
         };
 
-        executor.reuse().live().insert(&dependency).await?;
+        executor.reuse().insert(&dependency).await?;
     }
 
-    Ok(system_tables)
+    let ids: Vec<_> = system_tables.iter().map(|t| t.id).collect();
+    Ok(executor
+        .reuse()
+        .history()
+        .chunked()
+        .fetch_all(&ids, ())
+        .await?)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::LiveEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
@@ -152,19 +158,22 @@ mod tests {
 
         assert_eq!(system_tables.len(), 1);
         for table in system_tables {
-            let found = db.live().fetch_one::<TableDB>(&table.id).await.unwrap();
-            assert_eq!(table.id, found.id);
-            assert_eq!(table.collection_id, found.collection_id);
-            assert_eq!(table.table_id, found.table_id);
-            assert_eq!(table.name, found.name);
-            assert_eq!(table.function_id, found.function_id);
-            assert_eq!(table.function_version_id, found.function_version_id);
-            assert_eq!(table.function_param_pos, found.function_param_pos);
-            assert_eq!(table.private, found.private);
-            assert_eq!(table.partitioned, found.partitioned);
-            assert_eq!(table.defined_on, found.defined_on);
-            assert_eq!(table.defined_by_id, found.defined_by_id);
-            assert_eq!(table.status, found.status);
+            let found = db.fetch_one::<TableDB>(&table.base.id).await.unwrap();
+            assert_eq!(table.base.id, found.base.id);
+            assert_eq!(table.base.collection_id, found.base.collection_id);
+            assert_eq!(table.base.table_id, found.base.table_id);
+            assert_eq!(table.base.name, found.base.name);
+            assert_eq!(table.base.function_id, found.base.function_id);
+            assert_eq!(
+                table.base.function_version_id,
+                found.base.function_version_id
+            );
+            assert_eq!(table.base.function_param_pos, found.base.function_param_pos);
+            assert_eq!(table.base.private, found.base.private);
+            assert_eq!(table.base.partitioned, found.base.partitioned);
+            assert_eq!(table.base.defined_on, found.base.defined_on);
+            assert_eq!(table.base.defined_by_id, found.base.defined_by_id);
+            assert_eq!(table.base.status, found.base.status);
         }
     }
 }

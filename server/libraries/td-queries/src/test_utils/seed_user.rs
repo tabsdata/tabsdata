@@ -2,7 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::{Queries, QueryExecutor};
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -15,7 +16,7 @@ use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
 
 pub(crate) async fn seed_user(
-    db: impl QueryExecutor + Domained<Domain = Apiserver>,
+    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
     name: &UserName,
     enabled: &UserEnabled,
 ) -> Result<UserDB, TdError> {
@@ -26,14 +27,14 @@ pub(crate) async fn seed_user(
 /// `system` flag drives for service users). Enabled so tests prove the
 /// row is hidden by the `system` flag rather than by `enabled`.
 pub(crate) async fn seed_system_user(
-    db: impl QueryExecutor + Domained<Domain = Apiserver>,
+    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
     name: &UserName,
 ) -> Result<UserDB, TdError> {
     seed_user_with(db, name, &UserEnabled::TRUE, &UserSystem::TRUE).await
 }
 
 async fn seed_user_with(
-    db: impl QueryExecutor + Domained<Domain = Apiserver>,
+    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
     name: &UserName,
     enabled: &UserEnabled,
     system: &UserSystem,
@@ -68,13 +69,13 @@ async fn seed_user_with(
         system: *system,
     };
 
-    db.live().insert(&user_db).await?;
+    db.insert(&user_db).await?;
     Ok(user_db)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::LiveEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::user::UserDB;
@@ -87,7 +88,7 @@ mod tests {
             .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::TRUE)
             .await
             .unwrap();
-        let found = db.live().fetch_one::<UserDB>(&user.id).await.unwrap();
+        let found = db.fetch_one::<UserDB>(&user.id).await.unwrap();
         assert_eq!(found, user);
     }
 }

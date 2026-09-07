@@ -2,28 +2,28 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::LiveEntry;
+use crate::Queries;
 use crate::QueryExecutor;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{
-    LogicalFunctionRunDB, LogicalPointerDao, LogicalTableDataVersionDB,
-    LogicalTableDataVersionPointerDB,
+    LogicalFunctionRunDB, LogicalTableDataVersionDB, LogicalTableDataVersionInsertDB,
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AtTime, HasData, LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
-    PhysicalTableDataVersionId, TableFunctionParamPos,
+    HasData, LogicalTableDataVersionId, PhysicalTableDataVersionId, TableFunctionParamPos,
 };
 
 pub(crate) async fn seed_physical_table_data_version_with_data(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -43,7 +43,7 @@ pub(crate) async fn seed_physical_table_data_version_with_data(
 }
 
 pub(crate) async fn seed_physical_table_data_version(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -63,7 +63,7 @@ pub(crate) async fn seed_physical_table_data_version(
 }
 
 pub async fn _seed_physical_table_data_version(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -71,22 +71,60 @@ pub async fn _seed_physical_table_data_version(
     table: &TableDB,
     has_data: Option<&HasData>,
 ) -> Result<PhysicalTableDataVersionDB, TdError> {
-    let table_data_version_db = PhysicalTableDataVersionDB {
-        id: PhysicalTableDataVersionId::new(),
-        project_id: physical_function_run.project_id,
+    // The logical version this materialization is of, so the seed mirrors
+    // what plan-build + dispatch produce: reuse the LTDV minted by the
+    // function-run seed when present (real flows materialize the
+    // plan-minted row, they never mint a second one), minting only if the
+    // table has none for this execution.
+    let producer_lfr: LogicalFunctionRunDB = executor
+        .reuse()
+        .fetch_one(and!(
+            &physical_function_run.base.execution_id,
+            &physical_function_run.base.function_id
+        ))
+        .await?;
+    let existing: Option<LogicalTableDataVersionDB> = executor
+        .reuse()
+        .history()
+        .fetch_first(and!(&execution.base.id, &table.base.table_id))
+        .await?;
+    let logical_id = match existing {
+        Some(ltdv) => ltdv.base.id,
+        None => {
+            let ltdv = LogicalTableDataVersionInsertDB {
+                id: LogicalTableDataVersionId::new(),
+                collection_id: collection.id,
+                execution_id: execution.base.id.clone(),
+                transaction_id: transaction.base.id.clone(),
+                table_id: table.base.table_id,
+                producer_logical_function_run_id: Some(producer_lfr.base.id.clone()),
+                function_param_pos: Some(TableFunctionParamPos::try_from(0)?),
+                private: table.base.private,
+                triggered_on: physical_function_run.base.triggered_on,
+                triggered_by_id: transaction.base.triggered_by_id,
+                group_id: producer_lfr.base.group_id,
+            };
+            executor.reuse().insert(&ltdv).await?;
+            ltdv.id
+        }
+    };
+
+    let ptdv_id = PhysicalTableDataVersionId::new();
+    let table_data_version_db = PhysicalTableDataVersionInsertDB {
+        id: ptdv_id.clone(),
         collection_id: collection.id,
-        table_id: table.table_id,
-        name: table.name.clone(),
-        table_version_id: table.id,
-        function_version_id: table.function_version_id.clone(),
+        table_id: table.base.table_id,
+        name: table.base.name.clone(),
+        table_version_id: table.base.id,
+        function_version_id: table.base.function_version_id.clone(),
         function_version_patch_id: None,
-        execution_id: execution.id.clone(),
-        transaction_id: transaction.id.clone(),
-        physical_function_run_id: physical_function_run.id.clone(),
+        execution_id: execution.base.id.clone(),
+        transaction_id: transaction.base.id.clone(),
+        physical_function_run_id: physical_function_run.base.id.clone(),
         function_param_pos: TableFunctionParamPos::try_from(0)?,
-        triggered_on: physical_function_run.triggered_on,
+        triggered_on: physical_function_run.base.triggered_on,
         // Mirror the mint: an FR and its output TDVs stamp the same prefix.
-        base_path: physical_function_run.base_path.clone(),
+        base_path: physical_function_run.base.base_path.clone(),
         has_data: has_data.cloned(),
         schema_changed: None,
         column_count: None,
@@ -94,78 +132,15 @@ pub async fn _seed_physical_table_data_version(
         data_bytes: None,
         schema_hash: None,
         with_data_table_data_version_id: None,
+        logical_table_data_version_id: logical_id.clone(),
     };
-
-    // Bind an LTDV to the TDV so the seed mirrors what plan-build +
-    // dispatch produce: reuse the LTDV minted by the function-run seed
-    // when present (real flows bind the plan-minted row, they never mint
-    // a second one), minting only if the table has none for this
-    // execution. The producer LFR is derived via (execution_id,
-    // function_id) from the FR.
-    let producer_lfr: LogicalFunctionRunDB = executor
-        .reuse()
-        .live()
-        .fetch_one(and!(
-            &physical_function_run.execution_id,
-            &physical_function_run.function_id
-        ))
-        .await?;
-    let existing: Option<LogicalTableDataVersionDB> = executor
-        .reuse()
-        .live()
-        .fetch_optional(and!(&execution.id, &table.table_id))
-        .await?;
-    let logical = match existing {
-        Some(ltdv) => ltdv,
-        None => {
-            let ltdv = LogicalTableDataVersionDB {
-                id: LogicalTableDataVersionId::new(),
-                project_id: producer_lfr.project_id,
-                collection_id: collection.id,
-                execution_id: execution.id.clone(),
-                transaction_id: transaction.id.clone(),
-                table_id: table.table_id,
-                producer_logical_function_run_id: Some(producer_lfr.id.clone()),
-                function_param_pos: Some(TableFunctionParamPos::try_from(0)?),
-                private: table.private,
-                triggered_on: physical_function_run.triggered_on,
-                triggered_by_id: transaction.triggered_by_id,
-                group_id: producer_lfr.group_id,
-            };
-            executor
-                .reuse()
-                .live()
-                .insert::<LogicalTableDataVersionDB>(&ltdv)
-                .await?;
-            ltdv
-        }
-    };
-
-    executor
-        .reuse()
-        .live()
-        .insert(&table_data_version_db)
-        .await?;
-    let pointer = LogicalTableDataVersionPointerDB::build_event(
-        logical.project_id,
-        &logical.id,
-        LogicalPointerStatus::Bound,
-        Some(table_data_version_db.id.clone()),
-        AtTime::try_from(physical_function_run.triggered_on)?,
-        transaction.triggered_by_id,
-        LogicalPointerReason::InitialMaterialization,
-    )?;
-    executor
-        .reuse()
-        .live()
-        .insert::<LogicalTableDataVersionPointerDB>(&pointer)
-        .await?;
-    Ok(table_data_version_db)
+    executor.reuse().insert(&table_data_version_db).await?;
+    Ok(executor.reuse().fetch_one(&ptdv_id).await?)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::CurrentEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use ta_objects::and;
     use td_database::pool::TdPool;
@@ -252,13 +227,14 @@ mod tests {
             .unwrap();
 
         let table_version = db
-            .current()
-            .fetch_one::<TableDB>(and!(
+            .latest()
+            .fetch_first::<TableDB>(and!(
                 &collection.id,
                 TableName::try_from(table_name).unwrap()
             ))
             .await
-            .unwrap();
+            .unwrap()
+            .expect("seeded table must exist");
 
         let physical_table_data_version = db
             .scoped(p.id)
@@ -273,21 +249,30 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(physical_table_data_version.collection_id, collection.id);
         assert_eq!(
-            physical_table_data_version.table_version_id,
-            table_version.id
+            physical_table_data_version.base.collection_id,
+            collection.id
         );
         assert_eq!(
-            physical_table_data_version.function_version_id,
-            function_version.id
+            physical_table_data_version.base.table_version_id,
+            table_version.base.id
         );
-        assert_eq!(physical_table_data_version.has_data, None);
-        assert_eq!(physical_table_data_version.execution_id, execution.id);
-        assert_eq!(physical_table_data_version.transaction_id, transaction.id);
         assert_eq!(
-            physical_table_data_version.physical_function_run_id,
-            physical_function_run.id
+            physical_table_data_version.base.function_version_id,
+            function_version.base.id
+        );
+        assert_eq!(physical_table_data_version.base.has_data, None);
+        assert_eq!(
+            physical_table_data_version.base.execution_id,
+            execution.base.id
+        );
+        assert_eq!(
+            physical_table_data_version.base.transaction_id,
+            transaction.base.id
+        );
+        assert_eq!(
+            physical_table_data_version.base.physical_function_run_id,
+            physical_function_run.base.id
         );
     }
 }

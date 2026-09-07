@@ -2,8 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::LiveEntry;
+use crate::Queries;
 use crate::QueryExecutor;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -11,14 +12,14 @@ use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::transaction::TransactionDB;
-use td_objects::dxo::worker::{CronTriggerConfig, WorkerDB};
+use td_objects::dxo::worker::{CronTriggerConfig, WorkerDB, WorkerInsertDB};
 use td_objects::types::basic::Enabled;
 use td_objects::types::basic::{
     CronMask, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 
 pub(crate) async fn seed_worker(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     function: &FunctionDB,
     worker_type: &WorkerType,
@@ -36,14 +37,13 @@ pub(crate) async fn seed_worker(
         })?),
         _ => None,
     };
-    let worker_db = WorkerDB {
+    let worker_db = WorkerInsertDB {
         id: WorkerId::new(),
-        project_id: collection.project_id,
         collection_id: collection.id,
         execution_id: None,
         transaction_id: None,
         physical_function_run_id: None,
-        function_version_id: function.id.clone(),
+        function_version_id: function.base.id.clone(),
         message_status: message_status.clone(),
         started_on: None,
         ended_on: None,
@@ -53,29 +53,24 @@ pub(crate) async fn seed_worker(
         worker_config,
     };
 
-    executor
-        .reuse()
-        .live()
-        .insert::<WorkerDB>(&worker_db)
-        .await?;
-    Ok(worker_db)
+    executor.reuse().insert(&worker_db).await?;
+    Ok(executor.reuse().fetch_one(&worker_db.id).await?)
 }
 
 pub(crate) async fn seed_function_runner_worker(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,
     status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
-    let worker_db = WorkerDB {
+    let worker_db = WorkerInsertDB {
         id: WorkerId::new(),
-        project_id: physical_function_run.project_id,
-        collection_id: execution.collection_id,
-        execution_id: Some(execution.id.clone()),
-        transaction_id: Some(transaction.id.clone()),
-        physical_function_run_id: Some(physical_function_run.id.clone()),
-        function_version_id: physical_function_run.function_version_id.clone(),
+        collection_id: execution.base.collection_id,
+        execution_id: Some(execution.base.id.clone()),
+        transaction_id: Some(transaction.base.id.clone()),
+        physical_function_run_id: Some(physical_function_run.base.id.clone()),
+        function_version_id: physical_function_run.base.function_version_id.clone(),
         message_status: status.clone(),
         started_on: None,
         ended_on: None,
@@ -85,12 +80,8 @@ pub(crate) async fn seed_function_runner_worker(
         worker_config: None,
     };
 
-    executor
-        .reuse()
-        .live()
-        .insert::<WorkerDB>(&worker_db)
-        .await?;
-    Ok(worker_db)
+    executor.reuse().insert(&worker_db).await?;
+    Ok(executor.reuse().fetch_one(&worker_db.id).await?)
 }
 
 #[cfg(test)]
@@ -187,17 +178,17 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, Some(execution.id));
-        assert_eq!(worker.transaction_id, Some(transaction.id));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, Some(execution.base.id));
+        assert_eq!(worker.base.transaction_id, Some(transaction.base.id));
         assert_eq!(
-            worker.physical_function_run_id,
-            Some(physical_function_run.id)
+            worker.base.physical_function_run_id,
+            Some(physical_function_run.base.id)
         );
         assert_eq!(
-            worker.function_version_id,
-            physical_function_run.function_version_id
+            worker.base.function_version_id,
+            physical_function_run.base.function_version_id
         );
-        assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
     }
 }

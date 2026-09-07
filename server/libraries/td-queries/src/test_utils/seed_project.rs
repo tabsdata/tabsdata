@@ -2,14 +2,15 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::LiveEntry;
+use crate::Queries;
 use crate::QueryExecutor;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, Domained};
 use td_database::pool::scoped::{Scoped, ScopedExt};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::group::{GroupCreate, GroupDB};
-use td_objects::dxo::project::ProjectCreateDB;
+use td_objects::dxo::group::{GroupCreate, GroupInsertDB};
+use td_objects::dxo::project::ProjectInsertDB;
 use td_objects::dxo::project::{ActiveProjectDB, ProjectCreate};
 use td_objects::types::basic::{
     AccessTokenId, BasePath, Description, GroupId, GroupName, ProjectId, ProjectName, System,
@@ -28,7 +29,8 @@ use td_security::SYSTEM_GROUPS;
 /// is not RLS-scoped, so it is inserted directly on the pool.
 pub(crate) async fn seed_project<E>(db: E, name: ProjectName) -> Result<ActiveProjectDB, TdError>
 where
-    for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
+    for<'s> &'s Scoped<E, ProjectId>:
+        QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
 {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
@@ -37,7 +39,7 @@ where
         description: Description::default(),
         base_path: BasePath::default(),
     };
-    let project_db = ProjectCreateDB {
+    let project_db = ProjectInsertDB {
         id: ProjectId::default(),
         name: project_create.name,
         description: project_create.description,
@@ -54,14 +56,14 @@ where
     // rows default their `project_id` from the scope's GUC (and RLS `WITH CHECK`
     // enforces the match), mirroring `seed_default_groups`.
     let scoped = db.in_project(project_db.id);
-    scoped.live().insert(&project_db).await?;
+    scoped.insert(&project_db).await?;
 
     for (group_id, group_name, group_description) in SYSTEM_GROUPS {
         let group_create = GroupCreate {
             name: GroupName::try_from(group_name)?,
             description: Description::try_from(group_description)?,
         };
-        let group = GroupDB {
+        let group = GroupInsertDB {
             id: GroupId::try_from(group_id)?,
             name: group_create.name,
             description: group_create.description,
@@ -71,7 +73,7 @@ where
             modified_by_id: request_context.user_id.into(),
             system: System::TRUE,
         };
-        scoped.live().insert::<GroupDB>(&group).await?;
+        scoped.insert(&group).await?;
     }
 
     Ok(ActiveProjectDB::from(project_db))
@@ -79,7 +81,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::LiveEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
@@ -94,11 +96,7 @@ mod tests {
             .await
             .unwrap();
 
-        let found = db
-            .live()
-            .fetch_one::<ActiveProjectDB>(&project.id)
-            .await
-            .unwrap();
+        let found = db.fetch_one::<ActiveProjectDB>(&project.id).await.unwrap();
         assert_eq!(found.id, project.id);
         assert_eq!(found.name, project.name);
 
@@ -114,15 +112,14 @@ mod tests {
         ] {
             let group: GroupDB = db
                 .scoped(project.id)
-                .live()
                 .fetch_one::<GroupDB>(&name)
                 .await
                 .unwrap();
             assert_eq!(
-                group.id, id,
+                group.base.id, id,
                 "system group '{name}' must carry the fixed id"
             );
-            assert!(*group.system);
+            assert!(*group.base.system);
         }
     }
 }

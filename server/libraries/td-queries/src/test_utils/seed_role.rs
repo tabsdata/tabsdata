@@ -2,7 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::{Queries, QueryExecutor};
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -12,7 +13,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_role(
-    db: impl QueryExecutor + Domained<Domain = Apiserver>,
+    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
     name: RoleName,
     description: Description,
 ) -> Result<RoleDB, TdError> {
@@ -33,13 +34,13 @@ pub(crate) async fn seed_role(
         fixed: Fixed::FALSE,
     };
 
-    db.live().insert(&role_db).await?;
+    db.insert(&role_db).await?;
     Ok(role_db)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::LiveEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::role::RoleDB;
@@ -57,7 +58,6 @@ pub mod tests {
             .unwrap();
 
         let found = db
-            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await
             .unwrap();

@@ -20,6 +20,7 @@ use crate::test_utils::seed_collection::{seed_collection, seed_collection_in_gro
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
 use crate::test_utils::seed_function::seed_function;
 use crate::test_utils::seed_group::seed_group;
+use crate::test_utils::seed_logical_function_run::seed_logical_function_run;
 use crate::test_utils::seed_logical_input::seed_logical_input;
 use crate::test_utils::seed_permission::seed_permission;
 use crate::test_utils::seed_physical_function_run::seed_physical_function_run;
@@ -33,6 +34,7 @@ use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::{seed_system_user, seed_user};
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, Domained};
 use td_database::pool::scoped::Scoped;
 use td_error::TdError;
@@ -40,7 +42,7 @@ use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::dxo::group::GroupDB;
-use td_objects::dxo::logical::LogicalFunctionRunInputDB;
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
@@ -58,40 +60,43 @@ use td_objects::types::basic::{
     WorkerType,
 };
 
-query_handle! {
-    /// Entry trait providing [`seed`](SeedEntry::seed) on every
-    /// [`QueryExecutor`](crate::QueryExecutor) — exactly like
-    /// [`live`](crate::LiveEntry::live) / [`current`](crate::CurrentEntry::current).
-    /// Returns a [`Seed`] handle that delegates straight to the executor: it
-    /// adds **no** scope of its own. Whether the writes are project-scoped is
-    /// the caller's choice of executor — `db.scoped(p).seed()` scopes to `p`,
-    /// while a bare pool `seed()` (no surrounding `.scoped`) runs unscoped, so
-    /// field-less, RLS-defaulted seeds fail unless the caller scoped it.
-    pub trait SeedEntry {
-        fn seed(self) -> Seed<Self> {
-            Seed { executor: self }
-        }
+/// Entry trait providing [`seed`](SeedEntry::seed) on every
+/// [`QueryExecutor`]. Deliberately separate from
+/// [`Queries`](crate::Queries): the seed surface is `test-utils` only, and a
+/// production import of one trait must not pull it in.
+///
+/// The handle adds **no** scope of its own — whether the writes are
+/// project-scoped is the caller's choice of executor: `db.scoped(p).seed()`
+/// scopes to `p`, a bare pool `seed()` does not, so field-less RLS-defaulted
+/// seeds fail unless the caller scoped it.
+pub trait SeedEntry: QueryExecutor {
+    fn seed(self) -> Seed<Self> {
+        Seed { executor: self }
     }
 }
+
+impl<E: QueryExecutor> SeedEntry for E {}
 
 pub struct Seed<E> {
     pub(crate) executor: E,
 }
 
-impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
+impl<E: QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
     // Project seeding uses its executor only to scope into the freshly-created
     // project, so the write bound is on the scoped view; `&TdPool` is the only
     // executor that scopes to one.
     pub async fn project(self, name: ProjectName) -> Result<ActiveProjectDB, TdError>
     where
-        for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
+        for<'s> &'s Scoped<E, ProjectId>:
+            QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     {
         seed_project(self.executor, name).await
     }
 
     pub async fn test_project(self) -> Result<ActiveProjectDB, TdError>
     where
-        for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
+        for<'s> &'s Scoped<E, ProjectId>:
+            QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     {
         seed_project(self.executor, ProjectName::try_from("test")?).await
     }
@@ -100,7 +105,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         self,
         collection_name: &CollectionName,
         created_by: &UserId,
-    ) -> Result<ActiveCollectionDB, TdError> {
+    ) -> Result<ActiveCollectionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_collection(self.executor, collection_name, created_by).await
     }
 
@@ -109,18 +117,24 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         collection_name: &CollectionName,
         created_by: &UserId,
         group_id: GroupId,
-    ) -> Result<ActiveCollectionDB, TdError> {
+    ) -> Result<ActiveCollectionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_collection_in_group(self.executor, collection_name, created_by, group_id).await
     }
 
-    pub async fn execution(self, function_version: &FunctionDB) -> Result<ExecutionDB, TdError> {
+    pub async fn execution(self, function_version: &FunctionDB) -> Result<ExecutionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_execution(self.executor, function_version).await
     }
 
-    pub async fn cron_execution(
-        self,
-        function_version: &FunctionDB,
-    ) -> Result<ExecutionDB, TdError> {
+    pub async fn cron_execution(self, function_version: &FunctionDB) -> Result<ExecutionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_cron_execution(self.executor, function_version).await
     }
 
@@ -128,7 +142,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         self,
         collection: &ActiveCollectionDB,
         function_create: &FunctionRegister,
-    ) -> Result<FunctionDB, TdError> {
+    ) -> Result<FunctionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_function(self.executor, collection, function_create).await
     }
 
@@ -139,23 +156,44 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
-        requirement_table: &TableDB,
-        requirement_function_run: Option<&PhysicalFunctionRunDB>,
         requirement_table_data_version: Option<&PhysicalTableDataVersionDB>,
         requirement_dependency_pos: Option<&DependencyPos>,
         requirement_version_pos: &VersionPos,
-    ) -> Result<LogicalFunctionRunInputDB, TdError> {
+    ) -> Result<LogicalFunctionRunInputDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_logical_input(
             self.executor,
             collection,
             execution,
             transaction,
             physical_function_run,
-            requirement_table,
-            requirement_function_run,
             requirement_table_data_version,
             requirement_dependency_pos,
             requirement_version_pos,
+        )
+        .await
+    }
+
+    pub async fn logical_function_run(
+        self,
+        collection: &ActiveCollectionDB,
+        function_version: &FunctionDB,
+        execution: &ExecutionDB,
+        transaction: &TransactionDB,
+        status: &LogicalFunctionRunStatus,
+    ) -> Result<LogicalFunctionRunDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
+        seed_logical_function_run(
+            self.executor,
+            collection,
+            function_version,
+            execution,
+            transaction,
+            status,
         )
         .await
     }
@@ -167,7 +205,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         status: &LogicalFunctionRunStatus,
-    ) -> Result<PhysicalFunctionRunDB, TdError> {
+    ) -> Result<PhysicalFunctionRunDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_physical_function_run(
             self.executor,
             collection,
@@ -200,15 +241,17 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         seed_role(self.executor, name, description).await
     }
 
-    pub async fn group(
-        self,
-        name: GroupName,
-        description: Description,
-    ) -> Result<GroupDB, TdError> {
+    pub async fn group(self, name: GroupName, description: Description) -> Result<GroupDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_group(self.executor, name, description).await
     }
 
-    pub async fn system_tables(self, function: &FunctionDB) -> Result<Vec<TableDB>, TdError> {
+    pub async fn system_tables(self, function: &FunctionDB) -> Result<Vec<TableDB>, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_system_tables(self.executor, function).await
     }
 
@@ -219,7 +262,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
         table: &TableDB,
-    ) -> Result<PhysicalTableDataVersionDB, TdError> {
+    ) -> Result<PhysicalTableDataVersionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_physical_table_data_version(
             self.executor,
             collection,
@@ -238,7 +284,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
         table: &TableDB,
-    ) -> Result<PhysicalTableDataVersionDB, TdError> {
+    ) -> Result<PhysicalTableDataVersionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_physical_table_data_version_with_data(
             self.executor,
             collection,
@@ -254,7 +303,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         self,
         execution: &ExecutionDB,
         transaction_key: &TransactionKey,
-    ) -> Result<TransactionDB, TdError> {
+    ) -> Result<TransactionDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_transaction(self.executor, execution, transaction_key).await
     }
 
@@ -277,7 +329,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         worker_type: &WorkerType,
         worker_status: &WorkerStatus,
         message_status: &WorkerMessageStatus,
-    ) -> Result<WorkerDB, TdError> {
+    ) -> Result<WorkerDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_worker(
             self.executor,
             collection,
@@ -295,7 +350,10 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
         status: &WorkerMessageStatus,
-    ) -> Result<WorkerDB, TdError> {
+    ) -> Result<WorkerDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
         seed_function_runner_worker(
             self.executor,
             execution,

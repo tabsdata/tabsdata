@@ -2,7 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::{Queries, QueryExecutor};
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -13,7 +14,7 @@ use td_objects::types::basic::{
 };
 
 pub async fn seed_permission(
-    db: impl QueryExecutor + Domained<Domain = Apiserver>,
+    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
     permission_type: PermissionType,
     entity_name: Option<EntityName>,
     entity_id: Option<EntityId>,
@@ -41,13 +42,13 @@ pub async fn seed_permission(
         fixed: Fixed::FALSE,
     };
 
-    db.live().insert(&permission_db).await?;
+    db.insert(&permission_db).await?;
     Ok(permission_db)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::LiveEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::permission::PermissionDB;
@@ -74,11 +75,7 @@ mod tests {
             .await
             .unwrap();
 
-        let found = db
-            .live()
-            .fetch_one::<PermissionDB>(&permission.id)
-            .await
-            .unwrap();
+        let found = db.fetch_one::<PermissionDB>(&permission.id).await.unwrap();
         assert_eq!(permission.id, found.id);
         assert_eq!(permission.role_id, found.role_id);
         assert_eq!(permission.permission_type, found.permission_type);

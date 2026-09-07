@@ -85,9 +85,9 @@ pub async fn seed_run(db: &TdPool, project: ProjectId) -> Result<SeededRun, TdEr
         )
         .await?;
     Ok(SeededRun {
-        execution: execution.id,
-        transaction: transaction.id,
-        worker: worker.id,
+        execution: execution.base.id,
+        transaction: transaction.base.id,
+        worker: worker.base.id,
     })
 }
 
