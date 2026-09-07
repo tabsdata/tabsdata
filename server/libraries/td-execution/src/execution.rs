@@ -127,7 +127,7 @@ impl<T, V> ExecutionPlan<FunctionNode, T, V> {
             let key = &partial.inner[err.node_id()];
             match transaction_mapper.transaction_by() {
                 Ok(transaction_by) => {
-                    ExecutionPlannerError::CyclicTransaction(transaction_by, key.into()).into()
+                    ExecutionPlannerError::CyclicTransaction(transaction_by, key.clone()).into()
                 }
                 Err(err) => err,
             }

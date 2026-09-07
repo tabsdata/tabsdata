@@ -47,6 +47,13 @@ impl<O, P> CachedProvider<O, P> {
     pub async fn invalidate(&self) {
         *self.cache.lock().await = None;
     }
+
+    /// The cached value, if any — no provider context needed, so hot paths can
+    /// skip acquiring a connection and fall back to [`Provider::get`] only on
+    /// a miss.
+    pub async fn cached(&self) -> Option<Arc<O>> {
+        self.cache.lock().await.clone()
+    }
 }
 
 impl<O, P> Default for CachedProvider<O, P>

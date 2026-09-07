@@ -30,7 +30,6 @@ td-test = [
 dummy = []
 mock-env = []
 test_logging = []
-test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]

@@ -13,7 +13,9 @@ database:
       database: tabsdata
       password: secret
     pool:
-      min_connections: 5
+      regular:
+        min_connections: 5
+        max_connections: 50
 ";
 
 #[test]

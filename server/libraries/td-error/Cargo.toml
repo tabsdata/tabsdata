@@ -25,7 +25,6 @@ td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
 mock-env = []
 test_logging = []
-test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
@@ -57,7 +56,6 @@ anyhow = { workspace = true }
 derive_builder = { workspace = true }
 itertools = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
-tower = { workspace = true }
 
 [dev-dependencies]
 td-error = { workspace = true, features = ["td-test"] }

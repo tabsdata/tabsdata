@@ -317,7 +317,6 @@ fn io_error(path: &Path, e: &std::io::Error) -> TdError {
 mod tests {
     use super::*;
     use serde_json::json;
-    use td_objects::Buildable;
     use td_objects::dxo::connection::KeyValue;
 
     fn store() -> FileConnectionStore {
@@ -338,19 +337,18 @@ mod tests {
     }
 
     fn upsert(name: &str, secret_value: Option<&str>) -> ConnectionUpsert {
-        ConnectionUpsert::builder()
-            .connection(Some(json!({
+        ConnectionUpsert {
+            connection: Some(json!({
                 "kind": "mysqlSrcConn",
                 "name": name,
                 "conn_configs": {"host": "h", "env:password": "CREDENTIALS_PASSWORD"},
-            })))
-            .secrets(Some(vec![KeyValue {
+            })),
+            secrets: Some(vec![KeyValue {
                 key: "CREDENTIALS_PASSWORD".to_string(),
                 value: secret_value.map(str::to_string),
-            }]))
-            .vars(Some(vec![]))
-            .build()
-            .unwrap()
+            }]),
+            vars: Some(vec![]),
+        }
     }
 
     #[tokio::test]

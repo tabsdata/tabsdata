@@ -126,11 +126,8 @@ fn resolve(
         serde_yaml::from_value(node_at(value, property.section)?.clone()).ok()?;
     if let Some(database) = database {
         for entry in components.values_mut() {
-            let Some(target) = entry.conn.postgres_mut() else {
-                continue;
-            };
-            if target.database.is_none() {
-                target.database = Some(database.to_owned());
+            if entry.postgres.database.is_none() {
+                entry.postgres.database = Some(database.to_owned());
             }
         }
     }

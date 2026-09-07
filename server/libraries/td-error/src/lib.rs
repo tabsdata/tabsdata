@@ -262,18 +262,14 @@ impl TdDomainError for InlineError {
     }
 }
 
-/// Asserts a service invocation error.
-///
-/// The invocation of the given `service` with the given `request` is expected to fail.
-///
-/// The `assert_error` function is called with service invocation [`TdDomainError`] error.
-/// The function should assert the error variant.
-pub async fn assert_service_error<Req, Res, Err: TdDomainError + 'static>(
-    service: tower::util::BoxCloneSyncService<Req, Res, TdError>,
-    request: Req,
+/// Asserts that a service invocation failed with domain error `Err`: the
+/// caller invokes the service and passes the result; `assert_error` asserts
+/// the variant.
+pub fn assert_service_error<T, Err: TdDomainError + 'static>(
+    result: Result<T, TdError>,
     assert_error: impl Fn(&Err),
 ) {
-    match tower::ServiceExt::oneshot(service, request).await {
+    match result {
         Ok(_) => panic!("Service is expected to error"),
         Err(err) => match err.source().unwrap().downcast_ref::<Err>() {
             Some(err) => assert_error(err),
