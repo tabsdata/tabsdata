@@ -7,9 +7,17 @@ database:
     postgres:
       password: ${{secretAuto:postgres_apiserver_password}}
     pool:
-      min_connections: 5
-      max_connections: 50
-      acquire_timeout: 30
-      max_lifetime: 3600
-      idle_timeout: 60
-      test_before_acquire: true
+      regular:
+        min_connections: 5
+        max_connections: 50
+        acquire_timeout: 30
+        max_lifetime: 3600
+        idle_timeout: 60
+        test_before_acquire: true
+      exclusive:
+        min_connections: 1
+        max_connections: 10
+        acquire_timeout: 30
+        max_lifetime: 3600
+        idle_timeout: 60
+        test_before_acquire: true
