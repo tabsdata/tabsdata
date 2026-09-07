@@ -2,149 +2,80 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
-use crate::table::layers::flow::{build_response, with_recursion_options};
+use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
+use crate::table::flow::{build_response, with_recursion_options};
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::And;
-use td_objects::StateFilter;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::and;
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse};
-use td_objects::rest_urls::TableParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse, TableParam};
+use td_queries::HistoricEntry;
 
-pub struct GraphOpts;
-impl GraphConfig for GraphOpts {
-    fn function_state() -> StateFilter<FunctionDB> {
-        FunctionDB::available()
-    }
+#[service_factory]
+async fn table_flow_graph(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<ReadRequest<(CollectionParam, TableParam)>>,
+) -> Result<TableFlowGraphResponse, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection_param, table_param)) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+    let conn = gated_conn.get(grant);
 
-    fn include_dependency_functions() -> bool {
-        true
-    }
-}
+    let collection_id_name = collection_param.collection;
+    let table_id_name = table_param.table;
+    let at = ctx.time;
 
-#[service_factory(
-    name = TableFlowGraphService,
-    request = ReadRequest<TableParam>,
-    response = TableFlowGraphResponse,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        // Extract from request.
-        from_fn(With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
-        from_fn(With::<ReadRequest<TableParam>>::extract::<RequestContext>),
-        // Authorize: the requester must be able to view the project in scope.
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(With::<TableParam>::extract::<CollectionIdName>),
-        from_fn(With::<TableParam>::extract::<TableIdName>),
-        // Find main table
-        from_fn(
-            By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                { TableDBWithNames::Available },
-                TableDBWithNames,
-            >
-        ),
-        // Generate td graph
-        from_fn(With::<TableDBWithNames>::extract::<TableId>),
-        from_fn(With::<TableId>::convert_to::<FunctionOrTable>),
-        from_fn(with_recursion_options),
-        generate_td_graph(GraphOpts),
-        // Build response
-        from_fn(build_response),
-    )
+    let table: TableDBWithNames = conn
+        .historic(&at)
+        .state(TableDBWithNames::available())
+        .fetch_one(and!(&collection_id_name, &table_id_name))
+        .await?;
+
+    let table_id = table.base.table_id;
+    let entrypoint = FunctionOrTable::from(&table_id);
+    let recursion = with_recursion_options().await?;
+    let config = GraphConfig {
+        include_dependency_functions: true,
+        ..GraphConfig::defaults(FunctionDB::available())
+    };
+    let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion).await?;
+
+    build_response(&table, &graph).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use itertools::Itertools;
     use std::collections::HashMap;
     use std::str::FromStr;
     use std::sync::LazyLock;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
+    use td_objects::and;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::graph::GraphEdge;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
         TableName, TableNameDto, UserId,
     };
+    use td_objects::types::basic::{CollectionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_objects::{Buildable, and};
     use td_queries::CurrentEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_table_flow_graph(db: TdPool) {
-        use crate::graph::layers::build::GraphBuilder;
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
-        use td_tower::metadata::type_of_val;
-
-        TableFlowGraphService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<ReadRequest<TableParam>, ProjectId>, TableFlowGraphResponse>(
-                &[
-                    // Extract from request.
-                    type_of_val(&With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
-                    type_of_val(&With::<ReadRequest<TableParam>>::extract::<RequestContext>),
-                    // Authorize: the requester must be able to view the project in scope.
-                    type_of_val(&Scope::<Project>::set),
-                    type_of_val(&Rbac::<Project, ViewProject>::check),
-                    type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                    type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
-                    type_of_val(&With::<TableParam>::extract::<TableIdName>),
-                    // Find main table
-                    type_of_val(
-                        &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                            { TableDBWithNames::Available },
-                            TableDBWithNames,
-                        >,
-                    ),
-                    // Generate td graph
-                    type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                    type_of_val(&With::<TableId>::convert_to::<FunctionOrTable>),
-                    type_of_val(&with_recursion_options),
-                    // Find td graph
-                    // Find triggers
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
-                    // Find dependencies. For clarity, we always show the function, even if
-                    // generating a table centered graph, the same way we show the tables of
-                    // a function centered graph.
-                    type_of_val(&GraphBuilder::<GraphOpts>::main_function_id),
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_dependency_graph),
-                    type_of_val(&GraphBuilder::<GraphOpts>::unique_function_ids),
-                    // Find output tables
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
-                    // Find all tables and functions
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_all_tables_map),
-                    type_of_val(&GraphBuilder::<GraphOpts>::find_all_functions_map),
-                    // Create td graph and validate it
-                    type_of_val(&GraphBuilder::<GraphOpts>::build_td_graph),
-                    // Build response
-                    type_of_val(&build_response),
-                ],
-            );
-    }
 
     static FUNCTION_NAMES: LazyLock<Vec<FunctionName>> = LazyLock::new(|| {
         vec![
@@ -165,21 +96,28 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[0].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![
                 TableNameDto::try_from("table_0")?,
                 TableNameDto::try_from("table_1")?,
-            ])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]
+            .into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_0 = db
             .scoped(p.id)
@@ -187,25 +125,25 @@ mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        // Actual test
-        let service = TableFlowGraphService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                    .table(TableIdName::from_str("table_0")?)
-                    .build()?,
-            )
+            .read((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                },
+                TableParam {
+                    table: TableIdName::from_str("table_0")?,
+                },
+            ))
             .in_project(p.id);
 
-        let response = service.raw_oneshot(request).await?;
+        let response = service.table_flow_graph(request).await?.data;
 
-        // Assertions
         let central_table = db
             .current()
             .fetch_one::<TableDBWithNames>(and!(&function_0.id, TableName::try_from("table_0")?))
             .await?;
-        assert_eq!(response.table, central_table.id);
+        assert_eq!(response.table, central_table.base.id);
 
         let expected_functions = [&function_0]
             .iter()
@@ -234,7 +172,6 @@ mod tests {
         assert!(response.system_tables.is_empty());
         assert_eq!(expected_tables.len(), response.user_tables.len());
 
-        // Assert relations
         let relations = response.relations;
         assert_eq!(relations.len(), 2);
         for (f, t, edge) in relations {
@@ -260,18 +197,24 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[0].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependencyDto::try_from("table_0")?]))
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("table_0")?]),
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_0 = db
             .scoped(p.id)
@@ -279,21 +222,28 @@ mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[1].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependencyDto::try_from("table_0")?]))
-            .triggers(vec![TableTriggerDto::try_from("table_0")?])
-            .tables(vec![
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[1].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("table_0")?]),
+            triggers: vec![TableTriggerDto::try_from("table_0")?].into(),
+            tables: vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
-            ])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]
+            .into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_1 = db
             .scoped(p.id)
@@ -301,18 +251,24 @@ mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[2].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependencyDto::try_from("table_0")?]))
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_3")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[2].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("table_0")?]),
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_3")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_2 = db
             .scoped(p.id)
@@ -320,25 +276,25 @@ mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        // Actual test
-        let service = TableFlowGraphService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                    .table(TableIdName::from_str("table_0")?)
-                    .build()?,
-            )
+            .read((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                },
+                TableParam {
+                    table: TableIdName::from_str("table_0")?,
+                },
+            ))
             .in_project(p.id);
 
-        let response = service.raw_oneshot(request).await?;
+        let response = service.table_flow_graph(request).await?.data;
 
-        // Assertions
         let central_table: TableDBWithNames = db
             .current()
             .fetch_one::<TableDBWithNames>(and!(&function_0.id, TableName::try_from("table_0")?))
             .await?;
-        assert_eq!(response.table, central_table.id);
+        assert_eq!(response.table, central_table.base.id);
 
         let expected_functions = [&function_0, &function_1, &function_2]
             .iter()
@@ -369,7 +325,6 @@ mod tests {
         assert!(response.system_tables.is_empty());
         assert_eq!(expected_tables.len(), response.user_tables.len());
 
-        // Assert relations
         let relations = response.relations;
         assert_eq!(relations.len(), 8);
         for (f, t, edge) in relations {
@@ -416,18 +371,24 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[0].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependencyDto::try_from("table_0")?]))
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("table_0")?]),
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_0 = db
             .scoped(p.id)
@@ -435,21 +396,28 @@ mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[1].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependencyDto::try_from("table_0")?]))
-            .triggers(None)
-            .tables(vec![
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[1].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("table_0")?]),
+            triggers: None,
+            tables: vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
-            ])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]
+            .into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _function_1 = db
             .scoped(p.id)
@@ -457,18 +425,24 @@ mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .name(FUNCTION_NAMES[2].clone())
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependencyDto::try_from("table_0")?]))
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_3")?])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[2].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("table_0")?]),
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_3")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_2 = db
             .scoped(p.id)
@@ -476,25 +450,25 @@ mod tests {
             .function(&collection_0, &create)
             .await?;
 
-        // Actual test
-        let service = TableFlowGraphService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                    .table(TableIdName::from_str("table_3")?)
-                    .build()?,
-            )
+            .read((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                },
+                TableParam {
+                    table: TableIdName::from_str("table_3")?,
+                },
+            ))
             .in_project(p.id);
 
-        let response = service.raw_oneshot(request).await?;
+        let response = service.table_flow_graph(request).await?.data;
 
-        // Assertions
         let central_table = db
             .current()
             .fetch_one::<TableDBWithNames>(and!(&function_2.id, TableName::try_from("table_3")?))
             .await?;
-        assert_eq!(response.table, central_table.id);
+        assert_eq!(response.table, central_table.base.id);
 
         let expected_functions = [&function_0, &function_2]
             .iter()
@@ -519,7 +493,6 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tables, expected_tables);
 
-        // Assert relations
         let relations = response.relations;
         assert_eq!(relations.len(), 4);
         for (f, t, edge) in relations {

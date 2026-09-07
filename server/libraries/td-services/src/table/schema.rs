@@ -2,15 +2,13 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::table::layers::storage::StorageServiceError;
+use crate::table::columns::drop_extra_columns;
+use crate::table::storage::StorageServiceError;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{Field, LazyFrame, PlPath, PolarsError, ScanArgsParquet, SchemaExt};
 use td_error::{TdError, td_error};
-use td_objects::Buildable;
-use td_objects::rest_urls::params::{SchemaField, TableSchema};
+use td_objects::dxo::table::{ExtraCols, SchemaField, TableSchema};
 use td_storage::{SPath, Storage};
-use td_tableframe::common::drop_system_columns;
-use td_tower::extractors::Ref;
 
 #[td_error]
 enum SchemaError {
@@ -19,8 +17,9 @@ enum SchemaError {
 }
 
 pub async fn get_table_schema(
-    storage: Ref<Storage>,
-    table_path: Ref<Option<SPath>>,
+    storage: &Storage,
+    extra_cols: &ExtraCols,
+    table_path: &Option<SPath>,
 ) -> Result<TableSchema, TdError> {
     fn get_schema(mut lazy_frame: LazyFrame) -> Result<TableSchema, TdError> {
         let schema = lazy_frame
@@ -30,7 +29,7 @@ pub async fn get_table_schema(
             .iter_fields()
             .map(Field::try_into)
             .collect::<Result<_, _>>()?;
-        Ok(TableSchema::builder().fields(schema).build()?)
+        Ok(TableSchema { fields: schema })
     }
 
     if let Some(table_path) = &*table_path {
@@ -49,7 +48,7 @@ pub async fn get_table_schema(
             let lazy_frame = LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)
                 .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
 
-            let lazy_frame = drop_system_columns(lazy_frame)
+            let lazy_frame = drop_extra_columns(lazy_frame, extra_cols)
                 .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
 
             get_schema(lazy_frame)

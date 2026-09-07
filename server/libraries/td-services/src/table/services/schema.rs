@@ -2,48 +2,56 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::table::layers::find_data_version_location_at;
-use crate::table::layers::schema::get_table_schema;
+use crate::table::find_data_version_location_at;
+use crate::table::schema::get_table_schema;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::rest_urls::params::{TableAtIdName, TableSchema};
-use td_objects::tower_service::with::With;
-#[cfg(test)]
-use td_objects::types::basic::CollectionIdName;
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::crudl::{AtTimeParam, WithinProject};
+use td_objects::dxo::table::{ExtraColsParam, TableParam, TableSchema, UncommittedParam};
 use td_storage::Storage;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 
-#[service_factory(
-    name = TableSchemaService,
-    request = ReadRequest<TableAtIdName>,
-    response = TableSchema,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-    context = Storage,
-)]
-fn service() {
-    layers!(
-        // Extract parameters
-        from_fn(With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-        // Check permissions
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // Find data version location.
-        find_data_version_location_at::<_, TableAtIdName>(),
-        // Get table schema
-        from_fn(get_table_schema),
+#[service_factory]
+async fn table_schema(
+    authz: Ctx<AuthzContext>,
+    storage: Ctx<Storage>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<
+        ReadRequest<(
+            CollectionParam,
+            TableParam,
+            AtTimeParam,
+            UncommittedParam,
+            ExtraColsParam,
+        )>,
+    >,
+) -> Result<TableSchema, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection, table, at, uncommitted, extra_cols)) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+
+    let (_, location) = find_data_version_location_at(
+        gated_conn.get(grant),
+        &collection.collection,
+        &table.table,
+        &at.at,
+        &uncommitted.uncommitted,
     )
+    .await?;
+    get_table_schema(&storage, &extra_cols.extra_cols, &location).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use polars::datatypes::{Int64Chunked, StringChunked};
     use polars::prelude::sync_on_close::SyncOnCloseType;
     use polars::prelude::{
@@ -52,75 +60,27 @@ mod tests {
     };
     use std::path::Path;
     use std::str::FromStr;
-    use std::sync::Arc;
-    use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
+    use td_objects::and;
+    use td_objects::dxo::crudl::AtTimeParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::dxo::table::TableDB;
-    use td_objects::rest_urls::params::SchemaField;
-    use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
+    use td_objects::dxo::table::{ExtraCols, ExtraColsParam, TableParam, UncommittedParam};
+    use td_objects::dxo::table::{SchemaField, TableDB};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
         ProjectId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
         UncommittedStatus, UserId,
     };
-    use td_objects::{Buildable, and};
+    use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
-    use td_tower::ctx_service::RawOneshot;
     use url::Url;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_table_schema(db: TdPool) {
-        use crate::table::layers::storage::resolve_table_location;
-        use td_objects::And;
-        use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::types::basic::{TableId, TableIdName, TriggeredOn, UncommittedStatus};
-
-        use td_database::pool::scoped::Scoped;
-        use td_tower::metadata::type_of_val;
-
-        TableSchemaService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<ReadRequest<TableAtIdName>, ProjectId>, TableSchema>(&[
-                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
-                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-                // check requester has project permissions
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // Find table data version location.
-                // Extract parameters
-                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-                type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
-                type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
-                type_of_val(&With::<TableAtIdName>::extract::<UncommittedStatus>),
-                // Only active or frozen tables
-                // Find Table ID, looking at the version at the time
-                type_of_val(
-                    &td_queries::By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                        { TableDBWithNames::Available },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                // Only committed transactions, at the triggered on time
-                type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
-                // Find the latest data version of the table ID, at that time
-                // Resolve the location of the data version. This takes into account versions without
-                // data changes (in which the previous version is resolved)
-                type_of_val(&resolve_table_location),
-                // get schema
-                type_of_val(&get_table_schema),
-            ]);
-    }
 
     //noinspection DuplicatedCode
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
@@ -131,7 +91,7 @@ mod tests {
         let storage = Storage::from(vec![
             MountDef::builder().id("id").uri(url).path("/").build()?,
         ])?;
-        let storage = Arc::new(storage);
+        let storage = Ctx::new(storage);
 
         let collection = db
             .scoped(p.id)
@@ -143,18 +103,24 @@ mod tests {
         let dependencies = None;
         let triggers = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(Some(created_tables.clone()))
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables: Some(created_tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -268,31 +234,40 @@ mod tests {
         async fn get_schema(
             db: TdPool,
             project_id: ProjectId,
-            storage: Arc<Storage>,
+            storage: Ctx<Storage>,
             collection: &str,
             table: &str,
             at_time: &AtTime,
         ) -> Result<TableSchema, TdError> {
-            let service =
-                TableSchemaService::new(db, Arc::new(AuthzContext::default()), storage).service();
+            let service = Services {
+                storage: storage,
+                ..Services::with_defaults(db)
+            };
 
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(TableAtIdName::new(
-                    TableParam::builder()
-                        .collection(CollectionIdName::from_str(collection)?)
-                        .table(TableIdName::from_str(table)?)
-                        .build()?,
-                    AtTimeParam::builder().at(at_time).build()?,
-                    UncommittedParam::builder()
-                        .uncommitted(UncommittedStatus::TRUE)
-                        .build()?,
+                .read((
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection)?,
+                    },
+                    TableParam {
+                        table: TableIdName::from_str(table)?,
+                    },
+                    AtTimeParam { at: *at_time },
+                    UncommittedParam {
+                        uncommitted: UncommittedStatus::TRUE,
+                    },
+                    ExtraColsParam {
+                        extra_cols: ExtraCols::None,
+                    },
                 ))
                 .in_project(project_id);
-            service.raw_oneshot(request).await
+            service
+                .table_schema(request)
+                .await
+                .map(|response| response.data)
         }
 
         // No data before the first function run
-        // With IDs
         let response_with_ids = get_schema(
             db.clone(),
             p.id,
@@ -305,7 +280,6 @@ mod tests {
         let response = response_with_ids.fields;
         assert_eq!(*response, vec![]);
 
-        // With names
         let response_with_names = get_schema(
             db.clone(),
             p.id,
@@ -318,8 +292,6 @@ mod tests {
         let response = response_with_names.fields;
         assert_eq!(*response, vec![]);
 
-        // Schema named 0 at first function run
-        // With IDs
         let response_with_ids = get_schema(
             db.clone(),
             p.id,
@@ -330,7 +302,6 @@ mod tests {
         )
         .await?;
 
-        // With names
         let response_with_names = get_schema(
             db.clone(),
             p.id,
@@ -346,19 +317,18 @@ mod tests {
         assert_eq!(
             *response,
             vec![
-                SchemaField::builder()
-                    .try_name("i0")?
-                    .try_type_("i64")?
-                    .build()?,
-                SchemaField::builder()
-                    .try_name("s")?
-                    .try_type_("str")?
-                    .build()?,
+                SchemaField {
+                    name: "i0".try_into()?,
+                    type_: "i64".try_into()?,
+                },
+                SchemaField {
+                    name: "s".try_into()?,
+                    type_: "str".try_into()?,
+                },
             ]
         );
 
         // Schema named 0 at second function run (as it has no data, it doesn't change)
-        // With IDs
         let response_with_ids = get_schema(
             db.clone(),
             p.id,
@@ -369,7 +339,6 @@ mod tests {
         )
         .await?;
 
-        // With names
         let response_with_names = get_schema(
             db.clone(),
             p.id,
@@ -385,19 +354,18 @@ mod tests {
         assert_eq!(
             *response,
             vec![
-                SchemaField::builder()
-                    .try_name("i0")?
-                    .try_type_("i64")?
-                    .build()?,
-                SchemaField::builder()
-                    .try_name("s")?
-                    .try_type_("str")?
-                    .build()?,
+                SchemaField {
+                    name: "i0".try_into()?,
+                    type_: "i64".try_into()?,
+                },
+                SchemaField {
+                    name: "s".try_into()?,
+                    type_: "str".try_into()?,
+                },
             ]
         );
 
         // Schema named 2 at third function run (skip 1 as second run had no data)
-        // With IDs
         let response_with_ids = get_schema(
             db.clone(),
             p.id,
@@ -408,7 +376,6 @@ mod tests {
         )
         .await?;
 
-        // With names
         let response_with_names = get_schema(
             db.clone(),
             p.id,
@@ -424,14 +391,14 @@ mod tests {
         assert_eq!(
             *response,
             vec![
-                SchemaField::builder()
-                    .try_name("i2")?
-                    .try_type_("i64")?
-                    .build()?,
-                SchemaField::builder()
-                    .try_name("s")?
-                    .try_type_("str")?
-                    .build()?,
+                SchemaField {
+                    name: "i2".try_into()?,
+                    type_: "i64".try_into()?,
+                },
+                SchemaField {
+                    name: "s".try_into()?,
+                    type_: "str".try_into()?,
+                },
             ]
         );
         Ok(())

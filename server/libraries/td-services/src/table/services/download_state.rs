@@ -2,163 +2,86 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::table::layers::download::get_table_download;
-use crate::table::layers::download_state::get_table_at_id_name;
-use crate::table::layers::find_data_version_location_at;
+use crate::table::download::get_table_download;
+use crate::table::download_state::get_table_at_id_name;
+use crate::table::find_data_version_location_at;
 use ta_services::factory::service_factory;
-use td_authz::rbac::enter_project_scope;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::scope_to_project;
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::ReadRequest;
-use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::crudl::{AtTimeParam, ReadRequest};
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionIdParam};
 use td_objects::dxo::table::TableDBWithNames;
-use td_objects::rest_urls::internal::FunctionVersionAtId;
-use td_objects::rest_urls::params::TableAtIdName;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, CollectionId, FunctionVersionId, ProjectId};
 use td_objects::types::stream::BoxedSyncStream;
-use td_queries::By;
+use td_queries::{HistoricEntry, LiveEntry};
 use td_storage::Storage;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 
-#[service_factory(
-    name = TableStateDownloadService,
-    request = ReadRequest<FunctionVersionAtId>,
-    response = BoxedSyncStream,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = Storage,
-)]
-fn service() {
-    layers!(
-        // Extract parameters
-        from_fn(With::<ReadRequest<FunctionVersionAtId>>::extract_name::<FunctionVersionAtId>),
-        from_fn(With::<FunctionVersionAtId>::extract::<AtTime>),
-        // get function
-        from_fn(With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
-        from_fn(
-            By::<FunctionVersionId>::historic_fetch_one::<
-                { FunctionDBWithNames::Available },
-                FunctionDBWithNames,
-            >
-        ),
-        // pivot into the function's project scope via the collection
-        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
-        from_fn(enter_project_scope),
-        // find system tables
-        from_fn(
-            By::<FunctionVersionId>::historic_fetch_all::<
-                { TableDBWithNames::System },
-                TableDBWithNames,
-            >
-        ),
-        from_fn(get_table_at_id_name),
-        // Find table data version location.
-        find_data_version_location_at::<_, TableAtIdName>(),
-        from_fn(get_table_download),
+#[service_factory]
+async fn table_state_download(
+    authz: Ctx<AuthzContext>,
+    storage: Ctx<Storage>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ReadRequest<(FunctionVersionIdParam, AtTimeParam)>,
+) -> Result<BoxedSyncStream, TdError> {
+    let (_, (version, at)) = request.into_parts();
+    let conn = gated_conn.get(authz.none());
+    let at = at.at;
+    let function_version_id = version.function_version_id;
+
+    let function: FunctionDBWithNames = conn
+        .historic(&at)
+        .state(FunctionDBWithNames::available())
+        .fetch_one(&function_version_id)
+        .await?;
+    // pivot into the function's project scope via the collection
+    let collection: CollectionDB = conn.live().fetch_one(&function.base.collection_id).await?;
+    scope_to_project(conn, &collection.base.project_id).await?;
+
+    let system_tables: Vec<TableDBWithNames> = conn
+        .historic(&at)
+        .state(TableDBWithNames::system())
+        .fetch_all(&function.base.id)
+        .await?;
+    let (collection, table, version_at, uncommitted) =
+        get_table_at_id_name(&at, &function, &system_tables).await?;
+
+    let (_, location) = find_data_version_location_at(
+        conn,
+        &collection.collection,
+        &table.table,
+        &version_at.at,
+        &uncommitted.uncommitted,
     )
+    .await?;
+    get_table_download(&storage, &location).await
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Context;
+    use crate::Services;
     use crate::table::services::download::tests::test_download_tables;
     use bytes::Bytes;
     use futures_util::StreamExt;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
-    use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
+    use td_objects::dxo::function::{FunctionRegister, FunctionVersionIdParam};
     use td_objects::system::TD_FN_STATE_PREFIX;
-    use td_objects::types::basic::AccessTokenId;
+    use td_objects::types::basic::{AccessTokenId, ReuseFrozen};
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_table_download_state(db: TdPool) {
-        use crate::table::layers::storage::resolve_table_location;
-        use td_objects::dxo::table::TableDBWithNames;
-
-        use td_objects::types::basic::{
-            AtTime, CollectionIdName, ProjectId, TableId, TableIdName, TriggeredOn,
-            UncommittedStatus,
-        };
-
-        use td_objects::And;
-        use td_tower::metadata::type_of_val;
-
-        TableStateDownloadService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ReadRequest<FunctionVersionAtId>, BoxedSyncStream>(&[
-                // Extract parameters
-                type_of_val(
-                    &With::<ReadRequest<FunctionVersionAtId>>::extract_name::<FunctionVersionAtId>,
-                ),
-                type_of_val(&With::<FunctionVersionAtId>::extract::<AtTime>),
-                // get function
-                type_of_val(&With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
-                type_of_val(
-                    &By::<FunctionVersionId>::historic_fetch_one::<
-                        { FunctionDBWithNames::Available },
-                        FunctionDBWithNames,
-                    >,
-                ),
-                // pivot into the function's project scope via the collection
-                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
-                type_of_val(&enter_project_scope),
-                // find system table
-                type_of_val(
-                    &By::<FunctionVersionId>::historic_fetch_all::<
-                        { TableDBWithNames::System },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&get_table_at_id_name),
-                // Find table data version location.
-                // Extract parameters
-                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-                type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
-                type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
-                type_of_val(&With::<TableAtIdName>::extract::<UncommittedStatus>),
-                // Find Table ID, looking at the version at the time
-                type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                        { TableDBWithNames::Available },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                // At the triggered on time
-                type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
-                // Find the latest data version of the table ID, at that time
-                // Resolve the location of the data version. This takes into account versions without
-                // data changes (in which the previous version is resolved)
-                type_of_val(&resolve_table_location),
-                type_of_val(&get_table_download),
-            ]);
-    }
 
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
     async fn test_download_state(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let context = Context::with_defaults(db);
+        let context = Services::with_defaults(db.clone());
 
-        let collection = context
-            .apiserver_pool
+        let collection = db
             .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
@@ -168,30 +91,30 @@ mod tests {
         let dependencies = None;
         let triggers = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(Some(created_tables.clone()))
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
-        let function = context
-            .apiserver_pool
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables: Some(created_tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let function = db
             .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let system_tables = context
-            .apiserver_pool
-            .scoped(p.id)
-            .seed()
-            .system_tables(&function)
-            .await?;
+        let system_tables = db.scoped(p.id).seed().system_tables(&function).await?;
         let td_fn_state_table = system_tables
             .iter()
             .find(|t| t.name.starts_with(TD_FN_STATE_PREFIX))
@@ -199,33 +122,31 @@ mod tests {
 
         let function_version_id = function.id.clone();
 
-        let get_download = async move |context: &Context,
+        let get_download = async move |context: &Services,
                                        _table: &str, // not using table because always getting state table of the fn
                                        at_time: &AtTime|
                     -> Result<Bytes, TdError> {
-            // with ids
-            let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-                FunctionVersionAtId {
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+                FunctionVersionIdParam {
                     function_version_id: function_version_id.clone(),
-                    at: *at_time,
                 },
-            );
-            let service = TableStateDownloadService::build(context);
-            let response = service.service().raw_oneshot(request).await?;
+                AtTimeParam { at: *at_time },
+            ));
+            let service = context.clone();
+            let response = service.table_state_download(request).await?.data;
             let mut stream = response.into_inner();
             let bytes_with_ids = match stream.next().await {
                 Some(res) => res?,
                 None => Bytes::new(),
             };
-            // with names
-            let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-                FunctionVersionAtId {
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+                FunctionVersionIdParam {
                     function_version_id: function_version_id.clone(),
-                    at: *at_time,
                 },
-            );
-            let service = TableStateDownloadService::build(context);
-            let response = service.service().raw_oneshot(request).await?;
+                AtTimeParam { at: *at_time },
+            ));
+            let service = context.clone();
+            let response = service.table_state_download(request).await?.data;
             let mut stream = response.into_inner();
             let bytes_with_names = match stream.next().await {
                 Some(res) => res?,
@@ -236,6 +157,15 @@ mod tests {
         };
 
         let tables = std::slice::from_ref(&td_fn_state_table.name);
-        test_download_tables(&context, &p, &collection, &function, tables, get_download).await
+        test_download_tables(
+            &db,
+            &context,
+            &p,
+            &collection,
+            &function,
+            tables,
+            get_download,
+        )
+        .await
     }
 }

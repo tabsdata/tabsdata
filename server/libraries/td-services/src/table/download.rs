@@ -7,11 +7,10 @@ use sync_wrapper::SyncStream;
 use td_error::TdError;
 use td_objects::types::stream::BoxedSyncStream;
 use td_storage::{SPath, Storage};
-use td_tower::extractors::Ref;
 
 pub async fn get_table_download(
-    storage: Ref<Storage>,
-    table_path: Ref<Option<SPath>>,
+    storage: &Storage,
+    table_path: &Option<SPath>,
 ) -> Result<BoxedSyncStream, TdError> {
     match &*table_path {
         Some(path) => {

@@ -2,57 +2,76 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::table::layers::find_data_version_location_at;
-use crate::table::layers::sample::get_table_sample;
+use crate::table::find_data_version_location_at;
+use crate::table::sample::get_table_sample;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::table::TableDBWithNames;
-use td_objects::rest_urls::FileFormat;
-use td_objects::rest_urls::params::TableSampleAtName;
-use td_objects::tower_service::with::With;
-#[cfg(test)]
-use td_objects::types::basic::CollectionIdName;
-use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::crudl::{AtTimeParam, WithinProject};
+use td_objects::dxo::table::{
+    ExtraColsParam, FileFormatParam, SampleLenParam, SampleOffsetParam, SqlParam, TableParam,
+    UncommittedParam,
+};
 use td_objects::types::stream::BoxedSyncStream;
 use td_storage::Storage;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 
-#[service_factory(
-    name = TableSampleService,
-    request = ReadRequest<TableSampleAtName>,
-    response = BoxedSyncStream,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-    context = Storage,
-)]
-fn service() {
-    layers!(
-        // Extract parameters
-        from_fn(With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>),
-        // check requester has project permissions
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // Find table data version location.
-        find_data_version_location_at::<_, TableSampleAtName>(),
-        // Get sample.
-        from_fn(With::<TableSampleAtName>::extract::<SampleOffset>),
-        from_fn(With::<TableSampleAtName>::extract::<SampleLen>),
-        from_fn(With::<TableSampleAtName>::extract::<FileFormat>),
-        from_fn(With::<TableDBWithNames>::extract::<TableName>),
-        from_fn(With::<TableSampleAtName>::extract::<Option<Sql>>),
-        from_fn(get_table_sample),
+#[service_factory]
+async fn table_sample(
+    authz: Ctx<AuthzContext>,
+    storage: Ctx<Storage>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<
+        ReadRequest<(
+            CollectionParam,
+            TableParam,
+            AtTimeParam,
+            UncommittedParam,
+            SampleOffsetParam,
+            SampleLenParam,
+            FileFormatParam,
+            SqlParam,
+            ExtraColsParam,
+        )>,
+    >,
+) -> Result<BoxedSyncStream, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection, table, at, uncommitted, offset, len, format, sql, extra_cols)) =
+        request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+
+    let (table_db, location) = find_data_version_location_at(
+        gated_conn.get(grant),
+        &collection.collection,
+        &table.table,
+        &at.at,
+        &uncommitted.uncommitted,
     )
+    .await?;
+
+    let table_name = table_db.base.name.clone();
+    get_table_sample(
+        &storage,
+        &offset.offset,
+        &len.len,
+        &format.format,
+        &sql.sql,
+        &extra_cols.extra_cols,
+        &table_name,
+        &location,
+    )
+    .await
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::Services;
     use bytes::Bytes;
     use futures::StreamExt;
     use polars::datatypes::{Int64Chunked, StringChunked};
@@ -64,101 +83,32 @@ mod tests {
     use std::io::Cursor;
     use std::path::Path;
     use std::str::FromStr;
-    use std::sync::Arc;
-    use ta_services::service::TdService;
+    use ta_services::service::Ctx;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
+    use td_objects::and;
+    use td_objects::dxo::collection::CollectionParam;
+    use td_objects::dxo::crudl::AtTimeParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::dxo::table::TableDB;
-    use td_objects::rest_urls::{
-        AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam, UncommittedParam,
+    use td_objects::dxo::table::{
+        ExtraCols, ExtraColsParam, FileFormatParam, SampleLenParam, SampleOffsetParam, SqlParam,
+        TableParam, UncommittedParam,
     };
+    use td_objects::dxo::table::{FileFormat, TableDB};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
         ProjectId, StorageVersion, TableIdName, TableNameDto, TransactionKey, UncommittedStatus,
         UserId,
     };
-    use td_objects::{Buildable, and};
+    use td_objects::types::basic::{CollectionIdName, ReuseFrozen, TableName};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
-    use td_tower::ctx_service::RawOneshot;
     use url::Url;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_table_sample(db: TdPool) {
-        use crate::table::layers::storage::resolve_table_location;
-        use td_objects::And;
-        use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::types::basic::{Sql, TableId, TableIdName, TriggeredOn, UncommittedStatus};
-
-        use td_database::pool::scoped::Scoped;
-        use td_tower::metadata::type_of_val;
-
-        fn dummy_file() -> String {
-            if cfg!(target_os = "windows") {
-                "file:///c:/dummy".to_string()
-            } else {
-                "file:///dummy".to_string()
-            }
-        }
-
-        let mound_def = MountDef::builder()
-            .id("id")
-            .path("/")
-            .uri(dummy_file())
-            .build()
-            .unwrap();
-        let storage = Storage::from(vec![mound_def]).unwrap();
-        TableSampleService::new(db, Arc::new(AuthzContext::default()), Arc::new(storage))
-            .metadata()
-            .await
-            .assert_service::<Scoped<ReadRequest<TableSampleAtName>, ProjectId>, BoxedSyncStream>(
-                &[
-                    // Extract parameters
-                    type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
-                    type_of_val(
-                        &With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>,
-                    ),
-                    // check requester has project permissions
-                    type_of_val(&Scope::<Project>::set),
-                    type_of_val(&Rbac::<Project, ViewProject>::check),
-                    // Find table data version location.
-                    // Extract parameters
-                    type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
-                    type_of_val(&With::<TableSampleAtName>::extract::<TableIdName>),
-                    type_of_val(&With::<TableSampleAtName>::extract::<AtTime>),
-                    type_of_val(&With::<TableSampleAtName>::extract::<UncommittedStatus>),
-                    // Only active or frozen tables
-                    // Find Table ID, looking at the version at the time
-                    type_of_val(
-                        &td_queries::By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                            { TableDBWithNames::Available },
-                            TableDBWithNames,
-                        >,
-                    ),
-                    type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                    // Only committed transactions, at the triggered on time
-                    type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
-                    // Find the latest data version of the table ID, at that time
-                    // Resolve the location of the data version. This takes into account versions without
-                    // data changes (in which the previous version is resolved)
-                    type_of_val(&resolve_table_location),
-                    // Get sample.
-                    type_of_val(&With::<TableSampleAtName>::extract::<SampleOffset>),
-                    type_of_val(&With::<TableSampleAtName>::extract::<SampleLen>),
-                    type_of_val(&With::<TableSampleAtName>::extract::<FileFormat>),
-                    type_of_val(&With::<TableDBWithNames>::extract::<TableName>),
-                    type_of_val(&With::<TableSampleAtName>::extract::<Option<Sql>>),
-                    type_of_val(&get_table_sample),
-                ],
-            );
-    }
 
     //noinspection DuplicatedCode
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
@@ -169,7 +119,7 @@ mod tests {
         let storage = Storage::from(vec![
             MountDef::builder().id("id").uri(url).path("/").build()?,
         ])?;
-        let storage = Arc::new(storage);
+        let storage = Ctx::new(storage);
 
         let collection = db
             .scoped(p.id)
@@ -181,18 +131,24 @@ mod tests {
         let dependencies = None;
         let triggers = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(Some(created_tables.clone()))
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables: Some(created_tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function_version = db
             .scoped(p.id)
             .seed()
@@ -307,40 +263,49 @@ mod tests {
         async fn get_sample(
             db: TdPool,
             project_id: ProjectId,
-            storage: Arc<Storage>,
+            storage: Ctx<Storage>,
             collection: &str,
             table: &str,
             at_time: &AtTime,
             offset: i64,
             len: i64,
         ) -> Result<Bytes, TdError> {
-            let service =
-                TableSampleService::new(db, Arc::new(AuthzContext::default()), storage).service();
+            let service = Services {
+                storage: storage,
+                ..Services::with_defaults(db)
+            };
 
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(TableSampleAtName::new(
-                    TableParam::builder()
-                        .collection(CollectionIdName::from_str(collection)?)
-                        .table(TableIdName::from_str(table)?)
-                        .build()?,
-                    AtTimeParam::builder().at(at_time).build()?,
-                    UncommittedParam::builder()
-                        .uncommitted(UncommittedStatus::TRUE)
-                        .build()?,
-                    SampleOffsetLenParam::builder()
-                        .try_offset(offset)?
-                        .try_len(len)?
-                        .build()?,
-                    FileFormatParam::builder()
-                        .format(FileFormat::Parquet)
-                        .build()?,
-                    SqlParam::builder().sql(None).build()?,
+                .read((
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection)?,
+                    },
+                    TableParam {
+                        table: TableIdName::from_str(table)?,
+                    },
+                    AtTimeParam { at: *at_time },
+                    UncommittedParam {
+                        uncommitted: UncommittedStatus::TRUE,
+                    },
+                    SampleOffsetParam {
+                        offset: offset.try_into()?,
+                    },
+                    SampleLenParam {
+                        len: len.try_into()?,
+                    },
+                    FileFormatParam {
+                        format: FileFormat::Parquet,
+                    },
+                    SqlParam { sql: None },
+                    ExtraColsParam {
+                        extra_cols: ExtraCols::None,
+                    },
                 ))
                 .in_project(project_id);
-            let response = service.raw_oneshot(request).await;
+            let response = service.table_sample(request).await;
             match response {
                 Ok(response) => {
-                    let mut data = response.into_inner();
+                    let mut data = response.data.into_inner();
                     let bytes = data.next().await.unwrap()?;
                     Ok(bytes)
                 }
@@ -349,7 +314,6 @@ mod tests {
         }
 
         // No data before the first function run
-        // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
             p.id,
@@ -362,7 +326,6 @@ mod tests {
         )
         .await?;
 
-        // With names
         let bytes_with_names = get_sample(
             db.clone(),
             p.id,
@@ -382,8 +345,6 @@ mod tests {
         let expected = DataFrame::default();
         assert_eq!(df, expected);
 
-        // Sample named 0 at first function run
-        // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
             p.id,
@@ -396,7 +357,6 @@ mod tests {
         )
         .await?;
 
-        // With names
         let bytes_with_names = get_sample(
             db.clone(),
             p.id,
@@ -421,7 +381,6 @@ mod tests {
         assert_eq!(df, expected);
 
         // Sample named 0 at second function run (as it has no data, it doesn't change)
-        // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
             p.id,
@@ -434,7 +393,6 @@ mod tests {
         )
         .await?;
 
-        // With names
         let bytes_with_names = get_sample(
             db.clone(),
             p.id,
@@ -459,7 +417,6 @@ mod tests {
         assert_eq!(df, expected);
 
         // Sample named 2 at third function run (skip 1 as second run had no data)
-        // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
             p.id,
@@ -472,7 +429,6 @@ mod tests {
         )
         .await?;
 
-        // With names
         let bytes_with_names = get_sample(
             db.clone(),
             p.id,
@@ -496,7 +452,6 @@ mod tests {
         .unwrap();
         assert_eq!(df, expected);
 
-        // With another offset
         let bytes = get_sample(
             db.clone(),
             p.id,
@@ -516,7 +471,6 @@ mod tests {
         .unwrap();
         assert_eq!(df, expected);
 
-        // With another length
         let bytes = get_sample(
             db.clone(),
             p.id,

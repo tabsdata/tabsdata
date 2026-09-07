@@ -1,69 +1,55 @@
 //
-// Copyright 2026 Tabsdata Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::And;
-use td_objects::NoFilter;
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::logical::{TableDataVersion, TableDataVersionDBWithNames};
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::AtTimeParam;
+use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
+use td_objects::dxo::logical::TableDataVersion;
 use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::table::TableParam;
 use td_objects::list::params::ListQueryParams;
-use td_objects::rest_urls::params::TableDataVersionAtIdName;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TriggeredOn,
-};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_objects::types::basic::TriggeredOn;
+use td_objects::{StateFilter, and};
+use td_queries::{CurrentEntry, HistoricEntry, LiveEntry};
 
-#[service_factory(
-    name = TableListDataVersionsService,
-    request = ListRequest<TableDataVersionAtIdName>,
-    response = ListResponse<TableDataVersion>,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<TableDataVersionAtIdName>>::extract::<RequestContext>),
-        from_fn(
-            With::<ListRequest<TableDataVersionAtIdName>>::extract_name::<TableDataVersionAtIdName>
-        ),
-        // find collection ID
-        from_fn(With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
-        // check requester has project permissions
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // extract at time (triggered on)
-        from_fn(With::<TableDataVersionAtIdName>::extract::<AtTime>),
-        from_fn(With::<AtTime>::try_convert_to::<TriggeredOn, _>),
-        // find table ID
-        from_fn(With::<TableDataVersionAtIdName>::extract::<TableIdName>),
-        from_fn(
-            By::<And![CollectionIdName, TableIdName]>::fetch_one_current::<
-                { TableDBWithNames::Available },
-                TableDBWithNames,
-            >
-        ),
-        from_fn(With::<TableDBWithNames>::extract::<TableId>),
-        // list
-        from_fn(With::<ListRequest<TableDataVersionAtIdName>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<TableDataVersion>, _>),
-        from_fn(
-            By::<TableId>::historic_list_full::<
-                NoFilter,
-                { TableDataVersionDBWithNames::All },
-                TableDataVersion,
-            >
-        ),
-    )
+#[service_factory]
+async fn table_list_data_versions(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<ListRequest<(CollectionParam, TableParam, AtTimeParam)>>,
+) -> Result<ListResponse<TableDataVersion>, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection_param, table_param, at_param), list_params) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+    let conn = gated_conn.get(grant);
+
+    let collection_id_name = collection_param.collection;
+    let _collection: ActiveCollectionDB = conn.live().fetch_one(&collection_id_name).await?;
+    let at = at_param.at;
+    let triggered_on = TriggeredOn::try_from(&at)?;
+    let table_id_name = table_param.table;
+    let table: TableDBWithNames = conn
+        .current()
+        .state(TableDBWithNames::available())
+        .fetch_one(and!(&collection_id_name, &table_id_name))
+        .await?;
+
+    let query_params = ListQueryParams::<TableDataVersion>::try_from(&list_params)?;
+    let rows = conn
+        .historic(&triggered_on)
+        .state(StateFilter::all())
+        .list_full(&table.base.table_id, &query_params)
+        .await?;
+    build_list_response(&list_params, &query_params, rows)
 }

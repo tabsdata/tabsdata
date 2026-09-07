@@ -2,7 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::table::layers::storage::StorageServiceError;
+use crate::table::columns::drop_extra_columns;
+use crate::table::storage::StorageServiceError;
 use bytes::Bytes;
 use futures_util::FutureExt;
 use polars::prelude::cloud::CloudOptions;
@@ -12,14 +13,11 @@ use polars::prelude::{
 };
 use polars::sql::SQLContext;
 use std::io::Cursor;
-use std::ops::Deref;
 use td_error::{TdError, td_error};
-use td_objects::rest_urls::FileFormat;
+use td_objects::dxo::table::{ExtraCols, FileFormat};
 use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
 use td_objects::types::stream::BoxedSyncStream;
 use td_storage::{SPath, Storage};
-use td_tableframe::common::drop_system_columns;
-use td_tower::extractors::Ref;
 
 #[td_error]
 enum SampleError {
@@ -44,8 +42,8 @@ enum SampleError {
 /// CSV cannot serialize nested columns — Polars' `CsvWriter` errors with
 /// "CSV format does not support nested data" on any `List` / `Struct` column.
 /// Replace each nested column with its per-row string representation so a CSV sample of
-// such a table degrades gracefully instead of failing. Non-nested columns and null
-// values are left untouched. Parquet / JSON keep the original nested types.
+/// such a table degrades gracefully instead of failing. Non-nested columns and null
+/// values are left untouched. Parquet / JSON keep the original nested types.
 fn stringify_nested_columns(dataframe: DataFrame) -> Result<DataFrame, PolarsError> {
     if !dataframe.dtypes().iter().any(|dtype| dtype.is_nested()) {
         return Ok(dataframe);
@@ -67,14 +65,16 @@ fn stringify_nested_columns(dataframe: DataFrame) -> Result<DataFrame, PolarsErr
     DataFrame::new(columns)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn get_table_sample(
-    storage: Ref<Storage>,
-    offset: Ref<SampleOffset>,
-    len: Ref<SampleLen>,
-    format: Ref<FileFormat>,
-    sql: Ref<Option<Sql>>,
-    table_name: Ref<TableName>,
-    table_path: Ref<Option<SPath>>,
+    storage: &Storage,
+    offset: &SampleOffset,
+    len: &SampleLen,
+    format: &FileFormat,
+    sql: &Option<Sql>,
+    extra_cols: &ExtraCols,
+    table_name: &TableName,
+    table_path: &Option<SPath>,
 ) -> Result<BoxedSyncStream, TdError> {
     fn write_sample(mut dataframe: DataFrame, format: &FileFormat) -> Result<Bytes, SampleError> {
         let mut buffer = Vec::new();
@@ -117,13 +117,11 @@ pub async fn get_table_sample(
             let lazy_frame = LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)
                 .map_err(SampleError::LazyFrameError)?;
 
-            // drop system columns and set the offset set in the request
-            let lazy_frame = drop_system_columns(lazy_frame)
+            let lazy_frame = drop_extra_columns(lazy_frame, extra_cols)
                 .map_err(SampleError::LazyFrameError)?
                 .slice(**offset, IdxSize::MAX);
 
-            // if SQL is provided, execute it on the lazy frame
-            let lazy_frame = match sql.deref() {
+            let lazy_frame = match sql {
                 Some(sql) => {
                     let mut sql_context = SQLContext::new();
                     sql_context.register(table_name.as_str(), lazy_frame);
@@ -141,7 +139,6 @@ pub async fn get_table_sample(
                 None => lazy_frame,
             };
 
-            // set the length of the sample to return
             let lazy_frame = lazy_frame.slice(0, **len as IdxSize);
             let dataframe = lazy_frame.collect().map_err(SampleError::LazyFrameError)?;
             write_sample(dataframe, &format)
@@ -159,7 +156,7 @@ pub async fn get_table_sample(
 
 #[cfg(test)]
 mod tests {
-    use crate::table::layers::sample::{SampleError, get_table_sample, stringify_nested_columns};
+    use crate::table::sample::{SampleError, get_table_sample, stringify_nested_columns};
     use futures_util::TryStreamExt;
     use polars::df;
     use polars::prelude::*;
@@ -168,16 +165,15 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use td_error::TdError;
-    use td_objects::rest_urls::FileFormat;
+    use td_objects::dxo::table::{ExtraCols, FileFormat};
     use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
     use td_storage::SPath;
-    use td_tower::extractors::Ref;
 
-    // Parquet file with (id, name) columns, 10 rows, id = 0..9
     fn create_table_file(path: &Path) {
         let mut df = df!(
             "id" => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
             "name" => ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+            "@td.origin.file.path" => ["p", "p", "p", "p", "p", "p", "p", "p", "p", "p"],
             "$td.id" => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         )
         .unwrap();
@@ -195,6 +191,17 @@ mod tests {
         len: usize,
         format: FileFormat,
         sql: Option<Sql>,
+    ) -> Result<PathBuf, TdError> {
+        test_get_table_sample_with(offset, len, format, sql, ExtraCols::None).await
+    }
+
+    //noinspection DuplicatedCode
+    async fn test_get_table_sample_with(
+        offset: usize,
+        len: usize,
+        format: FileFormat,
+        sql: Option<Sql>,
+        extra_cols: ExtraCols,
     ) -> Result<PathBuf, TdError> {
         let test_dir = td_common::tdtestdir!();
         let mount_def = td_storage::MountDef::builder()
@@ -218,13 +225,14 @@ mod tests {
         create_table_file(Path::new(adjusted_path));
 
         let stream = get_table_sample(
-            Ref::new(storage),
-            Ref::new(SampleOffset::try_from(offset as i64).unwrap()),
-            Ref::new(SampleLen::try_from(len as i64).unwrap()),
-            Ref::new(format),
-            Ref::new(sql),
-            Ref::new(TableName::try_from("my_table").unwrap()),
-            Ref::new(Some(table_path)),
+            &storage,
+            &SampleOffset::try_from(offset as i64).unwrap(),
+            &SampleLen::try_from(len as i64).unwrap(),
+            &format,
+            &sql,
+            &extra_cols,
+            &TableName::try_from("my_table").unwrap(),
+            &Some(table_path),
         )
         .await?;
 
@@ -278,6 +286,58 @@ mod tests {
         let df = ParquetReader::new(file).finish().unwrap();
         assert_eq!(df.get_column_names(), &["id", "name"]);
         assert_eq!(df.height(), 10);
+        Ok(())
+    }
+
+    async fn sample_columns(extra_cols: ExtraCols) -> Result<Vec<String>, TdError> {
+        let file = test_get_table_sample_with(
+            0,
+            SampleLen::MAX as usize,
+            FileFormat::Parquet,
+            None,
+            extra_cols,
+        )
+        .await?;
+        let df = ParquetReader::new(File::open(file).unwrap())
+            .finish()
+            .unwrap();
+        Ok(df
+            .get_column_names()
+            .iter()
+            .map(|name| name.to_string())
+            .collect())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_extra_cols_none() -> Result<(), TdError> {
+        assert_eq!(sample_columns(ExtraCols::None).await?, ["id", "name"]);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_extra_cols_meta() -> Result<(), TdError> {
+        assert_eq!(
+            sample_columns(ExtraCols::Meta).await?,
+            ["id", "name", "@td.origin.file.path"]
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_extra_cols_sys() -> Result<(), TdError> {
+        assert_eq!(
+            sample_columns(ExtraCols::Sys).await?,
+            ["id", "name", "$td.id"]
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_extra_cols_all() -> Result<(), TdError> {
+        assert_eq!(
+            sample_columns(ExtraCols::All).await?,
+            ["id", "name", "@td.origin.file.path", "$td.id"]
+        );
         Ok(())
     }
 
@@ -416,7 +476,6 @@ mod tests {
         ])
         .unwrap();
 
-        // Writing the frame as CSV fails before stringifying the list column.
         let mut before = df.clone();
         let mut sink = Vec::new();
         assert!(
@@ -425,7 +484,6 @@ mod tests {
                 .is_err()
         );
 
-        // After stringifying, the list column is String and CSV writing works.
         let mut flat = stringify_nested_columns(df).unwrap();
         assert_eq!(
             flat.column("@td.medallion.pk").unwrap().dtype(),
@@ -516,13 +574,14 @@ mod tests {
         let storage = td_storage::Storage::from(vec![mount_def])?;
 
         let stream = get_table_sample(
-            Ref::new(storage),
-            Ref::new(SampleOffset::default()),
-            Ref::new(SampleLen::default()),
-            Ref::new(format),
-            Ref::new(sql),
-            Ref::new(TableName::try_from("my_table").unwrap()),
-            Ref::new(None),
+            &storage,
+            &SampleOffset::default(),
+            &SampleLen::default(),
+            &format,
+            &sql,
+            &ExtraCols::None,
+            &TableName::try_from("my_table").unwrap(),
+            &None,
         )
         .await?;
 

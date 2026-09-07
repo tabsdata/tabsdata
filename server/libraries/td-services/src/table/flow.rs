@@ -5,13 +5,12 @@
 use itertools::{Either, Itertools};
 use std::collections::HashSet;
 use td_error::TdError;
-use td_objects::dxo::execution::{FunctionNodeResponseBuilder, TableNodeResponseBuilder};
+use td_objects::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use td_objects::dxo::graph::GraphNode;
 use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::types::composed::TableVersions;
 use td_objects::types::recursion::RecursionOptions;
-use td_tower::extractors::Ref;
 
 pub async fn with_recursion_options() -> Result<RecursionOptions, TdError> {
     Ok(RecursionOptions::new(None, None))
@@ -19,19 +18,17 @@ pub async fn with_recursion_options() -> Result<RecursionOptions, TdError> {
 
 // similar to execution response
 pub async fn build_response(
-    table: Ref<TableDBWithNames>,
-    graph: Ref<TdGraph>,
+    table: &TableDBWithNames,
+    graph: &TdGraph,
 ) -> Result<TableFlowGraphResponse, TdError> {
     let graph = graph
         .map(
             |node| async move {
                 let response = match node {
-                    GraphNode::Function(function) => GraphNode::Function(
-                        FunctionNodeResponseBuilder::try_from(function)?.build()?,
-                    ),
-                    GraphNode::Table(table) => {
-                        GraphNode::Table(TableNodeResponseBuilder::try_from(table)?.build()?)
+                    GraphNode::Function(function) => {
+                        GraphNode::Function(FunctionNodeResponse::from(function))
                     }
+                    GraphNode::Table(table) => GraphNode::Table(TableNodeResponse::from(table)),
                 };
                 Ok::<_, TdError>(response)
             },
@@ -42,7 +39,6 @@ pub async fn build_response(
         )
         .await?;
 
-    // Relations info
     let relations = graph
         .relations()
         .into_iter()
@@ -50,14 +46,12 @@ pub async fn build_response(
         .sorted()
         .collect();
 
-    // Functions info
     let all_functions = graph
         .functions()
         .into_iter()
         .map(|f| (f.function_version_id.clone(), f.clone()))
         .collect();
 
-    // Tables info
     let all_tables_set = graph.tables();
     let all_tables = all_tables_set
         .iter()
@@ -73,7 +67,7 @@ pub async fn build_response(
         });
 
     let response = TableFlowGraphResponse {
-        table: table.id,
+        table: table.base.id,
         all_functions,
         all_tables,
         system_tables,

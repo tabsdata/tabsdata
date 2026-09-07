@@ -2,51 +2,50 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::table::layers::download::get_table_download;
-use crate::table::layers::find_data_version_location_at;
+use crate::table::download::get_table_download;
+use crate::table::find_data_version_location_at;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-#[cfg(test)]
-use td_objects::dxo::collection::ActiveCollectionDB;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::rest_urls::params::TableAtIdName;
-use td_objects::tower_service::with::With;
-#[cfg(test)]
-use td_objects::types::basic::CollectionIdName;
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::crudl::{AtTimeParam, WithinProject};
+use td_objects::dxo::table::{TableParam, UncommittedParam};
 use td_objects::types::stream::BoxedSyncStream;
 use td_storage::Storage;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 
-#[service_factory(
-    name = TableDownloadService,
-    request = ReadRequest<TableAtIdName>,
-    response = BoxedSyncStream,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-    context = Storage,
-)]
-fn service() {
-    layers!(
-        // Extract parameters
-        from_fn(With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-        // check requester has project permissions
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // Find table data version location.
-        find_data_version_location_at::<_, TableAtIdName>(),
-        from_fn(get_table_download),
+#[service_factory]
+async fn table_download(
+    authz: Ctx<AuthzContext>,
+    storage: Ctx<Storage>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<
+        ReadRequest<(CollectionParam, TableParam, AtTimeParam, UncommittedParam)>,
+    >,
+) -> Result<BoxedSyncStream, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection, table, at, uncommitted)) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+
+    let (_, location) = find_data_version_location_at(
+        gated_conn.get(grant),
+        &collection.collection,
+        &table.table,
+        &at.at,
+        &uncommitted.uncommitted,
     )
+    .await?;
+    get_table_download(&storage, &location).await
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use crate::Context;
+    use crate::Services;
     use bytes::Bytes;
     use futures::StreamExt;
     use polars::datatypes::{Int64Chunked, StringChunked};
@@ -58,83 +57,35 @@ pub(crate) mod tests {
     use std::io::Cursor;
     use std::path::Path;
     use std::str::FromStr;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt;
     use td_error::TdError;
+    use td_objects::and;
+    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionParam;
+    use td_objects::dxo::crudl::AtTimeParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::project::ActiveProjectDB;
     use td_objects::dxo::table::TableDB;
-    use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
+    use td_objects::dxo::table::{TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
         StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey, UncommittedStatus,
         UserId,
     };
-    use td_objects::{Buildable, and};
+    use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_table_download(db: TdPool) {
-        use crate::table::layers::storage::resolve_table_location;
-        use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::types::basic::{
-            ProjectId, TableId, TableIdName, TriggeredOn, UncommittedStatus,
-        };
-
-        use td_database::pool::scoped::Scoped;
-        use td_objects::And;
-        use td_tower::metadata::type_of_val;
-
-        TableDownloadService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<ReadRequest<TableAtIdName>, ProjectId>, BoxedSyncStream>(&[
-                // Extract parameters
-                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
-                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-                // check requester has project permissions
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // Find table data version location.
-                // Extract parameters
-                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-                type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
-                type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
-                type_of_val(&With::<TableAtIdName>::extract::<UncommittedStatus>),
-                // Only active or frozen tables
-                // Find Table ID, looking at the version at the time
-                type_of_val(
-                    &td_queries::By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                        { TableDBWithNames::Available },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                // Only committed transactions, at the triggered on time
-                type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
-                // Find the latest data version of the table ID, at that time
-                // Resolve the location of the data version. This takes into account versions without
-                // data changes (in which the previous version is resolved)
-                type_of_val(&resolve_table_location),
-                type_of_val(&get_table_download),
-            ]);
-    }
 
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
     async fn test_download(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let context = Context::with_defaults(db);
+        let context = Services::with_defaults(db.clone());
 
-        let collection = context
-            .apiserver_pool
+        let collection = db
             .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
@@ -144,65 +95,72 @@ pub(crate) mod tests {
         let dependencies = None;
         let triggers = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(Some(created_tables.clone()))
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
-        let function = context
-            .apiserver_pool
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables: Some(created_tables.clone()),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let function = db
             .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
 
         let (collection_name, collection_id) = (collection.name.clone(), collection.id);
-        let get_download = async move |context: &Context,
+        let get_download = async move |context: &Services,
                                        table: &str,
                                        at_time: &AtTime|
                     -> Result<Bytes, TdError> {
-            // with ids
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(TableAtIdName::new(
-                    TableParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection_id))?)
-                        .table(TableIdName::from_str(table)?)
-                        .build()?,
-                    AtTimeParam::builder().at(at_time).build()?,
-                    UncommittedParam::builder()
-                        .uncommitted(UncommittedStatus::TRUE)
-                        .build()?,
+                .read((
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection_id))?,
+                    },
+                    TableParam {
+                        table: TableIdName::from_str(table)?,
+                    },
+                    AtTimeParam { at: *at_time },
+                    UncommittedParam {
+                        uncommitted: UncommittedStatus::TRUE,
+                    },
                 ))
                 .in_project(p.id);
-            let service = TableDownloadService::build(context);
-            let response = service.service().raw_oneshot(request).await?;
+            let service = context.clone();
+            let response = service.table_download(request).await?.data;
             let mut stream = response.into_inner();
             let bytes_with_ids = match stream.next().await {
                 Some(res) => res?,
                 None => Bytes::new(),
             };
-            // with names
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(TableAtIdName::new(
-                    TableParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection_name))?)
-                        .table(TableIdName::from_str(table)?)
-                        .build()?,
-                    AtTimeParam::builder().at(at_time).build()?,
-                    UncommittedParam::builder()
-                        .uncommitted(UncommittedStatus::TRUE)
-                        .build()?,
+                .read((
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection_name))?,
+                    },
+                    TableParam {
+                        table: TableIdName::from_str(table)?,
+                    },
+                    AtTimeParam { at: *at_time },
+                    UncommittedParam {
+                        uncommitted: UncommittedStatus::TRUE,
+                    },
                 ))
                 .in_project(p.id);
-            let service = TableDownloadService::build(context);
-            let response = service.service().raw_oneshot(request).await?;
+            let service = context.clone();
+            let response = service.table_download(request).await?.data;
             let mut stream = response.into_inner();
             let bytes_with_names = match stream.next().await {
                 Some(res) => res?,
@@ -216,39 +174,42 @@ pub(crate) mod tests {
             .into_iter()
             .map(TableName::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        test_download_tables(&context, &p, &collection, &function, &tables, get_download).await
+        test_download_tables(
+            &db,
+            &context,
+            &p,
+            &collection,
+            &function,
+            &tables,
+            get_download,
+        )
+        .await
     }
 
     pub async fn test_download_tables(
-        context: &Context,
+        db: &TdPool,
+        context: &Services,
         p: &ActiveProjectDB,
         collection: &ActiveCollectionDB,
         function: &FunctionDB,
         tables: &[TableName],
-        get_download: impl AsyncFn(&Context, &str, &AtTime) -> Result<Bytes, TdError>,
+        get_download: impl AsyncFn(&Services, &str, &AtTime) -> Result<Bytes, TdError>,
     ) -> Result<(), TdError> {
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = context
-                .apiserver_pool
-                .scoped(p.id)
-                .seed()
-                .execution(function)
-                .await?;
+            let execution = db.scoped(p.id).seed().execution(function).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = context
-                .apiserver_pool
+            let transaction = db
                 .scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
 
             at_times.push(AtTime::now());
-            let physical_function_run = context
-                .apiserver_pool
+            let physical_function_run = db
                 .scoped(p.id)
                 .seed()
                 .physical_function_run(
@@ -261,15 +222,13 @@ pub(crate) mod tests {
                 .await?;
 
             for table in tables {
-                let table_version = context
-                    .apiserver_pool
+                let table_version = db
                     .live()
                     .fetch_one::<TableDB>(and!(collection.id, table))
                     .await?;
 
                 if i % 2 == 0 {
-                    let physical_table_data_version = context
-                        .apiserver_pool
+                    let physical_table_data_version = db
                         .scoped(p.id)
                         .seed()
                         .physical_table_data_version_with_data(
@@ -327,9 +286,7 @@ pub(crate) mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    context
-                        .apiserver_pool
-                        .scoped(p.id)
+                    db.scoped(p.id)
                         .seed()
                         .physical_table_data_version(
                             collection,
@@ -347,7 +304,6 @@ pub(crate) mod tests {
         let bytes = get_download(context, tables[0].as_str(), &at_times[0]).await?;
         assert!(bytes.is_empty());
 
-        // Download named 0 at first function run
         let bytes = get_download(context, tables[0].as_str(), &at_times[1]).await?;
         let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
         let expected = DataFrame::new(vec![

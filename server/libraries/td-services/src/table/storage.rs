@@ -10,7 +10,6 @@ use td_objects::types::basic::{TableId, TriggeredOn, UncommittedStatus};
 use td_queries::LtdvEntry;
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
-use td_tower::extractors::{MutRef, Ref};
 
 #[td_error]
 pub enum StorageServiceError {
@@ -23,19 +22,15 @@ pub enum StorageServiceError {
 }
 
 pub async fn resolve_table_location(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    triggered_on: Ref<TriggeredOn>,
-    table_id: Ref<TableId>,
-    uncommitted: Ref<UncommittedStatus>,
+    conn: &mut DomainConnection<Apiserver>,
+    triggered_on: &TriggeredOn,
+    table_id: &TableId,
+    uncommitted: &UncommittedStatus,
 ) -> Result<Option<SPath>, TdError> {
     let committed_only = !**uncommitted;
     let data_version = conn
         .ltdv()
-        .latest_bound_tdv_with_data_for_table(
-            table_id.as_ref(),
-            triggered_on.as_ref(),
-            committed_only,
-        )
+        .latest_bound_tdv_with_data_for_table(table_id, triggered_on, committed_only)
         .await?;
 
     if let Some(data_version) = data_version {
@@ -49,40 +44,43 @@ pub async fn resolve_table_location(
 fn get_spath(
     data_version: &PhysicalTableDataVersionDBWithNames,
 ) -> Result<(SPath, StorageLocation), TdError> {
-    Ok(StorageLocation::from(&data_version.storage_version)
-        .builder(&data_version.base_path)
-        .collection(&data_version.collection_id)
-        .data(&data_version.id)
-        .table(&data_version.table_id, &data_version.table_version_id)
+    Ok(StorageLocation::from(&data_version.base.storage_version)
+        .builder(&data_version.base.base.base_path)
+        .collection(&data_version.base.base.collection_id)
+        .data(&data_version.base.base.id)
+        .table(
+            &data_version.base.base.table_id,
+            &data_version.base.base.table_version_id,
+        )
         .build()?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::function::services::update::UpdateFunctionService;
+    use crate::Services;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt;
+    use td_objects::and;
     use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
+    use td_objects::dxo::function::FunctionParam;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
     use td_objects::dxo::project::ActiveProjectDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDB;
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
         LogicalFunctionRunStatus, TableName, TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_resolve_table_location_non_existing(db: TdPool) -> Result<(), TdError> {
@@ -317,18 +315,24 @@ mod tests {
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_1")?])
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function = db
             .scoped(p.id)
@@ -371,25 +375,30 @@ mod tests {
         p: &ActiveProjectDB,
     ) -> Result<(ExecutionDB, TransactionDB, PhysicalFunctionRunDB, TableDB), TdError> {
         // Update the function to change the table version (TODO make this a seed function)
-        let update = FunctionUpdate::builder()
-            .name(Some("joaquin_2".try_into()?))
-            .description(Some("function_foo description".try_into()?))
-            .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Transformer)
-            .tables(vec![TableNameDto::try_from("table_1")?])
-            .build()?;
+        let update = FunctionUpdate {
+            name: Some("joaquin_2".try_into()?),
+            description: Some("function_foo description".try_into()?),
+            snippet: Some("function_foo snippet".try_into()?),
+            decorator: Some(Decorator::Transformer),
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            ..Default::default()
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin")?)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("joaquin")?,
+                    },
+                ),
                 update.clone(),
             )
             .in_project(p.id);
-        let service = UpdateFunctionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.update_function(request).await;
         let response = response?;
 
         let function: FunctionDB = db.live().fetch_one(&(response.id)).await?;
@@ -426,16 +435,16 @@ mod tests {
         table_id: TableId,
         uncommitted: bool,
     ) -> Result<Option<SPath>, TdError> {
-        let connection = DomainConnection::ready(db.begin().await.unwrap().into_connection());
+        let mut connection = DomainConnection::new(db.begin().await.unwrap());
         resolve_table_location(
-            MutRef::new(connection),
-            Ref::new(TriggeredOn::now()),
-            Ref::new(table_id),
-            Ref::new(if uncommitted {
+            &mut connection,
+            &TriggeredOn::now(),
+            &table_id,
+            &if uncommitted {
                 UncommittedStatus::TRUE
             } else {
                 UncommittedStatus::FALSE
-            }),
+            },
         )
         .await
     }
@@ -482,18 +491,24 @@ mod tests {
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_1")?])
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function = db
             .scoped(p.id)
@@ -530,13 +545,10 @@ mod tests {
         ))
     }
 
-    // Tests for committed vs uncommitted behavior
-
     #[td_test::test(db)]
     async fn test_resolve_committed_data_version_with_uncommitted_true(
         db: TdPool,
     ) -> Result<(), TdError> {
-        // Committed data version with data should be found when uncommitted=true
         let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
             _setup_committed_table(db.clone(), &p).await?;
@@ -562,7 +574,6 @@ mod tests {
     async fn test_resolve_committed_data_version_with_uncommitted_false(
         db: TdPool,
     ) -> Result<(), TdError> {
-        // Committed data version with data should be found when uncommitted=false
         let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
             _setup_committed_table(db.clone(), &p).await?;
@@ -588,7 +599,6 @@ mod tests {
     async fn test_resolve_uncommitted_data_version_with_uncommitted_true(
         db: TdPool,
     ) -> Result<(), TdError> {
-        // Non-committed data version with data should be found when uncommitted=true
         let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone(), &p).await?;
@@ -614,7 +624,6 @@ mod tests {
     async fn test_resolve_uncommitted_data_version_with_uncommitted_false(
         db: TdPool,
     ) -> Result<(), TdError> {
-        // Non-committed data version with data should NOT be found when uncommitted=false
         let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone(), &p).await?;

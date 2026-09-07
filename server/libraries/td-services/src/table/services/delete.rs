@@ -2,171 +2,119 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::table::layers::delete::{
-    build_deleted_table, build_deleted_triggers, build_frozen_functions,
-};
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-use td_objects::And;
-use td_objects::dxo::collection::ActiveCollectionDB;
-use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::{GatedConnection, InProject, RW};
+use td_error::{TdError, td_error};
+use td_objects::and;
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB, CollectionParam};
+use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
+use td_objects::dxo::table::TableParam;
+use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDB;
-use td_objects::rest_urls::TableParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    AtTime, CollectionIdName, CollectionName, FunctionId, TableId, TableIdName, TableVersionId,
-};
-use td_queries::By;
-use td_queries::{insert, insert_vec};
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::types::basic::{CollectionName, FunctionId, TableName, TableStatus};
+use td_queries::{ChunkedQueries, HistoricEntry, LiveEntry};
 
-#[service_factory(
-    name = TableDeleteService,
-    request = DeleteRequest<TableParam>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
-        from_fn(With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
-        // Extract collection and table from request.
-        from_fn(With::<TableParam>::extract::<CollectionIdName>),
-        from_fn(With::<TableParam>::extract::<TableIdName>),
-        // Get collection. Extract collection id and name.
-        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-        from_fn(With::<ActiveCollectionDB>::extract::<CollectionName>),
-        // check requester has project permissions
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, DevelopProject>::check),
-        // Get table. Extract table id, table version id
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(
-            By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                { TableDBWithNames::Frozen },
-                TableDBWithNames,
-            >
-        ),
-        from_fn(With::<TableDBWithNames>::extract::<TableId>),
-        from_fn(With::<TableDBWithNames>::extract::<TableVersionId>),
-        // Insert into function_versions(sql) entries with status=Frozen,
-        // for all functions with status=Active that have the table as dependency
-        // at the current time.
-        from_fn(By::<TableId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>),
-        from_fn(With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
-        from_fn(
-            By::<Vec<FunctionId>>::historic_fetch_all_chunked::<{ FunctionDB::Active }, FunctionDB>
-        ),
-        from_fn(build_frozen_functions),
-        from_fn(insert_vec::<FunctionDB>),
-        // Insert into trigger_versions(sql) entries with status=Deleted,
-        // for all triggers that have the table as dependency
-        // at the current time.
-        from_fn(By::<TableId>::historic_fetch_all::<{ TriggerDB::Available }, TriggerDB>),
-        from_fn(build_deleted_triggers),
-        from_fn(insert_vec::<TriggerDB>),
-        // Insert into table_versions(sql) status=Deleted.
-        from_fn(By::<TableVersionId>::fetch_one::<TableDB>),
-        from_fn(With::<TableDB>::try_convert_to::<TableDBBuilder, _>),
-        from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
-        from_fn(build_deleted_table),
-        from_fn(insert::<TableDB>),
-    )
+#[td_error]
+enum DeleteTableError {
+    #[error("Table '{0}' exists in collection '{1}' but it is not in frozen state: {2}")]
+    TableNotFrozen(TableName, CollectionName, String) = 0,
+}
+
+#[service_factory]
+async fn table_delete(
+    authz: Ctx<AuthzContext>,
+    gated_trx: &mut GatedConnection<RW, InProject>,
+    request: WithinProject<DeleteRequest<(CollectionParam, TableParam)>>,
+) -> Result<(), TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection_param, table_param)) = request.into_parts();
+    let grant = authz
+        .require::<Project, DevelopProject>(gated_trx, &ctx, &project)
+        .await?;
+    let conn = gated_trx.get(grant);
+
+    let collection_id_name = collection_param.collection;
+    let table_id_name = table_param.table;
+    // Bare-table row lock: the freeze-dependents scan must not race
+    // function register/update, which lock this row too.
+    let locked: CollectionCreateDB = conn
+        .live()
+        .fetch_one_for_update(&collection_id_name)
+        .await?;
+    let collection: ActiveCollectionDB = conn.live().fetch_one(&locked.id).await?;
+
+    // Get table (must be frozen to delete).
+    let at = ctx.time;
+    let table: TableDBWithNames = conn
+        .historic(&at)
+        .state(TableDBWithNames::frozen())
+        .fetch_one(and!(&collection_id_name, &table_id_name))
+        .await?;
+    let table_id = table.base.table_id;
+
+    // Freeze all functions with status=Active that have the table as a
+    // dependency at the current time.
+    let dependencies: Vec<DependencyDB> = conn
+        .historic(&at)
+        .state(DependencyDB::active())
+        .fetch_all(&table_id)
+        .await?;
+    let function_ids: Vec<FunctionId> = dependencies.iter().map(|x| x.function_id).collect();
+    let functions: Vec<FunctionDB> = conn
+        .historic(&at)
+        .state(FunctionDB::active())
+        .fetch_all_chunked::<FunctionId>(&function_ids)
+        .await?;
+    let frozen: Vec<FunctionDB> = functions.iter().map(|f| f.frozen(&ctx)).collect();
+    conn.insert_vec::<FunctionDB>(&frozen).await?;
+
+    // Delete all triggers that have the table as dependency at the current time.
+    let triggers: Vec<TriggerDB> = conn
+        .historic(&at)
+        .state(TriggerDB::available())
+        .fetch_all(&table_id)
+        .await?;
+    let deleted: Vec<TriggerDB> = triggers.iter().map(|t| t.deleted(&ctx)).collect();
+    conn.insert_vec::<TriggerDB>(&deleted).await?;
+
+    let previous: TableDB = conn.live().fetch_one(&table.base.id).await?;
+    // Only frozen tables can be deleted.
+    if !matches!(previous.status, TableStatus::Frozen) {
+        Err(DeleteTableError::TableNotFrozen(
+            previous.name.clone(),
+            collection.name.clone(),
+            previous.status.to_string(),
+        ))?
+    }
+    let deleted_table = previous.deleted(&ctx);
+    conn.live().insert(&deleted_table).await?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::function::services::update::UpdateFunctionService;
+    use crate::Services;
     use crate::table::services::tests::{assert_delete, assert_not_deleted};
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::dxo::function::{FunctionParam, FunctionRegister, FunctionUpdate};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, TableName,
         TableNameDto, UserId,
     };
+    use td_objects::types::basic::{CollectionIdName, TableIdName};
+    use td_objects::types::basic::{CollectionName, ReuseFrozen};
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_delete_table(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
-        use td_tower::metadata::type_of_val;
-
-        TableDeleteService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<DeleteRequest<TableParam>, ProjectId>, ()>(&[
-                type_of_val(&With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
-                type_of_val(&With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
-                // Extract collection and table from request.
-                type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
-                type_of_val(&With::<TableParam>::extract::<TableIdName>),
-                // Get collection. Extract collection id and name.
-                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionName>),
-                // check requester has project permissions
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, DevelopProject>::check),
-                // Get table. Extract table id, table version id
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                        { TableDBWithNames::Frozen },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                type_of_val(&With::<TableDBWithNames>::extract::<TableVersionId>),
-                // Insert into function_versions(sql) entries with status=Frozen,
-                // for all functions with status=Active that have the table as dependency
-                // at the current time.
-                type_of_val(
-                    &By::<TableId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>,
-                ),
-                type_of_val(&With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
-                type_of_val(
-                    &By::<Vec<FunctionId>>::historic_fetch_all_chunked::<
-                        { FunctionDB::Active },
-                        FunctionDB,
-                    >,
-                ),
-                type_of_val(&build_frozen_functions),
-                type_of_val(&insert_vec::<FunctionDB>),
-                // Insert into trigger_versions(sql) entries with status=Deleted,
-                // for all triggers that have the table as dependency
-                // at the current time.
-                type_of_val(
-                    &By::<TableId>::historic_fetch_all::<{ TriggerDB::Available }, TriggerDB>,
-                ),
-                type_of_val(&build_deleted_triggers),
-                type_of_val(&insert_vec::<TriggerDB>),
-                // Insert into table_versions(sql) status=Deleted.
-                type_of_val(&By::<TableVersionId>::fetch_one::<TableDB>),
-                type_of_val(&With::<TableDB>::try_convert_to::<TableDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
-                type_of_val(&build_deleted_table),
-                type_of_val(&insert::<TableDB>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_delete_table(db: TdPool) -> Result<(), TdError> {
@@ -178,22 +126,27 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        // Create a function with some tables.
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![
                 TableNameDto::try_from("super_table")?,
                 TableNameDto::try_from("keep_this_one")?,
-            ]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(p.id)
@@ -202,41 +155,47 @@ mod tests {
             .await?;
 
         // Update the function to remove the tables (set it to frozen).
-        let update = FunctionUpdate::builder()
-            .name(Some("joaquin_workout".try_into()?))
-            .description(Some("function_foo description".try_into()?))
-            .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Transformer)
-            .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .build()?;
+        let update = FunctionUpdate {
+            name: Some("joaquin_workout".try_into()?),
+            description: Some("function_foo description".try_into()?),
+            snippet: Some("function_foo snippet".try_into()?),
+            decorator: Some(Decorator::Transformer),
+            tables: Some(vec![TableNameDto::try_from("keep_this_one")?]),
+            runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
+            ..Default::default()
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("joaquin_workout")?,
+                    },
+                ),
                 update.clone(),
             )
             .in_project(p.id);
 
-        let service = UpdateFunctionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.update_function(request).await;
         let _response = response?;
 
-        // Test remove tables.
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .table(TableIdName::from_str("super_table")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                },
+                TableParam {
+                    table: TableIdName::from_str("super_table")?,
+                },
+            ))
             .in_project(p.id);
 
-        let service = TableDeleteService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.table_delete(request).await?.data;
 
         assert_delete(
             &db,
@@ -257,22 +216,27 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        // Create a function with some tables.
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![
                 TableNameDto::try_from("super_table")?,
                 TableNameDto::try_from("keep_this_one")?,
-            ]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(p.id)
@@ -280,19 +244,24 @@ mod tests {
             .function(&collection, &create)
             .await?;
 
-        // Create a function depending on it.
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_dependant_function")?
-            .try_description("joaquin_dependant_function description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("joaquin_dependant_function snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(Some(vec![TableDependencyDto::try_from("super_table")?]))
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin_dependant_function".try_into()?,
+            description: "joaquin_dependant_function description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "joaquin_dependant_function snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("super_table")?]),
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(p.id)
@@ -301,41 +270,47 @@ mod tests {
             .await?;
 
         // Update the function to remove the tables (set it to frozen).
-        let update = FunctionUpdate::builder()
-            .name(Some("joaquin_workout".try_into()?))
-            .description(Some("function_foo description".try_into()?))
-            .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Transformer)
-            .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .build()?;
+        let update = FunctionUpdate {
+            name: Some("joaquin_workout".try_into()?),
+            description: Some("function_foo description".try_into()?),
+            snippet: Some("function_foo snippet".try_into()?),
+            decorator: Some(Decorator::Transformer),
+            tables: Some(vec![TableNameDto::try_from("keep_this_one")?]),
+            runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
+            ..Default::default()
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("joaquin_workout")?,
+                    },
+                ),
                 update.clone(),
             )
             .in_project(p.id);
 
-        let service = UpdateFunctionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.update_function(request).await;
         let _response = response?;
 
-        // Test remove tables.
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .table(TableIdName::from_str("super_table")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                },
+                TableParam {
+                    table: TableIdName::from_str("super_table")?,
+                },
+            ))
             .in_project(p.id);
 
-        let service = TableDeleteService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.table_delete(request).await?.data;
 
         assert_delete(
             &db,
