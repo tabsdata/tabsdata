@@ -9,4 +9,5 @@
 
 pub(crate) mod chunked;
 pub(crate) mod recursive;
-pub(crate) mod versioned;
+pub(crate) mod scd2;
+pub(crate) mod table;

@@ -48,7 +48,7 @@ where
     let id_col = D::COL;
     Query::select()
         .columns([id_col])
-        .from(D::table())
+        .from(D::TABLE)
         .order_by(id_col, Order::Desc)
         .limit(1)
         .take()
@@ -100,7 +100,7 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
         .begin()
         .await
         .map_err(ServiceDbError::CannotBeginTransaction)?;
-    conn.bypass_project_scope()
+    conn.scope_across_projects()
         .await
         .map_err(ServiceDbError::CannotBypassProjectScope)?;
 
@@ -141,7 +141,7 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::CurrentEntry;
+    use crate::Queries;
     use crate::test_utils::SeedEntry;
     use sea_query::ExprTrait;
     use sea_query::{Expr, Query};
@@ -149,6 +149,7 @@ mod tests {
     use td_database::sea_query::builder::SeaQueryExt;
     use td_error::TdError;
     use td_objects::dxo::execution::ExecutionDBIden;
+    use td_objects::dxo::function::FunctionPatchInsertDB;
     use td_objects::dxo::function::{FunctionDBIden, FunctionRegister};
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
     use td_objects::dxo::table::TableDB;
@@ -188,8 +189,8 @@ mod tests {
     /// patch's id after a restart.
     #[td_test::test(db)]
     async fn test_last_function_version_id_covers_patches(db: TdPool) -> Result<(), TdError> {
-        use crate::LiveEntry;
-        use td_objects::dxo::function::FunctionPatchDB;
+        use crate::Queries;
+
         use td_objects::types::basic::{
             AtTime, Description, FunctionRuntimeValues, FunctionStatus, Snippet,
         };
@@ -226,11 +227,11 @@ mod tests {
             .seed()
             .function(&collection, &create)
             .await?;
-        let patch = FunctionPatchDB {
+        let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: function.id.clone().into(),
-            function_id: function.function_id,
-            collection_id: function.collection_id,
+            parent_function_version_id: function.base.id.clone().into(),
+            function_id: function.base.function_id,
+            collection_id: function.base.collection_id,
             snippet: Snippet::try_from("S")?,
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("V")?,
@@ -239,14 +240,14 @@ mod tests {
             defined_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).live().insert(&patch).await?;
+        db.scoped(p.id).insert(&patch).await?;
 
         let head = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&db).await?;
-        assert_eq!(head, Some(function.id));
+        assert_eq!(head, Some(function.base.id));
         assert!(Some(&patch.id) > head.as_ref());
 
         let mut conn = db.begin().await.unwrap();
-        conn.bypass_project_scope().await.unwrap();
+        conn.scope_across_projects().await.unwrap();
         let last = last_function_version_id(&mut *conn).await?;
         assert_eq!(last, Some(patch.id));
         Ok(())
@@ -324,9 +325,10 @@ mod tests {
             .await?;
 
         let table_version = db
-            .current()
-            .fetch_one::<TableDB>(and!(&collection.id, TableName::try_from(table_name)?))
-            .await?;
+            .latest()
+            .fetch_first::<TableDB>(and!(&collection.id, TableName::try_from(table_name)?))
+            .await?
+            .expect("seeded table must exist");
 
         db.scoped(p.id)
             .seed()
