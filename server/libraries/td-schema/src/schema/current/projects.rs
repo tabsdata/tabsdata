@@ -21,7 +21,7 @@ use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Func, Iden, JoinType, Query, 
 
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
@@ -73,7 +73,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![
             // Every row, including soft-deleted, with the real name resolved via
             // COALESCE(name_when_deleted, name) and a `deleted` flag. The canonical
@@ -110,7 +110,7 @@ impl Entity for Defs {
                     .and_where(Expr::col((ProjectsResolved, Projects::NameWhenDeleted)).is_null())
                     .to_owned(),
             ),
-            projects_with_names(b),
+            projects_with_names(),
         ]
     }
 }
@@ -118,7 +118,7 @@ impl Entity for Defs {
 /// View that joins active-projects rows to `users` for `created_by` /
 /// `modified_by` display names, falling back to the encoded user id when the
 /// user row is gone (`name_or_id`).
-fn projects_with_names(b: &Backend) -> ViewDef {
+fn projects_with_names() -> ViewDef {
     let created_by_user = Alias::new("created_by_user");
     let modified_by_user = Alias::new("modified_by_user");
     ViewDef::new(
@@ -130,14 +130,11 @@ fn projects_with_names(b: &Backend) -> ViewDef {
             .expr(Expr::col((ProjectsActive, Projects::BasePath)))
             .expr(Expr::col((ProjectsActive, Projects::CreatedOn)))
             .expr(Expr::col((ProjectsActive, Projects::CreatedById)))
-            .expr_as(
-                b.name_or_id((created_by_user.clone(), Users::Name), (ProjectsActive, Projects::CreatedById)),
-                Alias::new("created_by"),
-            )
+            .expr_as(name_or_id((created_by_user.clone(), Users::Name), (ProjectsActive, Projects::CreatedById)), Alias::new("created_by"))
             .expr(Expr::col((ProjectsActive, Projects::ModifiedOn)))
             .expr(Expr::col((ProjectsActive, Projects::ModifiedById)))
             .expr_as(
-                b.name_or_id((modified_by_user.clone(), Users::Name), (ProjectsActive, Projects::ModifiedById)),
+                name_or_id((modified_by_user.clone(), Users::Name), (ProjectsActive, Projects::ModifiedById)),
                 Alias::new("modified_by"),
             )
             .from(ProjectsActive)

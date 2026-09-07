@@ -5,7 +5,6 @@
 use sea_query::{ColumnDef, Iden, Index, IndexCreateStatement, InsertStatement, Table, TableCreateStatement};
 
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
@@ -35,8 +34,6 @@ impl Entity for Defs {
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
-                // project); the no-RLS backends (sqlite/mysql) keep
-                // no default at all, so writes there must set `project_id`.
                 .col(ColumnDef::new(Connections::ProjectId).text().not_null())
                 .primary_key(Index::create().col(Connections::ProjectId).col(Connections::Id))
                 // Top-level connector kind (e.g. `mysqlSrcConn`) — immutable.
@@ -53,7 +50,7 @@ impl Entity for Defs {
         vec![]
     }
 
-    fn create_views(&self, _b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![]
     }
 

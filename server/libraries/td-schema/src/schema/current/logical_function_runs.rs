@@ -30,7 +30,7 @@ use super::projects::{Projects, ProjectsResolved};
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::{json_object_agg, name_or_id};
 use crate::schema::sql::{StickyTerminalsTriggerDef, TriggerSpec, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
@@ -179,7 +179,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         // function_runs__with_names — names-joined view of the LFR identity
         // row. Backs the listing endpoint that powers the execution-plan
         // graph — `status` here is the canonical (sticky-Committed)
@@ -194,7 +194,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (LogicalFunctionRuns::Table, LogicalFunctionRuns::TriggeredById)),
+                    name_or_id((Users::Table, Users::Name), (LogicalFunctionRuns::Table, LogicalFunctionRuns::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
                 .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
@@ -277,7 +277,7 @@ impl Entity for Defs {
         );
 
         let mut views = vec![function_runs_with_names];
-        views.extend(status_summary_views(b));
+        views.extend(status_summary_views());
         views
     }
 
@@ -298,7 +298,7 @@ impl Entity for Defs {
 ///
 /// Status lives on `logical_function_runs.status`; aggregation rows up
 /// from LFRs (one per logical run) rather than FRs (per-attempt audit).
-fn status_summary_views(b: &Backend) -> Vec<ViewDef> {
+fn status_summary_views() -> Vec<ViewDef> {
     // Helper: COUNT(CASE WHEN logical_function_runs.status IN (values) THEN 1 END)
     let count_status_in = |statuses: &[&str]| {
         Expr::expr(Func::count(Expr::expr(Expr::case(
@@ -320,8 +320,8 @@ fn status_summary_views(b: &Backend) -> Vec<ViewDef> {
     // --- finished (global + execution) ---
     let finished = Expr::expr(Func::count(Expr::col(Asterisk))).eq(count_status_in(&["C", "X", "Y"]));
 
-    // --- txn status CASE (transaction — individual C/X/Y branches) ---
-    let txn_status_case = Expr::case(count_status_in(&["S"]).eq(count_all()), Expr::val("S"))
+    // --- trx status CASE (transaction — individual C/X/Y branches) ---
+    let trx_status_case = Expr::case(count_status_in(&["S"]).eq(count_all()), Expr::val("S"))
         .case(count_status_in(&["C"]).eq(count_all()), Expr::val("C"))
         .case(count_status_in(&["X"]).eq(count_all()), Expr::val("X"))
         .case(count_status_in(&["Y"]).eq(count_all()), Expr::val("Y"))
@@ -329,11 +329,11 @@ fn status_summary_views(b: &Backend) -> Vec<ViewDef> {
         .case(count_status_in(&["S", "RR", "RS", "R", "D", "E"]).gt(0), Expr::val("R"))
         .finally(Expr::val("U"));
 
-    // --- txn finished ---
-    let txn_finished = Expr::expr(Func::count(Expr::col(Asterisk))).eq(count_status_in(&["C", "X", "Y"]));
+    // --- trx finished ---
+    let trx_finished = Expr::expr(Func::count(Expr::col(Asterisk))).eq(count_status_in(&["C", "X", "Y"]));
 
     // --- JSON subqueries (fully sea-query; only the dialect JSON aggregate is custom) ---
-    let json_agg = b.json_object_agg("inner_fr.status", "inner_fr.count");
+    let json_agg = json_object_agg("inner_fr.status", "inner_fr.count");
 
     // A per-status `(status, count)` select, ready to be wrapped as a scalar
     // subquery. The optional `correlate` predicate ties the counts to the outer
@@ -361,7 +361,7 @@ fn status_summary_views(b: &Backend) -> Vec<ViewDef> {
     let exec_json_subquery = json_count_subquery(inner_status_counts(Some(
         Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId)).equals((Executions::Table, Executions::Id)),
     )));
-    let txn_json_subquery = json_count_subquery(inner_status_counts(Some(
+    let trx_json_subquery = json_count_subquery(inner_status_counts(Some(
         Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::TransactionId)).equals((Transactions::Table, Transactions::Id)),
     )));
 
@@ -397,9 +397,9 @@ fn status_summary_views(b: &Backend) -> Vec<ViewDef> {
         TransactionStatusSummary,
         Query::select()
             .expr_as(Expr::col((Transactions::Table, Transactions::Id)), Alias::new("transaction_id"))
-            .expr_as(txn_status_case, Alias::new("status"))
-            .expr_as(txn_finished, Alias::new("finished"))
-            .expr_as(txn_json_subquery, Alias::new("function_run_status_count"))
+            .expr_as(trx_status_case, Alias::new("status"))
+            .expr_as(trx_finished, Alias::new("finished"))
+            .expr_as(trx_json_subquery, Alias::new("function_run_status_count"))
             .from(Transactions::Table)
             .join(
                 JoinType::LeftJoin,

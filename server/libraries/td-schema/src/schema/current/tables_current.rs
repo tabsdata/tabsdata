@@ -10,7 +10,7 @@ use super::collections::{Collections, CollectionsResolved};
 use super::functions::Functions;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -79,7 +79,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         // JOINs `functions` (event log), not `functions_current`, for the function name:
         // a table row's `function_version_id` pins to the exact fvid at registration time,
         // not whatever happens to be the latest version of that function later.
@@ -89,7 +89,7 @@ impl Entity for Defs {
                 .expr(Expr::col((TablesCurrent::Table, Asterisk)))
                 .expr_as(Expr::col((TablesCurrent::Table, TablesCurrent::FunctionParamPos)).lt(0), Alias::new("system"))
                 .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (TablesCurrent::Table, TablesCurrent::DefinedById)),
+                    name_or_id((Users::Table, Users::Name), (TablesCurrent::Table, TablesCurrent::DefinedById)),
                     Alias::new("defined_by"),
                 )
                 .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))

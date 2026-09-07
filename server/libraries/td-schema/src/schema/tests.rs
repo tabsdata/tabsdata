@@ -6,42 +6,28 @@
 //!
 //! These tests validate SQL generation without touching a database. The tests
 //! that execute SQL against a real database live in `td-database` where
-//! `TdPool` / `DynamicPool` are available.
+//! `TdPool` is available.
 
-use super::backend::Backend;
 use super::sql::TriggerSpec;
 use super::{CurrentSource, SchemaDelta, SchemaSource, archive, current, deltas, install_script};
+use crate::schema::render::{render_schema, update_db_version};
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-/// Cached `current::build()` output per backend. The consistency tests
-/// only read this — the install script is deterministic (gated by
-/// `test_schema_build_is_deterministic`) so a single build per backend
-/// is reused across every test that just inspects the statement list.
-static BUILD_SQLITE: LazyLock<Vec<String>> = LazyLock::new(|| current::build(Backend::Sqlite));
-static BUILD_POSTGRES: LazyLock<Vec<String>> = LazyLock::new(|| current::build(Backend::Postgres));
-static BUILD_MYSQL: LazyLock<Vec<String>> = LazyLock::new(|| current::build(Backend::MySql));
+/// Cached `current::build()` output. The consistency tests only read this —
+/// the install script is deterministic (gated by
+/// `test_schema_build_is_deterministic`) so a single build is reused across
+/// every test that just inspects the statement list.
+static BUILD: LazyLock<Vec<String>> = LazyLock::new(current::build);
 
-fn cached_build(b: Backend) -> &'static [String] {
-    match b {
-        Backend::Sqlite => &BUILD_SQLITE,
-        Backend::Postgres => &BUILD_POSTGRES,
-        Backend::MySql => &BUILD_MYSQL,
-    }
+fn cached_build() -> &'static [String] {
+    &BUILD
 }
 
-/// Validate that a [`SchemaSource`] produces a non-empty install script for
-/// every enabled backend.
-///
-/// Per-backend statement counts are not asserted equal: Postgres emits a
-/// supporting `CREATE FUNCTION` alongside each trigger because sqlx-postgres
-/// rejects multi-statement strings, so the backends legitimately diverge in
-/// total statement count even when the schema is logically identical.
+/// Validate that a [`SchemaSource`] produces a non-empty install script.
 pub(crate) fn validate_schema_source(source: &dyn SchemaSource) {
-    for b in Backend::ALL {
-        let stmts = install_script(source, b);
-        assert!(!stmts.is_empty(), "schema v{} produced an empty install script on {b:?}", source.current_version());
-    }
+    let stmts = install_script(source);
+    assert!(!stmts.is_empty(), "schema v{} produced an empty install script", source.current_version());
 }
 
 #[test]
@@ -51,29 +37,24 @@ fn test_validate_current_schema() {
 
 /// Validate that a [`SchemaDelta`] implementation:
 /// - Is a single-step migration (`FROM_VERSION + 1 == TO_VERSION`)
-/// - Produces non-empty output across all backends
+/// - Produces non-empty output
 /// - Last statement updates `db_version` to `TO_VERSION` (the bump guard)
-///
-/// Statement counts legitimately differ per backend, so equivalence is proven
-/// against a real database by td-database's `components::tests::migration`.
 ///
 /// Each delta module's own tests call this against its `Migration` impl.
 #[allow(dead_code)]
 pub(crate) fn validate_delta<D: SchemaDelta>() {
     assert_eq!(D::FROM_VERSION + 1, D::TO_VERSION, "Delta must be single-step: got {}->{}", D::FROM_VERSION, D::TO_VERSION,);
 
-    for b in Backend::ALL {
-        let stmts = D::up(b);
-        assert!(!stmts.is_empty(), "SchemaDelta v{}->v{} produced empty output on {b:?}", D::FROM_VERSION, D::TO_VERSION,);
-        let last = stmts.last().unwrap();
-        assert!(
-            last.contains(&format!("'{}'", D::TO_VERSION)),
-            "Last statement of delta v{}->v{} must update db_version to {}. Got: {last}",
-            D::FROM_VERSION,
-            D::TO_VERSION,
-            D::TO_VERSION,
-        );
-    }
+    let stmts = D::up();
+    assert!(!stmts.is_empty(), "SchemaDelta v{}->v{} produced empty output", D::FROM_VERSION, D::TO_VERSION,);
+    let last = stmts.last().unwrap();
+    assert!(
+        last.contains(&format!("'{}'", D::TO_VERSION)),
+        "Last statement of delta v{}->v{} must update db_version to {}. Got: {last}",
+        D::FROM_VERSION,
+        D::TO_VERSION,
+        D::TO_VERSION,
+    );
 }
 
 // No real deltas exist at the v1 baseline; synthetic ones exercise the
@@ -85,10 +66,10 @@ impl SchemaDelta for SyntheticDelta {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
 
-    fn up(backend: Backend) -> Vec<String> {
+    fn up() -> Vec<String> {
         vec![
             "ALTER TABLE users ADD COLUMN nickname text".to_string(),
-            backend.update_db_version(Self::TO_VERSION),
+            update_db_version(Self::TO_VERSION),
         ]
     }
 }
@@ -104,7 +85,7 @@ impl SchemaDelta for MissingBumpDelta {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
 
-    fn up(_backend: Backend) -> Vec<String> {
+    fn up() -> Vec<String> {
         vec!["ALTER TABLE users ADD COLUMN nickname text".to_string()]
     }
 }
@@ -117,10 +98,8 @@ fn test_validate_delta_rejects_missing_version_bump() {
 
 #[test]
 fn test_update_db_version_sql_is_stable() {
-    for b in Backend::ALL {
-        let last = SyntheticDelta::up(b).pop().unwrap();
-        assert_eq!(last, "UPDATE tabsdata_system SET value = '2' WHERE name = 'db_version'", "unexpected db_version bump SQL on {b:?}",);
-    }
+    let last = SyntheticDelta::up().pop().unwrap();
+    assert_eq!(last, "UPDATE tabsdata_system SET value = '2' WHERE name = 'db_version'");
 }
 
 fn snapshot_dir(sub: &str) -> std::path::PathBuf {
@@ -140,7 +119,7 @@ fn test_schema_ddl_snapshot() {
 #[test]
 fn test_archive_ddl_snapshots() {
     for v in 1..current::VERSION {
-        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("archive/v{v}/snapshots")), |b| archive::build(v, b));
+        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("archive/v{v}/snapshots")), || archive::build(v));
     }
 }
 
@@ -150,50 +129,42 @@ fn test_archive_ddl_snapshots() {
 #[test]
 fn test_delta_ddl_snapshots() {
     for v in 2..=current::VERSION {
-        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("deltas/snapshots/v{}_to_v{v}", v - 1)), |b| deltas::get(v, b));
+        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("deltas/snapshots/v{}_to_v{v}", v - 1)), || deltas::get(v));
     }
 }
 
 /// On a version bump, archives must exist for every version in
-/// `1..CURRENT_VERSION` and produce non-empty output for every backend.
-/// Guards against bumping `CURRENT_VERSION` without creating
-/// `archive/vN/`. No-op at v1 baseline.
+/// `1..CURRENT_VERSION` and produce non-empty output. Guards against bumping
+/// `CURRENT_VERSION` without creating `archive/vN/`. No-op at v1 baseline.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_migration_guard_archives_exist() {
     for v in 1..current::VERSION {
-        for b in Backend::ALL {
-            let result = std::panic::catch_unwind(|| archive::build(v, b));
-            assert!(
-                result.is_ok(),
-                "Missing archive for version {v} on {b:?}. When bumping \
-                 CURRENT_VERSION to {}, copy current/ to archive/v{v}/.",
-                current::VERSION
-            );
-            assert!(!result.unwrap().is_empty(), "Archive v{v} produced empty output on {b:?}");
-        }
+        let result = std::panic::catch_unwind(|| archive::build(v));
+        assert!(
+            result.is_ok(),
+            "Missing archive for version {v}. When bumping CURRENT_VERSION to {}, copy current/ to archive/v{v}/.",
+            current::VERSION
+        );
+        assert!(!result.unwrap().is_empty(), "Archive v{v} produced empty output");
     }
 }
 
 /// On a version bump, deltas must exist for every version in
-/// `2..=CURRENT_VERSION` and produce non-empty output for every backend.
-/// Guards against bumping `CURRENT_VERSION` without creating
-/// `deltas/vN_to_vM.rs`. No-op at v1 baseline.
+/// `2..=CURRENT_VERSION` and produce non-empty output. Guards against bumping
+/// `CURRENT_VERSION` without creating `deltas/vN_to_vM.rs`. No-op at v1 baseline.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_migration_guard_deltas_exist() {
     for v in 2..=current::VERSION {
-        for b in Backend::ALL {
-            let result = std::panic::catch_unwind(|| deltas::get(v, b));
-            assert!(
-                result.is_ok(),
-                "Missing delta for version {v} on {b:?}. When bumping \
-                 CURRENT_VERSION to {}, create deltas/v{}_to_v{v}.rs.",
-                current::VERSION,
-                v - 1
-            );
-            assert!(!result.unwrap().is_empty(), "Delta v{v} produced empty output on {b:?}");
-        }
+        let result = std::panic::catch_unwind(|| deltas::get(v));
+        assert!(
+            result.is_ok(),
+            "Missing delta for version {v}. When bumping CURRENT_VERSION to {}, create deltas/v{}_to_v{v}.rs.",
+            current::VERSION,
+            v - 1
+        );
+        assert!(!result.unwrap().is_empty(), "Delta v{v} produced empty output");
     }
 }
 
@@ -204,15 +175,8 @@ fn test_migration_guard_deltas_exist() {
 #[test]
 fn test_migration_guard_deltas_bump_db_version() {
     for v in 2..=current::VERSION {
-        for b in Backend::ALL {
-            let stmts = deltas::get(v, b);
-            assert_eq!(
-                stmts.last(),
-                Some(&b.update_db_version(v)),
-                "Delta v{}->v{v} on {b:?} must end with `b.update_db_version({v})`",
-                v - 1,
-            );
-        }
+        let stmts = deltas::get(v);
+        assert_eq!(stmts.last(), Some(&update_db_version(v)), "Delta v{}->v{v} must end with `update_db_version({v})`", v - 1,);
     }
 }
 
@@ -228,7 +192,7 @@ fn test_migration_guard_deltas_bump_db_version() {
 #[test]
 fn test_table_names_are_unique() {
     let mut seen = HashSet::new();
-    for sql in cached_build(Backend::Sqlite) {
+    for sql in cached_build() {
         if let Some(name) = parse_create_table_name(sql) {
             assert!(seen.insert(name.clone()), "duplicate table: {name:?}");
         }
@@ -241,12 +205,11 @@ fn test_table_names_are_unique() {
 /// (self-references allowed).
 #[test]
 fn test_entities_are_fk_topologically_sorted() {
-    let b = Backend::Sqlite;
     let mut declared: HashSet<String> = HashSet::new();
     for (i, e) in current::ENTITIES.iter().enumerate() {
         let mut entity_tables: Vec<String> = Vec::new();
         for t in e.create_tables() {
-            let sql = b.build_schema(t);
+            let sql = render_schema(t);
             let table = parse_create_table_name(&sql).unwrap_or_else(|| panic!("could not parse table name from: {sql}"));
             for fk in fk_references(&sql) {
                 if entity_tables.contains(&fk) {
@@ -262,12 +225,11 @@ fn test_entities_are_fk_topologically_sorted() {
 
 /// T2b: every view created by any entity has a unique name.
 /// Same rationale as `test_table_names_are_unique`: catches accidental
-/// duplicates that SQLite would accept but Postgres/MySQL would reject
-/// at the second `CREATE VIEW`.
+/// duplicates that would be rejected at the second `CREATE VIEW`.
 #[test]
 fn test_view_names_are_unique() {
     let mut seen = HashSet::new();
-    for sql in cached_build(Backend::Sqlite) {
+    for sql in cached_build() {
         if let Some(name) = parse_create_view_name(sql) {
             assert!(seen.insert(name.clone()), "duplicate view: {name:?}");
         }
@@ -278,21 +240,20 @@ fn test_view_names_are_unique() {
 #[test]
 fn test_index_names_are_unique() {
     let mut seen = HashSet::new();
-    for sql in cached_build(Backend::Sqlite) {
+    for sql in cached_build() {
         if let Some(name) = parse_create_index_name(sql) {
             assert!(seen.insert(name.clone()), "duplicate index: {name:?}");
         }
     }
 }
 
-/// T2d: every DB trigger has a unique name across all entities. The
-/// SQL trigger namespace is global on every backend, so collisions are
-/// CREATE-time errors. SQLite encodes `_no_update`/`_no_delete` suffixes
-/// for immutable triggers — those suffixed names also must be unique.
+/// T2d: every DB trigger has a unique name across all entities. Immutable
+/// triggers carry `_no_update`/`_no_delete` suffixes — those suffixed names
+/// must be unique too.
 #[test]
 fn test_db_trigger_names_are_unique() {
     let mut seen = HashSet::new();
-    for sql in cached_build(Backend::Sqlite) {
+    for sql in cached_build() {
         if let Some(name) = parse_create_trigger_name(sql) {
             assert!(seen.insert(name.clone()), "duplicate trigger: {name:?}");
         }
@@ -304,36 +265,30 @@ fn test_db_trigger_names_are_unique() {
 /// hidden nondeterminism.
 #[test]
 fn test_schema_build_is_deterministic() {
-    for b in Backend::ALL {
-        let first = current::build(b);
-        let second = current::build(b);
-        assert_eq!(first, second, "current::build({b:?}) not deterministic");
-    }
+    assert_eq!(current::build(), current::build(), "current::build() not deterministic");
 }
 
-/// T6: the install script is segmented by phase — CREATE TABLE,
-/// then CREATE TRIGGER (and supporting CREATE FUNCTION on Postgres),
-/// then CREATE VIEW, then CREATE INDEX, then INSERT. A regression that
-/// reorders `install_script`'s composition fails here.
+/// T6: the install script is segmented by phase — CREATE TABLE, then
+/// CREATE TRIGGER (and its supporting CREATE FUNCTION), then CREATE VIEW,
+/// then CREATE INDEX, then INSERT, then RLS. A regression that reorders
+/// `install_script`'s composition fails here.
 #[test]
 fn test_schema_build_phase_ordering() {
-    for b in Backend::ALL {
-        let stmts = cached_build(b);
-        let phases: Vec<Phase> = stmts.iter().map(|s| classify_stmt(s)).collect();
-        // Permitted ordering: a strictly non-decreasing sequence of phase
-        // indices. Within a phase, statements may interleave (e.g.
-        // Postgres emits CREATE FUNCTION between CREATE TRIGGERs).
-        let mut current_phase = Phase::Table as usize;
-        for (i, p) in phases.iter().enumerate() {
-            let pi = *p as usize;
-            assert!(
-                pi >= current_phase,
-                "stmt {i} on {b:?} is phase {p:?} but later phases already started ({:?}); SQL: {}",
-                phase_name(current_phase),
-                stmts[i],
-            );
-            current_phase = pi;
-        }
+    let stmts = cached_build();
+    let phases: Vec<Phase> = stmts.iter().map(|s| classify_stmt(s)).collect();
+    // Permitted ordering: a strictly non-decreasing sequence of phase indices.
+    // Within a phase, statements may interleave (CREATE FUNCTION between
+    // CREATE TRIGGERs).
+    let mut current_phase = Phase::Table as usize;
+    for (i, p) in phases.iter().enumerate() {
+        let pi = *p as usize;
+        assert!(
+            pi >= current_phase,
+            "stmt {i} is phase {p:?} but later phases already started ({:?}); SQL: {}",
+            phase_name(current_phase),
+            stmts[i],
+        );
+        current_phase = pi;
     }
 }
 
@@ -344,7 +299,7 @@ fn test_schema_build_phase_ordering() {
 #[test]
 fn test_current_peers_are_paired() {
     let mut tables_in_order: Vec<String> = Vec::new();
-    for sql in cached_build(Backend::Sqlite) {
+    for sql in cached_build() {
         if let Some(name) = parse_create_table_name(sql) {
             tables_in_order.push(name);
         }
@@ -468,7 +423,7 @@ fn fk_references(sql: &str) -> Vec<String> {
 // Cross-validation tests
 // ---------------------------------------------------------------------------
 
-/// Extract column names from a SQLite `CREATE TABLE` SQL.
+/// Extract column names from a `CREATE TABLE` statement.
 ///
 /// A column declaration is `"name" <type-token> …`. References inside
 /// `FOREIGN KEY ("col") REFERENCES "tab" ("col")` are followed by `)` or
@@ -493,7 +448,7 @@ fn parse_create_table_columns(sql: &str) -> Vec<String> {
 }
 
 /// Extract `(target_table, target_col)` for every `REFERENCES "T" ("C")` in
-/// the SQL (SQLite dialect).
+/// the SQL.
 fn fk_target_table_columns(sql: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut rest = sql;
@@ -518,7 +473,7 @@ fn fk_target_table_columns(sql: &str) -> Vec<(String, String)> {
 /// Cache table_name → column_name list across one full build.
 static COLS_BY_TABLE: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| {
     let mut map = HashMap::new();
-    for sql in cached_build(Backend::Sqlite) {
+    for sql in cached_build() {
         if let Some(t) = parse_create_table_name(sql) {
             map.insert(t, parse_create_table_columns(sql));
         }
@@ -533,7 +488,7 @@ static COLS_BY_TABLE: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| 
 /// referenced table — an Iden enum carrying a stale variant, for instance.
 #[test]
 fn test_fk_target_columns_resolve() {
-    for sql in cached_build(Backend::Sqlite) {
+    for sql in cached_build() {
         for (t, c) in fk_target_table_columns(sql) {
             let cols = COLS_BY_TABLE.get(&t).unwrap_or_else(|| panic!("FK in {sql} references unknown table {t:?}"));
             assert!(cols.iter().any(|x| x == &c), "FK target {t}({c}) does not appear in {t}'s declared columns {cols:?}",);
@@ -573,8 +528,7 @@ fn test_maintain_current_trigger_columns_match_tables() {
 /// policy to every table in that list, so a table that grows a `project_id`
 /// column but is omitted from the list gets NO row-level-security policy — a
 /// silent cross-tenant leak. This makes that divergence (in either direction)
-/// a build failure. The `project_id` column is identical across backends, so
-/// the SQLite-derived `COLS_BY_TABLE` is authoritative for membership.
+/// a build failure. `COLS_BY_TABLE` is authoritative for membership.
 #[test]
 fn test_project_scoped_tables_match_project_id_columns() {
     // `roles` carries a `project_id` column for per-project roles, but it is a

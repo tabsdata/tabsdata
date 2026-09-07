@@ -10,7 +10,7 @@ use sea_query::{
 use super::projects::Projects;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -69,7 +69,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         let created_by_user = Alias::new("created_by_user");
         let modified_by_user = Alias::new("modified_by_user");
         vec![ViewDef::new(
@@ -80,11 +80,11 @@ impl Entity for Defs {
                 .expr(Expr::col((Roles::Table, Roles::Description)))
                 .expr(Expr::col((Roles::Table, Roles::CreatedOn)))
                 .expr(Expr::col((Roles::Table, Roles::CreatedById)))
-                .expr_as(b.name_or_id((created_by_user.clone(), Users::Name), (Roles::Table, Roles::CreatedById)), Alias::new("created_by"))
+                .expr_as(name_or_id((created_by_user.clone(), Users::Name), (Roles::Table, Roles::CreatedById)), Alias::new("created_by"))
                 .expr(Expr::col((Roles::Table, Roles::ModifiedOn)))
                 .expr(Expr::col((Roles::Table, Roles::ModifiedById)))
                 .expr_as(
-                    b.name_or_id((modified_by_user.clone(), Users::Name), (Roles::Table, Roles::ModifiedById)),
+                    name_or_id((modified_by_user.clone(), Users::Name), (Roles::Table, Roles::ModifiedById)),
                     Alias::new("modified_by"),
                 )
                 .expr(Expr::col((Roles::Table, Roles::Kind)))

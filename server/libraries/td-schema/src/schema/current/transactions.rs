@@ -13,7 +13,7 @@ use super::groups::Groups;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 /// `transactions__with_names` view name. Re-used cross-file by
@@ -96,7 +96,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         let groups_alias = Alias::new("groups_for_transactions");
         vec![ViewDef::new(
             TransactionsWithNames,
@@ -106,7 +106,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (Transactions::Table, Transactions::TriggeredById)),
+                    name_or_id((Users::Table, Users::Name), (Transactions::Table, Transactions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
                 .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))

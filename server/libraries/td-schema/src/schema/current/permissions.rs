@@ -11,7 +11,7 @@ use super::projects::{Projects, ProjectsResolved};
 use super::roles::Roles;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -78,7 +78,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![
             // permissions__with_names (all unique tables).
             //
@@ -86,7 +86,6 @@ impl Entity for Defs {
             // because the view re-projects `entity_id` through a CASE expression
             // (masking the system-collection sentinel). With `permissions.*` the
             // original `entity_id` column would also appear, and Postgres rejects
-            // views with duplicate column names (SQLite accepts them).
             ViewDef::new(
                 PermissionsWithNames,
                 Query::select()
@@ -98,7 +97,7 @@ impl Entity for Defs {
                     .expr(Expr::col((Permissions::Table, Permissions::GrantedOn)))
                     .expr(Expr::col((Permissions::Table, Permissions::Fixed)))
                     .expr_as(
-                        b.name_or_id((Users::Table, Users::Name), (Permissions::Table, Permissions::GrantedById)),
+                        name_or_id((Users::Table, Users::Name), (Permissions::Table, Permissions::GrantedById)),
                         Alias::new("granted_by"),
                     )
                     .expr_as(

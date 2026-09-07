@@ -2,7 +2,6 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::schema::backend::Backend;
 use std::path::Path;
 
 const HEADER: &str = "-- AUTO-GENERATED schema DDL snapshot. Do not edit by hand.\n\
@@ -10,41 +9,28 @@ const HEADER: &str = "-- AUTO-GENERATED schema DDL snapshot. Do not edit by hand
 
 const REFRESH: &str = "If intentional, rerun this test with TD_SNAPSHOT_UPDATE=1 to refresh the snapshots.";
 
-/// Assert each backend's built DDL matches the committed `<backend>.sql` under
-/// `dir`, panicking with a statement-level diff on drift. With the
-/// `TD_SNAPSHOT_UPDATE` env var set, rewrites the snapshots instead.
-pub fn assert_snapshot(dir: &Path, build: impl Fn(Backend) -> Vec<String>) {
-    let update = std::env::var_os("TD_SNAPSHOT_UPDATE").is_some();
-    if update {
+/// Assert the built DDL matches the committed `postgres.sql` under `dir`,
+/// panicking with a statement-level diff on drift. With the
+/// `TD_SNAPSHOT_UPDATE` env var set, rewrites the snapshot instead.
+pub fn assert_snapshot(dir: &Path, build: impl Fn() -> Vec<String>) {
+    let path = dir.join("postgres.sql");
+    let actual = render(&build());
+    if std::env::var_os("TD_SNAPSHOT_UPDATE").is_some() {
         std::fs::create_dir_all(dir).expect("create snapshot dir");
+        std::fs::write(&path, &actual).expect("write snapshot");
+        println!("wrote {}", path.display());
+        return;
     }
-    for b in Backend::ALL {
-        let path = dir.join(file_name(b));
-        let actual = render(&build(b));
-        if update {
-            std::fs::write(&path, &actual).expect("write snapshot");
-            println!("wrote {}", path.display());
-            continue;
-        }
-        let expected = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("missing DDL snapshot for {b:?} at {}: {e}\n{REFRESH}", path.display()))
-            .replace("\r\n", "\n");
-        if actual != expected {
-            panic!(
-                "\n\nSchema DDL for {b:?} changed (snapshot out of date).\n\
-                 --- {path}\n+++ built\n{diff}\n{REFRESH}\n",
-                path = path.display(),
-                diff = line_diff(&expected, &actual),
-            );
-        }
-    }
-}
-
-fn file_name(b: Backend) -> &'static str {
-    match b {
-        Backend::Sqlite => "sqlite.sql",
-        Backend::Postgres => "postgres.sql",
-        Backend::MySql => "mysql.sql",
+    let expected = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("missing DDL snapshot at {}: {e}\n{REFRESH}", path.display()))
+        .replace("\r\n", "\n");
+    if actual != expected {
+        panic!(
+            "\n\nSchema DDL changed (snapshot out of date).\n\
+             --- {path}\n+++ built\n{diff}\n{REFRESH}\n",
+            path = path.display(),
+            diff = line_diff(&expected, &actual),
+        );
     }
 }
 

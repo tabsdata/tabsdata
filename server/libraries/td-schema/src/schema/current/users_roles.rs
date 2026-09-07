@@ -10,7 +10,7 @@ use sea_query::{
 use super::roles::Roles;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -67,20 +67,20 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         let added_by_user = Alias::new("added_by_user");
         vec![ViewDef::new(
             UsersRolesWithNames,
             Query::select()
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::Id)))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::UserId)))
-                .expr_as(b.name_or_id((Users::Table, Users::Name), (UsersRoles::Table, UsersRoles::UserId)), Alias::new("user"))
+                .expr_as(name_or_id((Users::Table, Users::Name), (UsersRoles::Table, UsersRoles::UserId)), Alias::new("user"))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::RoleId)))
-                .expr_as(b.name_or_id((Roles::Table, Roles::Name), (UsersRoles::Table, UsersRoles::RoleId)), Alias::new("role"))
+                .expr_as(name_or_id((Roles::Table, Roles::Name), (UsersRoles::Table, UsersRoles::RoleId)), Alias::new("role"))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::AddedOn)))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::AddedById)))
                 .expr_as(
-                    b.name_or_id((added_by_user.clone(), Users::Name), (UsersRoles::Table, UsersRoles::AddedById)),
+                    name_or_id((added_by_user.clone(), Users::Name), (UsersRoles::Table, UsersRoles::AddedById)),
                     Alias::new("added_by"),
                 )
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::Fixed)))

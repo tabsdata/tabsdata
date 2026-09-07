@@ -16,7 +16,6 @@ use super::collections::{Collections, CollectionsResolved};
 use super::triggers_current::TriggersCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
 use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
 
 /// `triggers__with_names` view name. Re-used inside this file by
@@ -98,7 +97,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, _b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![
             triggers_with_names(),
             ViewDef::new(

@@ -15,7 +15,7 @@
 //! impl SchemaDelta for Migration {
 //!     const FROM_VERSION: usize = N;
 //!     const TO_VERSION: usize = N + 1;
-//!     fn up(b: Backend) -> Vec<String> { /* ... */ }
+//!     fn up() -> Vec<String> { /* ... */ }
 //! }
 //! ```
 //!
@@ -30,29 +30,26 @@
 //!    `impl SchemaDelta`.
 //! 2. Add `pub(crate) mod vN_to_v{N+1};` to this file.
 //! 3. Add a match arm to `get()`:
-//!    `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
+//!    `{N+1} => vN_to_v{N+1}::Migration::up(),`.
 //! 4. Freeze its DDL snapshots under `snapshots/v{N}_to_v{N+1}/` by running
 //!    `test_delta_ddl_snapshots` with `TD_SNAPSHOT_UPDATE=1`.
 //!
 //! The last statement in every delta **must** update `db_version` using the
-//! helper: `b.update_db_version(Self::TO_VERSION)`.
+//! helper: `update_db_version(Self::TO_VERSION)`.
 //!
 //! The whole ladder runs as one transaction, so a delta must emit only
 //! transaction-safe SQL — no `CREATE INDEX CONCURRENTLY`, no `VACUUM`.
 //!
 //! See the project README for a full guide and example.
 
-use crate::schema::backend::Backend;
-
 /// Returns the SQL statements to upgrade from version `target_version - 1` to
-/// `target_version` for the given backend.
+/// `target_version`.
 ///
 /// # Panics
 ///
 /// Panics if no delta exists for the given target version.
 #[allow(clippy::match_single_binding)]
-pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
-    let _backend = backend.into();
+pub fn get(target_version: usize) -> Vec<String> {
     match target_version {
         _ => panic!("No delta migration for version {target_version}"),
     }

@@ -27,6 +27,15 @@ pub const DB_VERSION_NAME: &str = "db_version";
 pub const TABSDATA_VERSION_NAME: &str = "tabsdata_version";
 pub const DB_EDITION_NAME: &str = "edition";
 
+/// Session variable carrying the request's project. The row-level-security
+/// policies compare `project_id` against it and the project-scoped column
+/// default reads it, so the connection layer that sets it and the schema that
+/// reads it must name it identically.
+pub const PROJECT_ID_GUC: &str = "app.project_id";
+/// Session variable admitting cross-project work. Same coupling as
+/// [`PROJECT_ID_GUC`].
+pub const BYPASS_RLS_GUC: &str = "app.bypass_rls";
+
 /// Tabsdata major-product version this binary speaks.
 ///
 /// Bump only when cutting a new major (2.0 → 3.0). Within a major, schema

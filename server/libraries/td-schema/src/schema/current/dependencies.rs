@@ -11,7 +11,6 @@ use super::collections::{Collections, CollectionsResolved};
 use super::dependencies_current::DependenciesCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
 use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
 
 #[derive(Iden, Clone, Copy)]
@@ -91,7 +90,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, _b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         // dependencies__with_names (collections joined twice: once for collection_id, once for table_collection_id)
         let table_collection = Alias::new("table_collection");
         vec![ViewDef::new(

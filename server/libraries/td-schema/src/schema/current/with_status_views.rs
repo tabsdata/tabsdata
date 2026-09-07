@@ -15,7 +15,6 @@ use super::logical_function_runs::{ExecutionStatusSummary, TransactionStatusSumm
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::transactions::TransactionsWithNames;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -29,7 +28,7 @@ pub struct TransactionsWithStatus;
 pub(super) struct Defs;
 
 impl Entity for Defs {
-    fn create_views(&self, _b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![
             with_status_view(
                 ExecutionsWithStatus,

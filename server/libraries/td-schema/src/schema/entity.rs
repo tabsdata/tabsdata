@@ -5,7 +5,6 @@
 //! [`Entity`] — one schema unit (a table with its indices, views, triggers, seeds)
 //! that `current/` assembles in FK-safe order.
 
-use super::backend::Backend;
 use super::sql::{SeedCurrent, TriggerSpec, ViewDef};
 use sea_query::{IndexCreateStatement, InsertStatement, TableCreateStatement};
 
@@ -26,7 +25,7 @@ pub(crate) trait Entity {
     }
     /// `CREATE VIEW` statements driven from this entity's tables (cross-entity
     /// views live in the last `ENTITIES` member, so a single pass stays dep-safe).
-    fn create_views(&self, _b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![]
     }
     /// Trigger specs maintaining this entity.

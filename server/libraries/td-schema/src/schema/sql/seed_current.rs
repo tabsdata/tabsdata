@@ -2,9 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::schema::render::render_query;
 use sea_query::{DynIden, Expr, ExprTrait, Func, Iden, Order, OverStatement, Query, WindowStatement};
-
-use crate::schema::backend::Backend;
 
 /// Synthetic alias for the ranked subquery in the wrapping `INSERT … SELECT`.
 #[derive(Iden, Clone, Copy)]
@@ -45,7 +44,7 @@ impl SeedCurrent {
     /// wrapping `INSERT … SELECT`, and the subquery alias — is built through
     /// sea_query so identifier quoting and dialect differences are the query
     /// builder's responsibility, not a hand-assembled `format!` string.
-    pub(crate) fn render(&self, b: &Backend) -> String {
+    pub(crate) fn render(&self) -> String {
         let mut window = WindowStatement::new();
         window.partition_by(self.partition_col.clone()).order_by(self.version_col.clone(), Order::Desc).order_by(Id, Order::Desc);
 
@@ -70,7 +69,7 @@ impl SeedCurrent {
             .select_from(selected.take())
             .expect("seed INSERT columns match the ranked SELECT by construction");
 
-        b.build_query(insert.take())
+        render_query(insert.take())
     }
 }
 
@@ -96,7 +95,7 @@ mod tests {
 
     #[test]
     fn render_emits_insert_select_with_rn_filter() {
-        let sql = sample().render(&Backend::Sqlite);
+        let sql = sample().render();
         assert!(
             sql.starts_with(
                 r#"INSERT INTO "foos_current" ("id", "foo_id", "name", "defined_on") SELECT "id", "foo_id", "name", "defined_on" FROM ("#
@@ -108,7 +107,7 @@ mod tests {
 
     #[test]
     fn render_uses_row_number_partition_and_order() {
-        let sql = sample().render(&Backend::Sqlite);
+        let sql = sample().render();
         assert!(sql.contains("row_number()"), "{sql}");
         assert!(sql.contains("PARTITION BY \"foo_id\""), "{sql}");
         assert!(sql.contains("ORDER BY \"defined_on\" DESC, \"id\" DESC"), "{sql}");

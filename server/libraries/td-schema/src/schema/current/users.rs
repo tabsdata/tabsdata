@@ -8,7 +8,7 @@ use sea_query::{
 };
 
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -64,16 +64,16 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         let created_by_user = Alias::new("created_by_user");
         let modified_by_user = Alias::new("modified_by_user");
         vec![ViewDef::new(
             UsersWithNames,
             Query::select()
                 .expr(Expr::col((Users::Table, Asterisk)))
-                .expr_as(b.name_or_id((created_by_user.clone(), Users::Name), (Users::Table, Users::CreatedById)), Alias::new("created_by"))
+                .expr_as(name_or_id((created_by_user.clone(), Users::Name), (Users::Table, Users::CreatedById)), Alias::new("created_by"))
                 .expr_as(
-                    b.name_or_id((modified_by_user.clone(), Users::Name), (Users::Table, Users::ModifiedById)),
+                    name_or_id((modified_by_user.clone(), Users::Name), (Users::Table, Users::ModifiedById)),
                     Alias::new("modified_by"),
                 )
                 .from(Users::Table)

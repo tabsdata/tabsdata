@@ -38,7 +38,6 @@ impl Entity for Defs {
         // Must be declared before any table whose FK targets it
         // (e.g. `physical_function_runs.function_version_patch_id`).
         // Postgres validates FK targets at CREATE TABLE time within the
-        // same transaction; SQLite is more permissive.
         vec![
             Table::create()
                 .table(FunctionPatches::Table)

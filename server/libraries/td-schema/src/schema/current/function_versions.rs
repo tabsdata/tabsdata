@@ -20,7 +20,7 @@ use super::functions::FUNCTION_STATUS_DELETED;
 use super::functions::Functions;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -30,12 +30,12 @@ pub struct FunctionVersionsWithNames;
 pub(super) struct Defs;
 
 impl Entity for Defs {
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         let parent = Alias::new("parent");
         let mut heads = Query::select()
             .expr(Expr::col((Functions::Table, Asterisk)))
             .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-            .expr_as(b.name_or_id((Users::Table, Users::Name), (Functions::Table, Functions::DefinedById)), Alias::new("defined_by"))
+            .expr_as(name_or_id((Users::Table, Users::Name), (Functions::Table, Functions::DefinedById)), Alias::new("defined_by"))
             .expr_as(Expr::val(None::<String>), Alias::new("patch_of"))
             .from(Functions::Table)
             .join(
@@ -73,7 +73,7 @@ impl Entity for Defs {
             .expr(Expr::col((parent.clone(), Functions::Connection)))
             .expr(Expr::col((parent.clone(), Functions::Enabled)))
             .expr(Expr::col((CollectionsResolved, Collections::Name)))
-            .expr(b.name_or_id((Users::Table, Users::Name), (FunctionPatches::Table, FunctionPatches::DefinedById)))
+            .expr(name_or_id((Users::Table, Users::Name), (FunctionPatches::Table, FunctionPatches::DefinedById)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ParentFunctionVersionId)))
             .from(FunctionPatches::Table)
             .join_as(

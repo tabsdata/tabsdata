@@ -9,7 +9,7 @@ use sea_query::{
 use super::collections::{Collections, CollectionsResolved};
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -89,7 +89,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![ViewDef::new(
             FunctionsCurrentWithNames,
             Query::select()
@@ -98,7 +98,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((CollectionsResolved, Collections::GroupId)), Alias::new("group_id"))
                 .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (FunctionsCurrent::Table, FunctionsCurrent::DefinedById)),
+                    name_or_id((Users::Table, Users::Name), (FunctionsCurrent::Table, FunctionsCurrent::DefinedById)),
                     Alias::new("defined_by"),
                 )
                 .from(FunctionsCurrent::Table)

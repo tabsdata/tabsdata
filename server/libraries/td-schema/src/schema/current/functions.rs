@@ -11,7 +11,7 @@ use super::collections::{Collections, CollectionsResolved};
 use super::functions_current::FunctionsCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
 
 /// `FunctionStatus::Deleted` discriminant, hoisted as a `&str` because
@@ -106,7 +106,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![ViewDef::new(
             FunctionsWithNames,
             Query::select()
@@ -116,7 +116,7 @@ impl Entity for Defs {
                 // Group snapshot from the function's collection. Used at LFR/LTDV
                 // mint time to stamp `group_id` onto each minted row.
                 .expr_as(Expr::col((CollectionsResolved, Collections::GroupId)), Alias::new("group_id"))
-                .expr_as(b.name_or_id((Users::Table, Users::Name), (Functions::Table, Functions::DefinedById)), Alias::new("defined_by"))
+                .expr_as(name_or_id((Users::Table, Users::Name), (Functions::Table, Functions::DefinedById)), Alias::new("defined_by"))
                 .from(Functions::Table)
                 .join(
                     JoinType::LeftJoin,

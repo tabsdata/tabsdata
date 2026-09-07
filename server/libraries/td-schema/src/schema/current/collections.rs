@@ -12,7 +12,7 @@ use super::groups::Groups;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
@@ -54,8 +54,6 @@ impl Entity for Defs {
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
-                // project); the no-RLS backends (sqlite/mysql) keep
-                // no default at all, so writes there must set `project_id`.
                 .col(ColumnDef::new(Collections::ProjectId).text().not_null())
                 .col(ColumnDef::new(Collections::Name).text().not_null())
                 .col(ColumnDef::new(Collections::Description).text().not_null())
@@ -120,7 +118,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![
             // Every row, including soft-deleted, with the real name resolved via
             // COALESCE(name_when_deleted, name) and a `deleted` flag. The canonical
@@ -187,12 +185,12 @@ impl Entity for Defs {
                     .and_where(Expr::col((CollectionsResolved, Collections::NameWhenDeleted)).is_null())
                     .to_owned(),
             ),
-            collections_with_names(b),
+            collections_with_names(),
         ]
     }
 }
 
-fn collections_with_names(b: &Backend) -> ViewDef {
+fn collections_with_names() -> ViewDef {
     let created_by_user = Alias::new("created_by_user");
     let modified_by_user = Alias::new("modified_by_user");
     let groups_alias = Alias::new("groups_for_collection");
@@ -201,11 +199,11 @@ fn collections_with_names(b: &Backend) -> ViewDef {
         Query::select()
             .expr(Expr::col((CollectionsActive, Asterisk)))
             .expr_as(
-                b.name_or_id((created_by_user.clone(), Users::Name), (CollectionsActive, Collections::CreatedById)),
+                name_or_id((created_by_user.clone(), Users::Name), (CollectionsActive, Collections::CreatedById)),
                 Alias::new("created_by"),
             )
             .expr_as(
-                b.name_or_id((modified_by_user.clone(), Users::Name), (CollectionsActive, Collections::ModifiedById)),
+                name_or_id((modified_by_user.clone(), Users::Name), (CollectionsActive, Collections::ModifiedById)),
                 Alias::new("modified_by"),
             )
             .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))

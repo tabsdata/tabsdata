@@ -6,7 +6,7 @@ use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateState
 
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -41,8 +41,6 @@ impl Entity for Defs {
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
-                // project); the no-RLS backends (sqlite/mysql) keep
-                // no default at all, so writes there must set `project_id`.
                 .col(ColumnDef::new(Groups::ProjectId).text().not_null())
                 .primary_key(Index::create().col(Groups::ProjectId).col(Groups::Id))
                 .col(ColumnDef::new(Groups::Name).text().not_null())
@@ -70,7 +68,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         let created_by_user = Alias::new("created_by_user");
         let modified_by_user = Alias::new("modified_by_user");
         vec![ViewDef::new(
@@ -82,14 +80,11 @@ impl Entity for Defs {
                 .expr(Expr::col((Groups::Table, Groups::Description)))
                 .expr(Expr::col((Groups::Table, Groups::CreatedOn)))
                 .expr(Expr::col((Groups::Table, Groups::CreatedById)))
-                .expr_as(
-                    b.name_or_id((created_by_user.clone(), Users::Name), (Groups::Table, Groups::CreatedById)),
-                    Alias::new("created_by"),
-                )
+                .expr_as(name_or_id((created_by_user.clone(), Users::Name), (Groups::Table, Groups::CreatedById)), Alias::new("created_by"))
                 .expr(Expr::col((Groups::Table, Groups::ModifiedOn)))
                 .expr(Expr::col((Groups::Table, Groups::ModifiedById)))
                 .expr_as(
-                    b.name_or_id((modified_by_user.clone(), Users::Name), (Groups::Table, Groups::ModifiedById)),
+                    name_or_id((modified_by_user.clone(), Users::Name), (Groups::Table, Groups::ModifiedById)),
                     Alias::new("modified_by"),
                 )
                 .expr(Expr::col((Groups::Table, Groups::System)))

@@ -32,7 +32,6 @@
 //! `test_archive_ddl_snapshots` then guards the frozen copy automatically.
 //! See the project README for a full guide and example.
 
-use crate::schema::backend::Backend;
 use crate::schema::source::{SchemaSource, install_script};
 
 /// The [`SchemaSource`] for an archived version.
@@ -49,6 +48,6 @@ pub fn source(version: usize) -> &'static dyn SchemaSource {
 
 /// The full install script for an archived version. Panics if no archive
 /// exists for it.
-pub fn build(version: usize, backend: impl Into<Backend>) -> Vec<String> {
-    install_script(source(version), backend.into())
+pub fn build(version: usize) -> Vec<String> {
+    install_script(source(version))
 }

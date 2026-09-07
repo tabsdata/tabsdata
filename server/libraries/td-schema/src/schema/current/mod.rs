@@ -40,8 +40,8 @@ mod with_status_views;
 mod workers;
 
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
 use crate::schema::deltas;
+use crate::schema::render::{render_query, render_schema};
 use crate::schema::source::{Derived, SchemaSource, install_script};
 use crate::schema::sql;
 use sea_query::{DynIden, IntoIden};
@@ -144,8 +144,8 @@ pub(crate) fn project_scoped_tables() -> Vec<DynIden> {
 }
 
 /// The complete fresh-install script for the current schema.
-pub fn build(b: Backend) -> Vec<String> {
-    install_script(&Source, b)
+pub fn build() -> Vec<String> {
+    install_script(&Source)
 }
 
 /// [`SchemaSource`] for the live schema, over `ENTITIES` plus [`deltas`].
@@ -158,52 +158,49 @@ impl SchemaSource for Source {
         VERSION
     }
 
-    fn tables(&self, b: Backend) -> Vec<String> {
-        ENTITIES.iter().flat_map(|e| e.create_tables()).map(|t| b.build_schema(t)).collect()
+    fn tables(&self) -> Vec<String> {
+        ENTITIES.iter().flat_map(|e| e.create_tables()).map(render_schema).collect()
     }
 
-    fn triggers(&self, b: Backend) -> Vec<Derived> {
+    fn triggers(&self) -> Vec<Derived> {
         ENTITIES
             .iter()
             .flat_map(|e| e.create_db_triggers())
             .map(|t| Derived {
-                create: t.render(&b),
-                drop: t.render_drop(&b),
+                create: t.render(),
+                drop: t.render_drop(),
             })
             .collect()
     }
 
-    fn views(&self, b: Backend) -> Vec<Derived> {
+    fn views(&self) -> Vec<Derived> {
         ENTITIES
             .iter()
-            .flat_map(|e| e.create_views(&b))
+            .flat_map(|e| e.create_views())
             .map(|v| Derived {
-                create: vec![v.render(&b)],
+                create: vec![v.render()],
                 drop: vec![v.render_drop()],
             })
             .collect()
     }
 
-    fn indexes(&self, b: Backend) -> Vec<String> {
-        ENTITIES.iter().flat_map(|e| e.create_indices()).map(|i| b.build_schema(i)).collect()
+    fn indexes(&self) -> Vec<String> {
+        ENTITIES.iter().flat_map(|e| e.create_indices()).map(render_schema).collect()
     }
 
-    fn seeds(&self, b: Backend) -> Vec<String> {
-        let mut out: Vec<String> = ENTITIES.iter().flat_map(|e| e.seeds()).map(|ins| b.build_query(ins)).collect();
+    fn seeds(&self) -> Vec<String> {
+        let mut out: Vec<String> = ENTITIES.iter().flat_map(|e| e.seeds()).map(render_query).collect();
         // `_current` snapshot seeding after every event-log table is seeded,
         // so `ROW_NUMBER` ranks against the complete history.
-        out.extend(ENTITIES.iter().flat_map(|e| e.seed_current()).map(|spec| spec.render(&b)));
+        out.extend(ENTITIES.iter().flat_map(|e| e.seed_current()).map(|spec| spec.render()));
         out
     }
 
-    fn rls(&self, b: Backend) -> Vec<String> {
-        if !matches!(b, Backend::Postgres) {
-            return vec![];
-        }
+    fn rls(&self) -> Vec<String> {
         project_scoped_tables().iter().flat_map(|t| sql::rls::policy_statements(&t.to_string())).collect()
     }
 
-    fn delta(&self, target: usize, b: Backend) -> Vec<String> {
-        deltas::get(target, b)
+    fn delta(&self, target: usize) -> Vec<String> {
+        deltas::get(target)
     }
 }

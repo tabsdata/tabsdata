@@ -12,7 +12,7 @@ use super::functions::Functions;
 use super::tables_current::TablesCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
 
 #[derive(Iden, Clone, Copy)]
@@ -98,13 +98,13 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![ViewDef::new(
             TablesWithNames,
             Query::select()
                 .expr(Expr::col((Tables::Table, Asterisk)))
                 .expr_as(Expr::col((Tables::Table, Tables::FunctionParamPos)).lt(0), Alias::new("system"))
-                .expr_as(b.name_or_id((Users::Table, Users::Name), (Tables::Table, Tables::DefinedById)), Alias::new("defined_by"))
+                .expr_as(name_or_id((Users::Table, Users::Name), (Tables::Table, Tables::DefinedById)), Alias::new("defined_by"))
                 .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
                 .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))

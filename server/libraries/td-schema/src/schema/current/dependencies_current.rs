@@ -9,7 +9,6 @@ use sea_query::{
 use super::collections::{Collections, CollectionsResolved};
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -77,7 +76,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, _b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         let table_collection = Alias::new("table_collection");
         vec![ViewDef::new(
             DependenciesCurrentWithNames,

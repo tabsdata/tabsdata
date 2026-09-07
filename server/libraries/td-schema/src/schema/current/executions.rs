@@ -12,7 +12,7 @@ use super::functions::Functions;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 /// `executions__with_names` view name. Re-used cross-file by
@@ -53,7 +53,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Executions::TriggeredById).text().not_null())
                 // `Option<Json<RecursionOptions>>` in the DAO; sqlx encodes
                 // `Json<T>` as JSONB in Postgres, so the column must be JSONB
-                // (MySQL JSON, SQLite TEXT) — not plain TEXT, which PG rejects at
                 // decode time with a "mismatched types" error.
                 .col(ColumnDef::new(Executions::RecursionOptions).json_binary().null())
                 .col(ColumnDef::new(Executions::FunctionId).text().not_null().default(""))
@@ -100,7 +99,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![ViewDef::new(
             ExecutionsWithNames,
             Query::select()
@@ -109,7 +108,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (Executions::Table, Executions::TriggeredById)),
+                    name_or_id((Users::Table, Users::Name), (Executions::Table, Executions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
                 .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))

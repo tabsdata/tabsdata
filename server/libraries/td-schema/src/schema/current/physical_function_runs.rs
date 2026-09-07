@@ -15,7 +15,7 @@ use super::functions::Functions;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -172,7 +172,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         vec![ViewDef::new(
             PhysicalFunctionRunsWithNames,
             Query::select()
@@ -186,7 +186,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Executions::Table, Executions::FunctionVersionId)), Alias::new("execution_function_version_id"))
                 .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::TriggeredById)),
+                    name_or_id((Users::Table, Users::Name), (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
                 .from(PhysicalFunctionRuns::Table)

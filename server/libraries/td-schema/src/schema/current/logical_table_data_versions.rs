@@ -26,7 +26,7 @@ use super::physical_table_data_versions::PhysicalTableDataVersions;
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::backend::Backend;
+use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
@@ -164,7 +164,7 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+    fn create_views(&self) -> Vec<ViewDef> {
         // table_data_versions__with_names
         //
         // The single table-data-version listing view: LTDV identity rows
@@ -181,10 +181,7 @@ impl Entity for Defs {
                     .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                     .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                     .expr_as(
-                        b.name_or_id(
-                            (Users::Table, Users::Name),
-                            (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById),
-                        ),
+                        name_or_id((Users::Table, Users::Name), (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById)),
                         Alias::new("triggered_by"),
                     )
                     .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
