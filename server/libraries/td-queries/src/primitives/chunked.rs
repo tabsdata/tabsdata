@@ -2,145 +2,156 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Helpers and per-chunk SQL builders for the `ChunkedQueries` trait
-//! impl in [`crate::generic::chunked`].
-//!
-//! Each `*_chunk_query` returns a single statement covering one chunk
-//! of bind values; the trait impl loops over chunks of size
-//! [`MAX_QUERY_CONDITIONS`].
+//! Builders over a slice of conditions, OR-joined per chunk so a caller's
+//! slice may exceed the bind-parameter limit.
 
-use crate::primitives::versioned::{Cte, latest_ranked_cte};
-
-use sea_query::{Expr, ExprTrait, Query};
+use crate::QueryExecutor;
+use crate::primitives::scd2::{close_query, open_interval_cond, visible_at_cond};
+use sea_query::{Condition, InsertStatement, Query, SelectStatement, UpdateStatement};
+use sqlx::FromRow;
+use sqlx::postgres::PgRow;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{CurrentDao, Dao, DaoCore, DaoUpdate, VersionedDao};
+use ta_objects::{Dao, InsertDao, Scd2Dao, SelectDao, TableDao, UpdateDao};
+use td_database::sea_query::builder::SeaQueryExt;
 use tracing::warn;
 
-/// Maximum conditions per query.
-///
-/// Conservatively set well below the database limit (
-/// PostgreSQL: 65,535) to leave room for other parameters in the query
-/// (pagination, ordering, additional WHERE clauses).
-/// `sea_query::Condition` can cause stack overflow when nesting (this is,
-/// multiple OR conditions). With 1000 OR conditions, this can already
-/// happen. So, queries should never reach this limit; this is just a
-/// failsafe.
 pub(crate) const MAX_QUERY_CONDITIONS: usize = 100;
 
-/// Maximum rows per batch INSERT statement.
-///
-/// Capped so that `rows * columns` stays well below database bind-parameter
-/// limit (PostgreSQL: 65,535).
 pub(crate) const MAX_INSERT_ROWS: usize = 100;
 
-pub(crate) fn resolve_or<D: DaoCore>(
-    items: &[impl SqlCondition<D>],
-) -> Result<sea_query::Condition, SqlError> {
-    let mut cond = sea_query::Condition::any();
-    for item in items {
-        cond = cond.add(item.resolve());
-    }
-    Ok(cond)
+pub(crate) fn resolve_or<D: Dao>(items: &[impl SqlCondition<D>]) -> Condition {
+    items
+        .iter()
+        .fold(Condition::any(), |cond, item| cond.add(item.resolve()))
 }
 
-/// Emit a warning when a chunked query exceeds [`MAX_QUERY_CONDITIONS`].
-/// This is a failsafe — callers should use JOINs or scoped queries
-/// instead of passing unbounded slices.
-pub(crate) fn warn_if_chunked<D: DaoCore>(len: usize) {
+pub(crate) fn warn_if_chunked<D: Dao>(len: usize) {
     if len > MAX_QUERY_CONDITIONS {
-        let chunks = len.div_ceil(MAX_QUERY_CONDITIONS);
         warn!(
             entity = D::display_name(),
             values = len,
             max = MAX_QUERY_CONDITIONS,
-            chunks,
-            "Chunked query exceeded MAX_QUERY_PARAMS",
+            chunks = len.div_ceil(MAX_QUERY_CONDITIONS),
+            "chunked query exceeded the per-statement condition limit",
         );
     }
 }
 
-pub(crate) fn insert_vec_query<D: Dao>(daos: &[D]) -> Result<sea_query::InsertStatement, SqlError> {
+/// One statement per chunk of `values`; `D` names the entity in errors and
+/// the chunking warning, `O` is the decoded row.
+pub(crate) async fn fetch_chunked<D, O, E, C>(
+    mut executor: E,
+    values: &[C],
+    statement: impl Fn(&[C]) -> SelectStatement,
+) -> Result<Vec<O>, SqlError>
+where
+    D: Dao,
+    O: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+    E: QueryExecutor,
+{
+    warn_if_chunked::<D>(values.len());
+    let mut results = Vec::new();
+    for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
+        let rows: Vec<O> = statement(chunk)
+            .build_query_as()
+            .fetch_all(executor.reuse())
+            .await
+            .map_err(SqlError::on_read::<D>)?;
+        results.extend(rows);
+    }
+    Ok(results)
+}
+
+pub(crate) fn insert_vec_query<D: InsertDao>(daos: &[D]) -> Result<InsertStatement, SqlError> {
     let mut query = Query::insert();
-    query.into_table(D::table()).columns(D::columns());
+    query.into_table(D::TABLE).columns(D::columns());
     for dao in daos {
         query.values(dao.insert_values())?;
     }
     Ok(query)
 }
 
-pub(crate) fn fetch_all_chunk_query<D: Dao, V: SqlCondition<D>>(
-    chunk: &[V],
-) -> Result<sea_query::SelectStatement, SqlError> {
-    Ok(Query::select()
-        .from(D::table())
-        .columns(D::columns())
-        .cond_where(resolve_or::<D>(chunk)?)
-        .order_by_columns(D::order_by())
-        .take())
+pub(crate) fn close_chunk_query<D: TableDao + Scd2Dao>(
+    chunk: &[impl SqlCondition<D>],
+    extra: &Condition,
+    at: &D::VersionOrder,
+) -> Result<UpdateStatement, SqlError> {
+    close_query::<D>(
+        ChunkCondition {
+            chunk: resolve_or::<D>(chunk),
+            extra: extra.clone(),
+        },
+        at,
+    )
 }
 
-pub(crate) fn update_chunk_query<U: DaoUpdate, D: DaoCore, V: SqlCondition<D>>(
+struct ChunkCondition {
+    chunk: Condition,
+    extra: Condition,
+}
+
+impl<D: Dao> SqlCondition<D> for ChunkCondition {
+    fn resolve(&self) -> Condition {
+        Condition::all()
+            .add(self.chunk.clone())
+            .add(self.extra.clone())
+    }
+}
+
+pub(crate) fn update_chunk_query<U: UpdateDao>(
     dao: &U,
-    chunk: &[V],
-) -> Result<sea_query::UpdateStatement, SqlError> {
-    Ok(Query::update()
-        .table(U::table())
+    chunk: &[impl SqlCondition<U::FilterBy>],
+) -> UpdateStatement {
+    Query::update()
+        .table(U::TABLE)
         .values(dao.update_values())
-        .cond_where(resolve_or::<D>(chunk)?)
-        .take())
+        .cond_where(resolve_or::<U::FilterBy>(chunk))
+        .take()
 }
 
-pub(crate) fn delete_chunk_query<D: DaoCore, V: SqlCondition<D>>(
-    chunk: &[V],
-) -> Result<sea_query::DeleteStatement, SqlError> {
-    Ok(Query::delete()
-        .from_table(D::table())
-        .cond_where(resolve_or::<D>(chunk)?)
-        .take())
-}
-
-pub(crate) fn fetch_all_at_chunk_query<D: VersionedDao, V: SqlCondition<D>>(
-    chunk: &[V],
-    on: &D::VersionOrder,
-    state_cond: Option<&sea_query::Condition>,
-) -> Result<sea_query::WithQuery, SqlError> {
-    let mut q = Query::select()
+fn select_chunk<D: SelectDao>(chunk: &[impl SqlCondition<D>], extra: Condition) -> SelectStatement {
+    Query::select()
         .columns(D::columns())
-        .from(Cte::Ranked)
-        .and_where(Expr::col(Cte::Rn).eq(1_i64))
-        .cond_where(resolve_or::<D>(chunk)?)
+        .from(D::TABLE)
+        .cond_where(resolve_or::<D>(chunk))
+        .cond_where(extra)
         .order_by_columns(D::order_by())
-        .take();
-    if let Some(s) = state_cond {
-        q.cond_where(s.clone());
-    }
-    Ok(q.with(latest_ranked_cte::<D>(on)?))
+        .take()
 }
 
-pub(crate) fn fetch_all_current_chunk_query<D: CurrentDao, V: SqlCondition<D>>(
-    chunk: &[V],
-    state_cond: Option<&sea_query::Condition>,
-) -> Result<sea_query::SelectStatement, SqlError> {
-    let mut q = Query::select()
-        .columns(D::columns())
-        .from(D::current_table_name())
-        .cond_where(resolve_or::<D>(chunk)?)
-        .take();
-    if let Some(s) = state_cond {
-        q.cond_where(s.clone());
-    }
-    Ok(q)
+pub(crate) fn fetch_all_chunk_query<D: SelectDao>(
+    chunk: &[impl SqlCondition<D>],
+    extra: &Condition,
+) -> SelectStatement {
+    select_chunk::<D>(chunk, extra.clone())
+}
+
+pub(crate) fn fetch_all_at_chunk_query<D: SelectDao + Scd2Dao>(
+    chunk: &[impl SqlCondition<D>],
+    on: &D::VersionOrder,
+    extra: &Condition,
+) -> SelectStatement {
+    select_chunk::<D>(chunk, visible_at_cond::<D>(on).add(extra.clone()))
+}
+
+pub(crate) fn fetch_all_current_chunk_query<D: SelectDao + Scd2Dao>(
+    chunk: &[impl SqlCondition<D>],
+    extra: &Condition,
+) -> SelectStatement {
+    select_chunk::<D>(
+        chunk,
+        Condition::all()
+            .add(open_interval_cond::<D>())
+            .add(extra.clone()),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use sea_query::{Alias, Asterisk, PostgresQueryBuilder};
-    use ta_objects::StateFilter;
     use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
-
-    // --- Basic test DAO ---
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
     struct TestId(String);
@@ -155,14 +166,12 @@ mod tests {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "test_chunked")]
+    #[dao(table = "test_chunked", ops(select, insert, delete))]
     struct TestDao {
         pub id: TestId,
         pub name: TestName,
         pub status: TestStatus,
     }
-
-    // --- Versioned test DAO ---
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
     struct TestPartition(String);
@@ -177,40 +186,27 @@ mod tests {
     }
 
     #[ta_objects::Dao]
-    #[dao(
-        sql_table = "test_chunked_versioned",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id")
-    )]
-    struct TestVersionedDao {
+    #[dao(table = "test_chunked_versioned", ops(select, insert), scd2)]
+    struct TestScd2Dao {
+        #[dao(pk)]
         pub id: TestId,
+        #[dao(partition_by)]
         pub partition_id: TestPartition,
         pub status: TestVStatus,
+        #[dao(valid_from)]
         pub defined_on: TestDefinedOn,
     }
-
-    // --- Current test DAO ---
 
     #[ta_objects::Dao]
-    #[dao(
-        sql_table = "test_chunked_current_table",
-        versioned(
-            pk = "id",
-            version_by = "defined_on",
-            partition_by = "partition_id",
-            current = "test_chunked_current_view"
-        )
-    )]
+    #[dao(table = "test_chunked_current_table", ops(select, insert), scd2)]
     struct TestCurrentDao {
+        #[dao(pk)]
         pub id: TestId,
+        #[dao(partition_by)]
         pub partition_id: TestPartition,
         pub status: TestVStatus,
+        #[dao(valid_from)]
         pub defined_on: TestDefinedOn,
-    }
-
-    impl TestCurrentDao {
-        pub fn active() -> StateFilter<Self> {
-            StateFilter::of(TestVStatus::Active)
-        }
     }
 
     #[test]
@@ -240,16 +236,13 @@ mod tests {
             TestId::try_from("a").unwrap(),
             TestId::try_from("b").unwrap(),
         ];
-        let cond = resolve_or::<TestDao>(&ids).unwrap();
+        let cond = resolve_or::<TestDao>(&ids);
         let sql = Query::select()
             .column(Asterisk)
             .from(Alias::new("t"))
             .cond_where(cond)
             .to_string(PostgresQueryBuilder);
-        assert!(
-            sql.contains("'a'") && sql.contains("'b'") && sql.contains("OR"),
-            "should combine with OR: {sql}"
-        );
+        assert_eq!(sql, r#"SELECT * FROM "t" WHERE "id" = 'a' OR "id" = 'b'"#);
     }
 
     #[test]
@@ -258,23 +251,25 @@ mod tests {
             TestId::try_from("x").unwrap(),
             TestId::try_from("y").unwrap(),
         ];
-        let sql = fetch_all_chunk_query::<TestDao, TestId>(&ids)
-            .unwrap()
+        let sql = fetch_all_chunk_query::<TestDao>(&ids, &Condition::all())
             .to_string(PostgresQueryBuilder);
-        assert!(
-            sql.contains(r#"FROM "test_chunked""#),
-            "should select from table: {sql}"
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_chunked" WHERE ("id" = 'x' OR "id" = 'y') AND TRUE ORDER BY "id" DESC"#
         );
-        assert!(
-            sql.contains("'x'") && sql.contains("'y'"),
-            "should include both values: {sql}"
-        );
-        assert!(sql.contains("ORDER BY"), "should order: {sql}");
+    }
+
+    #[ta_objects::Dao]
+    #[dao(table = "test_chunked", ops(update(TestDao)))]
+    struct TestUpdateDao {
+        pub id: TestId,
+        pub name: TestName,
+        pub status: TestStatus,
     }
 
     #[test]
     fn test_update_chunk_query() {
-        let dao = TestDao {
+        let dao = TestUpdateDao {
             id: TestId::try_from("i1").unwrap(),
             name: TestName::try_from("updated").unwrap(),
             status: TestStatus::Active,
@@ -283,35 +278,10 @@ mod tests {
             TestId::try_from("i1").unwrap(),
             TestId::try_from("i2").unwrap(),
         ];
-        let sql = update_chunk_query::<TestDao, TestDao, TestId>(&dao, &ids)
-            .unwrap()
-            .to_string(PostgresQueryBuilder);
-        assert!(
-            sql.starts_with(r#"UPDATE "test_chunked" SET"#),
-            "should update table: {sql}"
-        );
-        assert!(
-            sql.contains("'i1'") && sql.contains("'i2'"),
-            "should include both condition values: {sql}"
-        );
-    }
-
-    #[test]
-    fn test_delete_chunk_query() {
-        let ids = vec![
-            TestId::try_from("d1").unwrap(),
-            TestId::try_from("d2").unwrap(),
-        ];
-        let sql = delete_chunk_query::<TestDao, TestId>(&ids)
-            .unwrap()
-            .to_string(PostgresQueryBuilder);
-        assert!(
-            sql.starts_with(r#"DELETE FROM "test_chunked""#),
-            "should delete from table: {sql}"
-        );
-        assert!(
-            sql.contains("'d1'") && sql.contains("'d2'"),
-            "should include both condition values: {sql}"
+        let sql = update_chunk_query::<TestUpdateDao>(&dao, &ids).to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"UPDATE "test_chunked" SET "id" = 'i1', "name" = 'updated', "status" = 'A' WHERE "id" = 'i1' OR "id" = 'i2'"#
         );
     }
 
@@ -322,16 +292,12 @@ mod tests {
             TestPartition::try_from("p2").unwrap(),
         ];
         let on = TestDefinedOn::try_from(100i64).unwrap();
-        let sql = fetch_all_at_chunk_query::<TestVersionedDao, TestPartition>(&ids, &on, None)
-            .unwrap()
+        let sql = fetch_all_at_chunk_query::<TestScd2Dao>(&ids, &on, &Condition::all())
             .to_string(PostgresQueryBuilder);
-        assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
-        assert!(sql.contains("ROW_NUMBER"), "should use ROW_NUMBER: {sql}");
-        assert!(
-            sql.contains("'p1'") && sql.contains("'p2'"),
-            "should include both partition values: {sql}"
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_chunked_versioned" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("defined_on" <= 100 AND "valid_to" > 100 AND TRUE) ORDER BY "id" DESC"#
         );
-        assert!(sql.contains(r#""rn" = 1"#), "should filter rn = 1: {sql}");
     }
 
     #[test]
@@ -340,32 +306,11 @@ mod tests {
             TestPartition::try_from("p1").unwrap(),
             TestPartition::try_from("p2").unwrap(),
         ];
-        let sql = fetch_all_current_chunk_query::<TestCurrentDao, TestPartition>(&ids, None)
-            .unwrap()
+        let sql = fetch_all_current_chunk_query::<TestCurrentDao>(&ids, &Condition::all())
             .to_string(PostgresQueryBuilder);
-        assert!(
-            sql.contains(r#"FROM "test_chunked_current_view""#),
-            "should select from current view: {sql}"
-        );
-        assert!(
-            sql.contains("'p1'") && sql.contains("'p2'"),
-            "should include both values: {sql}"
-        );
-    }
-
-    #[test]
-    fn test_fetch_all_current_chunk_query_active_state() {
-        let ids = vec![TestPartition::try_from("p1").unwrap()];
-        let active = TestCurrentDao::active();
-        let sql = fetch_all_current_chunk_query::<TestCurrentDao, TestPartition>(
-            &ids,
-            Some(active.condition()),
-        )
-        .unwrap()
-        .to_string(PostgresQueryBuilder);
-        assert!(
-            sql.contains(r#""status" = 'A'"#),
-            "should filter by active state: {sql}"
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "partition_id", "status", "defined_on" FROM "test_chunked_current_table" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("valid_to" = ('infinity'::timestamptz) AND TRUE) ORDER BY "id" DESC"#
         );
     }
 }
