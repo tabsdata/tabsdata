@@ -12,3 +12,6 @@ pub const EXECUTION_GRAPH_OPTIONS: RecursionOptions = RecursionOptions::V1(Recur
     max_downstream_depth: Some(Depth::ZERO),
     override_disabled_trigger: None,
 });
+
+#[cfg(test)]
+mod plan_shape;

@@ -50,7 +50,16 @@ strum = { workspace = true, features = ["derive"] }
 # Development dependencies
 
 [dev-dependencies]
+# Deliberately cyclic (td-services depends on td-execution, which depends on
+# this crate): cargo permits dev-dependency cycles. The plan-shape test runs
+# the execute service to assert what this edition's graph options yield.
+td-services = { workspace = true, features = ["td-test"] }
+td-database = { workspace = true, features = ["test-utils"] }
+td-queries = { workspace = true, features = ["test-utils"] }
+td-test = { workspace = true }
 te-execution = { workspace = true, features = ["td-test"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
