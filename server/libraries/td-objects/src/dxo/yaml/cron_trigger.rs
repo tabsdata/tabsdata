@@ -29,7 +29,7 @@ pub struct Info {
     pub function_version_id: FunctionVersionId,
     pub function: FunctionName,
     pub scheduled_on: AtTime, // when the request yaml was created
-    pub task: HttpRequest,    // http task of the cron trigger
+    pub task: HttpRequest,
     pub config: WorkerConfig, // cron trigger config serialized
 }
 
@@ -77,7 +77,6 @@ mod tests {
             },
         }));
         let serialized = serde_yaml::to_string(&input).unwrap();
-        // println!("{}", serialized);
 
         let scheduled_on = scheduled_on.to_string();
         let start = serde_json::to_string(&start).unwrap();

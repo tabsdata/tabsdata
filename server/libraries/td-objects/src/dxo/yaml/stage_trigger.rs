@@ -37,11 +37,11 @@ pub struct Info {
     pub function_bundle: Location,
     pub function_stage: Location,
     pub function_checkpoint: Location,
-    pub scheduled_on: AtTime,    // when the request yaml was created
-    pub fn_trigger: HttpRequest, // trigger of the function
-    pub fn_state: HttpRequest,   // state of the function
-    pub fn_status: HttpRequest,  // status of the execution plan (uses ep_id and f_version_id)
-    pub config: WorkerConfig,    // StageTriggerConfig serialized
+    pub scheduled_on: AtTime, // when the request yaml was created
+    pub fn_trigger: HttpRequest,
+    pub fn_state: HttpRequest,
+    pub fn_status: HttpRequest, // status of the execution plan (uses ep_id and f_version_id)
+    pub config: WorkerConfig,   // StageTriggerConfig serialized
 }
 
 pub type StageTriggerOutput = ();
@@ -121,7 +121,6 @@ mod tests {
             },
         }));
         let serialized = serde_yaml::to_string(&input).unwrap();
-        // println!("{}", serialized);
 
         let scheduled_on = scheduled_on.to_string();
         let start = serde_json::to_string(&start).unwrap();

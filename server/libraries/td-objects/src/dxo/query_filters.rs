@@ -16,48 +16,42 @@
 
 use crate::types::basic::EpochMs;
 use chrono::Utc;
+use ta_objects::{TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::bucket;
 use td_error::td_error;
 
-#[ta_objects::dxo]
-mod definitions {
-    /// Calendar unit driving both the window grammar (width +
-    /// right-edge snap) and the aggregation grain (one row per unit).
-    /// `Quarter` and `Year` are not stored as precomputed columns;
-    /// the SQL groups by `ended_on_month_ms` and a Rust post-pass folds
-    /// the monthly rows up.
-    #[ta_objects::typed_enum]
-    #[derive(Eq, PartialEq, Hash, Copy)]
-    pub enum WindowUnit {
-        Hour,
-        Day,
-        Week,
-        Month,
-        Quarter,
-        Year,
-    }
-
-    /// How the start of the window is computed from `from`.
-    ///
-    /// `Calendar` snaps the start to the calendar-unit boundary
-    /// containing `from`, with the end at `from` itself. Reporting-style
-    /// views — "week-to-date", "month-to-date", "the last 3 quarters
-    /// ending today". `span > 1` extends back `(span − 1)` additional
-    /// full units before the snapped boundary.
-    ///
-    /// `Rolling` is a fixed-width window of exactly `span * unit`
-    /// ending at `from` — for sliding views where the boundaries don't
-    /// snap to a calendar ("trailing 7 days", "last 24 hours",
-    /// Tuesday-to-Tuesday weeks pinned to a non-ISO cadence).
-    #[ta_objects::typed_enum]
-    #[derive(Eq, PartialEq, Hash, Copy)]
-    pub enum WindowAlign {
-        Calendar,
-        Rolling,
-    }
+/// Calendar unit driving both the window grammar (width +
+/// right-edge snap) and the aggregation grain (one row per unit).
+/// `Quarter` and `Year` are not stored as precomputed columns;
+/// the SQL groups by `ended_on_month_ms` and a Rust post-pass folds
+/// the monthly rows up.
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash, Copy)]
+pub enum WindowUnit {
+    Hour,
+    Day,
+    Week,
+    Month,
+    Quarter,
+    Year,
 }
 
-pub use definitions::*;
+/// How the start of the window is computed from `from`.
+///
+/// `Calendar` snaps the start to the calendar-unit boundary
+/// containing `from`, with the end at `from` itself. Reporting-style
+/// views — "week-to-date", "month-to-date", "the last 3 quarters
+/// ending today". `span > 1` extends back `(span − 1)` additional
+/// full units before the snapped boundary.
+///
+/// `Rolling` is a fixed-width window of exactly `span * unit`
+/// ending at `from` — for sliding views where the boundaries don't
+/// snap to a calendar ("trailing 7 days", "last 24 hours",
+/// Tuesday-to-Tuesday weeks pinned to a non-ISO cadence).
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash, Copy)]
+pub enum WindowAlign {
+    Calendar,
+    Rolling,
+}
 
 impl From<WindowUnit> for bucket::WindowUnit {
     fn from(u: WindowUnit) -> Self {

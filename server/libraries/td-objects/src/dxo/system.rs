@@ -8,7 +8,7 @@ pub struct ApiStatus {
     pub latency_as_nanos: u128,
 }
 
-#[ta_objects::typed_enum]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub enum HealthStatus {
     OK,
     DatabaseError(String),

@@ -2,203 +2,271 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::dxo]
-mod definitions {
-    use crate::types::basic::{
-        AtTime, BasePath, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged,
-        ExecutionId, FunctionName, FunctionVersionId, HasData, PhysicalFunctionRunId,
-        PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, RowCount, SchemaChanged,
-        SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
-        TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
-    };
-    use ta_objects::and;
+use crate::types::basic::{
+    AtTime, BasePath, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged,
+    ExecutionId, FunctionName, FunctionVersionId, HasData, PhysicalFunctionRunId,
+    PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, RowCount, SchemaChanged,
+    SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
+    TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
+};
+use ta_objects::FromDao;
+use td_error::TdError;
 
-    #[ta_objects::Dao]
-    #[dao(
-        data_version,
-        sql_table = "physical_table_data_versions",
-        order_by(col = "triggered_on", dir = "desc"),
-        versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id"),
-        states(
-            WithData = Some(HasData::TRUE),
-        )
-    )]
-    pub struct PhysicalTableDataVersionDB {
-        #[builder(default = "PhysicalTableDataVersionId::new()")]
-        #[dxo(extractor)]
-        pub id: PhysicalTableDataVersionId,
-        /// The project this version belongs to. Inherited from the parent
-        /// LFR/PFR at mint; required at construction — there is no default
-        /// project fallback, which would mask a builder forgetting to thread
-        /// the project through the (bypass-scoped) dispatch insert.
-        #[dxo(extractor)]
-        pub project_id: ProjectId,
-        pub collection_id: CollectionId,
-        pub table_id: TableId,
-        pub name: TableName,
-        pub table_version_id: TableVersionId,
-        #[dxo(extractor)]
-        pub function_version_id: FunctionVersionId,
-        // Mirrors `physical_function_runs.function_version_patch_id` for the
-        // producer attempt. NULL → no patch; non-NULL → patch id.
-        #[builder(default)]
-        pub function_version_patch_id: Option<FunctionVersionId>,
-        pub execution_id: ExecutionId,
-        pub transaction_id: TransactionId,
-        pub physical_function_run_id: PhysicalFunctionRunId,
-        pub function_param_pos: TableFunctionParamPos,
-        pub triggered_on: TriggeredOn,
-        // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
-        // Reads use this directly (never recompute), so the data stays findable after
-        // the collection/function base_path later changes.
-        #[builder(default)]
-        pub base_path: BasePath,
+#[ta_objects::Dao]
+#[dao(
+    data_version,
+    sql_table = "physical_table_data_versions",
+    order_by(col = "triggered_on", dir = "desc"),
+    versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id")
+)]
+pub struct PhysicalTableDataVersionDB {
+    pub id: PhysicalTableDataVersionId,
+    /// The project this version belongs to. Inherited from the parent
+    /// LFR/PFR at mint; required at construction — there is no default
+    /// project fallback, which would mask a builder forgetting to thread
+    /// the project through the (bypass-scoped) dispatch insert.
+    pub project_id: ProjectId,
+    pub collection_id: CollectionId,
+    pub table_id: TableId,
+    pub name: TableName,
+    pub table_version_id: TableVersionId,
+    pub function_version_id: FunctionVersionId,
+    // Mirrors `physical_function_runs.function_version_patch_id` for the
+    // producer attempt. NULL → no patch; non-NULL → patch id.
+    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub execution_id: ExecutionId,
+    pub transaction_id: TransactionId,
+    pub physical_function_run_id: PhysicalFunctionRunId,
+    pub function_param_pos: TableFunctionParamPos,
+    pub triggered_on: TriggeredOn,
+    // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
+    // Reads use this directly (never recompute), so the data stays findable after
+    // the collection/function base_path later changes.
+    pub base_path: BasePath,
 
-        // Data information
-        // Even if the version !has_data, data information might come from previous version,
-        // as that means the data did not change at all. So has_data.is_none() and
-        // column_count.is_some() is possible.
-        #[builder(default)]
-        pub has_data: Option<HasData>,
-        #[builder(default)]
-        pub schema_changed: Option<SchemaChanged>,
-        #[builder(default)]
-        pub column_count: Option<ColumnCount>,
-        #[builder(default)]
-        pub row_count: Option<RowCount>,
-        // Byte count from the worker yaml's `TableInfo.data_bytes`. NULL
-        // when the worker omits it (older Python workers).
-        #[builder(default)]
-        pub data_bytes: Option<ByteCount>,
-        #[builder(default)]
-        pub schema_hash: Option<SchemaHash>,
+    // Data information
+    // Even if the version !has_data, data information might come from previous version,
+    // as that means the data did not change at all. So has_data.is_none() and
+    // column_count.is_some() is possible.
+    pub has_data: Option<HasData>,
+    pub schema_changed: Option<SchemaChanged>,
+    pub column_count: Option<ColumnCount>,
+    pub row_count: Option<RowCount>,
+    // Byte count from the worker yaml's `TableInfo.data_bytes`. NULL
+    // when the worker omits it (older Python workers).
+    pub data_bytes: Option<ByteCount>,
+    pub schema_hash: Option<SchemaHash>,
 
-        // Only available when this version has data, but it is not generated by this version
-        // (!has_data and previous version has_data)
-        #[builder(default)]
-        pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
+    // Only available when this version has data, but it is not generated by this version
+    // (!has_data and previous version has_data)
+    pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
+}
+
+#[ta_objects::Dao]
+#[dao(
+    sql_table = "physical_table_data_versions__with_function",
+    order_by(col = "triggered_on", dir = "desc"),
+    versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id"),
+    data_version
+)]
+pub struct PhysicalTableDataVersionDBWithFunction {
+    #[dao(flatten)]
+    pub base: PhysicalTableDataVersionDB,
+    pub triggered_by_id: UserId,
+    pub started_on: Option<AtTime>,
+    pub ended_on: Option<AtTime>,
+    pub status: PhysicalFunctionRunStatus,
+    pub storage_version: StorageVersion,
+}
+
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq, Hash)]
+pub struct ExecutionTableDataVersionRead {
+    pub id: PhysicalTableDataVersionId,
+    pub project_id: ProjectId,
+    pub collection_id: CollectionId,
+    pub table_id: TableId,
+    pub name: TableName,
+    pub table_version_id: TableVersionId,
+    pub function_version_id: FunctionVersionId,
+    pub function_version_patch_id: Option<FunctionVersionId>,
+    pub execution_id: ExecutionId,
+    pub transaction_id: TransactionId,
+    pub physical_function_run_id: PhysicalFunctionRunId,
+    pub function_param_pos: TableFunctionParamPos,
+    pub triggered_on: TriggeredOn,
+    pub base_path: BasePath,
+    pub has_data: Option<HasData>,
+    pub schema_changed: Option<SchemaChanged>,
+    pub column_count: Option<ColumnCount>,
+    pub row_count: Option<RowCount>,
+    pub data_bytes: Option<ByteCount>,
+    pub schema_hash: Option<SchemaHash>,
+    pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
+    pub triggered_by_id: UserId,
+    pub started_on: Option<AtTime>,
+    pub ended_on: Option<AtTime>,
+    pub status: PhysicalFunctionRunStatus,
+    pub storage_version: StorageVersion,
+}
+
+impl FromDao for ExecutionTableDataVersionRead {
+    type Dao = PhysicalTableDataVersionDBWithNames;
+
+    fn from_dao(dao: PhysicalTableDataVersionDBWithNames) -> Result<Self, TdError> {
+        Ok(Self {
+            id: dao.base.base.id,
+            project_id: dao.base.base.project_id,
+            collection_id: dao.base.base.collection_id,
+            table_id: dao.base.base.table_id,
+            name: dao.base.base.name,
+            table_version_id: dao.base.base.table_version_id,
+            function_version_id: dao.base.base.function_version_id,
+            function_version_patch_id: dao.base.base.function_version_patch_id,
+            execution_id: dao.base.base.execution_id,
+            transaction_id: dao.base.base.transaction_id,
+            physical_function_run_id: dao.base.base.physical_function_run_id,
+            function_param_pos: dao.base.base.function_param_pos,
+            triggered_on: dao.base.base.triggered_on,
+            base_path: dao.base.base.base_path,
+            has_data: dao.base.base.has_data,
+            schema_changed: dao.base.base.schema_changed,
+            column_count: dao.base.base.column_count,
+            row_count: dao.base.base.row_count,
+            data_bytes: dao.base.base.data_bytes,
+            schema_hash: dao.base.base.schema_hash,
+            with_data_table_data_version_id: dao.base.base.with_data_table_data_version_id,
+            triggered_by_id: dao.base.triggered_by_id,
+            started_on: dao.base.started_on,
+            ended_on: dao.base.ended_on,
+            status: dao.base.status,
+            storage_version: dao.base.storage_version,
+        })
     }
+}
 
-    #[ta_objects::Dao]
-    #[dao(
-        data_version,
-        sql_table = "physical_table_data_versions__with_function",
-        order_by(col = "triggered_on", dir = "desc"),
-        versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id"),
-        states(
-            WithData = Some(HasData::TRUE),
-            // PFR-side terminal-success. The "Committed" name is
-            // retained for caller continuity even though the underlying
-            // column is PFR.status (which can be Done; the LFR-side
-            // sticky Committed lives on LTDV, not joined here).
-            Done = PhysicalFunctionRunStatus::Done,
-            DoneWithData = and!(Some(HasData::TRUE), PhysicalFunctionRunStatus::Done),
-        )
-    )]
-    #[inherits(PhysicalTableDataVersionDB)]
-    pub struct PhysicalTableDataVersionDBWithFunction {
-        pub triggered_by_id: UserId,
-        pub started_on: Option<AtTime>,
-        pub ended_on: Option<AtTime>,
-        pub status: PhysicalFunctionRunStatus,
-        pub storage_version: StorageVersion,
+#[ta_objects::Dao]
+#[dao(
+    sql_table = "physical_table_data_versions__with_names",
+    versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id"),
+    data_version
+)]
+pub struct PhysicalTableDataVersionDBWithNames {
+    #[dao(flatten)]
+    pub base: PhysicalTableDataVersionDBWithFunction,
+    pub collection: CollectionName,
+    pub function: FunctionName,
+    pub created_by: UserName,
+}
+
+#[ta_objects::Dto]
+#[dto(list(on = PhysicalTableDataVersionDBWithNames))]
+pub struct PhysicalTableDataVersion {
+    #[dto(list(pagination_by = "+", filter, filter_like))]
+    pub id: PhysicalTableDataVersionId,
+    #[dto(list(filter, order_by))]
+    pub collection_id: CollectionId,
+    #[dto(list(filter, order_by))]
+    pub table_id: TableId,
+    #[dto(list(filter, filter_like, order_by))]
+    pub name: TableName,
+    #[dto(list(filter, order_by))]
+    pub table_version_id: TableVersionId,
+    #[dto(list(filter, filter_like, order_by))]
+    pub function_version_id: FunctionVersionId,
+    #[dto(list(filter, col = "has_data"))]
+    pub data_changed: DataChanged,
+    #[dto(list(filter, col = "schema_changed"))]
+    pub schema_data_changed: SchemaDataChanged,
+    #[dto(list(filter, filter_like, order_by))]
+    pub execution_id: ExecutionId,
+    #[dto(list(filter, filter_like, order_by))]
+    pub transaction_id: TransactionId,
+    #[dto(list(filter, order_by))]
+    pub physical_function_run_id: PhysicalFunctionRunId,
+    #[dto(list(filter, order_by))]
+    pub function_param_pos: Option<TableFunctionParamPos>,
+
+    #[dto(list(filter, order_by, col = "triggered_on"))]
+    pub created_at: TriggeredOn,
+    #[dto(list(filter, order_by))]
+    pub triggered_by_id: UserId,
+    #[dto(list(filter, order_by))]
+    pub started_on: Option<AtTime>,
+    #[dto(list(filter, order_by))]
+    pub ended_on: Option<AtTime>,
+    #[dto(list(filter, order_by))]
+    pub status: PhysicalFunctionRunStatus,
+
+    #[dto(list(filter, filter_like, order_by))]
+    pub collection: CollectionName,
+    #[dto(list(filter, filter_like, order_by))]
+    pub function: FunctionName,
+    #[dto(list(filter, filter_like, order_by))]
+    pub created_by: UserName,
+
+    pub column_count: Option<ColumnCount>,
+    pub row_count: Option<RowCount>,
+    pub data_bytes: Option<ByteCount>,
+    #[dto(list(filter))]
+    pub schema_hash: Option<SchemaHash>,
+    pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
+}
+
+impl FromDao for PhysicalTableDataVersion {
+    type Dao = PhysicalTableDataVersionDBWithNames;
+
+    fn from_dao(dao: PhysicalTableDataVersionDBWithNames) -> Result<Self, TdError> {
+        Ok(Self {
+            id: dao.base.base.id,
+            collection_id: dao.base.base.collection_id,
+            table_id: dao.base.base.table_id,
+            name: dao.base.base.name,
+            table_version_id: dao.base.base.table_version_id,
+            function_version_id: dao.base.base.function_version_id,
+            data_changed: dao.base.base.has_data.into(),
+            schema_data_changed: dao.base.base.schema_changed.into(),
+            execution_id: dao.base.base.execution_id,
+            transaction_id: dao.base.base.transaction_id,
+            physical_function_run_id: dao.base.base.physical_function_run_id,
+            function_param_pos: dao.base.base.function_param_pos.into(),
+            created_at: dao.base.base.triggered_on,
+            triggered_by_id: dao.base.triggered_by_id,
+            started_on: dao.base.started_on,
+            ended_on: dao.base.ended_on,
+            status: dao.base.status,
+            collection: dao.collection,
+            function: dao.function,
+            created_by: dao.created_by,
+            column_count: dao.base.base.column_count,
+            row_count: dao.base.base.row_count,
+            data_bytes: dao.base.base.data_bytes,
+            schema_hash: dao.base.base.schema_hash,
+            with_data_table_data_version_id: dao.base.base.with_data_table_data_version_id,
+        })
     }
+}
 
-    #[ta_objects::Dto]
-    #[dxo(builder(try_from = PhysicalTableDataVersionDBWithFunction))]
-    #[inherits(PhysicalTableDataVersionDBWithFunction)]
-    #[derive(Eq, PartialEq, Hash)]
-    pub struct ExecutionTableDataVersionRead {}
+#[ta_objects::Dao]
+#[dao(update, sql_table = "physical_table_data_versions")]
+pub struct UpdateTableDataVersionDB {
+    #[dao(immutable)]
+    pub has_data: Option<HasData>,
+    #[dao(immutable)]
+    pub schema_changed: Option<SchemaChanged>,
+    #[dao(immutable)]
+    pub column_count: Option<ColumnCount>,
+    #[dao(immutable)]
+    pub row_count: Option<RowCount>,
+    #[dao(immutable)]
+    pub data_bytes: Option<ByteCount>,
+    #[dao(immutable)]
+    pub schema_hash: Option<SchemaHash>,
+    #[dao(immutable)]
+    pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
+}
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "physical_table_data_versions__with_names")]
-    #[inherits(PhysicalTableDataVersionDBWithFunction)]
-    pub struct PhysicalTableDataVersionDBWithNames {
-        pub collection: CollectionName,
-        pub function: FunctionName,
-        pub created_by: UserName,
-    }
-
-    #[ta_objects::Dto]
-    #[dto(list(on = PhysicalTableDataVersionDBWithNames))]
-    pub struct PhysicalTableDataVersion {
-        #[dto(list(pagination_by = "+", filter, filter_like))]
-        pub id: PhysicalTableDataVersionId,
-        #[dto(list(filter, order_by))]
-        pub collection_id: CollectionId,
-        #[dto(list(filter, order_by))]
-        pub table_id: TableId,
-        #[dto(list(filter, filter_like, order_by))]
-        pub name: TableName,
-        #[dto(list(filter, order_by))]
-        pub table_version_id: TableVersionId,
-        #[dto(list(filter, filter_like, order_by))]
-        pub function_version_id: FunctionVersionId,
-        #[dxo(builder(field = "has_data"))]
-        #[dto(list(filter))]
-        pub data_changed: DataChanged,
-        #[dxo(builder(field = "schema_changed"))]
-        #[dto(list(filter))]
-        pub schema_data_changed: SchemaDataChanged,
-        #[dto(list(filter, filter_like, order_by))]
-        pub execution_id: ExecutionId,
-        #[dto(list(filter, filter_like, order_by))]
-        pub transaction_id: TransactionId,
-        #[dto(list(filter, order_by))]
-        pub physical_function_run_id: PhysicalFunctionRunId,
-        #[dto(list(filter, order_by))]
-        pub function_param_pos: Option<TableFunctionParamPos>,
-
-        #[dxo(builder(field = "triggered_on"))]
-        #[dto(list(filter, order_by))]
-        pub created_at: TriggeredOn,
-        #[dto(list(filter, order_by))]
-        pub triggered_by_id: UserId,
-        #[dto(list(filter, order_by))]
-        pub started_on: Option<AtTime>,
-        #[dto(list(filter, order_by))]
-        pub ended_on: Option<AtTime>,
-        #[dto(list(filter, order_by))]
-        pub status: PhysicalFunctionRunStatus,
-
-        #[dto(list(filter, filter_like, order_by))]
-        pub collection: CollectionName,
-        #[dto(list(filter, filter_like, order_by))]
-        pub function: FunctionName,
-        #[dto(list(filter, filter_like, order_by))]
-        pub created_by: UserName,
-
-        pub column_count: Option<ColumnCount>,
-        pub row_count: Option<RowCount>,
-        pub data_bytes: Option<ByteCount>,
-        #[dto(list(filter))]
-        pub schema_hash: Option<SchemaHash>,
-        pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(update, sql_table = "physical_table_data_versions")]
-    pub struct UpdateTableDataVersionDB {
-        #[dao(immutable)]
-        #[builder(default)]
-        pub has_data: Option<HasData>,
-        #[dao(immutable)]
-        #[builder(default)]
-        pub schema_changed: Option<SchemaChanged>,
-        #[dao(immutable)]
-        #[builder(default)]
-        pub column_count: Option<ColumnCount>,
-        #[dao(immutable)]
-        #[builder(default)]
-        pub row_count: Option<RowCount>,
-        #[dao(immutable)]
-        #[builder(default)]
-        pub data_bytes: Option<ByteCount>,
-        #[dao(immutable)]
-        #[builder(default)]
-        pub schema_hash: Option<SchemaHash>,
-        #[dao(immutable)]
-        #[builder(default)]
-        pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
-    }
+#[ta_objects::UrlParam]
+pub struct PhysicalTableDataVersionParam {
+    pub table_data_version: PhysicalTableDataVersionId,
 }

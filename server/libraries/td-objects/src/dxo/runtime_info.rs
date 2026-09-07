@@ -20,7 +20,6 @@ impl Default for ServerVersion {
 #[ta_objects::Dto]
 #[derive(Default)]
 pub struct PythonVersions {
-    #[builder(default)]
     pub versions: Vec<PythonVersion>,
 }
 

@@ -2,98 +2,118 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::dxo]
-mod definitions {
-    use crate::types::basic::{
-        AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, GrantType, NewPassword,
-        OldPassword, Password, RefreshToken, RefreshTokenId, SessionStatus, TokenType, UserId,
-        UserName,
-    };
+use crate::types::basic::{
+    AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, GrantType, NewPassword, OldPassword,
+    Password, RefreshToken, RefreshTokenId, SessionStatus, TokenType, UserId, UserName,
+};
 
-    #[ta_objects::Dto]
-    pub struct Login {
-        #[dxo(extractor)]
-        pub name: UserName,
-        #[dxo(extractor)]
-        pub password: Password,
+#[ta_objects::Dto]
+pub struct Login {
+    pub name: UserName,
+    pub password: Password,
+}
+
+#[ta_objects::Dto]
+pub struct RefreshRequestX {
+    pub grant_type: GrantType,
+    pub refresh_token: RefreshToken,
+}
+
+#[ta_objects::Dto]
+pub struct TokenResponseX {
+    pub access_token: AccessToken,
+    pub refresh_token: RefreshToken,
+    pub token_type: TokenType,
+    pub expires_in: AccessTokenExpiration,
+}
+
+#[ta_objects::Dto]
+pub struct PasswordChange {
+    pub name: UserName,
+    pub old_password: OldPassword,
+    pub new_password: NewPassword,
+}
+
+#[ta_objects::Dao]
+#[dao(sql_table = "sessions")]
+pub struct SessionDB {
+    pub access_token_id: AccessTokenId,
+    pub refresh_token_id: RefreshTokenId,
+    pub user_id: UserId,
+    pub created_on: AtTime,
+    pub expires_on: AtTime,
+    pub status_change_on: AtTime,
+    pub status: SessionStatus,
+}
+
+impl SessionDB {
+    /// A fresh Active session with new token ids.
+    pub fn new(user_id: UserId, at: AtTime, expires_on: AtTime) -> Self {
+        Self {
+            access_token_id: AccessTokenId::default(),
+            refresh_token_id: RefreshTokenId::default(),
+            user_id,
+            created_on: at,
+            expires_on,
+            status_change_on: AtTime::default(),
+            status: SessionStatus::Active,
+        }
     }
+}
 
-    #[ta_objects::Dto]
-    pub struct RefreshRequestX {
-        pub grant_type: GrantType,
-        #[dxo(extractor)]
-        pub refresh_token: RefreshToken,
+#[ta_objects::Dao]
+#[dao(sql_table = "sessions__with_names")]
+pub struct SessionDBWithNames {
+    #[dao(flatten)]
+    pub base: SessionDB,
+    pub user_name: UserName,
+}
+
+#[ta_objects::Dao]
+#[dao(sql_table = "sessions")]
+pub struct SessionLogoutDB {
+    pub status_change_on: AtTime,
+    pub status: SessionStatus,
+}
+
+impl SessionLogoutDB {
+    pub fn new(at: AtTime) -> Self {
+        Self {
+            status_change_on: at,
+            status: SessionStatus::InvalidLogout,
+        }
     }
+}
 
-    #[ta_objects::Dto]
-    pub struct TokenResponseX {
-        pub access_token: AccessToken,
-        pub refresh_token: RefreshToken,
-        pub token_type: TokenType,
-        pub expires_in: AccessTokenExpiration,
+#[ta_objects::Dao]
+#[dao(sql_table = "sessions")]
+pub struct SessionPasswordChangeDB {
+    pub status_change_on: AtTime,
+    pub status: SessionStatus,
+}
+
+impl SessionPasswordChangeDB {
+    pub fn new(at: AtTime) -> Self {
+        Self {
+            status_change_on: at,
+            status: SessionStatus::InvalidPasswordChange,
+        }
     }
+}
 
-    #[ta_objects::Dto]
-    pub struct PasswordChange {
-        #[dxo(extractor)]
-        pub name: UserName,
-        #[dxo(extractor)]
-        pub old_password: OldPassword,
-        #[dxo(extractor)]
-        pub new_password: NewPassword,
-    }
+#[ta_objects::Dao]
+#[dao(sql_table = "sessions")]
+pub struct SessionNewTokenDB {
+    pub status_change_on: AtTime,
+    pub status: SessionStatus,
+}
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "sessions")]
-    pub struct SessionDB {
-        #[builder(default)]
-        pub access_token_id: AccessTokenId,
-        #[builder(default)]
-        pub refresh_token_id: RefreshTokenId,
-        #[dxo(setter)]
-        pub user_id: UserId,
-        #[dxo(setter)]
-        pub created_on: AtTime,
-        pub expires_on: AtTime,
-        #[builder(default = "AtTime::default()")]
-        // TODO, ideally we should support #[dxo(setter)] on the same type multiple times.
-        pub status_change_on: AtTime,
-        #[builder(default = "SessionStatus::Active")]
-        pub status: SessionStatus,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "sessions__with_names")]
-    #[inherits(SessionDB)]
-    pub struct SessionDBWithNames {
-        pub user_name: UserName,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "sessions")]
-    pub struct SessionLogoutDB {
-        #[dxo(setter)]
-        pub status_change_on: AtTime,
-        #[builder(default = "SessionStatus::InvalidLogout")]
-        pub status: SessionStatus,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "sessions")]
-    pub struct SessionPasswordChangeDB {
-        #[dxo(setter)]
-        pub status_change_on: AtTime,
-        #[builder(default = "SessionStatus::InvalidPasswordChange")]
-        pub status: SessionStatus,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "sessions")]
-    pub struct SessionNewTokenDB {
-        #[dxo(setter)]
-        pub status_change_on: AtTime,
-        #[builder(default = "SessionStatus::InvalidNewToken")]
-        pub status: SessionStatus,
+impl SessionNewTokenDB {
+    pub fn new(at: AtTime) -> Self {
+        Self {
+            status_change_on: at,
+            status: SessionStatus::InvalidNewToken,
+        }
     }
 }
 

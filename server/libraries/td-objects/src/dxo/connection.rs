@@ -41,7 +41,6 @@ pub struct ConnectionUpsert {
         default,
         deserialize_with = "crate::dxo::collection::deserialize_yaml_connection"
     )]
-    #[builder(default)]
     pub connection: Option<serde_json::Value>,
     pub secrets: Option<Vec<KeyValue>>,
     pub vars: Option<Vec<KeyValue>>,
@@ -53,7 +52,6 @@ pub struct ConnectionUpsert {
 #[ta_objects::Dto]
 pub struct ConnectionRead {
     #[serde(default)]
-    #[builder(default)]
     pub id: Option<ConnectionId>,
     #[schema(value_type = Object)]
     pub connection: serde_json::Value,
@@ -71,33 +69,22 @@ pub struct ConnectionHydrated {
     pub vars: Vec<KeyValue>,
 }
 
-#[ta_objects::dxo]
-mod definitions {
-    use crate::dxo::crudl::RequestContext;
-    use crate::types::basic::{AtTime, ConnectionId, ConnectionKind, UserId};
+use crate::types::basic::{AtTime, ConnectionKind, UserId};
 
-    /// A connection row: stable identity + connector kind, 1:1 with its
-    /// source/destination collection (created with it, named by it, deleted
-    /// with it). The connection CONTENT (dehydrated JSON, secrets, vars)
-    /// lives in the store backend, keyed by this row's id; the row pins the
-    /// connector kind across updates. The row exists only once a store write
-    /// succeeded (store-first ordering), so its presence IS the confirmation.
-    /// `project_id` is owned by RLS (field-less, like groups).
-    #[ta_objects::Dao]
-    #[dao(sql_table = "connections")]
-    #[dxo(updater(try_from = RequestContext, skip_all))]
-    pub struct ConnectionDB {
-        #[dxo(extractor)]
-        #[builder(default)]
-        pub id: ConnectionId,
-        pub kind: ConnectionKind,
-        #[dxo(updater(include, field = "time"))]
-        pub created_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub created_by_id: UserId,
-        #[dxo(updater(include, field = "time"))]
-        pub modified_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub modified_by_id: UserId,
-    }
+/// A connection row: stable identity + connector kind, 1:1 with its
+/// source/destination collection (created with it, named by it, deleted
+/// with it). The connection CONTENT (dehydrated JSON, secrets, vars)
+/// lives in the store backend, keyed by this row's id; the row pins the
+/// connector kind across updates. The row exists only once a store write
+/// succeeded (store-first ordering), so its presence IS the confirmation.
+/// `project_id` is owned by RLS (field-less, like groups).
+#[ta_objects::Dao]
+#[dao(sql_table = "connections")]
+pub struct ConnectionDB {
+    pub id: ConnectionId,
+    pub kind: ConnectionKind,
+    pub created_on: AtTime,
+    pub created_by_id: UserId,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
 }

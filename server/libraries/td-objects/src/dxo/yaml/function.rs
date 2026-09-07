@@ -57,9 +57,7 @@ pub struct FunctionInfo {
     pub function_data: Location,
     /// Where a publisher run's ingested data is kept, one file per input
     /// index. Absent for functions that ingest nothing.
-    #[builder(default)]
     pub function_raw: Option<Location>,
-    #[builder(default)]
     pub scheduled_on: AtTime, // when the request yaml was created
 }
 
@@ -71,17 +69,11 @@ pub struct InputTableVersion {
     pub collection: CollectionName,
     pub table_id: TableId,
     pub table_version_id: TableVersionId,
-    #[builder(default)]
     pub execution_id: Option<ExecutionId>,
-    #[builder(default)]
     pub transaction_id: Option<TransactionId>,
-    #[builder(default)]
     pub function_run_id: Option<PhysicalFunctionRunId>,
-    #[builder(default)]
     pub triggered_on: Option<AtTime>,
-    #[builder(default)]
     pub table_data_version_id: Option<PhysicalTableDataVersionId>,
-    #[builder(default)]
     pub location: Option<Location>,
     pub input_idx: InputIdx,
     pub table_pos: DependencyPos,
@@ -101,20 +93,20 @@ impl Locations for InputTableVersion {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct InputPartitionTableVersion {
-    name: TableName,
-    collection_id: CollectionId,
-    collection: CollectionName,
-    table_id: TableId,
-    table_version_id: TableVersionId,
-    execution_id: Option<ExecutionId>,
-    transaction_id: Option<TransactionId>,
-    function_run_id: Option<PhysicalFunctionRunId>,
-    triggered_on: Option<AtTime>,
-    table_data_version_id: Option<PhysicalTableDataVersionId>,
-    partitions: HashMap<PartitionName, Location>,
-    input_idx: InputIdx,
-    table_pos: DependencyPos,
-    version_pos: VersionPos,
+    pub name: TableName,
+    pub collection_id: CollectionId,
+    pub collection: CollectionName,
+    pub table_id: TableId,
+    pub table_version_id: TableVersionId,
+    pub execution_id: Option<ExecutionId>,
+    pub transaction_id: Option<TransactionId>,
+    pub function_run_id: Option<PhysicalFunctionRunId>,
+    pub triggered_on: Option<AtTime>,
+    pub table_data_version_id: Option<PhysicalTableDataVersionId>,
+    pub partitions: HashMap<PartitionName, Location>,
+    pub input_idx: InputIdx,
+    pub table_pos: DependencyPos,
+    pub version_pos: VersionPos,
 }
 
 impl Locations for InputPartitionTableVersion {
@@ -202,14 +194,14 @@ pub struct OutputTableVersion {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct OutputPartitionTableVersion {
-    name: TableName,
-    collection_id: CollectionId,
-    collection: CollectionName,
-    table_id: TableId,
-    table_version_id: TableVersionId,
-    table_data_version_id: PhysicalTableDataVersionId,
-    base_location: Location,
-    table_pos: TableFunctionParamPos,
+    pub name: TableName,
+    pub collection_id: CollectionId,
+    pub collection: CollectionName,
+    pub table_id: TableId,
+    pub table_version_id: TableVersionId,
+    pub table_data_version_id: PhysicalTableDataVersionId,
+    pub base_location: Location,
+    pub table_pos: TableFunctionParamPos,
 }
 
 #[ta_objects::Dto]
@@ -223,7 +215,6 @@ pub struct TableInfo {
     pub row_count: RowCount,
     pub schema_hash: SchemaHash,
     #[serde(default)]
-    #[builder(default)]
     pub data_bytes: Option<ByteCount>,
 }
 
@@ -250,7 +241,6 @@ mod tests {
     use crate::types::basic::{EnvPrefix, FunctionId};
     use itertools::Itertools;
     use std::collections::HashSet;
-    use ta_objects::Buildable;
     use td_error::TdError;
     use url::Url;
 
@@ -360,7 +350,6 @@ mod tests {
             })],
         }));
         let serialized = serde_yaml::to_string(&input).unwrap();
-        // println!("{}", serialized);
 
         let triggered_on = triggered_on.to_string();
         let scheduled_on = scheduled_on.to_string();
@@ -468,104 +457,115 @@ output:
 
     #[test]
     fn test_input_table_version_locations() -> Result<(), TdError> {
-        let itv = InputTableVersion::builder()
-            .try_name("n")?
-            .collection_id(CollectionId::default())
-            .try_collection("cn")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .try_input_idx(1)?
-            .try_table_pos(1)?
-            .try_version_pos(1)?
-            .build()?;
+        let itv = InputTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: None,
+            transaction_id: None,
+            function_run_id: None,
+            triggered_on: None,
+            table_data_version_id: None,
+            location: None,
+            input_idx: 1.try_into()?,
+            table_pos: 1.try_into()?,
+            version_pos: 1.try_into()?,
+        };
         assert_eq!(itv.locations().len(), 0);
 
-        let location = Location::builder()
-            .uri(Url::parse("file:///foo").unwrap())
-            .build()?;
-        let itv = InputTableVersion::builder()
-            .try_name("n")?
-            .collection_id(CollectionId::default())
-            .try_collection("cn")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .location(location.clone())
-            .try_input_idx(1)?
-            .try_table_pos(1)?
-            .try_version_pos(1)?
-            .build()?;
+        let location = Location {
+            uri: Url::parse("file:///foo").unwrap(),
+            env_prefix: None,
+        };
+        let itv = InputTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: None,
+            triggered_on: None,
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            location: Some(location.clone()),
+            input_idx: 1.try_into()?,
+            table_pos: 1.try_into()?,
+            version_pos: 1.try_into()?,
+        };
         assert_eq!(itv.locations(), vec![&location]);
         Ok(())
     }
 
     #[test]
     fn test_input_partition_table_version_locations() -> Result<(), TdError> {
-        let itv = InputPartitionTableVersion::builder()
-            .try_name("n")?
-            .collection_id(CollectionId::default())
-            .try_collection("cn")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .function_run_id(PhysicalFunctionRunId::new())
-            .triggered_on(AtTime::default())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .try_input_idx(1)?
-            .try_table_pos(1)?
-            .try_version_pos(1)?
-            .partitions(HashMap::new())
-            .build()?;
+        let itv = InputPartitionTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: Some(PhysicalFunctionRunId::new()),
+            triggered_on: Some(AtTime::default()),
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            input_idx: 1.try_into()?,
+            table_pos: 1.try_into()?,
+            version_pos: 1.try_into()?,
+            partitions: HashMap::new(),
+        };
         assert_eq!(itv.locations().len(), 0);
 
-        let location = Location::builder()
-            .uri(Url::parse("file:///foo").unwrap())
-            .build()?;
+        let location = Location {
+            uri: Url::parse("file:///foo").unwrap(),
+            env_prefix: None,
+        };
         let partitions = HashMap::from([(PartitionName::try_from("p")?, location.clone())]);
-        let itv = InputPartitionTableVersion::builder()
-            .try_name("n")?
-            .collection_id(CollectionId::default())
-            .try_collection("cn")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .function_run_id(PhysicalFunctionRunId::new())
-            .triggered_on(AtTime::default())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .try_input_idx(1)?
-            .try_table_pos(1)?
-            .try_version_pos(1)?
-            .partitions(partitions)
-            .build()?;
+        let itv = InputPartitionTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: Some(PhysicalFunctionRunId::new()),
+            triggered_on: Some(AtTime::default()),
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            input_idx: 1.try_into()?,
+            table_pos: 1.try_into()?,
+            version_pos: 1.try_into()?,
+            partitions,
+        };
         assert_eq!(itv.locations(), vec![&location]);
         Ok(())
     }
 
     #[test]
     fn test_input_table_locations() -> Result<(), TdError> {
-        let location = Location::builder()
-            .uri(Url::parse("file:///foo").unwrap())
-            .build()?;
-        let itv = InputTableVersion::builder()
-            .try_name("n")?
-            .collection_id(CollectionId::default())
-            .try_collection("cn")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .function_run_id(PhysicalFunctionRunId::new())
-            .triggered_on(AtTime::default())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .location(location.clone())
-            .try_input_idx(1)?
-            .try_table_pos(1)?
-            .try_version_pos(1)?
-            .build()?;
+        let location = Location {
+            uri: Url::parse("file:///foo").unwrap(),
+            env_prefix: None,
+        };
+        let itv = InputTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: Some(PhysicalFunctionRunId::new()),
+            triggered_on: Some(AtTime::default()),
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            location: Some(location.clone()),
+            input_idx: 1.try_into()?,
+            table_pos: 1.try_into()?,
+            version_pos: 1.try_into()?,
+        };
         assert_eq!(InputTable::Table(itv.clone()).locations(), vec![&location]);
         assert_eq!(
             InputTable::TableVersions {
@@ -576,25 +576,22 @@ output:
             vec![&location]
         );
 
-        let itv = InputPartitionTableVersion::builder()
-            .try_name("n")?
-            .collection_id(CollectionId::default())
-            .try_collection("cn")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .function_run_id(PhysicalFunctionRunId::new())
-            .triggered_on(AtTime::default())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .try_input_idx(1)?
-            .try_table_pos(1)?
-            .try_version_pos(1)?
-            .partitions(HashMap::from([(
-                PartitionName::try_from("p")?,
-                location.clone(),
-            )]))
-            .build()?;
+        let itv = InputPartitionTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: Some(PhysicalFunctionRunId::new()),
+            triggered_on: Some(AtTime::default()),
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            input_idx: 1.try_into()?,
+            table_pos: 1.try_into()?,
+            version_pos: 1.try_into()?,
+            partitions: HashMap::from([(PartitionName::try_from("p")?, location.clone())]),
+        };
         assert_eq!(
             InputTable::PartitionedTable(itv.clone()).locations(),
             vec![&location]
@@ -612,44 +609,41 @@ output:
 
     #[test]
     fn test_output_table_locations() -> Result<(), TdError> {
-        let location = Location::builder()
-            .uri(Url::parse("file:///foo").unwrap())
-            .build()?;
-        let ot = OutputTable::Table(
-            OutputTableVersion::builder()
-                .try_name("n")?
-                .collection_id(CollectionId::default())
-                .try_collection("cn")?
-                .table_id(TableId::default())
-                .table_version_id(TableVersionId::default())
-                .table_data_version_id(PhysicalTableDataVersionId::new())
-                .location(location.clone())
-                .try_table_pos(1)?
-                .build()?,
-        );
+        let location = Location {
+            uri: Url::parse("file:///foo").unwrap(),
+            env_prefix: None,
+        };
+        let ot = OutputTable::Table(OutputTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            table_data_version_id: PhysicalTableDataVersionId::new(),
+            location: location.clone(),
+            table_pos: 1.try_into()?,
+        });
 
         assert_eq!(ot.locations(), vec![&location]);
 
-        let ot = OutputTable::PartitionedTable(
-            OutputPartitionTableVersion::builder()
-                .try_name("n")?
-                .collection_id(CollectionId::default())
-                .try_collection("cn")?
-                .table_id(TableId::default())
-                .table_version_id(TableVersionId::default())
-                .table_data_version_id(PhysicalTableDataVersionId::new())
-                .base_location(location.clone())
-                .try_table_pos(1)?
-                .build()?,
-        );
+        let ot = OutputTable::PartitionedTable(OutputPartitionTableVersion {
+            name: "n".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "cn".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            table_data_version_id: PhysicalTableDataVersionId::new(),
+            base_location: location.clone(),
+            table_pos: 1.try_into()?,
+        });
         assert_eq!(ot.locations(), vec![&location]);
         Ok(())
     }
 
     #[test]
     fn test_output_table_serde_yaml() -> Result<(), TdError> {
-        let function_output = FunctionOutput::builder()
-            .output(vec![
+        let function_output = FunctionOutput {
+            output: vec![
                 WrittenTable::Data {
                     table: TableName::try_from("table_1")?,
                     info: TableInfo {
@@ -662,8 +656,8 @@ output:
                 WrittenTable::NoData {
                     table: TableName::try_from("table_2")?,
                 },
-            ])
-            .build()?;
+            ],
+        };
         let function_output = WorkerOutput::Function(function_output);
 
         println!("{}", serde_json::to_string(&function_output).unwrap());
@@ -675,167 +669,167 @@ output:
     #[test]
     fn test_function_input_v2_locations() -> Result<(), TdError> {
         let locations = vec![
-            Location::builder()
-                .uri(Url::parse("file:///foo0").unwrap())
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo1").unwrap())
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo2").unwrap())
-                .env_prefix(Some(EnvPrefix::try_from("PA_")?))
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo3").unwrap())
-                .env_prefix(Some(EnvPrefix::try_from("PA_")?))
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo4").unwrap())
-                .env_prefix(Some(EnvPrefix::try_from("PB_")?))
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo5").unwrap())
-                .env_prefix(Some(EnvPrefix::try_from("PC_")?))
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo5").unwrap())
-                .env_prefix(Some(EnvPrefix::try_from("PC_")?))
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo5").unwrap())
-                .env_prefix(Some(EnvPrefix::try_from("PC_")?))
-                .build()?,
-            Location::builder()
-                .uri(Url::parse("file:///foo6").unwrap())
-                .env_prefix(Some(EnvPrefix::try_from("PD_")?))
-                .build()?,
+            Location {
+                uri: Url::parse("file:///foo0").unwrap(),
+                env_prefix: None,
+            },
+            Location {
+                uri: Url::parse("file:///foo1").unwrap(),
+                env_prefix: None,
+            },
+            Location {
+                uri: Url::parse("file:///foo2").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PA_")?),
+            },
+            Location {
+                uri: Url::parse("file:///foo3").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PA_")?),
+            },
+            Location {
+                uri: Url::parse("file:///foo4").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PB_")?),
+            },
+            Location {
+                uri: Url::parse("file:///foo5").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PC_")?),
+            },
+            Location {
+                uri: Url::parse("file:///foo5").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PC_")?),
+            },
+            Location {
+                uri: Url::parse("file:///foo5").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PC_")?),
+            },
+            Location {
+                uri: Url::parse("file:///foo6").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PD_")?),
+            },
         ];
-        let itv0 = InputTableVersion::builder()
-            .try_name(format!("fn_state_{}", FunctionId::default()))?
-            .collection_id(CollectionId::default())
-            .try_collection("collection_1")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .location(locations[1].clone())
-            .try_input_idx(0)?
-            .try_table_pos(-1)?
-            .try_version_pos(0)?
-            .build()?;
-        let itv1 = InputTableVersion::builder()
-            .try_name("table_1")?
-            .collection_id(CollectionId::default())
-            .try_collection("collection_1")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .function_run_id(PhysicalFunctionRunId::new())
-            .triggered_on(AtTime::default())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .location(locations[2].clone())
-            .try_input_idx(0)?
-            .try_table_pos(0)?
-            .try_version_pos(0)?
-            .build()?;
-        let itv2 = InputTableVersion::builder()
-            .try_name("table_2")?
-            .collection_id(CollectionId::default())
-            .try_collection("collection_1")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .function_run_id(PhysicalFunctionRunId::new())
-            .triggered_on(AtTime::default())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .location(locations[3].clone())
-            .try_input_idx(1)?
-            .try_table_pos(0)?
-            .try_version_pos(1)?
-            .build()?;
-        let itv3 = InputTableVersion::builder()
-            .try_name("table_3")?
-            .collection_id(CollectionId::default())
-            .try_collection("collection_1")?
-            .table_id(TableId::default())
-            .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .function_run_id(PhysicalFunctionRunId::new())
-            .triggered_on(AtTime::default())
-            .table_data_version_id(PhysicalTableDataVersionId::new())
-            .location(locations[4].clone())
-            .try_input_idx(2)?
-            .try_table_pos(1)?
-            .try_version_pos(0)?
-            .build()?;
-        let ot3 = OutputTable::Table(
-            OutputTableVersion::builder()
-                .try_name(format!("fn_state_{}", FunctionId::default()))?
-                .collection_id(CollectionId::default())
-                .try_collection("collection_1")?
-                .table_id(TableId::default())
-                .table_version_id(TableVersionId::default())
-                .table_data_version_id(PhysicalTableDataVersionId::new())
-                .location(locations[5].clone())
-                .try_table_pos(-1)?
-                .build()?,
-        );
-        let ot4 = OutputTable::Table(
-            OutputTableVersion::builder()
-                .try_name("table_4")?
-                .collection_id(CollectionId::default())
-                .try_collection("collection_1")?
-                .table_id(TableId::default())
-                .table_version_id(TableVersionId::default())
-                .table_data_version_id(PhysicalTableDataVersionId::new())
-                .location(locations[6].clone())
-                .try_table_pos(1)?
-                .build()?,
-        );
-        let ot5 = OutputTable::Table(
-            OutputTableVersion::builder()
-                .try_name("table_5")?
-                .collection_id(CollectionId::default())
-                .try_collection("collection_1")?
-                .table_id(TableId::default())
-                .table_version_id(TableVersionId::default())
-                .table_data_version_id(PhysicalTableDataVersionId::new())
-                .location(locations[7].clone())
-                .try_table_pos(1)?
-                .build()?,
-        );
+        let itv0 = InputTableVersion {
+            name: format!("fn_state_{}", FunctionId::default()).try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "collection_1".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: None,
+            triggered_on: None,
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            location: Some(locations[1].clone()),
+            input_idx: 0.try_into()?,
+            table_pos: (-1).try_into()?,
+            version_pos: 0.try_into()?,
+        };
+        let itv1 = InputTableVersion {
+            name: "table_1".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "collection_1".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: Some(PhysicalFunctionRunId::new()),
+            triggered_on: Some(AtTime::default()),
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            location: Some(locations[2].clone()),
+            input_idx: 0.try_into()?,
+            table_pos: 0.try_into()?,
+            version_pos: 0.try_into()?,
+        };
+        let itv2 = InputTableVersion {
+            name: "table_2".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "collection_1".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: Some(PhysicalFunctionRunId::new()),
+            triggered_on: Some(AtTime::default()),
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            location: Some(locations[3].clone()),
+            input_idx: 1.try_into()?,
+            table_pos: 0.try_into()?,
+            version_pos: 1.try_into()?,
+        };
+        let itv3 = InputTableVersion {
+            name: "table_3".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "collection_1".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            execution_id: Some(ExecutionId::new()),
+            transaction_id: Some(TransactionId::new()),
+            function_run_id: Some(PhysicalFunctionRunId::new()),
+            triggered_on: Some(AtTime::default()),
+            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            location: Some(locations[4].clone()),
+            input_idx: 2.try_into()?,
+            table_pos: 1.try_into()?,
+            version_pos: 0.try_into()?,
+        };
+        let ot3 = OutputTable::Table(OutputTableVersion {
+            name: format!("fn_state_{}", FunctionId::default()).try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "collection_1".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            table_data_version_id: PhysicalTableDataVersionId::new(),
+            location: locations[5].clone(),
+            table_pos: (-1).try_into()?,
+        });
+        let ot4 = OutputTable::Table(OutputTableVersion {
+            name: "table_4".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "collection_1".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            table_data_version_id: PhysicalTableDataVersionId::new(),
+            location: locations[6].clone(),
+            table_pos: 1.try_into()?,
+        });
+        let ot5 = OutputTable::Table(OutputTableVersion {
+            name: "table_5".try_into()?,
+            collection_id: CollectionId::default(),
+            collection: "collection_1".try_into()?,
+            table_id: TableId::default(),
+            table_version_id: TableVersionId::default(),
+            table_data_version_id: PhysicalTableDataVersionId::new(),
+            location: locations[7].clone(),
+            table_pos: 1.try_into()?,
+        });
 
-        let info = FunctionInfo::builder()
-            .project_id(ProjectId::default())
-            .collection_id(CollectionId::default())
-            .collection(CollectionName::try_from("cn")?)
-            .function_version_id(FunctionVersionId::new())
-            .function_defined_on(AtTime::default())
-            .function(FunctionName::try_from("fn")?)
-            .function_run_id(PhysicalFunctionRunId::new())
-            .function_bundle(locations[8].clone())
-            .function_stage(locations[0].clone())
-            .triggered_on(TriggeredOn::default())
-            .transaction_id(TransactionId::new())
-            .execution_id(ExecutionId::new())
-            .execution_name(Some(ExecutionName::try_from("en")?))
-            .function_data(locations[0].clone())
-            .build()?;
-        let function_input = FunctionInput::builder()
-            .info(info)
-            .system_input(vec![InputTable::Table(itv0)])
-            .input(vec![
+        let info = FunctionInfo {
+            project_id: ProjectId::default(),
+            collection_id: CollectionId::default(),
+            collection: CollectionName::try_from("cn")?,
+            function_version_id: FunctionVersionId::new(),
+            function_defined_on: AtTime::default(),
+            function: FunctionName::try_from("fn")?,
+            function_run_id: PhysicalFunctionRunId::new(),
+            function_bundle: locations[8].clone(),
+            function_stage: locations[0].clone(),
+            triggered_on: TriggeredOn::default(),
+            transaction_id: TransactionId::new(),
+            execution_id: ExecutionId::new(),
+            execution_name: Some(ExecutionName::try_from("en")?),
+            function_data: locations[0].clone(),
+            function_raw: None,
+            scheduled_on: AtTime::default(),
+        };
+        let function_input = FunctionInput {
+            info,
+            system_input: vec![InputTable::Table(itv0)],
+            input: vec![
                 InputTable::Table(itv1),
                 InputTable::Table(itv2),
                 InputTable::Table(itv3),
-            ])
-            .system_output(vec![ot3])
-            .output(vec![ot4, ot5])
-            .build()?;
+            ],
+            system_output: vec![ot3],
+            output: vec![ot4, ot5],
+        };
         let function_input = WorkerInput::Function(Box::new(function_input));
         assert_eq!(
             function_input
@@ -863,7 +857,6 @@ output:
                 EnvPrefix::try_from("PD_")?
             ])
         );
-        // println!("{}", serde_yaml::to_string(&function_input).unwrap());
         Ok(())
     }
 }

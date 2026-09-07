@@ -9,7 +9,6 @@ use url::Url;
 #[derive(Eq, PartialEq)]
 pub struct Location {
     pub uri: Url,
-    #[builder(default)]
     pub env_prefix: Option<EnvPrefix>,
 }
 

@@ -9,6 +9,6 @@ use std::collections::HashMap;
 #[ta_objects::Dao]
 #[dao(sql_table = "global_status_summary")]
 pub struct GlobalStatusSummaryDB {
-    status: GlobalStatus,
-    function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
+    pub status: GlobalStatus,
+    pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
 }

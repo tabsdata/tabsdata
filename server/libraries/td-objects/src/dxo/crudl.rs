@@ -3,11 +3,9 @@
 //
 
 use crate::types::basic::{AccessTokenId, AtTime, UserId};
-use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use std::fmt::Debug;
 use td_error::td_error;
-use td_tower::error::{ConnectionError, FromHandlerError};
 
 /// How the requester was authenticated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -26,23 +24,15 @@ pub enum Provenance {
 /// effective permissions are the union across all the user's assigned roles,
 /// so there is no per-session "active role".
 #[ta_objects::Dlo]
+#[derive(Copy)]
 pub struct RequestContext {
-    /// The ID of the access token in the request.
-    #[dxo(extractor)]
     pub access_token_id: AccessTokenId,
-    /// The ID of the user making the request.
-    #[dxo(extractor)]
     pub user_id: UserId,
-    /// The time the request was made.
-    #[dxo(extractor)]
     pub time: AtTime,
-    /// How the requester was authenticated.
-    #[builder(default)]
     pub provenance: Provenance,
 }
 
 impl RequestContext {
-    /// Construct a request context from the caller's identity.
     pub fn with(access_token_id: impl Into<AccessTokenId>, user_id: impl Into<UserId>) -> Self {
         Self {
             access_token_id: access_token_id.into(),
@@ -64,75 +54,54 @@ impl RequestContext {
     }
 }
 
-pub trait IntoName<T> {
-    fn into_name(self) -> T;
+#[ta_objects::Dlo]
+pub struct CreateRequest<C, N = ()> {
+    pub context: RequestContext,
+    pub name: N,
+    pub data: C,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Name<N>(pub(crate) N);
-
-impl<N> IntoName<N> for Name<N> {
-    fn into_name(self) -> N {
-        self.0
+impl<C, N> CreateRequest<C, N> {
+    pub fn into_parts(self) -> (RequestContext, N, C) {
+        (self.context, self.name, self.data)
     }
 }
 
-pub trait IntoData<D> {
-    fn into_data(self) -> D;
+#[ta_objects::Dlo]
+pub struct UpdateRequest<U, N = ()> {
+    pub context: RequestContext,
+    pub name: N,
+    pub data: U,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Data<D>(pub(crate) D);
-
-impl<D> IntoData<D> for Data<D> {
-    fn into_data(self) -> D {
-        self.0
+impl<U, N> UpdateRequest<U, N> {
+    pub fn into_parts(self) -> (RequestContext, N, U) {
+        (self.context, self.name, self.data)
     }
 }
 
-/// Request to create an entity.
 #[ta_objects::Dlo]
-pub struct CreateRequest<N: Clone, C: Clone> {
-    #[dxo(extractor)]
+pub struct DeleteRequest<N = ()> {
     pub context: RequestContext,
-    #[dxo(extractor)]
-    pub name: Name<N>,
-    /// The data to create the entity.
-    #[dxo(extractor)]
-    pub data: Data<C>,
+    pub name: N,
 }
 
-/// Request to update an entity.
-#[ta_objects::Dlo]
-pub struct UpdateRequest<N: Clone, U: Clone> {
-    #[dxo(extractor)]
-    pub context: RequestContext,
-    /// The logical name of the entity to update.
-    #[dxo(extractor)]
-    pub name: Name<N>,
-    /// The data to update the entity.
-    #[dxo(extractor)]
-    pub data: Data<U>,
+impl<N> DeleteRequest<N> {
+    pub fn into_parts(self) -> (RequestContext, N) {
+        (self.context, self.name)
+    }
 }
 
-/// Request to delete an entity.
 #[ta_objects::Dlo]
-pub struct DeleteRequest<N: Clone> {
-    #[dxo(extractor)]
+pub struct ReadRequest<N = ()> {
     pub context: RequestContext,
-    /// The logical name of the entity to delete.
-    #[dxo(extractor)]
-    pub name: Name<N>,
+    pub name: N,
 }
 
-/// Request to get an entity.
-#[ta_objects::Dlo]
-pub struct ReadRequest<N: Clone> {
-    #[dxo(extractor)]
-    pub context: RequestContext,
-    /// The logical name of the entity to read.
-    #[dxo(extractor)]
-    pub name: Name<N>,
+impl<N> ReadRequest<N> {
+    pub fn into_parts(self) -> (RequestContext, N) {
+        (self.context, self.name)
+    }
 }
 
 const DEFAULT_PAGE_LEN: usize = 50;
@@ -141,34 +110,23 @@ fn default_page_len() -> usize {
     DEFAULT_PAGE_LEN
 }
 
-/// List parameters for list operations defining filtering, sorting and pagination.
 #[ta_objects::QueryParam]
 #[derive(Validate)]
 pub struct ListParams {
     /// The desired length for the result list (for now, default is 50).
     #[validate(minimum = 0)]
     #[validate(maximum = 1000)]
-    #[builder(default = "default_page_len()")]
     #[serde(default = "default_page_len")]
     pub len: usize,
-    /// The filter to apply when creating the result list.
-    #[builder(default)]
     #[serde(alias = "search", default)]
     pub filter: Vec<String>,
-    /// The sort order of the result list.
-    #[builder(default)]
     #[serde(alias = "order-by", default)]
     pub order_by: Option<String>,
-    /// The previous value for pagination.
-    #[builder(default)]
     #[serde(default)]
     pub previous: Option<String>,
-    /// The next value for pagination.
-    #[builder(default)]
     #[serde(default)]
     pub next: Option<String>,
     /// The natural ID of the entity used in pagination.
-    #[builder(default)]
     #[serde(default)]
     pub pagination_id: Option<String>,
 }
@@ -187,73 +145,71 @@ impl Default for ListParams {
 }
 
 /// Request to list entities. Project-free like the other CRUD requests; a
-/// tenant request pairs it with its project via the blanket `InProject`
-/// trait's `in_project` (see `td_tower::project_scope`).
+/// tenant request pairs it with its project via the blanket `ScopedExt`
+/// trait's `in_project` (see `td_database::pool::scoped`).
 #[ta_objects::Dlo]
-pub struct ListRequest<N: Clone> {
-    #[dxo(extractor)]
+pub struct ListRequest<N = ()> {
     pub context: RequestContext,
-    #[dxo(extractor)]
-    pub name: Name<N>,
-    #[dxo(extractor)]
+    pub name: N,
     pub list_params: ListParams,
+}
+
+impl<N> ListRequest<N> {
+    pub fn into_parts(self) -> (RequestContext, N, ListParams) {
+        (self.context, self.name, self.list_params)
+    }
 }
 
 impl RequestContext {
     /// Creates a create request. Scope it to a project with
     /// [`CreateRequest::in_project`].
-    pub fn create<N: Clone, C: Clone>(self, name: impl Into<N>, data: C) -> CreateRequest<N, C> {
+    pub fn create<C, N>(self, name: impl Into<N>, data: C) -> CreateRequest<C, N> {
         CreateRequest {
             context: self,
-            name: Name(name.into()),
-            data: Data(data),
+            name: name.into(),
+            data,
         }
     }
 
     /// Creates an update request. Scope it to a project with
     /// [`UpdateRequest::in_project`].
-    pub fn update<N: Clone, U: Clone>(self, name: impl Into<N>, data: U) -> UpdateRequest<N, U> {
+    pub fn update<U, N>(self, name: impl Into<N>, data: U) -> UpdateRequest<U, N> {
         UpdateRequest {
             context: self,
-            name: Name(name.into()),
-            data: Data(data),
+            name: name.into(),
+            data,
         }
     }
 
     /// Creates a delete request. Scope it to a project with
     /// [`DeleteRequest::in_project`].
-    pub fn delete<N: Clone>(self, name: impl Into<N>) -> DeleteRequest<N> {
+    pub fn delete<N>(self, name: impl Into<N>) -> DeleteRequest<N> {
         DeleteRequest {
             context: self,
-            name: Name(name.into()),
+            name: name.into(),
         }
     }
 
     /// Creates a get request. Scope it to a project with
     /// [`ReadRequest::in_project`].
-    pub fn read<N: Clone>(self, name: impl Into<N>) -> ReadRequest<N> {
+    pub fn read<N>(self, name: impl Into<N>) -> ReadRequest<N> {
         ReadRequest {
             context: self,
-            name: Name(name.into()),
+            name: name.into(),
         }
     }
 
     /// Creates a list request. Scope it to a project with
     /// [`ListRequest::in_project`].
-    pub fn list<N: Clone>(
-        self,
-        name: impl Into<N>,
-        list_params: impl Into<ListParams>,
-    ) -> ListRequest<N> {
+    pub fn list<N>(self, name: impl Into<N>, list_params: impl Into<ListParams>) -> ListRequest<N> {
         ListRequest {
             context: self,
-            name: Name(name.into()),
+            name: name.into(),
             list_params: list_params.into(),
         }
     }
 }
 
-/// Error returned by the logical layer operations.
 #[td_error]
 pub enum CrudlErrorX {
     #[error("Cannot create, a unique value in data already exists: {0}")]
@@ -277,73 +233,27 @@ pub enum CrudlErrorX {
     #[error("Invalid old password")]
     InvalidOldPassword = 4001,
 
-    #[error("Connection Error: {0}")]
-    ConnectionError(#[source] ConnectionError) = 5000,
-    #[error("Service Handler Error: {0}")]
-    ServiceHandlerError(#[from] FromHandlerError) = 5001,
     #[error("Internal error: {0}")]
     InternalError(String) = 5002,
 }
 
-/// Response for list operations.
-///
-/// Besides the data, it includes the [`ListParams`] used for the list operation,
-/// the offset and length of the result and a flag indicating if there are more results or not.
 #[ta_objects::Dto]
-pub struct ListResponse<LL: Clone> {
-    /// The list parameters of the request.
+pub struct ListResponse<LL> {
     pub list_params: ListParams,
-    /// The length of the result list.
     pub len: usize,
-    #[builder(setter(custom))]
-    /// The data of the result list.
     pub data: Vec<LL>,
 
-    // Pagination info to go to previous page
-
-    //#[builder(private)] NOTE: we cannot do set this because list_status! macro generates a
-    //                          concrete class and tries to define the builder with a pub setter.
-    //                          As we don't use the ListParam builder in the app code (use by the
-    //                          framework only) this is not an issue.
     pub previous: Option<String>,
-    //#[builder(private)] NOTE: same same
     pub previous_pagination_id: Option<String>,
 
-    // Pagination info to go to next page
-
-    //#[builder(private)] NOTE: same same
     pub next: Option<String>,
-    //#[builder(private)] NOTE: same same
     pub next_pagination_id: Option<String>,
 }
 
-impl<LL: Clone> ListResponseBuilder<LL> {
-    /// Sets the data for the list response, the length is inferred from the data.
-    pub fn data(&mut self, data: Vec<LL>) -> &mut Self {
-        self.len = Some(data.len());
-        self.data = Some(data);
-        self
-    }
-
-    /// Sets info to paginate to previous page
-    pub fn previous_page(
-        &mut self,
-        previous: Option<String>,
-        previous_pagination_id: Option<String>,
-    ) -> &mut Self {
-        self.previous = Some(previous);
-        self.previous_pagination_id = Some(previous_pagination_id);
-        self
-    }
-
-    /// Sets info to paginate to next page
-    pub fn next_page(
-        &mut self,
-        next: Option<String>,
-        next_pagination_id: Option<String>,
-    ) -> &mut Self {
-        self.next = Some(next);
-        self.next_pagination_id = Some(next_pagination_id);
-        self
-    }
+/// `?at=` — the point in time a historical read resolves at. Shared by every
+/// domain with a versioned read surface (functions, tables).
+#[ta_objects::QueryParam]
+pub struct AtTimeParam {
+    #[serde(default)]
+    pub at: AtTime,
 }

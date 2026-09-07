@@ -14,19 +14,15 @@ use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use ta_objects::Buildable;
 use td_error::TdError;
 use utoipa::ToSchema;
 
-/// Represents a function version to perform graph resolution.
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Hash)]
-#[dxo(builder(try_from = FunctionDBWithNames))]
 pub struct FunctionNode {
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_id: FunctionId,
-    #[dxo(builder(field = "id"))]
     pub function_version_id: FunctionVersionId,
     pub name: FunctionName,
     pub enabled: Enabled,
@@ -39,16 +35,13 @@ impl Display for FunctionNode {
     }
 }
 
-/// Represents a table version to perform graph resolution.
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Hash)]
-#[dxo(builder(try_from = TableDBWithNames))]
 pub struct TableNode {
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
     pub table_id: TableId,
-    #[dxo(builder(field = "id"))]
     pub table_version_id: TableVersionId,
     pub name: TableName,
     pub system: System,
@@ -61,7 +54,6 @@ impl Display for TableNode {
     }
 }
 
-/// Graph node representation. It can be a function or a table.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, ToSchema)]
 pub enum GraphNode<F = FunctionNode, T = TableNode> {
     Function(F),
@@ -83,34 +75,29 @@ impl GraphNode<FunctionNode, TableNode> {
         table: &TableDBWithNames,
     ) -> Result<(Self, Self), TdError> {
         Ok((
-            GraphNode::Function(
-                FunctionNode::builder()
-                    .collection_id(function.collection_id)
-                    .collection(function.collection.clone())
-                    .function_id(function.function_id)
-                    .function_version_id(function.id.clone())
-                    .name(function.name.clone())
-                    .enabled(function.enabled)
-                    .group_id(function.group_id)
-                    .build()?,
-            ),
-            GraphNode::Table(
-                TableNode::builder()
-                    .collection_id(table.collection_id)
-                    .collection(table.collection.clone())
-                    .function_version_id(table.function_version_id.clone())
-                    .table_id(table.table_id)
-                    .table_version_id(table.id)
-                    .name(table.name.clone())
-                    .system(table.system)
-                    .private(table.private)
-                    .build()?,
-            ),
+            GraphNode::Function(FunctionNode {
+                collection_id: function.base.collection_id,
+                collection: function.collection.clone(),
+                function_id: function.base.function_id,
+                function_version_id: function.base.id.clone(),
+                name: function.base.name.clone(),
+                enabled: function.base.enabled,
+                group_id: function.group_id,
+            }),
+            GraphNode::Table(TableNode {
+                collection_id: table.base.collection_id,
+                collection: table.collection.clone(),
+                function_version_id: table.base.function_version_id.clone(),
+                table_id: table.base.table_id,
+                table_version_id: table.base.id,
+                name: table.base.name.clone(),
+                system: table.system,
+                private: table.base.private,
+            }),
         ))
     }
 }
 
-/// Adds contextual information to dependency graph edges.
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct GraphDependency {
@@ -118,7 +105,6 @@ pub struct GraphDependency {
     pub self_dependency: SelfDependency,
 }
 
-/// Adds contextual information to dependency graph edges.
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct GraphOutput {
@@ -253,20 +239,23 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Function(function) = function_node {
-            assert_eq!(function.collection_id, table.collection_id);
+            assert_eq!(function.collection_id, table.base.collection_id);
             assert_eq!(function.collection, table.collection);
-            assert_eq!(function.function_version_id, table.function_version_id);
+            assert_eq!(function.function_version_id, table.base.function_version_id);
             assert_eq!(function.name, table.function);
         } else {
             panic!("Expected GraphNode::Function");
         }
 
         if let GraphNode::Table(table_node) = table_node {
-            assert_eq!(table_node.collection_id, table.collection_id);
+            assert_eq!(table_node.collection_id, table.base.collection_id);
             assert_eq!(table_node.collection, table.collection);
-            assert_eq!(table_node.function_version_id, table.function_version_id);
-            assert_eq!(table_node.table_version_id, table.id);
-            assert_eq!(table_node.name, table.name);
+            assert_eq!(
+                table_node.function_version_id,
+                table.base.function_version_id
+            );
+            assert_eq!(table_node.table_version_id, table.base.id);
+            assert_eq!(table_node.name, table.base.name);
         } else {
             panic!("Expected GraphNode::Table");
         }
@@ -281,20 +270,20 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
-            assert_eq!(node.collection_id, dependency.table_collection_id);
+            assert_eq!(node.collection_id, dependency.base.table_collection_id);
             assert_eq!(node.collection, dependency.table_collection);
-            assert_eq!(node.function_version_id, table.function_version_id);
-            assert_eq!(node.table_version_id, table.id);
-            assert_eq!(node.name, table.name);
+            assert_eq!(node.function_version_id, table.base.function_version_id);
+            assert_eq!(node.table_version_id, table.base.id);
+            assert_eq!(node.name, table.base.name);
         } else {
             panic!("Expected GraphNode::Table");
         }
 
         if let GraphNode::Function(node) = function_node {
-            assert_eq!(node.collection_id, dependency.collection_id);
+            assert_eq!(node.collection_id, dependency.base.collection_id);
             assert_eq!(node.collection, dependency.collection);
-            assert_eq!(node.function_version_id, function.id);
-            assert_eq!(node.name, function.name);
+            assert_eq!(node.function_version_id, function.base.id);
+            assert_eq!(node.name, function.base.name);
         } else {
             panic!("Expected GraphNode::Function");
         }
@@ -309,19 +298,19 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
-            assert_eq!(node.collection_id, trigger.trigger_by_collection_id);
+            assert_eq!(node.collection_id, trigger.base.trigger_by_collection_id);
             assert_eq!(node.collection, trigger.trigger_by_collection);
-            assert_eq!(node.function_version_id, table.function_version_id);
-            assert_eq!(node.table_version_id, table.id);
-            assert_eq!(node.name, table.name);
+            assert_eq!(node.function_version_id, table.base.function_version_id);
+            assert_eq!(node.table_version_id, table.base.id);
+            assert_eq!(node.name, table.base.name);
         } else {
             panic!("Expected GraphNode::Table");
         }
 
         if let GraphNode::Function(node) = function_node {
-            assert_eq!(node.collection_id, trigger.collection_id);
+            assert_eq!(node.collection_id, trigger.base.collection_id);
             assert_eq!(node.collection, trigger.collection);
-            assert_eq!(node.function_version_id, function.id);
+            assert_eq!(node.function_version_id, function.base.id);
             assert_eq!(node.name, node.name);
         } else {
             panic!("Expected GraphNode::Function");

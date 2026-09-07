@@ -2,266 +2,318 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::dxo]
-mod definitions {
-    use crate::dxo::crudl::RequestContext;
-    use crate::dxo::function::{Function, FunctionDBWithNames};
-    use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
-    use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
-    use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled, ExecutionId,
-        ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly,
-        FunctionVersionId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger,
-        PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning, StatusCount, System,
-        TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
-    };
-    use crate::types::composed::TableVersions;
-    use crate::types::json::Json;
-    use crate::types::recursion::RecursionOptions;
-    use crate::types::status_count::FunctionRunStatusCount;
-    use std::collections::{HashMap, HashSet};
-    use ta_objects::Setter;
+use crate::dxo::function::{Function, FunctionDBWithNames};
+use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
+use crate::dxo::physical_table_data_version::{
+    ExecutionTableDataVersionRead, PhysicalTableDataVersionDBWithFunction,
+};
+use crate::types::basic::{
+    AllowDisabled, AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled,
+    ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
+    FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger,
+    PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning, StatusCount, System,
+    TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
+};
+use crate::types::composed::TableVersions;
+use crate::types::json::Json;
+use crate::types::recursion::RecursionOptions;
+use crate::types::status_count::FunctionRunStatusCount;
+use std::collections::{HashMap, HashSet};
+use ta_objects::FromDao;
+use td_error::TdError;
 
-    #[ta_objects::Dto]
-    pub struct ExecutionRequest {
-        pub name: Option<ExecutionName>,
-        #[builder(default)]
-        #[serde(default)]
-        #[dxo(extractor)]
-        pub function_only: FunctionOnly,
-        #[builder(default)]
-        #[serde(default)]
-        #[dxo(extractor)]
-        pub override_disabled_trigger: OverrideDisabledTrigger,
-        #[builder(default)]
-        #[serde(default)]
-        #[dxo(extractor)]
-        pub skip_if_running: SkipIfRunning,
-        #[builder(default)]
-        #[serde(default)]
-        #[dxo(extractor)]
-        pub external_uid: Option<ExternalUid>,
-    }
+#[ta_objects::Dto]
+pub struct ExecutionRequest {
+    pub name: Option<ExecutionName>,
+    #[serde(default)]
+    pub function_only: FunctionOnly,
+    #[serde(default)]
+    pub override_disabled_trigger: OverrideDisabledTrigger,
+    #[serde(default)]
+    pub skip_if_running: SkipIfRunning,
+    #[serde(default)]
+    pub external_uid: Option<ExternalUid>,
+}
 
-    impl From<&ExecutionRequestInternal> for ExecutionRequest {
-        fn from(value: &ExecutionRequestInternal) -> Self {
-            ExecutionRequest {
-                name: value.name.clone(),
-                function_only: value.function_only,
-                override_disabled_trigger: OverrideDisabledTrigger::FALSE,
-                skip_if_running: value.skip_if_running,
-                external_uid: value.external_uid.clone(),
-            }
+impl From<&ExecutionRequestInternal> for ExecutionRequest {
+    fn from(value: &ExecutionRequestInternal) -> Self {
+        ExecutionRequest {
+            name: value.name.clone(),
+            function_only: value.function_only,
+            override_disabled_trigger: OverrideDisabledTrigger::FALSE,
+            skip_if_running: value.skip_if_running,
+            external_uid: value.external_uid.clone(),
         }
     }
+}
 
-    #[ta_objects::Dto]
-    pub struct ExecutionRequestInternal {
-        pub name: Option<ExecutionName>,
-        #[builder(default)]
-        #[serde(default)]
-        #[dxo(extractor)]
-        pub function_only: FunctionOnly,
-        #[builder(default)]
-        #[serde(default)]
-        #[dxo(extractor)]
-        pub skip_if_running: SkipIfRunning,
-        #[builder(default)]
-        #[serde(default)]
-        #[dxo(extractor)]
-        pub external_uid: Option<ExternalUid>,
-        #[dxo(extractor)]
-        pub trigger_type: TriggerType,
+#[ta_objects::Dto]
+pub struct ExecutionRequestInternal {
+    pub name: Option<ExecutionName>,
+    #[serde(default)]
+    pub function_only: FunctionOnly,
+    #[serde(default)]
+    pub skip_if_running: SkipIfRunning,
+    #[serde(default)]
+    pub external_uid: Option<ExternalUid>,
+    pub trigger_type: TriggerType,
+}
+
+#[ta_objects::Dao]
+#[dao(sql_table = "executions", order_by(col = "triggered_on", dir = "desc"))]
+pub struct ExecutionDB {
+    pub id: ExecutionId,
+    pub name: Option<ExecutionName>,
+    pub collection_id: CollectionId,
+    pub function_id: FunctionId,
+    pub function_version_id: FunctionVersionId,
+    pub triggered_on: TriggeredOn,
+    pub triggered_by_id: UserId,
+    pub trigger_type: TriggerType,
+
+    /// Caller-supplied idempotency key. Unique per `function_id` when set;
+    /// NULL allows multiple executions for the same function.
+    pub external_uid: Option<ExternalUid>,
+
+    pub recursion_options: Option<Json<RecursionOptions>>,
+}
+
+#[ta_objects::Dao]
+#[dao(sql_table = "executions__with_names")]
+pub struct ExecutionDBWithNames {
+    #[dao(flatten)]
+    pub base: ExecutionDB,
+    pub collection: CollectionName,
+    // True when the owning collection is soft-deleted; `collection` still
+    // carries the real pre-deletion name (resolved view).
+    pub collection_deleted: CollectionWhenDeleted,
+    pub function: FunctionName,
+    pub triggered_by: UserName,
+    pub project: Option<ProjectName>,
+}
+
+#[ta_objects::Dao]
+#[dao(sql_table = "executions__with_status")]
+pub struct ExecutionDBWithStatus {
+    #[dao(flatten)]
+    pub base: ExecutionDBWithNames,
+    pub project_id: ProjectId,
+    pub started_on: Option<AtTime>,
+    pub ended_on: Option<AtTime>,
+    pub status: ExecutionStatus,
+    pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
+}
+
+#[ta_objects::Dto]
+#[dto(list(on = ExecutionDBWithStatus))]
+pub struct Execution {
+    #[dto(list(pagination_by = "+", filter, filter_like))]
+    pub id: ExecutionId,
+    #[dto(list(filter, filter_like))]
+    pub name: Option<ExecutionName>,
+    #[dto(list(filter, order_by))]
+    pub collection_id: CollectionId,
+    pub function_id: FunctionId,
+    #[dto(list(filter))]
+    pub function_version_id: FunctionVersionId,
+    #[dto(list(filter, order_by))]
+    pub triggered_on: TriggeredOn,
+    pub triggered_by_id: UserId,
+    #[dto(list(filter, order_by))]
+    pub trigger_type: TriggerType,
+    pub external_uid: Option<ExternalUid>,
+
+    #[dto(list(filter, filter_like, order_by))]
+    pub collection: CollectionName,
+    pub collection_deleted: CollectionWhenDeleted,
+    #[dto(list(filter, filter_like, order_by))]
+    pub function: FunctionName,
+    #[dto(list(filter, filter_like, order_by))]
+    pub triggered_by: UserName,
+    #[dto(list(filter, filter_like, order_by))]
+    pub project: Option<ProjectName>,
+    #[dto(list(filter))]
+    pub project_id: ProjectId,
+
+    #[dto(list(filter))]
+    pub started_on: Option<AtTime>,
+    #[dto(list(filter))]
+    pub ended_on: Option<AtTime>,
+    #[dto(list(filter, order_by))]
+    pub status: ExecutionStatus,
+    pub function_run_status_count: FunctionRunStatusCount,
+}
+
+impl FromDao for Execution {
+    type Dao = ExecutionDBWithStatus;
+
+    fn from_dao(dao: ExecutionDBWithStatus) -> Result<Self, TdError> {
+        Ok(Self {
+            id: dao.base.base.id,
+            name: dao.base.base.name,
+            collection_id: dao.base.base.collection_id,
+            function_id: dao.base.base.function_id,
+            function_version_id: dao.base.base.function_version_id,
+            triggered_on: dao.base.base.triggered_on,
+            triggered_by_id: dao.base.base.triggered_by_id,
+            trigger_type: dao.base.base.trigger_type,
+            external_uid: dao.base.base.external_uid,
+            collection: dao.base.collection,
+            collection_deleted: dao.base.collection_deleted,
+            function: dao.base.function,
+            triggered_by: dao.base.triggered_by,
+            project: dao.base.project,
+            project_id: dao.project_id,
+            started_on: dao.started_on,
+            ended_on: dao.ended_on,
+            status: dao.status,
+            function_run_status_count: dao.function_run_status_count.into(),
+        })
     }
+}
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "executions", order_by(col = "triggered_on", dir = "desc"))]
-    #[dxo(
-        builder(try_from = FunctionDBWithNames, skip_all),
-        updater(try_from = RequestContext, skip_all),
-        updater(try_from = ExecutionRequest, skip_all)
-    )]
-    pub struct ExecutionDB {
-        #[builder(default = "ExecutionId::new()")]
-        #[dxo(extractor)]
-        pub id: ExecutionId,
-        #[dxo(updater(try_from = ExecutionRequest, include))]
-        pub name: Option<ExecutionName>,
-        #[dxo(extractor, builder(include))]
-        pub collection_id: CollectionId,
-        #[dxo(builder(include))]
-        pub function_id: FunctionId, // Added in v3
-        #[dxo(builder(field = "id"))]
-        #[dxo(extractor)]
-        pub function_version_id: FunctionVersionId,
-        #[dxo(updater(try_from = RequestContext, include, field = "time"))]
-        #[dxo(extractor)]
-        pub triggered_on: TriggeredOn,
-        #[dxo(updater(try_from = RequestContext, field = "user_id"))]
-        pub triggered_by_id: UserId,
-        #[dxo(setter)]
-        pub trigger_type: TriggerType, // Added in v4
+#[ta_objects::Dto]
+pub struct ExecutionDetails {
+    pub execution: Execution,
+    pub functions: Vec<Function>,
+}
 
-        /// Caller-supplied idempotency key. Unique per `function_id` when set;
-        /// NULL allows multiple executions for the same function.
-        #[builder(default)]
-        #[dxo(updater(try_from = ExecutionRequest, include))]
-        pub external_uid: Option<ExternalUid>,
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq, Hash)]
+pub struct FunctionNodeResponse {
+    pub collection_id: CollectionId,
+    pub collection: CollectionName,
+    pub function_version_id: FunctionVersionId,
+    pub name: FunctionName,
+    pub enabled: Enabled,
+}
 
-        pub recursion_options: Option<Json<RecursionOptions>>, // Added in v3
-    }
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq, Hash)]
+pub struct TableNodeResponse {
+    pub collection_id: CollectionId,
+    pub collection: CollectionName,
+    pub function_version_id: FunctionVersionId,
+    pub table_version_id: TableVersionId,
+    pub name: TableName,
+    pub system: System,
+}
 
-    // custom setter to convert to json
-    impl Setter<RecursionOptions> for ExecutionDBBuilder {
-        fn set(&mut self, value: &RecursionOptions) -> &mut Self {
-            let recursion_options = Some(Json(*value));
-            self.recursion_options = Some(recursion_options);
-            self
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ResolvedVersionResponse {
+    pub inner: Vec<Option<PhysicalTableDataVersionId>>,
+    /// Per-slot provenance idx, paired 1:1 with `inner` on dependency
+    /// edges (empty on trigger/output edges). Slots without a data
+    /// version carry `InputIdx::NO_DATA`. Sourced from the persisted
+    /// `logical_function_run_inputs` rows, so reads always reproduce
+    /// the idxs the plan actually ran with.
+    pub input_idxs: Vec<InputIdx>,
+    pub original: TableVersions,
+}
+
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq)]
+pub struct ExecutionResponse {
+    pub id: ExecutionId,
+    pub name: Option<ExecutionName>,
+    pub triggered_on: TriggeredOn,
+    pub trigger_type: TriggerType,
+    pub dot: Dot,
+    pub all_functions: HashMap<FunctionVersionId, FunctionNodeResponse>,
+    pub triggered_functions: HashSet<FunctionVersionId>,
+    pub manual_trigger: FunctionVersionId,
+    pub transactions: HashMap<TransactionId, HashSet<FunctionVersionId>>,
+    pub all_tables: HashMap<TableVersionId, TableNodeResponse>,
+    pub created_tables: HashSet<TableVersionId>,
+    pub system_tables: HashSet<TableVersionId>,
+    pub user_tables: HashSet<TableVersionId>,
+    pub relations: Vec<(
+        FunctionVersionId,
+        TableVersionId,
+        GraphEdge<ResolvedVersionResponse>,
+    )>,
+    pub relations_info: HashMap<PhysicalTableDataVersionId, ExecutionTableDataVersionRead>,
+}
+impl From<&FunctionNode> for FunctionNodeResponse {
+    fn from(src: &FunctionNode) -> Self {
+        FunctionNodeResponse {
+            collection_id: src.collection_id,
+            collection: src.collection.clone(),
+            function_version_id: src.function_version_id.clone(),
+            name: src.name.clone(),
+            enabled: src.enabled,
         }
     }
+}
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "executions__with_names")]
-    #[inherits(ExecutionDB)]
-    pub struct ExecutionDBWithNames {
-        pub collection: CollectionName,
-        // True when the owning collection is soft-deleted; `collection` still
-        // carries the real pre-deletion name (resolved view).
-        pub collection_deleted: CollectionWhenDeleted,
-        pub function: FunctionName,
-        pub triggered_by: UserName,
-        pub project: Option<ProjectName>,
+impl From<&TableNode> for TableNodeResponse {
+    fn from(src: &TableNode) -> Self {
+        TableNodeResponse {
+            collection_id: src.collection_id,
+            collection: src.collection.clone(),
+            function_version_id: src.function_version_id.clone(),
+            table_version_id: src.table_version_id,
+            name: src.name.clone(),
+            system: src.system,
+        }
     }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "executions__with_status")]
-    #[inherits(ExecutionDBWithNames)]
-    pub struct ExecutionDBWithStatus {
-        #[dxo(extractor)]
-        pub id: ExecutionId,
-
-        #[dxo(extractor)]
-        pub project_id: ProjectId,
-        pub started_on: Option<AtTime>,
-        pub ended_on: Option<AtTime>,
-        pub status: ExecutionStatus,
-        pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
+}
+impl From<&FunctionDBWithNames> for FunctionNode {
+    fn from(src: &FunctionDBWithNames) -> Self {
+        FunctionNode {
+            collection_id: src.base.collection_id,
+            collection: src.collection.clone(),
+            function_id: src.base.function_id,
+            function_version_id: src.base.id.clone(),
+            name: src.base.name.clone(),
+            enabled: src.base.enabled,
+            group_id: src.group_id,
+        }
     }
+}
 
-    #[ta_objects::Dto]
-    #[dto(list(on = ExecutionDBWithStatus))]
-    #[inherits(ExecutionDBWithStatus)]
-    pub struct Execution {
-        #[exclude]
-        pub recursion_options: Option<Json<RecursionOptions>>, // Added in v3
-
-        #[dto(list(pagination_by = "+", filter, filter_like))]
-        pub id: ExecutionId,
-        #[dto(list(filter))]
-        pub project_id: ProjectId,
-        #[dto(list(filter, filter_like))]
-        pub name: Option<ExecutionName>,
-        #[dto(list(filter, order_by))]
-        pub collection_id: CollectionId,
-        #[dto(list(filter, order_by))]
-        pub triggered_on: TriggeredOn,
-
-        #[dto(list(filter, filter_like, order_by))]
-        pub collection: CollectionName,
-        #[builder(default)]
-        pub collection_deleted: CollectionWhenDeleted,
-        #[dto(list(filter, filter_like, order_by))]
-        pub function: FunctionName,
-        #[dto(list(filter))]
-        pub function_version_id: FunctionVersionId,
-        #[dto(list(filter, filter_like, order_by))]
-        pub triggered_by: UserName,
-        #[dto(list(filter, order_by))]
-        pub trigger_type: TriggerType, // Added in v4
-
-        #[dto(list(filter))]
-        pub started_on: Option<AtTime>,
-        #[dto(list(filter))]
-        pub ended_on: Option<AtTime>,
-        #[dto(list(filter, order_by))]
-        pub status: ExecutionStatus,
-        #[dto(list(filter, filter_like, order_by))]
-        pub project: Option<ProjectName>,
-        pub function_run_status_count: FunctionRunStatusCount,
+impl From<&PhysicalTableDataVersionDBWithFunction> for ExecutionTableDataVersionRead {
+    fn from(src: &PhysicalTableDataVersionDBWithFunction) -> Self {
+        ExecutionTableDataVersionRead {
+            id: src.base.id.clone(),
+            project_id: src.base.project_id,
+            collection_id: src.base.collection_id,
+            table_id: src.base.table_id,
+            name: src.base.name.clone(),
+            table_version_id: src.base.table_version_id,
+            function_version_id: src.base.function_version_id.clone(),
+            function_version_patch_id: src.base.function_version_patch_id.clone(),
+            execution_id: src.base.execution_id.clone(),
+            transaction_id: src.base.transaction_id.clone(),
+            physical_function_run_id: src.base.physical_function_run_id.clone(),
+            function_param_pos: src.base.function_param_pos,
+            triggered_on: src.base.triggered_on,
+            base_path: src.base.base_path.clone(),
+            has_data: src.base.has_data,
+            schema_changed: src.base.schema_changed,
+            column_count: src.base.column_count,
+            row_count: src.base.row_count,
+            data_bytes: src.base.data_bytes,
+            schema_hash: src.base.schema_hash.clone(),
+            with_data_table_data_version_id: src.base.with_data_table_data_version_id.clone(),
+            triggered_by_id: src.triggered_by_id,
+            started_on: src.started_on,
+            ended_on: src.ended_on,
+            status: src.status,
+            storage_version: src.storage_version.clone(),
+        }
     }
+}
 
-    #[ta_objects::Dto]
-    pub struct ExecutionDetails {
-        #[dxo(setter)]
-        pub execution: Execution,
-        #[dxo(setter)]
-        pub functions: Vec<Function>,
-    }
+#[ta_objects::UrlParam]
+pub struct ExecutionParam {
+    pub execution: ExecutionId,
+}
 
-    #[ta_objects::Dto]
-    #[derive(Eq, PartialEq, Hash)]
-    #[dxo(builder(try_from = FunctionNode))]
-    pub struct FunctionNodeResponse {
-        pub collection_id: CollectionId,
-        pub collection: CollectionName,
-        #[dxo(builder(try_from = FunctionDBWithNames, field = "id"))]
-        pub function_version_id: FunctionVersionId,
-        pub name: FunctionName,
-        pub enabled: Enabled,
-    }
-
-    #[ta_objects::Dto]
-    #[derive(Eq, PartialEq, Hash)]
-    #[dxo(builder(try_from = TableNode))]
-    pub struct TableNodeResponse {
-        pub collection_id: CollectionId,
-        pub collection: CollectionName,
-        pub function_version_id: FunctionVersionId,
-        #[dxo(builder(try_from = TableDBWithNames, field = "id"))]
-        pub table_version_id: TableVersionId,
-        pub name: TableName,
-        pub system: System,
-    }
-
-    /// Represents the versions of a table to be included in the response.
-    #[ta_objects::Dto]
-    #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-    pub struct ResolvedVersionResponse {
-        pub inner: Vec<Option<PhysicalTableDataVersionId>>,
-        /// Per-slot provenance idx, paired 1:1 with `inner` on dependency
-        /// edges (empty on trigger/output edges). Slots without a data
-        /// version carry `InputIdx::NO_DATA`. Sourced from the persisted
-        /// `logical_function_run_inputs` rows, so reads always reproduce
-        /// the idxs the plan actually ran with.
-        pub input_idxs: Vec<InputIdx>,
-        pub original: TableVersions,
-    }
-
-    #[ta_objects::Dto]
-    #[derive(Eq, PartialEq)]
-    pub struct ExecutionResponse {
-        pub id: ExecutionId,
-        pub name: Option<ExecutionName>,
-        pub triggered_on: TriggeredOn,
-        pub trigger_type: TriggerType,
-        pub dot: Dot,
-        // functions info
-        pub all_functions: HashMap<FunctionVersionId, FunctionNodeResponse>,
-        pub triggered_functions: HashSet<FunctionVersionId>,
-        pub manual_trigger: FunctionVersionId,
-        // transactions info
-        pub transactions: HashMap<TransactionId, HashSet<FunctionVersionId>>,
-        // tables info
-        pub all_tables: HashMap<TableVersionId, TableNodeResponse>,
-        pub created_tables: HashSet<TableVersionId>,
-        pub system_tables: HashSet<TableVersionId>,
-        pub user_tables: HashSet<TableVersionId>,
-        // relations info
-        pub relations: Vec<(
-            FunctionVersionId,
-            TableVersionId,
-            GraphEdge<ResolvedVersionResponse>,
-        )>,
-        pub relations_info: HashMap<PhysicalTableDataVersionId, ExecutionTableDataVersionRead>,
-    }
+/// `?with_disabled=` — include executions of disabled functions in the listing.
+#[ta_objects::QueryParam]
+pub struct AllowDisabledParam {
+    #[serde(default)]
+    pub with_disabled: AllowDisabled,
 }

@@ -13,89 +13,110 @@
 //! carry `system = true` and are rejected by `update` and `delete` at
 //! the service layer.
 
-#[ta_objects::dxo]
-mod definitions {
-    use crate::dxo::crudl::RequestContext;
-    use crate::types::basic::{AtTime, Description, GroupId, GroupName, System, UserId, UserName};
+use crate::dxo::crudl::RequestContext;
+use crate::types::basic::{
+    AtTime, Description, GroupId, GroupIdName, GroupName, System, UserId, UserName,
+};
+use ta_objects::FromDao;
+use td_error::TdError;
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "groups")]
-    #[dxo(
-        builder(try_from = GroupCreate, skip_all),
-        updater(try_from = RequestContext, skip_all),
-    )]
-    pub struct GroupDB {
-        #[builder(default)]
-        #[dxo(extractor)]
-        pub id: GroupId,
-        #[dxo(builder(include), extractor)]
-        pub name: GroupName,
-        #[dxo(builder(include))]
-        pub description: Description,
-        #[dxo(updater(include, field = "time"))]
-        pub created_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub created_by_id: UserId,
-        #[dxo(updater(include, field = "time"))]
-        pub modified_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub modified_by_id: UserId,
-        #[builder(default = "System::from(false)")]
-        pub system: System,
-    }
+#[ta_objects::Dao]
+#[dao(sql_table = "groups")]
+pub struct GroupDB {
+    pub id: GroupId,
+    pub name: GroupName,
+    pub description: Description,
+    pub created_on: AtTime,
+    pub created_by_id: UserId,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
+    pub system: System,
+}
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "groups__with_names")]
-    #[inherits(GroupDB)]
-    pub struct GroupDBWithNames {
-        #[dxo(extractor)]
-        pub id: GroupId,
+#[ta_objects::Dao]
+#[dao(sql_table = "groups__with_names")]
+pub struct GroupDBWithNames {
+    #[dao(flatten)]
+    pub base: GroupDB,
+    pub created_by: UserName,
+    pub modified_by: UserName,
+}
 
-        pub created_by: UserName,
-        pub modified_by: UserName,
-    }
+#[ta_objects::Dto]
+pub struct GroupCreate {
+    pub name: GroupName,
+    #[serde(default)]
+    pub description: Description,
+}
 
-    #[ta_objects::Dto]
-    pub struct GroupCreate {
-        pub name: GroupName,
-        #[serde(default)]
-        pub description: Description,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(update, sql_table = "groups")]
-    #[dxo(
-        builder(try_from = GroupUpdate, skip_all),
-        updater(try_from = RequestContext, skip_all),
-    )]
-    pub struct GroupDBUpdate {
-        #[dxo(builder(include))]
-        pub name: Option<GroupName>,
-        #[dxo(builder(include))]
-        pub description: Option<Description>,
-        #[dxo(updater(include, field = "time"))]
-        pub modified_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub modified_by_id: UserId,
-    }
-
-    #[ta_objects::Dto]
-    pub struct GroupUpdate {
-        pub name: Option<GroupName>,
-        pub description: Option<Description>,
-    }
-
-    #[ta_objects::Dto]
-    #[dto(list(on = GroupDBWithNames))]
-    #[inherits(GroupDBWithNames)]
-    pub struct Group {
-        #[dto(list(pagination_by = "+"))]
-        pub id: GroupId,
-        #[dto(list(filter, filter_like, order_by))]
-        pub name: GroupName,
-        #[dto(list(filter, filter_like, order_by))]
-        pub description: Description,
+impl GroupCreate {
+    pub fn to_dao(self, ctx: &RequestContext) -> GroupDB {
+        GroupDB {
+            id: GroupId::default(),
+            name: self.name,
+            description: self.description,
+            created_on: ctx.time,
+            created_by_id: ctx.user_id,
+            modified_on: ctx.time,
+            modified_by_id: ctx.user_id,
+            system: System::FALSE,
+        }
     }
 }
 
-pub use definitions::*;
+#[ta_objects::Dao]
+#[dao(update, sql_table = "groups")]
+pub struct GroupDBUpdate {
+    pub name: Option<GroupName>,
+    pub description: Option<Description>,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
+}
+
+#[ta_objects::Dto]
+pub struct GroupUpdate {
+    pub name: Option<GroupName>,
+    pub description: Option<Description>,
+}
+
+#[ta_objects::Dto]
+#[dto(list(on = GroupDBWithNames))]
+pub struct Group {
+    #[dto(list(pagination_by = "+"))]
+    pub id: GroupId,
+    #[dto(list(filter, filter_like, order_by))]
+    pub name: GroupName,
+    #[dto(list(filter, filter_like, order_by))]
+    pub description: Description,
+    pub created_on: AtTime,
+    pub created_by_id: UserId,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
+    pub system: System,
+    pub created_by: UserName,
+    pub modified_by: UserName,
+}
+
+impl FromDao for Group {
+    type Dao = GroupDBWithNames;
+
+    fn from_dao(dao: GroupDBWithNames) -> Result<Self, TdError> {
+        Ok(Self {
+            id: dao.base.id,
+            name: dao.base.name,
+            description: dao.base.description,
+            created_on: dao.base.created_on,
+            created_by_id: dao.base.created_by_id,
+            modified_on: dao.base.modified_on,
+            modified_by_id: dao.base.modified_by_id,
+            system: dao.base.system,
+            created_by: dao.created_by,
+            modified_by: dao.modified_by,
+        })
+    }
+}
+
+#[ta_objects::UrlParam]
+pub struct GroupParam {
+    pub group: GroupIdName,
+}

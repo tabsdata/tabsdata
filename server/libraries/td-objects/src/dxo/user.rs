@@ -2,129 +2,225 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::dxo]
-mod definitions {
-    use crate::dxo::crudl::RequestContext;
-    use crate::dxo::role::Role;
-    use crate::types::basic::{
-        AtTime, Email, FullName, Password, PasswordChangeTime, PasswordHash, PasswordMustChange,
-        UserEnabled, UserId, UserName, UserSystem,
-    };
+use crate::dxo::crudl::RequestContext;
+use crate::dxo::role::Role;
+use crate::types::basic::{
+    AtTime, Email, FullName, Password, PasswordChangeTime, PasswordHash, PasswordMustChange,
+    UserEnabled, UserId, UserIdName, UserName, UserSystem,
+};
+use ta_objects::FromDao;
+use td_error::TdError;
+use td_security::config::PasswordHashingConfig;
+use td_security::password::create_password_hash;
 
-    #[ta_objects::Dao]
-    #[derive(Eq, PartialEq)]
-    #[dao(sql_table = "users")]
-    #[dxo(
-        builder(try_from = UserDB),
-        updater(try_from = RequestContext, skip_all)
-    )]
-    pub struct UserDB {
-        #[builder(default)]
-        #[dxo(extractor)]
-        pub id: UserId,
-        #[dxo(extractor)]
-        pub name: UserName,
-        pub full_name: FullName,
-        pub email: Option<Email>,
-        #[dxo(updater(include, field = "time"))]
-        pub created_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub created_by_id: UserId,
-        #[dxo(updater(include, field = "time"))]
-        pub modified_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub modified_by_id: UserId,
-        #[dxo(extractor, setter)]
-        pub password_hash: PasswordHash,
-        #[dxo(setter)]
-        pub password_set_on: PasswordChangeTime,
-        #[dxo(extractor, setter)]
-        pub password_must_change: PasswordMustChange,
-        #[dxo(extractor, setter)]
-        pub enabled: UserEnabled,
-        #[builder(default)]
-        #[dxo(extractor, setter)]
-        pub system: UserSystem,
-    }
+#[ta_objects::Dao]
+#[derive(Eq, PartialEq)]
+#[dao(sql_table = "users")]
+pub struct UserDB {
+    pub id: UserId,
+    pub name: UserName,
+    pub full_name: FullName,
+    pub email: Option<Email>,
+    pub created_on: AtTime,
+    pub created_by_id: UserId,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
+    pub password_hash: PasswordHash,
+    pub password_set_on: PasswordChangeTime,
+    pub password_must_change: PasswordMustChange,
+    pub enabled: UserEnabled,
+    pub system: UserSystem,
+}
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "users__with_names")]
-    #[inherits(UserDB)]
-    pub struct UserDBWithNames {
-        #[dxo(extractor)]
-        pub id: UserId,
+#[ta_objects::Dao]
+#[dao(sql_table = "users__with_names")]
+pub struct UserDBWithNames {
+    #[dao(flatten)]
+    pub base: UserDB,
+    pub created_by: UserName,
+    pub modified_by: UserName,
+}
 
-        pub created_by: UserName,
-        pub modified_by: UserName,
-    }
-
-    #[ta_objects::Dto]
-    pub struct UserCreate {
-        pub name: UserName,
-        pub full_name: FullName,
-        pub email: Option<Email>,
-        pub password: Password,
-        #[serde(default)]
-        pub enabled: UserEnabled,
-    }
-
-    #[ta_objects::Dto]
-    #[derive(Default)]
+#[ta_objects::Dto]
+pub struct UserCreate {
+    pub name: UserName,
+    pub full_name: FullName,
+    pub email: Option<Email>,
+    pub password: Password,
     #[serde(default)]
-    pub struct UserUpdate {
-        pub full_name: Option<FullName>,
-        pub email: Option<Option<Email>>,
-        pub password: Option<Password>,
-        pub enabled: Option<UserEnabled>,
+    pub enabled: UserEnabled,
+}
+
+impl UserCreate {
+    pub fn to_dao(
+        self,
+        ctx: &RequestContext,
+        password_hashing_config: &PasswordHashingConfig,
+    ) -> Result<UserDB, TdError> {
+        let password_hash = PasswordHash::try_from(create_password_hash(
+            password_hashing_config,
+            self.password.trim(),
+        ))?;
+        Ok(UserDB {
+            id: UserId::default(),
+            name: self.name,
+            full_name: self.full_name,
+            email: self.email,
+            created_on: ctx.time,
+            created_by_id: ctx.user_id,
+            modified_on: ctx.time,
+            modified_by_id: ctx.user_id,
+            password_hash,
+            password_set_on: PasswordChangeTime::try_from(&ctx.time)?,
+            password_must_change: PasswordMustChange::TRUE,
+            enabled: self.enabled,
+            system: UserSystem::FALSE,
+        })
     }
+}
 
-    #[ta_objects::Dao]
-    #[dao(update, sql_table = "users")]
-    #[dxo(
-        builder(try_from = UserDB),
-        updater(try_from = RequestContext, skip_all)
-    )]
-    pub struct UserUpdateDB {
-        pub full_name: FullName,
-        // Tri-state for update_values: outer `None` skips the column (unchanged),
-        // `Some(None)` sets it NULL (clear), `Some(Some(v))` sets `v`. Seeded from
-        // the current `UserDB`, overridden by the update layer.
-        pub email: Option<Option<Email>>,
-        #[dxo(updater(include, field = "time"))]
-        pub modified_on: AtTime,
-        #[dxo(updater(include, field = "user_id"))]
-        pub modified_by_id: UserId,
-        pub password_hash: PasswordHash,
-        pub password_set_on: PasswordChangeTime,
-        pub password_must_change: PasswordMustChange,
-        pub enabled: UserEnabled,
+#[ta_objects::Dto]
+#[derive(Default)]
+#[serde(default)]
+pub struct UserUpdate {
+    pub full_name: Option<FullName>,
+    pub email: Option<Option<Email>>,
+    pub password: Option<Password>,
+    pub enabled: Option<UserEnabled>,
+}
+
+impl UserUpdate {
+    /// Seed the update row from the current user, stamp it, and merge the
+    /// set fields (a set password re-hashes and forces a change on login).
+    pub fn to_dao(
+        self,
+        user: UserDB,
+        ctx: &RequestContext,
+        password_hashing_config: &PasswordHashingConfig,
+    ) -> Result<UserUpdateDB, TdError> {
+        let mut db = UserUpdateDB::from(user);
+        db.modified_on = ctx.time;
+        db.modified_by_id = ctx.user_id;
+        if let Some(full_name) = self.full_name {
+            db.full_name = full_name;
+        }
+        // Re-wrap as `Some(inner)` so update_values writes the column; the
+        // DTO's outer `None` falls through here (unchanged).
+        if let Some(email) = self.email {
+            db.email = Some(email);
+        }
+        if let Some(password) = self.password {
+            db.password_hash = PasswordHash::try_from(create_password_hash(
+                password_hashing_config,
+                password.trim(),
+            ))?;
+            db.password_set_on = PasswordChangeTime::try_from(&ctx.time)?;
+            db.password_must_change = PasswordMustChange::TRUE;
+        };
+        if let Some(enabled) = self.enabled {
+            db.enabled = enabled;
+        }
+        Ok(db)
     }
+}
 
-    #[ta_objects::Dto]
-    #[dto(list(on = UserDBWithNames))]
-    #[inherits(UserDBWithNames)]
-    pub struct UserRead {
-        #[exclude]
-        pub password_hash: PasswordHash,
+#[ta_objects::Dao]
+#[dao(update, sql_table = "users")]
+pub struct UserUpdateDB {
+    pub full_name: FullName,
+    // Tri-state for update_values: outer `None` skips the column (unchanged),
+    // `Some(None)` sets it NULL (clear), `Some(Some(v))` sets `v`. Seeded from
+    // the current `UserDB`, overridden by the update layer.
+    pub email: Option<Option<Email>>,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
+    pub password_hash: PasswordHash,
+    pub password_set_on: PasswordChangeTime,
+    pub password_must_change: PasswordMustChange,
+    pub enabled: UserEnabled,
+}
 
-        #[dto(list(pagination_by = "+"))]
-        pub id: UserId,
-        #[dto(list(filter, filter_like, order_by))]
-        pub name: UserName,
-        #[dto(list(filter, filter_like, order_by))]
-        pub full_name: FullName,
-        #[dto(list(filter, filter_like))]
-        pub email: Option<Email>,
+#[ta_objects::Dto]
+#[dto(list(on = UserDBWithNames))]
+pub struct UserRead {
+    #[dto(list(pagination_by = "+"))]
+    pub id: UserId,
+    #[dto(list(filter, filter_like, order_by))]
+    pub name: UserName,
+    #[dto(list(filter, filter_like, order_by))]
+    pub full_name: FullName,
+    #[dto(list(filter, filter_like))]
+    pub email: Option<Email>,
+    pub created_on: AtTime,
+    pub created_by_id: UserId,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
+    pub password_set_on: PasswordChangeTime,
+    pub password_must_change: PasswordMustChange,
+    pub enabled: UserEnabled,
+    pub system: UserSystem,
+    pub created_by: UserName,
+    pub modified_by: UserName,
+}
+
+impl FromDao for UserRead {
+    type Dao = UserDBWithNames;
+
+    fn from_dao(dao: UserDBWithNames) -> Result<Self, TdError> {
+        Ok(Self {
+            id: dao.base.id,
+            name: dao.base.name,
+            full_name: dao.base.full_name,
+            email: dao.base.email,
+            created_on: dao.base.created_on,
+            created_by_id: dao.base.created_by_id,
+            modified_on: dao.base.modified_on,
+            modified_by_id: dao.base.modified_by_id,
+            password_set_on: dao.base.password_set_on,
+            password_must_change: dao.base.password_must_change,
+            enabled: dao.base.enabled,
+            system: dao.base.system,
+            created_by: dao.created_by,
+            modified_by: dao.modified_by,
+        })
     }
+}
 
-    #[ta_objects::Dto]
-    #[dxo(builder(try_from = UserDBWithNames))]
-    #[inherits(UserDBWithNames)]
-    pub struct UserInfo {
-        #[exclude]
-        pub password_hash: PasswordHash,
+#[ta_objects::Dto]
+pub struct UserInfo {
+    pub id: UserId,
+    pub name: UserName,
+    pub full_name: FullName,
+    pub email: Option<Email>,
+    pub created_on: AtTime,
+    pub created_by_id: UserId,
+    pub modified_on: AtTime,
+    pub modified_by_id: UserId,
+    pub password_set_on: PasswordChangeTime,
+    pub password_must_change: PasswordMustChange,
+    pub enabled: UserEnabled,
+    pub system: UserSystem,
+    pub created_by: UserName,
+    pub modified_by: UserName,
 
-        #[dxo(builder(skip), setter)]
-        pub user_roles: Vec<Role>,
+    pub user_roles: Vec<Role>,
+}
+impl From<UserDB> for UserUpdateDB {
+    fn from(src: UserDB) -> Self {
+        UserUpdateDB {
+            full_name: src.full_name,
+            email: Some(src.email),
+            modified_on: src.modified_on,
+            modified_by_id: src.modified_by_id,
+            password_hash: src.password_hash,
+            password_set_on: src.password_set_on,
+            password_must_change: src.password_must_change,
+            enabled: src.enabled,
+        }
     }
+}
+
+#[ta_objects::UrlParam]
+pub struct UserParam {
+    pub user: UserIdName,
 }
