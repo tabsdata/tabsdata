@@ -2,123 +2,75 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::user_role::layers::assert_user_is_not_system;
+use crate::user_role::assert_user_is_not_system;
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
-use td_authz::{AuthzContext, refresh_authz_context};
-use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, RbacSource, System, SystemEntity};
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_objects::FromDao;
+use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::role::RoleDB;
+use td_objects::dxo::role::RoleParam;
 use td_objects::dxo::user::UserDB;
-use td_objects::dxo::user_role::{
-    UserRole, UserRoleBuilder, UserRoleCreate, UserRoleDB, UserRoleDBBuilder, UserRoleDBWithNames,
-};
-use td_objects::rest_urls::RoleParam;
-use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserName, UserRoleId};
-use td_queries::By;
-use td_queries::insert;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::dxo::user_role::{UserRole, UserRoleCreate, UserRoleDB, UserRoleDBWithNames};
+use td_objects::types::basic::Fixed;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = CreateUserRoleService,
-    request = CreateRequest<RoleParam, UserRoleCreate>,
-    response = UserRole,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, ManageAccess>::check),
-        from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_name::<RoleParam>),
-        from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_data::<UserRoleCreate>),
-        from_fn(builder::<UserRoleDB>),
-        from_fn(With::<RoleParam>::extract::<RoleIdName>),
-        from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
-        from_fn(With::<RoleDB>::extract::<RoleId>),
-        from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
-        from_fn(With::<UserRoleCreate>::extract::<UserName>),
-        from_fn(By::<UserName>::fetch_one::<UserDB>),
-        from_fn(assert_user_is_not_system),
-        from_fn(With::<UserDB>::extract::<UserId>),
-        from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
-        from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-        from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB>),
-        from_fn(insert::<UserRoleDB>),
-        from_fn(With::<UserRoleDB>::extract::<UserRoleId>),
-        from_fn(By::<UserRoleId>::fetch_one::<UserRoleDBWithNames>),
-        from_fn(With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
-        from_fn(With::<UserRoleBuilder>::build::<UserRole>),
-        // Added a role membership; invalidate the cached authz grants.
-        from_fn(refresh_authz_context),
-    )
+#[service_factory]
+async fn create_user_role(
+    authz: Ctx<AuthzContext>,
+    db: DbPool<Global>,
+    request: CreateRequest<UserRoleCreate, RoleParam>,
+) -> Result<UserRole, TdError> {
+    let (ctx, param, create) = request.into_parts();
+    let mut trx = db.begin().await?;
+    let grant = authz
+        .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
+        .await?;
+    let conn = trx.get(grant);
+
+    let role: RoleDB = conn.live().fetch_one(&param.role).await?;
+
+    let user: UserDB = conn.live().fetch_one(&create.user).await?;
+    assert_user_is_not_system(&user)?;
+
+    let user_role = UserRoleDB::new(user.id, role.id, &ctx, Fixed::FALSE);
+    conn.live().insert(&user_role).await?;
+
+    let with_names: UserRoleDBWithNames = conn.live().fetch_one(&user_role.id).await?;
+    let read = UserRole::from_dao(with_names)?;
+    trx.commit().await?;
+
+    // Added a role membership; with the transaction committed, invalidate the
+    // cached authz grants.
+    let mut conn = db.read().await?;
+    authz.refresh(conn.get(grant)).await?;
+
+    Ok(read)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use crate::user_role::UserRoleError;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::Buildable;
-    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled};
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::{
+        AccessTokenId, Description, RoleIdName, RoleName, UserEnabled, UserId, UserName,
+    };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_create_user_role(db: TdPool) {
-        use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
-        use td_tower::metadata::type_of_val;
-
-        CreateUserRoleService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<CreateRequest<RoleParam, UserRoleCreate>, UserRole>(&[
-            type_of_val(
-                &With::<CreateRequest<RoleParam, UserRoleCreate>>::extract::<RequestContext>,
-            ),
-            type_of_val(&Scope::<System>::system),
-            type_of_val(&Rbac::<System, ManageAccess>::check),
-            type_of_val(
-                &With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_name::<RoleParam>,
-            ),
-            type_of_val(
-                &With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_data::<UserRoleCreate>,
-            ),
-            type_of_val(&builder::<UserRoleDB>),
-            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
-            type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&With::<RoleId>::set::<UserRoleDBBuilder>),
-            type_of_val(&With::<UserRoleCreate>::extract::<UserName>),
-            type_of_val(&By::<UserName>::fetch_one::<UserDB>),
-            type_of_val(&assert_user_is_not_system),
-            type_of_val(&With::<UserDB>::extract::<UserId>),
-            type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
-            type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-            type_of_val(&With::<UserRoleDBBuilder>::build::<UserRoleDB>),
-            type_of_val(&insert::<UserRoleDB>),
-            type_of_val(&With::<UserRoleDB>::extract::<UserRoleId>),
-            type_of_val(&By::<UserRoleId>::fetch_one::<UserRoleDBWithNames>),
-            type_of_val(&With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
-            type_of_val(&With::<UserRoleBuilder>::build::<UserRole>),
-            type_of_val(&refresh_authz_context),
-        ]);
-    }
 
     #[td_test::test(db)]
     async fn test_create_user_role(db: TdPool) -> Result<(), TdError> {
         let _user = db
             .seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(false))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::FALSE)
             .await;
         let _role = db
             .seed()
@@ -128,19 +80,19 @@ mod tests {
             )
             .await;
 
-        let create = UserRoleCreate::builder()
-            .user(UserName::try_from("joaquin")?)
-            .build()?;
+        let create = UserRoleCreate {
+            user: UserName::try_from("joaquin")?,
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            RoleParam::builder()
-                .role(RoleIdName::from_str("king")?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str("king")?,
+            },
             create,
         );
 
-        let service = CreateUserRoleService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.create_user_role(request).await;
         let response = response?;
 
         let found = db.live().fetch_one::<UserRoleDB>(&response.id).await?;
@@ -163,25 +115,24 @@ mod tests {
             )
             .await?;
 
-        let create = UserRoleCreate::builder()
-            .user(UserName::try_from("svc")?)
-            .build()?;
+        let create = UserRoleCreate {
+            user: UserName::try_from("svc")?,
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-            RoleParam::builder()
-                .role(RoleIdName::from_str("king")?)
-                .build()?,
+            RoleParam {
+                role: RoleIdName::from_str("king")?,
+            },
             create,
         );
 
-        let service = CreateUserRoleService::with_defaults(db.clone()).service();
-        assert_service_error(service, request, |err| match err {
+        let service = Services::with_defaults(db.clone());
+        assert_service_error(service.create_user_role(request).await, |err| match err {
             UserRoleError::CannotGrantRoleToSystemUser(name) => {
                 assert_eq!(name, &UserName::try_from("svc").unwrap());
             }
             other => panic!("Expected CannotGrantRoleToSystemUser, got {other:?}"),
-        })
-        .await;
+        });
         Ok(())
     }
 }

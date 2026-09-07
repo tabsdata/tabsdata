@@ -3,95 +3,60 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
-use td_objects::And;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::role::RoleDB;
-use td_objects::dxo::user::UserDB;
-use td_objects::dxo::user_role::{UserRole, UserRoleBuilder, UserRoleDBWithNames};
-use td_objects::rest_urls::UserRoleParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName};
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, System, SystemEntity};
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::role::{RoleDB, RoleParam};
+use td_objects::dxo::user::{UserDB, UserParam};
+use td_objects::dxo::user_role::{UserRole, UserRoleDBWithNames};
+use td_objects::{FromDao, and};
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ReadUserRoleService,
-    request = ReadRequest<UserRoleParam>,
-    response = UserRole,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ReadRequest<UserRoleParam>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
-        from_fn(With::<ReadRequest<UserRoleParam>>::extract_name::<UserRoleParam>),
-        from_fn(With::<UserRoleParam>::extract::<RoleIdName>),
-        from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
-        from_fn(With::<RoleDB>::extract::<RoleId>),
-        from_fn(With::<UserRoleParam>::extract::<UserIdName>),
-        from_fn(By::<UserIdName>::fetch_one::<UserDB>),
-        from_fn(With::<UserDB>::extract::<UserId>),
-        from_fn(By::<And![RoleId, UserId]>::fetch_one::<UserRoleDBWithNames>),
-        from_fn(With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
-        from_fn(With::<UserRoleBuilder>::build::<UserRole>),
-    )
+#[service_factory]
+async fn read_user_role(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ReadRequest<(RoleParam, UserParam)>,
+) -> Result<UserRole, TdError> {
+    let (ctx, (role_param, user_param)) = request.into_parts();
+    let grant = authz
+        .require::<System, (ManageAccess, OnAnyProject<ManageProject>)>(
+            gated_conn,
+            &ctx,
+            &SystemEntity,
+        )
+        .await?;
+    let conn = gated_conn.get(grant);
+
+    let role: RoleDB = conn.live().fetch_one(&role_param.role).await?;
+    let user: UserDB = conn.live().fetch_one(&user_param.user).await?;
+    let with_names: UserRoleDBWithNames = conn.live().fetch_one(and!(&role.id, &user.id)).await?;
+    UserRole::from_dao(with_names)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Services;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::user_role::UserRoleDB;
-    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled, UserName};
+    use td_objects::types::basic::{
+        AccessTokenId, Description, RoleIdName, RoleName, UserEnabled, UserId, UserIdName, UserName,
+    };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_read_user_role(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ReadUserRoleService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ReadRequest<UserRoleParam>, UserRole>(&[
-                type_of_val(&With::<ReadRequest<UserRoleParam>>::extract::<RequestContext>),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
-                type_of_val(&With::<ReadRequest<UserRoleParam>>::extract_name::<UserRoleParam>),
-                type_of_val(&With::<UserRoleParam>::extract::<RoleIdName>),
-                type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
-                type_of_val(&With::<RoleDB>::extract::<RoleId>),
-                type_of_val(&With::<UserRoleParam>::extract::<UserIdName>),
-                type_of_val(&By::<UserIdName>::fetch_one::<UserDB>),
-                type_of_val(&With::<UserDB>::extract::<UserId>),
-                type_of_val(&By::<And![RoleId, UserId]>::fetch_one::<UserRoleDBWithNames>),
-                type_of_val(&With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
-                type_of_val(&With::<UserRoleBuilder>::build::<UserRole>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_read_user_role(db: TdPool) -> Result<(), TdError> {
         let user = db
             .seed()
-            .user(
-                &UserName::try_from("joaquin").unwrap(),
-                &UserEnabled::from(false),
-            )
+            .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::FALSE)
             .await?;
         let role = db
             .seed()
@@ -102,15 +67,17 @@ mod tests {
             .await?;
         let user_role = db.seed().user_role(&user.id, &role.id).await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            UserRoleParam::builder()
-                .role(RoleIdName::from_str("king")?)
-                .user(UserIdName::from_str("joaquin")?)
-                .build()?,
-        );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+            RoleParam {
+                role: RoleIdName::from_str("king")?,
+            },
+            UserParam {
+                user: UserIdName::from_str("joaquin")?,
+            },
+        ));
 
-        let service = ReadUserRoleService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.read_user_role(request).await;
         let response = response?;
 
         let found = db.live().fetch_one::<UserRoleDB>(&user_role.id).await?;

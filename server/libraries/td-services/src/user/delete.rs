@@ -6,12 +6,8 @@ use crate::user::UserError;
 use td_error::TdError;
 use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::UserId;
-use td_tower::extractors::Ref;
 
-pub async fn delete_user_validate(
-    user_db: Ref<UserDB>,
-    user_id: Ref<UserId>,
-) -> Result<(), TdError> {
+pub fn delete_user_validate(user_db: &UserDB, user_id: &UserId) -> Result<(), TdError> {
     if *user_db.system {
         Err(UserError::SystemUserProtected)?
     }
