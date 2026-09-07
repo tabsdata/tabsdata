@@ -30,7 +30,7 @@ impl TransactionMapper for TransactionBy {
 mod tests {
     use super::*;
     use crate::transaction::TransactionBy;
-    use td_objects::Buildable;
+
     use td_objects::dxo::graph::FunctionNode;
     use td_objects::transaction::map::TransactionMapperError;
     use td_objects::types::basic::{
@@ -48,15 +48,15 @@ mod tests {
         let mapper = TransactionBy::Function;
 
         let key = FunctionVersionId::new();
-        let function = FunctionNode::builder()
-            .collection_id(CollectionId::default())
-            .collection(CollectionName::try_from("test")?)
-            .function_id(FunctionId::default())
-            .function_version_id(&key)
-            .name(FunctionName::try_from("name")?)
-            .enabled(Enabled::TRUE)
-            .group_id(GroupId::default())
-            .build()?;
+        let function = FunctionNode {
+            collection_id: CollectionId::default(),
+            collection: CollectionName::try_from("test")?,
+            function_id: FunctionId::default(),
+            function_version_id: key.clone(),
+            name: FunctionName::try_from("name")?,
+            enabled: Enabled::TRUE,
+            group_id: GroupId::default(),
+        };
 
         assert_eq!(
             mapper.key(&function)?,

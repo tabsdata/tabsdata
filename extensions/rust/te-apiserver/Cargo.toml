@@ -65,7 +65,6 @@ td-error = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 getset = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-utoipa-axum = { workspace = true }
 
 [dev-dependencies]
 te-apiserver = { workspace = true, features = ["td-test"] }

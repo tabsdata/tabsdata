@@ -12,9 +12,9 @@
 //! compiles against either.
 
 use std::sync::Arc;
-
 use td_authz::rbac::AuthzRegistry;
-use td_database::domain::{Apiserver, DomainConnection, DomainPool};
+use td_authz::security::sys_admin::ensure_sys_admin_permissions;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::{TdError, td_error};
 use td_security::config::PasswordHashingConfig;
@@ -54,21 +54,14 @@ pub async fn enable_extensions(
 ) -> Result<Arc<AuthzRegistry>, TdError> {
     let registry = register_ext(AuthzRegistry::default());
 
-    // Writes go through the read-write pool's transaction (the read-only
-    // `acquire()` would reject the INSERTs).
+    // Boot writes run as one committed transaction on the regular pool.
     let tx = db
         .begin()
         .await
         .map_err(|e| AuthzBootstrapError::TransactionBegin(e.to_string()))?;
-    let mut conn = DomainConnection::from_transaction(tx);
-    td_authz::security::sys_admin::ensure_sys_admin_permissions(
-        &mut conn,
-        registry.sys_admin_permissions(),
-    )
-    .await?;
-    conn.into_transaction()
-        .expect("owned boot transaction")
-        .commit()
+    let mut conn = DomainConnection::new(tx);
+    ensure_sys_admin_permissions(&mut conn, registry.sys_admin_permissions()).await?;
+    conn.commit()
         .await
         .map_err(|e| AuthzBootstrapError::TransactionCommit(e.to_string()))?;
 
@@ -85,8 +78,13 @@ pub async fn enable_extensions(
 /// representable on the flat Simple surface; refuse to start otherwise and list
 /// the offending rows so the operator can revert or boot in `rbac` mode.
 async fn ensure_representable(db: &TdPool, registry: &AuthzRegistry) -> Result<(), TdError> {
+    let conn = db
+        .begin_ro()
+        .await
+        .map_err(|e| AuthzBootstrapError::TransactionBegin(e.to_string()))?;
+    let mut conn = DomainConnection::<Apiserver>::new(conn);
     let reasons = td_authz::security::representability::check_representability(
-        DomainPool::<Apiserver>::over(db),
+        &mut conn,
         registry.sys_admin_permissions(),
     )
     .await?;

@@ -2,28 +2,24 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use axum::extract::FromRef;
 use std::future::Future;
-use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_database::components::ServingPools;
 use td_error::TdError;
 
-#[derive(ServiceFactory, Clone, Debug)]
+/// The edition's service state; the open-source edition carries none.
+#[derive(Default, Clone, Debug)]
 pub struct ExtendedServices {}
 
-#[derive(FieldAccessors, FromRef, Default, Clone, Debug)]
-pub struct ExtendedContext {}
-
-/// Edition seam: extend a base context into this edition's [`ExtendedContext`],
-/// given the serving pools and the edition's resolved config. Implemented for any
-/// base — an extension grabs what it needs off the base (via `FieldAccessor`) and
-/// the pools. The open-source edition carries no extension state.
+/// Edition seam: extend the base services into this edition's
+/// [`ExtendedServices`], given the serving pools and the edition's resolved
+/// config. Implemented for any base — an extension grabs what it needs off
+/// the base and the pools.
 pub trait ContextExt<Extended> {
     fn extend(
         &self,
         serving_pools: &ServingPools,
         extended: &Extended,
-    ) -> impl Future<Output = Result<ExtendedContext, TdError>>;
+    ) -> impl Future<Output = Result<ExtendedServices, TdError>>;
 }
 
 impl<Base, Extended> ContextExt<Extended> for Base {
@@ -31,7 +27,7 @@ impl<Base, Extended> ContextExt<Extended> for Base {
         &self,
         _serving_pools: &ServingPools,
         _extended: &Extended,
-    ) -> Result<ExtendedContext, TdError> {
-        Ok(ExtendedContext::default())
+    ) -> Result<ExtendedServices, TdError> {
+        Ok(ExtendedServices::default())
     }
 }
