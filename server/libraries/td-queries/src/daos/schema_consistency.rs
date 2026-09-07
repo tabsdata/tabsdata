@@ -61,3 +61,40 @@ async fn every_dao_projection_resolves_against_schema(db: TdPool) -> Result<(), 
 
     Ok(())
 }
+
+/// Guards against list-DTO registration silently breaking; 19 registered at
+/// the time of writing, keep the floor close.
+const MIN_EXPECTED_LIST_DTOS: usize = 15;
+
+/// Forces every runtime-resolved column reference (flatten-base structural
+/// columns, list DTOs' `pagination_by`/filter/order fields), so a typo fails
+/// here with the type's name instead of on first live use. No database.
+#[test]
+fn every_registered_dao_and_list_dto_resolves_its_columns() {
+    let daos: Vec<_> = td_objects::registered_daos().collect();
+    assert!(
+        daos.len() >= MIN_EXPECTED_DAOS,
+        "only {} DAOs registered (expected >= {MIN_EXPECTED_DAOS}); DAO registration may be broken",
+        daos.len(),
+    );
+    for dao in daos {
+        let name = (dao.describe)().name;
+        std::panic::catch_unwind(dao.validate)
+            .unwrap_or_else(|_| panic!("`{name}`: a runtime-resolved column does not resolve"));
+    }
+
+    let dtos: Vec<_> = td_objects::registered_list_dtos().collect();
+    assert!(
+        dtos.len() >= MIN_EXPECTED_LIST_DTOS,
+        "only {} list DTOs registered (expected >= {MIN_EXPECTED_LIST_DTOS}); registration may be broken",
+        dtos.len(),
+    );
+    for dto in dtos {
+        std::panic::catch_unwind(dto.validate).unwrap_or_else(|_| {
+            panic!(
+                "`{}`: a list field does not resolve to a DAO column",
+                dto.name
+            )
+        });
+    }
+}

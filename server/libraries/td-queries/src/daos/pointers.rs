@@ -431,10 +431,9 @@ fn void_event<P: LogicalPointerDao>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_objects::Buildable;
     use td_objects::dxo::logical::LogicalFunctionRunPointerDB;
     use td_objects::types::basic::{
-        LogicalFunctionRunId, PhysicalFunctionRunId, ProjectId, UserId,
+        LogicalFunctionRunId, LogicalFunctionRunPointerId, PhysicalFunctionRunId, ProjectId, UserId,
     };
 
     fn build_pointer(
@@ -442,16 +441,16 @@ mod tests {
         status: LogicalPointerStatus,
         concrete: Option<PhysicalFunctionRunId>,
     ) -> LogicalFunctionRunPointerDB {
-        LogicalFunctionRunPointerDB::builder()
-            .project_id(ProjectId::default())
-            .logical_function_run_id(logical_id)
-            .status(status)
-            .physical_function_run_id(concrete)
-            .set_on(AtTime::now())
-            .set_by_id(UserId::admin())
-            .reason(LogicalPointerReason::InitialDispatch)
-            .build()
-            .unwrap()
+        LogicalFunctionRunPointerDB {
+            id: LogicalFunctionRunPointerId::default(),
+            project_id: ProjectId::default(),
+            logical_function_run_id: logical_id,
+            status,
+            physical_function_run_id: concrete,
+            set_on: AtTime::now(),
+            set_by_id: UserId::admin(),
+            reason: LogicalPointerReason::InitialDispatch,
+        }
     }
 
     mod replay_attempt {
@@ -704,16 +703,17 @@ mod tests {
         use crate::test_utils::SeedEntry;
         use crate::{LfrEntry, LiveEntry, LtdvEntry};
         use td_database::pool::TdPool;
-        use td_objects::Buildable;
         use td_objects::dxo::function::FunctionRegister;
         use td_objects::dxo::logical::{
             LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalPointerDao,
             LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
         };
+        use td_objects::types::basic::ReuseFrozen;
         use td_objects::types::basic::{
-            AtTime, BundleId, CollectionName, Decorator, LogicalPointerReason,
-            LogicalPointerStatus, PhysicalFunctionRunId, PhysicalTableDataVersionId, TableId,
-            TableNameDto, TransactionKey, Trigger, UserId,
+            AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunId,
+            LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
+            LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, Private,
+            TableId, TableNameDto, TransactionKey, Trigger, UserId,
         };
 
         /// `function_run_at` walks the pointer event log:
@@ -730,23 +730,24 @@ mod tests {
                 .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
                 .await
                 .unwrap();
-            let create = FunctionRegister::builder()
-                .try_name("f0")
-                .unwrap()
-                .try_description("d")
-                .unwrap()
-                .bundle_id(BundleId::default())
-                .try_snippet("s")
-                .unwrap()
-                .decorator(Decorator::Publisher)
-                .dependencies(None)
-                .triggers(None)
-                .tables(vec![TableNameDto::try_from("t0").unwrap()])
-                .try_runtime_values("rt")
-                .unwrap()
-                .reuse_frozen_tables(false)
-                .build()
-                .unwrap();
+            let create = FunctionRegister {
+                name: "f0".try_into().unwrap(),
+                description: "d".try_into().unwrap(),
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into().unwrap(),
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: None,
+                triggers: None,
+                tables: vec![TableNameDto::try_from("t0").unwrap()].into(),
+                table_types: None,
+                runtime_values: "rt".try_into().unwrap(),
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            };
             let function = db
                 .scoped(p.id)
                 .seed()
@@ -762,21 +763,22 @@ mod tests {
                 .unwrap();
 
             let before_mint = AtTime::now();
-            let lfr = LogicalFunctionRunDB::builder()
-                .project_id(collection.project_id)
-                .group_id(collection.group_id)
-                .collection_id(collection.id)
-                .execution_id(execution.id.clone())
-                .transaction_id(transaction.id.clone())
-                .function_id(function.function_id)
-                .function_version_id(function.id.clone())
-                .trigger(Trigger::Manual)
-                .triggered_on(execution.triggered_on)
-                .triggered_by_id(execution.triggered_by_id)
-                .build()
-                .unwrap();
+            let lfr = LogicalFunctionRunDB {
+                id: LogicalFunctionRunId::new(),
+                project_id: collection.project_id,
+                collection_id: collection.id,
+                execution_id: execution.id.clone(),
+                transaction_id: transaction.id.clone(),
+                function_id: function.function_id,
+                function_version_id: function.id.clone(),
+                trigger: Trigger::Manual,
+                triggered_on: execution.triggered_on,
+                triggered_by_id: execution.triggered_by_id,
+                status: LogicalFunctionRunStatus::Scheduled,
+                group_id: collection.group_id,
+            };
 
-            let mut db = db.begin().await.unwrap().into_connection();
+            let mut db = db.begin().await.unwrap();
 
             db.live()
                 .insert::<LogicalFunctionRunDB>(&lfr)
@@ -852,23 +854,24 @@ mod tests {
                 .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
                 .await
                 .unwrap();
-            let create = FunctionRegister::builder()
-                .try_name("f0")
-                .unwrap()
-                .try_description("d")
-                .unwrap()
-                .bundle_id(BundleId::default())
-                .try_snippet("s")
-                .unwrap()
-                .decorator(Decorator::Publisher)
-                .dependencies(None)
-                .triggers(None)
-                .tables(vec![TableNameDto::try_from("t0").unwrap()])
-                .try_runtime_values("rt")
-                .unwrap()
-                .reuse_frozen_tables(false)
-                .build()
-                .unwrap();
+            let create = FunctionRegister {
+                name: "f0".try_into().unwrap(),
+                description: "d".try_into().unwrap(),
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into().unwrap(),
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: None,
+                triggers: None,
+                tables: vec![TableNameDto::try_from("t0").unwrap()].into(),
+                table_types: None,
+                runtime_values: "rt".try_into().unwrap(),
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            };
             let function = db
                 .scoped(p.id)
                 .seed()
@@ -885,21 +888,22 @@ mod tests {
 
             let before_mint = AtTime::now();
             let table_id = TableId::default();
-            let ltdv = LogicalTableDataVersionDB::builder()
-                .project_id(collection.project_id)
-                .group_id(collection.group_id)
-                .collection_id(collection.id)
-                .execution_id(execution.id.clone())
-                .transaction_id(transaction.id.clone())
-                .table_id(table_id)
-                .producer_logical_function_run_id(None)
-                .function_param_pos(None)
-                .triggered_on(execution.triggered_on)
-                .triggered_by_id(execution.triggered_by_id)
-                .build()
-                .unwrap();
+            let ltdv = LogicalTableDataVersionDB {
+                id: LogicalTableDataVersionId::new(),
+                project_id: collection.project_id,
+                collection_id: collection.id,
+                execution_id: execution.id.clone(),
+                transaction_id: transaction.id.clone(),
+                table_id,
+                producer_logical_function_run_id: None,
+                function_param_pos: None,
+                private: Private::FALSE,
+                triggered_on: execution.triggered_on,
+                triggered_by_id: execution.triggered_by_id,
+                group_id: collection.group_id,
+            };
 
-            let mut conn = db.begin().await.unwrap().into_connection();
+            let mut conn = db.begin().await.unwrap();
 
             conn.live()
                 .insert::<LogicalTableDataVersionDB>(&ltdv)

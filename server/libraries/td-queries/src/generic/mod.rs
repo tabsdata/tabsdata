@@ -21,6 +21,10 @@
 //!
 //! For DAO-specific queries (where the method body knows about a
 //! particular DAO's columns or invariants), see [`crate::daos`].
+//!
+//! The list methods take no visibility filter: row visibility is the
+//! connection's business — RLS scopes project rows, and cross-project reads
+//! narrow by the requester's viewable projects before querying.
 
 use std::marker::PhantomData;
 
@@ -30,6 +34,7 @@ pub mod data_version;
 pub mod historic;
 pub mod live;
 pub mod recursive;
+mod row_locks;
 pub mod versioned;
 
 /// Marker for "DAO not yet pinned" — leaf methods take a `<D>` turbofish.

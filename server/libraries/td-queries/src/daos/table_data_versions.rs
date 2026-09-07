@@ -111,7 +111,7 @@ where
 
         // Qualify with the view's table — the joined LTDV / pointer
         // tables also carry an `id` column, and Postgres rejects the
-        // unqualified ref as ambiguous (SQLite tolerates it).
+        // unqualified ref as ambiguous.
         let mut q = Query::select();
         q.expr(Expr::col((
             PhysicalTableDataVersionDBWithNamesIden::Table,

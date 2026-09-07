@@ -17,9 +17,9 @@ use crate::primitives::chunked::{MAX_QUERY_CONDITIONS, fetch_all_at_chunk_query,
 use crate::primitives::versioned::{latest_ranked_cte, select_at, select_latest_from_cte};
 use sea_query::Condition;
 use std::marker::PhantomData;
-use ta_objects::errors::SqlError;
+use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{DaoCore, ListDto, ListFilter, StateFilter, VersionedDao};
+use ta_objects::{DaoCore, FromDao, ListDto, StateFilter, VersionedDao};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
@@ -133,36 +133,34 @@ where
     }
 
     /// Latest-per-partition listing at `on`, filtered & paginated.
-    pub async fn list_versions<D, F: ListFilter>(
+    pub async fn list_versions<D>(
         self,
         condition: impl SqlCondition,
-        filter: &F,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         D: ListDto,
-        <D as ListDto>::Dao: VersionedDao<VersionOrder = T>,
-        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
+        <D as FromDao>::Dao: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = <<D as FromDao>::Dao as DaoCore>::Db>,
     {
-        self.with_dao::<<D as ListDto>::Dao>()
-            .list_versions(condition, filter, params)
+        self.with_dao::<<D as FromDao>::Dao>()
+            .list_versions(condition, params)
             .await
     }
 
     /// Listing of every row at `on` — all versions, no rn=1 dedup.
-    pub async fn list_full<D, F: ListFilter>(
+    pub async fn list_full<D>(
         self,
         condition: impl SqlCondition,
-        filter: &F,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         D: ListDto,
-        <D as ListDto>::Dao: VersionedDao<VersionOrder = T>,
-        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
+        <D as FromDao>::Dao: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = <<D as FromDao>::Dao as DaoCore>::Db>,
     {
-        self.with_dao::<<D as ListDto>::Dao>()
-            .list_full(condition, filter, params)
+        self.with_dao::<<D as FromDao>::Dao>()
+            .list_full(condition, params)
             .await
     }
 }
@@ -188,6 +186,24 @@ where
             .await
             .map_err(SqlError::on_read::<D>)?;
         Ok(r)
+    }
+
+    /// Assert no version matches `condition` and the bound state — a clean
+    /// "already exists" error instead of the unique-constraint violation a
+    /// later write would raise.
+    pub async fn assert_not_exists(self, condition: impl SqlCondition) -> Result<(), SqlError> {
+        let vals = condition.display_values::<D>();
+        let found: Option<D> = self.fetch_optional(condition).await?;
+        match found {
+            Some(_) => {
+                let cols: Vec<String> = vals.iter().map(|(k, _)| k.clone()).collect();
+                Err(SqlError::EntityAlreadyExists(
+                    D::display_name().to_string(),
+                    format_hint(&cols, &vals),
+                ))
+            }
+            None => Ok(()),
+        }
     }
 
     /// Optional variant.
@@ -239,50 +255,44 @@ where
     }
 
     /// Latest-per-partition listing matching the bound state.
-    pub async fn list_versions<L, F: ListFilter>(
+    pub async fn list_versions<L>(
         self,
         condition: impl SqlCondition,
-        filter: &F,
         params: &ListQueryParams<L>,
     ) -> Result<Vec<L>, SqlError>
     where
         L: ListDto<Dao = D>,
     {
         let with = latest_ranked_cte::<D>(self.on)?;
-        let base = select_latest_from_cte::<D>(condition, self.condition.as_ref())?
-            .cond_where(filter.condition::<D>()?)
-            .take();
+        let base = select_latest_from_cte::<D>(condition, self.condition.as_ref())?.take();
         let mut query = params.apply_to(base).with(with);
         let daos: Vec<D> = query
             .build_query_as()
             .fetch_all(self.executor)
             .await
             .map_err(SqlError::on_read::<D>)?;
-        daos.iter()
+        daos.into_iter()
             .map(|dao| L::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
     }
 
     /// Full audit-trail listing matching the bound state.
-    pub async fn list_full<L, F: ListFilter>(
+    pub async fn list_full<L>(
         self,
         condition: impl SqlCondition,
-        filter: &F,
         params: &ListQueryParams<L>,
     ) -> Result<Vec<L>, SqlError>
     where
         L: ListDto<Dao = D>,
     {
-        let base = select_at::<D>(condition, self.on, self.condition.as_ref())?
-            .cond_where(filter.condition::<D>()?)
-            .take();
+        let base = select_at::<D>(condition, self.on, self.condition.as_ref())?.take();
         let mut query = params.apply_to(base);
         let daos: Vec<D> = query
             .build_query_as()
             .fetch_all(self.executor)
             .await
             .map_err(SqlError::on_read::<D>)?;
-        daos.iter()
+        daos.into_iter()
             .map(|dao| L::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
     }

@@ -18,7 +18,6 @@ use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::{CurrentDao, Dao, DaoCore, Recursive, VersionedDao};
 use td_database::sea_query::builder::SeaQueryExt;
-use td_database::sea_query::kind::DatabaseBackend;
 use td_objects::types::basic::Depth;
 use td_objects::types::recursion::RecursionOptions;
 
@@ -376,7 +375,7 @@ where
     // non-recursive (anchor) term and (b) multiple recursive references
     // anywhere — `base UNION up UNION down` falls into (a), while combining
     // `up + down` with UNION ALL produces two `JOIN Reachable` and falls into
-    // (b). Sqlite is loose about both. The portable form is one JOIN to
+    // (b). The portable form is one JOIN to
     // `Reachable` with a directional OR in the ON-clause, and a CASE in the
     // projection that picks which column to emit based on which direction
     // matched.
@@ -655,19 +654,7 @@ where
     R: Dao,
     E: QueryExecutor,
 {
-    #[allow(
-        clippy::match_same_arms,
-        clippy::match_single_binding,
-        clippy::single_match
-    )]
-    let str_search_fn = match executor.kind() {
-        #[cfg(sqlite)]
-        DatabaseBackend::Sqlite => "INSTR",
-        #[cfg(postgres)]
-        DatabaseBackend::Postgres => "STRPOS",
-        #[cfg(mysql)]
-        DatabaseBackend::MySql => "INSTR",
-    };
+    let str_search_fn = "STRPOS";
 
     if up_enabled {
         with = with

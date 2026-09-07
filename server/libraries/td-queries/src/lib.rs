@@ -9,19 +9,17 @@ mod executor;
 
 mod daos;
 mod generic;
-pub mod list_filter;
 mod logic_id;
 mod primitives;
-mod tower;
 
 // Per-DAO query surfaces — wrapper struct + entry trait colocated in each
 // module via the `query_handle!` macro.
 pub use daos::dependency::{Dependencies, DependenciesEntry};
 pub use daos::execution::{Executions, ExecutionsEntry};
-#[cfg(all(postgres, feature = "td-test"))]
+#[cfg(feature = "td-test")]
 pub use daos::function_runs::chain_plan_sql;
 pub use daos::function_runs::{Lfr, LfrEntry, Pfr, PfrEntry};
-#[cfg(all(postgres, feature = "td-test"))]
+#[cfg(feature = "td-test")]
 pub use daos::metrics::metrics_plan_sql;
 pub use daos::metrics::{Metrics, MetricsEntry};
 pub use daos::pointers::{Bind, LogicalPointers, OutputRedirect, ReplayRedirect};
@@ -39,7 +37,6 @@ pub use generic::recursive::{CurrentRecursive, HistoricRecursive, RecursiveEntry
 pub use generic::versioned::{Versioned, VersionedEntry};
 
 pub use logic_id::initialize_logical_ids;
-pub use tower::by::{By, insert, insert_vec};
 
 /// One-shot import of every entry trait. Standard caller boilerplate is
 /// `use td_queries::prelude::*;` — brings in every entry method

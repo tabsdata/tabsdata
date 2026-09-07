@@ -24,11 +24,11 @@ use crate::primitives::chunked::{
     MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, delete_chunk_query, fetch_all_chunk_query,
     insert_vec_query, update_chunk_query, warn_if_chunked,
 };
+use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{Dao, DaoCore, DaoUpdate};
 use td_database::domain::Domained;
-use td_database::dynamic::DynamicQueryResult;
 use td_database::sea_query::builder::SeaQueryExt;
 
 pub trait ChunkedQueries {
@@ -39,7 +39,7 @@ pub trait ChunkedQueries {
     fn insert_vec<D: Dao>(
         self,
         daos: &[D],
-    ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>
+    ) -> impl Future<Output = Result<PgQueryResult, SqlError>>
     where
         Self: Domained<Domain = D::Db>;
 
@@ -59,7 +59,7 @@ pub trait ChunkedQueries {
         self,
         dao: &U,
         values: &[V],
-    ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>
+    ) -> impl Future<Output = Result<PgQueryResult, SqlError>>
     where
         Self: Domained<Domain = U::Db>;
 
@@ -68,7 +68,7 @@ pub trait ChunkedQueries {
     fn delete_chunked<D: DaoCore, V: SqlCondition>(
         self,
         values: &[V],
-    ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>
+    ) -> impl Future<Output = Result<PgQueryResult, SqlError>>
     where
         Self: Domained<Domain = D::Db>;
 }
@@ -77,11 +77,11 @@ impl<E> ChunkedQueries for E
 where
     E: QueryExecutor,
 {
-    async fn insert_vec<D: Dao>(mut self, daos: &[D]) -> Result<DynamicQueryResult, SqlError>
+    async fn insert_vec<D: Dao>(mut self, daos: &[D]) -> Result<PgQueryResult, SqlError>
     where
         Self: Domained<Domain = D::Db>,
     {
-        let mut result = DynamicQueryResult::empty(&self.kind());
+        let mut result = PgQueryResult::default();
         for chunk in daos.chunks(MAX_INSERT_ROWS) {
             let r = insert_vec_query::<D>(chunk)?
                 .build_query()
@@ -117,12 +117,12 @@ where
         mut self,
         dao: &U,
         values: &[V],
-    ) -> Result<DynamicQueryResult, SqlError>
+    ) -> Result<PgQueryResult, SqlError>
     where
         Self: Domained<Domain = U::Db>,
     {
         warn_if_chunked::<D>(values.len());
-        let mut result = DynamicQueryResult::empty(&self.kind());
+        let mut result = PgQueryResult::default();
         for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
             let r = update_chunk_query::<U, D, V>(dao, chunk)?
                 .build_query()
@@ -137,12 +137,12 @@ where
     async fn delete_chunked<D: DaoCore, V: SqlCondition>(
         mut self,
         values: &[V],
-    ) -> Result<DynamicQueryResult, SqlError>
+    ) -> Result<PgQueryResult, SqlError>
     where
         Self: Domained<Domain = D::Db>,
     {
         warn_if_chunked::<D>(values.len());
-        let mut result = DynamicQueryResult::empty(&self.kind());
+        let mut result = PgQueryResult::default();
         for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
             let r = delete_chunk_query::<D, V>(chunk)?
                 .build_query()

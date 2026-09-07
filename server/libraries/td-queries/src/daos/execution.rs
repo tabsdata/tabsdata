@@ -10,7 +10,7 @@ use sea_query::{Alias, Expr, ExprTrait, JoinType, Order, Query};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
-use td_objects::dxo::execution::Execution;
+use td_objects::dxo::execution::{Execution, ExecutionDBIden};
 use td_objects::dxo::logical::{
     LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalTableDataVersionDBIden,
     LogicalTableDataVersionPointerDBIden,
@@ -19,7 +19,7 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{FunctionVersionId, PhysicalTableDataVersionId};
 
-use ta_objects::{Dao, ListDto};
+use ta_objects::{Dao, FromDao};
 
 query_handle! {
     /// Entry trait providing [`executions`](ExecutionsEntry::executions) on
@@ -32,7 +32,7 @@ query_handle! {
     }
 }
 
-type DaoOf = <Execution as ListDto>::Dao;
+type DaoOf = <Execution as FromDao>::Dao;
 type Iden = <DaoOf as ta_objects::TypedColumns>::Iden;
 
 /// `executions`-table operations. Reach via
@@ -66,7 +66,7 @@ where
             .fetch_all(self.executor)
             .await
             .map_err(SqlError::on_read::<DaoOf>)?;
-        daos.iter()
+        daos.into_iter()
             .map(|dao| Execution::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
     }
@@ -87,7 +87,7 @@ where
             .fetch_all(self.executor)
             .await
             .map_err(SqlError::on_read::<DaoOf>)?;
-        daos.iter()
+        daos.into_iter()
             .map(|dao| Execution::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
     }
@@ -151,7 +151,7 @@ pub(crate) fn list_by_tdv_query(
                 LogicalFunctionRunInputDBIden::Table,
                 LogicalFunctionRunInputDBIden::ExecutionId,
             ))
-            .equals((Iden::Table, Iden::Id)),
+            .equals((Iden::Table, ExecutionDBIden::Id)),
         )
         .and_where(
             Expr::col((
@@ -182,7 +182,7 @@ pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> sea_query::SelectSt
                 LogicalFunctionRunDBIden::Table,
                 LogicalFunctionRunDBIden::ExecutionId,
             ))
-            .equals((Iden::Table, Iden::Id)),
+            .equals((Iden::Table, ExecutionDBIden::Id)),
         )
         .and_where(
             Expr::col((
@@ -200,7 +200,7 @@ pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> sea_query::SelectSt
                 PhysicalFunctionRunDBIden::Table,
                 PhysicalFunctionRunDBIden::ExecutionId,
             ))
-            .equals((Iden::Table, Iden::Id)),
+            .equals((Iden::Table, ExecutionDBIden::Id)),
         )
         .and_where(
             Expr::col((
@@ -221,12 +221,12 @@ pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> sea_query::SelectSt
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::SqliteQueryBuilder;
+    use sea_query::PostgresQueryBuilder;
 
     #[test]
     fn test_list_by_tdv_query_sql() {
         let tdv_id = Some(PhysicalTableDataVersionId::try_from("pdv20260101-0000000001").unwrap());
-        let sql = list_by_tdv_query(&tdv_id).to_string(SqliteQueryBuilder);
+        let sql = list_by_tdv_query(&tdv_id).to_string(PostgresQueryBuilder);
         assert!(sql.contains("EXISTS"), "should use EXISTS subquery: {sql}");
         assert!(
             sql.contains(r#""logical_function_run_inputs""#),
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_list_by_tdv_query_none_sql() {
-        let sql = list_by_tdv_query(&None).to_string(SqliteQueryBuilder);
+        let sql = list_by_tdv_query(&None).to_string(PostgresQueryBuilder);
         assert!(
             sql.contains("IS NULL") || sql.contains(r#"= NULL"#),
             "None tdv should filter by null: {sql}"
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn test_list_by_fv_query_sql() {
         let fv_id = FunctionVersionId::try_from("fv20260101-0000000001").unwrap();
-        let sql = list_by_fv_query(&fv_id).to_string(SqliteQueryBuilder);
+        let sql = list_by_fv_query(&fv_id).to_string(PostgresQueryBuilder);
         assert!(sql.contains("EXISTS"), "should use EXISTS subquery: {sql}");
         assert!(
             sql.contains(r#""logical_function_runs""#),

@@ -84,7 +84,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::SqliteQueryBuilder;
+    use sea_query::PostgresQueryBuilder;
     use ta_objects::SeaValue;
 
     #[test]
@@ -101,7 +101,7 @@ mod tests {
             .and_where(Expr::col(Cte::Rn).eq(1))
             .take()
             .with(with)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
 
         let cte_body_start = sql.find("AS (SELECT").unwrap();
         let cte_body_end = sql.rfind(") SELECT").unwrap();

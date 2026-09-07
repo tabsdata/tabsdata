@@ -383,6 +383,7 @@ mod tests {
     use std::sync::LazyLock;
     use ta_objects::Dao;
     use ta_objects::sql_condition::resolve_condition;
+    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::dependency::{DependencyDB, DependencyDBWithNames};
@@ -390,15 +391,10 @@ mod tests {
     use td_objects::dxo::trigger::{TriggerDB, TriggerDBWithNames};
     use td_objects::types::basic::{AtTime, CollectionId, Depth, FunctionId};
 
-    #[ta_objects::typed(string)]
-    #[derive(Eq, PartialEq)]
-    struct TestId;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct TestId(String);
 
-    #[ta_objects::typed(string)]
-    struct TestPartition;
-
-    #[ta_objects::typed_enum]
-    #[derive(Eq, PartialEq)]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     enum TestStatus {
         #[typed_enum(rename = "A")]
         Active,
@@ -406,9 +402,8 @@ mod tests {
         Deleted,
     }
 
-    #[ta_objects::typed(string)]
-    #[derive(Eq, PartialEq)]
-    struct TestRecursion;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct TestRecursion(String);
 
     // partitioning by id means there are no groups, each entry is independent
     #[Dao]
@@ -416,10 +411,7 @@ mod tests {
     #[dao(
         sql_table = "test_table",
         versioned(pk = "id", version_by = "defined_on", partition_by = "id"),
-        recursive(up = "current", down = "downstream"),
-        states(
-            Active = TestStatus::Active,
-        )
+        recursive(up = "current", down = "downstream")
     )]
     struct TestDao {
         id: TestId,
@@ -429,19 +421,28 @@ mod tests {
         defined_on: AtTime,
     }
 
+    impl TestDao {
+        pub fn active() -> StateFilter<Self> {
+            StateFilter::of(TestStatus::Active)
+        }
+    }
+
     #[Dao]
     #[dao(
         sql_table = "test_table_reference",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "reference_id"),
-        states(
-            Active = TestStatus::Active,
-        )
+        versioned(pk = "id", version_by = "defined_on", partition_by = "reference_id")
     )]
     struct RecursionReference {
         id: TestId,
         reference_id: TestRecursion,
         status: TestStatus,
         defined_on: AtTime,
+    }
+
+    impl RecursionReference {
+        pub fn active() -> StateFilter<Self> {
+            StateFilter::of(TestStatus::Active)
+        }
     }
 
     fn time(i: usize) -> AtTime {
@@ -1047,7 +1048,7 @@ mod tests {
             .direct_reference(&id)
             .d_state(TestDao::active())
             .r_state(RecursionReference::active())
-            .direct_reference_state(Some(RecursionReference::all()))
+            .direct_reference_state(Some(StateFilter::all()))
             .fetch_all()
             .await?;
         assert_eq!(result.len(), 1);
@@ -1345,70 +1346,84 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_select_active_versions_at_types(db: TdPool) -> Result<(), TdError> {
-        use ta_objects::States;
         use td_database::domain::Apiserver;
-        async fn test_query<const DS: u8, D, const RS: u8, R>(
+        async fn test_query<D, R>(
             db: &TdPool,
+            d_state: StateFilter<D>,
+            r_state: StateFilter<R>,
             recursion_ref: &dyn SeaValue,
         ) -> Result<(), TdError>
         where
-            D: VersionedDao<VersionOrder = AtTime>
-                + Recursive
-                + States<DS>
-                + DaoCore<Db = Apiserver>,
-            R: VersionedDao<VersionOrder = AtTime> + States<RS> + DaoCore<Db = Apiserver>,
+            D: VersionedDao<VersionOrder = AtTime> + Recursive + DaoCore<Db = Apiserver>,
+            R: VersionedDao<VersionOrder = AtTime> + DaoCore<Db = Apiserver>,
         {
             let _result: Vec<D> = db
                 .historic(&*LATER)
                 .recursive::<D, R>(RecursionOptions::new(Some(Depth::ZERO), None))
                 .direct_reference(recursion_ref)
-                .d_state(StateFilter::<D>::from_states::<DS>())
-                .r_state(StateFilter::<R>::from_states::<RS>())
+                .d_state(d_state)
+                .r_state(r_state)
                 .fetch_all()
                 .await?;
             Ok(())
         }
 
-        test_query::<{ DependencyDB::Active }, DependencyDB, { FunctionDB::Available }, FunctionDB>(&db, &FunctionId::default()).await?;
-        test_query::<{ DependencyDB::Active }, DependencyDB, { FunctionDB::Available }, FunctionDB>(&db, &CollectionId::default()).await?;
-        test_query::<
-            { DependencyDBWithNames::Active },
-            DependencyDBWithNames,
-            { FunctionDB::Available },
-            FunctionDB,
-        >(&db, &FunctionId::default())
-        .await?;
-        test_query::<
-            { DependencyDBWithNames::Active },
-            DependencyDBWithNames,
-            { FunctionDB::Available },
-            FunctionDB,
-        >(&db, &CollectionId::default())
-        .await?;
-
-        test_query::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Available }, FunctionDB>(
+        test_query::<DependencyDB, FunctionDB>(
             &db,
+            DependencyDB::active(),
+            FunctionDB::available(),
             &FunctionId::default(),
         )
         .await?;
-        test_query::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Available }, FunctionDB>(
+        test_query::<DependencyDB, FunctionDB>(
             &db,
+            DependencyDB::active(),
+            FunctionDB::available(),
             &CollectionId::default(),
         )
         .await?;
-        test_query::<
-            { TriggerDBWithNames::Active },
-            TriggerDBWithNames,
-            { FunctionDB::Available },
-            FunctionDB,
-        >(&db, &FunctionId::default())
+        test_query::<DependencyDBWithNames, FunctionDB>(
+            &db,
+            DependencyDBWithNames::active(),
+            FunctionDB::available(),
+            &FunctionId::default(),
+        )
         .await?;
-        test_query::<
-            { TriggerDBWithNames::Active },
-            TriggerDBWithNames,
-            { FunctionDB::Available },
-            FunctionDB,
-        >(&db, &CollectionId::default())
+        test_query::<DependencyDBWithNames, FunctionDB>(
+            &db,
+            DependencyDBWithNames::active(),
+            FunctionDB::available(),
+            &CollectionId::default(),
+        )
+        .await?;
+
+        test_query::<TriggerDB, FunctionDB>(
+            &db,
+            TriggerDB::active(),
+            FunctionDB::available(),
+            &FunctionId::default(),
+        )
+        .await?;
+        test_query::<TriggerDB, FunctionDB>(
+            &db,
+            TriggerDB::active(),
+            FunctionDB::available(),
+            &CollectionId::default(),
+        )
+        .await?;
+        test_query::<TriggerDBWithNames, FunctionDB>(
+            &db,
+            TriggerDBWithNames::active(),
+            FunctionDB::available(),
+            &FunctionId::default(),
+        )
+        .await?;
+        test_query::<TriggerDBWithNames, FunctionDB>(
+            &db,
+            TriggerDBWithNames::active(),
+            FunctionDB::available(),
+            &CollectionId::default(),
+        )
         .await?;
 
         Ok(())
@@ -1463,7 +1478,7 @@ mod tests {
     mod sql {
         use super::*;
         use crate::primitives::recursive::reachable_partitions_cte;
-        use sea_query::SqliteQueryBuilder;
+        use sea_query::PostgresQueryBuilder;
 
         #[test]
         fn test_reachable_partitions_cte_emits_recursive_walk() {
@@ -1480,7 +1495,7 @@ mod tests {
                 .from(Cte::Reachable)
                 .to_owned()
                 .with(WithClause::new().recursive(true).cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.starts_with("WITH RECURSIVE"), "{sql}");
             assert!(sql.contains(r#""reachable""#), "names the CTE: {sql}");
             assert!(
@@ -1518,7 +1533,7 @@ mod tests {
                 .from(Cte::Reachable)
                 .to_owned()
                 .with(WithClause::new().recursive(true).cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.matches("UNION").count() == 1, "one UNION only: {sql}");
         }
 
@@ -1538,7 +1553,7 @@ mod tests {
                 .from(Cte::ReferenceVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             // The inner ranking subquery filters by Reachable.partition_id.
             assert!(
                 sql.contains(r#""reachable""#) && sql.contains(r#""partition_id""#),
@@ -1555,7 +1570,7 @@ mod tests {
                 .from(Cte::ReferenceVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
             assert!(
                 sql.contains(r#""test_basic_table""#),
@@ -1577,7 +1592,7 @@ mod tests {
                 .from(Cte::RecursionVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.contains("ROW_NUMBER"), "should use ROW_NUMBER: {sql}");
             assert!(sql.contains(r#""rn" = 1"#), "should filter rn = 1: {sql}");
             assert!(
@@ -1610,7 +1625,7 @@ mod tests {
                 .from(Cte::RecursionVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains("<="),
                 "should have defined_on upper bound: {sql}"
@@ -1641,7 +1656,7 @@ mod tests {
                         .cte(cte)
                         .to_owned(),
                 )
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.contains("RECURSIVE"), "should be recursive: {sql}");
             assert!(sql.contains("UNION ALL"), "should have UNION ALL: {sql}");
             assert!(
@@ -1682,7 +1697,7 @@ mod tests {
                         .cte(cte)
                         .to_owned(),
                 )
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""downstream_versions""#),
                 "should name CTE downstream_versions: {sql}"
@@ -1714,7 +1729,7 @@ mod tests {
                         .cte(cte)
                         .to_owned(),
                 )
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.contains("< 3"), "should have depth limit < 3: {sql}");
         }
 
@@ -1726,7 +1741,7 @@ mod tests {
                 .from(Cte::RecursiveVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""upstream_versions""#),
                 "should include upstream: {sql}"
@@ -1746,7 +1761,7 @@ mod tests {
                 .from(Cte::RecursiveVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""upstream_versions""#),
                 "should include upstream: {sql}"
@@ -1765,7 +1780,7 @@ mod tests {
                 .from(Cte::RecursiveVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 !sql.contains(r#""upstream_versions""#),
                 "should NOT include upstream: {sql}"

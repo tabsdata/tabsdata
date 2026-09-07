@@ -12,6 +12,7 @@
 
 use crate::QueryExecutor;
 use crate::daos::pointers::{LogicalPointers, ProducerLfr};
+use crate::generic::live::claim;
 use crate::primitives::chunked::MAX_QUERY_CONDITIONS;
 use sea_query::{
     Alias, Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
@@ -23,7 +24,7 @@ use ta_objects::errors::SqlError;
 use ta_objects::{Dao, DaoCore};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::bundle::BundleDBIden;
-use td_objects::dxo::collection::CollectionDBIden;
+use td_objects::dxo::collection::{ActiveCollectionDBIden, CollectionDBIden};
 use td_objects::dxo::connection::ConnectionDBIden;
 use td_objects::dxo::execution::ExecutionDBIden;
 use td_objects::dxo::function::{
@@ -38,7 +39,7 @@ use td_objects::dxo::physical_function_run::{
     PhysicalFunctionRunDB, PhysicalFunctionRunDBIden, PhysicalFunctionRunDBWithNamesIden,
     PhysicalFunctionRunToExecute,
 };
-use td_objects::dxo::project::ProjectDBIden;
+use td_objects::dxo::project::{ActiveProjectDBIden, ProjectDBIden};
 use td_objects::dxo::user::UserDBIden;
 use td_objects::dxo::worker::WorkerDBIden;
 use td_objects::types::basic::{
@@ -281,7 +282,7 @@ where
         self,
         cutoff: &AtTime,
     ) -> Result<Vec<PhysicalFunctionRunDB>, SqlError> {
-        let result: Vec<PhysicalFunctionRunDB> = fetch_dispatched_pfrs_query(cutoff)
+        let result: Vec<PhysicalFunctionRunDB> = dispatched_before_query(cutoff)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -289,9 +290,9 @@ where
         Ok(result)
     }
 
-    /// The newest still-running PFR under this `(execution_id, function_id)`
-    /// (status in `Requested | Running`), if any. Used to gate replay
-    /// minting: a previous attempt that's already terminal (Failed /
+    /// The newest in-flight PFR under this `(execution_id, function_id)`
+    /// ([`PhysicalFunctionRunStatus::IN_FLIGHT`]), if any. Used to gate
+    /// replay minting: a previous attempt that's already terminal (Failed /
     /// Done) is not in flight, so a new replay can be minted.
     pub async fn in_flight_for(
         self,
@@ -602,7 +603,7 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> sea_query:
                 ])),
         );
 
-    Query::select()
+    let mut query = Query::select()
         .expr(Expr::col((LogicalFunctionRunDBIden::Table, Asterisk)))
         .from(LogicalFunctionRunDBIden::Table)
         .and_where(
@@ -624,12 +625,14 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> sea_query:
             Order::Asc,
         )
         .limit(limit)
-        .take()
+        .take();
+    claim::<LogicalFunctionRunDB>(&mut query);
+    query
 }
 
 /// The three chain statements (readiness / blocked / commit), for plan
 /// inspection in the load suite.
-#[cfg(all(postgres, feature = "td-test"))]
+#[cfg(feature = "td-test")]
 pub fn chain_plan_sql(
     at: &AtTime,
     execution_id: &ExecutionId,
@@ -671,7 +674,7 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             PhysicalFunctionRunDBWithNamesIden::Name,
         )
         .expr_as(
-            Expr::col((CollectionDBIden::Table, CollectionDBIden::Name)),
+            Expr::col((CollectionDBIden::Table, ActiveCollectionDBIden::Name)),
             PhysicalFunctionRunDBWithNamesIden::Collection,
         )
         .expr_as(
@@ -711,13 +714,19 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             FunctionDBIden::StageBasePath,
         )
         .expr_as(
-            Expr::col((CollectionDBIden::Table, CollectionDBIden::EffectiveBasePath)),
+            Expr::col((
+                CollectionDBIden::Table,
+                ActiveCollectionDBIden::EffectiveBasePath,
+            )),
             Alias::new("collection_base_path"),
         )
         // The collection's connection (NULL for non-source/destination
         // collections), carried into the dispatch request.
         .expr_as(
-            Expr::col((CollectionDBIden::Table, CollectionDBIden::ConnectionId)),
+            Expr::col((
+                CollectionDBIden::Table,
+                ActiveCollectionDBIden::ConnectionId,
+            )),
             Alias::new("connection_id"),
         )
         // The connection's type, as its Conn class. NULL whenever the collection
@@ -728,7 +737,7 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
         )
         // The run's project name, resolved so a deleted project still reports one.
         .expr_as(
-            Expr::col((ProjectDBIden::Table, ProjectDBIden::Name)),
+            Expr::col((ProjectDBIden::Table, ActiveProjectDBIden::Name)),
             Alias::new("project"),
         )
         // COALESCE to the collection's effective prefix so a missing bundle row
@@ -737,7 +746,10 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
         .expr_as(
             Expr::expr(Func::coalesce([
                 Expr::col((BundleDBIden::Table, BundleDBIden::BasePath)),
-                Expr::col((CollectionDBIden::Table, CollectionDBIden::EffectiveBasePath)),
+                Expr::col((
+                    CollectionDBIden::Table,
+                    ActiveCollectionDBIden::EffectiveBasePath,
+                )),
             ])),
             Alias::new("bundle_base_path"),
         )
@@ -791,13 +803,16 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
                 PhysicalFunctionRunDBIden::Table,
                 PhysicalFunctionRunDBIden::CollectionId,
             ))
-            .equals((CollectionDBIden::Table, CollectionDBIden::Id)),
+            .equals((CollectionDBIden::Table, ActiveCollectionDBIden::Id)),
         )
         .join(
             JoinType::LeftJoin,
             ConnectionDBIden::Table,
-            Expr::col((CollectionDBIden::Table, CollectionDBIden::ConnectionId))
-                .equals((ConnectionDBIden::Table, ConnectionDBIden::Id)),
+            Expr::col((
+                CollectionDBIden::Table,
+                ActiveCollectionDBIden::ConnectionId,
+            ))
+            .equals((ConnectionDBIden::Table, ConnectionDBIden::Id)),
         )
         .join(
             JoinType::LeftJoin,
@@ -806,7 +821,7 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
                 PhysicalFunctionRunDBIden::Table,
                 PhysicalFunctionRunDBIden::ProjectId,
             ))
-            .equals((ProjectDBIden::Table, ProjectDBIden::Id)),
+            .equals((ProjectDBIden::Table, ActiveProjectDBIden::Id)),
         )
         // Bundle join on the *effective* bundle id (patch's if patched, else head's),
         // matching the coalesced bundle_id projection, to read the bundle's stamped
@@ -884,7 +899,10 @@ pub(crate) fn fetch_effective_output_base_paths_query(
         .expr_as(
             Expr::expr(Func::coalesce([
                 Expr::col((FunctionDBIden::Table, FunctionDBIden::BasePath)),
-                Expr::col((CollectionDBIden::Table, CollectionDBIden::EffectiveBasePath)),
+                Expr::col((
+                    CollectionDBIden::Table,
+                    ActiveCollectionDBIden::EffectiveBasePath,
+                )),
             ])),
             Alias::new("base_path"),
         )
@@ -892,7 +910,7 @@ pub(crate) fn fetch_effective_output_base_paths_query(
         .join(
             JoinType::Join,
             CollectionDBIden::Table,
-            Expr::col((CollectionDBIden::Table, CollectionDBIden::Id))
+            Expr::col((CollectionDBIden::Table, ActiveCollectionDBIden::Id))
                 .equals((FunctionDBIden::Table, FunctionDBIden::CollectionId)),
         )
         .and_where(Expr::col((FunctionDBIden::Table, FunctionDBIden::Id)).is_in(id_values))
@@ -968,10 +986,13 @@ fn fetch_pfrs_to_dispatch_query(limit: u64) -> sea_query::SelectStatement {
             Order::Asc,
         )
         .limit(limit);
+    // `OF` keeps the claim on the PFR rows: the outer-joined workers side is
+    // read, and PostgreSQL refuses to lock a nullable join side anyway.
+    claim::<PhysicalFunctionRunDB>(&mut stmt);
     stmt.take()
 }
 
-fn fetch_dispatched_pfrs_query(cutoff: &AtTime) -> sea_query::SelectStatement {
+fn dispatched_before_query(cutoff: &AtTime) -> sea_query::SelectStatement {
     let mut stmt = Query::select();
     for col in <PhysicalFunctionRunDB as ta_objects::Dao>::columns() {
         stmt.column(col);
@@ -1002,10 +1023,13 @@ fn fetch_in_flight_pfr_query(
             Expr::col(PhysicalFunctionRunDBIden::ExecutionId).eq(execution_id.as_sea_value()),
         )
         .and_where(Expr::col(PhysicalFunctionRunDBIden::FunctionId).eq(function_id.as_sea_value()))
-        .and_where(Expr::col(PhysicalFunctionRunDBIden::Status).is_in([
-            LogicalFunctionRunStatus::Requested.as_sea_value(),
-            LogicalFunctionRunStatus::Running.as_sea_value(),
-        ]))
+        .and_where(
+            Expr::col(PhysicalFunctionRunDBIden::Status).is_in(
+                PhysicalFunctionRunStatus::IN_FLIGHT
+                    .iter()
+                    .map(|s| s.as_sea_value()),
+            ),
+        )
         .order_by(PhysicalFunctionRunDBIden::TriggeredOn, Order::Desc)
         .limit(1);
     stmt.take()
@@ -1140,7 +1164,7 @@ pub(crate) fn build_chain(params: ChainParams<'_>) -> SelectStatement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::{PostgresQueryBuilder, SqliteQueryBuilder};
+    use sea_query::PostgresQueryBuilder;
 
     #[test]
     fn test_fetch_to_commit_query_sql() {
@@ -1148,7 +1172,7 @@ mod tests {
             ExecutionId::try_from("ep20260101-0000000001").unwrap(),
             ExecutionId::try_from("ep20260101-0000000002").unwrap(),
         ];
-        let sql = fetch_ids_to_commit_query(&ids).to_string(SqliteQueryBuilder);
+        let sql = fetch_ids_to_commit_query(&ids).to_string(PostgresQueryBuilder);
         assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
         assert!(
             sql.contains("transactions_with_done_runs"),
@@ -1202,7 +1226,7 @@ mod tests {
     #[test]
     fn test_fetch_runs_for_dispatch_query_coalesces_patch_first() {
         let ids = vec![PhysicalFunctionRunId::new()];
-        let sql = fetch_runs_for_dispatch_query(&ids).to_string(SqliteQueryBuilder);
+        let sql = fetch_runs_for_dispatch_query(&ids).to_string(PostgresQueryBuilder);
         // LEFT JOIN on function_patches keyed on function_version_patch_id.
         assert!(
             sql.contains(r#"LEFT JOIN "function_patches""#),
@@ -1230,7 +1254,7 @@ mod tests {
     #[test]
     fn test_fetch_runs_for_dispatch_query_projects_base_paths() {
         let ids = vec![PhysicalFunctionRunId::new()];
-        let sql = fetch_runs_for_dispatch_query(&ids).to_string(SqliteQueryBuilder);
+        let sql = fetch_runs_for_dispatch_query(&ids).to_string(PostgresQueryBuilder);
         // The scheduler reads every prefix it needs off this row — no per-run fetches.
         // Head-side function stage/checkpoint prefix (stable across patches).
         assert!(
@@ -1273,9 +1297,34 @@ mod tests {
         );
     }
 
+    /// The dispatch fetches claim their rows rather than merely reading them:
+    /// `FOR UPDATE OF <own table> SKIP LOCKED`, so a row another writer is
+    /// mutating is passed over instead of overwritten. `OF` names the DAO's own
+    /// table — the PFR query outer-joins `workers`, whose nullable side
+    /// PostgreSQL refuses to lock.
+    #[test]
+    fn test_dispatch_fetches_claim_their_rows() {
+        let at = AtTime::now();
+        let claims = [
+            (
+                "lfrs_to_execute",
+                fetch_lfrs_to_execute_query(&at, 50).to_string(PostgresQueryBuilder),
+                r#"FOR UPDATE OF "logical_function_runs" SKIP LOCKED"#,
+            ),
+            (
+                "pfrs_to_dispatch",
+                fetch_pfrs_to_dispatch_query(50).to_string(PostgresQueryBuilder),
+                r#"FOR UPDATE OF "physical_function_runs" SKIP LOCKED"#,
+            ),
+        ];
+        for (name, sql, expected) in &claims {
+            assert!(sql.contains(expected), "{name} must claim its rows: {sql}");
+        }
+    }
+
     #[test]
     fn test_fetch_lfrs_to_execute_query_sql_logical_chain() {
-        let sql = fetch_lfrs_to_execute_query(&AtTime::now(), 50).to_string(SqliteQueryBuilder);
+        let sql = fetch_lfrs_to_execute_query(&AtTime::now(), 50).to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "logical_function_runs""#),
             "outer scans logical_function_runs: {sql}"
@@ -1316,7 +1365,7 @@ mod tests {
 
     #[test]
     fn test_to_dispatch_query_sql() {
-        let sql = fetch_pfrs_to_dispatch_query(50).to_string(SqliteQueryBuilder);
+        let sql = fetch_pfrs_to_dispatch_query(50).to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "physical_function_runs""#),
             "scans physical_function_runs: {sql}"
@@ -1341,7 +1390,7 @@ mod tests {
 
     #[test]
     fn test_dispatched_before_query_sql() {
-        let sql = fetch_dispatched_pfrs_query(&AtTime::now()).to_string(PostgresQueryBuilder);
+        let sql = dispatched_before_query(&AtTime::now()).to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "physical_function_runs""#),
             "scans physical_function_runs: {sql}"
@@ -1364,7 +1413,7 @@ mod tests {
     fn test_blocked_ids_query_sql() {
         let eid = ExecutionId::try_from("ep20260101-0000000001").unwrap();
         let at = AtTime::now();
-        let sql = blocked_ids_query(&eid, &at).to_string(SqliteQueryBuilder);
+        let sql = blocked_ids_query(&eid, &at).to_string(PostgresQueryBuilder);
         assert!(sql.contains("SELECT DISTINCT"), "should be distinct: {sql}");
         assert!(
             sql.contains(r#"FROM "logical_function_runs""#),
@@ -1392,14 +1441,14 @@ mod tests {
     fn test_in_flight_query_sql() {
         let exec = ExecutionId::try_from("ep20260101-0000000001").unwrap();
         let func = FunctionId::default();
-        let sql = fetch_in_flight_pfr_query(&exec, &func).to_string(SqliteQueryBuilder);
+        let sql = fetch_in_flight_pfr_query(&exec, &func).to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "physical_function_runs""#),
             "scans physical_function_runs: {sql}"
         );
         assert!(
-            sql.contains(r#"IN ('RR', 'R')"#),
-            "filters in-flight statuses: {sql}"
+            sql.contains(r#"IN ('RR', 'DP', 'R')"#),
+            "filters the full IN_FLIGHT status set: {sql}"
         );
         assert!(sql.contains("LIMIT 1"), "limits to one: {sql}");
     }

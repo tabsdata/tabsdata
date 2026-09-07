@@ -11,7 +11,7 @@ use sea_query::{Condition, Query, SelectStatement};
 use std::marker::PhantomData;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
-use ta_objects::{CurrentDao, DaoCore, ListDto, ListFilter, StateFilter};
+use ta_objects::{CurrentDao, DaoCore, FromDao, ListDto, StateFilter};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
@@ -114,19 +114,18 @@ where
     }
 
     /// Filtered, paginated list over the `_current` view (All state).
-    pub async fn list<D, F: ListFilter>(
+    pub async fn list<D>(
         self,
         condition: impl SqlCondition,
-        filter: &F,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         D: ListDto,
-        <D as ListDto>::Dao: CurrentDao,
-        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
+        <D as FromDao>::Dao: CurrentDao,
+        E: Domained<Domain = <<D as FromDao>::Dao as DaoCore>::Db>,
     {
-        self.with_dao::<<D as ListDto>::Dao>()
-            .list(condition, filter, params)
+        self.with_dao::<<D as FromDao>::Dao>()
+            .list(condition, params)
             .await
     }
 }
@@ -188,25 +187,22 @@ where
 
     /// Filtered, paginated list, mapped through `L::from_dao`. The DTO's
     /// associated `Dao` must match the wrapper's bound DAO.
-    pub async fn list<L, F: ListFilter>(
+    pub async fn list<L>(
         self,
         condition: impl SqlCondition,
-        filter: &F,
         params: &ListQueryParams<L>,
     ) -> Result<Vec<L>, SqlError>
     where
         L: ListDto<Dao = D>,
     {
-        let base = select_current::<D>(condition, self.condition.as_ref())?
-            .cond_where(filter.condition::<D>()?)
-            .take();
+        let base = select_current::<D>(condition, self.condition.as_ref())?.take();
         let mut query = params.apply_to(base);
         let daos: Vec<D> = query
             .build_query_as()
             .fetch_all(self.executor)
             .await
             .map_err(SqlError::on_read::<D>)?;
-        daos.iter()
+        daos.into_iter()
             .map(|dao| L::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
     }
@@ -238,23 +234,24 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::SqliteQueryBuilder;
+    use sea_query::PostgresQueryBuilder;
     use ta_objects::Dao;
+    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
-    #[ta_objects::typed(string)]
-    struct TestId;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestId(String);
 
-    #[ta_objects::typed(string)]
-    struct TestPartition;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestPartition(String);
 
-    #[ta_objects::typed_enum]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
     enum TestStatus {
         #[typed_enum(rename = "A")]
         Active,
     }
 
-    #[ta_objects::typed(string)]
-    struct TestDefinedOn;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestDefinedOn(String);
 
     #[Dao]
     #[dao(
@@ -264,8 +261,7 @@ mod tests {
             version_by = "defined_on",
             partition_by = "partition_id",
             current = "test_current_view"
-        ),
-        states(Active = TestStatus::Active)
+        )
     )]
     struct TestCurrentDao {
         id: TestId,
@@ -274,12 +270,18 @@ mod tests {
         defined_on: TestDefinedOn,
     }
 
+    impl TestCurrentDao {
+        pub fn active() -> StateFilter<Self> {
+            StateFilter::of(TestStatus::Active)
+        }
+    }
+
     #[test]
     fn test_select_current_no_state() {
         let id = TestPartition::try_from("p1").unwrap();
         let sql = select_current::<TestCurrentDao>(&id, None)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(sql.contains(r#"FROM "test_current_view""#), "{sql}");
         assert!(sql.contains(r#""partition_id" = 'p1'"#), "{sql}");
         assert!(!sql.contains(r#""status" = 'A'"#), "{sql}");
@@ -291,7 +293,7 @@ mod tests {
         let active = TestCurrentDao::active();
         let sql = select_current::<TestCurrentDao>(&id, Some(active.condition()))
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(sql.contains(r#"FROM "test_current_view""#), "{sql}");
         assert!(sql.contains(r#""partition_id" = 'p1'"#), "{sql}");
         assert!(sql.contains(r#""status" = 'A'"#), "{sql}");
@@ -301,7 +303,7 @@ mod tests {
     fn test_select_current_no_condition() {
         let sql = select_current::<TestCurrentDao>((), None)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(sql.contains(r#"FROM "test_current_view""#), "{sql}");
     }
 }

@@ -10,6 +10,7 @@
 //! [`MAX_QUERY_CONDITIONS`].
 
 use crate::primitives::versioned::{Cte, latest_ranked_cte};
+
 use sea_query::{Expr, ExprTrait, Query};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
@@ -18,7 +19,7 @@ use tracing::warn;
 
 /// Maximum conditions per query.
 ///
-/// Conservatively set well below database limits (SQLite: 32,766;
+/// Conservatively set well below the database limit (
 /// PostgreSQL: 65,535) to leave room for other parameters in the query
 /// (pagination, ordering, additional WHERE clauses).
 /// `sea_query::Condition` can cause stack overflow when nesting (this is,
@@ -30,7 +31,7 @@ pub(crate) const MAX_QUERY_CONDITIONS: usize = 100;
 /// Maximum rows per batch INSERT statement.
 ///
 /// Capped so that `rows * columns` stays well below database bind-parameter
-/// limits (SQLite: 32,766; PostgreSQL: 65,535).
+/// limit (PostgreSQL: 65,535).
 pub(crate) const MAX_INSERT_ROWS: usize = 100;
 
 pub(crate) fn resolve_or<D: DaoCore>(
@@ -135,40 +136,41 @@ pub(crate) fn fetch_all_current_chunk_query<D: CurrentDao, V: SqlCondition>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::{Alias, Asterisk, SqliteQueryBuilder};
-    use ta_objects::Buildable;
+    use sea_query::{Alias, Asterisk, PostgresQueryBuilder};
+    use ta_objects::StateFilter;
+    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
     // --- Basic test DAO ---
 
-    #[ta_objects::typed(string)]
-    struct TestId;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestId(String);
 
-    #[ta_objects::typed(string)]
-    struct TestName;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestName(String);
 
-    #[ta_objects::typed_enum]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
     enum TestStatus {
         #[typed_enum(rename = "A")]
         Active,
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "test_chunked", states(Active = TestStatus::Active))]
+    #[dao(sql_table = "test_chunked")]
     struct TestDao {
-        id: TestId,
-        name: TestName,
-        status: TestStatus,
+        pub id: TestId,
+        pub name: TestName,
+        pub status: TestStatus,
     }
 
     // --- Versioned test DAO ---
 
-    #[ta_objects::typed(string)]
-    struct TestPartition;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestPartition(String);
 
-    #[ta_objects::typed(i64)]
-    struct TestDefinedOn;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestDefinedOn(i64);
 
-    #[ta_objects::typed_enum]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
     enum TestVStatus {
         #[typed_enum(rename = "A")]
         Active,
@@ -177,14 +179,13 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(
         sql_table = "test_chunked_versioned",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id"),
-        states(Active = TestVStatus::Active)
+        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id")
     )]
     struct TestVersionedDao {
-        id: TestId,
-        partition_id: TestPartition,
-        status: TestVStatus,
-        defined_on: TestDefinedOn,
+        pub id: TestId,
+        pub partition_id: TestPartition,
+        pub status: TestVStatus,
+        pub defined_on: TestDefinedOn,
     }
 
     // --- Current test DAO ---
@@ -197,33 +198,36 @@ mod tests {
             version_by = "defined_on",
             partition_by = "partition_id",
             current = "test_chunked_current_view"
-        ),
-        states(Active = TestVStatus::Active)
+        )
     )]
     struct TestCurrentDao {
-        id: TestId,
-        partition_id: TestPartition,
-        status: TestVStatus,
-        defined_on: TestDefinedOn,
+        pub id: TestId,
+        pub partition_id: TestPartition,
+        pub status: TestVStatus,
+        pub defined_on: TestDefinedOn,
+    }
+
+    impl TestCurrentDao {
+        pub fn active() -> StateFilter<Self> {
+            StateFilter::of(TestVStatus::Active)
+        }
     }
 
     #[test]
     fn test_insert_vec_query() {
-        let dao1 = TestDao::builder()
-            .id(TestId::try_from("i1").unwrap())
-            .name(TestName::try_from("n1").unwrap())
-            .status(TestStatus::Active)
-            .build()
-            .unwrap();
-        let dao2 = TestDao::builder()
-            .id(TestId::try_from("i2").unwrap())
-            .name(TestName::try_from("n2").unwrap())
-            .status(TestStatus::Active)
-            .build()
-            .unwrap();
+        let dao1 = TestDao {
+            id: TestId::try_from("i1").unwrap(),
+            name: TestName::try_from("n1").unwrap(),
+            status: TestStatus::Active,
+        };
+        let dao2 = TestDao {
+            id: TestId::try_from("i2").unwrap(),
+            name: TestName::try_from("n2").unwrap(),
+            status: TestStatus::Active,
+        };
         let sql = insert_vec_query::<TestDao>(&[dao1, dao2])
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"INSERT INTO "test_chunked" ("id", "name", "status") VALUES ('i1', 'n1', 'A'), ('i2', 'n2', 'A')"#
@@ -241,7 +245,7 @@ mod tests {
             .column(Asterisk)
             .from(Alias::new("t"))
             .cond_where(cond)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains("'a'") && sql.contains("'b'") && sql.contains("OR"),
             "should combine with OR: {sql}"
@@ -256,7 +260,7 @@ mod tests {
         ];
         let sql = fetch_all_chunk_query::<TestDao, TestId>(&ids)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "test_chunked""#),
             "should select from table: {sql}"
@@ -270,19 +274,18 @@ mod tests {
 
     #[test]
     fn test_update_chunk_query() {
-        let dao = TestDao::builder()
-            .id(TestId::try_from("i1").unwrap())
-            .name(TestName::try_from("updated").unwrap())
-            .status(TestStatus::Active)
-            .build()
-            .unwrap();
+        let dao = TestDao {
+            id: TestId::try_from("i1").unwrap(),
+            name: TestName::try_from("updated").unwrap(),
+            status: TestStatus::Active,
+        };
         let ids = vec![
             TestId::try_from("i1").unwrap(),
             TestId::try_from("i2").unwrap(),
         ];
         let sql = update_chunk_query::<TestDao, TestDao, TestId>(&dao, &ids)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.starts_with(r#"UPDATE "test_chunked" SET"#),
             "should update table: {sql}"
@@ -301,7 +304,7 @@ mod tests {
         ];
         let sql = delete_chunk_query::<TestDao, TestId>(&ids)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.starts_with(r#"DELETE FROM "test_chunked""#),
             "should delete from table: {sql}"
@@ -321,7 +324,7 @@ mod tests {
         let on = TestDefinedOn::try_from(100i64).unwrap();
         let sql = fetch_all_at_chunk_query::<TestVersionedDao, TestPartition>(&ids, &on, None)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
         assert!(sql.contains("ROW_NUMBER"), "should use ROW_NUMBER: {sql}");
         assert!(
@@ -339,7 +342,7 @@ mod tests {
         ];
         let sql = fetch_all_current_chunk_query::<TestCurrentDao, TestPartition>(&ids, None)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "test_chunked_current_view""#),
             "should select from current view: {sql}"
@@ -359,7 +362,7 @@ mod tests {
             Some(active.condition()),
         )
         .unwrap()
-        .to_string(SqliteQueryBuilder);
+        .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#""status" = 'A'"#),
             "should filter by active state: {sql}"

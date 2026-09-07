@@ -59,12 +59,12 @@ pub(crate) fn purge_query(now: &AtTime) -> sea_query::DeleteStatement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::SqliteQueryBuilder;
+    use sea_query::PostgresQueryBuilder;
 
     #[test]
     fn test_purge_query_sql() {
         let now = AtTime::now();
-        let sql = purge_query(&now).to_string(SqliteQueryBuilder);
+        let sql = purge_query(&now).to_string(PostgresQueryBuilder);
         assert!(sql.starts_with(r#"DELETE FROM "sessions""#), "{sql}");
         assert!(
             sql.contains(r#""expires_on" <"#),

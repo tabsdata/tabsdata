@@ -24,12 +24,12 @@
 //! (which never conflict-replace) can't reach them.
 
 use crate::QueryExecutor;
-use sea_query::{LockType, OnConflict, Query, SelectStatement};
-use ta_objects::errors::SqlError;
+use sea_query::{IntoTableRef, LockBehavior, LockType, OnConflict, Query, SelectStatement};
+use sqlx::postgres::PgQueryResult;
+use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
-use ta_objects::{Dao, DaoCore, DaoUpdate, KeyedDao, ListDto, ListFilter, LiveDao, StateFilter};
+use ta_objects::{Dao, DaoCore, DaoUpdate, FromDao, KeyedDao, ListDto, LiveDao, StateFilter};
 use td_database::domain::Domained;
-use td_database::dynamic::DynamicQueryResult;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
 
@@ -53,7 +53,7 @@ where
     E: QueryExecutor,
 {
     /// Insert one row.
-    pub async fn insert<D: Dao>(self, dao: &D) -> Result<DynamicQueryResult, SqlError>
+    pub async fn insert<D: Dao>(self, dao: &D) -> Result<PgQueryResult, SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
@@ -68,7 +68,7 @@ where
     /// Upsert one row: insert it, and on a conflict over the DAO's
     /// [`key_columns`](KeyedDao::key_columns) replace its
     /// [`value_columns`](KeyedDao::value_columns) (every non-key column).
-    pub async fn upsert<D: KeyedDao>(self, dao: &D) -> Result<DynamicQueryResult, SqlError>
+    pub async fn upsert<D: KeyedDao>(self, dao: &D) -> Result<PgQueryResult, SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
@@ -83,10 +83,7 @@ where
     /// Insert one row, ignoring a conflict over the DAO's
     /// [`key_columns`](KeyedDao::key_columns) (`ON CONFLICT DO NOTHING`):
     /// a write-once / idempotent insert where the first row per key wins.
-    pub async fn insert_or_ignore<D: KeyedDao>(
-        self,
-        dao: &D,
-    ) -> Result<DynamicQueryResult, SqlError>
+    pub async fn insert_or_ignore<D: KeyedDao>(self, dao: &D) -> Result<PgQueryResult, SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
@@ -129,6 +126,52 @@ where
         Ok(r)
     }
 
+    /// Assert a row matching `condition` exists — a clean "could not find"
+    /// error instead of the raw fetch error path.
+    pub async fn assert_exists<D: LiveDao>(
+        self,
+        condition: impl SqlCondition,
+    ) -> Result<(), SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let vals = condition.display_values::<D>();
+        let found: Option<D> = self.fetch_optional(condition).await?;
+        match found {
+            Some(_) => Ok(()),
+            None => {
+                let cols: Vec<String> = vals.iter().map(|(k, _)| k.clone()).collect();
+                Err(SqlError::CouldNotFindEntity(
+                    D::display_name().to_string(),
+                    format_hint(&cols, &vals),
+                ))
+            }
+        }
+    }
+
+    /// Assert no row matches `condition` — a clean "already exists" error
+    /// instead of the unique-constraint violation a later write would raise.
+    pub async fn assert_not_exists<D: LiveDao>(
+        self,
+        condition: impl SqlCondition,
+    ) -> Result<(), SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let vals = condition.display_values::<D>();
+        let found: Option<D> = self.fetch_optional(condition).await?;
+        match found {
+            Some(_) => {
+                let cols: Vec<String> = vals.iter().map(|(k, _)| k.clone()).collect();
+                Err(SqlError::EntityAlreadyExists(
+                    D::display_name().to_string(),
+                    format_hint(&cols, &vals),
+                ))
+            }
+            None => Ok(()),
+        }
+    }
+
     /// Fetch the last row matching `condition` in the DAO's default
     /// ordering (the ordering *reversed*, `LIMIT 1`), or `None` if no row
     /// matches. For a DAO ordered `seq ASC` this is the max-`seq` row.
@@ -152,8 +195,7 @@ where
     /// Fetch the row matching `condition` **for update** (`SELECT … FOR
     /// UPDATE`, `LIMIT 1`), or `None` if none matches. The row lock
     /// serializes a concurrent read-modify-write on the same row behind
-    /// this one. sea_query emits `FOR UPDATE` on Postgres and omits it on
-    /// SQLite (which serializes write transactions anyway).
+    /// this one.
     pub async fn fetch_optional_for_update<D: LiveDao>(
         self,
         condition: impl SqlCondition,
@@ -189,6 +231,26 @@ where
         Ok(r)
     }
 
+    /// Fetch every row matching `condition` **for update**. Use it wherever the
+    /// rows feed a decision this transaction then writes back: the row locks
+    /// make the read-decide-write atomic against a concurrent writer of them.
+    /// Base-table DAOs only — PostgreSQL refuses `FOR UPDATE` through a view
+    /// that outer-joins.
+    pub async fn fetch_all_for_update<D: LiveDao>(
+        self,
+        condition: impl SqlCondition,
+    ) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let r = select_for_update::<D>(condition)?
+            .build_query_as()
+            .fetch_all(self.executor)
+            .await
+            .map_err(SqlError::on_read::<D>)?;
+        Ok(r)
+    }
+
     /// Fetch every row matching `condition`. No state filter.
     pub async fn fetch_all<D: LiveDao>(
         self,
@@ -210,7 +272,7 @@ where
         self,
         dao: &U,
         condition: impl SqlCondition,
-    ) -> Result<DynamicQueryResult, SqlError>
+    ) -> Result<PgQueryResult, SqlError>
     where
         E: Domained<Domain = U::Db>,
     {
@@ -226,7 +288,7 @@ where
     pub async fn delete<D: DaoCore>(
         self,
         condition: impl SqlCondition,
-    ) -> Result<DynamicQueryResult, SqlError>
+    ) -> Result<PgQueryResult, SqlError>
     where
         E: Domained<Domain = D::Db>,
     {
@@ -240,30 +302,28 @@ where
 
     /// Filtered, paginated list for a `ListDto`. Maps each row through
     /// `D::from_dao`.
-    pub async fn list<F: ListFilter, D>(
+    pub async fn list<D>(
         self,
         condition: impl SqlCondition,
-        filter: &F,
         params: &ListQueryParams<D>,
     ) -> Result<Vec<D>, SqlError>
     where
         D: ListDto,
-        <D as ListDto>::Dao: LiveDao,
-        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
+        <D as FromDao>::Dao: LiveDao,
+        E: Domained<Domain = <<D as FromDao>::Dao as DaoCore>::Db>,
     {
         let base = Query::select()
-            .columns(<D as ListDto>::Dao::columns())
-            .from(<D as ListDto>::Dao::table())
-            .cond_where(resolve_condition::<<D as ListDto>::Dao>(condition)?)
-            .cond_where(filter.condition::<<D as ListDto>::Dao>()?)
+            .columns(<D as FromDao>::Dao::columns())
+            .from(<D as FromDao>::Dao::table())
+            .cond_where(resolve_condition::<<D as FromDao>::Dao>(condition)?)
             .take();
         let mut query = params.apply_to(base);
-        let daos: Vec<<D as ListDto>::Dao> = query
+        let daos: Vec<<D as FromDao>::Dao> = query
             .build_query_as()
             .fetch_all(self.executor)
             .await
-            .map_err(SqlError::on_read::<<D as ListDto>::Dao>)?;
-        daos.iter()
+            .map_err(SqlError::on_read::<<D as FromDao>::Dao>)?;
+        daos.into_iter()
             .map(|dao| D::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
     }
@@ -278,6 +338,27 @@ where
         E: Domained<Domain = D::Db>,
     {
         let r = select_in::<D>(&state, condition)?
+            .build_query_as()
+            .fetch_all(self.executor)
+            .await
+            .map_err(SqlError::on_read::<D>)?;
+        Ok(r)
+    }
+
+    /// [`fetch_all_in`](Self::fetch_all_in) as a claim: `FOR UPDATE OF <table>
+    /// SKIP LOCKED`, so concurrent claimers take disjoint sets and a skipped
+    /// row falls to a later pass. Base-table DAOs only — PostgreSQL refuses
+    /// `FOR UPDATE` through a view that outer-joins.
+    pub async fn claim_all_in<D: LiveDao>(
+        self,
+        state: StateFilter<D>,
+        condition: impl SqlCondition,
+    ) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let mut query = select_in::<D>(&state, condition)?;
+        let r = claim::<D>(&mut query)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -373,6 +454,18 @@ pub(crate) fn select_for_update<D: Dao>(
     Ok(query)
 }
 
+/// Turn a select into a claim: `FOR UPDATE OF <table> SKIP LOCKED`, so a row
+/// another transaction is already mutating is passed over instead of waited on.
+/// `OF <table>` keeps the lock to the DAO's own rows — a correlated subquery's
+/// tables are read, not claimed.
+pub(crate) fn claim<D: Dao>(query: &mut SelectStatement) -> &mut SelectStatement {
+    query.lock_with_tables_behavior(
+        LockType::Update,
+        [D::table().into_table_ref()],
+        LockBehavior::SkipLocked,
+    )
+}
+
 /// The DAO's default ordering with each column's direction flipped.
 fn reverse_order<D: Dao>() -> impl Iterator<Item = (D::Iden, sea_query::Order)> {
     D::order_by().into_iter().map(|(col, ord)| {
@@ -445,35 +538,35 @@ pub(crate) fn select_latest_before<D: LiveDao>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::SqliteQueryBuilder;
-    use ta_objects::Buildable;
+    use sea_query::PostgresQueryBuilder;
+    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
-    #[ta_objects::typed(string)]
-    struct TestId;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestId(String);
 
-    #[ta_objects::typed(string)]
-    struct TestName;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestName(String);
 
-    #[ta_objects::typed_enum]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
     enum TestStatus {
         #[typed_enum(rename = "A")]
         Active,
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "test_basic", states(Active = TestStatus::Active))]
+    #[dao(sql_table = "test_basic")]
     struct TestDao {
-        id: TestId,
-        name: TestName,
-        status: TestStatus,
+        pub id: TestId,
+        pub name: TestName,
+        pub status: TestStatus,
     }
 
     #[ta_objects::Dao]
     #[dao(sql_table = "test_keyed", key(id))]
     struct TestKeyedDao {
-        id: TestId,
-        name: TestName,
-        status: TestStatus,
+        pub id: TestId,
+        pub name: TestName,
+        pub status: TestStatus,
     }
 
     #[test]
@@ -481,7 +574,7 @@ mod tests {
         let id = TestId::try_from("abc").unwrap();
         let sql = select::<TestDao>(&id)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" DESC"#
@@ -490,7 +583,9 @@ mod tests {
 
     #[test]
     fn test_select_no_condition() {
-        let sql = select::<TestDao>(()).unwrap().to_string(SqliteQueryBuilder);
+        let sql = select::<TestDao>(())
+            .unwrap()
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "id", "name", "status" FROM "test_basic" WHERE TRUE ORDER BY "id" DESC"#
@@ -499,15 +594,14 @@ mod tests {
 
     #[test]
     fn test_insert_query_sql() {
-        let dao = TestDao::builder()
-            .id(TestId::try_from("i1").unwrap())
-            .name(TestName::try_from("n1").unwrap())
-            .status(TestStatus::Active)
-            .build()
-            .unwrap();
+        let dao = TestDao {
+            id: TestId::try_from("i1").unwrap(),
+            name: TestName::try_from("n1").unwrap(),
+            status: TestStatus::Active,
+        };
         let sql = insert_query::<TestDao>(&dao)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"INSERT INTO "test_basic" ("id", "name", "status") VALUES ('i1', 'n1', 'A')"#
@@ -515,19 +609,18 @@ mod tests {
     }
 
     fn keyed_dao() -> TestKeyedDao {
-        TestKeyedDao::builder()
-            .id(TestId::try_from("i1").unwrap())
-            .name(TestName::try_from("n1").unwrap())
-            .status(TestStatus::Active)
-            .build()
-            .unwrap()
+        TestKeyedDao {
+            id: TestId::try_from("i1").unwrap(),
+            name: TestName::try_from("n1").unwrap(),
+            status: TestStatus::Active,
+        }
     }
 
     #[test]
     fn test_upsert_query_sql() {
         let sql = upsert_query::<TestKeyedDao>(&keyed_dao())
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         // conflict target = the declared key; replaced = every other column.
         assert_eq!(
             sql,
@@ -539,7 +632,7 @@ mod tests {
     fn test_insert_or_ignore_query_sql() {
         let sql = insert_or_ignore_query::<TestKeyedDao>(&keyed_dao())
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"INSERT INTO "test_keyed" ("id", "name", "status") VALUES ('i1', 'n1', 'A') ON CONFLICT ("id") DO NOTHING"#
@@ -553,7 +646,7 @@ mod tests {
         // last row reverses it to `id ASC`.
         let sql = select_last::<TestDao>(&id)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" ASC LIMIT 1"#
@@ -561,12 +654,25 @@ mod tests {
     }
 
     #[test]
-    fn test_select_for_update_emits_lock_on_postgres() {
+    fn test_select_for_update_emits_lock() {
         use sea_query::PostgresQueryBuilder;
         let id = TestId::try_from("abc").unwrap();
         let sql = select_for_update::<TestDao>(&id)
             .unwrap()
             .to_string(PostgresQueryBuilder);
         assert!(sql.contains("FOR UPDATE"), "{sql}");
+    }
+
+    /// A claim locks only its own rows and skips ones another claimant holds.
+    #[test]
+    fn test_claim_emits_skip_locked() {
+        use sea_query::PostgresQueryBuilder;
+        let state = StateFilter::<TestDao>::of(TestStatus::Active);
+        let mut query = select_in::<TestDao>(&state, &()).unwrap();
+        let sql = claim::<TestDao>(&mut query).to_string(PostgresQueryBuilder);
+        assert!(
+            sql.contains(r#"FOR UPDATE OF "test_basic" SKIP LOCKED"#),
+            "{sql}"
+        );
     }
 }

@@ -247,19 +247,21 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_query::{Asterisk, SqliteQueryBuilder};
+    use sea_query::{Asterisk, PostgresQueryBuilder};
     use ta_objects::Dao;
+    use ta_objects::StateFilter;
+    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 
-    #[ta_objects::typed(string)]
-    struct TestId;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestId(String);
 
-    #[ta_objects::typed(string)]
-    struct TestPartition;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestPartition(String);
 
-    #[ta_objects::typed(i64)]
-    struct TestDefinedOn;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct TestDefinedOn(i64);
 
-    #[ta_objects::typed_enum]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
     enum TestVStatus {
         #[typed_enum(rename = "A")]
         Active,
@@ -268,8 +270,7 @@ mod tests {
     #[Dao]
     #[dao(
         sql_table = "test_versioned",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id"),
-        states(Active = TestVStatus::Active)
+        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id")
     )]
     struct TestVersionedDao {
         id: TestId,
@@ -278,13 +279,19 @@ mod tests {
         defined_on: TestDefinedOn,
     }
 
+    impl TestVersionedDao {
+        pub fn active() -> StateFilter<Self> {
+            StateFilter::of(TestVStatus::Active)
+        }
+    }
+
     #[test]
     fn test_select_at_all() {
         let id = TestPartition::try_from("p1").unwrap();
         let on = TestDefinedOn::try_from(100i64).unwrap();
         let sql = select_at::<TestVersionedDao>(&id, &on, None)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "test_versioned""#),
             "should select from table: {sql}"
@@ -306,7 +313,7 @@ mod tests {
         let sql =
             select_at::<TestVersionedDao>(&id, &on, Some(TestVersionedDao::active().condition()))
                 .unwrap()
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#""status" = 'A'"#),
             "should filter by state: {sql}"
@@ -322,7 +329,7 @@ mod tests {
             .from(Cte::Ranked)
             .take()
             .with(with)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
         assert!(
             sql.contains(r#""defined_on" <= 100"#),
@@ -339,7 +346,7 @@ mod tests {
         let id = TestPartition::try_from("p1").unwrap();
         let sql = select_latest_from_cte::<TestVersionedDao>(&id, None)
             .unwrap()
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(
             sql.contains(r#"FROM "ranked""#),
             "should select from ranked CTE: {sql}"
@@ -363,7 +370,7 @@ mod tests {
             .from(Cte::Ranked)
             .take()
             .with(with)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
         let cte_body_start = sql.find("AS (SELECT").unwrap();
         let cte_body_end = sql.rfind(") SELECT").unwrap();
@@ -394,7 +401,7 @@ mod tests {
             .from(Cte::Ranked)
             .take()
             .with(with)
-            .to_string(SqliteQueryBuilder);
+            .to_string(PostgresQueryBuilder);
         assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
         // Partition equality must be INSIDE the CTE so the window only
         // ranks rows for this partition.
@@ -423,7 +430,7 @@ mod tests {
         .order_by_columns(TestVersionedDao::order_by())
         .take()
         .with(latest_ranked_cte::<TestVersionedDao>(&on).unwrap())
-        .to_string(SqliteQueryBuilder);
+        .to_string(PostgresQueryBuilder);
         assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
         assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
         assert!(sql.contains(r#""rn" = 1"#), "should filter rn = 1: {sql}");

@@ -8,10 +8,12 @@
 //! and chronological order of new IDs created during the application's lifecycle.
 
 use sea_query::{Order, Query};
+use sqlx::{Decode, Postgres, Type};
 use std::fmt::Debug;
 use ta_objects::DaoCore;
 use td_common::logic_id::KeyId;
-use td_database::dynamic::{DynamicDecode, DynamicType};
+use td_database::access::ServiceDbError;
+use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_database::sea_query::executor::SeaExecutor;
@@ -28,7 +30,6 @@ use td_objects::types::basic::{
     LogicalTableDataVersionId, PDV, PFR, PhysicalFunctionRunId, PhysicalTableDataVersionId, TX,
     TransactionId, WKR, WorkerId,
 };
-use td_tower::error::ConnectionError;
 
 /// Errors that can occur during logical ID initialization.
 #[td_error]
@@ -64,7 +65,7 @@ where
 async fn find_last_idl<D, ID, K>(executor: impl SeaExecutor) -> Result<Option<ID>, TdError>
 where
     D: DaoCore,
-    ID: DynamicType + DynamicDecode + Send + Unpin + 'static,
+    ID: for<'r> Decode<'r, Postgres> + Type<Postgres> + Send + Unpin + 'static,
     K: KeyId,
 {
     let res = find_last_idl_query::<D, ID>()
@@ -102,44 +103,41 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
     let mut conn = db
         .begin()
         .await
-        .map_err(ConnectionError::CannotBeginTransaction)?
-        .into_connection();
+        .map_err(ServiceDbError::CannotBeginTransaction)?;
     conn.bypass_project_scope()
         .await
-        .map_err(ConnectionError::CannotBypassProjectScope)?;
+        .map_err(ServiceDbError::CannotBypassProjectScope)?;
 
-    let id = find_last_idl::<ExecutionDB, ExecutionId, EP>(&mut conn).await?;
+    let id = find_last_idl::<ExecutionDB, ExecutionId, EP>(&mut *conn).await?;
     ExecutionId::init(id)?;
 
-    let id = find_last_idl::<TransactionDB, TransactionId, TX>(&mut conn).await?;
+    let id = find_last_idl::<TransactionDB, TransactionId, TX>(&mut *conn).await?;
     TransactionId::init(id)?;
 
-    let id = last_function_version_id(&mut conn).await?;
+    let id = last_function_version_id(&mut *conn).await?;
     FunctionVersionId::init(id)?;
 
-    let id = find_last_idl::<PhysicalFunctionRunDB, PhysicalFunctionRunId, PFR>(&mut conn).await?;
+    let id = find_last_idl::<PhysicalFunctionRunDB, PhysicalFunctionRunId, PFR>(&mut *conn).await?;
     PhysicalFunctionRunId::init(id)?;
 
     let id =
-        find_last_idl::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId, PDV>(&mut conn)
+        find_last_idl::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId, PDV>(&mut *conn)
             .await?;
     PhysicalTableDataVersionId::init(id)?;
 
-    let id = find_last_idl::<LogicalFunctionRunDB, LogicalFunctionRunId, FR>(&mut conn).await?;
+    let id = find_last_idl::<LogicalFunctionRunDB, LogicalFunctionRunId, FR>(&mut *conn).await?;
     LogicalFunctionRunId::init(id)?;
 
-    let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, DV>(&mut conn)
+    let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, DV>(&mut *conn)
         .await?;
     LogicalTableDataVersionId::init(id)?;
 
-    let id = find_last_idl::<WorkerDB, WorkerId, WKR>(&mut conn).await?;
+    let id = find_last_idl::<WorkerDB, WorkerId, WKR>(&mut *conn).await?;
     WorkerId::init(id)?;
 
-    if let Some(tx) = conn.into_transaction() {
-        tx.commit()
-            .await
-            .map_err(ConnectionError::CannotCommitTransaction)?;
-    }
+    conn.commit()
+        .await
+        .map_err(ServiceDbError::CannotCommitTransaction)?;
 
     Ok(())
 }
@@ -151,7 +149,6 @@ mod tests {
     use crate::test_utils::SeedEntry;
     use sea_query::ExprTrait;
     use sea_query::{Expr, Query};
-    use ta_objects::Buildable;
     use ta_objects::and;
     use td_database::sea_query::builder::SeaQueryExt;
     use td_error::TdError;
@@ -161,6 +158,7 @@ mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDBIden;
     use td_objects::types::basic::LogicalFunctionRunStatus;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableName;
     use td_objects::types::basic::TransactionKey;
     use td_objects::types::basic::{
@@ -208,44 +206,51 @@ mod tests {
                 &UserId::try_from(ENCODED_ID_SYSTEM)?,
             )
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name("f")?
-            .try_description("F")?
-            .bundle_id(BundleId::default())
-            .try_snippet("S")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t")?])
-            .try_runtime_values("V")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f".try_into()?,
+            description: "F".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "S".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t")?].into(),
+            table_types: None,
+            runtime_values: "V".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let patch = FunctionPatchDB::builder()
-            .parent_function_version_id(function.id.clone())
-            .function_id(function.function_id)
-            .collection_id(function.collection_id)
-            .snippet(Snippet::try_from("S")?)
-            .bundle_id(BundleId::default())
-            .runtime_values(FunctionRuntimeValues::try_from("V")?)
-            .description(Description::try_from("F")?)
-            .defined_on(AtTime::now())
-            .defined_by_id(UserId::try_from(ENCODED_ID_SYSTEM)?)
-            .status(FunctionStatus::Active)
-            .build()?;
+        let patch = FunctionPatchDB {
+            id: FunctionVersionId::new(),
+            parent_function_version_id: function.id.clone(),
+            function_id: function.function_id,
+            collection_id: function.collection_id,
+            snippet: Snippet::try_from("S")?,
+            bundle_id: BundleId::default(),
+            runtime_values: FunctionRuntimeValues::try_from("V")?,
+            description: Description::try_from("F")?,
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
+            status: FunctionStatus::Active,
+        };
         db.scoped(p.id).live().insert(&patch).await?;
 
         let head = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&db).await?;
         assert_eq!(head, Some(function.id));
         assert!(Some(&patch.id) > head.as_ref());
 
-        let mut conn = db.begin().await.unwrap().into_connection();
+        let mut conn = db.begin().await.unwrap();
         conn.bypass_project_scope().await.unwrap();
-        let last = last_function_version_id(&mut conn).await?;
+        let last = last_function_version_id(&mut *conn).await?;
         assert_eq!(last, Some(patch.id));
         Ok(())
     }
@@ -263,18 +268,24 @@ mod tests {
             .await?;
 
         let table_name = TableNameDto::try_from("t")?;
-        let create = FunctionRegister::builder()
-            .try_name("f")?
-            .try_description("F")?
-            .bundle_id(BundleId::default())
-            .try_snippet("S")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![table_name.clone()])
-            .try_runtime_values("V")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "f".try_into()?,
+            description: "F".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "S".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![table_name.clone()].into(),
+            table_types: None,
+            runtime_values: "V".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function = db
             .scoped(p.id)
@@ -379,13 +390,13 @@ mod tests {
 
     mod sql {
         use super::*;
-        use sea_query::SqliteQueryBuilder;
+        use sea_query::PostgresQueryBuilder;
 
         #[test]
         fn test_find_last_idl_execution() {
             let sql = find_last_idl_query::<ExecutionDB, ExecutionId>()
                 .unwrap()
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#"FROM "executions""#),
                 "should query executions: {sql}"
@@ -399,7 +410,7 @@ mod tests {
         fn test_find_last_idl_function() {
             let sql = find_last_idl_query::<FunctionDB, FunctionVersionId>()
                 .unwrap()
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#"FROM "functions""#),
                 "should query functions: {sql}"
@@ -411,7 +422,7 @@ mod tests {
         fn test_find_last_idl_transaction() {
             let sql = find_last_idl_query::<TransactionDB, TransactionId>()
                 .unwrap()
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#"FROM "transactions""#),
                 "should query transactions: {sql}"
@@ -423,7 +434,7 @@ mod tests {
             let sql =
                 find_last_idl_query::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId>()
                     .unwrap()
-                    .to_string(SqliteQueryBuilder);
+                    .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains("physical_table_data_version"),
                 "should query physical_table_data_versions: {sql}"

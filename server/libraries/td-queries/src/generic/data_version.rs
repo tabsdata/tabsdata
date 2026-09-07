@@ -316,10 +316,8 @@ where
     /// Return `version`'s 1-based position (`rn`) in the partition's
     /// timeline at the wrapper's `on`, or `None` if the row doesn't exist.
     ///
-    /// Returns `i64`: `rn` comes from `ROW_NUMBER() OVER (...)` which Postgres
-    /// types as `BIGINT`. Sqlite is loose about integer types and would also
-    /// accept `i32`, but matching the strictest backend keeps the scalar
-    /// decode portable.
+    /// Returns `i64`: `rn` comes from `ROW_NUMBER() OVER (...)`, which
+    /// PostgreSQL types as `BIGINT`.
     pub async fn fetch_relative_offset<D>(self, version: &Version) -> Result<Option<i64>, SqlError>
     where
         D: DataVersionDao,
@@ -353,16 +351,16 @@ mod tests {
     use std::ops::Deref;
     use std::sync::LazyLock;
     use ta_objects::Dao;
+    use ta_objects::StateFilter;
+    use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::types::basic::AtTime;
 
-    #[ta_objects::typed(string)]
-    #[derive(Eq, PartialEq)]
-    struct TestPartition;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+    struct TestPartition(String);
 
-    #[ta_objects::typed_enum]
-    #[derive(Eq, PartialEq)]
+    #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     enum TestStatus {
         #[typed_enum(rename = "A")]
         Active,
@@ -375,16 +373,19 @@ mod tests {
     #[dao(
         data_version,
         sql_table = "test_dv_table",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id"),
-        states(
-            Active = TestStatus::Active,
-        )
+        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id")
     )]
     struct TestDvDao {
         id: LogicalTableDataVersionId,
         partition_id: TestPartition,
         status: TestStatus,
         defined_on: AtTime,
+    }
+
+    impl TestDvDao {
+        pub fn active() -> StateFilter<Self> {
+            StateFilter::of(TestStatus::Active)
+        }
     }
 
     static P0: LazyLock<TestPartition> = LazyLock::new(|| TestPartition::try_from("p0").unwrap());
@@ -436,11 +437,11 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_versions_none_optional_no_match(db: TdPool) -> Result<(), TdError> {
-        let before = AtTime::try_from(
+        let before = AtTime::from(
             "2025-12-31T00:00:00.000+00:00"
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
-        )?;
+        );
         let r = (&db)
             .versioned(&before)
             .data_version(P0.deref())
@@ -762,7 +763,7 @@ mod tests {
 
     mod sql {
         use super::*;
-        use sea_query::{Asterisk, Query, SqliteQueryBuilder};
+        use sea_query::{Asterisk, PostgresQueryBuilder, Query};
 
         #[test]
         fn test_ranked_cte_sql() {
@@ -772,7 +773,7 @@ mod tests {
                 .from(Cte::Ranked)
                 .take()
                 .with(with)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
             assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
             assert!(
@@ -792,7 +793,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""rn" = 1"#),
                 "Versions::None should produce rn = 1: {sql}"
@@ -806,7 +807,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""rn" = 1"#),
                 "HEAD should produce rn = 1: {sql}"
@@ -821,7 +822,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""rn" = 3"#),
                 "HEAD~2 should produce rn = 3: {sql}"
@@ -836,7 +837,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""rn" = "total_count""#),
                 "INITIAL should produce rn = total_count: {sql}"
@@ -852,7 +853,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""id" = 'dv20260101-0000000002'"#),
                 "Fixed version should match id: {sql}"
@@ -866,7 +867,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains("1 = 0"),
                 "empty list should produce 1 = 0: {sql}"
@@ -884,7 +885,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(sql.contains("OR"), "list should use OR: {sql}");
         }
 
@@ -899,7 +900,7 @@ mod tests {
                 .column(Asterisk)
                 .from(Cte::Ranked)
                 .cond_where(cond)
-                .to_string(SqliteQueryBuilder);
+                .to_string(PostgresQueryBuilder);
             assert!(
                 sql.contains(r#""rn" <="#) && sql.contains(r#""rn" >="#),
                 "range should bound rn: {sql}"

@@ -235,7 +235,7 @@ where
 }
 
 /// The four metrics statements, for plan inspection in the load suite.
-#[cfg(all(postgres, feature = "td-test"))]
+#[cfg(feature = "td-test")]
 pub fn metrics_plan_sql(req: &MetricsRequest) -> [(&'static str, String); 4] {
     use sea_query::PostgresQueryBuilder;
     [
@@ -287,11 +287,11 @@ fn from_windowed_runs(stmt: &mut SelectStatement, req: &MetricsRequest) {
         stmt,
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::CollectionId,
+            LogicalFunctionRunDBIden::CollectionId,
         ),
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::ProjectId,
+            LogicalFunctionRunDBIden::ProjectId,
         ),
     );
     apply_ended_status_filter(stmt);
@@ -408,7 +408,7 @@ fn join_produced_tdv(stmt: &mut SelectStatement) {
             LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
             (
                 FunctionRunDBWithNamesIden::Table,
-                FunctionRunDBWithNamesIden::Id,
+                LogicalFunctionRunDBIden::Id,
             ),
         ),
         TableDataVersionDBWithNamesIden::Table,
@@ -434,7 +434,7 @@ fn lfri_probe() -> SelectStatement {
         .and_where(
             Expr::col((Sq::P, LogicalFunctionRunInputDBIden::LogicalFunctionRunId)).equals((
                 FunctionRunDBWithNamesIden::Table,
-                FunctionRunDBWithNamesIden::Id,
+                LogicalFunctionRunDBIden::Id,
             )),
         )
         .offset(0)
@@ -467,20 +467,17 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     inner.expr_as(bucket_expr(req), Col::Bucket);
     if matches!(req.dim, Dim::Collection) {
         inner.expr_as(
-            fr_col(FunctionRunDBWithNamesIden::CollectionId),
+            fr_col(LogicalFunctionRunDBIden::CollectionId),
             Col::CollectionId,
         );
     }
     inner
-        .expr_as(fr_col(FunctionRunDBWithNamesIden::GroupId), Col::GroupId)
-        .expr_as(
-            fr_col(FunctionRunDBWithNamesIden::ProjectId),
-            Col::ProjectId,
-        )
-        .expr_as(fr_col(FunctionRunDBWithNamesIden::Status), Col::Status)
+        .expr_as(fr_col(LogicalFunctionRunDBIden::GroupId), Col::GroupId)
+        .expr_as(fr_col(LogicalFunctionRunDBIden::ProjectId), Col::ProjectId)
+        .expr_as(fr_col(LogicalFunctionRunDBIden::Status), Col::Status)
         .expr_as(Func::count(Expr::val(1)), Col::FnRuns)
         .expr_as(
-            Func::count_distinct(fr_col(FunctionRunDBWithNamesIden::TransactionId)),
+            Func::count_distinct(fr_col(LogicalFunctionRunDBIden::TransactionId)),
             Col::Transactions,
         );
     select_io_sums(&mut inner);
@@ -502,7 +499,7 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         &req.statuses,
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Status,
+            LogicalFunctionRunDBIden::Status,
         ),
     );
     apply_run_dim_filters(&mut inner, req);
@@ -513,21 +510,21 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     if matches!(req.dim, Dim::Collection) {
         inner.group_by_col((
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::CollectionId,
+            LogicalFunctionRunDBIden::CollectionId,
         ));
     }
     inner
         .group_by_col((
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::GroupId,
+            LogicalFunctionRunDBIden::GroupId,
         ))
         .group_by_col((
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::ProjectId,
+            LogicalFunctionRunDBIden::ProjectId,
         ))
         .group_by_col((
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Status,
+            LogicalFunctionRunDBIden::Status,
         ));
 
     let mut outer = Query::select();
@@ -537,7 +534,7 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     match req.dim {
         Dim::Collection => {
             outer.expr(Expr::col((Sq::A, Col::CollectionId))).expr_as(
-                Expr::col((Sq::C, CollectionDBIden::Name)),
+                Expr::col((Sq::C, ActiveCollectionDBIden::Name)),
                 Col::CollectionName,
             );
         }
@@ -551,7 +548,10 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         .expr(Expr::col((Sq::A, Col::GroupId)))
         .expr_as(Expr::col((Sq::G, GroupDBIden::Name)), Col::GroupName)
         .expr(Expr::col((Sq::A, Col::ProjectId)))
-        .expr_as(Expr::col((Sq::Pr, ProjectDBIden::Name)), Col::ProjectName);
+        .expr_as(
+            Expr::col((Sq::Pr, ActiveProjectDBIden::Name)),
+            Col::ProjectName,
+        );
     for c in [
         Col::Status,
         Col::FnRuns,
@@ -577,7 +577,7 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
             JoinType::LeftJoin,
             CollectionDBIden::Table,
             Sq::C,
-            Expr::col((Sq::C, CollectionDBIden::Id)).equals((Sq::A, Col::CollectionId)),
+            Expr::col((Sq::C, ActiveCollectionDBIden::Id)).equals((Sq::A, Col::CollectionId)),
         );
     }
     outer
@@ -593,7 +593,7 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
             JoinType::LeftJoin,
             ProjectDBIden::Table,
             Sq::Pr,
-            Expr::col((Sq::Pr, ProjectDBIden::Id)).equals((Sq::A, Col::ProjectId)),
+            Expr::col((Sq::Pr, ActiveProjectDBIden::Id)).equals((Sq::A, Col::ProjectId)),
         )
         .order_by((Sq::A, Col::Bucket), Order::Desc);
     outer
@@ -645,7 +645,7 @@ fn per_lfr_input_aggregates_lateral() -> SelectStatement {
         ))
         .equals((
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Id,
+            LogicalFunctionRunDBIden::Id,
         )),
     )
     .and_where(
@@ -695,7 +695,7 @@ fn per_lfr_output_aggregates_lateral() -> SelectStatement {
             ))
             .equals((
                 FunctionRunDBWithNamesIden::Table,
-                FunctionRunDBWithNamesIden::Id,
+                LogicalFunctionRunDBIden::Id,
             )),
         )
         .and_where(
@@ -721,17 +721,14 @@ fn node_output_tables_query(req: &MetricsRequest) -> SelectStatement {
     join_produced_tdv(&mut stmt);
     stmt.distinct()
         .expr_as(bucket_expr(req), Col::Bucket)
-        .expr_as(
-            fr_col(FunctionRunDBWithNamesIden::ProjectId),
-            Col::ProjectId,
-        );
+        .expr_as(fr_col(LogicalFunctionRunDBIden::ProjectId), Col::ProjectId);
     let collection_id_expr = match req.dim {
-        Dim::Collection => fr_col(FunctionRunDBWithNamesIden::CollectionId),
+        Dim::Collection => fr_col(LogicalFunctionRunDBIden::CollectionId),
         Dim::Group => null_str(),
     };
     stmt.expr_as(collection_id_expr, Col::CollectionId)
-        .expr_as(fr_col(FunctionRunDBWithNamesIden::GroupId), Col::GroupId)
-        .expr_as(fr_col(FunctionRunDBWithNamesIden::Status), Col::Status)
+        .expr_as(fr_col(LogicalFunctionRunDBIden::GroupId), Col::GroupId)
+        .expr_as(fr_col(LogicalFunctionRunDBIden::Status), Col::Status)
         .expr_as(
             tdv_col(LogicalTableDataVersionDBIden::TableId),
             Col::TableId,
@@ -742,7 +739,7 @@ fn node_output_tables_query(req: &MetricsRequest) -> SelectStatement {
         &req.statuses,
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Status,
+            LogicalFunctionRunDBIden::Status,
         ),
     );
     apply_run_dim_filters(&mut stmt, req);
@@ -766,7 +763,7 @@ fn bucket_column_pfr(unit: WindowUnit) -> PhysicalFunctionRunDBIden {
     }
 }
 
-fn fr_col(c: FunctionRunDBWithNamesIden) -> SimpleExpr {
+fn fr_col<I: IntoIden>(c: I) -> SimpleExpr {
     Expr::col((FunctionRunDBWithNamesIden::Table, c))
 }
 fn tdv_col<I: IntoIden>(c: I) -> SimpleExpr {
@@ -801,8 +798,8 @@ fn edge_branch_select(
         .expr_as(source, Col::Source)
         .expr_as(kind_lit(target_kind), Col::TargetKind)
         .expr_as(target, Col::Target)
-        .expr_as(fr_col(FunctionRunDBWithNamesIden::Status), Col::Status)
-        .expr_as(fr_col(FunctionRunDBWithNamesIden::Id), Col::LfrId)
+        .expr_as(fr_col(LogicalFunctionRunDBIden::Status), Col::Status)
+        .expr_as(fr_col(LogicalFunctionRunDBIden::Id), Col::LfrId)
         .expr_as(
             tdv_col(LogicalTableDataVersionDBIden::Id),
             Col::SourceLtdvId,
@@ -819,10 +816,7 @@ fn edge_branch_select(
             tdv_col(TableDataVersionDBWithNamesIden::DataBytes),
             Col::SourceDataBytes,
         )
-        .expr_as(
-            fr_col(FunctionRunDBWithNamesIden::ProjectId),
-            Col::ProjectId,
-        )
+        .expr_as(fr_col(LogicalFunctionRunDBIden::ProjectId), Col::ProjectId)
         .expr_as(source_project, Col::SourceProjectId);
 }
 
@@ -852,7 +846,7 @@ fn apply_edge_user_status_filters(stmt: &mut SelectStatement, req: &MetricsReque
         &req.statuses,
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Status,
+            LogicalFunctionRunDBIden::Status,
         ),
     );
 }
@@ -879,7 +873,7 @@ fn apply_run_dim_filters(stmt: &mut SelectStatement, req: &MetricsRequest) {
         &req.collections,
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::CollectionId,
+            LogicalFunctionRunDBIden::CollectionId,
         ),
     );
     apply_dim_filter(
@@ -887,7 +881,7 @@ fn apply_run_dim_filters(stmt: &mut SelectStatement, req: &MetricsRequest) {
         &req.groups,
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::GroupId,
+            LogicalFunctionRunDBIden::GroupId,
         ),
     );
 }
@@ -940,7 +934,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
         ),
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::CollectionId,
+            LogicalFunctionRunDBIden::CollectionId,
         ),
     );
     apply_dim_filter_either_endpoint(
@@ -952,7 +946,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
         ),
         (
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::GroupId,
+            LogicalFunctionRunDBIden::GroupId,
         ),
     );
     stmt
@@ -980,7 +974,7 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
         ))
         .equals((
             FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Id,
+            LogicalFunctionRunDBIden::Id,
         ))
         .and(
             Expr::col((
@@ -1020,7 +1014,7 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
         fr_col(target_dim_iden(req.dim)),
         NodeKind::ExternalDestination,
         null_str(),
-        fr_col(FunctionRunDBWithNamesIden::ProjectId),
+        fr_col(LogicalFunctionRunDBIden::ProjectId),
     );
     join_consumed_lfri(&mut stmt);
     join_source_tdv(&mut stmt);
@@ -1038,7 +1032,7 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
                     ))
                     .equals((
                         FunctionRunDBWithNamesIden::Table,
-                        FunctionRunDBWithNamesIden::Id,
+                        LogicalFunctionRunDBIden::Id,
                     )),
                 );
             apply_user_table_filter(&mut sub, LogicalTableDataVersionDBIden::Table);
@@ -1115,8 +1109,8 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     let (dim_table, dim_id, dim_name) = match req.dim {
         Dim::Collection => (
             CollectionDBIden::Table.into_iden(),
-            CollectionDBIden::Id.into_iden(),
-            CollectionDBIden::Name.into_iden(),
+            ActiveCollectionDBIden::Id.into_iden(),
+            ActiveCollectionDBIden::Name.into_iden(),
         ),
         Dim::Group => (
             GroupDBIden::Table.into_iden(),
@@ -1167,7 +1161,10 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         .expr_as(Expr::col((Sq::TgtC, dim_name)), Col::TargetName)
         .expr(Expr::col((Sq::A, Col::Status)))
         .expr(Expr::col((Sq::A, Col::ProjectId)))
-        .expr_as(Expr::col((Sq::Proj, ProjectDBIden::Name)), Col::ProjectName)
+        .expr_as(
+            Expr::col((Sq::Proj, ActiveProjectDBIden::Name)),
+            Col::ProjectName,
+        )
         .expr(Expr::col((Sq::A, Col::FnRuns)))
         .expr(Expr::col((Sq::A, Col::Tables)))
         // Distinct-table count: not summable here; zero placeholder, the
@@ -1201,7 +1198,7 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
             JoinType::LeftJoin,
             ProjectDBIden::Table,
             Sq::Proj,
-            Expr::col((Sq::Proj, ProjectDBIden::Id)).equals((Sq::A, Col::ProjectId)),
+            Expr::col((Sq::Proj, ActiveProjectDBIden::Id)).equals((Sq::A, Col::ProjectId)),
         )
         .order_by((Sq::A, Col::Bucket), Order::Desc)
         .order_by_with_nulls((Sq::A, Col::Source), Order::Asc, NullOrdering::Last)
@@ -1382,10 +1379,10 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
 // ---------------------------------------------------------------------------
 
 /// Per-dim target column on the LFR view.
-fn target_dim_iden(dim: Dim) -> FunctionRunDBWithNamesIden {
+fn target_dim_iden(dim: Dim) -> LogicalFunctionRunDBIden {
     match dim {
-        Dim::Collection => FunctionRunDBWithNamesIden::CollectionId,
-        Dim::Group => FunctionRunDBWithNamesIden::GroupId,
+        Dim::Collection => LogicalFunctionRunDBIden::CollectionId,
+        Dim::Group => LogicalFunctionRunDBIden::GroupId,
     }
 }
 
@@ -1411,7 +1408,7 @@ fn ms_to_dt(ms: i64) -> DateTime<Utc> {
 fn apply_ended_status_filter(stmt: &mut SelectStatement) {
     let status = (
         FunctionRunDBWithNamesIden::Table,
-        FunctionRunDBWithNamesIden::Status,
+        LogicalFunctionRunDBIden::Status,
     );
     let ended_vals: Vec<_> = LogicalFunctionRunStatus::ENDED
         .iter()
@@ -1559,11 +1556,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_objects::types::basic::ReuseFrozen;
+    use td_objects::types::basic::{
+        BasePath, LogicalFunctionRunInputId, PhysicalTableDataVersionId,
+    };
 
     use crate::CurrentEntry;
     use crate::LiveEntry;
     use crate::test_utils::SeedEntry;
-    use ta_objects::Buildable;
     use ta_objects::and;
     use td_common::datetime::Timestamp;
     use td_database::pool::TdPool;
@@ -1631,18 +1631,24 @@ mod tests {
             .iter()
             .map(|t| TableNameDto::try_from(*t))
             .collect::<Result<Vec<_>, _>>()?;
-        let create = FunctionRegister::builder()
-            .try_name(name)?
-            .try_description("test fn")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(tables)
-            .try_runtime_values("rv")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: name.try_into()?,
+            description: "test fn".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(tables),
+            table_types: None,
+            runtime_values: "rv".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         db.scoped(collection.project_id)
             .seed()
             .function(collection, &create)
@@ -1665,18 +1671,20 @@ mod tests {
         bytes: i64,
     ) -> Result<(), TdError> {
         let bucket = EpochMs::try_from(IN_WINDOW)?;
-        let ended_on = AtTime::try_from(Timestamp::try_from(IN_WINDOW)?)?;
-        let update = UpdatePhysicalFunctionRunDB::builder()
-            .status(PhysicalFunctionRunStatus::Done)
-            .ended_on(Some(ended_on))
-            .ended_on_hour_ms(Some(bucket))
-            .ended_on_day_ms(Some(bucket))
-            .ended_on_week_ms(Some(bucket))
-            .ended_on_month_ms(Some(bucket))
-            .metric_table_versions(Some(TableVersionCount::try_from(tables)?))
-            .metric_rows(Some(RowCount::try_from(rows)?))
-            .metric_data_bytes(Some(ByteCount::try_from(bytes)?))
-            .build()?;
+        let ended_on = AtTime::from(Timestamp::try_from(IN_WINDOW)?);
+        let update = UpdatePhysicalFunctionRunDB {
+            dispatched_on: None,
+            started_on: None,
+            ended_on: Some(ended_on),
+            status: PhysicalFunctionRunStatus::Done,
+            ended_on_hour_ms: Some(bucket),
+            ended_on_day_ms: Some(bucket),
+            ended_on_week_ms: Some(bucket),
+            ended_on_month_ms: Some(bucket),
+            metric_table_versions: Some(TableVersionCount::try_from(tables)?),
+            metric_rows: Some(RowCount::try_from(rows)?),
+            metric_data_bytes: Some(ByteCount::try_from(bytes)?),
+        };
         db.scoped(pfr.project_id)
             .live()
             .update::<_, PhysicalFunctionRunDB>(&update, &pfr.id)
@@ -1697,26 +1705,31 @@ mod tests {
         row_count: i64,
         data_bytes: i64,
     ) -> Result<PhysicalTableDataVersionDB, TdError> {
-        let ptdv = PhysicalTableDataVersionDB::builder()
-            .project_id(pfr.project_id)
-            .collection_id(ltdv.collection_id)
-            .table_id(table.table_id)
-            .name(table.name.clone())
-            .table_version_id(table.id)
-            .function_version_id(&table.function_version_id)
-            .has_data(Some(HasData::TRUE))
-            .row_count(Some(RowCount::try_from(row_count)?))
-            .data_bytes(Some(ByteCount::try_from(data_bytes)?))
-            .execution_id(&ltdv.execution_id)
-            .transaction_id(&ltdv.transaction_id)
-            .physical_function_run_id(&pfr.id)
-            .function_param_pos(
-                table
-                    .function_param_pos
-                    .unwrap_or(TableFunctionParamPos::try_from(0)?),
-            )
-            .triggered_on(pfr.triggered_on)
-            .build()?;
+        let ptdv = PhysicalTableDataVersionDB {
+            id: PhysicalTableDataVersionId::new(),
+            project_id: pfr.project_id,
+            collection_id: ltdv.collection_id,
+            table_id: table.table_id,
+            name: table.name.clone(),
+            table_version_id: table.id,
+            function_version_id: table.function_version_id.clone(),
+            function_version_patch_id: None,
+            execution_id: ltdv.execution_id.clone(),
+            transaction_id: ltdv.transaction_id.clone(),
+            physical_function_run_id: pfr.id.clone(),
+            function_param_pos: table
+                .function_param_pos
+                .unwrap_or(TableFunctionParamPos::try_from(0)?),
+            triggered_on: pfr.triggered_on,
+            base_path: BasePath::default(),
+            has_data: Some(HasData::TRUE),
+            schema_changed: None,
+            column_count: None,
+            row_count: Some(RowCount::try_from(row_count)?),
+            data_bytes: Some(ByteCount::try_from(data_bytes)?),
+            schema_hash: None,
+            with_data_table_data_version_id: None,
+        };
         db.scoped(pfr.project_id)
             .live()
             .insert::<PhysicalTableDataVersionDB>(&ptdv)
@@ -1752,12 +1765,12 @@ mod tests {
     }
 
     async fn soft_delete_collection(db: &TdPool, coll: &ActiveCollectionDB) -> Result<(), TdError> {
-        let del = CollectionDeleteDB::builder()
-            .name(CollectionName::try_from(format!("deleted_{}", coll.id))?)
-            .modified_on(AtTime::try_from(Timestamp::try_from(IN_WINDOW)?)?)
-            .modified_by_id(UserId::try_from(ENCODED_ID_SYSTEM)?)
-            .name_when_deleted(coll.name.clone())
-            .build()?;
+        let del = CollectionDeleteDB {
+            name: CollectionName::try_from(format!("deleted_{}", coll.id))?,
+            modified_on: AtTime::from(Timestamp::try_from(IN_WINDOW)?),
+            modified_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
+            name_when_deleted: coll.name.clone(),
+        };
         db.scoped(coll.project_id)
             .live()
             .update::<_, ActiveCollectionDB>(&del, &coll.id)
@@ -1766,12 +1779,12 @@ mod tests {
     }
 
     async fn soft_delete_project(db: &TdPool, project: &ActiveProjectDB) -> Result<(), TdError> {
-        let del = ProjectDeleteDB::builder()
-            .name(ProjectName::try_from(format!("deleted_{}", project.id))?)
-            .modified_on(AtTime::try_from(Timestamp::try_from(IN_WINDOW)?)?)
-            .modified_by_id(UserId::try_from(ENCODED_ID_SYSTEM)?)
-            .name_when_deleted(project.name.clone())
-            .build()?;
+        let del = ProjectDeleteDB {
+            name: ProjectName::try_from(format!("deleted_{}", project.id))?,
+            modified_on: AtTime::from(Timestamp::try_from(IN_WINDOW)?),
+            modified_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
+            name_when_deleted: project.name.clone(),
+        };
         db.scoped(project.id)
             .live()
             .update::<_, ActiveProjectDB>(&del, &project.id)
@@ -1960,13 +1973,13 @@ mod tests {
         assert_eq!(n.collection_id.as_ref(), Some(&coll.id));
         assert_eq!(n.fn_runs, 1);
         // OUT magnitudes from PFR (stamp_buckets sets 1 / 10 / 100).
-        assert_eq!(*n.table_versions_out.as_ref(), 1);
-        assert_eq!(*n.row_count_out.as_ref(), 10);
-        assert_eq!(*n.data_bytes_out.as_ref(), 100);
+        assert_eq!(*n.table_versions_out, 1);
+        assert_eq!(*n.row_count_out, 10);
+        assert_eq!(*n.data_bytes_out, 100);
         // IN side empty for a pure publisher.
-        assert_eq!(*n.table_versions_in.as_ref(), 0);
-        assert_eq!(*n.row_count_in.as_ref(), 0);
-        assert_eq!(*n.data_bytes_in.as_ref(), 0);
+        assert_eq!(*n.table_versions_in, 0);
+        assert_eq!(*n.row_count_in, 0);
+        assert_eq!(*n.data_bytes_in, 0);
         Ok(())
     }
 
@@ -1978,8 +1991,8 @@ mod tests {
 
         let req = empty_request(Dim::Collection);
         let before = db.metrics().metrics_nodes(&req).await?;
-        assert_eq!(*before[0].row_count_out.as_ref(), 10);
-        assert_eq!(*before[0].data_bytes_out.as_ref(), 100);
+        assert_eq!(*before[0].row_count_out, 10);
+        assert_eq!(*before[0].data_bytes_out, 100);
 
         // A later Voided event unbinds the LTDV in the pointer-current
         // snapshot, so the view stops resolving its PTDV magnitudes.
@@ -1988,7 +2001,7 @@ mod tests {
             &ltdv.id,
             LogicalPointerStatus::Voided,
             None,
-            AtTime::try_from(Timestamp::try_from(4_102_444_800_000_i64)?)?,
+            AtTime::from(Timestamp::try_from(4_102_444_800_000_i64)?),
             ltdv.triggered_by_id,
             LogicalPointerReason::OperatorForceVoid,
         )?;
@@ -2004,13 +2017,11 @@ mod tests {
             "the run still exists, only its binding is gone"
         );
         assert_eq!(
-            *after[0].row_count_out.as_ref(),
-            0,
+            *after[0].row_count_out, 0,
             "void clears the bound PTDV row_count"
         );
         assert_eq!(
-            *after[0].data_bytes_out.as_ref(),
-            0,
+            *after[0].data_bytes_out, 0,
             "void clears the bound PTDV data_bytes"
         );
         Ok(())
@@ -2079,7 +2090,7 @@ mod tests {
         assert_eq!(ie.target, Some(coll.id.to_string()));
         assert_eq!(ie.fn_runs, 1);
         assert_eq!(ie.tables, 1);
-        assert_eq!(*ie.row_count.as_ref(), 10);
+        assert_eq!(*ie.row_count, 10);
 
         let ue = unused[0];
         assert_eq!(ue.source_kind, NodeKind::Dim);
@@ -2087,7 +2098,7 @@ mod tests {
         assert!(ue.target.is_none());
         assert_eq!(ue.fn_runs, 1);
         assert_eq!(ue.tables, 1);
-        assert_eq!(*ue.row_count.as_ref(), 10);
+        assert_eq!(*ue.row_count, 10);
         Ok(())
     }
 
@@ -2134,16 +2145,17 @@ mod tests {
             .fetch_one(and!(&consumer_pfr.execution_id, &consumer_pfr.function_id))
             .await?;
 
-        let input = LogicalFunctionRunInputDB::builder()
-            .collection_id(consumer_coll.id)
-            .execution_id(&consumer_exec.id)
-            .transaction_id(&consumer_trx.id)
-            .logical_function_run_id(consumer_lfr.id.clone())
-            .requirement_logical_table_data_version_id(Some(producer_ltdv.id))
-            .requirement_input_idx(Some(InputIdx::try_from(0)?))
-            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-            .requirement_version_pos(VersionPos::try_from(0)?)
-            .build()?;
+        let input = LogicalFunctionRunInputDB {
+            id: LogicalFunctionRunInputId::default(),
+            collection_id: consumer_coll.id,
+            execution_id: consumer_exec.id,
+            transaction_id: consumer_trx.id,
+            logical_function_run_id: consumer_lfr.id.clone(),
+            requirement_logical_table_data_version_id: Some(producer_ltdv.id),
+            requirement_input_idx: Some(InputIdx::try_from(0)?),
+            requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+            requirement_version_pos: VersionPos::try_from(0)?,
+        };
         db.scoped(p.id).live().insert(&input).await?;
 
         let req = empty_request(Dim::Collection);
@@ -2165,7 +2177,7 @@ mod tests {
         // Source-LTDV attribution: 10 rows came from the producer's
         // output LTDV (not consumer's own 10 — same number here, but
         // attribution is source-side).
-        assert_eq!(*e.row_count.as_ref(), 10);
+        assert_eq!(*e.row_count, 10);
 
         // The distinct-table listing backing `logical_tables` carries the same
         // real edge, one row for the producer's logical table.
@@ -2209,18 +2221,24 @@ mod tests {
         // Subscriber function: same shape as publisher but no output
         // tables → no LTDVs minted at plan-build.
         let consumer_fn = {
-            let create = td_objects::dxo::function::FunctionRegister::builder()
-                .try_name("egress_cons_fn")?
-                .try_description("test fn")?
-                .bundle_id(BundleId::default())
-                .try_snippet("snippet")?
-                .decorator(Decorator::Subscriber)
-                .dependencies(None)
-                .triggers(None)
-                .tables(Vec::<TableNameDto>::new())
-                .try_runtime_values("rv")?
-                .reuse_frozen_tables(false)
-                .build()?;
+            let create = td_objects::dxo::function::FunctionRegister {
+                name: "egress_cons_fn".try_into()?,
+                description: "test fn".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "snippet".try_into()?,
+                decorator: Decorator::Subscriber,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: None,
+                triggers: None,
+                tables: Some(Vec::<TableNameDto>::new()),
+                table_types: None,
+                runtime_values: "rv".try_into()?,
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            };
             db.scoped(p.id)
                 .seed()
                 .function(&consumer_coll, &create)
@@ -2249,16 +2267,17 @@ mod tests {
             .fetch_one(and!(&consumer_pfr.execution_id, &consumer_pfr.function_id))
             .await?;
 
-        let input = LogicalFunctionRunInputDB::builder()
-            .collection_id(consumer_coll.id)
-            .execution_id(&consumer_exec.id)
-            .transaction_id(&consumer_trx.id)
-            .logical_function_run_id(consumer_lfr.id.clone())
-            .requirement_logical_table_data_version_id(Some(producer_ltdv.id))
-            .requirement_input_idx(Some(InputIdx::try_from(0)?))
-            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-            .requirement_version_pos(VersionPos::try_from(0)?)
-            .build()?;
+        let input = LogicalFunctionRunInputDB {
+            id: LogicalFunctionRunInputId::default(),
+            collection_id: consumer_coll.id,
+            execution_id: consumer_exec.id,
+            transaction_id: consumer_trx.id,
+            logical_function_run_id: consumer_lfr.id.clone(),
+            requirement_logical_table_data_version_id: Some(producer_ltdv.id),
+            requirement_input_idx: Some(InputIdx::try_from(0)?),
+            requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+            requirement_version_pos: VersionPos::try_from(0)?,
+        };
         db.scoped(p.id).live().insert(&input).await?;
 
         let req = empty_request(Dim::Collection);
@@ -2275,7 +2294,7 @@ mod tests {
         assert!(e.target.is_none());
         assert_eq!(e.fn_runs, 1);
         assert_eq!(e.tables, 1);
-        assert_eq!(*e.row_count.as_ref(), 10);
+        assert_eq!(*e.row_count, 10);
         // The producer's LTDV is consumed by the subscriber → NOT
         // unused. Confirms the anti-join on LFRI works.
         let unused: Vec<_> = edges
@@ -2319,12 +2338,11 @@ mod tests {
         assert_eq!(nodes.len(), 1, "one node expected, got {nodes:?}");
         let n = &nodes[0];
         assert_eq!(
-            *n.table_versions_out.as_ref(),
-            1,
+            *n.table_versions_out, 1,
             "private output must not count, got {n:?}"
         );
-        assert_eq!(*n.row_count_out.as_ref(), 10);
-        assert_eq!(*n.data_bytes_out.as_ref(), 100);
+        assert_eq!(*n.row_count_out, 10);
+        assert_eq!(*n.data_bytes_out, 100);
 
         let edges = db
             .metrics()
@@ -2340,10 +2358,10 @@ mod tests {
             .collect();
         assert_eq!(ingress.len(), 1, "one ingress edge, got {edges:?}");
         assert_eq!(ingress[0].tables, 1);
-        assert_eq!(*ingress[0].row_count.as_ref(), 10);
+        assert_eq!(*ingress[0].row_count, 10);
         assert_eq!(unused.len(), 1, "one unused edge, got {edges:?}");
         assert_eq!(unused[0].tables, 1);
-        assert_eq!(*unused[0].row_count.as_ref(), 10);
+        assert_eq!(*unused[0].row_count, 10);
         Ok(())
     }
 
@@ -2370,16 +2388,17 @@ mod tests {
         let (cons_lfr, cons_pfr) = seed_done_run(&db, &cons_coll, &cons_fn).await?;
         stamp_buckets_on_pfr(&db, &cons_pfr).await?;
 
-        let input = LogicalFunctionRunInputDB::builder()
-            .collection_id(cons_coll.id)
-            .execution_id(&cons_lfr.execution_id)
-            .transaction_id(&cons_lfr.transaction_id)
-            .logical_function_run_id(cons_lfr.id.clone())
-            .requirement_logical_table_data_version_id(Some(private_ltdv.id.clone()))
-            .requirement_input_idx(Some(InputIdx::try_from(0)?))
-            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-            .requirement_version_pos(VersionPos::try_from(0)?)
-            .build()?;
+        let input = LogicalFunctionRunInputDB {
+            id: LogicalFunctionRunInputId::default(),
+            collection_id: cons_coll.id,
+            execution_id: cons_lfr.execution_id,
+            transaction_id: cons_lfr.transaction_id,
+            logical_function_run_id: cons_lfr.id.clone(),
+            requirement_logical_table_data_version_id: Some(private_ltdv.id.clone()),
+            requirement_input_idx: Some(InputIdx::try_from(0)?),
+            requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+            requirement_version_pos: VersionPos::try_from(0)?,
+        };
         db.scoped(p.id).live().insert(&input).await?;
 
         let nodes = db
@@ -2391,21 +2410,19 @@ mod tests {
             .find(|n| n.collection_id.as_ref() == Some(&prod_coll.id))
             .expect("producer node");
         assert_eq!(
-            *prod_node.table_versions_out.as_ref(),
-            0,
+            *prod_node.table_versions_out, 0,
             "private-only producer must report zero OUT, got {prod_node:?}"
         );
-        assert_eq!(*prod_node.row_count_out.as_ref(), 0);
+        assert_eq!(*prod_node.row_count_out, 0);
         let cons_node = nodes
             .iter()
             .find(|n| n.collection_id.as_ref() == Some(&cons_coll.id))
             .expect("consumer node");
         assert_eq!(
-            *cons_node.table_versions_in.as_ref(),
-            0,
+            *cons_node.table_versions_in, 0,
             "private input must not count, got {cons_node:?}"
         );
-        assert_eq!(*cons_node.row_count_in.as_ref(), 0);
+        assert_eq!(*cons_node.row_count_in, 0);
 
         let edges = db
             .metrics()
@@ -2440,16 +2457,17 @@ mod tests {
         let (cons_lfr, cons_pfr) = seed_done_run(&db, &cons_coll, &cons_fn).await?;
         stamp_buckets_on_pfr(&db, &cons_pfr).await?;
 
-        let input = LogicalFunctionRunInputDB::builder()
-            .collection_id(cons_coll.id)
-            .execution_id(&cons_lfr.execution_id)
-            .transaction_id(&cons_lfr.transaction_id)
-            .logical_function_run_id(cons_lfr.id.clone())
-            .requirement_logical_table_data_version_id(Some(prod_ltdv.id))
-            .requirement_input_idx(Some(InputIdx::try_from(0)?))
-            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-            .requirement_version_pos(VersionPos::try_from(0)?)
-            .build()?;
+        let input = LogicalFunctionRunInputDB {
+            id: LogicalFunctionRunInputId::default(),
+            collection_id: cons_coll.id,
+            execution_id: cons_lfr.execution_id,
+            transaction_id: cons_lfr.transaction_id,
+            logical_function_run_id: cons_lfr.id.clone(),
+            requirement_logical_table_data_version_id: Some(prod_ltdv.id),
+            requirement_input_idx: Some(InputIdx::try_from(0)?),
+            requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+            requirement_version_pos: VersionPos::try_from(0)?,
+        };
         db.scoped(p.id).live().insert(&input).await?;
 
         let edges = db
@@ -2462,7 +2480,7 @@ mod tests {
             .collect();
         assert_eq!(egress.len(), 1, "one egress edge, got {edges:?}");
         assert_eq!(egress[0].source, Some(cons_coll.id.to_string()));
-        assert_eq!(*egress[0].row_count.as_ref(), 10);
+        assert_eq!(*egress[0].row_count, 10);
         // The consumer's private output must not show as unused.
         assert!(
             edges
@@ -2525,16 +2543,17 @@ mod tests {
         let consumer_fn = make_publisher_function(&db, &consumer_coll, "edge_del_cons_fn").await?;
         let (consumer_lfr, consumer_pfr) = seed_done_run(&db, &consumer_coll, &consumer_fn).await?;
         stamp_buckets_on_pfr(&db, &consumer_pfr).await?;
-        let input = LogicalFunctionRunInputDB::builder()
-            .collection_id(consumer_coll.id)
-            .execution_id(&consumer_lfr.execution_id)
-            .transaction_id(&consumer_lfr.transaction_id)
-            .logical_function_run_id(consumer_lfr.id.clone())
-            .requirement_logical_table_data_version_id(Some(producer_ltdv.id))
-            .requirement_input_idx(Some(InputIdx::try_from(0)?))
-            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-            .requirement_version_pos(VersionPos::try_from(0)?)
-            .build()?;
+        let input = LogicalFunctionRunInputDB {
+            id: LogicalFunctionRunInputId::default(),
+            collection_id: consumer_coll.id,
+            execution_id: consumer_lfr.execution_id,
+            transaction_id: consumer_lfr.transaction_id,
+            logical_function_run_id: consumer_lfr.id.clone(),
+            requirement_logical_table_data_version_id: Some(producer_ltdv.id),
+            requirement_input_idx: Some(InputIdx::try_from(0)?),
+            requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+            requirement_version_pos: VersionPos::try_from(0)?,
+        };
         db.scoped(p.id).live().insert(&input).await?;
 
         let req = empty_request(Dim::Collection);
