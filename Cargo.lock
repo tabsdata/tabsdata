@@ -9408,7 +9408,6 @@ name = "ta-objects"
 version = "2.1.0"
 dependencies = [
  "chrono",
- "getset",
  "inventory",
  "openssl",
  "paste",
@@ -10111,18 +10110,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "td-shared"
-version = "2.1.0"
-dependencies = [
- "darling 0.23.0",
- "duct",
- "openssl",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "td-shuttle"
 version = "2.1.0"
 dependencies = [
@@ -10283,7 +10270,6 @@ dependencies = [
  "homedir",
  "object_store 0.13.2",
  "openssl",
- "path-slash",
  "ring",
  "serde",
  "serde_json",
@@ -10316,7 +10302,6 @@ dependencies = [
  "getset",
  "openssl",
  "serde",
- "ta-apiserver",
  "ta-services",
  "td-build",
  "td-error",
@@ -10353,18 +10338,21 @@ dependencies = [
  "openssl",
  "serde",
  "strum 0.28.0",
+ "td-database",
  "td-error",
  "td-objects",
+ "td-queries",
+ "td-services",
+ "td-test",
  "te-execution",
+ "tokio",
 ]
 
 [[package]]
 name = "te-services"
 version = "2.1.0"
 dependencies = [
- "axum",
  "openssl",
- "ta-services",
  "td-build",
  "td-database",
  "td-error",
@@ -10610,7 +10598,6 @@ dependencies = [
  "quote",
  "regex",
  "syn 2.0.119",
- "td-shared",
 ]
 
 [[package]]
