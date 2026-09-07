@@ -9,7 +9,7 @@ use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::and;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{AtTimeParam, ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionParam, FunctionVersion};
 use td_objects::list::params::ListQueryParams;
@@ -29,12 +29,11 @@ async fn function_history(
         .await?;
     let conn = gated_conn.get(grant);
 
-    let collection: ActiveCollectionDB = conn.fetch_one(&collection_param.collection).await?;
     let at = at.at;
     let function: FunctionDBWithNames = conn
         .scd2()
         .as_of(&at)
-        .fetch_one(and!(&collection.id, &function_param.function))
+        .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
     // Head versions and patches interleave: the union DAO is the one
@@ -349,6 +348,86 @@ mod tests {
 
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
 
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_function_history_after_collection_delete(db: TdPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("doomed")?;
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+        let create = FunctionRegister {
+            name: "publisher".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let function = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let registered_at = AtTime::now();
+
+        let service = Services::with_defaults(db.clone());
+        service
+            .delete_collection(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete(CollectionParam {
+                        collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                    })
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let request = |at: AtTime| {
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .list(
+                    (
+                        CollectionParam {
+                            collection: CollectionIdName::from_str(&collection_name.to_string())
+                                .unwrap(),
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str("publisher").unwrap(),
+                        },
+                        AtTimeParam { at },
+                    ),
+                    ListParams::default(),
+                )
+                .in_project(p.id)
+        };
+
+        let data = service
+            .function_history(request(registered_at))
+            .await?
+            .data
+            .data;
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0].id, function.base.id);
+
+        assert!(
+            service
+                .function_history(request(AtTime::now()))
+                .await
+                .is_err()
+        );
         Ok(())
     }
 }

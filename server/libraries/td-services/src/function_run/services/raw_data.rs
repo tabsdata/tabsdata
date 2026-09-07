@@ -9,13 +9,13 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::{
     FunctionRunParam, InputIdxParam, PhysicalFunctionRunDBWithNames,
 };
-use td_objects::types::basic::Decorator;
+use td_objects::types::basic::{CollectionIdName, Decorator};
 use td_objects::types::stream::BoxedSyncStream;
 use td_queries::Queries;
 use td_storage::Storage;
@@ -34,15 +34,19 @@ async fn function_run_raw_data(
         .await?;
     let conn = gated_conn.get(grant);
 
-    let collection: ActiveCollectionDB = conn.fetch_one(&collection.collection).await?;
     let run_id = function_run.function_run;
     let run: PhysicalFunctionRunDBWithNames = conn.timeline().fetch_one(&run_id).await?;
-    if run.base.base.collection_id != collection.id {
+    let collection = collection.collection;
+    let addresses_run = match &collection {
+        CollectionIdName::Id(id) => *id == run.base.base.collection_id,
+        CollectionIdName::Name(name) => *name == run.collection,
+    };
+    if !addresses_run {
         return Err(api_error!(
             ApiError::NotFound,
             "function run {} does not belong to collection {}",
             run_id,
-            collection.name
+            collection
         ));
     }
     // Only a publisher ingests, so only a publisher run has raw data at all.

@@ -145,8 +145,11 @@ pub async fn read_function(
     Project(project_id): Project,
     Path(collection): Path<CollectionParam>,
     Path(function): Path<FunctionParam>,
+    Query(at): Query<AtTimeParam>,
 ) -> Result<GetStatus<FunctionWithTables>, ErrorStatus> {
-    let request = context.read((collection, function)).in_project(project_id);
+    let request = context
+        .read((collection, function, at))
+        .in_project(project_id);
     let response = state.read_function(request).await?;
     Ok(GetStatus::OK(response))
 }
@@ -249,10 +252,11 @@ pub async fn list_patches(
     Project(project_id): Project,
     Path(collection): Path<CollectionParam>,
     Path(function): Path<FunctionParam>,
+    Query(at): Query<AtTimeParam>,
     Query(list_params): Query<ListParams>,
 ) -> Result<ListStatus<FunctionPatchRecord>, ErrorStatus> {
     let request = context
-        .list((collection, function), list_params)
+        .list((collection, function, at), list_params)
         .in_project(project_id);
     let response = state.list_function_patches(request).await?;
     Ok(ListStatus::OK(response))

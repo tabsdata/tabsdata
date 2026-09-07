@@ -10,7 +10,7 @@ use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
+use td_objects::dxo::crudl::{AtTimeParam, ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionPatchRecord};
 use td_objects::list::params::ListQueryParams;
@@ -21,20 +21,18 @@ use td_queries::Queries;
 async fn list_function_patches(
     authz: Ctx<AuthzContext>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<ListRequest<(CollectionParam, FunctionParam)>>,
+    request: WithinProject<ListRequest<(CollectionParam, FunctionParam, AtTimeParam)>>,
 ) -> Result<ListResponse<FunctionPatchRecord>, TdError> {
     let (project, request) = request.into_parts();
-    let (ctx, (collection_param, function_param), list_params) = request.into_parts();
+    let (ctx, (collection_param, function_param, at_param), list_params) = request.into_parts();
     let grant = authz
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
 
-    // Resolve function as of now — a deleted function must not resolve,
-    // hiding its patches with it.
     let collection_id_name = collection_param.collection;
     let function_id_name = function_param.function;
-    let at = ctx.time;
+    let at = at_param.at;
     let function: FunctionDBWithNames = conn
         .scd2()
         .as_of(&at)
@@ -44,7 +42,7 @@ async fn list_function_patches(
     let query_params = ListQueryParams::<FunctionPatchRecord>::try_from(&list_params)?;
     let rows = conn
         .timeline()
-        .list(&function.base.base.function_id, &query_params)
+        .list_until(&at, &function.base.base.function_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -65,7 +63,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
         TableNameDto, UserId,
     };
-    use td_objects::types::basic::{CollectionIdName, FunctionIdName};
+    use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
@@ -114,6 +112,7 @@ mod tests {
             FunctionParam {
                 function: FunctionIdName::from_str("f0")?,
             },
+            AtTimeParam { at: AtTime::now() },
         );
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(param, ListParams::default())
@@ -221,6 +220,7 @@ mod tests {
                         FunctionParam {
                             function: FunctionIdName::from_str(function)?,
                         },
+                        AtTimeParam { at: AtTime::now() },
                     ),
                     ListParams::default(),
                 )
@@ -265,6 +265,90 @@ mod tests {
         assert_eq!(err.api_error(), ApiError::NotFound);
         let response = list("f1").await?;
         assert_eq!(response.data.len(), 1);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_patches_at(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let coll = seed_patches_fixture(&db, p.id).await;
+        let parent: FunctionDBWithNames = db
+            .scd2()
+            .fetch_one(and!(&coll.id, &FunctionIdName::from_str("f0")?))
+            .await?;
+
+        let service = Services::with_defaults(db.clone());
+        let patch = async |snippet: &str| -> Result<(), TdError> {
+            let body = FunctionPatch {
+                patch_of: parent.base.base.id.clone(),
+                bundle_id: BundleId::default(),
+                snippet: snippet.try_into()?,
+                runtime_values: None,
+                description: None,
+            };
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .create(
+                    (
+                        CollectionParam {
+                            collection: CollectionIdName::from_str("c0")?,
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str("f0")?,
+                        },
+                    ),
+                    body,
+                )
+                .in_project(p.id);
+            service.create_function_patch(request).await?;
+            Ok(())
+        };
+
+        let before_patches = AtTime::now();
+        patch("first").await?;
+        let after_first = AtTime::now();
+        patch("second").await?;
+
+        let list = async |at: AtTime| -> Result<ListResponse<FunctionPatchRecord>, TdError> {
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .list(
+                    (
+                        CollectionParam {
+                            collection: CollectionIdName::from_str("c0")?,
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str("f0")?,
+                        },
+                        AtTimeParam { at },
+                    ),
+                    ListParams::default(),
+                )
+                .in_project(p.id);
+            service
+                .list_function_patches(request)
+                .await
+                .map(|response| response.data)
+        };
+
+        assert_eq!(list(before_patches).await?.data.len(), 0);
+        let first = list(after_first).await?.data;
+        assert_eq!(first.len(), 1);
+        assert_eq!(list(AtTime::now()).await?.data.len(), 2);
+
+        service
+            .delete_collection(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete(CollectionParam {
+                        collection: CollectionIdName::from_str("c0")?,
+                    })
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let still_first = list(after_first).await?.data;
+        assert_eq!(still_first.len(), 1);
+        assert_eq!(still_first[0].id, first[0].id);
+        let err = list(AtTime::now()).await.map(|_| ()).unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
         Ok(())
     }
 }
