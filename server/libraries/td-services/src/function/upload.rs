@@ -9,7 +9,6 @@ use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::types::basic::{BasePath, BundleHash, BundleId, CollectionId, StorageVersion};
 use td_storage::location::StorageLocation;
 use td_storage::{Storage, StorageError};
-use td_tower::extractors::Ref;
 use tokio::io::BufWriter;
 use tokio_util::io::StreamReader;
 
@@ -24,12 +23,12 @@ enum UploadError {
 }
 
 pub async fn upload_function_write_to_storage(
-    storage: Ref<Storage>,
-    bundle_id: Ref<BundleId>,
-    storage_version: Ref<StorageVersion>,
-    base_path: Ref<BasePath>,
-    collection_id: Ref<CollectionId>,
-    request: Ref<FunctionUpload>,
+    storage: &Storage,
+    bundle_id: &BundleId,
+    storage_version: &StorageVersion,
+    base_path: &BasePath,
+    collection_id: &CollectionId,
+    request: &FunctionUpload,
 ) -> Result<BundleHash, TdError> {
     let stream = request.stream().await.ok_or(UploadError::MissingBody)?; //cannot easily test this error
 
@@ -44,11 +43,11 @@ pub async fn upload_function_write_to_storage(
     let bytes = buffer.into_inner();
     let hash = hex::encode(&Sha256::digest(&bytes)[..]);
 
-    let storage_location = StorageLocation::from(&*storage_version);
+    let storage_location = StorageLocation::from(storage_version);
     let (location, _) = storage_location
-        .builder(&base_path)
-        .collection(&collection_id)
-        .function(&bundle_id)
+        .builder(base_path)
+        .collection(collection_id)
+        .function(bundle_id)
         .build()?;
 
     storage
@@ -56,5 +55,5 @@ pub async fn upload_function_write_to_storage(
         .await
         .map_err(UploadError::Save)?; //cannot easily test this error
 
-    BundleHash::try_from(&hash)
+    BundleHash::try_from(hash.as_str())
 }

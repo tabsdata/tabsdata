@@ -11,25 +11,24 @@ use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::{WorkerId, WorkerType, WorkerTypeDto};
 use td_objects::types::composed::TableDependency;
 use td_objects::types::table_ref::VersionedTableRef;
-use td_tower::extractors::Ref;
 
 pub async fn vec_create_table_dependency(
-    dependencies: Ref<Vec<DependencyDBWithNames>>,
-    tables: Ref<Vec<TableDBWithNames>>,
+    dependencies: &Vec<DependencyDBWithNames>,
+    tables: &Vec<TableDBWithNames>,
 ) -> Result<Vec<TableDependency>, TdError> {
     let tables = tables
         .iter()
-        .map(|t| (t.table_id, t))
+        .map(|t| (t.base.table_id, t))
         .collect::<HashMap<_, _>>();
 
     let table_deps = dependencies
         .iter()
         .filter_map(|d| {
-            let table = tables.get(&d.table_id)?;
-            let versions = d.table_versions.deref().clone();
+            let table = tables.get(&d.base.table_id)?;
+            let versions = d.base.table_versions.deref().clone();
             Some(TableDependency::new(VersionedTableRef::new(
                 Some(table.collection.clone()),
-                table.name.clone(),
+                table.base.name.clone(),
                 versions,
             )))
         })
@@ -38,13 +37,13 @@ pub async fn vec_create_table_dependency(
 }
 
 pub async fn map_create_worker(
-    workers: Ref<Vec<WorkerDBWithNames>>,
+    workers: &Vec<WorkerDBWithNames>,
 ) -> Result<HashMap<WorkerTypeDto, WorkerId>, TdError> {
     let workers = workers
         .iter()
-        .filter_map(|w| match w.worker_type {
-            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.id.clone())),
-            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.id.clone())),
+        .filter_map(|w| match w.base.worker_type {
+            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.base.id.clone())),
+            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.base.id.clone())),
             _ => None,
         })
         .collect();

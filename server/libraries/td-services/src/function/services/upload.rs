@@ -2,147 +2,90 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::layers::upload::upload_function_write_to_storage;
+use crate::function::upload::upload_function_write_to_storage;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-use td_objects::dxo::bundle::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
+use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::{GatedConnection, InProject, RW};
+use td_error::TdError;
+use td_objects::dxo::bundle::{Bundle, BundleDB};
 use td_objects::dxo::collection::ActiveCollectionDB;
-use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function_upload::FunctionUpload;
-use td_objects::rest_urls::CollectionParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    BasePath, BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
-};
-use td_queries::By;
-use td_queries::insert;
+use td_objects::types::basic::{BundleId, BundleStatus, StorageVersion};
+use td_queries::LiveEntry;
 use td_storage::Storage;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 
-#[service_factory(
-    name = UploadFunctionService,
-    request = CreateRequest<CollectionParam, FunctionUpload>,
-    response = Bundle,
-    connection = TransactionProvider,
-    scope = "Project",
-    context = AuthzContext,
-    context = Storage,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract::<RequestContext>),
-        from_fn(
-            With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_name::<CollectionParam>
-        ),
-        from_fn(
-            With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_data::<FunctionUpload>
-        ),
-        from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        // Extract collection
-        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
-        // check requester can manage or develop the current project
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, DevelopProject>::check),
-        // The bundle's storage prefix: the collection's effective base_path (resolved
-        // by the view), stamped onto the bundle row so it self-locates after moves.
-        from_fn(With::<ActiveCollectionDB>::extract::<BasePath>),
-        // Get storage version.
-        from_fn(With::<StorageVersion>::default),
-        // Write to storage with new bundle id.
-        from_fn(With::<BundleId>::default),
-        from_fn(upload_function_write_to_storage),
-        // Build BundleDB (status defaults to Pending until a function claims it).
-        from_fn(With::<RequestContext>::try_convert_to::<BundleDBBuilder, _>),
-        from_fn(With::<BundleId>::set::<BundleDBBuilder>),
-        from_fn(With::<CollectionId>::set::<BundleDBBuilder>),
-        from_fn(With::<BasePath>::set::<BundleDBBuilder>),
-        from_fn(With::<BundleHash>::set::<BundleDBBuilder>),
-        from_fn(With::<BundleDBBuilder>::build::<BundleDB>),
-        from_fn(insert::<BundleDB>),
-        // Build response
-        from_fn(With::<BundleDB>::try_convert_to::<BundleBuilder, _>),
-        from_fn(With::<BundleBuilder>::build::<Bundle>),
+#[service_factory]
+async fn upload_function(
+    authz: Ctx<AuthzContext>,
+    storage: Ctx<Storage>,
+    gated_trx: &mut GatedConnection<RW, InProject>,
+    request: WithinProject<CreateRequest<FunctionUpload, CollectionParam>>,
+) -> Result<Bundle, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, param, upload) = request.into_parts();
+
+    let grant = authz
+        .require::<Project, DevelopProject>(gated_trx, &ctx, &project)
+        .await?;
+    let conn = gated_trx.get(grant);
+    let collection_id_name = param.collection;
+    let collection: ActiveCollectionDB = conn.live().fetch_one(&collection_id_name).await?;
+
+    // The bundle's storage prefix: the collection's effective base_path (resolved
+    // by the view), stamped onto the bundle row so it self-locates after moves.
+    let base_path = collection.effective_base_path.clone();
+    let storage_version = StorageVersion::default();
+
+    let bundle_id = BundleId::default();
+    let hash = upload_function_write_to_storage(
+        &storage,
+        &bundle_id,
+        &storage_version,
+        &base_path,
+        &collection.id,
+        &upload,
     )
+    .await?;
+
+    // Pending until a function claims it.
+    let bundle = BundleDB {
+        id: bundle_id,
+        collection_id: collection.id,
+        hash: hash.clone(),
+        base_path: base_path.clone(),
+        status: BundleStatus::Pending,
+        created_on: ctx.time,
+        created_by_id: ctx.user_id,
+    };
+    conn.live().insert(&bundle).await?;
+
+    let read: Bundle = Bundle::from(&bundle);
+    Ok(read)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Context;
+    use crate::Services;
     use axum::body::Body;
     use axum::extract::Request;
     use sha2::{Digest, Sha256};
     use std::str::FromStr;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::CollectionIdName;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, BundleStatus, CollectionName, ProjectId, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_upload_function(db: TdPool) -> Result<(), TdError> {
-        use td_database::pool::scoped::Scoped;
-        use td_tower::metadata::type_of_val;
-
-        UploadFunctionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<CreateRequest<CollectionParam, FunctionUpload>, ProjectId>, Bundle>(&[
-                type_of_val(
-                    &With::<CreateRequest<CollectionParam, FunctionUpload>>::extract::<
-                        RequestContext,
-                    >,
-                ),
-                type_of_val(
-                    &With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_name::<
-                        CollectionParam,
-                    >,
-                ),
-                type_of_val(
-                    &With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_data::<
-                        FunctionUpload,
-                    >,
-                ),
-                type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                // Extract collection
-                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
-                // check requester can manage or develop the current project
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, DevelopProject>::check),
-                type_of_val(&With::<ActiveCollectionDB>::extract::<BasePath>),
-                // Get storage version.
-                type_of_val(&With::<StorageVersion>::default),
-                // Write to storage with new bundle id.
-                type_of_val(&With::<BundleId>::default),
-                type_of_val(&upload_function_write_to_storage),
-                // Build BundleDB
-                type_of_val(&With::<RequestContext>::try_convert_to::<BundleDBBuilder, _>),
-                type_of_val(&With::<BundleId>::set::<BundleDBBuilder>),
-                type_of_val(&With::<CollectionId>::set::<BundleDBBuilder>),
-                type_of_val(&With::<BasePath>::set::<BundleDBBuilder>),
-                type_of_val(&With::<BundleHash>::set::<BundleDBBuilder>),
-                type_of_val(&With::<BundleDBBuilder>::build::<BundleDB>),
-                type_of_val(&insert::<BundleDB>),
-                // Build response
-                type_of_val(&With::<BundleDB>::try_convert_to::<BundleBuilder, _>),
-                type_of_val(&With::<BundleBuilder>::build::<Bundle>),
-            ]);
-        Ok(())
-    }
 
     #[td_test::test(db)]
     async fn test_upload(db: TdPool) -> Result<(), TdError> {
@@ -162,19 +105,18 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .build()?,
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                },
                 function_upload,
             )
             .in_project(p.id);
 
-        let context = Context::with_defaults(db.clone());
-        let service = UploadFunctionService::build(&context).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let context = Services::with_defaults(db.clone());
+        let service = context.clone();
+        let response = service.upload_function(request).await;
+        let response = response?.data;
 
-        // Assert db
         let bundle_db: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(()).await?;
 
         assert_eq!(bundle_db.len(), 1);
@@ -192,7 +134,6 @@ mod tests {
         assert_eq!(bundle.base_path, BasePath::default());
         assert_eq!(bundle.status, BundleStatus::Pending);
 
-        // Assert storage
         let base_path = BasePath::default();
         let (bundle_location, _) = StorageLocation::current()
             .builder(&base_path)
@@ -209,9 +150,8 @@ mod tests {
     /// The upload service runs a best-effort GC of abandoned (stale `Pending`)
     /// bundles. Recent pending bundles must be spared: two uploads to the same
     /// collection leave two pending rows (neither is older than the cutoff).
-    /// Drives the upload service once against `collection`, returning the response.
     async fn upload_once(
-        context: &Context,
+        context: &Services,
         project_id: ProjectId,
         collection_name: &CollectionName,
         payload: &str,
@@ -222,21 +162,24 @@ mod tests {
         let function_upload = FunctionUpload::new(request);
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{collection_name}"))?)
-                    .build()?,
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("{collection_name}"))?,
+                },
                 function_upload,
             )
             .in_project(project_id);
-        let service = UploadFunctionService::build(context).service();
-        service.raw_oneshot(request).await
+        let service = context.clone();
+        service
+            .upload_function(request)
+            .await
+            .map(|response| response.data)
     }
 
     /// A bundle is stamped with the collection's base_path at upload time. Here the
     /// collection carries a non-default base_path ("/prod"), so the bundle must too.
     #[td_test::test(db)]
     async fn test_upload_bundle_base_path_non_default(db: TdPool) -> Result<(), TdError> {
-        use td_objects::dxo::collection::{CollectionUpdateDB, CollectionUpdateDBBuilder};
+        use td_objects::dxo::collection::CollectionUpdateDB;
 
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("prod_coll")?;
@@ -245,17 +188,18 @@ mod tests {
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
-        let context = Context::with_defaults(db.clone());
+        let context = Services::with_defaults(db.clone());
 
         // Move the collection onto a non-default base_path (the upload service's
         // public surface offers no base_path knob; the live update is the seam used
         // elsewhere to mutate seeded rows directly).
         let prod = BasePath::try_from("/prod")?;
-        let update: CollectionUpdateDB = CollectionUpdateDBBuilder::try_from(&collection)?
-            .modified_on(AtTime::now())
-            .modified_by_id(UserId::admin())
-            .base_path(Some(Some(prod.clone())))
-            .build()?;
+        let update = CollectionUpdateDB {
+            modified_on: AtTime::now(),
+            modified_by_id: UserId::admin(),
+            base_path: Some(Some(prod.clone())),
+            ..CollectionUpdateDB::from(&collection)
+        };
         db.live()
             .update::<CollectionUpdateDB, ActiveCollectionDB>(&update, &collection.id)
             .await?;
@@ -273,7 +217,6 @@ mod tests {
         assert_eq!(bundle_db.len(), 1);
         assert_eq!(bundle_db[0].base_path, prod);
 
-        // And the object lands under that base_path in storage.
         let (location, _) = StorageLocation::current()
             .builder(&prod)
             .collection(&bundle_db[0].collection_id)

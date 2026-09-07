@@ -5,37 +5,37 @@
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
+use ta_services::ctx_service::{Message, ReqCtx};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::DisplayVec;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
-use td_objects::dxo::bundle::BundleRegisteredDB;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::connection::ConnectionDB;
-use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
+use td_objects::dxo::crudl::RequestContext;
+use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
-use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
-use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBBuilder};
+use td_objects::dxo::table::{TableDB, TableDBWithNames};
+use td_objects::dxo::trigger::{TriggerDB, TriggerDBWithNames};
+use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
 use td_objects::types::basic::{
-    AtTime, BundleStatus, CollectionId, CollectionName, ConnectionKind, Decorator, DependencyId,
-    DependencyPos, DependencyStatus, FunctionId, FunctionVersionId, ResetState, ReuseFrozen,
-    TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TableType, TriggerId,
-    TriggerStatus, TriggerVersionId, TriggeredOn, WorkerConfig, WorkerStatus, WorkerType,
-    WorkerTypeDto,
+    AtTime, CollectionId, CollectionName, ConnectionKind, Decorator, DependencyId, DependencyPos,
+    DependencyStatus, DependencyVersionId, FunctionId, FunctionVersionId, Partitioned, Private,
+    ProjectId, ResetState, ReuseFrozen, System, TableFunctionParamPos, TableId, TableName,
+    TableNameDto, TableStatus, TableType, TableVersionId, TriggerId, TriggerStatus,
+    TriggerVersionId, TriggeredOn, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus,
+    WorkerType, WorkerTypeDto,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
 };
-use td_objects::{Buildable, and, or};
+use td_objects::{and, or};
 use td_queries::{ChunkedQueries, HistoricEntry, LiveEntry};
-use td_tower::ctx_service::{Message, ReqCtx};
-use td_tower::extractors::{MutRef, Ref};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 #[td_error]
 pub enum RegisterFunctionError {
@@ -63,14 +63,6 @@ pub enum RegisterFunctionError {
     ConnectionKindMismatch(ConnectionKind, ConnectionKind, CollectionName) = 10,
 }
 
-/// The bundle-claim update: a function register/update/patch flips the
-/// uploaded bundle's status to `Registered` (kept, not deleted).
-pub async fn bundle_registered() -> Result<BundleRegisteredDB, TdError> {
-    Ok(BundleRegisteredDB {
-        status: BundleStatus::Registered,
-    })
-}
-
 /// A publisher/subscriber must declare the connection kind it uses, its
 /// collection must carry a connection, and the two kinds must match. A
 /// transformer must declare none.
@@ -82,10 +74,10 @@ pub async fn bundle_registered() -> Result<BundleRegisteredDB, TdError> {
 /// guard below skips the check. Remove the guard once the legacy client is
 /// retired, so the check applies under every orchestrator.
 pub async fn ensure_connection_kind_matches(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    bridge: Ref<BridgeProviderHandle>,
-    function: Ref<FunctionDB>,
-    collection: Ref<ActiveCollectionDB>,
+    conn: &mut DomainConnection<Apiserver>,
+    bridge: &BridgeProviderHandle,
+    function: &FunctionDB,
+    collection: &ActiveCollectionDB,
 ) -> Result<(), TdError> {
     // TODO FOR 2.0: drop this guard (see fn doc) -- enforce on every orchestrator.
     if !matches!(bridge.orchestrator(), Orchestrator::Kubernetes) {
@@ -120,15 +112,14 @@ pub async fn ensure_connection_kind_matches(
 }
 
 pub async fn validate_tables_do_not_exist(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    collection_id: Ref<CollectionId>,
-    collection_name: Ref<CollectionName>,
-    existing_versions: Ref<Vec<TableDB>>,
-    new_tables: Ref<Option<Vec<TableNameDto>>>,
-    at_time: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    collection_id: &CollectionId,
+    collection_name: &CollectionName,
+    existing_versions: &Vec<TableDB>,
+    new_tables: &Option<Vec<TableNameDto>>,
+    at_time: &AtTime,
 ) -> Result<(), TdError> {
     if let Some(new_tables) = new_tables.as_ref() {
-        // First, validate there are no duplicates in the new tables.
         let duplicates = new_tables
             .iter()
             .duplicates()
@@ -149,24 +140,24 @@ pub async fn validate_tables_do_not_exist(
         let new_table_names: Vec<TableName> = new_tables
             .iter()
             .map(TableName::try_from)
-            .filter_ok(|t| !existing_tables_map.contains_key(&(collection_id.deref(), t)))
+            .filter_ok(|t| !existing_tables_map.contains_key(&(collection_id, t)))
             .collect::<Result<Vec<_>, _>>()?;
 
         let new_table_lookups: Vec<_> = new_table_names
             .iter()
-            .map(|t| and!(collection_id.deref(), t))
+            .map(|t| and!(collection_id, t))
             .collect();
         let tables_found = conn
-            .historic(at_time.deref())
+            .historic(at_time)
             .state(TableDBWithNames::available())
             .fetch_all_chunked::<_>(&new_table_lookups)
             .await?;
 
         if !tables_found.is_empty() {
-            let duplicate_tables: Vec<_> = tables_found.into_iter().map(|t| t.name).collect();
+            let duplicate_tables: Vec<_> = tables_found.into_iter().map(|t| t.base.name).collect();
             Err(RegisterFunctionError::TableAlreadyExists(
                 duplicate_tables.into(),
-                collection_name.deref().clone(),
+                collection_name.clone(),
             ))?
         }
     }
@@ -176,27 +167,26 @@ pub async fn validate_tables_do_not_exist(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_table_versions(
-    mut ctx: MutRef<ReqCtx>,
-    collection_id: Ref<CollectionId>,
-    collection_name: Ref<CollectionName>,
-    function_id: Ref<FunctionId>,
-    existing_versions: Ref<Vec<TableDB>>,
-    new_tables: Ref<Option<Vec<TableNameDto>>>,
-    new_tables_types: Ref<Option<HashMap<TableNameDto, TableType>>>,
-    table_version_builder: Ref<TableDBBuilder>,
-    reuse_frozen: Ref<ReuseFrozen>,
-    reset_state: Ref<ResetState>,
+    msgs: &mut ReqCtx,
+    collection_id: &CollectionId,
+    collection_name: &CollectionName,
+    function_id: &FunctionId,
+    existing_versions: &Vec<TableDB>,
+    new_tables: &Option<Vec<TableNameDto>>,
+    new_tables_types: &Option<HashMap<TableNameDto, TableType>>,
+    function: &FunctionDB,
+    request_context: &RequestContext,
+    reuse_frozen: &ReuseFrozen,
+    reset_state: &ResetState,
 ) -> Result<Vec<TableDB>, TdError> {
     let mut new_table_versions = HashMap::new();
 
-    // Existing versions
     let existing_versions: HashMap<_, _> = existing_versions
         .iter()
         .map(|t| ((&t.collection_id, &t.name), t))
         .collect();
 
-    // Table types
-    let new_tables_types = match new_tables_types.deref() {
+    let new_tables_types = match new_tables_types {
         Some(new_tables_types) => new_tables_types,
         None => &HashMap::new(),
     };
@@ -229,10 +219,9 @@ pub async fn build_table_versions(
 
     let new_tables = user_tables.chain(system_tables).collect::<Vec<_>>();
 
-    // Create new table versions
     for (pos, (table_name, table_type)) in new_tables {
         // Reuse table id if the table is the same
-        let existing_version = existing_versions.get(&(&*collection_id, table_name));
+        let existing_version = existing_versions.get(&(collection_id, table_name));
         // `reset_state` forces a fresh id for the function state table so it
         // starts empty (publishers re-read initial config). User tables keep
         // their reuse behavior.
@@ -245,10 +234,10 @@ pub async fn build_table_versions(
                 TableStatus::Frozen => {
                     // We can only unfreeze a frozen table if reuse_frozen is enabled
                     if **reuse_frozen {
-                        ctx.warning(Message::of(
+                        msgs.warning(Message::of(
                             RegisterFunctionError::FrozenTableAlreadyExists(
                                 table_name.clone(),
-                                collection_name.deref().clone(),
+                                collection_name.clone(),
                                 "unfreezing with new table definition".to_string(),
                             ),
                         ));
@@ -257,7 +246,7 @@ pub async fn build_table_versions(
                     } else {
                         Err(RegisterFunctionError::FrozenTableAlreadyExists(
                             table_name.clone(),
-                            collection_name.deref().clone(),
+                            collection_name.clone(),
                             "could not reuse frozen table".to_string(),
                         ))?
                     }
@@ -268,37 +257,47 @@ pub async fn build_table_versions(
                 }
             }
         } else {
-            // Straight up new table
             &TableId::default()
         };
 
-        let table_version = table_version_builder
-            .deref()
-            .clone()
-            .table_id(table_id)
-            .private(table_name.is_private())
-            .name(table_name)
-            .function_param_pos(Some(TableFunctionParamPos::try_from(pos)?))
-            .status(TableStatus::Active)
-            .table_type(table_type.cloned().unwrap_or_default())
-            .build()?;
+        let table_version = TableDB {
+            id: TableVersionId::default(),
+            collection_id: function.collection_id,
+            table_id: *table_id,
+            name: table_name.clone(),
+            function_id: function.function_id,
+            function_version_id: function.id.clone(),
+            function_param_pos: Some(TableFunctionParamPos::try_from(pos)?),
+            private: Private::from(table_name.is_private()),
+            partitioned: Partitioned::FALSE,
+            defined_on: request_context.time,
+            defined_by_id: request_context.user_id,
+            status: TableStatus::Active,
+            table_type: table_type.cloned().unwrap_or_default(),
+        };
 
-        new_table_versions.insert((&*collection_id, table_name), table_version);
+        new_table_versions.insert((collection_id, table_name), table_version);
     }
 
-    // Freeze if dropped
     for (key, existing_version) in existing_versions {
         if !new_table_versions.contains_key(&key) {
-            let table_version = table_version_builder
-                .deref()
-                .clone()
-                .table_id(existing_version.table_id)
-                .name(existing_version.name.clone())
-                .function_param_pos(existing_version.function_param_pos)
-                .status(TableStatus::Frozen)
-                .build()?;
+            let table_version = TableDB {
+                id: TableVersionId::default(),
+                collection_id: function.collection_id,
+                table_id: existing_version.table_id,
+                name: existing_version.name.clone(),
+                function_id: function.function_id,
+                function_version_id: function.id.clone(),
+                function_param_pos: existing_version.function_param_pos,
+                private: Private::FALSE,
+                partitioned: Partitioned::FALSE,
+                defined_on: request_context.time,
+                defined_by_id: request_context.user_id,
+                status: TableStatus::Frozen,
+                table_type: TableType::default(),
+            };
 
-            new_table_versions.insert((&*collection_id, &existing_version.name), table_version);
+            new_table_versions.insert((collection_id, &existing_version.name), table_version);
         }
     }
 
@@ -307,17 +306,16 @@ pub async fn build_table_versions(
 }
 
 pub async fn build_tables_trigger_versions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    at_time: Ref<AtTime>,
-    new_table_versions: Ref<Vec<TableDB>>,
+    conn: &mut DomainConnection<Apiserver>,
+    at_time: &AtTime,
+    new_table_versions: &Vec<TableDB>,
 ) -> Result<Vec<TriggerDB>, TdError> {
-    // Find existing downstream triggers (using table ids)
     let table_ids = new_table_versions
         .iter()
         .map(|t| t.table_id)
         .collect::<Vec<_>>();
     let existing_triggers = conn
-        .historic(at_time.deref())
+        .historic(at_time)
         .fetch_all_chunked::<TriggerDB, _>(&table_ids)
         .await?;
 
@@ -337,53 +335,40 @@ pub async fn build_tables_trigger_versions(
                 None => return None, // No matching table version found
             };
             match (&table.status, &trigger.status) {
-                (TableStatus::Frozen, TriggerStatus::Active) => {
-                    // If the table is now frozen, and the trigger was active, we freeze the trigger
-                    Some(
-                        trigger
-                            .clone()
-                            .into_builder()
-                            .id(TriggerVersionId::default())
-                            .status(TriggerStatus::Frozen)
-                            .defined_on(*at_time)
-                            .build(),
-                    )
-                }
-                (TableStatus::Active, TriggerStatus::Frozen) => {
-                    // If the table is now active, and the trigger was frozen, we can reactivate the trigger
-                    // for the new function id
-                    Some(
-                        trigger
-                            .clone()
-                            .into_builder()
-                            .id(TriggerVersionId::default())
-                            .trigger_by_function_id(table.function_id)
-                            .status(TriggerStatus::Active)
-                            .defined_on(*at_time)
-                            .build(),
-                    )
-                }
+                (TableStatus::Frozen, TriggerStatus::Active) => Some(TriggerDB {
+                    id: TriggerVersionId::default(),
+                    status: TriggerStatus::Frozen,
+                    defined_on: *at_time,
+                    ..trigger.clone()
+                }),
+                (TableStatus::Active, TriggerStatus::Frozen) => Some(TriggerDB {
+                    id: TriggerVersionId::default(),
+                    trigger_by_function_id: table.function_id,
+                    status: TriggerStatus::Active,
+                    defined_on: *at_time,
+                    ..trigger.clone()
+                }),
                 _ => None,
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Vec<_>>();
 
     Ok(trigger_versions)
 }
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_dependency_versions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    existing_versions: Ref<Vec<DependencyDB>>,
-    new_dependencies: Ref<Option<Vec<TableDependencyDto>>>,
-    collection_in_context: Ref<CollectionName>,
-    function_id: Ref<FunctionId>,
-    dependency_version_builder: Ref<DependencyDBBuilder>,
-    at_time: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    existing_versions: &Vec<DependencyDB>,
+    new_dependencies: &Option<Vec<TableDependencyDto>>,
+    collection_in_context: &CollectionName,
+    function_id: &FunctionId,
+    function: &FunctionDB,
+    request_context: &RequestContext,
+    at_time: &AtTime,
 ) -> Result<Vec<DependencyDB>, TdError> {
     let mut new_dependency_versions = HashMap::new();
 
-    // Existing versions
     let existing_versions: HashMap<_, _> = existing_versions
         .deref()
         .iter()
@@ -439,23 +424,22 @@ pub async fn build_dependency_versions(
         })
         .collect();
     let tables_found = conn
-        .historic(at_time.deref())
+        .historic(at_time)
         .state(TableDBWithNames::available())
         .fetch_all_chunked::<_>(&dep_lookups)
         .await?;
 
     let tables_found: HashMap<_, _> = tables_found
         .iter()
-        .map(|t| ((&t.collection, &t.name), t))
+        .map(|t| ((&t.collection, &t.base.name), t))
         .collect();
 
-    // Create new versions
     for (pos, dependency_table) in new_dependencies {
         let table_db = match tables_found.get(&(
             dependency_table
                 .collection
                 .as_ref()
-                .unwrap_or(&*collection_in_context),
+                .unwrap_or(collection_in_context),
             &dependency_table.table,
         )) {
             Some(table_db) => Ok(table_db),
@@ -464,11 +448,10 @@ pub async fn build_dependency_versions(
             )),
         }?;
 
-        // Validate that private tables are not being used from other collections
-        if *table_db.private && table_db.collection != *collection_in_context {
+        if *table_db.base.private && table_db.collection != *collection_in_context {
             Err(RegisterFunctionError::PrivateTableDependency(
                 table_db.collection.clone(),
-                table_db.name.clone(),
+                table_db.base.name.clone(),
             ))?
         }
 
@@ -476,19 +459,19 @@ pub async fn build_dependency_versions(
         // ranges should be older to newer, etc.). This avoids potential issues on trigger.
         // A standalone function should be at least triggerable at the time it is registered.
         let _ = VersionResolver::builder()
-            .function_id(&function_id)
-            .table_id(&table_db.table_id)
+            .function_id(function_id)
+            .table_id(&table_db.base.table_id)
             .versions(&dependency_table.versions)
-            .triggered_on(&TriggeredOn::try_from(&*at_time)?)
+            .triggered_on(&TriggeredOn::try_from(at_time)?)
             .error_on_desc_range(true)
             .build()?
-            .resolve(&mut conn)
+            .resolve(&mut *conn)
             .await?;
 
         // Reuse dependency id if the dependency is the same
         let existing_version = existing_versions.get(&(
-            table_db.collection_id,
-            table_db.table_id,
+            table_db.base.collection_id,
+            table_db.base.table_id,
             &dependency_table.versions,
             pos,
         ));
@@ -498,23 +481,26 @@ pub async fn build_dependency_versions(
             &DependencyId::default()
         };
 
-        let dependency_version = dependency_version_builder
-            .deref()
-            .clone()
-            .dependency_id(dependency_id)
-            .table_collection_id(table_db.collection_id)
-            .table_function_id(table_db.function_id)
-            .table_id(table_db.table_id)
-            .table_versions(dependency_table.versions.clone())
-            .dep_pos(DependencyPos::try_from(pos)?)
-            .status(DependencyStatus::Active)
-            .system(pos < 0)
-            .build()?;
+        let dependency_version = DependencyDB {
+            id: DependencyVersionId::default(),
+            collection_id: function.collection_id,
+            dependency_id: *dependency_id,
+            function_id: function.function_id,
+            table_collection_id: table_db.base.collection_id,
+            table_function_id: table_db.base.function_id,
+            table_id: table_db.base.table_id,
+            table_versions: dependency_table.versions.clone().into(),
+            dep_pos: DependencyPos::try_from(pos)?,
+            status: DependencyStatus::Active,
+            defined_on: request_context.time,
+            defined_by_id: request_context.user_id,
+            system: System::from(pos < 0),
+        };
 
         new_dependency_versions.insert(
             (
-                table_db.collection_id,
-                table_db.table_id,
+                table_db.base.collection_id,
+                table_db.base.table_id,
                 &dependency_table.versions,
                 pos,
             ),
@@ -522,21 +508,23 @@ pub async fn build_dependency_versions(
         );
     }
 
-    // Dependency deleted if dropped
     for (key, existing_version) in existing_versions {
         if !new_dependency_versions.contains_key(&key) {
-            let dependency_version = dependency_version_builder
-                .deref()
-                .clone()
-                .dependency_id(existing_version.dependency_id)
-                .table_collection_id(existing_version.table_collection_id)
-                .table_function_id(existing_version.function_id)
-                .table_id(existing_version.table_id)
-                .table_versions(existing_version.table_versions.clone())
-                .dep_pos(existing_version.dep_pos)
-                .status(DependencyStatus::Deleted)
-                .system(existing_version.system)
-                .build()?;
+            let dependency_version = DependencyDB {
+                id: DependencyVersionId::default(),
+                collection_id: function.collection_id,
+                dependency_id: existing_version.dependency_id,
+                function_id: function.function_id,
+                table_collection_id: existing_version.table_collection_id,
+                table_function_id: existing_version.function_id,
+                table_id: existing_version.table_id,
+                table_versions: existing_version.table_versions.clone(),
+                dep_pos: existing_version.dep_pos,
+                status: DependencyStatus::Deleted,
+                defined_on: request_context.time,
+                defined_by_id: request_context.user_id,
+                system: existing_version.system,
+            };
 
             new_dependency_versions.insert(
                 (
@@ -556,25 +544,32 @@ pub async fn build_dependency_versions(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_trigger_versions(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    existing_versions: Ref<Vec<TriggerDBWithNames>>,
-    new_tables: Ref<Option<Vec<TableNameDto>>>,
-    new_triggers: Ref<Option<Vec<TableTriggerDto>>>,
-    new_dependencies: Ref<Option<Vec<TableDependencyDto>>>,
-    collection_in_context: Ref<CollectionName>,
-    trigger_version_builder: Ref<TriggerDBBuilder>,
-    at_time: Ref<AtTime>,
+    conn: &mut DomainConnection<Apiserver>,
+    existing_versions: &Vec<TriggerDBWithNames>,
+    new_tables: &Option<Vec<TableNameDto>>,
+    new_triggers: &Option<Vec<TableTriggerDto>>,
+    new_dependencies: &Option<Vec<TableDependencyDto>>,
+    collection_in_context: &CollectionName,
+    function: &FunctionDB,
+    request_context: &RequestContext,
+    at_time: &AtTime,
 ) -> Result<Vec<TriggerDB>, TdError> {
     let mut new_trigger_versions = HashMap::new();
 
-    // Fetch existing versions
     let existing_versions: HashMap<_, _> = existing_versions
         .iter()
-        .map(|t| ((&t.trigger_by_collection_id, &t.trigger_by_table_id), t))
+        .map(|t| {
+            (
+                (
+                    &t.base.trigger_by_collection_id,
+                    &t.base.trigger_by_table_id,
+                ),
+                t,
+            )
+        })
         .collect();
 
     let new_triggers = if let Some(new_triggers) = new_triggers.as_deref() {
-        // function specifies triggers, we use those
         new_triggers
             .iter()
             .map(TableTrigger::try_from)
@@ -607,23 +602,22 @@ pub async fn build_trigger_versions(
         })
         .collect();
     let tables_found = conn
-        .historic(at_time.deref())
+        .historic(at_time)
         .state(TableDBWithNames::available())
         .fetch_all_chunked::<_>(&trigger_lookups)
         .await?;
 
     let tables_found: HashMap<_, _> = tables_found
         .iter()
-        .map(|t: &TableDBWithNames| ((&t.collection, &t.name), t))
+        .map(|t: &TableDBWithNames| ((&t.collection, &t.base.name), t))
         .collect();
 
-    // Create new versions
     for trigger_table in new_triggers {
         let table_db = match tables_found.get(&(
             trigger_table
                 .collection
                 .as_ref()
-                .unwrap_or(&*collection_in_context),
+                .unwrap_or(collection_in_context),
             &trigger_table.table,
         )) {
             None => Err(RegisterFunctionError::TriggerTableDoesNotExist(
@@ -633,7 +627,7 @@ pub async fn build_trigger_versions(
                 if table_db.collection == *collection_in_context
                     && new_tables
                         .as_deref()
-                        .is_some_and(|t| t.iter().any(|t| **t == *table_db.name)) =>
+                        .is_some_and(|t| t.iter().any(|t| **t == *table_db.base.name)) =>
             {
                 Err(RegisterFunctionError::SelfTrigger(trigger_table.clone()))
             }
@@ -642,48 +636,53 @@ pub async fn build_trigger_versions(
 
         // Reuse trigger id if the trigger is the same
         let existing_version =
-            existing_versions.get(&(&table_db.collection_id, &table_db.table_id));
+            existing_versions.get(&(&table_db.base.collection_id, &table_db.base.table_id));
         let trigger_id = if let Some(existing_version) = existing_version {
-            existing_version.trigger_id
+            existing_version.base.trigger_id
         } else {
             TriggerId::default()
         };
 
-        let trigger_version = trigger_version_builder
-            .deref()
-            .clone()
-            .trigger_id(trigger_id)
-            .trigger_by_collection_id(table_db.collection_id)
-            .trigger_by_function_id(*table_db.function_id)
-            .trigger_by_table_id(table_db.table_id)
-            .status(TriggerStatus::Active)
-            .system(table_db.system)
-            .build()?;
+        let trigger_version = TriggerDB {
+            id: TriggerVersionId::default(),
+            collection_id: function.collection_id,
+            trigger_id,
+            function_id: function.function_id,
+            trigger_by_collection_id: table_db.base.collection_id,
+            trigger_by_function_id: table_db.base.function_id,
+            trigger_by_table_id: table_db.base.table_id,
+            status: TriggerStatus::Active,
+            defined_on: request_context.time,
+            defined_by_id: request_context.user_id,
+            system: table_db.system,
+        };
 
         new_trigger_versions.insert(
-            (&table_db.collection_id, &table_db.table_id),
+            (&table_db.base.collection_id, &table_db.base.table_id),
             trigger_version,
         );
     }
 
-    // Delete if dropped
     for (key, existing_version) in existing_versions {
         if !new_trigger_versions.contains_key(&key) {
-            let trigger_version = trigger_version_builder
-                .deref()
-                .clone()
-                .trigger_id(existing_version.trigger_id)
-                .trigger_by_collection_id(existing_version.trigger_by_collection_id)
-                .trigger_by_function_id(*existing_version.trigger_by_function_id)
-                .trigger_by_table_id(existing_version.trigger_by_table_id)
-                .status(TriggerStatus::Deleted)
-                .system(existing_version.system)
-                .build()?;
+            let trigger_version = TriggerDB {
+                id: TriggerVersionId::default(),
+                collection_id: function.collection_id,
+                trigger_id: existing_version.base.trigger_id,
+                function_id: function.function_id,
+                trigger_by_collection_id: existing_version.base.trigger_by_collection_id,
+                trigger_by_function_id: existing_version.base.trigger_by_function_id,
+                trigger_by_table_id: existing_version.base.trigger_by_table_id,
+                status: TriggerStatus::Deleted,
+                defined_on: request_context.time,
+                defined_by_id: request_context.user_id,
+                system: existing_version.base.system,
+            };
 
             new_trigger_versions.insert(
                 (
-                    &existing_version.trigger_by_collection_id,
-                    &existing_version.trigger_by_table_id,
+                    &existing_version.base.trigger_by_collection_id,
+                    &existing_version.base.trigger_by_table_id,
                 ),
                 trigger_version,
             );
@@ -695,10 +694,10 @@ pub async fn build_trigger_versions(
 }
 
 pub async fn stop_current_workers(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    function_version_id: Ref<Option<FunctionVersionId>>,
+    conn: &mut DomainConnection<Apiserver>,
+    function_version_id: &Option<FunctionVersionId>,
 ) -> Result<(), TdError> {
-    if let Some(function_version_id) = function_version_id.deref() {
+    if let Some(function_version_id) = function_version_id {
         // we cannot stop function workers
         let to_stop = and!(
             function_version_id,
@@ -715,7 +714,9 @@ pub async fn stop_current_workers(
                         "Stopping worker {} with status {}",
                         worker.id, worker.status
                     );
-                    to_stop.push(worker.id);
+                    // Keyed on the status read: unlocked, and the tick writes
+                    // these same rows.
+                    to_stop.push(and!(worker.id, worker.status));
                 }
                 WorkerStatus::Done
                 | WorkerStatus::StopScheduled
@@ -732,10 +733,18 @@ pub async fn stop_current_workers(
             }
         }
 
-        let update = UpdateWorkerDB::stop_scheduled().await?;
+        let update = UpdateWorkerDB::stop_scheduled();
         let res = conn
             .update_chunked::<_, WorkerDB, _>(&update, &to_stop)
             .await?;
+        if res.rows_affected() != to_stop.len() as u64 {
+            warn!(
+                function_version_id = %function_version_id,
+                expected = to_stop.len(),
+                updated = res.rows_affected(),
+                "register: worker(s) changed status before the stop landed"
+            );
+        }
         debug!(
             "Set stopped status in {} workers for function version {}.",
             res.rows_affected(),
@@ -747,25 +756,38 @@ pub async fn stop_current_workers(
 }
 
 pub async fn build_workers(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    builder: Ref<WorkerDBBuilder>,
-    function_version_id: Ref<Option<FunctionVersionId>>,
-    new: Ref<Option<HashMap<WorkerTypeDto, WorkerConfig>>>,
+    conn: &mut DomainConnection<Apiserver>,
+    function: &FunctionDB,
+    project_id: &ProjectId,
+    function_version_id: &Option<FunctionVersionId>,
+    new: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
 ) -> Result<Vec<WorkerDB>, TdError> {
+    let new_worker = |worker_type: WorkerType, worker_config: Option<WorkerConfig>| WorkerDB {
+        id: WorkerId::new(),
+        project_id: *project_id,
+        collection_id: function.collection_id,
+        execution_id: None,
+        transaction_id: None,
+        physical_function_run_id: None,
+        function_version_id: function.id.clone(),
+        message_status: WorkerMessageStatus::None,
+        started_on: None,
+        ended_on: None,
+        status: WorkerStatus::Scheduled,
+        worker_type,
+        worker_enabled: function.enabled,
+        worker_config,
+    };
     let mut new_workers = vec![];
-    if let Some(new) = new.deref() {
+    if let Some(new) = new {
         match new.len() {
             0 => {
                 debug!("No workers specified.");
             }
             1 => {
                 for (worker_type, worker_config) in new {
-                    let worker_db = builder
-                        .deref()
-                        .clone()
-                        .worker_type(worker_type.clone())
-                        .worker_config(Some(worker_config.clone()))
-                        .build()?;
+                    let worker_db =
+                        new_worker(worker_type.clone().into(), Some(worker_config.clone()));
                     new_workers.push(worker_db);
                     debug!(worker_type = %worker_type, "function.register: new worker created");
                 }
@@ -779,7 +801,7 @@ pub async fn build_workers(
                 ))?
             }
         }
-    } else if let Some(function_version_id) = function_version_id.deref() {
+    } else if let Some(function_version_id) = function_version_id {
         // if there is no info about new workers, we recreate what was present for the new version
 
         let to_recreate = and!(
@@ -788,12 +810,7 @@ pub async fn build_workers(
         );
         let current_workers = conn.live().fetch_all::<WorkerDB>(to_recreate).await?;
         for worker in current_workers {
-            let worker_db = builder
-                .deref()
-                .clone()
-                .worker_type(worker.worker_type)
-                .worker_config(worker.worker_config.clone())
-                .build()?;
+            let worker_db = new_worker(worker.worker_type, worker.worker_config.clone());
             new_workers.push(worker_db);
         }
     }

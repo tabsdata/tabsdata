@@ -3,140 +3,76 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::And;
-use td_objects::NoFilter;
-use td_objects::dxo::collection::ActiveCollectionDB;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersion, FunctionVersionDBWithNames};
-use td_objects::list::params::ListQueryParams;
-use td_objects::rest_urls::params::FunctionAtIdName;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::and;
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::crudl::{AtTimeParam, ListRequest, ListResponse, WithinProject};
+use td_objects::dxo::function::{
+    FunctionDBWithNames, FunctionParam, FunctionVersion, FunctionVersionDBWithNames,
 };
-use td_queries::By;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::params::ListQueryParams;
+use td_objects::list::response::build_list_response;
+use td_queries::{HistoricEntry, LiveEntry};
 
-#[service_factory(
-    name = FunctionHistoryService,
-    request = ListRequest<FunctionAtIdName>,
-    response = ListResponse<FunctionVersion>,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<RequestContext>),
-        from_fn(With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>),
-        from_fn(With::<FunctionAtIdName>::extract::<CollectionIdName>),
-        // find collection ID
-        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
-        // check requester can view the current project
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // extract attime (natural order)
-        from_fn(With::<FunctionAtIdName>::extract::<AtTime>),
-        // find function ID at time (as name could change in time)
-        from_fn(With::<FunctionAtIdName>::extract::<FunctionIdName>),
-        from_fn(
-            By::<And![CollectionId, FunctionIdName]>::historic_fetch_one::<
-                { FunctionDBWithNames::Available },
-                FunctionDBWithNames,
-            >
-        ),
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        // List (all active versions at the time). Here we want the history, so we do not want
-        // to query the versioned view. Head versions and patches interleave: the
-        // union DAO is the one patch-aware surface.
-        from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionVersion>, _>),
-        from_fn(
-            By::<FunctionId>::historic_list_full::<
-                NoFilter,
-                { FunctionVersionDBWithNames::Available },
-                FunctionVersion,
-            >
-        ),
-    )
+#[service_factory]
+async fn function_history(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<ListRequest<(CollectionParam, FunctionParam, AtTimeParam)>>,
+) -> Result<ListResponse<FunctionVersion>, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection_param, function_param, at), list_params) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+    let conn = gated_conn.get(grant);
+
+    let collection: ActiveCollectionDB =
+        conn.live().fetch_one(&collection_param.collection).await?;
+    let at = at.at;
+    // find function ID at time (as name could change in time)
+    let function: FunctionDBWithNames = conn
+        .historic(&at)
+        .state(FunctionDBWithNames::available())
+        .fetch_one(and!(&collection.id, &function_param.function))
+        .await?;
+
+    // List (all active versions at the time). Here we want the history, so we
+    // do not want to query the versioned view. Head versions and patches
+    // interleave: the union DAO is the one patch-aware surface.
+    let query_params = ListQueryParams::<FunctionVersion>::try_from(&list_params)?;
+    let rows = conn
+        .historic(&at)
+        .state(FunctionVersionDBWithNames::available())
+        .list_full(&function.base.function_id, &query_params)
+        .await?;
+    build_list_response(&list_params, &query_params, rows)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::function::services::delete::DeleteFunctionService;
-    use crate::function::services::update::UpdateFunctionService;
+    use crate::Services;
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::Buildable;
-    use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
-    use td_objects::dxo::function::{FunctionPatchDB, FunctionRegister, FunctionUpdate};
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::dxo::collection::CollectionParam;
+    use td_objects::dxo::crudl::{AtTimeParam, ListParams, RequestContext};
+    use td_objects::dxo::function::{
+        FunctionParam, FunctionPatchDB, FunctionRegister, FunctionUpdate,
+    };
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, Snippet, UserId,
+        FunctionRuntimeValues, FunctionStatus, FunctionVersionId, Snippet, UserId,
     };
+    use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_function_history(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
-        use td_tower::metadata::type_of_val;
-
-        FunctionHistoryService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<ListRequest<FunctionAtIdName>, ProjectId>, ListResponse<FunctionVersion>>(&[
-                type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<RequestContext>),
-                type_of_val(
-                    &With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>,
-                ),
-                type_of_val(&With::<FunctionAtIdName>::extract::<CollectionIdName>),
-                // find collection ID
-                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
-                // check requester can view the current project
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // extract attime (natural order)
-                type_of_val(&With::<FunctionAtIdName>::extract::<AtTime>),
-                // find function ID at time (as name could change in time)
-                type_of_val(&With::<FunctionAtIdName>::extract::<FunctionIdName>),
-                type_of_val(
-                    &By::<And![CollectionId, FunctionIdName]>::historic_fetch_one::<
-                        { FunctionDBWithNames::Available },
-                        FunctionDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                // List (all active versions at the time). Here we want the history, so we do not want
-                // to query the versioned view. Head versions and patches interleave: the
-                // union DAO is the one patch-aware surface.
-                type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
-                type_of_val(
-                    &With::<ListParams>::try_convert_to::<ListQueryParams<FunctionVersion>, _>,
-                ),
-                type_of_val(
-                    &By::<FunctionId>::historic_list_full::<
-                        NoFilter,
-                        { FunctionVersionDBWithNames::Available },
-                        FunctionVersion,
-                    >,
-                ),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_function_history(db: TdPool) -> Result<(), TdError> {
@@ -149,19 +85,24 @@ mod tests {
 
         let t0 = AtTime::now();
 
-        // Create function_1
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "function_1".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _ = db
             .scoped(p.id)
             .seed()
@@ -170,74 +111,85 @@ mod tests {
 
         let t1 = AtTime::now();
 
-        // Update function_1 to function_2
-        let update = FunctionUpdate::builder()
-            .name(Some("function_2".try_into()?))
-            .description(Some("function_foo description".try_into()?))
-            .bundle_id(BundleId::default())
-            .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Transformer)
-            .build()?;
+        let update = FunctionUpdate {
+            name: Some("function_2".try_into()?),
+            description: Some("function_foo description".try_into()?),
+            bundle_id: Some(BundleId::default()),
+            snippet: Some("function_foo snippet".try_into()?),
+            decorator: Some(Decorator::Transformer),
+            ..Default::default()
+        };
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_1")?,
+                    },
+                ),
                 update.clone(),
             )
             .in_project(p.id);
 
-        let service = UpdateFunctionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.update_function(request).await;
         let updated = response?;
 
         let t2 = AtTime::now();
 
-        // Patch function_2's head version
-        let patch = FunctionPatchDB::builder()
-            .parent_function_version_id(updated.id.clone())
-            .function_id(updated.function_id)
-            .collection_id(collection.id)
-            .snippet(Snippet::try_from("patched snippet")?)
-            .bundle_id(BundleId::default())
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .description(Description::try_from("patched description")?)
-            .defined_on(AtTime::now())
-            .defined_by_id(UserId::admin())
-            .status(FunctionStatus::Active)
-            .build()?;
+        let patch = FunctionPatchDB {
+            id: FunctionVersionId::new(),
+            parent_function_version_id: updated.id.clone(),
+            function_id: updated.function_id,
+            collection_id: collection.id,
+            snippet: Snippet::try_from("patched snippet")?,
+            bundle_id: BundleId::default(),
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            description: Description::try_from("patched description")?,
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::admin(),
+            status: FunctionStatus::Active,
+        };
         db.scoped(p.id).live().insert(&patch).await?;
 
         let t2p = AtTime::now();
 
-        // Delete function_2
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("function_2")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("function_2")?,
+                },
+            ))
             .in_project(p.id);
-        let service = DeleteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_function(request).await?.data;
 
         let t3 = AtTime::now();
 
         // Create function_1 again (DIFFERENT THAN THE FIRST ONE)
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "function_1".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let _ = db
             .scoped(p.id)
             .seed()
@@ -246,60 +198,74 @@ mod tests {
 
         let t4 = AtTime::now();
 
-        // Actual test
-        // t0 -> no functions yet
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(
-                FunctionAtIdName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .at(t0)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_1")?,
+                    },
+                    AtTimeParam { at: t0 },
+                ),
                 ListParams::default(),
             )
             .in_project(p.id);
 
-        let service = FunctionHistoryService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.function_history(request).await;
         let response = response;
         assert!(response.is_err());
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(
-                FunctionAtIdName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .at(t1)
-                    .build()?,
-                ListParamsBuilder::default()
-                    .order_by("name".to_string())
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_1")?,
+                    },
+                    AtTimeParam { at: t1 },
+                ),
+                ListParams {
+                    filter: Default::default(),
+                    order_by: Some("name".to_string()),
+                    previous: None,
+                    next: None,
+                    pagination_id: None,
+                    ..Default::default()
+                },
             )
             .in_project(p.id);
 
-        let service = FunctionHistoryService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.function_history(request).await;
+        let response = response?.data;
         let data = response.data;
 
         assert_eq!(data.len(), 1);
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
 
-        // t2 -> function_1 and function_2 in history
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(
-                FunctionAtIdName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_2")?)
-                    .at(t2)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_2")?,
+                    },
+                    AtTimeParam { at: t2 },
+                ),
                 ListParams::default(),
             )
             .in_project(p.id);
 
-        let service = FunctionHistoryService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.function_history(request).await;
+        let response = response?.data;
         let data = response.data;
 
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
@@ -310,18 +276,22 @@ mod tests {
         // the parent's name and carrying patch_of
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(
-                FunctionAtIdName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_2")?)
-                    .at(t2p)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_2")?,
+                    },
+                    AtTimeParam { at: t2p },
+                ),
                 ListParams::default(),
             )
             .in_project(p.id);
 
-        let service = FunctionHistoryService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.function_history(request).await;
+        let response = response?.data;
         let data = response.data;
 
         assert_eq!(data.len(), 3);
@@ -333,40 +303,51 @@ mod tests {
         assert_eq!(data[2].snippet, Snippet::try_from("patched snippet")?);
         assert_eq!(data[2].decorator, Decorator::Transformer);
 
-        // t3 -> no function to retrieve the history
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(
-                FunctionAtIdName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_2")?)
-                    .at(t3)
-                    .build()?,
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_2")?,
+                    },
+                    AtTimeParam { at: t3 },
+                ),
                 ListParams::default(),
             )
             .in_project(p.id);
 
-        let service = FunctionHistoryService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.function_history(request).await;
         let response = response;
         assert!(response.is_err());
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(
-                FunctionAtIdName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .at(t4)
-                    .build()?,
-                ListParamsBuilder::default()
-                    .order_by("name".to_string())
-                    .build()
-                    .unwrap(),
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_1")?,
+                    },
+                    AtTimeParam { at: t4 },
+                ),
+                ListParams {
+                    filter: Default::default(),
+                    order_by: Some("name".to_string()),
+                    previous: None,
+                    next: None,
+                    pagination_id: None,
+                    ..Default::default()
+                },
             )
             .in_project(p.id);
 
-        let service = FunctionHistoryService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.function_history(request).await;
+        let response = response?.data;
         let data = response.data;
 
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);

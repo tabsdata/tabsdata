@@ -2,234 +2,166 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::layers::delete::build_deleted_function_version;
-use crate::function::layers::{
+use crate::function::{
     register_dependencies, register_tables, register_triggers, register_workers,
 };
-use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashMap;
+use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::{DbPool, InProject};
+use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::And;
-use td_objects::dxo::collection::ActiveCollectionDB;
-use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::and;
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB, CollectionParam};
+use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::dependency::DependencyDB;
-use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder, FunctionDBWithNames};
+use td_objects::dxo::function::FunctionParam;
+use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::rest_urls::FunctionParam;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
-    FunctionVersionId, ResetState, ReuseFrozen, TableNameDto, TableType, WorkerConfig,
-    WorkerTypeDto,
-};
-use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-use td_queries::By;
-use td_queries::insert;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::types::basic::{ResetState, ReuseFrozen, WorkerConfig, WorkerTypeDto};
+use td_queries::{HistoricEntry, LiveEntry};
 
-#[service_factory(
-    name = DeleteFunctionService,
-    request = DeleteRequest<FunctionParam>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Project",
-    context = AuthzContext,
-    context = SchedulerNotify,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
-        from_fn(With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
-        // Extract collection and function from request.
-        from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
-        from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-        // Get collection. Extract collection id and name.
-        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
-        // check requester can manage or develop the current project
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, DevelopProject>::check),
-        from_fn(With::<ActiveCollectionDB>::extract::<CollectionName>),
-        // Get function. Extract function version id.
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(
-            By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
-                { FunctionDBWithNames::Available },
-                FunctionDBWithNames,
-            >
-        ),
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-        // Insert into function_versions(sql) status=Deleted.
-        from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDB>),
-        from_fn(With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
-        from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
-        from_fn(build_deleted_function_version),
-        from_fn(insert::<FunctionDB>),
-        // Register associations
-        // Find previous versions.
-        from_fn(With::<FunctionVersionId>::some),
-        from_fn(By::<FunctionId>::historic_fetch_all::<{ TableDB::Active }, TableDB>),
-        from_fn(By::<FunctionId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>),
-        from_fn(
-            By::<FunctionId>::historic_fetch_all::<
-                { TriggerDBWithNames::Available },
-                TriggerDBWithNames,
-            >
-        ),
-        // Extract new associations (empty because it is a delete operation).
-        from_fn(With::<Option<Vec<TableNameDto>>>::default),
-        from_fn(With::<Option<HashMap<TableNameDto, TableType>>>::default),
-        from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
-        from_fn(With::<Option<Vec<TableTriggerDto>>>::default),
-        // Create an empty hashmap as workers so all the previous workers get deleted
-        from_fn(With::<HashMap<WorkerTypeDto, WorkerConfig>>::default),
-        from_fn(With::<HashMap<WorkerTypeDto, WorkerConfig>>::some),
-        // Extract reuse frozen (default as deletes are not reusing anything)
-        from_fn(With::<ReuseFrozen>::default),
-        // Deletes never reset state.
-        from_fn(With::<ResetState>::default),
-        // And register new ones
-        register_tables(),
-        register_dependencies(),
-        register_triggers(),
-        register_workers(),
-        // Wake the scheduler so cron/stage workers stop immediately
-        // instead of at the next polling tick.
-        from_fn(notify_scheduler),
+#[service_factory]
+async fn delete_function(
+    authz: Ctx<AuthzContext>,
+    scheduler_notify: Ctx<SchedulerNotify>,
+    msgs: &mut ReqCtx,
+    db: DbPool<InProject>,
+    request: WithinProject<DeleteRequest<(CollectionParam, FunctionParam)>>,
+) -> Result<(), TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, (collection_param, function_param)) = request.into_parts();
+    let mut gated_trx = db.begin().await?;
+    let grant = authz
+        .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
+        .await?;
+    let conn = gated_trx.get(grant);
+
+    // Bare-table row lock (views with outer joins aren't lockable); the
+    // active-view fetch is the liveness check, decided under the lock.
+    let locked: CollectionCreateDB = conn
+        .live()
+        .fetch_one_for_update(&collection_param.collection)
+        .await?;
+    let collection: ActiveCollectionDB = conn.live().fetch_one(&locked.id).await?;
+
+    let at = ctx.time;
+    let current: FunctionDBWithNames = conn
+        .historic(&at)
+        .state(FunctionDBWithNames::available())
+        .fetch_one(and!(&collection_param.collection, &function_param.function))
+        .await?;
+
+    let previous: FunctionDB = conn.live().fetch_one(&current.base.id).await?;
+    let deleted = previous.deleted(&ctx);
+    conn.live().insert(&deleted).await?;
+
+    let previous_version_id = Some(current.base.id);
+    let existing_tables: Vec<TableDB> = conn
+        .historic(&at)
+        .state(TableDB::active())
+        .fetch_all(&current.base.function_id)
+        .await?;
+    let existing_dependencies: Vec<DependencyDB> = conn
+        .historic(&at)
+        .state(DependencyDB::active())
+        .fetch_all(&current.base.function_id)
+        .await?;
+    let existing_triggers: Vec<TriggerDBWithNames> = conn
+        .historic(&at)
+        .state(TriggerDBWithNames::available())
+        .fetch_all(&current.base.function_id)
+        .await?;
+    let no_tables = None;
+    let no_table_types = None;
+    let no_dependencies = None;
+    let no_triggers = None;
+    // An empty workers map so all the previous workers get deleted.
+    let empty_workers = Some(HashMap::<WorkerTypeDto, WorkerConfig>::default());
+    // Deletes reuse nothing and never reset state.
+    let reuse_frozen = ReuseFrozen::default();
+    let reset_state = ResetState::default();
+    register_tables(
+        conn,
+        msgs,
+        &ctx,
+        &deleted,
+        &collection.id,
+        &collection.name,
+        &at,
+        &existing_tables,
+        &no_tables,
+        &no_table_types,
+        &reuse_frozen,
+        &reset_state,
     )
+    .await?;
+    register_dependencies(
+        conn,
+        &ctx,
+        &deleted,
+        &collection.name,
+        &at,
+        &existing_dependencies,
+        &no_dependencies,
+    )
+    .await?;
+    register_triggers(
+        conn,
+        &ctx,
+        &deleted,
+        &collection.name,
+        &at,
+        &existing_triggers,
+        &no_tables,
+        &no_triggers,
+        &no_dependencies,
+    )
+    .await?;
+    register_workers(
+        conn,
+        &deleted,
+        &project,
+        &previous_version_id,
+        &empty_workers,
+    )
+    .await?;
+    gated_trx.commit().await?;
+
+    // Wake the scheduler so cron/stage workers stop immediately instead of at
+    // the next polling tick.
+    scheduler_notify.notify_scheduler();
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::function::services::register::RegisterFunctionService;
+    use crate::Services;
     use crate::function::services::tests::{assert_delete, assert_register};
     use std::str::FromStr;
-    use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::Buildable;
-    use td_objects::dxo::function::{FunctionBuilder, FunctionRegister};
+    use td_objects::FromDao;
+    use td_objects::dxo::collection::CollectionParam;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::{Function, FunctionRegister};
     use td_objects::dxo::worker::WorkerDB;
-    use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, UserId, WorkerMessageStatus,
         WorkerStatus, WorkerType,
     };
+    use td_objects::types::basic::{CollectionIdName, FunctionIdName};
+    use td_objects::types::basic::{CollectionName, TableNameDto};
+    use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_delete_function(db: TdPool) {
-        use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
-        use td_tower::metadata::type_of_val;
-
-        use crate::function::layers::register::{
-            build_dependency_versions, build_table_versions, build_tables_trigger_versions,
-            build_trigger_versions, build_workers, stop_current_workers,
-        };
-        use td_objects::dxo::dependency::DependencyDBBuilder;
-        use td_objects::dxo::table::TableDBBuilder;
-        use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
-        use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
-        use td_objects::types::basic::{ResetState, ReuseFrozen};
-        use td_queries::insert_vec;
-
-        DeleteFunctionService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Scoped<DeleteRequest<FunctionParam>, ProjectId>, ()>(&[
-                type_of_val(&With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
-                type_of_val(&With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
-                // Extract collection and function from request.
-                type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
-                type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-                // Get collection. Extract collection id and name.
-                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
-                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
-                // check requester can manage or develop the current project
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, DevelopProject>::check),
-                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionName>),
-                // Get function. Extract function version id.
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(
-                    &By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
-                        { FunctionDBWithNames::Available },
-                        FunctionDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-                // Insert into function_versions(sql) status=Deleted.
-                type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDB>),
-                type_of_val(&With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
-                type_of_val(&build_deleted_function_version),
-                type_of_val(&insert::<FunctionDB>),
-                // Register associations
-                // Find previous versions.
-                type_of_val(&With::<FunctionVersionId>::some),
-                type_of_val(&By::<FunctionId>::historic_fetch_all::<{ TableDB::Active }, TableDB>),
-                type_of_val(
-                    &By::<FunctionId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>,
-                ),
-                type_of_val(
-                    &By::<FunctionId>::historic_fetch_all::<
-                        { TriggerDBWithNames::Available },
-                        TriggerDBWithNames,
-                    >,
-                ),
-                // Extract new associations (empty because it is a delete operation).
-                type_of_val(&With::<Option<Vec<TableNameDto>>>::default),
-                type_of_val(&With::<Option<HashMap<TableNameDto, TableType>>>::default),
-                type_of_val(&With::<Option<Vec<TableDependencyDto>>>::default),
-                type_of_val(&With::<Option<Vec<TableTriggerDto>>>::default),
-                // Create an empty hashmap as workers so all the previous workers get deleted
-                type_of_val(&With::<HashMap<WorkerTypeDto, WorkerConfig>>::default),
-                type_of_val(&With::<HashMap<WorkerTypeDto, WorkerConfig>>::some),
-                // Extract reuse frozen (default as deletes are not reusing anything)
-                type_of_val(&With::<ReuseFrozen>::default),
-                type_of_val(&With::<ResetState>::default),
-                // Insert into table_versions(sql) current function tables status=Active.
-                // Reuse table_id for tables that existed (had status=Frozen)
-                type_of_val(&With::<FunctionDB>::try_convert_to::<TableDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
-                type_of_val(&build_table_versions),
-                type_of_val(&insert_vec::<TableDB>),
-                // Insert into trigger_versions(sql) downstream table triggers updates.
-                type_of_val(&build_tables_trigger_versions),
-                type_of_val(&insert_vec::<TriggerDB>),
-                // Build dependency_versions(sql) current function table dependencies status=Active.
-                type_of_val(&With::<FunctionDB>::try_convert_to::<DependencyDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
-                type_of_val(&build_dependency_versions),
-                type_of_val(&insert_vec::<DependencyDB>),
-                // Insert into trigger_versions(sql) current function trigger status=Active.
-                type_of_val(&With::<FunctionDB>::try_convert_to::<TriggerDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
-                type_of_val(&build_trigger_versions),
-                type_of_val(&insert_vec::<TriggerDB>),
-                // Set stopped for current workers and insert into workers(sql) new workers.
-                type_of_val(&stop_current_workers),
-                type_of_val(&With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
-                type_of_val(&With::<ProjectId>::set::<WorkerDBBuilder>),
-                type_of_val(&build_workers),
-                type_of_val(&insert_vec::<WorkerDB>),
-                type_of_val(&notify_scheduler),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_delete_function(db: TdPool) -> Result<(), TdError> {
@@ -241,18 +173,24 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let created_function = db
             .scoped(p.id)
@@ -261,16 +199,18 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("joaquin_workout")?,
+                },
+            ))
             .in_project(p.id);
 
-        let service = DeleteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_function(request).await?.data;
 
         assert_delete(
             &db,
@@ -292,21 +232,27 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![
                 TableNameDto::try_from("table1")?,
                 TableNameDto::try_from("table2")?,
-            ]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+            ]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let created_function = db
             .scoped(p.id)
@@ -315,16 +261,18 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("joaquin_workout")?,
+                },
+            ))
             .in_project(p.id);
 
-        let service = DeleteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_function(request).await?.data;
 
         assert_delete(
             &db,
@@ -346,18 +294,24 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let trigger_create = FunctionRegister::builder()
-            .try_name("the_trigger")?
-            .try_description("wanted")?
-            .bundle_id(BundleId::default())
-            .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let trigger_create = FunctionRegister {
+            name: "the_trigger".try_into()?,
+            description: "wanted".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "the_trigger snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(p.id)
@@ -365,18 +319,24 @@ mod tests {
             .function(&collection, &trigger_create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("trigger_table")?]),
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let created_function = db
             .scoped(p.id)
@@ -385,16 +345,18 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("joaquin_workout")?,
+                },
+            ))
             .in_project(p.id);
 
-        let service = DeleteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_function(request).await?.data;
 
         assert_delete(
             &db,
@@ -416,18 +378,24 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let trigger_create = FunctionRegister::builder()
-            .try_name("the_trigger")?
-            .try_description("wanted")?
-            .bundle_id(BundleId::default())
-            .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let trigger_create = FunctionRegister {
+            name: "the_trigger".try_into()?,
+            description: "wanted".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "the_trigger snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(p.id)
@@ -435,18 +403,24 @@ mod tests {
             .function(&collection, &trigger_create)
             .await?;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: "joaquin_workout".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
+            tables: None,
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let created_function = db
             .scoped(p.id)
@@ -455,16 +429,18 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("joaquin_workout")?,
+                },
+            ))
             .in_project(p.id);
 
-        let service = DeleteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_function(request).await?.data;
 
         assert_delete(
             &db,
@@ -486,18 +462,24 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let trigger_create = FunctionRegister::builder()
-            .try_name("the_trigger")?
-            .try_description("wanted")?
-            .bundle_id(BundleId::default())
-            .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let trigger_create = FunctionRegister {
+            name: "the_trigger".try_into()?,
+            description: "wanted".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "the_trigger snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let _ = db
             .scoped(p.id)
@@ -505,44 +487,56 @@ mod tests {
             .function(&collection, &trigger_create)
             .await?;
 
-        let create_1 = FunctionRegister::builder()
-            .try_name("joaquin_workout_1")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
-            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
-            .tables(Some(vec![TableNameDto::try_from("workout_1")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create_1 = FunctionRegister {
+            name: "joaquin_workout_1".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("trigger_table")?]),
+            triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
+            tables: Some(vec![TableNameDto::try_from("workout_1")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection_name.as_str())?,
+                },
                 create_1.clone(),
             )
             .in_project(p.id);
 
-        let service = RegisterFunctionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.register_function(request).await;
         let created_function_version_1 = response?;
 
-        let create_2 = FunctionRegister::builder()
-            .try_name("joaquin_workout_2")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
-            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
-            .tables(Some(vec![TableNameDto::try_from("workout_2")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create_2 = FunctionRegister {
+            name: "joaquin_workout_2".try_into()?,
+            description: "function_foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(vec![TableDependencyDto::try_from("trigger_table")?]),
+            triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
+            tables: Some(vec![TableNameDto::try_from("workout_2")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let created_function_2 = db
             .scoped(p.id)
@@ -551,23 +545,24 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("joaquin_workout_2")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("joaquin_workout_2")?,
+                },
+            ))
             .in_project(p.id);
 
-        let service = DeleteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_function(request).await?.data;
 
-        // Assert that the first function is as if it just got registered
         let function_version: FunctionDBWithNames = db
             .live()
             .fetch_one::<FunctionDBWithNames>(&(&created_function_version_1.id))
             .await?;
-        let function_version = FunctionBuilder::try_from(&function_version)?.build()?;
+        let function_version = Function::from_dao(function_version)?;
         assert_register(
             &db,
             &UserId::admin(),
@@ -577,7 +572,6 @@ mod tests {
         )
         .await?;
 
-        // But the second function is deleted
         assert_delete(
             &db,
             &UserId::admin(),
@@ -598,47 +592,51 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        // register a function
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("wanted")?
-            .bundle_id(BundleId::default())
-            .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Transformer)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .workers(Some(HashMap::from([(
+        let create = FunctionRegister {
+            name: "function_1".try_into()?,
+            description: "wanted".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "the_trigger snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: Some(HashMap::from([(
                 WorkerTypeDto::CronTrigger,
                 WorkerConfig::default(),
-            )])))
-            .build()?;
+            )])),
+        };
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection_name.as_str())?,
+                },
                 create,
             )
             .in_project(p.id);
-        let service = RegisterFunctionService::with_defaults(db.clone()).service();
-        let function = service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        let function = service.register_function(request).await?.data;
 
-        // and then just deleted
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .build()?,
-            )
+            .delete((
+                CollectionParam {
+                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str("function_1")?,
+                },
+            ))
             .in_project(p.id);
-        let service = DeleteFunctionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        service.delete_function(request).await?.data;
 
-        // check its workers also got stopped
         let workers: Vec<WorkerDB> = db.live().fetch_all::<WorkerDB>(()).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];

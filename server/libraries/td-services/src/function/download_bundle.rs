@@ -3,7 +3,6 @@
 //
 
 use futures::TryStreamExt;
-use std::ops::Deref;
 use sync_wrapper::SyncStream;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
@@ -15,7 +14,6 @@ use td_objects::{and, not};
 use td_queries::{CurrentEntry, LiveEntry};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
-use td_tower::extractors::{MutRef, Ref};
 
 #[td_error]
 enum DownloadBundleError {
@@ -38,8 +36,8 @@ pub struct BundleDownload {
 /// deleted (the view folds a deleted parent into a patch's status),
 /// surfaces as not found.
 pub async fn resolve_function_version(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    function_version_id: Ref<FunctionVersionId>,
+    conn: &mut DomainConnection<Apiserver>,
+    function_version_id: &FunctionVersionId,
 ) -> Result<FunctionVersionDBWithNames, TdError> {
     let version = conn
         .live()
@@ -50,7 +48,7 @@ pub async fn resolve_function_version(
         .await?
         .ok_or_else(|| {
             TdError::from(DownloadBundleError::FunctionVersionNotFound(
-                function_version_id.deref().clone(),
+                function_version_id.clone(),
             ))
         })?;
 
@@ -62,19 +60,18 @@ pub async fn resolve_function_version(
         .fetch_one::<FunctionDB>(&version.function_id)
         .await?;
     if matches!(current.status, FunctionStatus::Deleted) {
-        return Err(DownloadBundleError::FunctionVersionNotFound(
-            function_version_id.deref().clone(),
-        )
-        .into());
+        return Err(
+            DownloadBundleError::FunctionVersionNotFound(function_version_id.clone()).into(),
+        );
     }
 
     Ok(version)
 }
 
 pub async fn build_bundle_download(
-    mut conn: MutRef<DomainConnection<Apiserver>>,
-    storage: Ref<Storage>,
-    function: Ref<FunctionVersionDBWithNames>,
+    conn: &mut DomainConnection<Apiserver>,
+    storage: &Storage,
+    function: &FunctionVersionDBWithNames,
 ) -> Result<BundleDownload, TdError> {
     // The bundle row is durable: it self-locates its artifact via the
     // storage prefix frozen at upload.

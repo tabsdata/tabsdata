@@ -159,9 +159,9 @@ mod tests {
     use super::*;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionPatchDB, FunctionRegister};
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
         ProjectId, RawSnippet, Snippet, TableNameDto, UserId,
@@ -179,18 +179,24 @@ mod tests {
             .seed()
             .collection(&CollectionName::try_from(coll_name)?, &UserId::admin())
             .await?;
-        let create = FunctionRegister::builder()
-            .try_name(fn_name)?
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(Some(vec![TableNameDto::try_from("t0")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: fn_name.try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let head = db
             .scoped(project_id)
             .seed()
@@ -206,18 +212,19 @@ mod tests {
         defined_on: AtTime,
         snippet: &str,
     ) -> Result<FunctionVersionId, TdError> {
-        let patch = FunctionPatchDB::builder()
-            .parent_function_version_id(head.id.clone())
-            .function_id(head.function_id)
-            .collection_id(head.collection_id)
-            .snippet(Snippet::try_from(RawSnippet::try_from(snippet)?)?)
-            .bundle_id(BundleId::default())
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .description(Description::try_from("d")?)
-            .defined_on(defined_on)
-            .defined_by_id(UserId::admin())
-            .status(FunctionStatus::Active)
-            .build()?;
+        let patch = FunctionPatchDB {
+            id: FunctionVersionId::new(),
+            parent_function_version_id: head.id.clone(),
+            function_id: head.function_id,
+            collection_id: head.collection_id,
+            snippet: Snippet::try_from(RawSnippet::try_from(snippet)?)?,
+            bundle_id: BundleId::default(),
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            description: Description::try_from("d")?,
+            defined_on,
+            defined_by_id: UserId::admin(),
+            status: FunctionStatus::Active,
+        };
         db.scoped(project_id).live().insert(&patch).await?;
         Ok(patch.id)
     }
@@ -233,27 +240,23 @@ mod tests {
 
         // Three deterministic points: `before` (epoch — no patches), `t1`
         // (p1 alive), `t2 = t1 + 1ms` (p2 alive).
-        let before = AtTime::try_from(td_common::datetime::Timestamp::try_from(0_i64).unwrap())?;
+        let before = AtTime::from(td_common::datetime::Timestamp::try_from(0_i64).unwrap());
         let t1 = AtTime::now();
-        let t2 = AtTime::try_from(td_common::datetime::Timestamp::from(
+        let t2 = AtTime::from(td_common::datetime::Timestamp::from(
             **t1 + chrono::Duration::milliseconds(1),
-        ))?;
+        ));
         let p1 = insert_patch(&db, p.id, &head, t1, "p1").await?;
         let p2 = insert_patch(&db, p.id, &head, t2, "p2").await?;
 
-        let mut conn =
-            DomainConnection::<Apiserver>::ready(db.begin().await.unwrap().into_connection());
+        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
 
-        // At T1: p1 exists; p2 does not yet.
         let at_t1 = latest_patch_or_head(&mut conn, &head.id, &t1).await?;
         assert_eq!(at_t1.function_version_id, head.id);
         assert_eq!(at_t1.function_version_patch_id, Some(p1));
 
-        // At T2: p2 is the newest active patch.
         let at_t2 = latest_patch_or_head(&mut conn, &head.id, &t2).await?;
         assert_eq!(at_t2.function_version_patch_id, Some(p2));
 
-        // Before either patch: head only, no patch resolved.
         let at_before = latest_patch_or_head(&mut conn, &head.id, &before).await?;
         assert_eq!(at_before.function_version_patch_id, None);
         Ok(())
@@ -276,8 +279,7 @@ mod tests {
         let p_a = insert_patch(&db, p.id, &head_a, now, "p-a").await?;
         let p_b = insert_patch(&db, p.id, &head_b, now, "p-b").await?;
 
-        let mut conn =
-            DomainConnection::<Apiserver>::ready(db.begin().await.unwrap().into_connection());
+        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
         let map =
             latest_patch_or_head_batch(&mut conn, vec![head_a.id.clone(), head_b.id.clone()], &now)
                 .await?;
