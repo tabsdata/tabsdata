@@ -2,10 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! DataVersion-family load cases. `VersionedDataVersion` has no production
+//! DataVersion-family load cases. `DataVersion` has no production
 //! DAO, so this family uses a purpose-built `LoadDvDao` over a dedicated
-//! table, sized on versions-per-partition (what `Versions` selectors rank
-//! over).
+//! table, sized on versions-per-partition (what `Versions` selectors
+//! resolve positions over).
 
 use crate::bulk::bulk_insert;
 use crate::harness::{analyze, timed, timed_once};
@@ -21,7 +21,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::types::basic::{AtTime, LogicalTableDataVersionId};
 use td_objects::types::table_ref::{Version, Versions};
-use td_queries::{LiveEntry, VersionedEntry};
+use td_queries::Queries;
 use td_schema::schema::render::{render_query, render_schema};
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
@@ -35,22 +35,24 @@ pub(crate) enum DvStatus {
 
 #[Dao]
 #[derive(Eq, PartialEq)]
-#[dao(
-    data_version,
-    sql_table = "load_dv_table",
-    versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id")
-)]
+#[dao(table = "load_dv_table", ops(select, insert), timeline)]
 pub(crate) struct LoadDvDao {
+    #[dao(pk)]
     pub id: LogicalTableDataVersionId,
+    #[dao(partition_by)]
     pub partition_id: DvPartition,
     pub status: DvStatus,
+    #[dao(version_by)]
     pub defined_on: AtTime,
 }
 
 /// Keyed projection of the same `load_dv_table`, for the keyed write paths.
 #[Dao]
 #[derive(Eq, PartialEq)]
-#[dao(sql_table = "load_dv_table", key(id))]
+#[dao(
+    table = "load_dv_table",
+    ops(select, insert, delete, upsert(LogicalTableDataVersionId))
+)]
 pub(crate) struct LoadDvKeyedDao {
     pub id: LogicalTableDataVersionId,
     pub partition_id: DvPartition,
@@ -223,8 +225,7 @@ async fn load_data_version_fetch_one(db: TdPool) -> Result<(), TdError> {
     let p = p0();
     let t = Instant::now();
     let _row: LoadDvDao = (&db)
-        .versioned(&on)
-        .data_version(&p)
+        .data_version(&on, &p)
         .fetch_one::<LoadDvDao>(&Versions::Single(Version::Head(0)))
         .await?;
     record("data_version::fetch_one", t, 1);
@@ -237,8 +238,7 @@ async fn load_data_version_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let p = p0();
     let t = Instant::now();
     let row = (&db)
-        .versioned(&on)
-        .data_version(&p)
+        .data_version(&on, &p)
         .fetch_optional::<LoadDvDao>(&Versions::None)
         .await?;
     record("data_version::fetch_optional", t, row.is_some() as usize);
@@ -252,8 +252,7 @@ async fn load_data_version_fetch_all(db: TdPool) -> Result<(), TdError> {
     let p = p0();
     let t = Instant::now();
     let rows = (&db)
-        .versioned(&on)
-        .data_version(&p)
+        .data_version(&on, &p)
         .fetch_all::<LoadDvDao>(&Versions::Range(Version::Head(-2), Version::Head(0)))
         .await?;
     record("data_version::fetch_all", t, rows.len());
@@ -267,8 +266,7 @@ async fn load_data_version_fetch_relative_offset(db: TdPool) -> Result<(), TdErr
     let p = p0();
     let t = Instant::now();
     let offset = (&db)
-        .versioned(&on)
-        .data_version(&p)
+        .data_version(&on, &p)
         .fetch_relative_offset::<LoadDvDao>(&Version::Head(0))
         .await?;
     record(
@@ -299,8 +297,8 @@ fn keyed_row() -> Result<LoadDvKeyedDao, TdError> {
 async fn load_data_version_upsert(db: TdPool) -> Result<(), TdError> {
     let row = keyed_row()?;
     let t = Instant::now();
-    db.live().upsert(&row).await?;
-    record("live::upsert", t, 1);
+    db.upsert(&row).await?;
+    record("default::upsert", t, 1);
     Ok(())
 }
 
@@ -308,8 +306,8 @@ async fn load_data_version_upsert(db: TdPool) -> Result<(), TdError> {
 async fn load_data_version_insert_or_ignore(db: TdPool) -> Result<(), TdError> {
     let row = keyed_row()?;
     let t = Instant::now();
-    db.live().insert_or_ignore(&row).await?;
-    record("live::insert_or_ignore", t, 1);
+    db.insert_or_ignore(&row).await?;
+    record("default::insert_or_ignore", t, 1);
     Ok(())
 }
 
@@ -341,43 +339,39 @@ pub(crate) async fn time_dv_queries(db: &TdPool) -> Result<Vec<(&'static str, f6
     let _ = timed!(
         out,
         "data_version::fetch_one",
-        (db).versioned(&on)
-            .data_version(&p)
+        (db).data_version(&on, &p)
             .fetch_one::<LoadDvDao>(&Versions::Single(Version::Head(0)))
             .await?
     );
     let _ = timed!(
         out,
         "data_version::fetch_optional",
-        (db).versioned(&on)
-            .data_version(&p)
+        (db).data_version(&on, &p)
             .fetch_optional::<LoadDvDao>(&Versions::None)
             .await?
     );
     let _ = timed!(
         out,
         "data_version::fetch_all",
-        (db).versioned(&on)
-            .data_version(&p)
+        (db).data_version(&on, &p)
             .fetch_all::<LoadDvDao>(&Versions::Range(Version::Head(-2), Version::Head(0)))
             .await?
     );
     let _ = timed!(
         out,
         "data_version::fetch_relative_offset",
-        (db).versioned(&on)
-            .data_version(&p)
+        (db).data_version(&on, &p)
             .fetch_relative_offset::<LoadDvDao>(&Version::Head(0))
             .await?
     );
     // `upsert` replaces the first seeded id; `insert_or_ignore` hits its
     // conflict path.
     let row = keyed_row()?;
-    timed_once!(out, "live::upsert", (db).live().upsert(&row).await?);
+    timed_once!(out, "default::upsert", (db).upsert(&row).await?);
     timed_once!(
         out,
-        "live::insert_or_ignore",
-        (db).live().insert_or_ignore(&row).await?
+        "default::insert_or_ignore",
+        (db).insert_or_ignore(&row).await?
     );
     Ok(out)
 }

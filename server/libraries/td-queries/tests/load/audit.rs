@@ -2,25 +2,31 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Coverage audit: scans all of `src/` for the `pub async fn` query surface
-//! and diffs it against the union of every case's `covers` minus [`EXEMPT`],
-//! so the [`LOAD_CASES`] registry cannot drift from the crate.
+//! Coverage audit: scans all of `src/` for the public query surface and diffs
+//! it against the union of every case's `covers` minus [`EXEMPT`], so the
+//! [`LOAD_CASES`] registry cannot drift from the crate.
+//!
+//! A query is a public method that awaits: an `async fn` on a handle's impl,
+//! or a `-> impl Future` method on a public trait (how the [`Queries`] entry
+//! surface is written, since a trait method taking `self` by value cannot be
+//! `async fn` and stay object-safe-ish under RPIT). Methods returning a
+//! handle are not queries — the handle's own methods are scanned instead.
 
 use crate::cases::{Family, LOAD_CASES, Status};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use syn::{Attribute, ImplItem, Item, Type, Visibility};
+use syn::{Attribute, ImplItem, Item, ReturnType, TraitItem, Type, TypeParamBound, Visibility};
 
 /// Test-only subdirs of `src/`; everything else is scanned recursively.
 const SKIP_DIRS: &[&str] = &["test_utils", "fixtures"];
 
 /// Queries with no load case, each with a reason (`Type::*` matches every
 /// method on the type; stale entries fail the audit):
-/// - `By::*`, `insert`, `insert_vec`: delegate to the generic
-///   `Live`/`Current`/`Historic` handles — no distinct SQL of their own.
 /// - `initialize_logical_ids`: one-shot startup bootstrap, not request-path.
-const EXEMPT: &[&str] = &["initialize_logical_ids"];
+/// - `RecursiveQuery::fetch_all`: recursion over an unversioned relation; no
+///   DAO is both `recursive` and unversioned, so nothing can construct it.
+const EXEMPT: &[&str] = &["initialize_logical_ids", "RecursiveQuery::fetch_all"];
 
 fn is_exempt(key: &str) -> bool {
     EXEMPT.iter().any(|e| match e.strip_suffix("::*") {
@@ -31,11 +37,12 @@ fn is_exempt(key: &str) -> bool {
     })
 }
 
-/// Collect `Struct::method` for every `pub async fn`, keyed by the impl
-/// block's self type (free fns get a bare name). Typestate-split handles
-/// declare the same method twice; the `BTreeSet` dedups them into one logical
-/// query, matching the registry. Trait-impl methods have inherited
-/// visibility, so they never contribute.
+/// Collect `Struct::method` for every public query, keyed by the impl block's
+/// self type or the trait's name (free fns get a bare name). Typestate-split
+/// handles declare the same method twice; the `BTreeSet` dedups them into one
+/// logical query, matching the registry. Trait *impl* methods have inherited
+/// visibility, so they never contribute — only the trait's own declarations
+/// do.
 fn scan_surface() -> BTreeSet<String> {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files: Vec<PathBuf> = Vec::new();
@@ -50,7 +57,7 @@ fn scan_surface() -> BTreeSet<String> {
                 if !SKIP_DIRS.contains(&name) {
                     stack.push(path);
                 }
-            } else if name.ends_with(".rs") && name != "mod.rs" {
+            } else if name.ends_with(".rs") {
                 files.push(path);
             }
         }
@@ -90,6 +97,20 @@ fn collect_items(items: &[Item], surface: &mut BTreeSet<String>) {
                     }
                 }
             }
+            Item::Trait(t) if !is_cfg_test(&t.attrs) => {
+                if !matches!(t.vis, Visibility::Public(_)) {
+                    continue;
+                }
+                let ty = t.ident.to_string();
+                for ti in &t.items {
+                    if let TraitItem::Fn(m) = ti
+                        && !is_cfg_test(&m.attrs)
+                        && (m.sig.asyncness.is_some() || returns_future(&m.sig.output))
+                    {
+                        surface.insert(format!("{ty}::{}", m.sig.ident));
+                    }
+                }
+            }
             Item::Mod(m) if !is_cfg_test(&m.attrs) => {
                 if let Some((_, items)) = &m.content {
                     collect_items(items, surface);
@@ -102,6 +123,20 @@ fn collect_items(items: &[Item], surface: &mut BTreeSet<String>) {
 
 fn is_pub_async(vis: &Visibility, asyncness: Option<syn::token::Async>) -> bool {
     matches!(vis, Visibility::Public(_)) && asyncness.is_some()
+}
+
+/// `-> impl Future<..>`, the trait-method spelling of an `async fn`.
+fn returns_future(output: &ReturnType) -> bool {
+    let ReturnType::Type(_, ty) = output else {
+        return false;
+    };
+    let Type::ImplTrait(imp) = ty.as_ref() else {
+        return false;
+    };
+    imp.bounds.iter().any(|b| match b {
+        TypeParamBound::Trait(t) => t.path.segments.last().is_some_and(|s| s.ident == "Future"),
+        _ => false,
+    })
 }
 
 fn is_cfg_test(attrs: &[Attribute]) -> bool {
@@ -202,14 +237,16 @@ fn implemented_count() -> usize {
 
 fn family_name(f: Family) -> &'static str {
     match f {
-        Family::Live => "Live",
-        Family::Current => "Current",
-        Family::Versioned => "Versioned",
-        Family::Historic => "Historic",
+        Family::Default => "Default",
+        Family::Latest => "Current",
+        Family::At => "At",
+        Family::AsOf => "FindAt",
         Family::DataVersion => "DataVersion",
         Family::Recursive => "Recursive",
         Family::Chain => "Chain",
-        Family::Pointer => "Pointer",
+        Family::Attempts => "Attempts",
+        Family::History => "Versions",
+        Family::Chunked => "Chunked",
         Family::Metrics => "Metrics",
         Family::Sessions => "Sessions",
     }

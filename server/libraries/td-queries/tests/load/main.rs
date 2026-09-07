@@ -8,21 +8,24 @@
 //! [`scaling`] guards growth at two sizes, [`report`] checks runtime coverage
 //! and regression. See `tests/load/README.md`.
 
+mod at_cases;
+mod attempt_cases;
 mod audit;
 mod bulk;
 mod cases;
 mod chain_cases;
-mod current_live_cases;
+mod chunked_cases;
 mod dataset;
 mod dataversion_cases;
+mod default_write_cases;
 mod harness;
+mod history_cases;
+mod latest_default_cases;
 mod list_cases;
-mod live_write_cases;
 mod metric;
 mod metrics_cases;
-mod pointer_cases;
 mod profile;
+mod raw;
 mod recursive_cases;
 mod report;
 mod scaling;
-mod versioned_cases;

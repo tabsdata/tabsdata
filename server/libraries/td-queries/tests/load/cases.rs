@@ -11,23 +11,29 @@
 /// they stress.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Family {
-    Live,
-    /// `_current` view over a versioned table.
-    Current,
-    /// Partition-scoped point-in-time (ranked CTE), one partition.
-    Versioned,
-    /// Cross-partition ranked-CTE scan (the slow path).
-    Historic,
+    /// The wordless grain: unversioned single-table reads and writes.
+    Default,
+    /// At-now reads over the open SCD2 intervals.
+    Latest,
+    /// Partition-scoped point-in-time, one partition.
+    At,
+    /// Cross-partition point-in-time by condition.
+    AsOf,
     /// `Versions`-selector reads over the purpose-built `LoadDvDao` fixture,
     /// sized on versions-per-partition.
     DataVersion,
     /// Recursive walk over the producer→consumer dependency edges. Recursion
     /// depth stays 1 and fan-out 1: that axis is an open coverage gap.
     Recursive,
-    /// Logical-chain walk: `LFR ⨝ LFRI ⨝ LTDV ⨝ latest-pointer ⨝ producer`.
+    /// Logical-chain walk: `LFR ⨝ LFRI ⨝ LTDV ⨝ bound attempt ⨝ producer`.
     Chain,
-    /// Pointer event log.
-    Pointer,
+    /// The current attempt of a logical row.
+    Attempts,
+    /// Every version row a condition matches, with no time predicate.
+    History,
+    /// The same operations over a slice that may exceed the bind-parameter
+    /// limit.
+    Chunked,
     /// Aggregation over the `__with_names` views — the metrics dataset.
     Metrics,
     Sessions,
@@ -54,312 +60,285 @@ pub struct LoadCase {
 
 /// Grouped by source file; order is not significant.
 pub const LOAD_CASES: &[LoadCase] = &[
-    // generic/live.rs — single-table CRUD (writes scale with table + index size too).
+    // The wordless grain — single-table CRUD (writes scale with table + index size too).
     LoadCase {
-        name: "live::insert",
-        covers: &["Live::insert"],
-        family: Family::Live,
+        name: "default::insert",
+        covers: &["Queries::insert"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_one",
-        covers: &["Live::fetch_one"],
-        family: Family::Live,
+        name: "default::fetch_one",
+        covers: &["Queries::fetch_one"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_optional",
+        name: "default::fetch_optional",
         // assert_exists / assert_not_exists are thin wrappers over the same
         // fetch_optional query.
         covers: &[
-            "Live::fetch_optional",
-            "Live::assert_exists",
-            "Live::assert_not_exists",
+            "Queries::fetch_optional",
+            "Queries::assert_exists",
+            "Queries::assert_not_exists",
         ],
-        family: Family::Live,
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_all",
-        covers: &["Live::fetch_all"],
-        family: Family::Live,
+        name: "default::fetch_all",
+        covers: &["Queries::fetch_all"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::update",
-        covers: &["Live::update"],
-        family: Family::Live,
+        name: "default::update",
+        covers: &["Queries::update"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::delete",
-        covers: &["Live::delete"],
-        family: Family::Live,
+        name: "default::delete",
+        covers: &["Queries::delete"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::list",
-        covers: &["Live::list"],
-        family: Family::Live,
+        name: "default::list",
+        covers: &["Queries::list"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_all_in",
-        covers: &["Live::fetch_all_in"],
-        family: Family::Live,
+        name: "default::fetch_latest_before",
+        covers: &["Queries::fetch_latest_before"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_latest_before",
-        covers: &["Live::fetch_latest_before"],
-        family: Family::Live,
+        name: "default::upsert",
+        covers: &["Queries::upsert"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::upsert",
-        covers: &["Live::upsert"],
-        family: Family::Live,
+        name: "default::insert_or_ignore",
+        covers: &["Queries::insert_or_ignore"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::insert_or_ignore",
-        covers: &["Live::insert_or_ignore"],
-        family: Family::Live,
+        name: "default::fetch_last",
+        covers: &["Queries::fetch_last"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_last",
-        covers: &["Live::fetch_last"],
-        family: Family::Live,
+        name: "default::fetch_optional_for_update",
+        covers: &["ForUpdate::fetch_optional"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_optional_for_update",
-        covers: &["Live::fetch_optional_for_update"],
-        family: Family::Live,
+        name: "default::fetch_one_for_update",
+        covers: &["ForUpdate::fetch_one"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_one_for_update",
-        covers: &["Live::fetch_one_for_update"],
-        family: Family::Live,
+        name: "default::fetch_all_for_update",
+        covers: &["ForUpdate::fetch_all"],
+        family: Family::Default,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::fetch_all_for_update",
-        covers: &["Live::fetch_all_for_update"],
-        family: Family::Live,
+        name: "default::claim_all",
+        covers: &["ForUpdate::claim_all"],
+        family: Family::Default,
+        status: Status::Implemented,
+    },
+    // generic/current.rs — open-interval (at-now) reads.
+    LoadCase {
+        name: "latest::fetch_one",
+        covers: &["Latest::fetch_one"],
+        family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "live::claim_all_in",
-        covers: &["Live::claim_all_in"],
-        family: Family::Live,
-        status: Status::Implemented,
-    },
-    // generic/current.rs — `_current` view reads.
-    LoadCase {
-        name: "current::fetch_one",
-        covers: &["Current::fetch_one"],
-        family: Family::Current,
+        name: "latest::fetch_optional",
+        covers: &["Latest::fetch_optional"],
+        family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "current::fetch_optional",
-        covers: &["Current::fetch_optional"],
-        family: Family::Current,
+        name: "latest::fetch_all",
+        covers: &["Latest::fetch_all"],
+        family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "current::fetch_all",
-        covers: &["Current::fetch_all"],
-        family: Family::Current,
+        name: "latest::fetch_all_chunked",
+        covers: &["LatestChunked::fetch_all"],
+        family: Family::Latest,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "current::fetch_all_chunked",
-        covers: &["Current::fetch_all_chunked"],
-        family: Family::Current,
+        name: "latest::list",
+        covers: &["Latest::list"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    // generic/at cases — partition-keyed lookups through FindAt.
+    LoadCase {
+        name: "as_of::fetch_one_by_partition",
+        covers: &["AsOf::fetch_one"],
+        family: Family::At,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "current::list",
-        covers: &["Current::list"],
-        family: Family::Current,
-        status: Status::Implemented,
-    },
-    // generic/versioned.rs — partition-scoped point-in-time (fast path).
-    LoadCase {
-        name: "versioned::fetch_one",
-        covers: &["Versioned::fetch_one"],
-        family: Family::Versioned,
+        name: "as_of::fetch_optional_by_partition",
+        covers: &["AsOf::fetch_optional"],
+        family: Family::At,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "versioned::fetch_optional",
-        covers: &["Versioned::fetch_optional"],
-        family: Family::Versioned,
+        name: "as_of::fetch_all_chunked_by_partition",
+        covers: &["AsOfChunked::fetch_all"],
+        family: Family::At,
+        status: Status::Implemented,
+    },
+    // generic/find_at.rs — cross-partition latest-at-time by condition.
+    LoadCase {
+        name: "as_of::fetch_one",
+        covers: &["AsOf::fetch_one"],
+        family: Family::AsOf,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "versioned::fetch_all_for_partition",
-        covers: &["Versioned::fetch_all_for_partition"],
-        family: Family::Versioned,
+        name: "as_of::fetch_optional",
+        // fetch_optional and assert_not_exists are thin wrappers over the
+        // same fetch_first query.
+        covers: &[
+            "AsOf::fetch_first",
+            "AsOf::fetch_optional",
+            "AsOf::assert_not_exists",
+        ],
+        family: Family::AsOf,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "versioned::fetch_all_chunked",
-        covers: &["Versioned::fetch_all_chunked"],
-        family: Family::Versioned,
-        status: Status::Implemented,
-    },
-    // generic/historic.rs — cross-partition ranked-CTE scan (slow path).
-    LoadCase {
-        name: "historic::fetch_one",
-        covers: &["Historic::fetch_one"],
-        family: Family::Historic,
+        name: "as_of::fetch_all",
+        covers: &["AsOf::fetch_all"],
+        family: Family::AsOf,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "historic::fetch_optional",
-        // assert_not_exists is a thin wrapper over the same fetch_optional
-        // query.
-        covers: &["Historic::fetch_optional", "Historic::assert_not_exists"],
-        family: Family::Historic,
+        name: "as_of::fetch_all_chunked",
+        covers: &["AsOfChunked::fetch_all"],
+        family: Family::AsOf,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "historic::fetch_all",
-        covers: &["Historic::fetch_all"],
-        family: Family::Historic,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "historic::fetch_all_chunked",
-        covers: &["Historic::fetch_all_chunked"],
-        family: Family::Historic,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "historic::list_versions",
-        covers: &["Historic::list_versions"],
-        family: Family::Historic,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "historic::list_full",
-        covers: &["Historic::list_full"],
-        family: Family::Historic,
+        name: "as_of::list",
+        covers: &["AsOf::list"],
+        family: Family::AsOf,
         status: Status::Implemented,
     },
     // generic/data_version.rs — Versions-selector reads (head/initial/range).
     LoadCase {
         name: "data_version::fetch_one",
-        covers: &["VersionedDataVersion::fetch_one"],
+        covers: &["DataVersion::fetch_one"],
         family: Family::DataVersion,
         status: Status::Implemented,
     },
     LoadCase {
         name: "data_version::fetch_optional",
-        covers: &["VersionedDataVersion::fetch_optional"],
+        covers: &["DataVersion::fetch_optional"],
         family: Family::DataVersion,
         status: Status::Implemented,
     },
     LoadCase {
         name: "data_version::fetch_all",
-        covers: &["VersionedDataVersion::fetch_all"],
+        covers: &["DataVersion::fetch_all"],
         family: Family::DataVersion,
         status: Status::Implemented,
     },
     LoadCase {
         name: "data_version::fetch_relative_offset",
-        covers: &["VersionedDataVersion::fetch_relative_offset"],
+        covers: &["DataVersion::fetch_relative_offset"],
         family: Family::DataVersion,
-        status: Status::Implemented,
-    },
-    // generic/recursive.rs — three recursion surfaces over the same walker.
-    LoadCase {
-        name: "recursive::live",
-        covers: &["RecursiveQuery::fetch_all"],
-        family: Family::Recursive,
         status: Status::Implemented,
     },
     LoadCase {
         name: "recursive::current",
-        covers: &["CurrentRecursive::fetch_all"],
+        covers: &["LatestRecursive::fetch_all"],
         family: Family::Recursive,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "recursive::historic",
-        covers: &["HistoricRecursive::fetch_all"],
+        name: "recursive::find_at",
+        covers: &["AsOfRecursive::fetch_all"],
         family: Family::Recursive,
         status: Status::Implemented,
     },
     // daos/function_runs.rs — logical-chain readiness/commit/dispatch.
     LoadCase {
         name: "lfr::to_execute",
-        covers: &["Lfr::to_execute"],
+        covers: &["LogicalRuns::to_execute"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "lfr::to_commit",
-        covers: &["Lfr::to_commit"],
+        covers: &["LogicalRuns::to_commit"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "lfr::previous_for_function_at",
-        covers: &["Lfr::previous_for_function_at"],
+        covers: &["LogicalRuns::previous_for_function_at"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "lfr::for_dispatch",
-        covers: &["Lfr::for_dispatch"],
+        covers: &["LogicalRuns::for_dispatch"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "lfr::blocked_ids",
-        covers: &["Lfr::blocked_ids"],
+        covers: &["LogicalRuns::blocked_ids"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "lfr::downstream_one_hop",
-        covers: &["Lfr::downstream_one_hop"],
+        covers: &["LogicalRuns::downstream_one_hop"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "lfr::effective_output_base_paths",
-        covers: &["Lfr::effective_output_base_paths"],
+        covers: &["LogicalRuns::effective_output_base_paths"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "lfr::with_bundle_base_path",
-        covers: &["Lfr::with_bundle_base_path"],
+        covers: &["LogicalRuns::with_bundle_base_path"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "pfr::to_dispatch",
-        covers: &["Pfr::to_dispatch"],
+        covers: &["PhysicalRuns::to_dispatch"],
         family: Family::Chain,
         status: Status::Implemented,
     },
     LoadCase {
         name: "pfr::dispatched_before",
-        covers: &["Pfr::dispatched_before"],
-        family: Family::Chain,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "pfr::in_flight_for",
-        covers: &["Pfr::in_flight_for"],
+        covers: &["PhysicalRuns::dispatched_before"],
         family: Family::Chain,
         status: Status::Implemented,
     },
@@ -382,42 +361,30 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Chain,
         status: Status::Implemented,
     },
-    // daos/pointers.rs — pointer event log.
+    // The attempt tables' current-version reads.
     LoadCase {
-        name: "pointers::concrete",
-        covers: &["LogicalPointers::concrete"],
-        family: Family::Pointer,
+        name: "attempts::current_run",
+        covers: &["Latest::fetch_optional"],
+        family: Family::Attempts,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "pointers::bind_all",
-        covers: &["LogicalPointers::bind_all"],
-        family: Family::Pointer,
+        name: "attempts::current_version",
+        covers: &["Latest::fetch_optional"],
+        family: Family::Attempts,
         status: Status::Implemented,
     },
     LoadCase {
-        name: "pointers::redirect_replay_attempts",
-        covers: &["LogicalPointers::redirect_replay_attempts"],
-        family: Family::Pointer,
+        name: "attempts::version_at",
+        covers: &["AsOf::fetch_optional"],
+        family: Family::Attempts,
         status: Status::Implemented,
     },
-    LoadCase {
-        name: "pointers::redirect_outputs",
-        covers: &["LogicalPointers::redirect_outputs"],
-        family: Family::Pointer,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "pointers::at_concrete",
-        covers: &["PointersAt::concrete"],
-        family: Family::Pointer,
-        status: Status::Implemented,
-    },
-    // daos/table_data_versions.rs — PTDV-with-names + pointer-bound filter.
+    // daos/table_data_versions.rs — PTDV-with-names, bound-interval filter.
     LoadCase {
         name: "ltdv::latest_bound_tdv_with_data_for_table",
-        covers: &["Ltdv::latest_bound_tdv_with_data_for_table"],
-        family: Family::Pointer,
+        covers: &["TableDataVersions::latest_bound_tdv_with_data_for_table"],
+        family: Family::Attempts,
         status: Status::Implemented,
     },
     // daos/metrics.rs — heaviest aggregations.
@@ -456,6 +423,92 @@ pub const LOAD_CASES: &[LoadCase] = &[
         name: "sessions::purge",
         covers: &["Sessions::purge"],
         family: Family::Sessions,
+        status: Status::Implemented,
+    },
+    // generic/history.rs — the whole timeline of a partition, no validity
+    // filter, and the time-bounded listing over it.
+    LoadCase {
+        name: "history::fetch_all",
+        covers: &["History::fetch_all"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "history::fetch_first",
+        covers: &["History::fetch_first"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "history::fetch_last",
+        covers: &["History::fetch_last"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "history::list",
+        covers: &["History::list"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "history::list_until",
+        covers: &["History::list_until"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "history::fetch_all_chunked",
+        covers: &["HistoryChunked::fetch_all"],
+        family: Family::History,
+        status: Status::Implemented,
+    },
+    // generic/chunked.rs — the wordless grain's chunked operations, and the
+    // chunked SCD2 close.
+    LoadCase {
+        name: "chunked::fetch_all",
+        covers: &["Chunked::fetch_all"],
+        family: Family::Chunked,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "chunked::insert",
+        covers: &["Chunked::insert"],
+        family: Family::Chunked,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "chunked::update",
+        covers: &["Chunked::update"],
+        family: Family::Chunked,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "chunked::close",
+        covers: &["Chunked::close"],
+        family: Family::Chunked,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "default::fetch_first",
+        covers: &["Queries::fetch_first"],
+        family: Family::Default,
+        status: Status::Implemented,
+    },
+    // The SCD2 close is a write against the open interval, timed under the
+    // default family like the other writes.
+    LoadCase {
+        name: "default::close",
+        covers: &["Queries::close"],
+        family: Family::Default,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "latest::fetch_first",
+        // assert_not_exists is a thin wrapper over the same fetch_first
+        // query.
+        covers: &["Latest::fetch_first", "Latest::assert_not_exists"],
+        family: Family::Latest,
         status: Status::Implemented,
     },
 ];

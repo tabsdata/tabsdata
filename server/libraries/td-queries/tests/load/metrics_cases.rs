@@ -12,7 +12,8 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest};
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
-use td_queries::MetricsEntry;
+use td_objects::types::visible_projects::VisibleProjects;
+use td_queries::Queries;
 
 fn metrics_request(dim: Dimension) -> MetricsRequest {
     MetricsRequest {
@@ -33,7 +34,10 @@ async fn load_metrics_nodes(db: TdPool) -> Result<(), TdError> {
     let req = metrics_request(Dimension::Collection);
     let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
-    let rows = conn.metrics().metrics_nodes(&req).await?;
+    let rows = conn
+        .metrics()
+        .metrics_nodes(&req, &VisibleProjects::All)
+        .await?;
     record("metrics::metrics_nodes", profile, t, rows.len(), seeded);
 
     assert!(!rows.is_empty(), "seeded publishers must yield node rows");
@@ -48,7 +52,10 @@ async fn load_metrics_edges(db: TdPool) -> Result<(), TdError> {
     let req = metrics_request(Dimension::Collection);
     let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
-    let rows = conn.metrics().metrics_edges(&req).await?;
+    let rows = conn
+        .metrics()
+        .metrics_edges(&req, &VisibleProjects::All)
+        .await?;
     record("metrics::metrics_edges", profile, t, rows.len(), seeded);
 
     assert!(
@@ -72,7 +79,7 @@ async fn load_metrics_inflight(db: TdPool) -> Result<(), TdError> {
     };
     let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
-    let rows = conn.metrics().inflight(&req).await?;
+    let rows = conn.metrics().inflight(&req, &VisibleProjects::All).await?;
     record("metrics::inflight", profile, t, rows.len(), seeded);
     Ok(())
 }

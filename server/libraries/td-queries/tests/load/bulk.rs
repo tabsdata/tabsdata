@@ -3,11 +3,11 @@
 //
 
 //! Chunked multi-row `INSERT` for the seed datasets. Unlike `COPY`, it still
-//! fires table triggers, so `_current` and sticky-status maintenance stay
-//! correct.
+//! fires table triggers, so SCD2 close-out and sticky-status maintenance
+//! stay correct.
 
 use sea_query::Query;
-use ta_objects::Dao;
+use ta_objects::InsertDao;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_queries::QueryExecutor;
@@ -17,7 +17,7 @@ const MAX_BIND_PARAMS: usize = 800;
 
 pub async fn bulk_insert<D, E>(executor: E, rows: &[D]) -> Result<u64, SqlError>
 where
-    D: Dao,
+    D: InsertDao,
     E: QueryExecutor + Copy,
 {
     if rows.is_empty() {
@@ -29,7 +29,7 @@ where
     let mut total = 0u64;
     for batch in rows.chunks(chunk) {
         let mut query = Query::insert();
-        query.into_table(D::table()).columns(D::columns());
+        query.into_table(D::TABLE).columns(D::columns());
         for dao in batch {
             query.values(dao.insert_values())?;
         }
