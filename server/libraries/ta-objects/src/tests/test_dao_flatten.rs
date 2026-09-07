@@ -2,17 +2,18 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-/// Tests for `#[dao(flatten)]`: an embedded base DAO whose columns the
-/// enclosing DAO also projects, base first, via delegation.
 #[cfg(test)]
 mod tests {
     use crate as ta_objects;
     use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 
-    use crate::dxo::{Dao, DaoCore, DaoUpdate, KeyedDao, Recursive, TypedColumns, VersionedDao};
+    use crate::dxo::{
+        Dao, InsertDao, PkDao, RecursiveDao, SelectDao, TimelineDao, UpdateDao, UpsertDao,
+    };
+    use crate::unique::AddressesOneRow;
     use sea_query::{Iden, Order};
-    use std::any::TypeId;
     use std::str::FromStr;
+    use td_database::access::{DbScope, Global};
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct WidgetId(String);
@@ -37,8 +38,9 @@ mod tests {
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(sql_table = "widgets", key(name))]
+    #[dao(table = "widgets", ops(select, insert, delete), unique(Name))]
     struct WidgetDao {
+        #[dao(pk)]
         pub id: WidgetId,
         pub name: Name,
         pub defined_on: Option<DefinedOn>,
@@ -46,7 +48,7 @@ mod tests {
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(sql_table = "widgets__with_names")]
+    #[dao(table = "widgets__with_names", ops(select, insert, delete))]
     struct WidgetDaoWithNames {
         #[dao(flatten)]
         pub base: WidgetDao,
@@ -56,14 +58,14 @@ mod tests {
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(sql_table = "widgets__with_status")]
+    #[dao(table = "widgets__with_status", ops(select, insert, delete))]
     struct WidgetDaoWithStatus {
         #[dao(flatten)]
         pub base: WidgetDaoWithNames,
         pub started_on: DefinedOn,
     }
 
-    fn col_names<D: Dao>() -> Vec<String> {
+    fn col_names<D: SelectDao>() -> Vec<String> {
         D::columns()
             .into_iter()
             .map(|c| Iden::to_string(&c))
@@ -73,7 +75,7 @@ mod tests {
     #[test]
     fn test_table_and_column_rendering() {
         assert_eq!(
-            Iden::to_string(&WidgetDaoWithNames::table()),
+            Iden::to_string(&WidgetDaoWithNames::TABLE),
             "widgets__with_names"
         );
         assert_eq!(
@@ -100,18 +102,8 @@ mod tests {
 
         assert!(WidgetDaoWithNamesIden::from_str("nonexistent").is_err());
 
-        // Two levels down.
         let deep = WidgetDaoWithStatusIden::from_str("id").unwrap();
         assert_eq!(Iden::to_string(&deep), "id");
-    }
-
-    #[test]
-    fn test_col_for_type_resolves_base_and_own() {
-        let col = WidgetDaoWithNames::col_for_type(TypeId::of::<Name>()).unwrap();
-        assert_eq!(col, WidgetDaoWithNamesIden::Base(WidgetDaoIden::Name));
-
-        let own = WidgetDaoWithNames::col_for_type(TypeId::of::<OwnerName>()).unwrap();
-        assert_eq!(own, WidgetDaoWithNamesIden::Owner);
     }
 
     #[test]
@@ -125,7 +117,6 @@ mod tests {
             <WidgetDaoWithNames as HasColumn<OwnerName>>::COL,
             WidgetDaoWithNamesIden::Owner
         );
-        // Two flatten levels down.
         assert_eq!(
             Iden::to_string(&<WidgetDaoWithStatus as HasColumn<Name>>::COL),
             "name"
@@ -157,10 +148,27 @@ mod tests {
         assert!(matches!(order[0].1, Order::Desc));
     }
 
+    #[ta_objects::Dao]
+    #[dao(table = "widgets", ops(update(WidgetDao)))]
+    struct WidgetUpdate {
+        pub id: WidgetId,
+        pub name: Name,
+        pub defined_on: Option<DefinedOn>,
+    }
+
+    #[ta_objects::Dao]
+    #[dao(table = "widgets", ops(update(WidgetDao)))]
+    struct WidgetUpdateWithNames {
+        #[dao(flatten)]
+        pub base: WidgetUpdate,
+        pub owner: OwnerName,
+        pub renamed: RenamedName,
+    }
+
     #[test]
     fn test_update_values_delegate_base() {
-        let dao = WidgetDaoWithNames {
-            base: WidgetDao {
+        let dao = WidgetUpdateWithNames {
+            base: WidgetUpdate {
                 id: WidgetId::try_from("w1").unwrap(),
                 name: Name::try_from("n").unwrap(),
                 defined_on: None,
@@ -173,74 +181,57 @@ mod tests {
             .into_iter()
             .map(|(c, _)| Iden::to_string(&c))
             .collect();
-        // `defined_on` is None (skipped), base columns come first.
         assert_eq!(cols, ["id", "name", "owner", "renamed"]);
     }
 
-    // ---- versioned / recursive / keyed columns resolving into the base ----
-
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(
-        sql_table = "versioned_widgets",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "widget_id"),
-        recursive(up = "widget_id", down = "id")
-    )]
-    struct VersionedWidgetDao {
+    #[dao(table = "scd2_widgets", ops(select, insert), scd2, recursive)]
+    struct Scd2WidgetDao {
+        #[dao(pk, recurse_down)]
         pub id: WidgetVersionId,
+        #[dao(partition_by, recurse_up)]
         pub widget_id: WidgetId,
+        #[dao(valid_from)]
         pub defined_on: DefinedOn,
     }
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
     #[dao(
-        sql_table = "versioned_widgets__with_names",
-        versioned(
-            pk = "id",
-            version_by = "defined_on",
-            partition_by = "widget_id",
-            current = "versioned_widgets_current__with_names"
-        ),
-        recursive(up = "widget_id", down = "id")
+        table = "scd2_widgets__with_names",
+        ops(select, insert),
+        scd2,
+        recursive
     )]
-    struct VersionedWidgetDaoWithNames {
+    struct Scd2WidgetDaoWithNames {
         #[dao(flatten)]
-        pub base: VersionedWidgetDao,
+        pub base: Scd2WidgetDao,
         pub owner: OwnerName,
     }
 
     #[test]
-    fn test_versioned_cols_resolve_into_base() {
+    fn test_scd2_cols_resolve_into_base() {
+        assert_eq!(Iden::to_string(&Scd2WidgetDaoWithNames::PK), "id");
         assert_eq!(
-            Iden::to_string(&VersionedWidgetDaoWithNames::pk_col()),
-            "id"
-        );
-        assert_eq!(
-            Iden::to_string(&VersionedWidgetDaoWithNames::partition_col()),
+            Iden::to_string(&Scd2WidgetDaoWithNames::PARTITION),
             "widget_id"
         );
         assert_eq!(
-            Iden::to_string(&VersionedWidgetDaoWithNames::version_order_col()),
+            Iden::to_string(&Scd2WidgetDaoWithNames::VERSION_ORDER),
             "defined_on"
         );
     }
 
     #[test]
     fn test_recursive_cols_resolve_into_base() {
-        assert_eq!(
-            Iden::to_string(&VersionedWidgetDaoWithNames::recurse_up()),
-            "widget_id"
-        );
-        assert_eq!(
-            Iden::to_string(&VersionedWidgetDaoWithNames::recurse_down()),
-            "id"
-        );
+        assert_eq!(Iden::to_string(&Scd2WidgetDaoWithNames::UP), "widget_id");
+        assert_eq!(Iden::to_string(&Scd2WidgetDaoWithNames::DOWN), "id");
     }
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(sql_table = "widgets_rows", key(name))]
+    #[dao(table = "widgets_rows", ops(select, insert, delete, upsert(Name)))]
     struct WidgetRowDao {
         #[dao(flatten)]
         pub base: WidgetDao,
@@ -260,5 +251,12 @@ mod tests {
             .map(|c| Iden::to_string(&c))
             .collect();
         assert_eq!(values, ["id", "defined_on", "row_id"]);
+    }
+
+    fn addresses_one_row<S: DbScope, C: AddressesOneRow<WidgetRowDao, S>>(_condition: &C) {}
+
+    #[test]
+    fn test_key_from_base_addresses_one_row() {
+        addresses_one_row::<Global, _>(&Name::try_from("w1").unwrap());
     }
 }

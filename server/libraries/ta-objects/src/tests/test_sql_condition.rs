@@ -19,7 +19,7 @@ mod tests {
 
     /// Dummy DAO that maps every type to column `v`.
     #[ta_objects::Dao]
-    #[dao(sql_table = "test_table")]
+    #[dao(table = "test_table", ops(select, insert, delete))]
     struct TestDao {
         v: VCol,
     }

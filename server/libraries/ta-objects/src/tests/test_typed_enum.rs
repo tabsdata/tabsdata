@@ -102,19 +102,13 @@ mod tests {
         assert_eq!(v.as_sea_value(), sea_query::Value::String(Some("A".into())));
     }
 
-    #[test]
-    fn test_sea_value_type_id() {
-        let v = Status::Active;
-        assert_eq!(v.as_type_id(), std::any::TypeId::of::<Status>());
-    }
-
     // ----- SqlCondition -------------------------------------------------------
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct Enabled(bool);
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "test_enum")]
+    #[dao(table = "test_enum", ops(select, insert, delete))]
     struct EnumTestDao {
         status: Status,
         enabled: Enabled,

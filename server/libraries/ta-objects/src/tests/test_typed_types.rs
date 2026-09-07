@@ -483,7 +483,6 @@ mod tests {
             v.as_sea_value(),
             sea_query::Value::String(Some("hello".into()))
         );
-        assert_eq!(v.as_type_id(), std::any::TypeId::of::<MyStr>());
     }
 
     #[test]
@@ -493,7 +492,6 @@ mod tests {
 
         let v = MyI32::try_from(42i32).unwrap();
         assert_eq!(v.as_sea_value(), sea_query::Value::Int(Some(42)));
-        assert_eq!(v.as_type_id(), std::any::TypeId::of::<MyI32>());
     }
 
     #[test]
@@ -503,7 +501,6 @@ mod tests {
 
         let v = MyI64::try_from(99i64).unwrap();
         assert_eq!(v.as_sea_value(), sea_query::Value::BigInt(Some(99)));
-        assert_eq!(v.as_type_id(), std::any::TypeId::of::<MyI64>());
     }
 
     #[test]
@@ -515,7 +512,6 @@ mod tests {
         assert_eq!(v.as_sea_value(), sea_query::Value::Bool(Some(true)));
         let v = MyBool::FALSE;
         assert_eq!(v.as_sea_value(), sea_query::Value::Bool(Some(false)));
-        assert_eq!(v.as_type_id(), std::any::TypeId::of::<MyBool>());
     }
 
     #[test]
@@ -594,7 +590,7 @@ mod tests {
     struct CondBool(bool);
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "test_cond")]
+    #[dao(table = "test_cond", ops(select, insert, delete))]
     struct CondDao {
         col: CondStr,
         num: CondI64,

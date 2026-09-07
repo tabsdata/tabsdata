@@ -2,8 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::DaoCore;
-use sea_query::TableRef;
+use crate::Dao;
 use td_error::td_error;
 use tracing::{error, warn};
 
@@ -28,8 +27,6 @@ pub enum SqlError {
 
     #[error("[{0}] SQL error: {1}")]
     AnySqlxError(String, #[source] sqlx::Error) = 5000,
-    #[error("Type with name '{0}' was not found in '{1:?}'")]
-    TypeNotFound(String, Box<TableRef>) = 5001,
     #[error("Error building SQL Query: {0}")]
     QueryError(#[from] sea_query::error::Error) = 5002,
     #[error(
@@ -42,6 +39,8 @@ pub enum SqlError {
         "[{0}] Refusing to run a destructive operation with no WHERE clause; pass an explicit condition"
     )]
     EmptyConditionRefused(String) = 5005,
+    #[error("[{0}] A single-row read matched more than one row")]
+    MultipleRowsMatched(String) = 5006,
 }
 
 /// Extra context extracted from a database error.
@@ -172,13 +171,19 @@ fn classify(entity: String, error: sqlx::Error, values: &[(String, String)]) -> 
 impl SqlError {
     /// Classify a `sqlx::Error` for a write operation (insert/update),
     /// with DAO values available for hint enrichment.
-    pub fn on_write<D: DaoCore>(error: sqlx::Error, values: &[(String, String)]) -> Self {
+    pub fn on_write<D: Dao>(error: sqlx::Error, values: &[(String, String)]) -> Self {
         classify(D::display_name().to_string(), error, values)
     }
 
     /// Classify a `sqlx::Error` for a read operation,
     /// with no DAO values available.
-    pub fn on_read<D: DaoCore>(error: sqlx::Error) -> Self {
+    pub fn on_read<D: Dao>(error: sqlx::Error) -> Self {
         classify(D::display_name().to_string(), error, &[])
+    }
+
+    /// The not-found a filtered read raises when it matches nothing — what
+    /// `fetch_one` would have returned on an empty result.
+    pub fn not_found<D: Dao>() -> Self {
+        SqlError::RowNotFound(D::display_name().to_string(), sqlx::Error::RowNotFound)
     }
 }

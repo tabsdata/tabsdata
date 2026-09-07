@@ -26,7 +26,7 @@
 //! values — including rows read back from the database.
 
 use std::fmt::Display;
-use td_common::datetime::Timestamp;
+use td_common::datetime::{IntervalEnd, Timestamp};
 use td_common::id::Id;
 use td_common::logic_id::{IdL, KeyId};
 use td_error::{TdError, td_error};
@@ -266,5 +266,31 @@ impl TypedInner for Timestamp {
     }
     fn schema() -> RefOr<Schema> {
         <i64 as PartialSchema>::schema()
+    }
+}
+
+impl TypedInner for IntervalEnd {
+    // Infinity has no sea-query value (it binds NULL here), which is why the
+    // derive emits no condition leaf for interval-end wrappers: the
+    // open-interval predicate is the 'infinity' literal, never a bound value.
+    fn sea_value(&self) -> sea_query::Value {
+        sea_query::Value::ChronoDateTimeUtc(self.at().map(|t| **t))
+    }
+    fn null_sea_value() -> sea_query::Value {
+        sea_query::Value::ChronoDateTimeUtc(None)
+    }
+    fn parse_str(s: &str) -> Result<Self, TdError> {
+        Ok(s.parse::<IntervalEnd>()?)
+    }
+    fn schema() -> RefOr<Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::from_iter([
+                utoipa::openapi::schema::Type::Integer,
+                utoipa::openapi::schema::Type::Null,
+            ]))
+            .format(Some(utoipa::openapi::schema::SchemaFormat::KnownFormat(
+                utoipa::openapi::schema::KnownFormat::Int64,
+            )))
+            .into()
     }
 }

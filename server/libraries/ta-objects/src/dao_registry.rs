@@ -2,65 +2,51 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Registry of every read [`Dao`](crate::Dao), populated by the `#[Dao]`
-//! macro via [`inventory::submit!`], so a single test can validate every
-//! projection against the live schema without a curated list. Update-only
-//! and generic DAOs are excluded by the macro.
+//! Every readable DAO, submitted by the macro, so one test can validate every
+//! projection against the live schema without a curated list.
 //!
-//! Coverage constraints (load-bearing, not enforced): the registration is
-//! emitted under `cfg(not(test))`, so a DAO defined in the validating test's
-//! own crate never registers there; and only DAOs in crates linked into the
-//! test binary register at all.
+//! Coverage is load-bearing but unenforced: registration is emitted under
+//! `cfg(not(test))`, so a DAO defined in the validating test's own crate never
+//! registers, and only DAOs linked into the test binary register at all.
 
-use crate::Dao;
+use crate::{ProjectScoped, SelectDao};
 use sea_query::Iden;
 
-/// The relation a DAO reads and the columns it projects, as the SQL
-/// identifiers it actually emits.
+/// The SQL identifiers a DAO actually emits.
 pub struct DaoProjection {
     pub name: &'static str,
     pub table: String,
     pub columns: Vec<String>,
+    /// Whether the DAO claims the `project_isolation` policy governs it.
+    pub project_scoped: bool,
 }
 
-/// Holds monomorphized fns rather than the type itself so the registry is a
-/// plain, iterable collection.
+/// A monomorphized fn rather than the type, so the registry is iterable.
 pub struct RegisteredDao {
     pub describe: fn() -> DaoProjection,
-    /// Forces every column reference the DAO resolves at runtime (a flatten
-    /// base's `order_by`/`key`/`versioned`/`recursive` columns), so a typo
-    /// panics in the registry-walking test instead of on first live use.
-    pub validate: fn(),
 }
 
 inventory::collect!(RegisteredDao);
 
-/// A list DTO's runtime-resolved column references (`pagination_by` and each
-/// filter/order role), forceable without a database — the `#[Dto]` macro
-/// registers one per non-generic `#[dto(list(on = ..))]` type.
-pub struct RegisteredListDto {
-    pub name: &'static str,
-    pub validate: fn(),
-}
-
-inventory::collect!(RegisteredListDto);
-
-/// Reads the identifiers straight off the DAO's own trait impl, so the
-/// registry cannot drift from what the DAO actually queries.
-pub fn dao_projection<D: Dao>() -> DaoProjection {
+/// Read off the DAO's own impl, so the registry cannot drift from it.
+pub fn dao_projection<D: SelectDao>() -> DaoProjection {
     DaoProjection {
         name: D::display_name(),
-        table: D::table().to_string(),
+        table: D::TABLE.to_string(),
         columns: D::columns().into_iter().map(|c| c.to_string()).collect(),
+        project_scoped: false,
+    }
+}
+
+/// As [`dao_projection`], for a DAO that declares `#[dao(project_scoped)]`.
+pub fn scoped_dao_projection<D: SelectDao + ProjectScoped>() -> DaoProjection {
+    DaoProjection {
+        project_scoped: true,
+        ..dao_projection::<D>()
     }
 }
 
 /// All registered read DAOs, in unspecified order.
 pub fn registered_daos() -> impl Iterator<Item = &'static RegisteredDao> {
     inventory::iter::<RegisteredDao>()
-}
-
-/// All registered list DTOs, in unspecified order.
-pub fn registered_list_dtos() -> impl Iterator<Item = &'static RegisteredListDto> {
-    inventory::iter::<RegisteredListDto>()
 }
