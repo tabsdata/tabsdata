@@ -108,7 +108,7 @@ pub mod sql_source;
 pub use enforce::{
     CreateProjects, DevelopProject, Enforce, ManageAccess, ManageProject, ManageRoles,
     OnAnyProject, RbacError, Requirement, Scope, SelfUser, ViewProject, VisibleProjectsResolver,
-    enforce, scope_to_project,
+    enforce,
 };
 pub use model::{
     EffectiveGrants, EntityKind, FromGrants, GrantedPermission, Grants, IdentityClaim, On, Project,

@@ -409,7 +409,7 @@ mod tests {
 
 /// Global (cross-project) metrics endpoints. Identical query grammar and
 /// responses to the project-scoped router, but mounted top-level (no `{project}`
-/// segment) and backed by the `*Global` services, which bypass RLS to aggregate
+/// segment) and backed by the `*_global` services, which bypass RLS to aggregate
 /// across every project. The query→request conversion is shared with the scoped
 /// router; the only differences are the absence of a `{project}` (so no
 /// `Project` extractor / `.in_project`) and the `*_global` service handle.

@@ -16,12 +16,12 @@ use axum::response::Response;
 use std::collections::HashMap;
 use std::str::FromStr;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_database::access::{DbPool, Global, Grant};
+use td_database::access::{DbPool, DbScope, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_services::project::ProjectError;
 
 /// Path-param key used by the `/projects/{project}/...` URLs.
@@ -51,13 +51,10 @@ pub async fn project_resolver_layer(
     Ok(next.run(request).await)
 }
 
-async fn resolve(
-    conn: &mut DomainConnection<Apiserver>,
+async fn resolve<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     id_name: &ProjectIdName,
 ) -> Result<Option<ProjectId>, TdError> {
-    let proj: Option<ActiveProjectDB> = conn
-        .live()
-        .fetch_optional::<ActiveProjectDB>(id_name)
-        .await?;
+    let proj: Option<ActiveProjectDB> = conn.fetch_optional::<ActiveProjectDB>(id_name).await?;
     Ok(proj.map(|p| p.id))
 }

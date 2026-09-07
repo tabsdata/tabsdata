@@ -10,7 +10,7 @@ use td_database::domain::{Apiserver, Domained};
 use td_error::{TdError, td_error};
 use td_objects::dxo::auth::SessionDBWithNames;
 use td_objects::types::basic::{AccessTokenId, SessionStatus};
-use td_queries::{LiveEntry, QueryExecutor, SessionsEntry};
+use td_queries::{Queries, QueryExecutor};
 
 pub type Session = SessionDBWithNames;
 pub type Sessions = CachedProvider<HashMap<AccessTokenId, Arc<Session>>, SqlSessionProvider>;
@@ -51,7 +51,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver> + Send>
     Provider<HashMap<AccessTokenId, Arc<Session>>, E> for SqlSessionProvider
 {
     async fn get(&self, conn: E) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
-        let sessions: Vec<Session> = conn.live().fetch_all(&SessionStatus::Active).await?;
+        let sessions: Vec<Session> = conn.fetch_all(&SessionStatus::Active).await?;
         let sessions = sessions
             .into_iter()
             .map(|s| (s.base.access_token_id, Arc::new(s)))

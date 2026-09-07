@@ -15,6 +15,7 @@
 //! check read the same `sys_admin_permissions()` list, so they stay consistent.
 
 use std::collections::HashSet;
+use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -23,14 +24,14 @@ use td_objects::types::basic::{
     AccessTokenId, EntityId, Fixed, PermissionEntityType, PermissionId, PermissionType, RoleId,
     UserId,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 /// Ensure the built-in `sys_admin` role holds every extension-contributed
 /// permission in `sys_admin_extras` (`(entity_type, permission)` pairs). Rows
 /// already present are skipped; the extension rows are stored like the built-in
 /// system rows — on `__all__`, system-granted, `fixed = true`.
-pub async fn ensure_sys_admin_permissions(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn ensure_sys_admin_permissions<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     sys_admin_extras: &[(&str, &str)],
 ) -> Result<(), TdError> {
     if sys_admin_extras.is_empty() {
@@ -38,7 +39,7 @@ pub async fn ensure_sys_admin_permissions(
     }
 
     let sys_admin = RoleId::sys_admin();
-    let existing = conn.live().fetch_all::<PermissionDB>(sys_admin).await?;
+    let existing = conn.fetch_all::<PermissionDB>(sys_admin).await?;
     let present: HashSet<(String, String)> = existing
         .iter()
         .map(|p| (p.entity_type.to_string(), p.permission_type.to_string()))
@@ -62,7 +63,7 @@ pub async fn ensure_sys_admin_permissions(
             granted_on: context.time,
             fixed: Fixed::TRUE,
         };
-        conn.live().insert(&permission_db).await?;
+        conn.insert(&permission_db).await?;
     }
     Ok(())
 }
@@ -70,6 +71,7 @@ pub async fn ensure_sys_admin_permissions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::access::InProject;
     use td_database::pool::TdPool;
 
     #[td_test::test(db)]
@@ -80,7 +82,7 @@ mod tests {
         // production startup path) so the row persists between calls.
         async fn reconcile(db: &TdPool, extras: &[(&str, &str)]) -> Result<(), TdError> {
             let tx = db.begin().await.unwrap();
-            let mut conn = DomainConnection::new(tx);
+            let mut conn = DomainConnection::<Apiserver, InProject>::new(tx);
             ensure_sys_admin_permissions(&mut conn, extras).await?;
             conn.commit().await.unwrap();
             Ok(())
@@ -88,7 +90,7 @@ mod tests {
 
         async fn count_ai(db: &TdPool) -> Result<usize, TdError> {
             let mut conn = db.begin().await.unwrap();
-            let perms = conn.live().fetch_all::<PermissionDB>(()).await?;
+            let perms = conn.fetch_all::<PermissionDB>(()).await?;
             Ok(perms
                 .iter()
                 .filter(|p| {

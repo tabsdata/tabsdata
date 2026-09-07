@@ -13,6 +13,7 @@
 use crate::rbac::model::{Grants, IdentityClaim, RoleGrant, User};
 use std::collections::HashMap;
 use std::sync::Arc;
+use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -27,17 +28,17 @@ pub trait RbacSource: Send + Sync {
     /// The effective grants for the user: the union across their assigned
     /// roles; no grants is an empty [`Grants`], not an error. The slot may be
     /// latent — implementations should touch it only on a cache miss.
-    fn user_grants(
+    fn user_grants<S: DbScope>(
         &self,
-        slot: &mut DomainConnection<Apiserver>,
+        slot: &mut DomainConnection<Apiserver, S>,
         user: &UserId,
     ) -> impl Future<Output = Result<Arc<Grants>, TdError>> + Send;
 
     /// Invalidate any cached state. Must be called when role assignments or
     /// role permissions change.
-    fn refresh(
+    fn refresh<S: DbScope>(
         &self,
-        slot: &mut DomainConnection<Apiserver>,
+        slot: &mut DomainConnection<Apiserver, S>,
     ) -> impl Future<Output = Result<(), TdError>> + Send;
 }
 
@@ -85,15 +86,18 @@ impl FixedRbacSource {
 }
 
 impl RbacSource for FixedRbacSource {
-    async fn user_grants(
+    async fn user_grants<S: DbScope>(
         &self,
-        _slot: &mut DomainConnection<Apiserver>,
+        _slot: &mut DomainConnection<Apiserver, S>,
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
         Ok(self.users.get(user).unwrap_or(&self.empty).clone())
     }
 
-    async fn refresh(&self, _slot: &mut DomainConnection<Apiserver>) -> Result<(), TdError> {
+    async fn refresh<S: DbScope>(
+        &self,
+        _slot: &mut DomainConnection<Apiserver, S>,
+    ) -> Result<(), TdError> {
         Ok(())
     }
 }

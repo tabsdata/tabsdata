@@ -28,12 +28,13 @@ use crate::rbac::registry::AuthzRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
+use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{RoleId, UserId};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use tracing::{debug, instrument};
 
 /// Per-user effective grants, keyed by [`UserId`].
@@ -77,11 +78,11 @@ impl SqlRbacGrantsProvider {
 
     /// Load `role_permission` rows and group them into a per-role [`Grants`].
     #[instrument(name = "authz.rbac.role_grants", skip_all, level = "debug", err(Debug))]
-    async fn role_grants(
+    async fn role_grants<S: DbScope>(
         &self,
-        conn: &mut DomainConnection<Apiserver>,
+        conn: &mut DomainConnection<Apiserver, S>,
     ) -> Result<HashMap<RoleId, Grants>, TdError> {
-        let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
+        let permissions = conn.fetch_all::<PermissionDB>(()).await?;
         let total = permissions.len();
         let mut by_role: HashMap<RoleId, Grants> = HashMap::new();
         for perm in &permissions {
@@ -101,14 +102,16 @@ impl SqlRbacGrantsProvider {
 
 // Runs only on a cache miss (`CachedProvider` decides), so a warm cache never
 // materializes a latent slot.
-impl<'a> Provider<UserGrants, &'a mut DomainConnection<Apiserver>> for SqlRbacGrantsProvider {
+impl<'a, S: DbScope> Provider<UserGrants, &'a mut DomainConnection<Apiserver, S>>
+    for SqlRbacGrantsProvider
+{
     #[instrument(name = "authz.rbac.get", skip_all, level = "debug", err(Debug))]
     async fn get(
         &self,
-        slot: &'a mut DomainConnection<Apiserver>,
+        slot: &'a mut DomainConnection<Apiserver, S>,
     ) -> Result<Arc<UserGrants>, TdError> {
         let role_grants = self.role_grants(&mut *slot).await?;
-        let user_roles = slot.live().fetch_all::<UserRoleDB>(()).await?;
+        let user_roles = slot.fetch_all::<UserRoleDB>(()).await?;
 
         // effective grants of a user = union across all the roles they hold.
         let mut by_user: HashMap<UserId, Grants> = HashMap::new();
@@ -132,7 +135,7 @@ impl<'a> Provider<UserGrants, &'a mut DomainConnection<Apiserver>> for SqlRbacGr
         Ok(Arc::new(by_user))
     }
 
-    async fn purge(&self, _slot: &'a mut DomainConnection<Apiserver>) -> Result<(), TdError> {
+    async fn purge(&self, _slot: &'a mut DomainConnection<Apiserver, S>) -> Result<(), TdError> {
         Ok(())
     }
 }
@@ -176,9 +179,9 @@ impl SqlRbacSource {
 }
 
 impl super::source::RbacSource for SqlRbacSource {
-    async fn user_grants(
+    async fn user_grants<S: DbScope>(
         &self,
-        slot: &mut DomainConnection<Apiserver>,
+        slot: &mut DomainConnection<Apiserver, S>,
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
         let by_user = self.provider.get(slot).await?;
@@ -188,7 +191,10 @@ impl super::source::RbacSource for SqlRbacSource {
             .unwrap_or_else(|| self.empty.clone()))
     }
 
-    async fn refresh(&self, slot: &mut DomainConnection<Apiserver>) -> Result<(), TdError> {
+    async fn refresh<S: DbScope>(
+        &self,
+        slot: &mut DomainConnection<Apiserver, S>,
+    ) -> Result<(), TdError> {
         self.provider.purge(slot).await
     }
 }
@@ -198,6 +204,7 @@ mod tests {
     use super::*;
     use crate::rbac::model::{Project, ProjectPermission, Requires, SystemPermission};
     use crate::rbac::source::RbacSource;
+    use td_database::access::InProject;
     use td_database::pool::TdPool;
     use td_objects::types::basic::UserId;
 
@@ -206,7 +213,7 @@ mod tests {
         // The bootstrap seeds the `admin` user into the `sys_admin` and
         // `default` roles; its effective grants are the union of both.
         let source = SqlRbacSource::default();
-        let mut slot = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
+        let mut slot = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
 
         let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
         // sys_admin role -> all system permissions
