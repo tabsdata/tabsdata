@@ -24,7 +24,13 @@ use td_services::Services;
 
 const EXECUTION_TAG: &str = "Execution";
 
-#[apiserver_path(mount = global, method = post, path = "/executions/{execution}/cancel", tag = EXECUTION_TAG, doc = "Cancel all transactions in the given execution")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/executions/{execution}/cancel",
+    tag(EXECUTION_TAG),
+    doc = "Cancel all transactions in the given execution"
+)]
 pub async fn cancel_execution(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -35,7 +41,13 @@ pub async fn cancel_execution(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/executions/{execution}/details", tag = EXECUTION_TAG, doc = "Details of an execution")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/executions/{execution}/details",
+    tag(EXECUTION_TAG),
+    doc = "Details of an execution"
+)]
 pub async fn details(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -46,7 +58,13 @@ pub async fn details(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/executions", tag = EXECUTION_TAG, doc = "List executions")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/executions",
+    tag(EXECUTION_TAG),
+    doc = "List executions"
+)]
 pub async fn lists(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -57,7 +75,13 @@ pub async fn lists(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/function-versions/{function_version_id}/executions", tag = EXECUTION_TAG, doc = "List executions by function version")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/function-versions/{function_version_id}/executions",
+    tag(EXECUTION_TAG),
+    doc = "List executions by function version"
+)]
 pub async fn list_by_function_version(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -69,7 +93,13 @@ pub async fn list_by_function_version(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/table-data-versions/{table_data_version}/executions", tag = EXECUTION_TAG, doc = "List executions by table data version")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/table-data-versions/{table_data_version}/executions",
+    tag(EXECUTION_TAG),
+    doc = "List executions by table data version"
+)]
 pub async fn list_by_physical_table_data_version(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -83,7 +113,13 @@ pub async fn list_by_physical_table_data_version(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/executions/{execution}", tag = EXECUTION_TAG, doc = "Read an execution")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/executions/{execution}",
+    tag(EXECUTION_TAG),
+    doc = "Read an execution"
+)]
 pub async fn read_execution(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -95,7 +131,13 @@ pub async fn read_execution(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = post, path = "/executions/{execution}/recover", tag = EXECUTION_TAG, doc = "Recover all transactions in the given execution")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/executions/{execution}/recover",
+    tag(EXECUTION_TAG),
+    doc = "Recover all transactions in the given execution"
+)]
 pub async fn recover_execution(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

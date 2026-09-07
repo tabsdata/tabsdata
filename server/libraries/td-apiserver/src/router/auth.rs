@@ -16,7 +16,13 @@ use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::user::UserInfo;
 use td_services::Services;
 
-#[apiserver_path(mount = global, method = post, path = "/auth/logout", tag = AUTH_TAG, doc = "User Logout")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/auth/logout",
+    tag(AUTH_TAG),
+    doc = "User Logout"
+)]
 pub async fn logout(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -26,7 +32,13 @@ pub async fn logout(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = post, path = "/auth/refresh", tag = AUTH_TAG, doc = "Refresh Access Token")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/auth/refresh",
+    tag(AUTH_TAG),
+    doc = "Refresh Access Token"
+)]
 pub async fn refresh(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -37,7 +49,13 @@ pub async fn refresh(
     Ok(RawStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/auth/info", tag = AUTH_TAG, doc = "User Info")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/auth/info",
+    tag(AUTH_TAG),
+    doc = "User Info"
+)]
 pub async fn user_info(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -47,7 +65,13 @@ pub async fn user_info(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = unauthenticated, method = post, path = "/auth/login", tag = AUTH_TAG, doc = "User Login")]
+#[apiserver_path(
+    mount(unauthenticated),
+    method(post),
+    path = "/auth/login",
+    tag(AUTH_TAG),
+    doc = "User Login"
+)]
 pub async fn login(
     State(state): State<Services>,
     Json(request): Json<Login>,
@@ -56,7 +80,13 @@ pub async fn login(
     Ok(RawStatus::OK(response))
 }
 
-#[apiserver_path(mount = unauthenticated, method = post, path = "/auth/password_change", tag = AUTH_TAG, doc = "Password change")]
+#[apiserver_path(
+    mount(unauthenticated),
+    method(post),
+    path = "/auth/password_change",
+    tag(AUTH_TAG),
+    doc = "Password change"
+)]
 pub async fn password_change(
     State(state): State<Services>,
     Json(request): Json<PasswordChange>,
@@ -65,12 +95,14 @@ pub async fn password_change(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = unauthenticated,
-    method = get,
+#[apiserver_path(
+    mount(unauthenticated),
+    method(get),
     path = "/ssl-cert",
-    tag = AUTH_TAG,
+    tag(AUTH_TAG),
     content_type = "application/x-pem-file",
-    doc = "PEM certificate download")]
+    doc = "PEM certificate download"
+)]
 pub async fn cert_download(State(state): State<Services>) -> Result<DownloadResponse, ErrorStatus> {
     let response = state.cert_download(()).await?.data;
     Ok(DownloadResponse::pem(response).attachment("tabsdata.pem"))

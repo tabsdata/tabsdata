@@ -17,7 +17,13 @@ use td_services::Services;
 
 const USERS_TAG: &str = "Users";
 
-#[apiserver_path(mount = global, method = get, path = "/users", tag = USERS_TAG, doc = "Lists users")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/users",
+    tag(USERS_TAG),
+    doc = "Lists users"
+)]
 async fn list_users(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -28,7 +34,13 @@ async fn list_users(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/users/{user}", tag = USERS_TAG, doc = "Get a user")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/users/{user}",
+    tag(USERS_TAG),
+    doc = "Get a user"
+)]
 pub async fn get_user(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -39,7 +51,13 @@ pub async fn get_user(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = post, path = "/users", tag = USERS_TAG, doc = "Create a user")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/users",
+    tag(USERS_TAG),
+    doc = "Create a user"
+)]
 pub async fn create_user(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -50,7 +68,13 @@ pub async fn create_user(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = global, method = post, path = "/users/{user}", tag = USERS_TAG, doc = "Update a user")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/users/{user}",
+    tag(USERS_TAG),
+    doc = "Update a user"
+)]
 pub async fn update_user(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -62,7 +86,13 @@ pub async fn update_user(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = delete, path = "/users/{user}", tag = USERS_TAG, doc = "Delete a user")]
+#[apiserver_path(
+    mount(global),
+    method(delete),
+    path = "/users/{user}",
+    tag(USERS_TAG),
+    doc = "Delete a user"
+)]
 pub async fn delete_user(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

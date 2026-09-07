@@ -125,7 +125,13 @@ pub(crate) fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRe
     })
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/metrics", tag = METRICS_TAG, doc = "Consolidated operational metrics: nodes + edges over a window")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/metrics",
+    tag(METRICS_TAG),
+    doc = "Consolidated operational metrics: nodes + edges over a window"
+)]
 pub async fn get_metrics(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -139,7 +145,13 @@ pub async fn get_metrics(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/inflight", tag = METRICS_TAG, doc = "Point-in-time count of in-flight runs")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/inflight",
+    tag(METRICS_TAG),
+    doc = "Point-in-time count of in-flight runs"
+)]
 pub async fn get_inflight(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -153,7 +165,13 @@ pub async fn get_inflight(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/snapshot", tag = METRICS_TAG, doc = "Combined `/metrics` + `/inflight` on one DB connection")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/snapshot",
+    tag(METRICS_TAG),
+    doc = "Combined `/metrics` + `/inflight` on one DB connection"
+)]
 pub async fn get_snapshot(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -414,7 +432,13 @@ mod tests {
 /// router; the only differences are the absence of a `{project}` (so no
 /// `Project` extractor / `.in_project`) and the `*_global` service handle.
 
-#[apiserver_path(mount = global, method = get, path = "/metrics", tag = METRICS_TAG, doc = "Cross-project operational metrics: nodes + edges over a window")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/metrics",
+    tag(METRICS_TAG),
+    doc = "Cross-project operational metrics: nodes + edges over a window"
+)]
 pub async fn get_metrics_global(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -425,7 +449,13 @@ pub async fn get_metrics_global(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/inflight", tag = METRICS_TAG, doc = "Cross-project point-in-time count of in-flight runs")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/inflight",
+    tag(METRICS_TAG),
+    doc = "Cross-project point-in-time count of in-flight runs"
+)]
 pub async fn get_inflight_global(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -436,7 +466,13 @@ pub async fn get_inflight_global(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/snapshot", tag = METRICS_TAG, doc = "Cross-project combined `/metrics` + `/inflight` on one DB connection")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/snapshot",
+    tag(METRICS_TAG),
+    doc = "Cross-project combined `/metrics` + `/inflight` on one DB connection"
+)]
 pub async fn get_snapshot_global(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

@@ -18,7 +18,13 @@ use td_services::Services;
 
 const WORKERS_TAG: &str = "Workers";
 
-#[apiserver_path(mount = global, method = get, path = "/workers", tag = WORKERS_TAG, doc = "List worker messages")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/workers",
+    tag(WORKERS_TAG),
+    doc = "List worker messages"
+)]
 pub async fn list_workers(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -29,12 +35,14 @@ pub async fn list_workers(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = global,
-    method = get,
+#[apiserver_path(
+    mount(global),
+    method(get),
     path = "/workers/{worker}/logs",
-    tag = WORKERS_TAG,
+    tag(WORKERS_TAG),
     content_type = "application/octet-stream",
-    doc = "Read worker message logs")]
+    doc = "Read worker message logs"
+)]
 pub async fn logs(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -47,12 +55,14 @@ pub async fn logs(
     Ok(DownloadResponse::octet_stream(response))
 }
 
-#[apiserver_path(mount = global,
-    method = get,
+#[apiserver_path(
+    mount(global),
+    method(get),
     path = "/workers/{worker}/logs/tail",
-    tag = WORKERS_TAG,
+    tag(WORKERS_TAG),
     content_type = "application/octet-stream",
-    doc = "Tail worker message logs")]
+    doc = "Tail worker message logs"
+)]
 pub async fn logs_tail(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

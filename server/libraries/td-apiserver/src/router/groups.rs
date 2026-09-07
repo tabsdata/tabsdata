@@ -19,7 +19,13 @@ use td_services::Services;
 
 const GROUPS_TAG: &str = "Groups";
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/groups", tag = GROUPS_TAG, doc = "Create a group")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/groups",
+    tag(GROUPS_TAG),
+    doc = "Create a group"
+)]
 pub async fn create_group(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -31,7 +37,13 @@ pub async fn create_group(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = project, method = delete, path = "/projects/{project}/groups/{group}", tag = GROUPS_TAG, doc = "Delete a group")]
+#[apiserver_path(
+    mount(project),
+    method(delete),
+    path = "/projects/{project}/groups/{group}",
+    tag(GROUPS_TAG),
+    doc = "Delete a group"
+)]
 pub async fn delete_group(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -43,7 +55,13 @@ pub async fn delete_group(
     Ok(DeleteStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/groups", tag = GROUPS_TAG, doc = "List groups")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/groups",
+    tag(GROUPS_TAG),
+    doc = "List groups"
+)]
 pub async fn list_group(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -55,7 +73,13 @@ pub async fn list_group(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/groups/{group}", tag = GROUPS_TAG, doc = "Read a group")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/groups/{group}",
+    tag(GROUPS_TAG),
+    doc = "Read a group"
+)]
 pub async fn read_group(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -67,7 +91,13 @@ pub async fn read_group(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/groups/{group}", tag = GROUPS_TAG, doc = "Update a group")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/groups/{group}",
+    tag(GROUPS_TAG),
+    doc = "Update a group"
+)]
 pub async fn update_group(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

@@ -14,13 +14,25 @@ use td_services::Services;
 
 const SYSTEM_TAG: &str = "System";
 
-#[apiserver_path(mount = global, method = get, path = "/status", tag = SYSTEM_TAG, doc = "API Server Status")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/status",
+    tag(SYSTEM_TAG),
+    doc = "API Server Status"
+)]
 pub async fn status(State(state): State<Services>) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
     let response = state.status(()).await?;
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/runtime-info", tag = SYSTEM_TAG, doc = "Runtime information")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/runtime-info",
+    tag(SYSTEM_TAG),
+    doc = "Runtime information"
+)]
 pub async fn info(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

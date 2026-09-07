@@ -30,7 +30,13 @@ const FUNCTION_RUNS_TAG: &str = "Function Runs";
 // Single listing endpoint. Returns LFR identity rows merged with the
 // currently-bound PFR's per-attempt fields (`physical_function_run_id`,
 // `started_on`, `ended_on`, …). No separate logical-only endpoint.
-#[apiserver_path(mount = global, method = get, path = "/function-runs", tag = FUNCTION_RUNS_TAG, doc = "List function runs (logical identity + currently-bound physical)")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/function-runs",
+    tag(FUNCTION_RUNS_TAG),
+    doc = "List function runs (logical identity + currently-bound physical)"
+)]
 pub async fn list_function_runs(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -41,7 +47,13 @@ pub async fn list_function_runs(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/functions/{function}/executions/{execution}", tag = FUNCTION_RUNS_TAG, doc = "Read function run")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/functions/{function}/executions/{execution}",
+    tag(FUNCTION_RUNS_TAG),
+    doc = "Read function run"
+)]
 pub async fn read_run(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -57,12 +69,14 @@ pub async fn read_run(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = project,
-    method = get,
+#[apiserver_path(
+    mount(project),
+    method(get),
     path = "/projects/{project}/collections/{collection}/function-runs/{function_run_id}/inputs/{input_idx}/raw-data",
-    tag = FUNCTION_RUNS_TAG,
+    tag(FUNCTION_RUNS_TAG),
     content_type = "application/vnd.apache.parquet",
-    doc = "Download one stamped raw-data file a publisher run ingested")]
+    doc = "Download one stamped raw-data file a publisher run ingested"
+)]
 pub async fn raw_data(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

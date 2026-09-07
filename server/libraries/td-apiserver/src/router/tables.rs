@@ -22,7 +22,13 @@ use td_services::Services;
 
 const TABLES_TAG: &str = "Tables";
 
-#[apiserver_path(mount = project, method = delete, path = "/projects/{project}/collections/{collection}/tables/{table}", tag = TABLES_TAG, doc = "Delete a table")]
+#[apiserver_path(
+    mount(project),
+    method(delete),
+    path = "/projects/{project}/collections/{collection}/tables/{table}",
+    tag(TABLES_TAG),
+    doc = "Delete a table"
+)]
 pub async fn delete_table(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -35,12 +41,14 @@ pub async fn delete_table(
     Ok(DeleteStatus::OK(response))
 }
 
-#[apiserver_path(mount = project,
-    method = get,
+#[apiserver_path(
+    mount(project),
+    method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/download",
-    tag = TABLES_TAG,
+    tag(TABLES_TAG),
     content_type = "application/vnd.apache.parquet",
-    doc = "Download a table as a parquet file")]
+    doc = "Download a table as a parquet file"
+)]
 pub async fn download(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -57,7 +65,13 @@ pub async fn download(
     Ok(DownloadResponse::parquet(stream))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/tables", tag = TABLES_TAG, doc = "List tables")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/tables",
+    tag(TABLES_TAG),
+    doc = "List tables"
+)]
 pub async fn list_tables(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -69,7 +83,13 @@ pub async fn list_tables(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables", tag = TABLES_TAG, doc = "List tables for a collection")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/tables",
+    tag(TABLES_TAG),
+    doc = "List tables for a collection"
+)]
 pub async fn list_tables_by_collection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -87,7 +107,13 @@ pub async fn list_tables_by_collection(
 // storage location, the PTDV id itself). `?at=` is the listing's
 // historical point in time for the LTDV row filter. Committed-only
 // filtering is via the standard `?filter=status:…` mechanism.
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables/{table}/data-versions", tag = TABLES_TAG, doc = "List data versions for a table (logical identity + currently-bound physical)")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/tables/{table}/data-versions",
+    tag(TABLES_TAG),
+    doc = "List data versions for a table (logical identity + currently-bound physical)"
+)]
 pub async fn list_data_versions(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -104,12 +130,14 @@ pub async fn list_data_versions(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project,
-    method = get,
+#[apiserver_path(
+    mount(project),
+    method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/sample",
-    tag = TABLES_TAG,
+    tag(TABLES_TAG),
     content_type = "text/csv",
-    doc = "Get a sample of a table")]
+    doc = "Get a sample of a table"
+)]
 #[allow(clippy::too_many_arguments)]
 pub async fn sample(
     State(state): State<Services>,
@@ -142,7 +170,13 @@ pub async fn sample(
     Ok(DownloadResponse::csv(stream))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables/{table}/schema", tag = TABLES_TAG, doc = "Get the schema of a table")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/tables/{table}/schema",
+    tag(TABLES_TAG),
+    doc = "Get the schema of a table"
+)]
 #[allow(clippy::too_many_arguments)]
 pub async fn schema(
     State(state): State<Services>,
@@ -161,7 +195,13 @@ pub async fn schema(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables/{table}/flow", tag = TABLES_TAG, doc = "Table flow graph")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/tables/{table}/flow",
+    tag(TABLES_TAG),
+    doc = "Table flow graph"
+)]
 pub async fn graph(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

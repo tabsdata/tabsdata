@@ -22,7 +22,13 @@ use td_services::Services;
 
 const PROJECTS_TAG: &str = "Projects";
 
-#[apiserver_path(mount = global, method = get, path = "/projects", tag = PROJECTS_TAG, doc = "Lists projects")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/projects",
+    tag(PROJECTS_TAG),
+    doc = "Lists projects"
+)]
 pub async fn list_projects(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -33,7 +39,13 @@ pub async fn list_projects(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/projects/{project}", tag = PROJECTS_TAG, doc = "Get a project")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/projects/{project}",
+    tag(PROJECTS_TAG),
+    doc = "Get a project"
+)]
 pub async fn get_project(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -44,7 +56,13 @@ pub async fn get_project(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = post, path = "/projects", tag = PROJECTS_TAG, doc = "Create a project")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/projects",
+    tag(PROJECTS_TAG),
+    doc = "Create a project"
+)]
 pub async fn create_project(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -55,7 +73,13 @@ pub async fn create_project(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = global, method = post, path = "/projects/{project}", tag = PROJECTS_TAG, doc = "Update a project")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/projects/{project}",
+    tag(PROJECTS_TAG),
+    doc = "Update a project"
+)]
 pub async fn update_project(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -67,7 +91,13 @@ pub async fn update_project(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = delete, path = "/projects/{project}", tag = PROJECTS_TAG, doc = "Delete a project")]
+#[apiserver_path(
+    mount(global),
+    method(delete),
+    path = "/projects/{project}",
+    tag(PROJECTS_TAG),
+    doc = "Delete a project"
+)]
 pub async fn delete_project(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

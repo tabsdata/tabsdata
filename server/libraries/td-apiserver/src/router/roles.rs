@@ -17,7 +17,13 @@ use td_services::Services;
 
 const ROLES_TAG: &str = "Roles";
 
-#[apiserver_path(mount = rbac, method = post, path = "/roles", tag = ROLES_TAG, doc = "Create a role")]
+#[apiserver_path(
+    mount(rbac),
+    method(post),
+    path = "/roles",
+    tag(ROLES_TAG),
+    doc = "Create a role"
+)]
 pub async fn create_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -28,7 +34,13 @@ pub async fn create_role(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = rbac, method = delete, path = "/roles/{role}", tag = ROLES_TAG, doc = "Delete a role")]
+#[apiserver_path(
+    mount(rbac),
+    method(delete),
+    path = "/roles/{role}",
+    tag(ROLES_TAG),
+    doc = "Delete a role"
+)]
 pub async fn delete_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -39,7 +51,13 @@ pub async fn delete_role(
     Ok(DeleteStatus::OK(response))
 }
 
-#[apiserver_path(mount = rbac, method = get, path = "/roles", tag = ROLES_TAG, doc = "List roles")]
+#[apiserver_path(
+    mount(rbac),
+    method(get),
+    path = "/roles",
+    tag(ROLES_TAG),
+    doc = "List roles"
+)]
 pub async fn list_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -50,7 +68,13 @@ pub async fn list_role(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = rbac, method = get, path = "/roles/{role}", tag = ROLES_TAG, doc = "Read a role")]
+#[apiserver_path(
+    mount(rbac),
+    method(get),
+    path = "/roles/{role}",
+    tag(ROLES_TAG),
+    doc = "Read a role"
+)]
 pub async fn read_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -61,7 +85,13 @@ pub async fn read_role(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = rbac, method = post, path = "/roles/{role}", tag = ROLES_TAG, doc = "Update a role")]
+#[apiserver_path(
+    mount(rbac),
+    method(post),
+    path = "/roles/{role}",
+    tag(ROLES_TAG),
+    doc = "Update a role"
+)]
 pub async fn update_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

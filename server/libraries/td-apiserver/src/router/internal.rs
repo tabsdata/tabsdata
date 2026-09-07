@@ -23,7 +23,13 @@ use td_services::internal_api::InternalRoutes;
 
 const INTERNAL_TAG: &str = "Internal";
 
-#[apiserver_path(mount = internal, method = post, path = "/internal/function-runs/{function_run_id}/workers/{worker_id}", tag = INTERNAL_TAG, doc = "Callback endpoint for function executions")]
+#[apiserver_path(
+    mount(internal),
+    method(post),
+    path = "/internal/function-runs/{function_run_id}/workers/{worker_id}",
+    tag(INTERNAL_TAG),
+    doc = "Callback endpoint for function executions"
+)]
 pub async fn function_run_callback(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -36,7 +42,13 @@ pub async fn function_run_callback(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = internal, method = post, path = "/internal/workers/{worker_id}", tag = INTERNAL_TAG, doc = "Callback endpoint for workers")]
+#[apiserver_path(
+    mount(internal),
+    method(post),
+    path = "/internal/workers/{worker_id}",
+    tag(INTERNAL_TAG),
+    doc = "Callback endpoint for workers"
+)]
 pub async fn worker_callback(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -48,7 +60,13 @@ pub async fn worker_callback(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = internal, method = get, path = "/internal/workers/{worker_id}/message", tag = INTERNAL_TAG, doc = "Resolve and return a worker's message (kubernetes pull path)")]
+#[apiserver_path(
+    mount(internal),
+    method(get),
+    path = "/internal/workers/{worker_id}/message",
+    tag(INTERNAL_TAG),
+    doc = "Resolve and return a worker's message (kubernetes pull path)"
+)]
 pub async fn worker_message(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -59,7 +77,13 @@ pub async fn worker_message(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = internal, method = post, path = "/internal/function-versions/{function_version_id}/execute", tag = INTERNAL_TAG, doc = "Executes a function version (must be the current active version)")]
+#[apiserver_path(
+    mount(internal),
+    method(post),
+    path = "/internal/function-versions/{function_version_id}/execute",
+    tag(INTERNAL_TAG),
+    doc = "Executes a function version (must be the current active version)"
+)]
 pub async fn function_version_execute(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -71,7 +95,13 @@ pub async fn function_version_execute(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = internal, method = get, path = "/internal/function-versions/{function_version_id}/execution-status", tag = INTERNAL_TAG, doc = "Execution status for a given function version and execution plan")]
+#[apiserver_path(
+    mount(internal),
+    method(get),
+    path = "/internal/function-versions/{function_version_id}/execution-status",
+    tag(INTERNAL_TAG),
+    doc = "Execution status for a given function version and execution plan"
+)]
 pub async fn function_version_execution_status(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -83,12 +113,14 @@ pub async fn function_version_execution_status(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = internal,
-    method = get,
+#[apiserver_path(
+    mount(internal),
+    method(get),
     path = "/internal/function-versions/{function_version_id}/download-state",
-    tag = INTERNAL_TAG,
+    tag(INTERNAL_TAG),
     content_type = "application/vnd.apache.parquet",
-    doc = "Download function state")]
+    doc = "Download function state"
+)]
 pub async fn download_state(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

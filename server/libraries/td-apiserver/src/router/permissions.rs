@@ -16,7 +16,13 @@ use td_services::Services;
 
 const PERMISSIONS_TAG: &str = "Permissions";
 
-#[apiserver_path(mount = rbac, method = post, path = "/roles/{role}/permissions", tag = PERMISSIONS_TAG, doc = "Create a permission")]
+#[apiserver_path(
+    mount(rbac),
+    method(post),
+    path = "/roles/{role}/permissions",
+    tag(PERMISSIONS_TAG),
+    doc = "Create a permission"
+)]
 pub async fn create_permission(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -28,7 +34,13 @@ pub async fn create_permission(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = rbac, method = delete, path = "/roles/{role}/permissions/{permission}", tag = PERMISSIONS_TAG, doc = "Delete a permission")]
+#[apiserver_path(
+    mount(rbac),
+    method(delete),
+    path = "/roles/{role}/permissions/{permission}",
+    tag(PERMISSIONS_TAG),
+    doc = "Delete a permission"
+)]
 pub async fn delete_permission(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -40,7 +52,13 @@ pub async fn delete_permission(
     Ok(DeleteStatus::OK(response))
 }
 
-#[apiserver_path(mount = rbac, method = get, path = "/roles/{role}/permissions", tag = PERMISSIONS_TAG, doc = "List permissions")]
+#[apiserver_path(
+    mount(rbac),
+    method(get),
+    path = "/roles/{role}/permissions",
+    tag(PERMISSIONS_TAG),
+    doc = "List permissions"
+)]
 pub async fn list_permissions(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

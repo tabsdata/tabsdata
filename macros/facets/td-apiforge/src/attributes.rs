@@ -8,9 +8,10 @@ use darling::FromMeta;
 use darling::ast::NestedMeta;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{FnArg, GenericArgument, Ident, ItemFn, LitStr, PathArguments, ReturnType, Type};
+use syn::{FnArg, GenericArgument, ItemFn, LitStr, PathArguments, ReturnType, Type};
 
 use crate::mount::Mount;
+use crate::word::Word;
 
 #[derive(FromMeta)]
 pub struct UtoipaPathArguments {
@@ -18,9 +19,9 @@ pub struct UtoipaPathArguments {
     /// The endpoint's one-line description; becomes the fn's doc comment and,
     /// through it, the OpenAPI summary.
     doc: LitStr,
-    method: Ident,
+    method: Word,
     path: LitStr,
-    tag: Ident,
+    tag: Word,
     /// Document the OK response inline with this content type instead of
     /// using the OK return type's `IntoResponses` impl. The body schema is
     /// `Vec<u8>` (opaque bytes).

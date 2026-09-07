@@ -56,12 +56,14 @@ fn not_found() -> ErrorStatus {
     api_error!(ApiError::NotFound, "resource not found").into()
 }
 
-#[apiserver_path(mount = global,
-    method = get,
+#[apiserver_path(
+    mount(global),
+    method(get),
     path = "/resources/{*path}",
-    tag = SYSTEM_TAG,
+    tag(SYSTEM_TAG),
     content_type = "application/octet-stream",
-    doc = "Serve a file from the apiserver's configured resources directory")]
+    doc = "Serve a file from the apiserver's configured resources directory"
+)]
 pub async fn get_resource(
     State(state): State<Services>,
     Path(path): Path<ResourcePathParam>,

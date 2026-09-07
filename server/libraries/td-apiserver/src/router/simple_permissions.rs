@@ -25,7 +25,13 @@ use td_services::Services;
 
 const SIMPLE_PERMISSIONS_TAG: &str = "Permissions (Simple)";
 
-#[apiserver_path(mount = simple, method = post, path = "/permission-grants", tag = SIMPLE_PERMISSIONS_TAG, doc = "Grant a flat permission to a user (Simple Security Mode)")]
+#[apiserver_path(
+    mount(simple),
+    method(post),
+    path = "/permission-grants",
+    tag(SIMPLE_PERMISSIONS_TAG),
+    doc = "Grant a flat permission to a user (Simple Security Mode)"
+)]
 pub async fn grant(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -36,7 +42,13 @@ pub async fn grant(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = simple, method = delete, path = "/permission-grants", tag = SIMPLE_PERMISSIONS_TAG, doc = "Revoke a flat permission from a user (Simple Security Mode)")]
+#[apiserver_path(
+    mount(simple),
+    method(delete),
+    path = "/permission-grants",
+    tag(SIMPLE_PERMISSIONS_TAG),
+    doc = "Revoke a flat permission from a user (Simple Security Mode)"
+)]
 pub async fn revoke(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -48,11 +60,13 @@ pub async fn revoke(
 }
 
 // Two list shapes (different response types), so two routes.
-#[apiserver_path(mount = simple,
-    method = get,
+#[apiserver_path(
+    mount(simple),
+    method(get),
     path = "/permission-grants/by-user",
-    tag = SIMPLE_PERMISSIONS_TAG,
-    doc = "List a user's effective flat permissions (Simple Security Mode)")]
+    tag(SIMPLE_PERMISSIONS_TAG),
+    doc = "List a user's effective flat permissions (Simple Security Mode)"
+)]
 pub async fn list_by_user(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -63,11 +77,13 @@ pub async fn list_by_user(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = simple,
-    method = get,
+#[apiserver_path(
+    mount(simple),
+    method(get),
     path = "/permission-grants/by-project",
-    tag = SIMPLE_PERMISSIONS_TAG,
-    doc = "List everyone with authority on a project (Simple Security Mode)")]
+    tag(SIMPLE_PERMISSIONS_TAG),
+    doc = "List everyone with authority on a project (Simple Security Mode)"
+)]
 pub async fn list_by_project(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

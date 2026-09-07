@@ -17,7 +17,13 @@ use td_services::Services;
 
 const LOGICAL_VERSIONS_TAG: &str = "Logical Versions";
 
-#[apiserver_path(mount = global, method = post, path = "/logical-function-runs/{logical_function_run}/replay", tag = LOGICAL_VERSIONS_TAG, doc = "Re-execute a finished LFR — mint a new concrete PhysicalFunctionRun against the latest patch")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/logical-function-runs/{logical_function_run}/replay",
+    tag(LOGICAL_VERSIONS_TAG),
+    doc = "Re-execute a finished LFR — mint a new concrete PhysicalFunctionRun against the latest patch"
+)]
 pub async fn replay(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

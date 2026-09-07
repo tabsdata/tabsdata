@@ -29,7 +29,13 @@ use td_services::Services;
 
 const FUNCTIONS_TAG: &str = "Functions";
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/functions/{function}/execute", tag = FUNCTIONS_TAG, doc = "Executes a function")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}/functions/{function}/execute",
+    tag(FUNCTIONS_TAG),
+    doc = "Executes a function"
+)]
 pub async fn execute(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -45,7 +51,13 @@ pub async fn execute(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = project, method = delete, path = "/projects/{project}/collections/{collection}/functions/{function}", tag = FUNCTIONS_TAG, doc = "Delete a function")]
+#[apiserver_path(
+    mount(project),
+    method(delete),
+    path = "/projects/{project}/collections/{collection}/functions/{function}",
+    tag(FUNCTIONS_TAG),
+    doc = "Delete a function"
+)]
 pub async fn delete_function(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -60,7 +72,13 @@ pub async fn delete_function(
     Ok(DeleteStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/functions/{function}/history", tag = FUNCTIONS_TAG, doc = "List the version history of a function")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/functions/{function}/history",
+    tag(FUNCTIONS_TAG),
+    doc = "List the version history of a function"
+)]
 pub async fn history(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -77,7 +95,13 @@ pub async fn history(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/functions", tag = FUNCTIONS_TAG, doc = "List functions")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/functions",
+    tag(FUNCTIONS_TAG),
+    doc = "List functions"
+)]
 pub async fn list_functions(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -89,7 +113,13 @@ pub async fn list_functions(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/functions", tag = FUNCTIONS_TAG, doc = "List functions for a collection")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/functions",
+    tag(FUNCTIONS_TAG),
+    doc = "List functions for a collection"
+)]
 pub async fn list_functions_by_collection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -102,7 +132,13 @@ pub async fn list_functions_by_collection(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/functions/{function}", tag = FUNCTIONS_TAG, doc = "Show a function")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/functions/{function}",
+    tag(FUNCTIONS_TAG),
+    doc = "Show a function"
+)]
 pub async fn read_function(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -115,7 +151,13 @@ pub async fn read_function(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/functions", tag = FUNCTIONS_TAG, doc = "Register a function")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}/functions",
+    tag(FUNCTIONS_TAG),
+    doc = "Register a function"
+)]
 pub async fn register(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -128,7 +170,13 @@ pub async fn register(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/functions/{function}", tag = FUNCTIONS_TAG, doc = "Update a function")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}/functions/{function}",
+    tag(FUNCTIONS_TAG),
+    doc = "Update a function"
+)]
 pub async fn update_function(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -144,7 +192,13 @@ pub async fn update_function(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/functions/{function}/enable", tag = FUNCTIONS_TAG, doc = "Enables/disables a function")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}/functions/{function}/enable",
+    tag(FUNCTIONS_TAG),
+    doc = "Enables/disables a function"
+)]
 pub async fn enable(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -160,7 +214,13 @@ pub async fn enable(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/functions/{function}/patch", tag = FUNCTIONS_TAG, doc = "Create a code-only patch of a function version")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}/functions/{function}/patch",
+    tag(FUNCTIONS_TAG),
+    doc = "Create a code-only patch of a function version"
+)]
 pub async fn patch(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -176,7 +236,13 @@ pub async fn patch(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/functions/{function}/patches", tag = FUNCTIONS_TAG, doc = "List patch function versions for a function (latest first)")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/functions/{function}/patches",
+    tag(FUNCTIONS_TAG),
+    doc = "List patch function versions for a function (latest first)"
+)]
 pub async fn list_patches(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -198,7 +264,13 @@ pub async fn list_patches(
 #[derive(utoipa::ToSchema)]
 pub struct FileUpload(Vec<u8>);
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/function-bundle-upload", tag = FUNCTIONS_TAG, doc = "Upload a function bundle")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}/function-bundle-upload",
+    tag(FUNCTIONS_TAG),
+    doc = "Upload a function bundle"
+)]
 pub async fn upload(
     State(state): State<Services>,
     Extension(request_context): Extension<RequestContext>,
@@ -217,14 +289,15 @@ pub async fn upload(
 // Keyed by function version id, not by collection/function name: a bundle is
 // the immutable artifact of a specific version. A version whose function has
 // been deleted is not exposed.
-#[apiserver_path(mount = global,
-    method = get,
+#[apiserver_path(
+    mount(global),
+    method(get),
     path = "/function-versions/{function_version_id}/bundle",
-    tag = FUNCTIONS_TAG,
+    tag(FUNCTIONS_TAG),
     content_type = "application/octet-stream",
     doc = "Download the bundle for a function version. Only Active or Frozen \
            versions are exposed; a version whose function has been deleted is \
-           not found. The bundle's content hash is exposed as a strong `ETag`.",
+           not found. The bundle's content hash is exposed as a strong `ETag`."
 )]
 pub async fn download_bundle(
     State(state): State<Services>,

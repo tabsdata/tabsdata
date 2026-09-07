@@ -21,7 +21,13 @@ use td_services::Services;
 
 const TRANSACTIONS_TAG: &str = "Transactions";
 
-#[apiserver_path(mount = global, method = post, path = "/transactions/{transaction}/cancel", tag = TRANSACTIONS_TAG, doc = "Cancel all function runs in the given transaction")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/transactions/{transaction}/cancel",
+    tag(TRANSACTIONS_TAG),
+    doc = "Cancel all function runs in the given transaction"
+)]
 pub async fn cancel_transaction(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -32,7 +38,13 @@ pub async fn cancel_transaction(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = get, path = "/transactions", tag = TRANSACTIONS_TAG, doc = "List transactions")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/transactions",
+    tag(TRANSACTIONS_TAG),
+    doc = "List transactions"
+)]
 pub async fn list_transactions(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -43,7 +55,13 @@ pub async fn list_transactions(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = global, method = post, path = "/transactions/{transaction}/recover", tag = TRANSACTIONS_TAG, doc = "Recover all function runs in the given transaction")]
+#[apiserver_path(
+    mount(global),
+    method(post),
+    path = "/transactions/{transaction}/recover",
+    tag(TRANSACTIONS_TAG),
+    doc = "Recover all function runs in the given transaction"
+)]
 pub async fn recover_transaction(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -54,7 +72,13 @@ pub async fn recover_transaction(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/synchrotron", tag = TRANSACTIONS_TAG, doc = "Synchrotron endpoint to list transactions in the system")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/synchrotron",
+    tag(TRANSACTIONS_TAG),
+    doc = "Synchrotron endpoint to list transactions in the system"
+)]
 pub async fn synchrotron(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

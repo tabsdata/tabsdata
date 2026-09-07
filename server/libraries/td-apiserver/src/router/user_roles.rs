@@ -19,7 +19,13 @@ use td_services::Services;
 
 const USER_ROLES_TAG: &str = "User Roles";
 
-#[apiserver_path(mount = rbac, method = post, path = "/roles/{role}/users", tag = USER_ROLES_TAG, doc = "Add a role for a user")]
+#[apiserver_path(
+    mount(rbac),
+    method(post),
+    path = "/roles/{role}/users",
+    tag(USER_ROLES_TAG),
+    doc = "Add a role for a user"
+)]
 pub async fn create_user_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -31,7 +37,13 @@ pub async fn create_user_role(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = rbac, method = delete, path = "/roles/{role}/users/{user}", tag = USER_ROLES_TAG, doc = "Delete a user from a role")]
+#[apiserver_path(
+    mount(rbac),
+    method(delete),
+    path = "/roles/{role}/users/{user}",
+    tag(USER_ROLES_TAG),
+    doc = "Delete a user from a role"
+)]
 pub async fn delete_user_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -43,7 +55,13 @@ pub async fn delete_user_role(
     Ok(DeleteStatus::OK(response))
 }
 
-#[apiserver_path(mount = rbac, method = get, path = "/roles/{role}/users", tag = USER_ROLES_TAG, doc = "List users for a role")]
+#[apiserver_path(
+    mount(rbac),
+    method(get),
+    path = "/roles/{role}/users",
+    tag(USER_ROLES_TAG),
+    doc = "List users for a role"
+)]
 pub async fn list_user_roles(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -55,7 +73,13 @@ pub async fn list_user_roles(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = rbac, method = get, path = "/roles/{role}/users/{user}", tag = USER_ROLES_TAG, doc = "Read a user role")]
+#[apiserver_path(
+    mount(rbac),
+    method(get),
+    path = "/roles/{role}/users/{user}",
+    tag(USER_ROLES_TAG),
+    doc = "Read a user role"
+)]
 pub async fn read_user_role(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,

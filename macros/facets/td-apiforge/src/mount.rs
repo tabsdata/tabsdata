@@ -2,13 +2,16 @@
 //  Copyright 2026 Tabsdata Inc.
 //
 
-//! The `mount = <class>` argument of `#[apiserver_path(...)]`: the router the
+//! The `mount(<class>)` argument of `#[apiserver_path(...)]`: the router the
 //! route registers itself into.
 
 use darling::FromMeta;
+use darling::ast::NestedMeta;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use syn::Expr;
+
+use crate::word::Word;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Mount {
@@ -50,17 +53,13 @@ impl FromMeta for Mount {
         }
     }
 
+    fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
+        let Word(ident) = Word::from_list(items)?;
+        Self::from_string(&ident.to_string()).map_err(|e| e.with_span(&ident))
+    }
+
     fn from_expr(expr: &Expr) -> darling::Result<Self> {
-        match expr {
-            Expr::Path(path) => path
-                .path
-                .get_ident()
-                .ok_or_else(|| darling::Error::unexpected_expr_type(expr))
-                .and_then(|ident| Self::from_string(&ident.to_string())),
-            Expr::Lit(lit) => Self::from_value(&lit.lit),
-            other => Err(darling::Error::unexpected_expr_type(other)),
-        }
-        .map_err(|e| e.with_span(expr))
+        Err(Word::spelling_error(expr))
     }
 }
 

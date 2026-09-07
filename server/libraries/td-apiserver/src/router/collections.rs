@@ -25,7 +25,13 @@ const COLLECTIONS_TAG: &str = "Collections";
 
 // Spans every project the caller can view; narrow with the `project`
 // list filter.
-#[apiserver_path(mount = global, method = get, path = "/collections", tag = COLLECTIONS_TAG, doc = "Lists collections")]
+#[apiserver_path(
+    mount(global),
+    method(get),
+    path = "/collections",
+    tag(COLLECTIONS_TAG),
+    doc = "Lists collections"
+)]
 pub async fn list_collections(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -36,7 +42,13 @@ pub async fn list_collections(
     Ok(ListStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}", tag = COLLECTIONS_TAG, doc = "Get a collection")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}",
+    tag(COLLECTIONS_TAG),
+    doc = "Get a collection"
+)]
 pub async fn get_collection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -48,7 +60,13 @@ pub async fn get_collection(
     Ok(GetStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections", tag = COLLECTIONS_TAG, doc = "Create a collection")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections",
+    tag(COLLECTIONS_TAG),
+    doc = "Create a collection"
+)]
 pub async fn create_collection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -60,7 +78,13 @@ pub async fn create_collection(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}", tag = COLLECTIONS_TAG, doc = "Update a collection")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}",
+    tag(COLLECTIONS_TAG),
+    doc = "Update a collection"
+)]
 pub async fn update_collection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -73,7 +97,13 @@ pub async fn update_collection(
     Ok(UpdateStatus::OK(response))
 }
 
-#[apiserver_path(mount = project, method = delete, path = "/projects/{project}/collections/{collection}", tag = COLLECTIONS_TAG, doc = "Delete a collection")]
+#[apiserver_path(
+    mount(project),
+    method(delete),
+    path = "/projects/{project}/collections/{collection}",
+    tag(COLLECTIONS_TAG),
+    doc = "Delete a collection"
+)]
 pub async fn delete_collection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -92,7 +122,13 @@ pub async fn delete_collection(
 // dehydrated connection + secrets + vars to the opaque store, keyed by
 // connection id. POST updates an existing connection; GET reads back names
 // only. Both require manage_project ("CRUD sources and destinations").
-#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/connection", tag = COLLECTIONS_TAG, doc = "Create or update the connection info of a source/destination collection")]
+#[apiserver_path(
+    mount(project),
+    method(post),
+    path = "/projects/{project}/collections/{collection}/connection",
+    tag(COLLECTIONS_TAG),
+    doc = "Create or update the connection info of a source/destination collection"
+)]
 pub async fn upsert_collection_connection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
@@ -105,7 +141,13 @@ pub async fn upsert_collection_connection(
     Ok(CreateStatus::CREATED(response))
 }
 
-#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/connection", tag = COLLECTIONS_TAG, doc = "Read the connection info of a source/destination collection (names only, no values)")]
+#[apiserver_path(
+    mount(project),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/connection",
+    tag(COLLECTIONS_TAG),
+    doc = "Read the connection info of a source/destination collection (names only, no values)"
+)]
 pub async fn get_collection_connection(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
