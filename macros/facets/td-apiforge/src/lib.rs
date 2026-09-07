@@ -8,6 +8,7 @@ use proc_macro::TokenStream;
 use crate::attributes::utoipa_path;
 
 mod attributes;
+mod mount;
 
 #[proc_macro_attribute]
 pub fn apiserver_path(args: TokenStream, item: TokenStream) -> TokenStream {

@@ -5,28 +5,22 @@
 use proc_macro::TokenStream;
 
 use darling::FromMeta;
+use darling::ast::NestedMeta;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{
-    FnArg, GenericArgument, Ident, ItemFn, LitStr, PathArguments, ReturnType, Type,
-    parse_macro_input,
-};
+use syn::{FnArg, GenericArgument, Ident, ItemFn, LitStr, PathArguments, ReturnType, Type};
 
-use td_shared::parse_meta;
+use crate::mount::Mount;
 
 #[derive(FromMeta)]
 pub struct UtoipaPathArguments {
-    #[darling(default)]
-    mount: Option<Ident>,
+    mount: Mount,
     /// The endpoint's one-line description; becomes the fn's doc comment and,
     /// through it, the OpenAPI summary.
-    #[darling(default)]
-    doc: Option<LitStr>,
-    #[darling(default)]
-    method: Option<Ident>,
-    #[darling(default)]
-    path: Option<LitStr>,
-    #[darling(default)]
-    tag: Option<Ident>,
+    doc: LitStr,
+    method: Ident,
+    path: LitStr,
+    tag: Ident,
     /// Document the OK response inline with this content type instead of
     /// using the OK return type's `IntoResponses` impl. The body schema is
     /// `Vec<u8>` (opaque bytes).
@@ -34,66 +28,28 @@ pub struct UtoipaPathArguments {
     content_type: Option<String>,
 }
 
-fn mount_variant(mount: &Option<Ident>, input: &ItemFn) -> Result<Ident, syn::Error> {
-    let mount = mount.as_ref().ok_or_else(|| {
-        syn::Error::new_spanned(
-            &input.sig.ident,
-            "missing mount class: `#[apiserver_path(mount = <unauthenticated|global|rbac|simple|project|internal|root>, ...)]`",
-        )
-    })?;
-    let variant = match mount.to_string().as_str() {
-        "unauthenticated" => "Unauthenticated",
-        "global" => "Global",
-        "rbac" => "Rbac",
-        "simple" => "Simple",
-        "project" => "Project",
-        "internal" => "Internal",
-        "root" => "Root",
-        other => {
-            return Err(syn::Error::new(
-                mount.span(),
-                format!(
-                    "unknown mount `{other}`; expected one of unauthenticated, global, rbac, simple, project, internal, root"
-                ),
-            ));
-        }
-    };
-    Ok(Ident::new(variant, mount.span()))
-}
-
 /// Utoipa path attribute macro generator. It takes the Axum fn as an argument, as well as
 /// the mount, method, path, and tag attributes. It generates the appropriate utoipa::path
 /// attribute plus the route's inventory registration.
 pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
-    let parsed_args = parse_meta!(UtoipaPathArguments, args).unwrap();
+    match try_utoipa_path(args, item) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.write_errors().into(),
+    }
+}
 
-    let input = parse_macro_input!(item as ItemFn);
+fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<TokenStream2> {
+    let nested = NestedMeta::parse_meta_list(args.into())?;
+    let UtoipaPathArguments {
+        mount,
+        doc,
+        method,
+        path,
+        tag,
+        content_type,
+    } = UtoipaPathArguments::from_list(&nested)?;
 
-    let mount = match mount_variant(&parsed_args.mount, &input) {
-        Ok(m) => m,
-        Err(e) => return e.to_compile_error().into(),
-    };
-
-    // Extract method, path, and tag from the attribute arguments
-    let method = parsed_args.method;
-    let Some(doc) = parsed_args.doc else {
-        return syn::Error::new_spanned(
-            &input.sig.ident,
-            "missing endpoint doc: `#[apiserver_path(doc = \"...\", ...)]`",
-        )
-        .to_compile_error()
-        .into();
-    };
-    let Some(path) = parsed_args.path else {
-        return syn::Error::new_spanned(
-            &input.sig.ident,
-            "missing route path: `#[apiserver_path(path = \"/...\", ...)]`",
-        )
-        .to_compile_error()
-        .into();
-    };
-    let path = Some(path);
-    let tag = parsed_args.tag;
+    let input: ItemFn = syn::parse(item)?;
 
     // Extract the type of the `Query` parameter from the function signature
     let query_params = extract_type_in_generic_argument(&input, "Query");
@@ -112,13 +68,14 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     let has_request = has_type(&input, "Request");
 
     if more_than_one(request_body.is_some(), has_multipart, has_request) {
-        panic!(
-            "Cannot have more than one of: [Json - Multipart - Request] extractor at the same time"
-        );
+        return Err(darling::Error::custom(
+            "cannot have more than one of the [Json - Multipart - Request] extractors at the same time",
+        )
+        .with_span(&input.sig.ident));
     }
 
     // Extract the response types from the Result type in the function signature
-    let (ok_response, err_response) = extract_result_types(&input);
+    let (ok_response, err_response) = extract_result_types(&input)?;
 
     // Generate the `#[utoipa::path(...)]` attribute
     let mut utoipa_attr = quote! {
@@ -134,12 +91,10 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     // The raw `Extension<ProjectId>` form is rejected: it would silently skip
     // that documentation.
     if let Some(offender) = project_id_extension_arg(&input) {
-        return syn::Error::new_spanned(
-            offender,
+        return Err(darling::Error::custom(
             "Extension<ProjectId> is not allowed in apiserver handlers; take the `Project` extractor so the project path parameter is documented",
         )
-        .to_compile_error()
-        .into();
+        .with_span(offender));
     }
     let project_scoped = has_project_extractor(&input);
 
@@ -193,7 +148,7 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
         };
     }
 
-    if let Some(ct) = parsed_args.content_type.as_deref() {
+    if let Some(ct) = content_type.as_deref() {
         utoipa_attr = quote! {
             #utoipa_attr
             responses(
@@ -229,12 +184,10 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
             let state = states.get::<#ty>().clone();
         },
         _ => {
-            return syn::Error::new_spanned(
-                &input.sig.ident,
+            return Err(darling::Error::custom(
                 "route registration requires the handler to extract a single State<T> type",
             )
-            .to_compile_error()
-            .into();
+            .with_span(&input.sig.ident));
         }
     };
     let fn_ident = &input.sig.ident;
@@ -283,7 +236,7 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    output.into()
+    Ok(output)
 }
 
 fn more_than_one(a: bool, b: bool, c: bool) -> bool {
@@ -378,43 +331,27 @@ fn extract_first_generic_argument(path: &syn::Path) -> Option<Type> {
 }
 
 /// Extracts the Ok and Err response types from the Result type in the function signature.
-pub fn extract_result_types(input: &ItemFn) -> (Type, Type) {
-    let return_type = match &input.sig.output {
-        ReturnType::Type(_, ty) => ty,
-        _ => panic!("Expected path type in function return type"),
+pub fn extract_result_types(input: &ItemFn) -> darling::Result<(Type, Type)> {
+    let err = || {
+        darling::Error::custom("apiserver handlers must return `Result<Ok, Err>`")
+            .with_span(&input.sig)
     };
 
-    let type_path = match &**return_type {
-        Type::Path(type_path) => type_path,
-        _ => panic!("Expected path type in function return type"),
+    let ReturnType::Type(_, return_type) = &input.sig.output else {
+        return Err(err());
+    };
+    let Type::Path(type_path) = &**return_type else {
+        return Err(err());
+    };
+    let segment = type_path.path.segments.last().ok_or_else(err)?;
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return Err(err());
+    };
+    let (Some(GenericArgument::Type(ok_response)), Some(GenericArgument::Type(err_response))) =
+        (args.args.first(), args.args.get(1))
+    else {
+        return Err(err());
     };
 
-    let segment = type_path
-        .path
-        .segments
-        .last()
-        .expect("Expected path segment in Result type");
-
-    let args = match &segment.arguments {
-        PathArguments::AngleBracketed(args) => args,
-        _ => panic!("Expected angle bracketed arguments in Result type"),
-    };
-
-    if args.args.len() != 2 {
-        panic!("Expected two generic arguments in Result type");
-    }
-
-    let ok_response = if let GenericArgument::Type(ty) = &args.args[0] {
-        ty.clone()
-    } else {
-        panic!("Expected type for Ok generic argument");
-    };
-
-    let err_response = if let GenericArgument::Type(ty) = &args.args[1] {
-        ty.clone()
-    } else {
-        panic!("Expected path type in Err generic argument");
-    };
-
-    (ok_response, err_response)
+    Ok((ok_response.clone(), err_response.clone()))
 }

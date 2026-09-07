@@ -31,7 +31,6 @@ version = "2.1.0"
 
 [workspace]
 members = [
-    "helpers/td-shared",
     "facets/td-apiforge",
     "facets/td-attach",
     "facets/tm-error",
@@ -90,16 +89,10 @@ dummy = []
 [workspace.dependencies.td-build]
 path = "../devutils/automation/tasks/cargo/td-build"
 
-[workspace.dependencies.td-shared]
-path = "helpers/td-shared"
-
 # External dependencies
 
 [workspace.dependencies.darling]
 version = "0.23.0"
-
-[workspace.dependencies.duct]
-version = "1.1.1"
 
 [workspace.dependencies.heck]
 version = "0.5.0"

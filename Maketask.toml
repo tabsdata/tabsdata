@@ -596,7 +596,6 @@ category = "04 - Test"
 private = true
 run_task = [
     { name = [
-        "__os__test_rs_macros",
         "__os__test_rs_modules",
         "__os__test_rs_expansions"
     ] }
@@ -611,8 +610,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 python ${WARP_TEST_RS_SCRIPT} __os__test_rs_macros __os__test_rs_modules_logging __os__test_rs_expansions __os__test_rs_modules_standard then __os__test_rs_query_scaling"
-    exit_code = exec --get-exit-code python ${WARP_TEST_RS_SCRIPT} __os__test_rs_macros __os__test_rs_modules_logging __os__test_rs_expansions __os__test_rs_modules_standard then __os__test_rs_query_scaling
+    debug "🚀 python ${WARP_TEST_RS_SCRIPT} __os__test_rs_modules_logging __os__test_rs_expansions __os__test_rs_modules_standard then __os__test_rs_query_scaling"
+    exit_code = exec --get-exit-code python ${WARP_TEST_RS_SCRIPT} __os__test_rs_modules_logging __os__test_rs_expansions __os__test_rs_modules_standard then __os__test_rs_query_scaling
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}
@@ -632,8 +631,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 python ${TMUX_TEST_RS_SCRIPT} __os__test_rs_macros __os__test_rs_modules_standard __os__test_rs_modules_logging __os__test_rs_expansions"
-    exit_code = exec --get-exit-code python ${TMUX_TEST_RS_SCRIPT} __os__test_rs_macros __os__test_rs_modules_standard __os__test_rs_modules_logging __os__test_rs_expansions
+    debug "🚀 python ${TMUX_TEST_RS_SCRIPT} __os__test_rs_modules_standard __os__test_rs_modules_logging __os__test_rs_expansions"
+    exit_code = exec --get-exit-code python ${TMUX_TEST_RS_SCRIPT} __os__test_rs_modules_standard __os__test_rs_modules_logging __os__test_rs_expansions
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}
@@ -652,7 +651,6 @@ run_task = [
     { name = ["test_parallel_warp_rs"], condition = { env_set = ["TD_WARP"] } },
     { name = ["test_parallel_tmux_rs"], condition = { env_set = ["TD_TMUX"] } },
     { name = [
-        "__os__test_rs_macros",
         "__os__test_rs_modules_standard",
         "__os__test_rs_modules_logging",
         "__os__test_rs_expansions"

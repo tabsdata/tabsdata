@@ -70,7 +70,6 @@ members = [
 ]
 exclude = [
     "macros",
-    "macros/helpers/td-shared",
     "macros/facets/td-apiforge",
     "macros/facets/td-attach",
     "macros/facets/tm-error",

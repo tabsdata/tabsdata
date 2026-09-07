@@ -334,11 +334,6 @@ env_scripts = [
     debug "✅ Materialized PROJECT_RS_TABSDATA_CARGO_TOML: ${PROJECT_RS_TABSDATA_CARGO_TOML}"
     debug "✅ Materialized PROJECT_RS_TD_MACROS_CARGO_TOML: ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
 
-    if not is_empty ${macros-features}
-        macros-test-features = concat "dummy" "," ${macros-features}
-    else
-        macros-test-features = set "td-test"
-    end
     skip_test_logging = set false
     skip_test_scaling = set false
     if ${on_ga_true}
@@ -379,17 +374,14 @@ env_scripts = [
         expansions-test-features = set "td-test"
     end
 
-    set_env macros-test-features ${macros-test-features}
     set_env modules-test-features ${modules-test-features}
     set_env modules-test-features-test_logging ${modules-test-features-test_logging}
     set_env expansions-test-features ${expansions-test-features}
 
-    macros-test-features = get_env macros-test-features
     modules-test-features = get_env modules-test-features
     modules-test-features-test_logging = get_env modules-test-features-test_logging
     expansions-test-features = get_env expansions-test-features
 
-    debug "✅ Using 'macros-test-features': ${macros-test-features}"
     debug "✅ Using 'modules-test-features': ${modules-test-features}"
     debug "✅ Using 'modules-test-features-test_logging': ${modules-test-features-test_logging}"
     debug "✅ Using 'expansions-test-features': ${expansions-test-features}"

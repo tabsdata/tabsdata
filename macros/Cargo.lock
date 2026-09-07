@@ -3069,9 +3069,9 @@ version = "2.1.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
+ "proc-macro2",
  "quote",
  "syn 2.0.119",
- "td-shared",
  "utoipa",
 ]
 
@@ -3113,18 +3113,6 @@ version = "2.1.0"
 dependencies = [
  "openssl",
  "td-build",
-]
-
-[[package]]
-name = "td-shared"
-version = "2.1.0"
-dependencies = [
- "darling 0.23.0",
- "duct",
- "openssl",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -3227,7 +3215,6 @@ dependencies = [
  "quote",
  "regex",
  "syn 2.0.119",
- "td-shared",
 ]
 
 [[package]]

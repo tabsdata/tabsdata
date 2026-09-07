@@ -9527,9 +9527,9 @@ version = "2.1.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
+ "proc-macro2",
  "quote",
  "syn 2.0.119",
- "td-shared",
  "utoipa",
 ]
 
