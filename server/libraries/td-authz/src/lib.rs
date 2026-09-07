@@ -10,36 +10,20 @@
 //! the requester's effective [`rbac::Grants`] (the union across all their
 //! assigned roles) against the operation's requirement.
 //!
-//! Services wire two layers — a [`rbac::Scope`] layer (the entity the
-//! operation targets) and a [`rbac::Rbac`] enforcement layer (the
-//! requirement(s)) — reading a `Ref<SqlRbacSource>` placed in the service
-//! context. See [`rbac`] for the full contract.
+//! Services build a [`rbac::Scope`] (the entity the operation targets) and
+//! call the [`rbac::Enforce`] check (the requirement(s)) against their
+//! [`AuthzContext`]. See [`rbac`] for the full contract.
 
 use crate::rbac::SqlRbacSource;
-use crate::rbac::source::RbacSource;
-use td_database::domain::{Apiserver, DomainConnection};
-use td_error::TdError;
-use td_tower::extractors::{MutRef, Ref};
-use tracing::instrument;
 
 pub mod rbac;
 pub mod security;
 pub mod session_provider;
 
-/// The authorization context placed in the service context.
+/// The authorization context services check against.
 ///
-/// This is the production [`rbac::RbacSource`] (SQL-backed, cached). Services
-/// declare `context = AuthzContext` on their service factory so the
-/// `Ref<AuthzContext>` the [`rbac::Rbac`] enforcement layer reads is
-/// available. Construct it with [`Default`].
+/// This is the production [`rbac::RbacSource`] (SQL-backed, cached), shared
+/// as a `Ctx<AuthzContext>` service dependency. Construct it with
+/// [`Default`]. Refresh it (`AuthzContext::refresh`) after committing any
+/// change to role assignments or role permissions.
 pub type AuthzContext = SqlRbacSource;
-
-/// Layer to refresh the authorization context. It must be called every time
-/// role assignments or role permissions change.
-#[instrument(name = "authz.refresh", skip_all, level = "debug", err(Debug))]
-pub async fn refresh_authz_context(
-    context: Ref<AuthzContext>,
-    mut slot: MutRef<DomainConnection<Apiserver>>,
-) -> Result<(), TdError> {
-    context.refresh(&mut slot).await
-}

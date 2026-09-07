@@ -206,7 +206,7 @@ mod tests {
         // The bootstrap seeds the `admin` user into the `sys_admin` and
         // `default` roles; its effective grants are the union of both.
         let source = SqlRbacSource::default();
-        let mut slot = DomainConnection::<Apiserver>::ready(db.acquire().await.unwrap());
+        let mut slot = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
 
         let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
         // sys_admin role -> all system permissions
@@ -219,21 +219,6 @@ mod tests {
         // an unknown user resolves to empty grants, not an error.
         let unknown = source.user_grants(&mut slot, &UserId::default()).await?;
         assert!(!unknown.allows(&Requires::system(SystemPermission::ManageAccess)));
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_user_grants_latent_slot(db: TdPool) -> Result<(), TdError> {
-        let source = SqlRbacSource::default();
-
-        let mut slot = DomainConnection::<Apiserver>::latent(db.clone());
-        let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
-        assert!(grants.allows(&Requires::system(SystemPermission::ManageAccess)));
-
-        // warm cache: a fresh latent slot is not materialized
-        let mut slot = DomainConnection::<Apiserver>::latent(db);
-        let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
-        assert!(grants.allows(&Requires::system(SystemPermission::ManageAccess)));
         Ok(())
     }
 }

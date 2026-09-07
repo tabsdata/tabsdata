@@ -6,16 +6,16 @@
 //!
 //! The pure core ([`super::model`]) is type-driven — each entity kind is a
 //! Rust type with its own permission set, and the enforcement decision is a
-//! pure function over typed [`Grant`]s. But grants enter the system as *data*:
+//! pure function over typed [`RoleGrant`]s. But grants enter the system as *data*:
 //! stored `role_permission` rows carry an `(entity_type, permission, entity_id)`
 //! triple of strings/ids, and the grant/introspection APIs speak names. The
 //! registry bridges the two — it maps a registered entity kind's *name* to a
 //! type-erased handler that knows how to turn those strings back into a typed
-//! [`Grant<E>`] (and to enumerate the kind's permissions for introspection).
+//! [`RoleGrant<E>`] (and to enumerate the kind's permissions for introspection).
 //!
 //! # Extending
 //!
-//! The decision and the tower gates are already type-extensible: a new entity
+//! The decision and the service gates are already type-extensible: a new entity
 //! kind is one [`EntityKind`] impl plus generic [`Scope`](super::Scope) /
 //! [`Rbac`](super::Rbac) wiring (see [`super`] module docs). The *only* thing
 //! that was a closed match — turning a stored row into a typed grant — now goes
@@ -35,7 +35,7 @@
 //! pure function.
 
 use crate::rbac::model::{
-    EntityKind, Grant, GrantedPermission, Grants, On, Project, ProjectId, System, SystemEntity,
+    EntityKind, GrantedPermission, Grants, On, Project, ProjectId, RoleGrant, System, SystemEntity,
     User,
 };
 use std::collections::HashMap;
@@ -79,7 +79,7 @@ impl DecodeEntityId for User {
 
 /// Type-erased bridge for one entity kind. Closes over the concrete `E` so the
 /// registry can store handlers for arbitrarily many kinds in one map while the
-/// typed [`Grant<E>`] construction stays compile-checked inside the handler.
+/// typed [`RoleGrant<E>`] construction stays compile-checked inside the handler.
 trait EntityKindHandler: Send + Sync {
     /// The permission names valid on this kind (introspection / validation).
     fn permissions(&self) -> Vec<&'static str>;
@@ -106,7 +106,7 @@ impl<E: DecodeEntityId> EntityKindHandler for Handler<E> {
         } else {
             On::Entity(E::decode_id(entity_id))
         };
-        grants.add(Grant { on, permission });
+        grants.add(RoleGrant { on, permission });
         true
     }
 }

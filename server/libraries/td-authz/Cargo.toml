@@ -29,7 +29,6 @@ td-test = [
     "td-error/td-test",
     "td-objects/td-test",
     "td-queries/td-test",
-    "td-tower/td-test",
 ]
 dummy = []
 mock-env = []
@@ -61,7 +60,6 @@ td-common = { workspace = true }
 td-database = { workspace = true }
 td-objects = { workspace = true }
 td-queries = { workspace = true }
-td-tower = { workspace = true }
 
 # External dependencies
 

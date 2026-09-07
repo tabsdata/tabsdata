@@ -2,59 +2,61 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Tower integration: scope setting and enforcement layers.
-//!
-//! Two layers, with the scope and the requirements tied together by the type
-//! system:
+//! Scope construction and enforcement, with the scope and the requirements
+//! tied together by the type system:
 //!
 //! ```ignore
 //! // project-scoped: manage_access on the system OR manage_project on the project
-//! .layer(from_fn(Scope::<Project>::set))                  // from Ref<ProjectId>
-//! .layer(from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check))
+//! Rbac::<Project, (ManageAccess, ManageProject)>::authorize(
+//!     &authz, &mut conn, &request.context, &Scope::of(&project_id),
+//! ).await?;
 //!
 //! // system-scoped
-//! .layer(from_fn(Scope::<System>::system))
-//! .layer(from_fn(Rbac::<System, CreateProjects>::check))
+//! Rbac::<System, CreateProjects>::authorize(
+//!     &authz, &mut conn, &request.context, &Scope::of(&SystemEntity),
+//! ).await?;
 //!
 //! // self-or-admin: the requester acting on their own user, or manage_access
-//! .layer(from_fn(Scope::<User>::set))                     // from Ref<UserId>
-//! .layer(from_fn(Rbac::<User, (SelfUser, ManageAccess)>::check))
+//! Rbac::<User, (SelfUser, ManageAccess)>::authorize(
+//!     &authz, &mut conn, &request.context, &Scope::of(&user_id),
+//! ).await?;
 //! ```
 //!
 //! where a service module fixes the source once:
 //!
 //! ```ignore
-//! type Rbac<E, R> = rbac::Enforce<RbacContext, E, R>;
+//! type Rbac<E, R> = rbac::Enforce<AuthzContext, E, R>;
 //! ```
 //!
 //! Design properties:
 //!
-//! - **One generic [`Scope::set`]** covers every entity kind — a new kind
-//!   gets its scope layer for free.
+//! - **One generic [`Scope::of`]** covers every entity kind — a new kind
+//!   gets its scope for free.
 //! - **Tuples are any-of** — `(A, B, C)` passes if any requirement passes.
 //! - **Scope/requirement mismatches don't compile.** `Rbac::<System,
 //!   ManageProject>` is a type error (`ManageProject` only implements
 //!   [`Requirement<Project>`]).
-//! - **No special-case branches in [`Enforce::check`].** Wildcards are
+//! - **No special-case branches in [`Enforce::authorize`].** Wildcards are
 //!   ordinary grants, requester identity is an implicit grant, and "a
 //!   per-project admin passes some system checks" is the explicit
 //!   [`OnAnyProject`] requirement.
 //! - **The decision is pure.** [`enforce`] takes plain [`Grants`] values —
-//!   unit tests need no database, pool or tower context.
+//!   unit tests need no database or pool.
 
 use crate::rbac::model::{
     EffectiveGrants, EntityKind, FromGrants, Grants, IdentityClaim, On, Project, ProjectId,
-    ProjectPermission, Requires, System, SystemEntity, SystemPermission, User,
+    ProjectPermission, Requires, SystemPermission, User,
 };
 use crate::rbac::source::{RbacSource, identity_grants};
+use crate::rbac::sql_source::SqlRbacSource;
 use std::any::type_name;
 use std::marker::PhantomData;
+use td_database::access::{Gated, Grant, ServiceDbError};
+use td_database::connection::PgConnectionExt;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::{Provenance, RequestContext};
 use td_objects::types::visible_projects::VisibleProjects;
-use td_tower::error::ConnectionError;
-use td_tower::extractors::{MutRef, Ref};
 
 /// Errors raised by the enforcement layer.
 #[td_error::td_error]
@@ -67,42 +69,31 @@ pub enum RbacError {
 
 /// The authorization scope of a request: the entity the operation targets.
 ///
-/// Set once per service via the layer fns below; the [`Enforce`] layer for
-/// entity kind `E` extracts `Ref<Scope<E>>`, so a missing or mismatched
-/// scope is a wiring error caught by the tower context, never a silent
-/// authorization semantic.
+/// Built once per service via [`Scope::of`] and handed to the [`Enforce`]
+/// check for the same entity kind `E`, so a mismatched scope is a compile
+/// error, never a silent authorization semantic.
 #[derive(Debug, Clone, Copy)]
 pub struct Scope<E: EntityKind>(pub On<E>);
 
 impl<E: EntityKind> Scope<E> {
-    /// Layer fn: scope on a single entity, from a `Ref<E::Id>` in the
-    /// service context. One generic impl for every entity kind.
-    pub async fn set(id: Ref<E::Id>) -> Result<Scope<E>, TdError> {
-        Ok(Scope(On::Entity(*id)))
+    /// Scope on a single entity. One generic impl for every entity kind.
+    pub fn of(id: &E::Id) -> Scope<E> {
+        Scope(On::Entity(*id))
     }
 }
 
-impl Scope<System> {
-    /// Layer fn: scope on the system entity (`system:__system__`); takes
-    /// nothing from the service context.
-    pub async fn system() -> Result<Scope<System>, TdError> {
-        Ok(Scope(On::Entity(SystemEntity)))
-    }
-}
-
-/// Layer fn: scope the connection to the resolved project (`SET LOCAL
-/// app.project_id`, clearing any bypass). A `scope = Global` service pivots
-/// through this once it has resolved the owning project of the id it was
-/// called with — downstream layers then run exactly as under `scope =
-/// Project`, with RLS enforcing the project and inserts inheriting it.
-pub async fn enter_project_scope(
-    project: Ref<ProjectId>,
-    mut slot: MutRef<DomainConnection<Apiserver>>,
+/// Scope the connection to `project` (`SET LOCAL app.project_id`, clearing
+/// any bypass). A globally-entered service pivots through this once it has
+/// resolved the owning project of the id it was called with — the rest of
+/// the body then runs exactly as under a project-scoped connection, with RLS
+/// enforcing the project and inserts inheriting it.
+pub async fn scope_to_project(
+    conn: &mut DomainConnection<Apiserver>,
+    project: &ProjectId,
 ) -> Result<(), TdError> {
-    let conn = slot.ready_mut().ok_or(ConnectionError::ConnectionLost)?;
     conn.set_project_scope(&project.to_string())
         .await
-        .map_err(ConnectionError::CannotSetProjectScope)?;
+        .map_err(ServiceDbError::CannotSetProjectScope)?;
     Ok(())
 }
 
@@ -239,7 +230,7 @@ any_of_tuple!(R1, R2, R3, R4);
 any_of_tuple!(R1, R2, R3, R4, R5);
 
 /// The pure enforcement decision — what unit tests target directly, with no
-/// database, async or tower machinery.
+/// database or async machinery.
 pub fn enforce<E: EntityKind, R: Requirement<E>>(
     user: &Grants,
     request: &Grants,
@@ -248,26 +239,24 @@ pub fn enforce<E: EntityKind, R: Requirement<E>>(
     R::allowed(&EffectiveGrants { user, request }, scope)
 }
 
-/// Service authorization enforcer: the tower layer that checks a requirement
-/// against the requester's effective grants for the scope in context.
+/// Service authorization enforcer: checks a requirement against the
+/// requester's effective grants for the given scope.
 pub struct Enforce<S: RbacSource, E: EntityKind, R: Requirement<E>> {
     _p: PhantomData<(S, E, R)>,
 }
 
 impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
-    /// Layer fn: check that the requester satisfies `R` on the
-    /// [`Scope<E>`] in the service context.
+    /// Check that the requester satisfies `R` on the given [`Scope<E>`].
     ///
     /// The requester's user is taken from the [`RequestContext`]; their
     /// effective grants come from the [`RbacSource`] (union across the
     /// user's assigned roles), plus the implicit identity grants. Grants
-    /// resolve through the [`Apiserver`]-domain slot — the primary for an
-    /// apiserver service, the `read_connection = Apiserver` slot elsewhere.
-    pub async fn check(
-        source: Ref<S>,
-        mut slot: MutRef<DomainConnection<Apiserver>>,
-        request: Ref<RequestContext>,
-        scope: Ref<Scope<E>>,
+    /// resolve through the [`Apiserver`]-domain connection.
+    pub async fn authorize(
+        source: &S,
+        conn: &mut DomainConnection<Apiserver>,
+        request: &RequestContext,
+        scope: &Scope<E>,
     ) -> Result<(), TdError> {
         // Internal-token callers bypass RBAC: the token itself binds
         // `(method, scope, bindings)` and the system user holds no role
@@ -277,8 +266,8 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
         if request.provenance == Provenance::InternalToken {
             return Ok(());
         }
-        let user_grants = source.user_grants(&mut slot, &request.user_id).await?;
-        let request_grants = identity_grants(&request);
+        let user_grants = source.user_grants(conn, &request.user_id).await?;
+        let request_grants = identity_grants(request);
         if enforce::<E, R>(&user_grants, &request_grants, &scope.0) {
             Ok(())
         } else {
@@ -293,29 +282,92 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
 /// Resolver for the requester's [`VisibleProjects`]: the data-filter
 /// counterpart of [`Enforce`]. A cross-project (global) read gates on no
 /// single project — instead it narrows its result set to the projects the
-/// requester may view. This layer puts that set in the service context for a
-/// downstream layer to filter against.
+/// requester may view.
 pub struct VisibleProjectsResolver<S: RbacSource> {
     _p: PhantomData<S>,
 }
 
 impl<S: RbacSource> VisibleProjectsResolver<S> {
-    /// Layer fn: resolve the requester's viewable-project set from their
-    /// effective grants (union across the user's assigned roles).
-    pub async fn projects(
-        source: Ref<S>,
-        mut slot: MutRef<DomainConnection<Apiserver>>,
-        request: Ref<RequestContext>,
+    /// Resolve the requester's viewable-project set from their effective
+    /// grants (union across the user's assigned roles).
+    pub async fn resolve(
+        source: &S,
+        conn: &mut DomainConnection<Apiserver>,
+        request: &RequestContext,
     ) -> Result<VisibleProjects, TdError> {
-        let user_grants = source.user_grants(&mut slot, &request.user_id).await?;
+        let user_grants = source.user_grants(conn, &request.user_id).await?;
         Ok(VisibleProjects::from_grants(&user_grants))
+    }
+}
+
+/// The service authorization vocabulary. Every connection a service body
+/// queries is unlocked by one of these, and each returns the [`Grant`] that
+/// unlocks it ([`Gated::get`](td_database::access::Gated::get)):
+///
+/// | call | meaning | audit grep |
+/// |---|---|---|
+/// | [`require`](Self::require) / [`require_in_project`](Self::require_in_project) | the requester must satisfy `R` on the entity | `require::<` |
+/// | [`visible_projects`](Self::visible_projects) | narrow a cross-project read to what the requester may view | `visible_projects(` |
+/// | [`none`](Self::none) | this connection carries NO entity check | `.none(` |
+///
+/// Where no requester exists at all (credential verification, scheduler
+/// ticks, unauthenticated probes) the service claims a grant directly with
+/// [`Grant::asserted`] and its reason.
+impl SqlRbacSource {
+    /// Enforce `R` on the entity `id`: `authz.require::<E, R>(conn, ctx, &id)`.
+    pub async fn require<E: EntityKind, R: Requirement<E>>(
+        &self,
+        conn: &mut impl Gated<Apiserver>,
+        request: &RequestContext,
+        id: &E::Id,
+    ) -> Result<Grant, TdError> {
+        let grant = Grant::asserted("rbac enforcement");
+        Enforce::<Self, E, R>::authorize(self, conn.get(grant), request, &Scope::of(id)).await?;
+        Ok(grant)
+    }
+
+    /// Pivot a globally-entered connection to the resolved owning `project`
+    /// (RLS scope, see [`scope_to_project`]) and enforce `R` there.
+    pub async fn require_in_project<R: Requirement<Project>>(
+        &self,
+        conn: &mut impl Gated<Apiserver>,
+        request: &RequestContext,
+        project: &ProjectId,
+    ) -> Result<Grant, TdError> {
+        let grant = Grant::asserted("rbac enforcement");
+        let conn = conn.get(grant);
+        scope_to_project(conn, project).await?;
+        Enforce::<Self, Project, R>::authorize(self, conn, request, &Scope::of(project)).await?;
+        Ok(grant)
+    }
+
+    /// The requester's viewable-project set, for global cross-project reads,
+    /// together with the [`Grant`] its resolution earned.
+    pub async fn visible_projects(
+        &self,
+        conn: &mut impl Gated<Apiserver>,
+        request: &RequestContext,
+    ) -> Result<(Grant, VisibleProjects), TdError> {
+        let grant = Grant::asserted("rbac visible-projects resolution");
+        let projects =
+            VisibleProjectsResolver::<Self>::resolve(self, conn.get(grant), request).await?;
+        Ok((grant, projects))
+    }
+
+    /// No entity check backs this connection: either the operation authorizes
+    /// nothing at all (logout, own session info, internal endpoints reached
+    /// with a validated token), or it reads what a check about to run needs —
+    /// an id behind a name, the project owning the entity the URL names — and
+    /// the `require` follows in the same body.
+    pub fn none(&self) -> Grant {
+        Grant::asserted("no entity check backs this connection")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rbac::model::{Grant, ProjectId, ProjectRole, SystemRole};
+    use crate::rbac::model::{ProjectId, ProjectRole, RoleGrant, System, SystemEntity, SystemRole};
     use crate::rbac::source::FixedRbacSource;
     use td_objects::types::basic::{AccessTokenId, UserId};
 
@@ -327,7 +379,7 @@ mod tests {
         identity_grants(&request(user_id))
     }
 
-    // ---- pure tests: no database, no pool, no tower context ----
+    // ---- pure tests: no database, no pool ----
 
     #[test]
     fn test_enforce_project_scope_levels() {
@@ -430,7 +482,7 @@ mod tests {
         assert!(!enforce::<User, SelfOrAccessAdmin>(&none, &request, &other));
 
         // a manage_access holder acting on any user
-        let access_admin = Grants::new().with(Grant::system(SystemPermission::ManageAccess));
+        let access_admin = Grants::new().with(RoleGrant::system(SystemPermission::ManageAccess));
         assert!(enforce::<User, SelfOrAccessAdmin>(
             &access_admin,
             &request,
@@ -472,62 +524,46 @@ mod tests {
         assert!(!enforce::<Project, FiveWay>(&viewer, &none, &scope));
     }
 
-    // ---- tower parity tests: the layer fns wired like a real service ----
+    // ---- integration tests: authorize wired like a real service ----
 
-    #[tokio::test]
-    async fn test_scope_layer_set() {
-        use std::sync::Arc;
-
-        // one generic set() for any entity kind, from a Ref<E::Id>
+    #[test]
+    fn test_scope_of() {
+        // one generic of() for any entity kind
         let p = ProjectId::default();
-        let scope = Scope::<Project>::set(Ref::from_arc(Arc::new(p)))
-            .await
-            .unwrap();
-        assert_eq!(scope.0, On::Entity(p));
+        assert_eq!(Scope::<Project>::of(&p).0, On::Entity(p));
 
         let user_id = UserId::default();
-        let scope = Scope::<User>::set(Ref::from_arc(Arc::new(user_id)))
-            .await
-            .unwrap();
-        assert_eq!(scope.0, On::Entity(user_id));
+        assert_eq!(Scope::<User>::of(&user_id).0, On::Entity(user_id));
 
-        // the system scope takes nothing from the context
-        let scope = Scope::<System>::system().await.unwrap();
-        assert_eq!(scope.0, On::Entity(SystemEntity));
+        assert_eq!(
+            Scope::<System>::of(&SystemEntity).0,
+            On::Entity(SystemEntity)
+        );
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_layer_check(db: td_database::pool::TdPool) {
-        use std::sync::Arc;
-
+    async fn test_enforce_authorize(db: td_database::pool::TdPool) {
         let user_id = UserId::default();
         let p = ProjectId::default();
 
-        let source = Arc::new(FixedRbacSource::new().with_user_roles(
+        let source = FixedRbacSource::new().with_user_roles(
             user_id,
             [SystemRole::Default.grants(), ProjectRole::Dev.grants(p)],
-        ));
-        let request = Arc::new(request(user_id));
-        let scope = Arc::new(Scope::<Project>(On::Entity(p)));
+        );
+        let request = request(user_id);
+        let scope = Scope::<Project>(On::Entity(p));
+        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
 
         // develop_project on p: allowed
-        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
-        Enforce::<FixedRbacSource, Project, DevelopProject>::check(
-            Ref::from_arc(source.clone()),
-            conn,
-            Ref::from_arc(request.clone()),
-            Ref::from_arc(scope.clone()),
+        Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
+            &source, &mut conn, &request, &scope,
         )
         .await
         .unwrap();
 
         // manage_project on p: forbidden
-        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
-        let err = Enforce::<FixedRbacSource, Project, ManageProject>::check(
-            Ref::from_arc(source.clone()),
-            conn,
-            Ref::from_arc(request.clone()),
-            Ref::from_arc(scope.clone()),
+        let err = Enforce::<FixedRbacSource, Project, ManageProject>::authorize(
+            &source, &mut conn, &request, &scope,
         )
         .await
         .unwrap_err();
@@ -537,125 +573,98 @@ mod tests {
         assert_eq!(scope_str, &format!("project:{p}"));
 
         // manage_access OR manage_project: still forbidden for this user
-        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
-        Enforce::<FixedRbacSource, Project, (ManageAccess, ManageProject)>::check(
-            Ref::from_arc(source.clone()),
-            conn,
-            Ref::from_arc(request.clone()),
-            Ref::from_arc(scope.clone()),
+        Enforce::<FixedRbacSource, Project, (ManageAccess, ManageProject)>::authorize(
+            &source, &mut conn, &request, &scope,
         )
         .await
         .unwrap_err();
 
         // a user unknown to the source has empty grants: forbidden
-        let unknown = Arc::new(RequestContext::with(
-            AccessTokenId::default(),
-            UserId::default(),
-        ));
-        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
-        Enforce::<FixedRbacSource, Project, ViewProject>::check(
-            Ref::from_arc(source.clone()),
-            conn,
-            Ref::from_arc(unknown),
-            Ref::from_arc(scope.clone()),
+        let unknown = RequestContext::with(AccessTokenId::default(), UserId::default());
+        Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
+            &source, &mut conn, &unknown, &scope,
         )
         .await
         .unwrap_err();
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_layer_check_latent_slot(db: td_database::pool::TdPool) {
-        use std::sync::Arc;
-
-        // The slot stays latent end-to-end: FixedRbacSource answers from
-        // memory, so no connection is ever acquired.
+    async fn test_enforce_authorize_fixed_source(db: td_database::pool::TdPool) {
+        // FixedRbacSource answers from memory; the connection is unused.
         let user_id = UserId::default();
         let p = ProjectId::default();
-        let source =
-            Arc::new(FixedRbacSource::new().with_user_roles(user_id, [ProjectRole::Dev.grants(p)]));
-        let request = Arc::new(request(user_id));
-        let scope = Arc::new(Scope::<Project>(On::Entity(p)));
+        let source = FixedRbacSource::new().with_user_roles(user_id, [ProjectRole::Dev.grants(p)]);
+        let request = request(user_id);
+        let scope = Scope::<Project>(On::Entity(p));
 
-        let slot = MutRef::new(DomainConnection::<Apiserver>::latent(db.clone()));
-        Enforce::<FixedRbacSource, Project, DevelopProject>::check(
-            Ref::from_arc(source.clone()),
-            slot,
-            Ref::from_arc(request.clone()),
-            Ref::from_arc(scope.clone()),
+        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
+        Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
+            &source, &mut conn, &request, &scope,
         )
         .await
         .unwrap();
 
-        let slot = MutRef::new(DomainConnection::<Apiserver>::latent(db));
-        Enforce::<FixedRbacSource, Project, ManageProject>::check(
-            Ref::from_arc(source),
-            slot,
-            Ref::from_arc(request),
-            Ref::from_arc(scope),
+        Enforce::<FixedRbacSource, Project, ManageProject>::authorize(
+            &source, &mut conn, &request, &scope,
         )
         .await
         .unwrap_err();
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_layer_bypasses_for_internal_token(db: td_database::pool::TdPool) {
-        use std::sync::Arc;
-
+    async fn test_enforce_bypasses_for_internal_token(db: td_database::pool::TdPool) {
         // `RequestContext::internal()` is the context the apiserver's
         // `internal_token_layer` injects once it has validated an
         // internal-endpoint token, which already binds (method, scope,
         // bindings) to the exact request -- so it bypasses RBAC. This is
         // what lets the streamer pod's manifest-trigger sidecar POST
-        // `function_version_execute` (which carries
-        // `Rbac::<Project, DevelopProject>::check`) without holding
+        // `function_version_execute` (which authorizes
+        // `Rbac::<Project, DevelopProject>`) without holding
         // a DevelopProject grant the system user could not have.
         let p = ProjectId::default();
-        let internal_request = Arc::new(RequestContext::internal());
-        let source = Arc::new(FixedRbacSource::new()); // empty: system has no grants
-        let scope = Arc::new(Scope::<Project>(On::Entity(p)));
+        let internal_request = RequestContext::internal();
+        let source = FixedRbacSource::new(); // empty: system has no grants
+        let scope = Scope::<Project>(On::Entity(p));
+        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
 
-        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
-        Enforce::<FixedRbacSource, Project, DevelopProject>::check(
-            Ref::from_arc(source.clone()),
-            conn,
-            Ref::from_arc(internal_request.clone()),
-            Ref::from_arc(scope.clone()),
+        Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
+            &source,
+            &mut conn,
+            &internal_request,
+            &scope,
         )
         .await
         .unwrap();
 
         // Even the strictest requirement passes for an internal call.
-        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
-        Enforce::<FixedRbacSource, Project, ManageProject>::check(
-            Ref::from_arc(source.clone()),
-            conn,
-            Ref::from_arc(internal_request),
-            Ref::from_arc(scope),
+        Enforce::<FixedRbacSource, Project, ManageProject>::authorize(
+            &source,
+            &mut conn,
+            &internal_request,
+            &scope,
         )
         .await
         .unwrap();
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_layer_no_bypass_for_system_identity(db: td_database::pool::TdPool) {
-        use std::sync::Arc;
-
+    async fn test_enforce_no_bypass_for_system_identity(db: td_database::pool::TdPool) {
         // The bypass keys on internal-token provenance, not on identity: a
         // session context that merely carries `UserId::system()` (a hijacked
         // or mis-seeded session, a context built from an id found in data)
         // is enforced like any other user -- and the system user holds no
         // grants, so it is forbidden.
         let p = ProjectId::default();
-        let system_session = Arc::new(request(UserId::system()));
-        let source = Arc::new(FixedRbacSource::new());
-        let scope = Arc::new(Scope::<Project>(On::Entity(p)));
+        let system_session = request(UserId::system());
+        let source = FixedRbacSource::new();
+        let scope = Scope::<Project>(On::Entity(p));
+        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
 
-        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
-        let err = Enforce::<FixedRbacSource, Project, ViewProject>::check(
-            Ref::from_arc(source.clone()),
-            conn,
-            Ref::from_arc(system_session),
-            Ref::from_arc(scope),
+        let err = Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
+            &source,
+            &mut conn,
+            &system_session,
+            &scope,
         )
         .await
         .unwrap_err();

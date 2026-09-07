@@ -54,7 +54,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver> + Send>
         let sessions: Vec<Session> = conn.live().fetch_all(&SessionStatus::Active).await?;
         let sessions = sessions
             .into_iter()
-            .map(|s| (s.access_token_id, Arc::new(s)))
+            .map(|s| (s.base.access_token_id, Arc::new(s)))
             .collect();
         Ok(Arc::new(sessions))
     }

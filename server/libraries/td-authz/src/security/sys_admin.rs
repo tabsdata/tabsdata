@@ -17,11 +17,11 @@
 use std::collections::HashSet;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::TryUpdater;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::permission::{PermissionDB, PermissionDBBuilder};
+use td_objects::dxo::permission::PermissionDB;
 use td_objects::types::basic::{
-    AccessTokenId, EntityId, Fixed, PermissionEntityType, PermissionType, RoleId, UserId,
+    AccessTokenId, EntityId, Fixed, PermissionEntityType, PermissionId, PermissionType, RoleId,
+    UserId,
 };
 use td_queries::LiveEntry;
 
@@ -52,15 +52,16 @@ pub async fn ensure_sys_admin_permissions(
         if present.contains(&(entity_type.to_string(), permission.to_string())) {
             continue;
         }
-        let mut builder = PermissionDBBuilder::default();
-        builder.try_update_from(&context)?;
-        builder
-            .role_id(sys_admin)
-            .permission_type(PermissionType::try_from(permission)?)
-            .entity_type(PermissionEntityType::try_from(entity_type)?)
-            .entity_id(EntityId::all_entities())
-            .fixed(Fixed::from(true));
-        let permission_db = builder.build()?;
+        let permission_db = PermissionDB {
+            id: PermissionId::default(),
+            role_id: sys_admin,
+            permission_type: PermissionType::try_from(permission)?,
+            entity_type: PermissionEntityType::try_from(entity_type)?,
+            entity_id: EntityId::all_entities(),
+            granted_by_id: context.user_id,
+            granted_on: context.time,
+            fixed: Fixed::TRUE,
+        };
         conn.live().insert(&permission_db).await?;
     }
     Ok(())
@@ -79,14 +80,14 @@ mod tests {
         // production startup path) so the row persists between calls.
         async fn reconcile(db: &TdPool, extras: &[(&str, &str)]) -> Result<(), TdError> {
             let tx = db.begin().await.unwrap();
-            let mut conn = DomainConnection::from_transaction(tx);
+            let mut conn = DomainConnection::new(tx);
             ensure_sys_admin_permissions(&mut conn, extras).await?;
-            conn.into_transaction().unwrap().commit().await.unwrap();
+            conn.commit().await.unwrap();
             Ok(())
         }
 
         async fn count_ai(db: &TdPool) -> Result<usize, TdError> {
-            let mut conn = db.acquire().await.unwrap();
+            let mut conn = db.begin().await.unwrap();
             let perms = conn.live().fetch_all::<PermissionDB>(()).await?;
             Ok(perms
                 .iter()

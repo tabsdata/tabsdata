@@ -5,7 +5,7 @@
 //! Pure RBAC core: entity kinds, permissions, grants and requirements.
 //!
 //! Everything in this file is synchronous, allocation-light and free of
-//! database / tower dependencies — the authorization *decision* is a pure
+//! database dependencies — the authorization *decision* is a pure
 //! function over a [`Grants`] value, which makes it trivially unit-testable.
 //!
 //! The model's single primitive: a permission
@@ -107,14 +107,14 @@ impl<E: EntityKind> Display for On<E> {
 ///
 /// Renders in the doc's notation: `(project:__all__, manage_project)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Grant<E: EntityKind> {
+pub struct RoleGrant<E: EntityKind> {
     /// The entity target the permission is held on.
     pub on: On<E>,
     /// The held permission.
     pub permission: E::Permission,
 }
 
-impl<E: EntityKind> Grant<E> {
+impl<E: EntityKind> RoleGrant<E> {
     /// A grant on a single entity.
     pub fn on(entity: E::Id, permission: E::Permission) -> Self {
         Self {
@@ -139,14 +139,14 @@ impl<E: EntityKind> Grant<E> {
     }
 }
 
-impl Grant<System> {
+impl RoleGrant<System> {
     /// A grant on the system entity (`system:__system__`).
     pub fn system(permission: SystemPermission) -> Self {
         Self::on(SystemEntity, permission)
     }
 }
 
-impl<E: EntityKind> Display for Grant<E> {
+impl<E: EntityKind> Display for RoleGrant<E> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}:{}, {})", E::NAME, self.on, self.permission.name())
     }
@@ -154,8 +154,8 @@ impl<E: EntityKind> Display for Grant<E> {
 
 /// A permission requirement on an entity target — what an operation demands.
 ///
-/// Same shape as [`Grant`] but a distinct type: grants and requirements sit
-/// on opposite sides of the asymmetric [`Grant::satisfies`] relation, and the
+/// Same shape as [`RoleGrant`] but a distinct type: grants and requirements sit
+/// on opposite sides of the asymmetric [`RoleGrant::satisfies`] relation, and the
 /// type makes the direction explicit at call sites.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Requires<E: EntityKind> {
@@ -317,13 +317,13 @@ impl ProjectPermission {
     }
 
     /// Sugar: grant this permission on a project.
-    pub fn granted_on(self, project: ProjectId) -> Grant<Project> {
-        Grant::on(project, self)
+    pub fn granted_on(self, project: ProjectId) -> RoleGrant<Project> {
+        RoleGrant::on(project, self)
     }
 
     /// Sugar: grant this permission on all projects (`project:__all__`).
-    pub fn granted_on_all(self) -> Grant<Project> {
-        Grant::all(self)
+    pub fn granted_on_all(self) -> RoleGrant<Project> {
+        RoleGrant::all(self)
     }
 }
 
@@ -377,7 +377,7 @@ trait GrantList: Debug + Send + Sync + 'static {
     fn merge_into(&self, target: &mut Grants);
 }
 
-impl<E: EntityKind> GrantList for Vec<Grant<E>> {
+impl<E: EntityKind> GrantList for Vec<RoleGrant<E>> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -411,20 +411,20 @@ impl Grants {
     }
 
     /// Builder-style [`Self::add`].
-    pub fn with<E: EntityKind>(mut self, grant: Grant<E>) -> Self {
+    pub fn with<E: EntityKind>(mut self, grant: RoleGrant<E>) -> Self {
         self.add(grant);
         self
     }
 
     /// Add a grant (idempotent).
-    pub fn add<E: EntityKind>(&mut self, grant: Grant<E>) {
+    pub fn add<E: EntityKind>(&mut self, grant: RoleGrant<E>) {
         let list = self
             .by_kind
             .entry(TypeId::of::<E>())
-            .or_insert_with(|| Box::new(Vec::<Grant<E>>::new()));
+            .or_insert_with(|| Box::new(Vec::<RoleGrant<E>>::new()));
         let list = list
             .as_any_mut()
-            .downcast_mut::<Vec<Grant<E>>>()
+            .downcast_mut::<Vec<RoleGrant<E>>>()
             .expect("grant list type mismatch");
         if !list.contains(&grant) {
             list.push(grant);
@@ -432,10 +432,10 @@ impl Grants {
     }
 
     /// The grants held for an entity kind.
-    pub fn of<E: EntityKind>(&self) -> &[Grant<E>] {
+    pub fn of<E: EntityKind>(&self) -> &[RoleGrant<E>] {
         self.by_kind
             .get(&TypeId::of::<E>())
-            .and_then(|list| list.as_any().downcast_ref::<Vec<Grant<E>>>())
+            .and_then(|list| list.as_any().downcast_ref::<Vec<RoleGrant<E>>>())
             .map(Vec::as_slice)
             .unwrap_or(&[])
     }
@@ -547,12 +547,12 @@ impl SystemRole {
     pub fn grants(&self) -> Grants {
         match self {
             SystemRole::SysAdmin => Grants::new()
-                .with(Grant::system(SystemPermission::ManageAccess))
-                .with(Grant::system(SystemPermission::CreateProjects))
-                .with(Grant::system(SystemPermission::ManageRoles))
+                .with(RoleGrant::system(SystemPermission::ManageAccess))
+                .with(RoleGrant::system(SystemPermission::CreateProjects))
+                .with(RoleGrant::system(SystemPermission::ManageRoles))
                 .with(ProjectPermission::ManageProject.granted_on_all()),
             SystemRole::Default => {
-                Grants::new().with(Grant::system(SystemPermission::CreateProjects))
+                Grants::new().with(RoleGrant::system(SystemPermission::CreateProjects))
             }
         }
     }
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     fn test_doc_notation_rendering() {
         assert_eq!(
-            Grant::system(SystemPermission::ManageAccess).to_string(),
+            RoleGrant::system(SystemPermission::ManageAccess).to_string(),
             "(system:__system__, manage_access)"
         );
         assert_eq!(
@@ -771,7 +771,7 @@ mod tests {
     fn test_grants_clone_preserves_all_kinds() {
         let p = project();
         let grants = Grants::new()
-            .with(Grant::system(SystemPermission::ManageAccess))
+            .with(RoleGrant::system(SystemPermission::ManageAccess))
             .with(ProjectPermission::DevelopProject.granted_on(p));
         let cloned = grants.clone();
         assert!(cloned.allows(&Requires::system(SystemPermission::ManageAccess)));

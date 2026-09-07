@@ -24,12 +24,12 @@
 //! *definitions*, not on who is in which role.
 
 use std::collections::HashMap;
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::types::basic::{PermissionEntityType, PermissionType, RoleId, RoleKind};
-use td_queries::{LiveEntry, QueryExecutor};
+use td_queries::LiveEntry;
 
 /// The expected fixed composition of the `sys_admin` role (condition 2),
 /// as `(entity_type, on `__all__`?, permission)` triples. System rows are
@@ -81,17 +81,12 @@ fn row_matches(perm: &PermissionDB, (et, on_all, pt): &(&str, bool, &str)) -> bo
 /// Run the RBAC -> Simple representability check against the live `roles` and
 /// `role_permission` tables. Returns the list of reasons the configuration
 /// cannot be represented on the Simple surface (empty = representable).
-///
-/// `db` is any query executor (a pool reference or a connection), so this can be
-/// called both at apiserver startup and from a service/test. `Copy` is required
-/// because each `.live()` consumes the executor and the check issues two reads;
-/// `&TdPool` (and the connection references) are `Copy`.
 pub async fn check_representability(
-    db: impl QueryExecutor + Domained<Domain = Apiserver> + Copy,
+    conn: &mut DomainConnection<Apiserver>,
     sys_admin_extras: &[(&str, &str)],
 ) -> Result<Vec<String>, TdError> {
-    let roles = db.live().fetch_all::<RoleDB>(()).await?;
-    let permissions = db.live().fetch_all::<PermissionDB>(()).await?;
+    let roles = conn.live().fetch_all::<RoleDB>(()).await?;
+    let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
     Ok(evaluate(&roles, &permissions, sys_admin_extras))
 }
 
@@ -301,13 +296,11 @@ mod tests {
     use super::*;
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::permission::PermissionDBBuilder;
     use td_objects::dxo::project::ActiveProjectDB;
-    use td_objects::dxo::role::{RoleCreate, RoleDBBuilder};
+    use td_objects::dxo::role::RoleCreate;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityId, Fixed, ProjectName, RoleName, UserId,
+        AccessTokenId, Description, EntityId, Fixed, PermissionId, ProjectName, RoleName, UserId,
     };
-    use td_objects::{Buildable, TryUpdater};
     use td_queries::test_utils::SeedEntry;
 
     fn admin_context() -> RequestContext {
@@ -349,24 +342,32 @@ mod tests {
         ];
         for (kind, suffix, permission_type) in specs {
             let role_name = RoleName::try_from(format!("{}_{suffix}", project.name))?;
-            let role_create = RoleCreate::builder()
-                .name(role_name)
-                .description(Description::try_from("per-project role")?)
-                .build()?;
-            let role = RoleDBBuilder::try_from(&role_create)?
-                .try_update_from(&context)?
-                .kind(kind)
-                .project_id(Some(project.id))
-                .fixed(Fixed::from(true))
-                .build()?;
-            let permission = PermissionDBBuilder::default()
-                .try_update_from(&context)?
-                .try_update_from(&role)?
-                .permission_type(permission_type)
-                .entity_type(PermissionEntityType::project())
-                .entity_id(entity_id)
-                .fixed(Fixed::from(true))
-                .build()?;
+            let role_create = RoleCreate {
+                name: role_name,
+                description: Description::try_from("per-project role")?,
+            };
+            let role = RoleDB {
+                id: RoleId::default(),
+                name: role_create.name,
+                description: role_create.description,
+                created_on: context.time.clone(),
+                created_by_id: context.user_id.clone(),
+                modified_on: context.time.clone(),
+                modified_by_id: context.user_id.clone(),
+                kind,
+                project_id: Some(project.id),
+                fixed: Fixed::TRUE,
+            };
+            let permission = PermissionDB {
+                id: PermissionId::default(),
+                role_id: role.id.clone(),
+                permission_type,
+                entity_type: PermissionEntityType::project(),
+                entity_id,
+                granted_by_id: context.user_id.clone(),
+                granted_on: context.time.clone(),
+                fixed: Fixed::TRUE,
+            };
             db.live().insert::<RoleDB>(&role).await?;
             db.live().insert::<PermissionDB>(&permission).await?;
         }
@@ -376,7 +377,8 @@ mod tests {
     /// A fresh bootstrap (only the built-in roles) is representable.
     #[td_test::test(db)]
     async fn test_fresh_bootstrap_is_representable(db: TdPool) -> Result<(), TdError> {
-        let reasons = check_representability(&db, &[]).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons.is_empty(),
             "expected no violations, got: {reasons:?}"
@@ -389,7 +391,8 @@ mod tests {
     async fn test_with_project_is_representable(db: TdPool) -> Result<(), TdError> {
         let project = db.seed().project(ProjectName::try_from("foo")?).await?;
         seed_per_project_roles(&db, &project).await?;
-        let reasons = check_representability(&db, &[]).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons.is_empty(),
             "expected no violations, got: {reasons:?}"
@@ -400,17 +403,27 @@ mod tests {
     /// A custom role makes the configuration unrepresentable (condition 1).
     #[td_test::test(db)]
     async fn test_custom_role_violates(db: TdPool) -> Result<(), TdError> {
-        let role_create = RoleCreate::builder()
-            .name(RoleName::try_from("data_engineers")?)
-            .description(Description::try_from("custom")?)
-            .build()?;
-        let role = RoleDBBuilder::try_from(&role_create)?
-            .try_update_from(&admin_context())?
-            .kind(RoleKind::Custom)
-            .build()?;
+        let role_create = RoleCreate {
+            name: RoleName::try_from("data_engineers")?,
+            description: Description::try_from("custom")?,
+        };
+        let context = admin_context();
+        let role = RoleDB {
+            id: RoleId::default(),
+            name: role_create.name,
+            description: role_create.description,
+            created_on: context.time.clone(),
+            created_by_id: context.user_id.clone(),
+            modified_on: context.time.clone(),
+            modified_by_id: context.user_id.clone(),
+            kind: RoleKind::Custom,
+            project_id: None,
+            fixed: Fixed::FALSE,
+        };
         db.live().insert::<RoleDB>(&role).await?;
 
-        let reasons = check_representability(&db, &[]).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
                 .iter()
@@ -436,7 +449,8 @@ mod tests {
             )
             .await?;
 
-        let reasons = check_representability(&db, &[]).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
                 .iter()
@@ -462,7 +476,8 @@ mod tests {
             )
             .await?;
 
-        let reasons = check_representability(&db, &[]).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
                 .iter()
@@ -483,7 +498,8 @@ mod tests {
             .permission(PermissionType::manage_access(), None, None, &default_role)
             .await?;
 
-        let reasons = check_representability(&db, &[]).await?;
+        let mut conn = DomainConnection::new(db.begin().await.unwrap());
+        let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
                 .iter()

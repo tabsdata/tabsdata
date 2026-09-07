@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Grant sources: where a request's [`Grants`] come from.
+//! RoleGrant sources: where a request's [`Grants`] come from.
 //!
 //! The async boundary lives here and only here — the enforcement decision
 //! itself ([`Grants::allows`]) is pure. A source resolves a user to their
@@ -10,7 +10,7 @@
 //! SQL-backed implementation ([`super::sql_source`]) loads `role_permission`
 //! rows, groups them per user, and caches the result.
 
-use crate::rbac::model::{Grant, Grants, IdentityClaim, User};
+use crate::rbac::model::{Grants, IdentityClaim, RoleGrant, User};
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_database::domain::{Apiserver, DomainConnection};
@@ -43,7 +43,7 @@ pub trait RbacSource: Send + Sync {
 
 /// An in-memory [`RbacSource`].
 ///
-/// This is the unit-test double — services and layers are tested against it
+/// This is the unit-test double — services are tested against it
 /// with no database — and the reference for what the SQL-backed source must
 /// produce per user.
 #[derive(Debug)]
@@ -105,7 +105,10 @@ impl RbacSource for FixedRbacSource {
 /// checked against these grants, with no dedicated branch in the enforcement
 /// path.
 pub fn identity_grants(request: &RequestContext) -> Grants {
-    Grants::new().with(Grant::<User>::on(request.user_id, IdentityClaim::Requester))
+    Grants::new().with(RoleGrant::<User>::on(
+        request.user_id,
+        IdentityClaim::Requester,
+    ))
 }
 
 #[cfg(test)]
