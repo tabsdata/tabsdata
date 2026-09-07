@@ -44,10 +44,10 @@ def faked(monkeypatch):
         Mysql, "load_tables",
         lambda self, uri, tables: {t.name: len(t.rows) for t in tables},
     )
-    def _apply_changes(self, uri, txns, before):
+    def _apply_changes(self, uri, trxs, before):
         # stub only the SQL write; keep the real entity-count accounting
         new = dict(before)
-        for table, delta in datagen.net_row_deltas(txns).items():
+        for table, delta in datagen.net_row_deltas(trxs).items():
             new[table] = max(0, new.get(table, 0) + delta)
         return new
 

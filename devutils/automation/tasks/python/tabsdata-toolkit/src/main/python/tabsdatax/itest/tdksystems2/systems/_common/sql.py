@@ -95,7 +95,7 @@ class SqlContainerBackend(PortPoolMixin, HostMixin):
     ] = []  # docker-run flags before the image (db2: --privileged)
     system_schemas: frozenset[str] = frozenset()
     admin_db: str = ""  # maintenance DB the admin connection targets (pg: postgres)
-    admin_autocommit: bool = False  # some DBs can't CREATE/DROP DATABASE in a txn
+    admin_autocommit: bool = False  # some DBs can't CREATE/DROP DATABASE in a trx
     ddl_from_slug: str = ""  # borrow another system's DDL (CDC reuses the plain one)
     # Rows per INSERT for the initial load; 1 = one INSERT per row (Oracle has no
     # multi-row VALUES). Higher = fewer round-trips where the dialect allows it.
@@ -496,8 +496,8 @@ class SqlContainerBackend(PortPoolMixin, HostMixin):
     ) -> dict[str, int]:
         rendered = [
             self.session_setup()
-            + [datagen.render_sql(c, quote=self.sql_quote) for c in txn]
-            for txn in transactions
+            + [datagen.render_sql(c, quote=self.sql_quote) for c in trx]
+            for trx in transactions
         ]
         run_sql_transactions(uri, rendered, label="modify-data")
         new = dict(before)

@@ -185,19 +185,19 @@ def plan(model: Model, spec: ChangeSpec, counts: dict[str, int]) -> list[Transac
     entities = resolve_entities(model, spec.entities)
     rng = random.Random(spec.seed)
     planner = _Planner(spec, counts, rng, entities)
-    txns: list[Transaction] = []
+    trxs: list[Transaction] = []
     for t in range(spec.sets):
-        txn = planner.build(t)
-        if txn:
-            txns.append(txn)
-    if not txns:
+        trx = planner.build(t)
+        if trx:
+            trxs.append(trx)
+    if not trxs:
         raise TdxError(
             "modify-data: nothing to do — the requested entities / ops produced no "
             "operations (a domain with no data has no rows to update/delete; use "
             "--ops Insert or create-data first, or name entities that support the "
             "chosen op)"
         )
-    return txns
+    return trxs
 
 
 def op_counts(transactions: list[Transaction]) -> dict[str, dict[OpKind, int]]:
@@ -205,8 +205,8 @@ def op_counts(transactions: list[Transaction]) -> dict[str, dict[OpKind, int]]:
     order. ``modify-data`` prints this so the user sees exactly what each table
     got. Every listed table maps all three ops (missing ones are 0)."""
     counts: dict[str, dict[OpKind, int]] = {}
-    for txn in transactions:
-        for ch in txn:
+    for trx in transactions:
+        for ch in trx:
             per = counts.setdefault(
                 ch.table, {OpKind.INSERT: 0, OpKind.UPDATE: 0, OpKind.DELETE: 0}
             )
@@ -220,8 +220,8 @@ def net_row_deltas(transactions: list[Transaction]) -> dict[str, int]:
     recorded ``entities`` counts so ``info`` / ``status`` and the next run's
     UPDATE / DELETE bounds stay in step with the data."""
     deltas: dict[str, int] = {}
-    for txn in transactions:
-        for ch in txn:
+    for trx in transactions:
+        for ch in trx:
             if ch.kind is OpKind.INSERT:
                 deltas[ch.table] = deltas.get(ch.table, 0) + 1
             elif ch.kind is OpKind.DELETE:

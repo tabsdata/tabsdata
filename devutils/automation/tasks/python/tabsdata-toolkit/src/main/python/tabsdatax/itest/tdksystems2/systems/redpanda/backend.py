@@ -272,7 +272,7 @@ class Redpanda(SqlContainerBackend):
     def apply_changes(
         self, uri: str, transactions: list, before: dict[str, int]
     ) -> dict[str, int]:
-        changes = [c for txn in transactions for c in txn]
+        changes = [c for trx in transactions for c in trx]
         if any(c.kind is not datagen.OpKind.INSERT for c in changes):
             raise TdxError(
                 f"{self.slug} topics are append-only for modify-data "

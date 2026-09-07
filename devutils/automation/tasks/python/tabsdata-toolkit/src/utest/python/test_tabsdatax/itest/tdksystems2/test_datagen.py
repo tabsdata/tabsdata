@@ -103,8 +103,8 @@ def test_initial_data_is_deterministic():
 def _plan_sql(spec, counts):
     mdl = datagen.load_model("employees")
     return [
-        [datagen.render_sql(c, quote="`") for c in txn]
-        for txn in datagen.plan(mdl, spec, counts)
+        [datagen.render_sql(c, quote="`") for c in trx]
+        for trx in datagen.plan(mdl, spec, counts)
     ]
 
 
@@ -129,7 +129,7 @@ def test_insert_uses_seed_block_so_distinct_seeds_never_collide():
         )
         return [
             c.row["emp_no"]
-            for txn in datagen.plan(mdl, spec, counts) for c in txn
+            for trx in datagen.plan(mdl, spec, counts) for c in trx
         ]
 
     s1, s2 = inserts_for(1), inserts_for(2)
@@ -144,8 +144,8 @@ def test_single_entity_sets_is_row_count():
         entities=["employees"], ops=OpSelector.UPDATE, sets=4,
         rows_per_entity={"employees": 1}, seed=1, insert_base=0,
     )
-    txns = datagen.plan(mdl, spec, counts)
-    assert sum(len(t) for t in txns) == 4  # 4 rows == --sets
+    trxs = datagen.plan(mdl, spec, counts)
+    assert sum(len(t) for t in trxs) == 4  # 4 rows == --sets
 
 
 def test_all_entities_uses_per_entity_rows_per_set():
@@ -155,9 +155,9 @@ def test_all_entities_uses_per_entity_rows_per_set():
         entities=["employees", "departments"], ops=OpSelector.UPDATE, sets=2,
         rows_per_entity={"employees": 1, "departments": 1}, seed=1, insert_base=0,
     )
-    txns = datagen.plan(mdl, spec, counts)
+    trxs = datagen.plan(mdl, spec, counts)
     # 2 sets x (1 employee update + 1 department update) = 4 changes
-    assert sum(len(t) for t in txns) == 4
+    assert sum(len(t) for t in trxs) == 4
 
 
 def test_departments_reject_insert_and_delete():
@@ -184,14 +184,14 @@ def test_op_counts_and_net_deltas():
         rows_per_entity={"employees": 1, "departments": 1}, seed=1,
         insert_base=1000,
     )
-    txns = datagen.plan(mdl, spec, counts)
-    per = datagen.op_counts(txns)
+    trxs = datagen.plan(mdl, spec, counts)
+    per = datagen.op_counts(trxs)
     # Mix over 3 sets = 1 insert + 1 update + 1 delete on employees; departments
     # takes only the update (insert/delete unsupported).
     assert per["employees"] == {OpKind.INSERT: 1, OpKind.UPDATE: 1, OpKind.DELETE: 1}
     assert per["departments"] == {OpKind.INSERT: 0, OpKind.UPDATE: 1, OpKind.DELETE: 0}
     # net row change: employees +1 -1 = 0, departments unchanged.
-    assert datagen.net_row_deltas(txns) == {"employees": 0}
+    assert datagen.net_row_deltas(trxs) == {"employees": 0}
 
 
 def test_ops_tag_and_op_applies():
