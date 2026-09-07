@@ -2,86 +2,68 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::metrics::layers::{build_inflight_response, build_inflight_response_global};
+use crate::metrics::inflight_response;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject, Visible};
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::metrics::{InflightRequest, InflightResponse};
-use td_objects::tower_service::with::With;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::types::visible_projects::VisibleProjects;
 
 /// `GET /inflight` — point-in-time count of in-flight LFRs broken
 /// out by `(collection_id, group_id, status)`. Inflight is defined by
 /// status, not by `ended_on IS NULL`. RLS filters to the request's project.
 /// Authorized: the requester must be able to view the project in scope.
-#[service_factory(
-    name = InflightService,
-    request = ReadRequest<InflightRequest>,
-    response = InflightResponse,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ReadRequest<InflightRequest>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<InflightRequest>>::extract_name::<InflightRequest>),
-        // Authorize: the requester must be able to view the project in scope.
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        from_fn(build_inflight_response),
-    )
+#[service_factory]
+async fn inflight(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<ReadRequest<InflightRequest>>,
+) -> Result<InflightResponse, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, param) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+    inflight_response(&param, &VisibleProjects::All, gated_conn.get(grant)).await
 }
 
 /// `GET /inflight` (global) — the same point-in-time aggregation across every
-/// project. `scope = "Global"` bypasses RLS so the query spans all tenants;
-/// the result is then narrowed to the projects the requester may view
-/// (`Visible::projects` + the `*_global` builder).
-#[service_factory(
-    name = InflightGlobalService,
-    request = ReadRequest<InflightRequest>,
-    response = InflightResponse,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service_global() {
-    layers!(
-        from_fn(With::<ReadRequest<InflightRequest>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<InflightRequest>>::extract_name::<InflightRequest>),
-        // Narrow the cross-project aggregation to the requester's viewable projects.
-        from_fn(Visible::projects),
-        from_fn(build_inflight_response_global),
-    )
+/// project. `DbPool<Global>` bypasses RLS so the query spans all tenants; the
+/// result is then narrowed to the projects the requester may view.
+#[service_factory]
+async fn inflight_global(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ReadRequest<InflightRequest>,
+) -> Result<InflightResponse, TdError> {
+    let (ctx, param) = request.into_parts();
+    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    inflight_response(&param, &visible, gated_conn.get(grant)).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Context;
-    use crate::collection::service::CollectionServices;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
-    use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::query_filters::DimensionFilter;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, GroupId, LogicalFunctionRunStatus, ProjectName, TableNameDto,
-        TransactionKey, UserId,
+        FunctionRuntimeValues, GroupId, GroupName, LogicalFunctionRunStatus, ProjectName,
+        TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_inflight_empty_db(db: TdPool) -> Result<(), TdError> {
@@ -91,14 +73,15 @@ mod tests {
             groups: DimensionFilter::default(),
             statuses: vec![],
         };
-        let service = InflightService::with_defaults(db).service();
+        let service = Services::with_defaults(db);
         let response = service
-            .raw_oneshot(
+            .inflight(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(request)
                     .in_project(p.id),
             )
-            .await?;
+            .await?
+            .data;
         assert!(response.rows.is_empty());
         Ok(())
     }
@@ -106,15 +89,11 @@ mod tests {
     /// Cross-tenant isolation on the `/inflight` metrics path. The query carries
     /// no project predicate and leans entirely on the per-request GUC + RLS, so a
     /// request scoped to a different project must observe none of another
-    /// project's in-flight runs. Postgres-only (SQLite/MySQL have no RLS).
+    /// project's in-flight runs.
     /// We seed an in-flight run scoped to one project and confirm a
     /// freshly-created empty project cannot see it.
     #[td_test::test(db)]
     async fn test_inflight_isolated_by_project(db: TdPool) -> Result<(), TdError> {
-        if !matches!(db.kind(), DatabaseBackend::Postgres) {
-            return Ok(());
-        }
-
         let p = db.seed().test_project().await?;
 
         // A second, empty project (its own system groups, no runs).
@@ -132,18 +111,24 @@ mod tests {
                 &UserId::admin(),
             )
             .await?;
-        let create = FunctionRegister::builder()
-            .name(FunctionName::try_from("inflight_iso_fn")?)
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FunctionName::try_from("inflight_iso_fn")?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let function = db
             .scoped(p.id)
             .seed()
@@ -167,9 +152,8 @@ mod tests {
             .await?;
 
         // Scoped to the first project: sees its own in-flight run.
-        let in_test = InflightService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(
+        let in_test = Services::with_defaults(db.clone())
+            .inflight(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(InflightRequest {
                         collections: DimensionFilter::default(),
@@ -178,16 +162,16 @@ mod tests {
                     })
                     .in_project(p.id),
             )
-            .await?;
+            .await?
+            .data;
         assert!(
             !in_test.rows.is_empty(),
             "the first project must see its own in-flight run",
         );
 
         // Scoped to the other project: RLS hides the first project's run.
-        let other = InflightService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(
+        let other = Services::with_defaults(db.clone())
+            .inflight(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(InflightRequest {
                         collections: DimensionFilter::default(),
@@ -196,7 +180,8 @@ mod tests {
                     })
                     .in_project(other_project.id),
             )
-            .await?;
+            .await?
+            .data;
         assert!(
             other.rows.is_empty(),
             "a different project must not see the first project's in-flight runs",
@@ -210,18 +195,24 @@ mod tests {
         db: &TdPool,
         collection: &ActiveCollectionDB,
     ) -> Result<(), TdError> {
-        let create = FunctionRegister::builder()
-            .name(FunctionName::try_from("g_inflight_fn")?)
-            .try_description("d")?
-            .bundle_id(BundleId::default())
-            .try_snippet("s")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("t0")?])
-            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: FunctionName::try_from("g_inflight_fn")?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
         let p = &collection.project_id;
         let function = db.scoped(p).seed().function(collection, &create).await?;
         let execution = db.scoped(p).seed().execution(&function).await?;
@@ -247,13 +238,9 @@ mod tests {
     /// RLS), attributing each row to its owning project. System groups carry
     /// the same fixed id in every project, so this doubles as the regression
     /// pin for bypass fan-out: a groups join not matching project_id would
-    /// multiply the counts. Postgres-only (bypass-vs-RLS is the whole point).
+    /// multiply the counts. Bypass-vs-RLS is the whole point.
     #[td_test::test(db)]
     async fn test_inflight_global_spans_and_attributes_projects(db: TdPool) -> Result<(), TdError> {
-        if !matches!(db.kind(), DatabaseBackend::Postgres) {
-            return Ok(());
-        }
-
         // Project A: an in-flight run in one of its collections.
         let p = db.seed().test_project().await?;
         let coll_a = db
@@ -271,21 +258,25 @@ mod tests {
             .await?;
         let coll_b_name = CollectionName::try_from("g_inflight_b_coll")?;
         let project_b_id = project_b.id.to_string();
-        CollectionServices::build(&Context::with_defaults(db.clone()))
-            .create
-            .service()
-            .raw_oneshot(
+        Services::with_defaults(db.clone())
+            .create_collection(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(
                         (),
-                        CollectionCreate::builder()
-                            .name(&coll_b_name)
-                            .description(&Description::try_from("d")?)
-                            .build()?,
+                        CollectionCreate {
+                            name: coll_b_name.clone(),
+                            description: Description::try_from("d")?,
+                            group: GroupName::default_group(),
+                            base_path: None,
+                            connection: None,
+                            secrets: None,
+                            vars: None,
+                        },
                     )
                     .in_project(project_b.id),
             )
-            .await?;
+            .await?
+            .data;
         let coll_b: ActiveCollectionDB = db
             .scoped(&project_b_id)
             .live()
@@ -295,9 +286,8 @@ mod tests {
 
         // Global request is project-free (bare InflightRequest) → bypass RLS →
         // both projects' runs are visible in one response.
-        let response = InflightGlobalService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(
+        let response = Services::with_defaults(db.clone())
+            .inflight_global(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
                     InflightRequest {
                         collections: DimensionFilter::default(),
@@ -306,7 +296,8 @@ mod tests {
                     },
                 ),
             )
-            .await?;
+            .await?
+            .data;
 
         let row_a = response
             .rows

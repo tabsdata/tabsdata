@@ -2,16 +2,16 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::metrics::layers::{build_metrics_response, build_metrics_response_global};
+use crate::metrics::metrics_response;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject, Visible};
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_authz::rbac::{Project, ViewProject};
+use td_database::access::{GatedConnection, InProject, RO};
+use td_error::TdError;
+use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::metrics::{MetricsRequest, MetricsResponse};
-use td_objects::tower_service::with::With;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::types::visible_projects::VisibleProjects;
 
 /// `GET /metrics` — consolidated operational endpoint. Returns
 /// `(nodes, edges)` over a window, parameterised by `dim`
@@ -21,60 +21,46 @@ use td_tower::layers;
 /// The connection GUC is set to the request's project and RLS filters the
 /// aggregation to it — the queries carry no project predicate of their own.
 /// Authorized: the requester must be able to view the project in scope.
-#[service_factory(
-    name = MetricsService,
-    request = ReadRequest<MetricsRequest>,
-    response = MetricsResponse,
-    connection = ConnectionProvider,
-    scope = "Project",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ReadRequest<MetricsRequest>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<MetricsRequest>>::extract_name::<MetricsRequest>),
-        // Authorize: the requester must be able to view the project in scope.
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        from_fn(build_metrics_response),
-    )
+#[service_factory]
+async fn metrics(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: WithinProject<ReadRequest<MetricsRequest>>,
+) -> Result<MetricsResponse, TdError> {
+    let (project, request) = request.into_parts();
+    let (ctx, param) = request.into_parts();
+    let grant = authz
+        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .await?;
+    metrics_response(&param, &VisibleProjects::All, gated_conn.get(grant)).await
 }
 
 /// `GET /metrics` (global) — the same nodes+edges aggregation across every
-/// project. `scope = "Global"` bypasses RLS so the query spans all tenants;
-/// the result is then narrowed to the projects the requester may view
-/// (`Visible::projects` + the `*_global` builder).
-#[service_factory(
-    name = MetricsGlobalService,
-    request = ReadRequest<MetricsRequest>,
-    response = MetricsResponse,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service_global() {
-    layers!(
-        from_fn(With::<ReadRequest<MetricsRequest>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<MetricsRequest>>::extract_name::<MetricsRequest>),
-        // Narrow the cross-project aggregation to the requester's viewable projects.
-        from_fn(Visible::projects),
-        from_fn(build_metrics_response_global),
-    )
+/// project. `DbPool<Global>` bypasses RLS so the query spans all tenants; the
+/// result is then narrowed to the projects the requester may view.
+#[service_factory]
+async fn metrics_global(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ReadRequest<MetricsRequest>,
+) -> Result<MetricsResponse, TdError> {
+    let (ctx, param) = request.into_parts();
+    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    metrics_response(&param, &visible, gated_conn.get(grant)).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_database::pool::TdPool;
-    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::metrics::Dim;
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
     use td_objects::types::basic::{AccessTokenId, UserId};
     use td_queries::test_utils::SeedEntry;
-    use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_metrics_empty_window(db: TdPool) -> Result<(), TdError> {
@@ -87,14 +73,15 @@ mod tests {
             groups: DimensionFilter::default(),
             statuses: vec![],
         };
-        let service = MetricsService::with_defaults(db).service();
+        let service = Services::with_defaults(db);
         let response = service
-            .raw_oneshot(
+            .metrics(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(request)
                     .in_project(p.id),
             )
-            .await?;
+            .await?
+            .data;
         assert_eq!(response.dim, Dim::Collection);
         assert_eq!(response.unit, WindowUnit::Day);
         assert_eq!(response.start_ms, 0);
