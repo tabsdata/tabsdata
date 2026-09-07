@@ -219,73 +219,9 @@ pub fn parse_versions(s: impl Into<String>) -> Result<Versions, TdError> {
     }
 }
 
-const NAME_PATTERN: &str = concat!("^", IDENTIFIER_PATTERN, "$");
+pub const NAME_PATTERN: &str = concat!("^", IDENTIFIER_PATTERN, "$");
 
-pub fn parse_name(s: impl Into<String>, name_type: &str) -> Result<String, TdError> {
-    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(NAME_PATTERN).unwrap());
-
-    parser(
-        REGEX.clone(),
-        s,
-        format!("{name_type}, a [A-Za-z0-9] word of up to 100 characters"),
-    )
-}
-
-const UNDERSCORE_NAME_PATTERN: &str = concat!("^", UNDERSCORE_IDENTIFIER_PATTERN, "$");
-
-pub fn parse_underscore_name(s: impl Into<String>, name_type: &str) -> Result<String, TdError> {
-    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(UNDERSCORE_NAME_PATTERN).unwrap());
-
-    parser(
-        REGEX.clone(),
-        s,
-        format!("{name_type}, a [_A-Za-z0-9] word of up to 100 characters"),
-    )
-}
-
-pub fn parse_collection(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Collection name")
-}
-
-pub fn parse_project(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Project name")
-}
-
-pub fn parse_entity(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Entity name")
-}
-
-pub fn parse_function(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Function name")
-}
-
-const EXECUTION_NAME_PATTERN: &str = concat!("^", IDENTIFIER_LEN_PATTERN, "$");
-
-pub fn parse_execution(s: impl Into<String>) -> Result<String, TdError> {
-    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(EXECUTION_NAME_PATTERN).unwrap());
-
-    parser(
-        REGEX.clone(),
-        s,
-        "Execution name, a word of up to 100 characters",
-    )
-}
-
-pub fn parse_table(s: impl Into<String>) -> Result<String, TdError> {
-    parse_underscore_name(s, "Table name")
-}
-
-pub fn parse_role(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Role name")
-}
-
-pub fn parse_group(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Group name")
-}
-
-pub fn parse_user(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "User name")
-}
+pub const UNDERSCORE_NAME_PATTERN: &str = concat!("^", UNDERSCORE_IDENTIFIER_PATTERN, "$");
 
 pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
     const EMAIL_PATTERN: &str = "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}";
@@ -307,38 +243,43 @@ mod tests {
     use td_common::id;
 
     #[test]
-    fn test_parse_name() {
-        let name = parse_name("abc".to_string(), "test").unwrap();
-        assert_eq!(name, "abc");
+    fn test_name_pattern() {
+        use crate::types::basic::UserName;
+        use ta_objects::Typed;
 
-        assert!(parse_name("".to_string(), "test").is_err());
-        assert!(parse_name(" a".to_string(), "test").is_err());
-        assert!(parse_name("a ".to_string(), "test").is_err());
-        assert!(parse_name(" a ".to_string(), "test").is_err());
-        assert!(parse_name("a a".to_string(), "test").is_err());
-        assert!(parse_name("0a".to_string(), "test").is_err());
-        assert!(parse_name("@".to_string(), "test").is_err());
-        assert!(parse_name("a".repeat(101), "test").is_err());
+        assert_eq!(*UserName::try_new("abc").unwrap(), "abc");
 
-        assert!(parse_name("A_".to_string(), "test").is_ok());
-        assert!(parse_name("A".to_string(), "test").is_ok());
-        assert!(parse_name("A1".to_string(), "test").is_ok());
-        assert!(parse_name("a".to_string(), "test").is_ok());
-        assert!(parse_name("a1".to_string(), "test").is_ok());
-        assert!(parse_name("AZaz09_".to_string(), "test").is_ok());
-        assert!(parse_name("a".repeat(100), "test").is_ok());
+        assert!(UserName::try_new("").is_err());
+        assert!(UserName::try_new(" a").is_err());
+        assert!(UserName::try_new("a ").is_err());
+        assert!(UserName::try_new(" a ").is_err());
+        assert!(UserName::try_new("a a").is_err());
+        assert!(UserName::try_new("0a").is_err());
+        assert!(UserName::try_new("@").is_err());
+        assert!(UserName::try_new("a".repeat(101)).is_err());
+
+        assert!(UserName::try_new("A_").is_ok());
+        assert!(UserName::try_new("A").is_ok());
+        assert!(UserName::try_new("A1").is_ok());
+        assert!(UserName::try_new("a").is_ok());
+        assert!(UserName::try_new("a1").is_ok());
+        assert!(UserName::try_new("AZaz09_").is_ok());
+        assert!(UserName::try_new("a".repeat(100)).is_ok());
     }
 
     #[test]
-    fn test_parse_names() {
-        assert!(parse_user("abc".to_string()).is_ok());
-        assert!(parse_user("_abc".to_string()).is_err());
-        assert!(parse_collection("abc".to_string()).is_ok());
-        assert!(parse_collection("_abc".to_string()).is_err());
-        assert!(parse_function("abc".to_string()).is_ok());
-        assert!(parse_function("_abc".to_string()).is_err());
-        assert!(parse_table("abc".to_string()).is_ok());
-        assert!(parse_table("_abc".to_string()).is_ok());
+    fn test_name_types() {
+        use crate::types::basic::{CollectionName, FunctionName, TableName, UserName};
+        use ta_objects::Typed;
+
+        assert!(UserName::try_new("abc").is_ok());
+        assert!(UserName::try_new("_abc").is_err());
+        assert!(CollectionName::try_new("abc").is_ok());
+        assert!(CollectionName::try_new("_abc").is_err());
+        assert!(FunctionName::try_new("abc").is_ok());
+        assert!(FunctionName::try_new("_abc").is_err());
+        assert!(TableName::try_new("abc").is_ok());
+        assert!(TableName::try_new("_abc").is_ok());
     }
 
     #[test]

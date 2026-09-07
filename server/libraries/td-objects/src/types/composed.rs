@@ -5,20 +5,19 @@
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{TableName, TableNameDto};
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
-use ta_objects::ComposedString;
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::TdError;
 
-#[ta_objects::typed(composed(inner = "VersionedTableRef::<TableName>"), try_from = TableDependencyDto)]
-#[derive(Eq, PartialEq)]
-pub struct TableDependency;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(try_from = TableDependencyDto)]
+pub struct TableDependency(VersionedTableRef<TableName>);
 
-#[ta_objects::typed(composed(inner = "VersionedTableRef::<TableNameDto>"))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct TableDependencyDto;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct TableDependencyDto(VersionedTableRef<TableNameDto>);
 
-#[ta_objects::typed(composed(inner = "TableRef::<TableName>"), try_from = TableTriggerDto)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct TableTrigger;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(try_from = TableTriggerDto)]
+pub struct TableTrigger(TableRef<TableName>);
 
 impl TryFrom<&TableDependencyDto> for TableTrigger {
     type Error = TdError;
@@ -36,15 +35,16 @@ impl TryFrom<&TableDBWithNames> for TableTrigger {
     type Error = TdError;
 
     fn try_from(v: &TableDBWithNames) -> Result<Self, Self::Error> {
-        let table = TableTrigger::new(TableRef::new(Some(v.collection.clone()), v.name.clone()));
+        let table = TableTrigger::new(TableRef::new(
+            Some(v.collection.clone()),
+            v.base.name.clone(),
+        ));
         Ok(table)
     }
 }
 
-#[ta_objects::typed(composed(inner = "TableRef::<TableNameDto>"))]
-#[derive(Eq, PartialEq)]
-pub struct TableTriggerDto;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct TableTriggerDto(TableRef<TableNameDto>);
 
-#[ta_objects::typed(composed(inner = "Versions"))]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TableVersions;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct TableVersions(Versions);

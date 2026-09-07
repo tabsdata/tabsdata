@@ -5,7 +5,6 @@
 use crate::types::basic::{LogicalFunctionRunStatus, StatusCount};
 use crate::types::json::Json;
 use std::collections::HashMap;
-use strum::IntoEnumIterator;
 
 #[derive(utoipa::ToSchema, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionRunStatusCount(HashMap<LogicalFunctionRunStatus, StatusCount>);

@@ -2,11 +2,11 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::execution_status::WorkerCallbackStatus;
 use td_error::{ApiError, TdError, api_error};
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum Decorator {
     #[typed_enum(rename = "P")]
     Publisher,
@@ -29,8 +29,7 @@ impl Decorator {
     }
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum DependencyStatus {
     #[typed_enum(rename = "A")]
     Active,
@@ -41,8 +40,7 @@ pub enum DependencyStatus {
 /// Flavour of a collection, inferred from its group at creation time and then
 /// immutable. `DataFactory` is the default; `Source`/`Destination` collections
 /// carry connection info.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum CollectionType {
     #[typed_enum(rename = "F")]
     DataFactory,
@@ -71,8 +69,7 @@ impl CollectionType {
 
 /// Represents the status of an execution.
 /// It is a summary of the statuses of all function runs within the execution.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub enum ExecutionStatus {
     /// All function runs are scheduled.
     #[typed_enum(rename = "S")]
@@ -120,8 +117,9 @@ pub enum ExecutionStatus {
 ///     Done --> Committed
 ///     Committed --> Yanked
 /// ```
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Copy)]
+#[derive(
+    TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash, Copy,
+)]
 pub enum LogicalFunctionRunStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -197,8 +195,7 @@ impl TryFrom<WorkerCallbackStatus> for LogicalFunctionRunStatus {
 }
 
 /// Status of a logical pointer (LFR or LTDV) at any moment.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub enum LogicalPointerStatus {
     /// The logical row exists but no concrete is bound yet.
     #[typed_enum(rename = "P")]
@@ -212,8 +209,7 @@ pub enum LogicalPointerStatus {
 }
 
 /// Reason recorded on every pointer-changing event in the logical history.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub enum LogicalPointerReason {
     /// Logical row created at plan-build time; status begins `Pending`.
     #[typed_enum(rename = "IM")]
@@ -258,8 +254,7 @@ pub enum LogicalPointerReason {
 ///   Failed    ─► Requested                       (operator recover)
 ///   Requested | Dispatched | Running ─► Failed   (recover abandons the attempt)
 /// ```
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash, Copy)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash, Copy)]
 pub enum PhysicalFunctionRunStatus {
     #[typed_enum(rename = "RR")]
     Requested,
@@ -351,8 +346,7 @@ impl From<&LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
 /// from upload until a function register/update/patch claims it, at which
 /// point it flips to `Registered`. Rows are never deleted, so `Pending` rows
 /// that are never claimed are orphan-GC candidates.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum BundleStatus {
     #[typed_enum(rename = "P")]
     Pending,
@@ -360,8 +354,7 @@ pub enum BundleStatus {
     Registered,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum FunctionStatus {
     #[typed_enum(rename = "A")]
     Active,
@@ -371,13 +364,13 @@ pub enum FunctionStatus {
     Deleted,
 }
 
-#[ta_objects::typed_enum]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub enum GrantType {
     #[typed_enum(rename = "refresh_token")]
     RefreshToken,
 }
 
-#[ta_objects::typed_enum]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub enum GlobalStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -398,9 +391,8 @@ pub enum GlobalStatus {
 /// `system` and `project`, but extensions register their own (e.g. `ai`) in the
 /// authorization registry. The set of *valid* values is whatever the registry
 /// has registered — validated at the grant-create boundary, not by this type.
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct PermissionEntityType;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct PermissionEntityType(String);
 
 impl PermissionEntityType {
     /// The built-in `system` entity type.
@@ -422,9 +414,8 @@ impl PermissionEntityType {
 /// authorization registry. The set of *valid* `(entity_type, permission)` pairs
 /// is whatever the registry has registered — validated at the grant-create
 /// boundary, not by this type.
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct PermissionType;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct PermissionType(String);
 
 impl PermissionType {
     // system permissions (entity `system:__system__`)
@@ -478,8 +469,7 @@ impl PermissionType {
 /// projects. The org-wide read/develop wildcards
 /// (`view_all_projects`/`develop_all_projects`) are intentionally absent — they
 /// have no Simple-surface name and are reachable only in RBAC Mode View.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub enum SimplePermissionType {
     // project-scoped — require a project
     #[typed_enum(rename = "view_project")]
@@ -539,8 +529,7 @@ impl SimplePermissionType {
 /// `custom` is the kind of any role created through the RBAC `role create`
 /// surface — its presence is what makes a configuration unrepresentable in
 /// Simple Security Mode (condition 1).
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum RoleKind {
     #[typed_enum(rename = "sys_admin")]
     SysAdmin,
@@ -560,8 +549,7 @@ pub enum RoleKind {
 
 /// Kind of replay-audit row written by the replay / delete-replay
 /// endpoints to `logical_function_run_replays`.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub enum ReplayKind {
     /// Operator created a fresh `PhysicalFunctionRunDB` and redirected the LFR
     /// pointer to it.
@@ -576,8 +564,7 @@ pub enum ReplayKind {
     Void,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum SessionStatus {
     #[typed_enum(rename = "a")]
     Active,
@@ -592,15 +579,13 @@ pub enum SessionStatus {
 }
 
 /// Kept 1:1 with `td_storage::location::StorageLocation`.
-#[ta_objects::typed_enum]
-#[derive(Default, Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Default, Eq, PartialEq, Hash)]
 pub enum StorageVersion {
     #[default]
     V1,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum TableStatus {
     #[typed_enum(rename = "A")]
     Active,
@@ -610,8 +595,7 @@ pub enum TableStatus {
     Deleted,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Default)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Default)]
 pub enum TableType {
     #[default]
     #[typed_enum(rename = "R")]
@@ -626,8 +610,7 @@ pub enum TableType {
 /// So final status (e.g., Committed, Canceled, Yanked) means all function runs within the transaction
 /// do have the same status.
 /// It is a summary of the statuses of all function runs within the transaction.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub enum TransactionStatus {
     /// All function runs are scheduled.
     #[typed_enum(rename = "S")]
@@ -652,8 +635,7 @@ pub enum TransactionStatus {
     Unexpected,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum Trigger {
     #[typed_enum(rename = "M")]
     Manual,
@@ -661,8 +643,7 @@ pub enum Trigger {
     Dependency,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Default, Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Default, Eq, PartialEq)]
 pub enum TriggerStatus {
     #[default]
     #[typed_enum(rename = "A")]
@@ -673,8 +654,7 @@ pub enum TriggerStatus {
     Deleted,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum TriggerType {
     #[typed_enum(rename = "M")]
     Manual,
@@ -684,8 +664,7 @@ pub enum TriggerType {
     StageTrigger,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum WorkerMessageStatus {
     #[typed_enum(rename = "N")]
     None,
@@ -695,8 +674,7 @@ pub enum WorkerMessageStatus {
     Unlocked,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum WorkerStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -731,8 +709,7 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
     }
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub enum WorkerTypeDto {
     #[typed_enum(rename = "CT")]
     CronTrigger,
@@ -740,8 +717,7 @@ pub enum WorkerTypeDto {
     StageTrigger,
 }
 
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum WorkerType {
     #[typed_enum(rename = "F")]
     FunctionRunner,
@@ -803,7 +779,6 @@ mod tests {
     /// that a manual array enumeration would miss.
     #[test]
     fn lfr_ended_and_in_flight_partition_all_variants() {
-        use strum::IntoEnumIterator;
         assert_eq!(LogicalFunctionRunStatus::ENDED.len(), 6);
         assert_eq!(LogicalFunctionRunStatus::IN_FLIGHT.len(), 5);
         for s in LogicalFunctionRunStatus::iter() {
@@ -819,7 +794,6 @@ mod tests {
 
     #[test]
     fn pfr_ended_and_in_flight_partition_all_variants() {
-        use strum::IntoEnumIterator;
         assert_eq!(PhysicalFunctionRunStatus::ENDED.len(), 3);
         assert_eq!(PhysicalFunctionRunStatus::IN_FLIGHT.len(), 3);
         for s in PhysicalFunctionRunStatus::iter() {

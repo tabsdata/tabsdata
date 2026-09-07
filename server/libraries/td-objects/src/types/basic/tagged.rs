@@ -2,12 +2,14 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use ta_objects::{TypedOpenApi, TypedSerde, TypedTag};
+
 use crate::types::basic::{
     CollectionId, CollectionName, FunctionId, FunctionName, GroupId, GroupName, ProjectId,
     ProjectName, RoleId, RoleName, TableId, TableName, UserId, UserName,
 };
 
-#[ta_objects::typed_tag]
+#[derive(TypedTag, TypedSerde, TypedOpenApi)]
 pub enum CollectionIdName {
     #[tag("~")]
     Id(CollectionId),
@@ -15,7 +17,7 @@ pub enum CollectionIdName {
     Name(CollectionName),
 }
 
-#[ta_objects::typed_tag]
+#[derive(TypedTag, TypedSerde, TypedOpenApi)]
 pub enum ProjectIdName {
     #[tag("~")]
     Id(ProjectId),
@@ -23,7 +25,7 @@ pub enum ProjectIdName {
     Name(ProjectName),
 }
 
-#[ta_objects::typed_tag]
+#[derive(TypedTag, TypedSerde, TypedOpenApi)]
 pub enum FunctionIdName {
     #[tag("~")]
     Id(FunctionId),
@@ -31,7 +33,7 @@ pub enum FunctionIdName {
     Name(FunctionName),
 }
 
-#[ta_objects::typed_tag]
+#[derive(TypedTag, TypedSerde, TypedOpenApi)]
 pub enum GroupIdName {
     #[tag("~")]
     Id(GroupId),
@@ -39,7 +41,7 @@ pub enum GroupIdName {
     Name(GroupName),
 }
 
-#[ta_objects::typed_tag]
+#[derive(TypedTag, TypedSerde, TypedOpenApi)]
 pub enum RoleIdName {
     #[tag("~")]
     Id(RoleId),
@@ -47,7 +49,7 @@ pub enum RoleIdName {
     Name(RoleName),
 }
 
-#[ta_objects::typed_tag]
+#[derive(TypedTag, TypedSerde, TypedOpenApi)]
 pub enum TableIdName {
     #[tag("~")]
     Id(TableId),
@@ -55,7 +57,7 @@ pub enum TableIdName {
     Name(TableName),
 }
 
-#[ta_objects::typed_tag]
+#[derive(TypedTag, TypedSerde, TypedOpenApi)]
 pub enum UserIdName {
     #[tag("~")]
     Id(UserId),

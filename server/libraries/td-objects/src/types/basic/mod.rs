@@ -13,7 +13,6 @@ mod tagged;
 mod timestamp;
 mod typed_enum;
 
-// Re-export the types so they are all accessible under basic::*
 pub use bool::*;
 pub use i16::*;
 pub use i32::*;

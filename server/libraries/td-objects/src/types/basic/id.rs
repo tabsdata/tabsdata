@@ -2,14 +2,16 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::id::{ID_LENGTH, Id};
+use td_common::logic_id::IdL;
 use td_security::{
     ID_ALL_ENTITIES, ID_GROUP_DEFAULT, ID_GROUP_DESTINATION, ID_GROUP_SOURCE, ID_ROLE_DEFAULT,
     ID_ROLE_PROJECT_CREATOR, ID_ROLE_SYS_ADMIN, ID_SYSTEM, ID_USER_ADMIN,
 };
 
-#[ta_objects::typed(id)]
-pub struct AccessTokenId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct AccessTokenId(Id);
 
 impl AccessTokenId {
     pub fn log(&self) -> String {
@@ -20,11 +22,12 @@ impl AccessTokenId {
     }
 }
 
-#[ta_objects::typed(id)]
-pub struct BundleId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct BundleId(Id);
 
-#[ta_objects::typed(id, try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
-pub struct CollectionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
+pub struct CollectionId(Id);
 
 impl CollectionId {
     pub fn all_collections() -> Self {
@@ -36,20 +39,22 @@ impl CollectionId {
     }
 }
 
-#[ta_objects::typed(id)]
-pub struct ConnectionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ConnectionId(Id);
 
-#[ta_objects::typed(id, try_from = EntityId)]
-pub struct ProjectId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = EntityId)]
+pub struct ProjectId(Id);
 
-#[ta_objects::typed(id)]
-pub struct DependencyId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct DependencyId(Id);
 
-#[ta_objects::typed(id)]
-pub struct DependencyVersionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct DependencyVersionId(Id);
 
-#[ta_objects::typed(id, try_from = CollectionId, try_from = ProjectId)]
-pub struct EntityId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = CollectionId, try_from = ProjectId)]
+pub struct EntityId(Id);
 
 impl EntityId {
     pub fn all_entities() -> Self {
@@ -61,26 +66,27 @@ impl EntityId {
     }
 }
 
-#[ta_objects::typed(idlogic(key = EP))]
-pub struct ExecutionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ExecutionId(IdL<EP>);
 
-#[ta_objects::typed(id, try_from = CollectionId)]
-pub struct FromCollectionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = CollectionId)]
+pub struct FromCollectionId(Id);
 
-#[ta_objects::typed(id)]
-pub struct FunctionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct FunctionId(Id);
 
 /// Identity of a function's stage/checkpoint directory. Stable across function
 /// versions (carried forward on update) so a function's accumulating state
 /// persists; regenerated only on `--reset-stage` to start fresh.
-#[ta_objects::typed(id)]
-pub struct StageId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct StageId(Id);
 
-#[ta_objects::typed(idlogic(key = FV))]
-pub struct FunctionVersionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct FunctionVersionId(IdL<FV>);
 
-#[ta_objects::typed(id)]
-pub struct GroupId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct GroupId(Id);
 
 impl GroupId {
     // Group ids are unique per project (composite PK), and the seeded system
@@ -103,38 +109,38 @@ impl GroupId {
     }
 }
 
-#[ta_objects::typed(idlogic(key = FR))]
-pub struct LogicalFunctionRunId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct LogicalFunctionRunId(IdL<FR>);
 
-#[ta_objects::typed(id)]
-pub struct LogicalFunctionRunInputId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct LogicalFunctionRunInputId(Id);
 
-#[ta_objects::typed(id)]
-pub struct LogicalFunctionRunPointerId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct LogicalFunctionRunPointerId(Id);
 
-#[ta_objects::typed(idlogic(key = DV))]
-pub struct LogicalTableDataVersionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct LogicalTableDataVersionId(IdL<DV>);
 
-#[ta_objects::typed(id)]
-pub struct LogicalTableDataVersionPointerId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct LogicalTableDataVersionPointerId(Id);
 
-#[ta_objects::typed(id)]
-pub struct PermissionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct PermissionId(Id);
 
-#[ta_objects::typed(idlogic(key = PFR))]
-pub struct PhysicalFunctionRunId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct PhysicalFunctionRunId(IdL<PFR>);
 
-#[ta_objects::typed(idlogic(key = PDV))]
-pub struct PhysicalTableDataVersionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct PhysicalTableDataVersionId(IdL<PDV>);
 
-#[ta_objects::typed(id)]
-pub struct RefreshTokenId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct RefreshTokenId(Id);
 
-#[ta_objects::typed(id)]
-pub struct RequirementId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct RequirementId(Id);
 
-#[ta_objects::typed(id)]
-pub struct RoleId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct RoleId(Id);
 
 impl RoleId {
     pub fn sys_admin() -> Self {
@@ -150,26 +156,27 @@ impl RoleId {
     }
 }
 
-#[ta_objects::typed(id)]
-pub struct TableId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TableId(Id);
 
-#[ta_objects::typed(id)]
-pub struct TableVersionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TableVersionId(Id);
 
-#[ta_objects::typed(id, try_from = CollectionId)]
-pub struct ToCollectionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = CollectionId)]
+pub struct ToCollectionId(Id);
 
-#[ta_objects::typed(idlogic(key = TX))]
-pub struct TransactionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TransactionId(IdL<TX>);
 
-#[ta_objects::typed(id)]
-pub struct TriggerId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TriggerId(Id);
 
-#[ta_objects::typed(id)]
-pub struct TriggerVersionId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TriggerVersionId(Id);
 
-#[ta_objects::typed(id)]
-pub struct UserId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct UserId(Id);
 
 impl UserId {
     pub fn admin() -> Self {
@@ -181,8 +188,8 @@ impl UserId {
     }
 }
 
-#[ta_objects::typed(id)]
-pub struct UserRoleId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct UserRoleId(Id);
 
-#[ta_objects::typed(idlogic(key = WKR))]
-pub struct WorkerId;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct WorkerId(IdL<WKR>);

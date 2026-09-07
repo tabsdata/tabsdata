@@ -3,42 +3,39 @@
 //
 
 use crate::dxo::table::TableDBWithNames;
-use crate::parse::{
-    DATA_LOCATION_REGEX, parse_collection, parse_email, parse_entity, parse_execution,
-    parse_function, parse_group, parse_project, parse_role, parse_table, parse_user,
-};
-use std::fmt::Debug;
+use crate::parse::{DATA_LOCATION_REGEX, NAME_PATTERN, UNDERSCORE_NAME_PATTERN, parse_email};
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::{ApiError, api_error};
 use td_security::{
     ADMIN_USER, DEFAULT_GROUP, DEFAULT_ROLE, DESTINATION_GROUP, PROJECT_CREATOR_ROLE, SOURCE_GROUP,
     SYS_ADMIN_ROLE, SYSTEM_USER,
 };
 
-#[ta_objects::typed(string(secret))]
-pub struct AccessToken;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(secret)]
+pub struct AccessToken(String);
 
-#[ta_objects::typed(string(default = "<unavailable>"))]
-pub struct BuildManifest;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = "<unavailable>")]
+pub struct BuildManifest(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq)]
-pub struct BundleHash;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct BundleHash(String);
 
-#[ta_objects::typed(string(parser = parse_collection), try_from = ToCollectionName)]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct CollectionName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters", try_from = ToCollectionName)]
+pub struct CollectionName(String);
 
-#[ta_objects::typed(string(parser = parse_project))]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ProjectName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
+pub struct ProjectName(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq)]
-pub struct Connector;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct Connector(String);
 
-#[ta_objects::typed(string(parser = CronMask::parse_cron))]
-#[derive(Eq, PartialEq)]
-pub struct CronMask;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(parser = CronMask::parse_cron)]
+pub struct CronMask(String);
 
 impl CronMask {
     fn create_cron(s: String) -> Result<croner::Cron, td_error::TdError> {
@@ -74,102 +71,104 @@ impl CronMask {
 /// (s3/az/gcs/local) is selected by mounts matching this prefix. Mandatory on
 /// collections (default `/`), an optional override on function versions, and
 /// stamped (frozen) on physical table data versions and bundles at creation.
-#[ta_objects::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct BasePath;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(regex = DATA_LOCATION_REGEX, default = "/")]
+pub struct BasePath(String);
 
-#[ta_objects::typed(string(min_len = 0, max_len = 200, default = ""))]
-#[derive(Eq, PartialEq)]
-pub struct Description;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min_len = 0, max_len = 200, default = "")]
+pub struct Description(String);
 
 /// Fully-qualified Conn class of a connection (`<module>:<qualname>`, e.g.
 /// `tabsdatak.conn.mysql:MySqlConn`). Stored on the connection row so the
 /// connector type cannot change across upserts, and matched against a
 /// publisher/subscriber function's own Conn class at register/update.
-#[ta_objects::typed(string(min_len = 1, max_len = 200))]
-#[derive(Eq, PartialEq)]
-pub struct ConnectionKind;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min_len = 1, max_len = 200)]
+pub struct ConnectionKind(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq)]
-pub struct Dot;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct Dot(String);
 
-#[ta_objects::typed(string(parser = parse_email))]
-#[derive(Eq, PartialEq)]
-pub struct Email;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(parser = parse_email)]
+pub struct Email(String);
 
-#[ta_objects::typed(string(parser = parse_entity))]
-pub struct EntityName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
+pub struct EntityName(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct EnvPrefix;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct EnvPrefix(String);
 
-#[ta_objects::typed(string)]
-pub struct ExecutionError;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ExecutionError(String);
 
-#[ta_objects::typed(string(parser = parse_execution))]
-#[derive(Eq, PartialEq)]
-pub struct ExecutionName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(max_len = 100)]
+pub struct ExecutionName(String);
 
 /// Caller-supplied idempotency key for a trigger. When set, an execution is
 /// deduplicated per function on `(function_id, external_uid)`.
-#[ta_objects::typed(string(min_len = 1, max_len = 64))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct ExternalUid;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(min_len = 1, max_len = 64)]
+pub struct ExternalUid(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq)]
-pub struct FullName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct FullName(String);
 
-#[ta_objects::typed(string(parser = parse_function))]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct FunctionName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
+pub struct FunctionName(String);
 
 // JSON blob with `version`, `envs` & `secrets` top entries.
 // info used in decorator.
-#[ta_objects::typed(string(secret, max_len = 4096, default = "{}"))]
-#[derive(Eq, PartialEq)]
-pub struct FunctionRuntimeValues;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(secret, max_len = 4096, default = "{}")]
+pub struct FunctionRuntimeValues(String);
 
-#[ta_objects::typed(string)]
-pub struct LikeFilter;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct LikeFilter(String);
 
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;
 
-#[ta_objects::typed(string(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
-pub struct NewPassword;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN)]
+pub struct NewPassword(String);
 
-#[ta_objects::typed(string(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
-pub struct OldPassword;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN)]
+pub struct OldPassword(String);
 
-#[ta_objects::typed(string(min_len = 1, max_len = 1024))]
-pub struct Partition;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(min_len = 1, max_len = 1024)]
+pub struct Partition(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct PartitionName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct PartitionName(String);
 
-#[ta_objects::typed(string)]
-pub struct PartitionFileName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct PartitionFileName(String);
 
-#[ta_objects::typed(string(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
-pub struct Password;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN)]
+pub struct Password(String);
 
-#[ta_objects::typed(string(secret))]
-#[derive(Eq, PartialEq)]
-pub struct PasswordHash;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(secret)]
+pub struct PasswordHash(String);
 
-#[ta_objects::typed(string)]
-pub struct PythonVersion;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct PythonVersion(String);
 
-#[ta_objects::typed(string(secret))]
-pub struct RefreshToken;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(secret)]
+pub struct RefreshToken(String);
 
-#[ta_objects::typed(string(parser = parse_role))]
-#[derive(Eq, PartialEq)]
-pub struct RoleName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
+pub struct RoleName(String);
 
 impl RoleName {
     pub fn sys_admin() -> Self {
@@ -185,9 +184,9 @@ impl RoleName {
     }
 }
 
-#[ta_objects::typed(string(parser = parse_group))]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct GroupName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
+pub struct GroupName(String);
 
 impl GroupName {
     pub fn default_group() -> Self {
@@ -203,24 +202,21 @@ impl GroupName {
     }
 }
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq)]
-pub struct SchemaFieldName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct SchemaFieldName(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq)]
-pub struct SchemaFieldType;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct SchemaFieldType(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct SchemaHash;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct SchemaHash(String);
 
-#[ta_objects::typed(string)]
-pub struct Sql;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct Sql(String);
 
-#[ta_objects::typed(string, try_from = TableNameDto)]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TableName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(try_from = TableNameDto)]
+pub struct TableName(String);
 
 impl TableName {
     pub fn is_private(&self) -> bool {
@@ -232,14 +228,14 @@ impl TryFrom<&TableDBWithNames> for TableName {
     type Error = td_error::TdError;
 
     fn try_from(v: &TableDBWithNames) -> Result<Self, Self::Error> {
-        let table = v.name.clone();
+        let table = v.base.name.clone();
         Ok(table)
     }
 }
 
-#[ta_objects::typed(string(parser = parse_table))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct TableNameDto;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(regex = UNDERSCORE_NAME_PATTERN, expected = "a [_A-Za-z0-9] word of up to 100 characters")]
+pub struct TableNameDto(String);
 
 impl TableNameDto {
     pub fn is_private(&self) -> bool {
@@ -247,25 +243,26 @@ impl TableNameDto {
     }
 }
 
-#[ta_objects::typed(string)]
-pub struct TabsdataVersion;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TabsdataVersion(String);
 
-#[ta_objects::typed(string(parser = parse_collection))]
-pub struct ToCollectionName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
+pub struct ToCollectionName(String);
 
-#[ta_objects::typed(string)]
-pub struct TokenType;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TokenType(String);
 
-#[ta_objects::typed(string(default = "F"))]
-pub struct TransactionByStr;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = "F")]
+pub struct TransactionByStr(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TransactionKey;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct TransactionKey(String);
 
-#[ta_objects::typed(string(parser = parse_user))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct UserName;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
+pub struct UserName(String);
 
 impl UserName {
     pub fn admin() -> Self {
@@ -278,13 +275,12 @@ impl UserName {
 }
 
 // JSON blob with config for the workers.
-#[ta_objects::typed(string(default = "{}", parser = WorkerConfig::parse_json))]
-#[derive(Eq, PartialEq)]
-pub struct WorkerConfig;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = "{}", parser = WorkerConfig::parse_json)]
+pub struct WorkerConfig(String);
 
 impl WorkerConfig {
     fn parse_json(value: String) -> Result<String, td_error::TdError> {
-        // validate value is a valid json string
         serde_json::from_str::<serde_json::Value>(&value).map_err(|e| {
             api_error!(
                 ApiError::InternalError,
@@ -307,8 +303,9 @@ impl WorkerConfig {
     }
 }
 
-#[ta_objects::typed(string(min_len = 1, max_len = 10, default = "V1"))]
-pub struct WorkerVersion;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(min_len = 1, max_len = 10, default = "V1")]
+pub struct WorkerVersion(String);
 
 #[cfg(test)]
 mod tests {

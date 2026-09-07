@@ -5,7 +5,6 @@
 use crate::types::basic::{Depth, OverrideDisabledTrigger};
 use serde::{Deserialize, Serialize};
 
-/// Represents the recursion options used when querying graphs.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum RecursionOptions {
     V1(RecursionOptionsV1),

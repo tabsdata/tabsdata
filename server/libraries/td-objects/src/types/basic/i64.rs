@@ -2,44 +2,44 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::typed(i64)]
-pub struct AccessTokenExpiration;
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct AccessTokenExpiration(i64);
 
-#[ta_objects::typed(i64)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct ColumnCount;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct ColumnCount(i64);
 
-#[ta_objects::typed(i64)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct RowCount;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct RowCount(i64);
 
-#[ta_objects::typed(i64)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct ByteCount;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct ByteCount(i64);
 
-#[ta_objects::typed(i64)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct TableVersionCount;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct TableVersionCount(i64);
 
 /// UTC epoch ms, floored to a bucket boundary (hour / day / week / month).
 /// Used by the operational-metrics endpoints to drive `GROUP BY` directly
 /// off indexed columns — no `date_trunc` at query time.
-#[ta_objects::typed(i64)]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct EpochMs;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct EpochMs(i64);
 
-#[ta_objects::typed(i64(min = 0, default = 0))]
-pub struct SampleOffset;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(min = 0, default = 0)]
+pub struct SampleOffset(i64);
 
-#[ta_objects::typed(i64(min = 0, max = SampleLen::MAX, default = 100))]
-pub struct SampleLen;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(min = 0, max = SampleLen::MAX, default = 100)]
+pub struct SampleLen(i64);
 
 impl SampleLen {
     pub const MAX: i64 = 1000;
 }
 
-#[ta_objects::typed(i64(default = 60))]
-pub struct TimeoutThresholdMin;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = 60)]
+pub struct TimeoutThresholdMin(i64);
 
-#[ta_objects::typed(i64(default = 10000))]
-pub struct SizeThreshold;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = 10000)]
+pub struct SizeThreshold(i64);

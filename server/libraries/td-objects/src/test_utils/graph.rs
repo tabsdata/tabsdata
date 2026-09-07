@@ -2,23 +2,22 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dxo::dependency::DependencyDBWithNames;
-use crate::dxo::function::FunctionDBWithNames;
+use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames};
+use crate::dxo::function::{FunctionDB, FunctionDBWithNames};
 use crate::dxo::graph::{FunctionNode, TableNode};
-use crate::dxo::table::TableDBWithNames;
-use crate::dxo::trigger::TriggerDBWithNames;
+use crate::dxo::table::{TableDB, TableDBWithNames};
+use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames};
 use crate::graph::{TdGraph, TdGraphBuilder};
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId,
     DependencyPos, DependencyStatus, DependencyVersionId, Description, Enabled, FunctionId,
-    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, RawSnippet,
-    Snippet, StageId, StorageVersion, TableId, TableName, TableStatus, TableType, TableVersionId,
-    TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
+    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Partitioned,
+    Private, RawSnippet, Snippet, StageId, StorageVersion, System, TableId, TableName, TableStatus,
+    TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
 use std::sync::LazyLock;
-use ta_objects::Buildable;
 
 static COLLECTION_ID: LazyLock<CollectionId> = LazyLock::new(CollectionId::default);
 static COLLECTION_NAME: LazyLock<CollectionName> =
@@ -111,10 +110,13 @@ pub async fn test_graph() -> TdGraph {
         function(&FUNCTION_NAMES[2]).await,
     ];
 
-    let all_tables_map = all_tables.iter().map(|t| (t.table_id, t.clone())).collect();
+    let all_tables_map = all_tables
+        .iter()
+        .map(|t| (t.base.table_id, t.clone()))
+        .collect();
     let all_functions_map = all_functions
         .iter()
-        .map(|f| (f.function_id, f.clone()))
+        .map(|f| (f.base.function_id, f.clone()))
         .collect();
 
     let output_tables = all_tables;
@@ -148,16 +150,15 @@ pub async fn test_graph() -> TdGraph {
 }
 
 pub fn function_node(function: &FunctionName) -> FunctionNode {
-    FunctionNode::builder()
-        .collection_id(*COLLECTION_ID)
-        .collection(COLLECTION_NAME.clone())
-        .function_id(FUNCTION_IDS.get(function).unwrap())
-        .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .name(function.clone())
-        .enabled(Enabled::TRUE)
-        .group_id(*GROUP_ID)
-        .build()
-        .unwrap()
+    FunctionNode {
+        collection_id: *COLLECTION_ID,
+        collection: COLLECTION_NAME.clone(),
+        function_id: *FUNCTION_IDS.get(function).unwrap(),
+        function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+        name: function.clone(),
+        enabled: Enabled::TRUE,
+        group_id: *GROUP_ID,
+    }
 }
 
 pub fn table_node(table: &TableName) -> TableNode {
@@ -166,68 +167,69 @@ pub fn table_node(table: &TableName) -> TableNode {
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    TableNode::builder()
-        .collection_id(*COLLECTION_ID)
-        .collection(COLLECTION_NAME.clone())
-        .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .table_id(TABLE_IDS.get(table).unwrap())
-        .table_version_id(TABLE_VERSION_IDS.get(table).unwrap())
-        .name(table.clone())
-        .system(false)
-        .private(false)
-        .build()
-        .unwrap()
+    TableNode {
+        collection_id: *COLLECTION_ID,
+        collection: COLLECTION_NAME.clone(),
+        function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+        table_id: *TABLE_IDS.get(table).unwrap(),
+        table_version_id: *TABLE_VERSION_IDS.get(table).unwrap(),
+        name: table.clone(),
+        system: System::FALSE,
+        private: Private::FALSE,
+    }
 }
 
 pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
-    TableDBWithNames::builder()
-        .id(TABLE_VERSION_IDS.get(table).unwrap())
-        .collection_id(*COLLECTION_ID)
-        .table_id(TABLE_IDS.get(table).unwrap())
-        .name(table.clone())
-        .function_id(FUNCTION_IDS.get(function).unwrap())
-        .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .function_param_pos(None)
-        .private(false)
-        .partitioned(false)
-        .defined_on(AtTime::now())
-        .defined_by_id(UserId::default())
-        .status(TableStatus::Active)
-        .system(false)
-        .collection(COLLECTION_NAME.clone())
-        .function(function.clone())
-        .defined_by(UserName::try_from("joaquin").unwrap())
-        .table_type(TableType::Regular)
-        .build()
-        .unwrap()
+    TableDBWithNames {
+        base: TableDB {
+            id: *TABLE_VERSION_IDS.get(table).unwrap(),
+            collection_id: *COLLECTION_ID,
+            table_id: *TABLE_IDS.get(table).unwrap(),
+            name: table.clone(),
+            function_id: *FUNCTION_IDS.get(function).unwrap(),
+            function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+            function_param_pos: None,
+            private: Private::FALSE,
+            partitioned: Partitioned::FALSE,
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::default(),
+            status: TableStatus::Active,
+            table_type: TableType::Regular,
+        },
+        system: System::FALSE,
+        defined_by: UserName::try_from("joaquin").unwrap(),
+        collection: COLLECTION_NAME.clone(),
+        function: function.clone(),
+    }
 }
 
 pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
-    FunctionDBWithNames::builder()
-        .id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .group_id(*GROUP_ID)
-        .collection_id(*COLLECTION_ID)
-        .name(function.clone())
-        .description(Description::default())
-        .decorator(Decorator::Publisher)
-        .connector(None)
-        .connection(None)
-        .runtime_values(FunctionRuntimeValues::default())
-        .function_id(FUNCTION_IDS.get(function).unwrap())
-        .base_path(None)
-        .stage_id(StageId::default())
-        .stage_base_path(BasePath::default())
-        .storage_version(StorageVersion::default())
-        .bundle_id(BundleId::default())
-        .snippet(Snippet::try_from(RawSnippet::try_from("test").unwrap()).unwrap())
-        .defined_on(AtTime::now())
-        .defined_by_id(UserId::default())
-        .status(FunctionStatus::Active)
-        .collection(COLLECTION_NAME.clone())
-        .defined_by(UserName::try_from("joaquin").unwrap())
-        .enabled(Enabled::TRUE)
-        .build()
-        .unwrap()
+    FunctionDBWithNames {
+        base: FunctionDB {
+            id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+            collection_id: *COLLECTION_ID,
+            name: function.clone(),
+            description: Description::default(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            runtime_values: FunctionRuntimeValues::default(),
+            function_id: *FUNCTION_IDS.get(function).unwrap(),
+            base_path: None,
+            stage_id: StageId::default(),
+            stage_base_path: BasePath::default(),
+            storage_version: StorageVersion::default(),
+            bundle_id: BundleId::default(),
+            snippet: Snippet::try_from(RawSnippet::try_from("test").unwrap()).unwrap(),
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::default(),
+            status: FunctionStatus::Active,
+            enabled: Enabled::TRUE,
+        },
+        collection: COLLECTION_NAME.clone(),
+        group_id: *GROUP_ID,
+        defined_by: UserName::try_from("joaquin").unwrap(),
+    }
 }
 
 pub async fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWithNames {
@@ -236,24 +238,25 @@ pub async fn dependency(table: &TableName, function: &FunctionName) -> Dependenc
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    DependencyDBWithNames::builder()
-        .id(DependencyVersionId::default())
-        .collection_id(*COLLECTION_ID)
-        .dependency_id(DependencyId::default())
-        .function_id(FUNCTION_IDS.get(function).unwrap())
-        .table_collection_id(*COLLECTION_ID)
-        .table_function_id(FUNCTION_IDS.get(table_function).unwrap())
-        .table_id(TABLE_IDS.get(table).unwrap())
-        .table_versions(TableVersions::try_from("HEAD").unwrap())
-        .dep_pos(DependencyPos::default())
-        .status(DependencyStatus::Active)
-        .defined_on(AtTime::now())
-        .defined_by_id(UserId::default())
-        .collection(COLLECTION_NAME.clone())
-        .table_collection(COLLECTION_NAME.clone())
-        .system(false)
-        .build()
-        .unwrap()
+    DependencyDBWithNames {
+        base: DependencyDB {
+            id: DependencyVersionId::default(),
+            collection_id: *COLLECTION_ID,
+            dependency_id: DependencyId::default(),
+            function_id: *FUNCTION_IDS.get(function).unwrap(),
+            table_collection_id: *COLLECTION_ID,
+            table_function_id: *FUNCTION_IDS.get(table_function).unwrap(),
+            table_id: *TABLE_IDS.get(table).unwrap(),
+            table_versions: TableVersions::try_from("HEAD").unwrap(),
+            dep_pos: DependencyPos::default(),
+            status: DependencyStatus::Active,
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::default(),
+            system: System::FALSE,
+        },
+        collection: COLLECTION_NAME.clone(),
+        table_collection: COLLECTION_NAME.clone(),
+    }
 }
 
 pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames {
@@ -262,20 +265,21 @@ pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWit
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    TriggerDBWithNames::builder()
-        .id(TriggerVersionId::default())
-        .collection_id(*COLLECTION_ID)
-        .trigger_id(TriggerId::default())
-        .function_id(FUNCTION_IDS.get(function).unwrap())
-        .trigger_by_collection_id(*COLLECTION_ID)
-        .trigger_by_function_id(FUNCTION_IDS.get(table_function).unwrap())
-        .trigger_by_table_id(TABLE_IDS.get(table).unwrap())
-        .status(TriggerStatus::Active)
-        .defined_on(AtTime::now())
-        .defined_by_id(UserId::default())
-        .collection(COLLECTION_NAME.clone())
-        .trigger_by_collection(COLLECTION_NAME.clone())
-        .system(false)
-        .build()
-        .unwrap()
+    TriggerDBWithNames {
+        base: TriggerDB {
+            id: TriggerVersionId::default(),
+            collection_id: *COLLECTION_ID,
+            trigger_id: TriggerId::default(),
+            function_id: *FUNCTION_IDS.get(function).unwrap(),
+            trigger_by_collection_id: *COLLECTION_ID,
+            trigger_by_function_id: *FUNCTION_IDS.get(table_function).unwrap(),
+            trigger_by_table_id: *TABLE_IDS.get(table).unwrap(),
+            status: TriggerStatus::Active,
+            defined_on: AtTime::now(),
+            defined_by_id: UserId::default(),
+            system: System::FALSE,
+        },
+        collection: COLLECTION_NAME.clone(),
+        trigger_by_collection: COLLECTION_NAME.clone(),
+    }
 }

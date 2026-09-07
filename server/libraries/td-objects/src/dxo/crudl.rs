@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::types::basic::{AccessTokenId, AtTime, UserId};
+use crate::types::basic::{AccessTokenId, AtTime, ProjectId, UserId};
 use serde_valid::Validate;
 use std::fmt::Debug;
 use td_error::td_error;
@@ -144,9 +144,14 @@ impl Default for ListParams {
     }
 }
 
+/// A request paired with the project it targets — what a project-scoped
+/// service declares as its request parameter. Built by the blanket
+/// `ScopedExt` trait's `in_project` (see `td_database::pool::scoped`).
+pub type WithinProject<R> = td_database::pool::scoped::Scoped<R, ProjectId>;
+
 /// Request to list entities. Project-free like the other CRUD requests; a
-/// tenant request pairs it with its project via the blanket `ScopedExt`
-/// trait's `in_project` (see `td_database::pool::scoped`).
+/// project-scoped request pairs it with its project via the blanket
+/// `ScopedExt` trait's `in_project` (see `td_database::pool::scoped`).
 #[ta_objects::Dlo]
 pub struct ListRequest<N = ()> {
     pub context: RequestContext,

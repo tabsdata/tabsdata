@@ -2,11 +2,13 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::typed(bool(default = false))]
-pub struct AllowDisabled;
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = false)]
+pub struct AllowDisabled(bool);
 
-#[ta_objects::typed(bool)]
-pub struct DataChanged;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct DataChanged(bool);
 
 impl From<Option<HasData>> for DataChanged {
     fn from(has_data: Option<HasData>) -> Self {
@@ -18,66 +20,68 @@ impl From<Option<HasData>> for DataChanged {
     }
 }
 
-#[ta_objects::typed(bool(default = false))]
-#[derive(Eq, PartialEq)]
-pub struct CollectionWhenDeleted;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct CollectionWhenDeleted(bool);
 
-#[ta_objects::typed(bool(default = false))]
-#[derive(Eq, PartialEq)]
-pub struct ProjectWhenDeleted;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct ProjectWhenDeleted(bool);
 
-#[ta_objects::typed(bool(default = true))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct Enabled;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(default = true)]
+pub struct Enabled(bool);
 
-#[ta_objects::typed(bool(default = false))]
-#[derive(Eq, PartialEq)]
-pub struct Fixed;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct Fixed(bool);
 
-#[ta_objects::typed(bool)]
-pub struct FixedRole;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct FixedRole(bool);
 
-#[ta_objects::typed(bool(default = false))]
-pub struct FunctionOnly;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = false)]
+pub struct FunctionOnly(bool);
 
-#[ta_objects::typed(bool(default = false))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct HasData;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(default = false)]
+pub struct HasData(bool);
 
-#[ta_objects::typed(bool)]
-#[derive(Eq, PartialEq)]
-pub struct IsEmptyVersions;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct IsEmptyVersions(bool);
 
-#[ta_objects::typed(bool(default = false))]
-pub struct OverrideDisabledTrigger;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = false)]
+pub struct OverrideDisabledTrigger(bool);
 
-#[ta_objects::typed(bool)]
-#[derive(Eq, PartialEq)]
-pub struct Partitioned;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct Partitioned(bool);
 
-#[ta_objects::typed(bool(default = false))]
-#[derive(Eq, PartialEq)]
-pub struct PasswordMustChange;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct PasswordMustChange(bool);
 
-#[ta_objects::typed(bool)]
-#[derive(Eq, PartialEq, Hash)]
-pub struct Private;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct Private(bool);
 
-#[ta_objects::typed(bool(default = false))]
-pub struct ResetState;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = false)]
+pub struct ResetState(bool);
 
-#[ta_objects::typed(bool(default = false))]
-pub struct ResetStage;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = false)]
+pub struct ResetStage(bool);
 
-#[ta_objects::typed(bool(default = false))]
-pub struct ReuseFrozen;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = false)]
+pub struct ReuseFrozen(bool);
 
-#[ta_objects::typed(bool(default = false))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct SchemaChanged;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(default = false)]
+pub struct SchemaChanged(bool);
 
-#[ta_objects::typed(bool)]
-pub struct SchemaDataChanged;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct SchemaDataChanged(bool);
 
 impl From<Option<SchemaChanged>> for SchemaDataChanged {
     fn from(schema_changed: Option<SchemaChanged>) -> Self {
@@ -89,27 +93,26 @@ impl From<Option<SchemaChanged>> for SchemaDataChanged {
     }
 }
 
-#[ta_objects::typed(bool)]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct SelfDependency;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct SelfDependency(bool);
 
-#[ta_objects::typed(bool)]
-pub struct SkipIfRunning;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct SkipIfRunning(bool);
 
-#[ta_objects::typed(bool)]
-pub struct SysAdmin;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct SysAdmin(bool);
 
-#[ta_objects::typed(bool)]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct System;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct System(bool);
 
-#[ta_objects::typed(bool(default = false))]
-pub struct UncommittedStatus;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(default = false)]
+pub struct UncommittedStatus(bool);
 
-#[ta_objects::typed(bool(default = true))]
-#[derive(Eq, PartialEq)]
-pub struct UserEnabled;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = true)]
+pub struct UserEnabled(bool);
 
-#[ta_objects::typed(bool(default = false))]
-#[derive(Eq, PartialEq)]
-pub struct UserSystem;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct UserSystem(bool);

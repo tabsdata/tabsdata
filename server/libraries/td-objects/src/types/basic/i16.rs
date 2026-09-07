@@ -2,11 +2,13 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::typed(i16)]
-pub struct ExecutionLimit;
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ExecutionLimit(i16);
 
-#[ta_objects::typed(i16)]
-pub struct ExecutionTry;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ExecutionTry(i16);
 
-#[ta_objects::typed(i16(min = 1))]
-pub struct LogsCastNumber;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(min = 1)]
+pub struct LogsCastNumber(i16);

@@ -3,13 +3,12 @@
 //
 
 use super::params::{ListError, ListQueryParams};
-use crate::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder};
+use crate::dxo::crudl::{ListParams, ListResponse};
 use std::any::type_name;
 use std::collections::HashSet;
 use ta_objects::ListDto;
 use td_error::TdError;
 
-/// Build ListResponse from list results
 pub fn build_list_response<T>(
     list_params: &ListParams,
     query_params: &ListQueryParams<T>,
@@ -44,17 +43,17 @@ where
         compute_previous(list_params, query_params, &result, has_more);
     let (next, next_pagination_id) = compute_next(list_params, query_params, &result, has_more);
 
-    let list_response = ListResponseBuilder::default()
-        .list_params(list_params.clone())
-        .data(result)
-        .previous_page(previous, previous_pagination_id)
-        .next_page(next, next_pagination_id)
-        .build()?;
-
-    Ok(list_response)
+    Ok(ListResponse {
+        list_params: list_params.clone(),
+        len: result.len(),
+        data: result,
+        previous,
+        previous_pagination_id,
+        next,
+        next_pagination_id,
+    })
 }
 
-/// Determine previous info for listing pagination
 fn compute_previous<T: ListDto>(
     list_params: &ListParams,
     query_params: &ListQueryParams<T>,
@@ -83,7 +82,6 @@ fn compute_previous<T: ListDto>(
     }
 }
 
-/// Determine next info for listing pagination
 fn compute_next<T: ListDto>(
     list_params: &ListParams,
     query_params: &ListQueryParams<T>,
@@ -113,17 +111,18 @@ fn compute_next<T: ListDto>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::crudl::ListParamsBuilder;
     use crate::list::params::Order;
     use sea_query::Condition;
-    use ta_objects::{Buildable, ListDto};
+    use ta_objects::FromDao;
+    use ta_objects::ListDto;
+    use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 
-    #[ta_objects::typed(string)]
-    pub struct StringType;
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    pub struct StringType(String);
 
     #[ta_objects::Dao]
     struct TestDao {
-        a: StringType,
+        pub a: StringType,
     }
 
     #[ta_objects::Dto]
@@ -133,9 +132,19 @@ mod tests {
         a: StringType,
     }
 
+    impl FromDao for TestDto {
+        type Dao = TestDao;
+
+        fn from_dao(dao: TestDao) -> Result<Self, TdError> {
+            Ok(Self { a: dao.a })
+        }
+    }
+
     fn make_dto(val: &str) -> TestDto {
-        let dao = TestDao::builder().try_a(val).unwrap().build().unwrap();
-        TestDto::from_dao(&dao).unwrap()
+        let dao = TestDao {
+            a: val.try_into().unwrap(),
+        };
+        TestDto::from_dao(dao).unwrap()
     }
 
     fn make_query_params(len: usize) -> ListQueryParams<TestDto> {
@@ -159,7 +168,15 @@ mod tests {
 
     #[test]
     fn test_initial_empty_result() {
-        let list_params = ListParamsBuilder::default().len(10usize).build().unwrap();
+        let list_params = ListParams {
+            len: 10usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: None,
+            pagination_id: None,
+            ..Default::default()
+        };
         let query_params = make_query_params(10);
         let resp = build_list_response(&list_params, &query_params, vec![]).unwrap();
         assert_eq!(resp.data.len(), 0);
@@ -169,7 +186,15 @@ mod tests {
 
     #[test]
     fn test_initial_fewer_than_len() {
-        let list_params = ListParamsBuilder::default().len(10usize).build().unwrap();
+        let list_params = ListParams {
+            len: 10usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: None,
+            pagination_id: None,
+            ..Default::default()
+        };
         let query_params = make_query_params(10);
         let result = make_items(5);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -181,7 +206,15 @@ mod tests {
     #[test]
     fn test_initial_exact_len_no_next() {
         // N+1 fix: exactly `len` rows means DB had no extra → no next page
-        let list_params = ListParamsBuilder::default().len(3usize).build().unwrap();
+        let list_params = ListParams {
+            len: 3usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: None,
+            pagination_id: None,
+            ..Default::default()
+        };
         let query_params = make_query_params(3);
         let result = make_items(3);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -193,7 +226,15 @@ mod tests {
     #[test]
     fn test_initial_has_more_truncates() {
         // N+1: len+1 rows means there are more pages; result truncated to len
-        let list_params = ListParamsBuilder::default().len(3usize).build().unwrap();
+        let list_params = ListParams {
+            len: 3usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: None,
+            pagination_id: None,
+            ..Default::default()
+        };
         let query_params = make_query_params(3);
         let result = make_items(4);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -209,12 +250,15 @@ mod tests {
 
     #[test]
     fn test_next_request_no_more() {
-        let list_params = ListParamsBuilder::default()
-            .len(5usize)
-            .next("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 5usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: Some("cursor".to_string()),
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(5);
         let result = make_items(3);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -226,12 +270,15 @@ mod tests {
     #[test]
     fn test_next_request_exact_len_no_more() {
         // N+1 fix: exactly len rows on a "next" request → no more forward
-        let list_params = ListParamsBuilder::default()
-            .len(3usize)
-            .next("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 3usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: Some("cursor".to_string()),
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(3);
         let result = make_items(3);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -242,12 +289,15 @@ mod tests {
 
     #[test]
     fn test_next_request_has_more() {
-        let list_params = ListParamsBuilder::default()
-            .len(3usize)
-            .next("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 3usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: Some("cursor".to_string()),
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(3);
         let result = make_items(4);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -262,12 +312,15 @@ mod tests {
 
     #[test]
     fn test_previous_request_no_more() {
-        let list_params = ListParamsBuilder::default()
-            .len(5usize)
-            .previous("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 5usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: Some("cursor".to_string()),
+            next: None,
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(5);
         let result = make_items(3);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -279,12 +332,15 @@ mod tests {
     #[test]
     fn test_previous_request_exact_len_no_more_back() {
         // N+1 fix: exactly len rows on a "previous" request → no more backward
-        let list_params = ListParamsBuilder::default()
-            .len(3usize)
-            .previous("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 3usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: Some("cursor".to_string()),
+            next: None,
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(3);
         let result = make_items(3);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -295,12 +351,15 @@ mod tests {
 
     #[test]
     fn test_previous_request_has_more() {
-        let list_params = ListParamsBuilder::default()
-            .len(3usize)
-            .previous("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 3usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: Some("cursor".to_string()),
+            next: None,
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(3);
         let result = make_items(4);
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -311,12 +370,15 @@ mod tests {
 
     #[test]
     fn test_previous_request_reverses_result() {
-        let list_params = ListParamsBuilder::default()
-            .len(5usize)
-            .previous("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 5usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: Some("cursor".to_string()),
+            next: None,
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(5);
         let result = vec![make_dto("c"), make_dto("b"), make_dto("a")];
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -327,7 +389,15 @@ mod tests {
 
     #[test]
     fn test_duplicate_cursor_value_is_an_error() {
-        let list_params = ListParamsBuilder::default().len(10usize).build().unwrap();
+        let list_params = ListParams {
+            len: 10usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: None,
+            pagination_id: None,
+            ..Default::default()
+        };
         let query_params = make_query_params(10);
         let result = vec![make_dto("a"), make_dto("b"), make_dto("a")];
         let err = build_list_response(&list_params, &query_params, result).unwrap_err();
@@ -344,7 +414,15 @@ mod tests {
 
     #[test]
     fn test_next_cursor_points_to_last_item() {
-        let list_params = ListParamsBuilder::default().len(2usize).build().unwrap();
+        let list_params = ListParams {
+            len: 2usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: None,
+            pagination_id: None,
+            ..Default::default()
+        };
         let query_params = make_query_params(2);
         let result = vec![make_dto("first"), make_dto("second"), make_dto("extra")];
         let resp = build_list_response(&list_params, &query_params, result).unwrap();
@@ -353,12 +431,15 @@ mod tests {
 
     #[test]
     fn test_previous_cursor_points_to_first_item() {
-        let list_params = ListParamsBuilder::default()
-            .len(5usize)
-            .next("cursor".to_string())
-            .pagination_id("id".to_string())
-            .build()
-            .unwrap();
+        let list_params = ListParams {
+            len: 5usize,
+            filter: Default::default(),
+            order_by: None,
+            previous: None,
+            next: Some("cursor".to_string()),
+            pagination_id: Some("id".to_string()),
+            ..Default::default()
+        };
         let query_params = make_query_params(5);
         let result = vec![make_dto("first"), make_dto("second")];
         let resp = build_list_response(&list_params, &query_params, result).unwrap();

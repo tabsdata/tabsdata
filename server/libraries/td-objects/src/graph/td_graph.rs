@@ -10,6 +10,7 @@ use crate::dxo::graph::{
 use crate::dxo::table::TableDBWithNames;
 use crate::dxo::trigger::TriggerDBWithNames;
 use crate::transaction::map::TransactionMapper;
+use crate::types::basic::SelfDependency;
 use crate::types::basic::{FunctionId, TableId, TransactionKey};
 use crate::types::table_ref::Versions;
 use petgraph::dot::{Config, Dot};
@@ -21,7 +22,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Deref;
-use ta_objects::Buildable;
 use td_error::{TdError, td_error};
 
 #[td_error]
@@ -53,7 +53,6 @@ impl<'a> TdGraphBuilder<'a> {
         }
     }
 
-    /// Adds a node to the graph if it does not exist.
     fn add_if_absent(&mut self, node: GraphNode) -> NodeIndex {
         *self
             .node_map
@@ -61,17 +60,16 @@ impl<'a> TdGraphBuilder<'a> {
             .or_insert_with(|| self.graph.add_node(node))
     }
 
-    /// Adds trigger edges between table and function nodes.
     pub fn with_triggers(mut self, triggers: &[TriggerDBWithNames]) -> Result<Self, TdError> {
         for trigger in triggers {
             let table = self
                 .all_tables_map
-                .get(&trigger.trigger_by_table_id)
-                .ok_or(GraphError::MissingTable(trigger.trigger_by_table_id))?;
+                .get(&trigger.base.trigger_by_table_id)
+                .ok_or(GraphError::MissingTable(trigger.base.trigger_by_table_id))?;
             let function = self
                 .all_functions_map
-                .get(&trigger.function_id)
-                .ok_or(GraphError::MissingFunction(trigger.function_id))?;
+                .get(&trigger.base.function_id)
+                .ok_or(GraphError::MissingFunction(trigger.base.function_id))?;
 
             let (function_node, table_node) = GraphNode::pair(function, table)?;
             let function_idx = self.add_if_absent(function_node);
@@ -84,21 +82,20 @@ impl<'a> TdGraphBuilder<'a> {
         Ok(self)
     }
 
-    /// Adds output edges from functions to output tables.
     pub fn with_outputs(mut self, outputs: &[TableDBWithNames]) -> Result<Self, TdError> {
         for table in outputs {
             let function = self
                 .all_functions_map
-                .get(&table.function_id)
-                .ok_or(GraphError::MissingFunction(table.function_id))?;
+                .get(&table.base.function_id)
+                .ok_or(GraphError::MissingFunction(table.base.function_id))?;
 
             let (function_node, table_node) = GraphNode::pair(function, table)?;
             let function_idx = self.add_if_absent(function_node);
             let table_idx = self.add_if_absent(table_node);
 
-            let graph_output = GraphOutput::builder()
-                .output_pos(table.function_param_pos)
-                .build()?;
+            let graph_output = GraphOutput {
+                output_pos: table.base.function_param_pos,
+            };
 
             // note it is inverted in dep and trigger edges
             self.graph.add_edge(
@@ -110,38 +107,38 @@ impl<'a> TdGraphBuilder<'a> {
         Ok(self)
     }
 
-    /// Adds dependency edges between functions.
     pub fn with_dependencies(mut self, deps: &[DependencyDBWithNames]) -> Result<Self, TdError> {
         for dep in deps {
             let table = self
                 .all_tables_map
-                .get(&dep.table_id)
-                .ok_or(GraphError::MissingTable(dep.table_id))?;
+                .get(&dep.base.table_id)
+                .ok_or(GraphError::MissingTable(dep.base.table_id))?;
             let function = self
                 .all_functions_map
-                .get(&dep.function_id)
-                .ok_or(GraphError::MissingFunction(dep.function_id))?;
+                .get(&dep.base.function_id)
+                .ok_or(GraphError::MissingFunction(dep.base.function_id))?;
 
             let (function_node, table_node) = GraphNode::pair(function, table)?;
             let function_idx = self.add_if_absent(function_node);
             let table_idx = self.add_if_absent(table_node);
 
-            let graph_dep = GraphDependency::builder()
-                .dep_pos(dep.dep_pos)
-                .self_dependency(function.id == table.function_version_id)
-                .build()?;
+            let graph_dep = GraphDependency {
+                dep_pos: dep.base.dep_pos,
+                self_dependency: SelfDependency::from(
+                    function.base.id == table.base.function_version_id,
+                ),
+            };
 
             // note it is inverted in output edges
             self.graph.add_edge(
                 table_idx,
                 function_idx,
-                GraphEdge::dependency(dep.table_versions.deref().clone(), graph_dep),
+                GraphEdge::dependency(dep.base.table_versions.deref().clone(), graph_dep),
             );
         }
         Ok(self)
     }
 
-    /// Consumes the builder and returns the final owned graph.
     pub fn build(self) -> TdGraph {
         TdGraph { inner: self.graph }
     }
@@ -211,7 +208,6 @@ where
 }
 
 impl<F: Display, T: Display, V: Display> TdGraph<F, T, V> {
-    /// Generates a DOT representation of the graph.
     pub fn dot(&self) -> Dot<'_, &Graph<GraphNode<F, T>, GraphEdge<V>>> {
         Dot::with_attr_getters(
             &self.inner,
@@ -237,12 +233,10 @@ pub struct PartialGraph<F> {
 }
 
 impl<F> PartialGraph<F> {
-    /// Creates a partial graph containing only trigger edges.
     pub fn trigger_graph<T, V>(original: &TdGraph<F, T, V>) -> Result<PartialGraph<&F>, TdError> {
         let mut new_graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
-        // Add nodes we want to keep (function nodes)
         for node_idx in original.inner.node_indices() {
             let node = &original.inner[node_idx];
             if let GraphNode::Function(node) = node {
@@ -251,7 +245,6 @@ impl<F> PartialGraph<F> {
             }
         }
 
-        // Rewire edges
         for node_idx in original.inner.node_indices() {
             let node = &original.inner[node_idx];
             if let GraphNode::Table(_) = node {
@@ -285,7 +278,6 @@ impl<F> PartialGraph<F> {
         Ok(PartialGraph { inner: new_graph })
     }
 
-    /// Creates a partial graph containing only dependency edges.
     pub fn dependency_graph<T, V>(
         original: &TdGraph<F, T, V>,
         drop_self_dependency: bool,
@@ -293,7 +285,6 @@ impl<F> PartialGraph<F> {
         let mut new_graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
-        // Add nodes we want to keep (table nodes)
         for node_idx in original.inner.node_indices() {
             let node = &original.inner[node_idx];
             if let GraphNode::Table(node) = node {
@@ -302,7 +293,6 @@ impl<F> PartialGraph<F> {
             }
         }
 
-        // Rewire edges
         for node_idx in original.inner.node_indices() {
             let node = &original.inner[node_idx];
             if let GraphNode::Function(_) = node {
@@ -348,7 +338,6 @@ impl<F> PartialGraph<F> {
         Ok(PartialGraph { inner: new_graph })
     }
 
-    /// Generates a DOT representation of the partial graph.
     #[allow(dead_code)]
     pub fn dot(&self) -> Dot<'_, &Graph<F, ()>> {
         Dot::with_attr_getters(
@@ -361,7 +350,6 @@ impl<F> PartialGraph<F> {
 }
 
 impl PartialGraph<FunctionNode> {
-    /// Creates a trigger transaction graph.
     pub fn transaction_graph<T, V>(
         dgraph: &TdGraph<FunctionNode, T, V>,
         transaction_mapper: &impl TransactionMapper,

@@ -2,36 +2,37 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-#[ta_objects::typed(i32(default = 0))]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct DependencyPos;
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(default = 0)]
+pub struct DependencyPos(i32);
 
-#[ta_objects::typed(i32(min = 0, default = 0))]
-pub struct Depth;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(min = 0, default = 0)]
+pub struct Depth(i32);
 
 impl Depth {
     pub const ZERO: Self = Self(0);
 }
 
-#[ta_objects::typed(i32)]
-pub struct StatusCount;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct StatusCount(i32);
 
-#[ta_objects::typed(i32)]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TableFunctionParamPos;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct TableFunctionParamPos(i32);
 
-#[ta_objects::typed(i32(default = 0))]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct InputIdx;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(default = 0)]
+pub struct InputIdx(i32);
 
 impl InputIdx {
     /// Input slot that resolved to no data version.
     pub const NO_DATA: Self = Self(-1);
 }
 
-#[ta_objects::typed(i32(default = 0))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct VersionPos;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(default = 0)]
+pub struct VersionPos(i32);
 
 impl VersionPos {
     pub const SINGLE_VERSION: Self = Self(-1);

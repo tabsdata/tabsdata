@@ -10,7 +10,6 @@ use std::ops::Deref;
 use std::str::FromStr;
 use td_error::{ApiError, TdError, api_error};
 
-/// A non-empty list of server addresses.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NonEmptyAddresses(NonEmpty<SocketAddr>);
 

@@ -12,7 +12,6 @@ use td_error::TdError;
 pub trait MapGraph<F, T, V> {
     type Output<FF, TT, VV>: MapGraph<FF, TT, VV>;
 
-    /// Transforms the graph edges by applying transformation functions
     fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
         &'a self,
         transform_nodes: CN,

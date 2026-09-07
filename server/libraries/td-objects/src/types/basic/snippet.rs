@@ -2,19 +2,20 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::TdError;
 
 /// Source as the client registered it. Only ever an inbound value: the
 /// server trims it down to a [`Snippet`] before storing it.
-#[ta_objects::typed(string(min_len = 0, max_len = RAW_SNIPPET_MAX_LEN))]
-#[derive(Eq, PartialEq)]
-pub struct RawSnippet;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min_len = 0, max_len = RAW_SNIPPET_MAX_LEN)]
+pub struct RawSnippet(String);
 
 /// The stored, user-facing source of a function: display metadata, not
 /// the code that runs — that lives in the function's bundle.
-#[ta_objects::typed(string(min_len = 0, max_len = SNIPPET_MAX_LEN))]
-#[derive(Eq, PartialEq)]
-pub struct Snippet;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min_len = 0, max_len = SNIPPET_MAX_LEN)]
+pub struct Snippet(String);
 
 pub const RAW_SNIPPET_MAX_LEN: usize = 1024 * 1024;
 pub const SNIPPET_MAX_LEN: usize = 32 * 1024;

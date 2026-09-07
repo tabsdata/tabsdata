@@ -2,7 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-// Basic types reexported for convenience under basic module
 pub mod basic;
 
 pub mod addresses;

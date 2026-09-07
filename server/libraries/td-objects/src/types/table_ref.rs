@@ -10,8 +10,6 @@ use std::fmt::{Display, Formatter};
 use ta_objects::ComposedString;
 use td_error::TdError;
 
-/// It represents a version.
-///
 /// `Fixed` references identify a *logic* table data version (LTDV) —
 /// the stable plan-time identity, not the concrete `physical_table_data_versions`
 /// row currently bound to it. The concrete TDV reachable from an LTDV
@@ -60,14 +58,10 @@ impl Version {
     }
 }
 
-/// It represents a set of versions.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Versions {
-    /// No versions
     None,
-    /// A single version.
     Single(Version),
-    /// A list of versions.
     List(Vec<Version>),
     /// A range of versions. Always older to newer.
     Range(Version, Version),
