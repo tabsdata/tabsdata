@@ -9,10 +9,10 @@ use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
-use td_objects::dxo::function::{Function, FunctionDBWithNames};
+use td_objects::dxo::function::Function;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::CurrentEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn function_list(
@@ -22,18 +22,13 @@ async fn function_list(
 ) -> Result<ListResponse<Function>, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, _, list_params) = request.into_parts();
-    // check requester can view the current project; within the project
-    // every collection is visible (no cross-project visibility)
+    // Within the project every collection is visible (no cross-project visibility).
     let grant = authz
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Function>::try_from(&list_params)?;
-    let rows = conn
-        .current()
-        .state(FunctionDBWithNames::available())
-        .list(&(), &query_params)
-        .await?;
+    let rows = conn.latest().list((), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -111,7 +106,6 @@ mod tests {
             .function(&collection, &create)
             .await?;
 
-        // List current functions
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
             .in_project(p.id);
@@ -130,7 +124,6 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_function_versions_without_permissions(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        // Create new role without permissions
         let user = db
             .seed()
             .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
@@ -211,9 +204,6 @@ mod tests {
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
         assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
 
-        // A user whose role holds no project permission cannot view the
-        // project: the request is rejected (rather than returning an empty
-        // list as the old visibility-filtered service did).
         let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
             .in_project(p.id);

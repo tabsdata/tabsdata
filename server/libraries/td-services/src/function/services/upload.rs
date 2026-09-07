@@ -9,13 +9,13 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{GatedConnection, InProject, RW};
 use td_error::TdError;
-use td_objects::dxo::bundle::{Bundle, BundleDB};
+use td_objects::dxo::bundle::{Bundle, BundleInsertDB};
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::types::basic::{BundleId, BundleStatus, StorageVersion};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_storage::Storage;
 
 #[service_factory]
@@ -33,7 +33,7 @@ async fn upload_function(
         .await?;
     let conn = gated_trx.get(grant);
     let collection_id_name = param.collection;
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&collection_id_name).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
 
     // The bundle's storage prefix: the collection's effective base_path (resolved
     // by the view), stamped onto the bundle row so it self-locates after moves.
@@ -52,7 +52,7 @@ async fn upload_function(
     .await?;
 
     // Pending until a function claims it.
-    let bundle = BundleDB {
+    let bundle = BundleInsertDB {
         id: bundle_id,
         collection_id: collection.id,
         hash: hash.clone(),
@@ -61,7 +61,7 @@ async fn upload_function(
         created_on: ctx.time,
         created_by_id: ctx.user_id,
     };
-    conn.live().insert(&bundle).await?;
+    conn.insert(&bundle).await?;
 
     let read: Bundle = Bundle::from(&bundle);
     Ok(read)
@@ -78,12 +78,13 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
+    use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::CollectionIdName;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, BundleStatus, CollectionName, ProjectId, UserId,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
 
@@ -117,28 +118,28 @@ mod tests {
         let response = service.upload_function(request).await;
         let response = response?.data;
 
-        let bundle_db: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(()).await?;
+        let bundle_db: Vec<BundleDB> = db.fetch_all::<BundleDB>(()).await?;
 
         assert_eq!(bundle_db.len(), 1);
         let bundle = &bundle_db[0];
-        assert_eq!(bundle.id, response.id);
-        assert_eq!(bundle.collection_id, collection.id);
+        assert_eq!(bundle.base.id, response.id);
+        assert_eq!(bundle.base.collection_id, collection.id);
         let hash = hex::encode(&Sha256::digest(payload)[..]);
-        assert_eq!(bundle.hash.to_string(), hash);
-        assert_eq!(bundle.created_by_id, UserId::admin());
+        assert_eq!(bundle.base.hash.to_string(), hash);
+        assert_eq!(bundle.base.created_by_id, UserId::admin());
 
         // Bundle is stamped with the effective base_path and starts Pending. The
         // seeded collection inherits (NULL base_path), so it resolves to the
         // project's `/` (BasePath::default()).
         assert_eq!(collection.base_path, None);
-        assert_eq!(bundle.base_path, BasePath::default());
-        assert_eq!(bundle.status, BundleStatus::Pending);
+        assert_eq!(bundle.base.base_path, BasePath::default());
+        assert_eq!(bundle.base.status, BundleStatus::Pending);
 
         let base_path = BasePath::default();
         let (bundle_location, _) = StorageLocation::current()
             .builder(&base_path)
             .collection(&collection.id)
-            .function(&bundle.id)
+            .function(&bundle.base.id)
             .build()?;
         let content = context.storage.read(&bundle_location).await?;
         let content = String::from_utf8(content).unwrap();
@@ -200,27 +201,24 @@ mod tests {
             base_path: Some(Some(prod.clone())),
             ..CollectionUpdateDB::from(&collection)
         };
-        db.live()
-            .update::<CollectionUpdateDB, ActiveCollectionDB>(&update, &collection.id)
+        db.update::<CollectionUpdateDB>(&update, &collection.id)
             .await?;
-        let reloaded: ActiveCollectionDB = db
-            .live()
-            .fetch_one::<ActiveCollectionDB>(&collection.id)
-            .await?;
+        let reloaded: ActiveCollectionDB =
+            db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
         assert_eq!(reloaded.base_path, Some(prod.clone()));
 
         // Upload: the bundle must inherit the collection's non-default base_path.
         let payload = "TEXT";
         upload_once(&context, p.id, &collection_name, payload).await?;
 
-        let bundle_db: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(()).await?;
+        let bundle_db: Vec<BundleDB> = db.fetch_all::<BundleDB>(()).await?;
         assert_eq!(bundle_db.len(), 1);
-        assert_eq!(bundle_db[0].base_path, prod);
+        assert_eq!(bundle_db[0].base.base_path, prod);
 
         let (location, _) = StorageLocation::current()
             .builder(&prod)
-            .collection(&bundle_db[0].collection_id)
-            .function(&bundle_db[0].id)
+            .collection(&bundle_db[0].base.collection_id)
+            .function(&bundle_db[0].base.id)
             .build()?;
         let content = String::from_utf8(context.storage.read(&location).await?).unwrap();
         assert_eq!(content, payload);

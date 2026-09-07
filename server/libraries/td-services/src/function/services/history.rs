@@ -11,12 +11,10 @@ use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{AtTimeParam, ListRequest, ListResponse, WithinProject};
-use td_objects::dxo::function::{
-    FunctionDBWithNames, FunctionParam, FunctionVersion, FunctionVersionDBWithNames,
-};
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionParam, FunctionVersion};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::{HistoricEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn function_history(
@@ -31,24 +29,19 @@ async fn function_history(
         .await?;
     let conn = gated_conn.get(grant);
 
-    let collection: ActiveCollectionDB =
-        conn.live().fetch_one(&collection_param.collection).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&collection_param.collection).await?;
     let at = at.at;
-    // find function ID at time (as name could change in time)
     let function: FunctionDBWithNames = conn
-        .historic(&at)
-        .state(FunctionDBWithNames::available())
+        .as_of(&at)
         .fetch_one(and!(&collection.id, &function_param.function))
         .await?;
 
-    // List (all active versions at the time). Here we want the history, so we
-    // do not want to query the versioned view. Head versions and patches
-    // interleave: the union DAO is the one patch-aware surface.
+    // Head versions and patches interleave: the union DAO is the one
+    // patch-aware surface.
     let query_params = ListQueryParams::<FunctionVersion>::try_from(&list_params)?;
     let rows = conn
-        .historic(&at)
-        .state(FunctionVersionDBWithNames::available())
-        .list_full(&function.base.function_id, &query_params)
+        .history()
+        .list_until(&at, and!(&function.base.base.function_id), &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -63,7 +56,7 @@ mod tests {
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::{AtTimeParam, ListParams, RequestContext};
     use td_objects::dxo::function::{
-        FunctionParam, FunctionPatchDB, FunctionRegister, FunctionUpdate,
+        FunctionParam, FunctionPatchInsertDB, FunctionRegister, FunctionUpdate,
     };
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
@@ -71,7 +64,7 @@ mod tests {
         FunctionRuntimeValues, FunctionStatus, FunctionVersionId, Snippet, UserId,
     };
     use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -139,7 +132,7 @@ mod tests {
 
         let t2 = AtTime::now();
 
-        let patch = FunctionPatchDB {
+        let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
             parent_function_version_id: updated.id.clone().into(),
             function_id: updated.function_id,
@@ -152,7 +145,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).live().insert(&patch).await?;
+        db.scoped(p.id).insert(&patch).await?;
 
         let t2p = AtTime::now();
 
@@ -171,7 +164,7 @@ mod tests {
 
         let t3 = AtTime::now();
 
-        // Create function_1 again (DIFFERENT THAN THE FIRST ONE)
+        // Re-create function_1 — a different function than the first one.
         let create = FunctionRegister {
             name: "function_1".try_into()?,
             description: "function_foo description".try_into()?,

@@ -21,7 +21,7 @@ use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::{TableId, TableName, WorkerId, WorkerTypeDto};
 use td_objects::types::composed::TableTrigger;
 use td_objects::{FromDao, and};
-use td_queries::{HistoricEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn read_function(
@@ -41,19 +41,17 @@ async fn read_function(
     let at = ctx.time;
 
     let function: FunctionDBWithNames = conn
-        .historic(&at)
-        .state(FunctionDBWithNames::available())
+        .as_of(&at)
         .fetch_one(and!(&collection, &function_id_name))
         .await?;
 
-    let function_id = function.base.function_id;
-    let function_version_id = function.base.id.clone();
+    let function_id = function.base.base.function_id;
+    let function_version_id = function.base.base.id.clone();
     let read: Function = Function::from_dao(function)?;
 
     let tables: Vec<TableDBWithNames> = conn
-        .historic(&at)
-        .state(TableDBWithNames::user())
-        .fetch_all(&function_id)
+        .as_of(&at)
+        .fetch_all(and!(&function_id, TableDBWithNames::user()))
         .await?;
     let table_names = tables
         .iter()
@@ -61,18 +59,17 @@ async fn read_function(
         .collect::<Result<Vec<_>, _>>()?;
 
     let triggers: Vec<TriggerDBWithNames> = conn
-        .historic(&at)
-        .state(TriggerDBWithNames::active())
-        .fetch_all(&function_id)
+        .as_of(&at)
+        .fetch_all(and!(&function_id, TriggerDBWithNames::active()))
         .await?;
     let trigger_table_ids: Vec<TableId> = triggers
         .iter()
-        .map(|x| x.base.trigger_by_table_id)
+        .map(|x| x.base.base.trigger_by_table_id)
         .collect();
     let trigger_tables: Vec<TableDBWithNames> = conn
-        .historic(&at)
-        .state(TableDBWithNames::available())
-        .fetch_all_chunked::<TableId>(&trigger_table_ids)
+        .as_of(&at)
+        .chunked()
+        .fetch_all(&trigger_table_ids, ())
         .await?;
     let table_triggers = trigger_tables
         .iter()
@@ -80,24 +77,23 @@ async fn read_function(
         .collect::<Result<Vec<_>, _>>()?;
 
     let dependencies: Vec<DependencyDBWithNames> = conn
-        .historic(&at)
-        .state(DependencyDBWithNames::user())
-        .fetch_all(&function_id)
+        .as_of(&at)
+        .fetch_all(and!(&function_id, DependencyDBWithNames::user()))
         .await?;
-    let dependency_table_ids: Vec<TableId> = dependencies.iter().map(|x| x.base.table_id).collect();
+    let dependency_table_ids: Vec<TableId> =
+        dependencies.iter().map(|x| x.base.base.table_id).collect();
     let dependency_tables: Vec<TableDBWithNames> = conn
-        .historic(&at)
-        .state(TableDBWithNames::available())
-        .fetch_all_chunked::<TableId>(&dependency_table_ids)
+        .as_of(&at)
+        .chunked()
+        .fetch_all(&dependency_table_ids, ())
         .await?;
     let table_dependencies = vec_create_table_dependency(&dependencies, &dependency_tables).await?;
 
     let workers: Vec<WorkerDBWithNames> = conn
-        .live()
-        .fetch_all_in::<WorkerDBWithNames>(
-            WorkerDBWithNames::enabled_triggers(),
+        .fetch_all::<WorkerDBWithNames>(and!(
             &function_version_id,
-        )
+            WorkerDBWithNames::enabled_triggers()
+        ))
         .await?;
     let worker_map: HashMap<WorkerTypeDto, WorkerId> = map_create_worker(&workers).await?;
 
@@ -175,7 +171,7 @@ mod tests {
                 CollectionParam {
                     collection: CollectionIdName::from_str(&format!(
                         "~{}",
-                        function.collection_id
+                        function.base.collection_id
                     ))?,
                 },
                 FunctionParam {
@@ -188,17 +184,20 @@ mod tests {
         let response = service.read_function(request).await;
         let response = response?;
 
-        assert_eq!(function.id, response.function.id);
-        assert_eq!(function.collection_id, response.function.collection_id);
-        assert_eq!(function.name, response.function.name);
-        assert_eq!(function.description, response.function.description);
-        assert_eq!(function.function_id, response.function.function_id);
-        assert_eq!(function.storage_version, response.function.storage_version);
-        assert_eq!(function.bundle_id, response.function.bundle_id);
-        assert_eq!(function.snippet, response.function.snippet);
-        assert_eq!(function.defined_on, response.function.defined_on);
-        assert_eq!(function.defined_by_id, response.function.defined_by_id);
-        assert_eq!(function.status, response.function.status);
+        assert_eq!(function.base.id, response.function.id);
+        assert_eq!(function.base.collection_id, response.function.collection_id);
+        assert_eq!(function.base.name, response.function.name);
+        assert_eq!(function.base.description, response.function.description);
+        assert_eq!(function.base.function_id, response.function.function_id);
+        assert_eq!(
+            function.base.storage_version,
+            response.function.storage_version
+        );
+        assert_eq!(function.base.bundle_id, response.function.bundle_id);
+        assert_eq!(function.base.snippet, response.function.snippet);
+        assert_eq!(function.base.defined_on, response.function.defined_on);
+        assert_eq!(function.base.defined_by_id, response.function.defined_by_id);
+        assert_eq!(function.base.status, response.function.status);
         assert_eq!(
             response.function.collection,
             CollectionName::try_from("cofnig")?

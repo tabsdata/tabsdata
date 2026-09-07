@@ -2,13 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::register::{ensure_connection_kind_matches, validate_tables_do_not_exist};
+use crate::function::engine::{FunctionSpec, FunctionState, register_version};
+use crate::function::register::ensure_connection_kind_matches;
 use crate::function::update::assert_function_name_not_exists;
-use crate::function::{
-    check_private_tables, register_dependencies, register_tables, register_triggers,
-    register_workers,
-};
-use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -17,23 +13,19 @@ use td_bridge::BridgeProviderHandle;
 use td_database::access::{DbPool, InProject};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB, CollectionParam};
+use td_objects::dxo::bundle::BundleStatusUpdateDB;
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
-use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{Function, FunctionDB, FunctionDBWithNames, FunctionUpdate};
-use td_objects::dxo::table::TableDB;
-use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::{FromDao, and};
-use td_queries::{HistoricEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn update_function(
     authz: Ctx<AuthzContext>,
     scheduler_notify: Ctx<SchedulerNotify>,
     bridge: Ctx<BridgeProviderHandle>,
-    msgs: &mut ReqCtx,
     db: DbPool<InProject>,
     request: WithinProject<UpdateRequest<FunctionUpdate, (CollectionParam, FunctionParam)>>,
 ) -> Result<Function, TdError> {
@@ -47,110 +39,48 @@ async fn update_function(
 
     // Bare-table row lock (views with outer joins aren't lockable); the
     // active-view fetch is the liveness check, decided under the lock.
-    let locked: CollectionCreateDB = conn
-        .live()
-        .fetch_one_for_update(&collection_param.collection)
+    let locked: CollectionDB = conn
+        .for_update()
+        .fetch_one(&collection_param.collection)
         .await?;
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&locked.id).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
     let at = ctx.time;
 
     // Before-update ids: the function id does not change, the function
     // version id does.
     let current: FunctionDBWithNames = conn
-        .historic(&at)
-        .state(FunctionDBWithNames::available())
+        .as_of(&at)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
-    assert_function_name_not_exists(conn, &collection.id, &collection.name, &current, &update)
-        .await?;
+    assert_function_name_not_exists(conn, &collection.id, &current, &update).await?;
 
-    let previous: FunctionDB = conn.live().fetch_one(&current.base.id).await?;
+    let previous: FunctionDB = conn.fetch_one(&current.base.base.id).await?;
     let function = update.to_dao(&previous, &ctx)?;
-    // A publisher/subscriber's connector must match the collection's connection kind.
     ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
-    conn.live().insert(&function).await?;
+    conn.insert(&function).await?;
 
     // Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
-    let bundle_registered = BundleRegisteredDB::registered();
-    conn.live()
-        .update::<BundleRegisteredDB, BundleDB>(&bundle_registered, function.bundle_id)
+    let bundle_registered = BundleStatusUpdateDB::registered();
+    conn.update::<BundleStatusUpdateDB>(&bundle_registered, function.bundle_id)
         .await?;
 
-    let previous_version_id = Some(current.base.id);
-    let existing_tables: Vec<TableDB> = conn
-        .historic(&at)
-        .state(TableDB::available())
-        .fetch_all(&current.base.function_id)
-        .await?;
-    let existing_dependencies: Vec<DependencyDB> = conn
-        .historic(&at)
-        .state(DependencyDB::active())
-        .fetch_all(&current.base.function_id)
-        .await?;
-    let existing_triggers: Vec<TriggerDBWithNames> = conn
-        .historic(&at)
-        .state(TriggerDBWithNames::available())
-        .fetch_all(&current.base.function_id)
-        .await?;
-    validate_tables_do_not_exist(
-        conn,
-        &collection.id,
-        &collection.name,
-        &existing_tables,
-        &update.tables,
-        &at,
-    )
-    .await?;
-    check_private_tables(&collection.name, &update.dependencies)?;
-    check_private_tables(&collection.name, &update.triggers)?;
-    register_tables(
-        conn,
-        msgs,
-        &ctx,
-        &function,
-        &collection.id,
-        &collection.name,
-        &at,
-        &existing_tables,
-        &update.tables,
-        &update.table_types,
-        &update.reuse_frozen_tables,
-        &update.reset_state,
-    )
-    .await?;
-    register_dependencies(
+    let previous_version_id = Some(current.base.base.id);
+    let state = FunctionState::load(conn, &function.function_id, &at).await?;
+    let spec = FunctionSpec::from(&update);
+    register_version(
         conn,
         &ctx,
+        &collection,
         &function,
-        &collection.name,
-        &at,
-        &existing_dependencies,
-        &update.dependencies,
-    )
-    .await?;
-    register_triggers(
-        conn,
-        &ctx,
-        &function,
-        &collection.name,
-        &at,
-        &existing_triggers,
-        &update.tables,
-        &update.triggers,
-        &update.dependencies,
-    )
-    .await?;
-    register_workers(
-        conn,
-        &function,
-        &project,
+        &state,
+        &spec,
         &previous_version_id,
         &update.workers,
     )
     .await?;
 
-    let with_names: FunctionDBWithNames = conn.live().fetch_one(&function.id).await?;
+    let with_names: FunctionDBWithNames = conn.fetch_one(&function.id).await?;
     let read = Function::from_dao(with_names)?;
     gated_trx.commit().await?;
 
@@ -176,7 +106,9 @@ mod tests {
     use td_objects::and;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::dependency::DependencyDB;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::table::TableDB;
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::system::TD_FN_STATE_PREFIX;
@@ -192,8 +124,8 @@ mod tests {
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::types::recursion::RecursionOptions;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
-    use td_queries::{CurrentEntry, HistoricEntry, LiveEntry};
 
     #[td_test::test(db)]
     async fn test_update_fields(db: TdPool) -> Result<(), TdError> {
@@ -572,12 +504,15 @@ mod tests {
         db: &TdPool,
         pred: impl Fn(&TableName) -> bool,
     ) -> Result<TableId, TdError> {
-        let active: Vec<TableDB> = db.live().fetch_all::<TableDB>(&TableStatus::Active).await?;
+        let active: Vec<TableDB> = db
+            .history()
+            .fetch_all::<TableDB>(&TableStatus::Active)
+            .await?;
         let table = active
             .into_iter()
-            .find(|t| pred(&t.name))
+            .find(|t| pred(&t.base.name))
             .expect("matching active table exists");
-        Ok(table.table_id)
+        Ok(table.base.table_id)
     }
 
     #[td_test::test(db)]
@@ -701,7 +636,6 @@ mod tests {
 
         let state_id_before = active_table_id(&db, |n| n.starts_with(TD_FN_STATE_PREFIX)).await?;
 
-        // Default reset_state = false.
         let update = FunctionUpdate {
             name: Some("noreset_fn".try_into()?),
             tables: Some(vec![TableNameDto::try_from("user_table")?]),
@@ -733,12 +667,12 @@ mod tests {
 
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
         let active: Vec<FunctionDB> = db
-            .live()
+            .history()
             .fetch_all::<FunctionDB>(&FunctionStatus::Active)
             .await?;
         let function = active
             .into_iter()
-            .find(|f| f.name == *name)
+            .find(|f| f.base.name == *name)
             .expect("matching active function exists");
         Ok(function)
     }
@@ -784,8 +718,8 @@ mod tests {
 
         let fn_name = FunctionName::try_from("stage_fn")?;
         let before = active_function(&db, &fn_name).await?;
-        let stage_id_before = before.stage_id;
-        let stage_base_path_before = before.stage_base_path.clone();
+        let stage_id_before = before.base.stage_id;
+        let stage_base_path_before = before.base.stage_base_path.clone();
 
         let update = FunctionUpdate {
             name: Some("stage_fn".try_into()?),
@@ -810,11 +744,11 @@ mod tests {
 
         let after = active_function(&db, &fn_name).await?;
         assert_ne!(
-            stage_id_before, after.stage_id,
+            stage_id_before, after.base.stage_id,
             "reset_stage should regenerate the stage id"
         );
         assert_eq!(
-            stage_base_path_before, after.stage_base_path,
+            stage_base_path_before, after.base.stage_base_path,
             "reset_stage should keep the stage base_path"
         );
         Ok(())
@@ -860,9 +794,8 @@ mod tests {
             .await?;
 
         let fn_name = FunctionName::try_from("nostage_fn")?;
-        let stage_id_before = active_function(&db, &fn_name).await?.stage_id;
+        let stage_id_before = active_function(&db, &fn_name).await?.base.stage_id;
 
-        // Default reset_stage = false.
         let update = FunctionUpdate {
             name: Some("nostage_fn".try_into()?),
             ..Default::default()
@@ -883,7 +816,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let _ = service.update_function(request).await?.data;
 
-        let stage_id_after = active_function(&db, &fn_name).await?.stage_id;
+        let stage_id_after = active_function(&db, &fn_name).await?.base.stage_id;
         assert_eq!(
             stage_id_before, stage_id_after,
             "without reset_stage the stage id is reused"
@@ -960,7 +893,7 @@ mod tests {
 
         let after = active_function(&db, &fn_name).await?;
         assert_eq!(
-            after.base_path,
+            after.base.base_path,
             Some(BasePath::try_from("/over")?),
             "base_path override should be persisted on the new version"
         );
@@ -987,7 +920,7 @@ mod tests {
 
         let after = active_function(&db, &fn_name).await?;
         assert_eq!(
-            after.base_path,
+            after.base.base_path,
             Some(BasePath::try_from("/over")?),
             "without an override the previous base_path carries forward"
         );
@@ -1705,7 +1638,7 @@ mod tests {
         let _response = response?;
 
         let tables = db
-            .live()
+            .history()
             .fetch_all::<TableDB>(and!(
                 TableName::try_from("joaquin_table")?,
                 TableStatus::Frozen
@@ -1735,7 +1668,6 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
-        // Without reuse_frozen, we just get an error
         let response = response;
         assert!(response.is_err());
         let error = response.unwrap_err();
@@ -1769,18 +1701,17 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
         let _response = response?;
-        // But with reuse_frozen, we get the expected response
 
         let tables: Vec<TableDB> = db
-            .live()
+            .history()
             .fetch_all::<TableDB>(&(&TableName::try_from("joaquin_table")?))
             .await?;
         assert_eq!(tables.len(), 3);
-        assert_eq!(tables[0].status, TableStatus::Active);
-        assert_eq!(tables[1].status, TableStatus::Frozen);
-        assert_eq!(tables[2].status, TableStatus::Active);
-        assert_eq!(tables[0].table_id, tables[1].table_id);
-        assert_eq!(tables[1].table_id, tables[2].table_id);
+        assert_eq!(tables[0].base.status, TableStatus::Active);
+        assert_eq!(tables[1].base.status, TableStatus::Frozen);
+        assert_eq!(tables[2].base.status, TableStatus::Active);
+        assert_eq!(tables[0].base.table_id, tables[1].base.table_id);
+        assert_eq!(tables[1].base.table_id, tables[2].base.table_id);
         Ok(())
     }
 
@@ -2106,13 +2037,16 @@ mod tests {
         let res = service.update_function(request).await;
         assert!(res.is_ok());
 
-        let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&(res.unwrap().id)).await?;
+        let tables: Vec<TableDB> = db
+            .latest()
+            .fetch_all::<TableDB>(&(res.unwrap().function_id))
+            .await?;
         let map: HashMap<String, TableDB> = tables
             .into_iter()
-            .map(|table| (table.name.to_string(), table))
+            .map(|table| (table.base.name.to_string(), table))
             .collect();
-        assert!(!map.get("table0").unwrap().private.deref());
-        assert!(map.get("_table0").unwrap().private.deref());
+        assert!(!map.get("table0").unwrap().base.private.deref());
+        assert!(map.get("_table0").unwrap().base.private.deref());
         Ok(())
     }
 
@@ -2186,8 +2120,8 @@ mod tests {
             ..Default::default()
         };
 
-        // With an update, a new function version and table version is created
-        // But the trigger and dependency should still be valid (as the use id, not version id)
+        // Triggers and dependencies survive the update: they reference ids,
+        // not version ids.
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
                 (
@@ -2218,39 +2152,33 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = db
-            .historic(&AtTime::now())
+            .as_of(&AtTime::now())
             .recursive::<TriggerDB, FunctionDB>(RecursionOptions::new(Some(Depth::ZERO), None))
             .direct_reference(&response.function_id)
-            .d_state(TriggerDB::active())
-            .r_state(FunctionDB::executable())
+            .filter(TriggerDB::active())
+            .filter_references(FunctionDB::executable())
             .fetch_all()
             .await
             .unwrap();
-        // 2 triggered functions, 1 downstream
         assert_eq!(recursive_downstream_trigger.len(), 1);
-        let triggered_function_id = &recursive_downstream_trigger[0].function_id;
+        let triggered_function_id = &recursive_downstream_trigger[0].base.function_id;
         let triggered_function: FunctionDBWithNames = db
-            .current()
+            .latest()
             .fetch_one::<FunctionDBWithNames>(&(triggered_function_id))
             .await
             .unwrap();
-        assert_eq!(triggered_function.base.name, dependant.name);
+        assert_eq!(triggered_function.base.base.name, dependant.name);
 
-        let downstream_dependencies: Vec<DependencyDB> = db
-            .current()
-            .state(DependencyDB::active())
-            .fetch_all(&(triggered_function_id))
-            .await
-            .unwrap();
-        // 1 downstream dependency on the triggered function
+        let downstream_dependencies: Vec<DependencyDB> =
+            db.latest().fetch_all(&triggered_function_id).await.unwrap();
         assert_eq!(downstream_dependencies.len(), 1);
-        let dependency_function_id = &recursive_downstream_trigger[0].function_id;
+        let dependency_function_id = &recursive_downstream_trigger[0].base.function_id;
         let dependency_function: FunctionDBWithNames = db
-            .current()
+            .latest()
             .fetch_one::<FunctionDBWithNames>(&dependency_function_id)
             .await
             .unwrap();
-        assert_eq!(dependency_function.base.name, dependant.name);
+        assert_eq!(dependency_function.base.base.name, dependant.name);
         Ok(())
     }
 
@@ -2319,8 +2247,8 @@ mod tests {
             ..Default::default()
         };
 
-        // With an update, a new function version and table version is created
-        // But the trigger and dependency should still be valid (as the use id, not version id)
+        // Triggers and dependencies survive the update: they reference ids,
+        // not version ids.
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
                 (
@@ -2351,23 +2279,23 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = db
-            .historic(&AtTime::now())
+            .as_of(&AtTime::now())
             .recursive::<TriggerDB, FunctionDB>(RecursionOptions::new(Some(Depth::ZERO), None))
             .direct_reference(&response.function_id)
-            .d_state(TriggerDB::active())
-            .r_state(FunctionDB::executable())
+            .filter(TriggerDB::active())
+            .filter_references(FunctionDB::executable())
             .fetch_all()
             .await
             .unwrap();
         assert!(recursive_downstream_trigger.is_empty());
 
         let dependency_function: Vec<FunctionDBWithNames> = db
-            .current()
+            .latest()
             .fetch_all::<FunctionDBWithNames>(&(&response.function_id))
             .await
             .unwrap();
         assert_eq!(dependency_function.len(), 1); // only implicit self dependency
-        assert_eq!(dependency_function[0].base.name, dependant.name);
+        assert_eq!(dependency_function[0].base.base.name, dependant.name);
         Ok(())
     }
 
@@ -2405,8 +2333,7 @@ mod tests {
             .function(&collection, &create)
             .await?;
         let workers: Vec<WorkerDB> = db
-            .live()
-            .fetch_all::<WorkerDB>(&function_db.id)
+            .fetch_all::<WorkerDB>(&function_db.base.id)
             .await
             .unwrap();
         assert!(workers.is_empty());
@@ -2434,23 +2361,22 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let updated_function_1 = service.update_function(request).await?.data;
         let workers: Vec<WorkerDB> = db
-            .live()
             .fetch_all::<WorkerDB>(&updated_function_1.id)
             .await
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, updated_function_1.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, updated_function_1.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::StageTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
         let update = FunctionUpdate {
             workers: None,
@@ -2473,42 +2399,40 @@ mod tests {
         let updated_function_2 = service.update_function(request).await?.data;
 
         let workers: Vec<WorkerDB> = db
-            .live()
             .fetch_all::<WorkerDB>(&updated_function_1.id)
             .await
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, updated_function_1.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, updated_function_1.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::StopScheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::StageTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
         let workers: Vec<WorkerDB> = db
-            .live()
             .fetch_all::<WorkerDB>(&updated_function_2.id)
             .await
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, updated_function_2.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, updated_function_2.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::StageTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
         let update = FunctionUpdate {
             workers: Some(HashMap::from([(
@@ -2534,42 +2458,40 @@ mod tests {
         let updated_function_3 = service.update_function(request).await?.data;
 
         let workers: Vec<WorkerDB> = db
-            .live()
             .fetch_all::<WorkerDB>(&updated_function_2.id)
             .await
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, updated_function_2.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, updated_function_2.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::StopScheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::StageTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
         let workers: Vec<WorkerDB> = db
-            .live()
             .fetch_all::<WorkerDB>(&updated_function_3.id)
             .await
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, updated_function_3.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, updated_function_3.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
         let update = FunctionUpdate {
             workers: Some(HashMap::new()),
@@ -2592,26 +2514,24 @@ mod tests {
         let updated_function_4 = service.update_function(request).await?.data;
 
         let workers: Vec<WorkerDB> = db
-            .live()
             .fetch_all::<WorkerDB>(&updated_function_3.id)
             .await
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, updated_function_3.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, updated_function_3.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::StopScheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
         let workers: Vec<WorkerDB> = db
-            .live()
             .fetch_all::<WorkerDB>(&updated_function_4.id)
             .await
             .unwrap();
@@ -2653,8 +2573,7 @@ mod tests {
             .function(&collection, &create)
             .await?;
         let workers: Vec<WorkerDB> = db
-            .live()
-            .fetch_all::<WorkerDB>(&function_db.id)
+            .fetch_all::<WorkerDB>(&function_db.base.id)
             .await
             .unwrap();
         assert!(workers.is_empty());

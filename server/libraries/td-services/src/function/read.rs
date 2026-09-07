@@ -18,17 +18,17 @@ pub async fn vec_create_table_dependency(
 ) -> Result<Vec<TableDependency>, TdError> {
     let tables = tables
         .iter()
-        .map(|t| (t.base.table_id, t))
+        .map(|t| (t.base.base.table_id, t))
         .collect::<HashMap<_, _>>();
 
     let table_deps = dependencies
         .iter()
         .filter_map(|d| {
-            let table = tables.get(&d.base.table_id)?;
-            let versions = d.base.table_versions.deref().clone();
+            let table = tables.get(&d.base.base.table_id)?;
+            let versions = d.base.base.table_versions.deref().clone();
             Some(TableDependency::new(VersionedTableRef::new(
                 Some(table.collection.clone()),
-                table.base.name.clone(),
+                table.base.base.name.clone(),
                 versions,
             )))
         })
@@ -41,9 +41,9 @@ pub async fn map_create_worker(
 ) -> Result<HashMap<WorkerTypeDto, WorkerId>, TdError> {
     let workers = workers
         .iter()
-        .filter_map(|w| match w.base.worker_type {
-            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.base.id.clone())),
-            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.base.id.clone())),
+        .filter_map(|w| match w.base.base.worker_type {
+            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.base.base.id.clone())),
+            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.base.base.id.clone())),
             _ => None,
         })
         .collect();

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::register_workers;
+use crate::function::workers::register_workers;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -11,14 +11,13 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{DbPool, InProject};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::collection::{CollectionCreateDB, CollectionParam};
+use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{Function, FunctionDB, FunctionDBWithNames, FunctionEnable};
-use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{WorkerConfig, WorkerTypeDto};
 use td_objects::{FromDao, and};
-use td_queries::{ChunkedQueries, CurrentEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn enable_function(
@@ -37,36 +36,27 @@ async fn enable_function(
 
     // Bare-table row lock: the re-registration must not resurrect a function
     // inside a collection whose delete cascade is in flight.
-    let _: CollectionCreateDB = conn
-        .live()
-        .fetch_one_for_update(&collection_param.collection)
+    let _: CollectionDB = conn
+        .for_update()
+        .fetch_one(&collection_param.collection)
         .await?;
 
     // Before-update ids: the function id does not change, the function
     // version id does.
     let current: FunctionDBWithNames = conn
-        .current()
-        .state(FunctionDBWithNames::available())
+        .latest()
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
-    let previous: FunctionDB = conn.live().fetch_one(&current.base.id).await?;
+    let previous: FunctionDB = conn.fetch_one(&current.base.base.id).await?;
     let function = previous.re_registered(&ctx, enable.enabled);
-    conn.live().insert(&function).await?;
+    conn.insert(&function).await?;
 
-    // Re-register tables (dependencies and triggers remain valid).
-    let tables: Vec<TableDB> = conn.live().fetch_all(&current.base.id).await?;
-    let new_tables: Vec<TableDB> = tables
-        .iter()
-        .map(|t| t.re_registered(&ctx, function.id.clone()))
-        .collect();
-    conn.insert_vec::<TableDB>(&new_tables).await?;
-
-    let previous_version_id = Some(current.base.id);
+    let previous_version_id = Some(current.base.base.id);
     let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
-    register_workers(conn, &function, &project, &previous_version_id, &no_workers).await?;
+    register_workers(conn, &function, &previous_version_id, &no_workers).await?;
 
-    let with_names: FunctionDBWithNames = conn.live().fetch_one(&function.id).await?;
+    let with_names: FunctionDBWithNames = conn.fetch_one(&function.id).await?;
     let read = Function::from_dao(with_names)?;
     gated_trx.commit().await?;
 
@@ -89,6 +79,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::dependency::DependencyDB;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::table::TableDB;
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::{
@@ -97,8 +88,8 @@ mod tests {
     use td_objects::types::basic::{BundleId, CollectionName, ReuseFrozen};
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
-    use td_queries::{CurrentEntry, LiveEntry};
 
     #[td_test::test(db)]
     async fn test_enable_enabled_empty_function(db: TdPool) -> Result<(), TdError> {
@@ -250,40 +241,55 @@ mod tests {
         let response = service.enable_function(request).await;
         let response = response?;
 
-        assert_ne!(response.id, created_function.id);
-        assert_ne!(response.defined_on, created_function.defined_on);
+        assert_ne!(response.id, created_function.base.id);
+        assert_ne!(response.defined_on, created_function.base.defined_on);
 
-        assert_eq!(response.collection_id, created_function.collection_id);
-        assert_eq!(response.name, created_function.name);
-        assert_eq!(response.description, created_function.description);
-        assert_eq!(response.decorator, created_function.decorator);
-        assert_eq!(response.connector, created_function.connector);
-        assert_eq!(response.runtime_values, created_function.runtime_values);
-        assert_eq!(response.function_id, created_function.function_id);
-        assert_eq!(response.storage_version, created_function.storage_version);
-        assert_eq!(response.bundle_id, created_function.bundle_id);
-        assert_eq!(response.snippet, created_function.snippet);
-        assert_eq!(response.status, created_function.status);
+        assert_eq!(response.collection_id, created_function.base.collection_id);
+        assert_eq!(response.name, created_function.base.name);
+        assert_eq!(response.description, created_function.base.description);
+        assert_eq!(response.decorator, created_function.base.decorator);
+        assert_eq!(response.connector, created_function.base.connector);
+        assert_eq!(
+            response.runtime_values,
+            created_function.base.runtime_values
+        );
+        assert_eq!(response.function_id, created_function.base.function_id);
+        assert_eq!(
+            response.storage_version,
+            created_function.base.storage_version
+        );
+        assert_eq!(response.bundle_id, created_function.base.bundle_id);
+        assert_eq!(response.snippet, created_function.base.snippet);
+        assert_eq!(response.status, created_function.base.status);
 
-        assert_eq!(created_function.enabled, enabled);
+        assert_eq!(created_function.base.enabled, enabled);
         assert_eq!(response.enabled, enabled_update);
 
         let current_function: Vec<FunctionDB> = db
-            .current()
+            .latest()
             .fetch_all::<FunctionDB>(&response.function_id)
             .await?;
         assert_eq!(current_function.len(), 1);
         let current_function = current_function.first().unwrap();
-        assert_eq!(current_function.id, response.id);
-        assert_eq!(current_function.enabled, enabled_update);
+        assert_eq!(current_function.base.id, response.id);
+        assert_eq!(current_function.base.enabled, enabled_update);
 
-        let current_tables: Vec<TableDB> =
-            db.live().fetch_all::<TableDB>(&current_function.id).await?;
+        // Flipping the flag versions the function alone: its tables keep the
+        // version that defined them.
+        let current_tables: Vec<TableDB> = db
+            .latest()
+            .fetch_all::<TableDB>(and!(&current_function.base.function_id, TableDB::active()))
+            .await?;
         assert_eq!(current_tables.len(), tables.unwrap_or_default().len());
+        assert!(
+            current_tables
+                .iter()
+                .all(|t| t.base.function_version_id == created_function.base.id)
+        );
 
         let current_dependencies: Vec<DependencyDB> = db
-            .current()
-            .fetch_all::<DependencyDB>(&current_function.function_id)
+            .latest()
+            .fetch_all::<DependencyDB>(&current_function.base.function_id)
             .await?;
         assert_eq!(
             current_dependencies.len(),
@@ -291,15 +297,13 @@ mod tests {
         );
 
         let current_triggers: Vec<TriggerDB> = db
-            .current()
-            .fetch_all::<TriggerDB>(&current_function.function_id)
+            .latest()
+            .fetch_all::<TriggerDB>(&current_function.base.function_id)
             .await?;
         assert_eq!(current_triggers.len(), triggers.unwrap_or_default().len());
 
-        let current_workers: Vec<WorkerDB> = db
-            .live()
-            .fetch_all::<WorkerDB>(&current_function.id)
-            .await?;
+        let current_workers: Vec<WorkerDB> =
+            db.fetch_all::<WorkerDB>(&current_function.base.id).await?;
         assert_eq!(current_workers.len(), workers.unwrap_or_default().len());
 
         Ok(())

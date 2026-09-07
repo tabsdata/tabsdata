@@ -10,13 +10,14 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{GatedConnection, InProject, RW};
 use td_error::TdError;
 use td_objects::FromDao;
-use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
+use td_objects::dxo::bundle::BundleStatusUpdateDB;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{
-    FunctionDB, FunctionParam, FunctionPatch, FunctionPatchDB, FunctionPatchRecord,
+    FunctionDB, FunctionParam, FunctionPatch, FunctionPatchDB, FunctionPatchInsertDB,
+    FunctionPatchRecord,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn create_function_patch(
@@ -33,19 +34,19 @@ async fn create_function_patch(
     let conn = gated_trx.get(grant);
     let collection_id_name = collection_param.collection;
     let function_id_name = function_param.function;
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&collection_id_name).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
 
-    let parent: FunctionDB = conn.live().fetch_one(&body.patch_of).await?;
+    let parent: FunctionDB = conn.fetch_one(&body.patch_of).await?;
     assert_patch_parent_matches_url(conn, &parent, &collection.id, &function_id_name).await?;
-    let patch: FunctionPatchDB = body.to_dao(parent, &ctx)?;
-    conn.live().insert(&patch).await?;
+    let patch: FunctionPatchInsertDB = body.to_dao(parent, &ctx)?;
+    conn.insert(&patch).await?;
 
-    let bundle_registered = BundleRegisteredDB::registered();
-    conn.live()
-        .update::<BundleRegisteredDB, BundleDB>(&bundle_registered, patch.bundle_id)
+    let bundle_registered = BundleStatusUpdateDB::registered();
+    conn.update::<BundleStatusUpdateDB>(&bundle_registered, patch.bundle_id)
         .await?;
 
-    let record: FunctionPatchRecord = FunctionPatchRecord::from_dao(patch)?;
+    let stored: FunctionPatchDB = conn.fetch_one(&patch.id).await?;
+    let record: FunctionPatchRecord = FunctionPatchRecord::from_dao(stored)?;
     Ok(record)
 }
 
@@ -59,14 +60,15 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
         TableNameDto, UserId,
     };
+    use td_objects::types::basic::{AtTime, FunctionVersionId, ReuseFrozen};
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
-    use td_objects::types::basic::{FunctionVersionId, ReuseFrozen};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     async fn seed_collection_helper(
@@ -147,7 +149,7 @@ mod tests {
         let parent = seed_function(&db, p.id, "c0", "f0").await;
 
         let body = FunctionPatch {
-            patch_of: parent.id.clone(),
+            patch_of: parent.base.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "patched snippet".try_into()?,
             runtime_values: None,
@@ -159,21 +161,19 @@ mod tests {
             .await?
             .data;
 
-        assert_ne!(response.id, parent.id);
-        assert_eq!(*response.parent_function_version_id, parent.id);
-        assert_eq!(response.function_id, parent.function_id);
-        assert_eq!(response.collection_id, parent.collection_id);
+        assert_ne!(response.id, parent.base.id);
+        assert_eq!(*response.parent_function_version_id, parent.base.id);
+        assert_eq!(response.function_id, parent.base.function_id);
+        assert_eq!(response.collection_id, parent.base.collection_id);
 
-        // The DB row matches and lives in `function_patches`.
-        let stored: FunctionPatchDB = db.live().fetch_one::<FunctionPatchDB>(&response.id).await?;
-        assert_eq!(*stored.parent_function_version_id, parent.id);
-        assert_eq!(stored.function_id, parent.function_id);
-        assert_ne!(stored.snippet, parent.snippet); // overridden by body
+        let stored: FunctionPatchDB = db.fetch_one::<FunctionPatchDB>(&response.id).await?;
+        assert_eq!(*stored.base.parent_function_version_id, parent.base.id);
+        assert_eq!(stored.base.function_id, parent.base.function_id);
+        assert_ne!(stored.base.snippet, parent.base.snippet);
 
-        // The `functions` table is untouched: no new row for the patch.
         let functions: Vec<FunctionDB> = db
-            .live()
-            .fetch_all::<FunctionDB>(&parent.function_id)
+            .history()
+            .fetch_all::<FunctionDB>(&parent.base.function_id)
             .await?;
         assert_eq!(
             functions.len(),
@@ -214,7 +214,7 @@ mod tests {
         let parent_f1 = seed_function_in(&db, p.id, &collection, "f1").await;
 
         let body = FunctionPatch {
-            patch_of: parent_f1.id.clone(),
+            patch_of: parent_f1.base.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             runtime_values: None,
@@ -241,7 +241,7 @@ mod tests {
         let _parent_c1 = seed_function(&db, p.id, "c1", "f0").await;
 
         let body = FunctionPatch {
-            patch_of: parent_c0.id.clone(),
+            patch_of: parent_c0.base.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             runtime_values: None,
@@ -261,23 +261,15 @@ mod tests {
         Ok(())
     }
 
-    /// Deletion tombstones a fresh version row while earlier rows stay
-    /// Active, so the guard must judge aliveness by the function's
-    /// *current* row — patching an old (Active) version of a deleted
-    /// function is refused.
+    /// Deletion closes the function's open interval; its earlier rows stay
+    /// readable, so patching an old version of a deleted function is refused.
     #[td_test::test(db)]
     async fn test_patch_of_deleted_function_rejected(db: TdPool) -> Result<(), TdError> {
-        use td_objects::types::basic::{AtTime, FunctionStatus, FunctionVersionId};
-
         let p = db.seed().test_project().await?;
         let v0 = seed_function(&db, p.id, "c0", "f0").await;
-        let tombstone = FunctionDB {
-            id: FunctionVersionId::new(),
-            defined_on: AtTime::now(),
-            status: FunctionStatus::Deleted,
-            ..v0.clone()
-        };
-        db.scoped(p.id).live().insert(&tombstone).await?;
+        db.scoped(p.id)
+            .close::<FunctionDB>(&v0.base.function_id, &AtTime::now())
+            .await?;
 
         let response = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
@@ -285,7 +277,7 @@ mod tests {
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: v0.id.clone(),
+                    patch_of: v0.base.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "snippet".try_into()?,
                     runtime_values: None,
@@ -303,13 +295,9 @@ mod tests {
         Ok(())
     }
 
-    /// Patches point to a parent fvid in `functions`. A patch of a
-    /// patch would need the second patch's
-    /// `parent_function_version_id` to be the first patch's `id` —
-    /// but the first patch lives in `function_patches`, not
-    /// `functions`, so the service's `fetch_one::<FunctionDB>(parent)`
-    /// lookup fails. Users wanting "iterate on a patch" should
-    /// create a new patch against the same parent.
+    /// Patches point to a parent fvid in `functions`; a patch's own id lives
+    /// in `function_patches`, so a patch of a patch cannot resolve.
+    /// Iterating on a patch means a new patch against the same parent.
     #[td_test::test(db)]
     async fn test_patch_of_patch_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -321,7 +309,7 @@ mod tests {
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: v0.id.clone(),
+                    patch_of: v0.base.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "v1".try_into()?,
                     runtime_values: None,
@@ -330,10 +318,8 @@ mod tests {
             ))
             .await?
             .data;
-        assert_eq!(*v0_prime.parent_function_version_id, v0.id);
+        assert_eq!(*v0_prime.parent_function_version_id, v0.base.id);
 
-        // Second patch pointing at the FIRST patch: fails — the
-        // parent fvid isn't in `functions`.
         let attempt = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
                 p.id,
@@ -352,42 +338,41 @@ mod tests {
         Ok(())
     }
 
-    /// Schema-level: the AFTER-INSERT trigger that maintains
-    /// `function_patches_current` keeps exactly one row per
-    /// `parent_function_version_id` partition — the latest by
-    /// `defined_on`. Catches a trigger regression where the current
-    /// table drifts from the base table's latest.
+    /// Schema-level: the SCD2 close-out trigger keeps exactly one open
+    /// `function_patches` row per `parent_function_version_id`
+    /// partition — the latest by `defined_on`. Catches a trigger
+    /// regression where the open interval drifts from the partition's
+    /// latest row.
     #[td_test::test(db)]
-    async fn test_function_patches_current_trigger_keeps_latest_per_parent(
+    async fn test_function_patches_close_out_keeps_latest_per_parent(
         db: TdPool,
     ) -> Result<(), TdError> {
-        use td_queries::{CurrentEntry, LiveEntry};
+        use td_queries::Queries;
         let p = db.seed().test_project().await?;
         let parent = seed_function(&db, p.id, "c0", "f0").await;
-        let parent_id = parent.id.clone();
+        let parent_id = parent.base.id.clone();
 
         // `parent_function_version_id` isn't a `FunctionPatchDB` extractor,
         // so fetch-all + filter (≤1 row per parent partition).
         let current_for_parent = |rows: Vec<FunctionPatchDB>| -> Vec<FunctionPatchDB> {
             rows.into_iter()
-                .filter(|p| *p.parent_function_version_id == parent_id)
+                .filter(|p| *p.base.parent_function_version_id == parent_id)
                 .collect()
         };
 
-        let before = current_for_parent(db.current().fetch_all::<FunctionPatchDB>(&()).await?);
+        let before = current_for_parent(db.latest().fetch_all::<FunctionPatchDB>(&()).await?);
         assert!(
             before.is_empty(),
             "no current row before any patch is inserted"
         );
 
-        // First patch — trigger materialises the partition's current row.
         let first = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
                 p.id,
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: parent.id.clone(),
+                    patch_of: parent.base.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "v1".try_into()?,
                     runtime_values: None,
@@ -396,12 +381,10 @@ mod tests {
             ))
             .await?
             .data;
-        let after_first = current_for_parent(db.current().fetch_all::<FunctionPatchDB>(&()).await?);
+        let after_first = current_for_parent(db.latest().fetch_all::<FunctionPatchDB>(&()).await?);
         assert_eq!(after_first.len(), 1);
-        assert_eq!(after_first[0].id, first.id);
+        assert_eq!(after_first[0].base.id, first.id);
 
-        // Second patch — trigger replaces the current row with the
-        // newer one (partition holds at most one).
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         let second = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
@@ -409,7 +392,7 @@ mod tests {
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: parent.id.clone(),
+                    patch_of: parent.base.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "v2".try_into()?,
                     runtime_values: None,
@@ -418,19 +401,17 @@ mod tests {
             ))
             .await?
             .data;
-        let after_second =
-            current_for_parent(db.current().fetch_all::<FunctionPatchDB>(&()).await?);
+        let after_second = current_for_parent(db.latest().fetch_all::<FunctionPatchDB>(&()).await?);
         assert_eq!(after_second.len(), 1, "one current row per parent");
-        assert_eq!(after_second[0].id, second.id);
+        assert_eq!(after_second[0].base.id, second.id);
         assert!(
-            after_second[0].defined_on >= after_first[0].defined_on,
+            after_second[0].base.defined_on >= after_first[0].base.defined_on,
             "current row must have the latest defined_on",
         );
 
-        // Base table retains both rows — event-log shape.
         let all: Vec<FunctionPatchDB> = db
-            .live()
-            .fetch_all::<FunctionPatchDB>(&parent.function_id)
+            .history()
+            .fetch_all::<FunctionPatchDB>(&parent.base.function_id)
             .await?;
         assert_eq!(all.len(), 2, "both patches retained in base table");
         Ok(())

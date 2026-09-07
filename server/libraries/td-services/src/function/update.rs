@@ -2,42 +2,26 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
-use td_error::{TdError, td_error};
+use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionUpdate};
-use td_objects::types::basic::{CollectionId, CollectionName, FunctionName};
-use td_queries::CurrentEntry;
+use td_objects::types::basic::CollectionId;
+use td_queries::Queries;
 
-#[td_error]
-enum UpdateFunctionError {
-    #[error("Function '{0}' already exists in collection '{1}'")]
-    FunctionAlreadyExists(FunctionName, CollectionName) = 0,
-}
-
-pub async fn assert_function_name_not_exists(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn assert_function_name_not_exists<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     collection_id: &CollectionId,
-    collection_name: &CollectionName,
     function: &FunctionDBWithNames,
     function_update: &FunctionUpdate,
 ) -> Result<(), TdError> {
     if let Some(name) = &function_update.name
-        && *name != function.base.name
+        && *name != function.base.base.name
     {
-        let found = conn
-            .current()
-            .state(FunctionDBWithNames::available())
-            .fetch_optional(and!(*collection_id, name))
+        conn.latest()
+            .assert_not_exists::<FunctionDBWithNames>(and!(collection_id, name))
             .await?;
-
-        if found.is_some() {
-            Err(UpdateFunctionError::FunctionAlreadyExists(
-                name.clone(),
-                collection_name.clone(),
-            ))?
-        }
     }
-
     Ok(())
 }

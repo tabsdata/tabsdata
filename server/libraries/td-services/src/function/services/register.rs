@@ -2,12 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::register::{ensure_connection_kind_matches, validate_tables_do_not_exist};
-use crate::function::{
-    check_private_tables, register_dependencies, register_tables, register_triggers,
-    register_workers,
-};
-use ta_services::ctx_service::ReqCtx;
+use crate::function::engine::{FunctionSpec, FunctionState, register_version};
+use crate::function::register::ensure_connection_kind_matches;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -16,21 +12,19 @@ use td_bridge::BridgeProviderHandle;
 use td_database::access::{DbPool, InProject};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
+use td_objects::dxo::bundle::BundleStatusUpdateDB;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{Function, FunctionDBWithNames, FunctionRegister};
-use td_objects::types::basic::ResetState;
 use td_objects::{FromDao, and};
-use td_queries::{HistoricEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn register_function(
     authz: Ctx<AuthzContext>,
     scheduler_notify: Ctx<SchedulerNotify>,
     bridge: Ctx<BridgeProviderHandle>,
-    msgs: &mut ReqCtx,
     db: DbPool<InProject>,
     request: WithinProject<CreateRequest<FunctionRegister, CollectionParam>>,
 ) -> Result<Function, TdError> {
@@ -44,94 +38,42 @@ async fn register_function(
 
     // Bare-table row lock (views with outer joins aren't lockable); the
     // active-view fetch is the liveness check, decided under the lock.
-    let locked: CollectionCreateDB = conn.live().fetch_one_for_update(&param.collection).await?;
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&locked.id).await?;
+    let locked: CollectionDB = conn.for_update().fetch_one(&param.collection).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
     let at = ctx.time;
     // Stage/checkpoint storage prefix: the collection's effective base_path (its
     // own, else the project's — already resolved by the collections_active view).
     let base_path = collection.effective_base_path.clone();
 
-    conn.historic(&at)
-        .state(FunctionDBWithNames::available())
-        .assert_not_exists(and!(&collection.id, &register.name))
+    conn.as_of(&at)
+        .assert_not_exists::<FunctionDBWithNames>(and!(&collection.id, &register.name))
         .await?;
 
     let function = register.to_dao(&ctx, collection.id, base_path.clone())?;
-    // A publisher/subscriber's connector must match the collection's connection kind.
     ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
-    conn.live().insert(&function).await?;
+    conn.insert(&function).await?;
 
     // Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
-    let bundle_registered = BundleRegisteredDB::registered();
-    conn.live()
-        .update::<BundleRegisteredDB, BundleDB>(&bundle_registered, function.bundle_id)
+    let bundle_registered = BundleStatusUpdateDB::registered();
+    conn.update::<BundleStatusUpdateDB>(&bundle_registered, function.bundle_id)
         .await?;
 
-    let previous_version_id = None;
-    let existing_tables = Vec::new();
-    let existing_dependencies = Vec::new();
-    let existing_triggers = Vec::new();
-    validate_tables_do_not_exist(
-        conn,
-        &collection.id,
-        &collection.name,
-        &existing_tables,
-        &register.tables,
-        &at,
-    )
-    .await?;
-    check_private_tables(&collection.name, &register.dependencies)?;
-    check_private_tables(&collection.name, &register.triggers)?;
-    // Register never resets state (fresh tables get new ids anyway).
-    let reset_state = ResetState::default();
-    register_tables(
-        conn,
-        msgs,
-        &ctx,
-        &function,
-        &collection.id,
-        &collection.name,
-        &at,
-        &existing_tables,
-        &register.tables,
-        &register.table_types,
-        &register.reuse_frozen_tables,
-        &reset_state,
-    )
-    .await?;
-    register_dependencies(
+    let state = FunctionState::empty();
+    let spec = FunctionSpec::from(&register);
+    register_version(
         conn,
         &ctx,
+        &collection,
         &function,
-        &collection.name,
-        &at,
-        &existing_dependencies,
-        &register.dependencies,
-    )
-    .await?;
-    register_triggers(
-        conn,
-        &ctx,
-        &function,
-        &collection.name,
-        &at,
-        &existing_triggers,
-        &register.tables,
-        &register.triggers,
-        &register.dependencies,
-    )
-    .await?;
-    register_workers(
-        conn,
-        &function,
-        &project,
-        &previous_version_id,
+        &state,
+        &spec,
+        &None,
         &register.workers,
     )
     .await?;
 
-    let with_names: FunctionDBWithNames = conn.live().fetch_one(&function.id).await?;
+    let with_names: FunctionDBWithNames = conn.fetch_one(&function.id).await?;
     let read = Function::from_dao(with_names)?;
     gated_trx.commit().await?;
 
@@ -172,17 +114,17 @@ mod tests {
         WorkerTypeDto,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
         let active: Vec<FunctionDB> = db
-            .live()
+            .history()
             .fetch_all::<FunctionDB>(&FunctionStatus::Active)
             .await?;
         let function = active
             .into_iter()
-            .find(|f| f.name == *name)
+            .find(|f| f.base.name == *name)
             .expect("matching active function exists");
         Ok(function)
     }
@@ -310,8 +252,8 @@ mod tests {
 
         assert_eq!(*response.snippet, module);
 
-        let stored: FunctionDB = db.live().fetch_one(&response.id).await?;
-        assert_eq!(*stored.snippet, module);
+        let stored: FunctionDB = db.fetch_one(&response.id).await?;
+        assert_eq!(*stored.base.snippet, module);
 
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
@@ -815,10 +757,8 @@ mod tests {
         test_register_tables_dependencies_triggers_different_collections(db, false, true).await
     }
 
-    // Within a project there is no cross-collection permission: every
-    // collection's public (non-private) tables are usable from any function in
-    // the project. Referencing another collection's public tables as
-    // dependencies/triggers always succeeds.
+    // Within a project there is no cross-collection permission: any function
+    // may reference another collection's public tables as dependencies/triggers.
     async fn test_register_tables_dependencies_triggers_different_collections(
         db: TdPool,
         deps_diff_collection: bool,
@@ -1211,13 +1151,16 @@ mod tests {
         let res = service.register_function(request).await;
         assert!(res.is_ok());
 
-        let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&(res.unwrap().id)).await?;
+        let tables: Vec<TableDB> = db
+            .history()
+            .fetch_all::<TableDB>(&(res.unwrap().id))
+            .await?;
         let map: HashMap<String, TableDB> = tables
             .into_iter()
-            .map(|table| (table.name.to_string(), table))
+            .map(|table| (table.base.name.to_string(), table))
             .collect();
-        assert!(!*map.get("table0").unwrap().private);
-        assert!(*map.get("_table0").unwrap().private);
+        assert!(!*map.get("table0").unwrap().base.private);
+        assert!(*map.get("_table0").unwrap().base.private);
         Ok(())
     }
 
@@ -1405,20 +1348,20 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await?.data;
 
-        let workers: Vec<WorkerDB> = db.live().fetch_all::<WorkerDB>(&res.id).await.unwrap();
+        let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(&res.id).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, res.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, res.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
         Ok(())
     }
 
@@ -1514,7 +1457,7 @@ mod tests {
 
         let function = active_function(&db, &FunctionName::try_from("stamped_fn")?).await?;
         assert_eq!(
-            function.stage_base_path, prod,
+            function.base.stage_base_path, prod,
             "stage_base_path is stamped from the collection base_path at register"
         );
         Ok(())
@@ -1551,7 +1494,7 @@ mod tests {
             .in_project(p.id);
         let bundle = context.clone().upload_function(request).await?.data;
         assert_eq!(
-            db.live().fetch_all::<BundleDB>(&bundle.id).await?[0].status,
+            db.fetch_all::<BundleDB>(&bundle.id).await?[0].base.status,
             BundleStatus::Pending,
             "bundle starts Pending right after upload"
         );
@@ -1585,12 +1528,11 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         service.register_function(request).await?;
 
-        // The bundle the function claimed is flipped Pending -> Registered.
         let function = active_function(&db, &FunctionName::try_from("flip_fn")?).await?;
-        let bundles: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(&function.bundle_id).await?;
+        let bundles: Vec<BundleDB> = db.fetch_all::<BundleDB>(&function.base.bundle_id).await?;
         assert_eq!(bundles.len(), 1);
-        assert_eq!(bundles[0].status, BundleStatus::Registered);
-        assert_eq!(bundles[0].collection_id, collection.id);
+        assert_eq!(bundles[0].base.status, BundleStatus::Registered);
+        assert_eq!(bundles[0].base.collection_id, collection.id);
         Ok(())
     }
 
@@ -1637,12 +1579,12 @@ mod tests {
 
         let function = active_function(&db, &FunctionName::try_from("override_fn")?).await?;
         assert_eq!(
-            function.base_path,
+            function.base.base_path,
             Some(BasePath::try_from("/fn")?),
             "base_path override is persisted on the function version"
         );
         assert_eq!(
-            function.stage_base_path, prod,
+            function.base.stage_base_path, prod,
             "stage_base_path still comes from the collection, not the override"
         );
         Ok(())
@@ -1737,9 +1679,9 @@ mod tests {
         register_in_kubernetes(&db, p.id, "src_pub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("pub_fn")?).await?;
-        assert_eq!(function.decorator, Decorator::Publisher);
+        assert_eq!(function.base.decorator, Decorator::Publisher);
         assert_eq!(
-            function.connection,
+            function.base.connection,
             Some(ConnectionKind::try_from("mysqlSrcConn")?)
         );
         Ok(())
@@ -1753,9 +1695,9 @@ mod tests {
         register_in_kubernetes(&db, p.id, "dst_sub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("sub_fn")?).await?;
-        assert_eq!(function.decorator, Decorator::Subscriber);
+        assert_eq!(function.base.decorator, Decorator::Subscriber);
         assert_eq!(
-            function.connection,
+            function.base.connection,
             Some(ConnectionKind::try_from("mysqlDestConn")?)
         );
         Ok(())
@@ -1780,7 +1722,6 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_publisher_requires_connector_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        // Under Kubernetes a publisher must declare its connection kind.
         create_collection(&db, p.id, "src_req", Some(GroupName::source())).await;
         let create = pubsub_register("req_fn", Decorator::Publisher, None)?;
         let err = register_in_kubernetes(&db, p.id, "src_req", create)
@@ -1834,8 +1775,8 @@ mod tests {
         register_in(&db, p.id, "fac_legacy_pub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("legacy_pub_fn")?).await?;
-        assert_eq!(function.decorator, Decorator::Publisher);
-        assert_eq!(function.connection, None);
+        assert_eq!(function.base.decorator, Decorator::Publisher);
+        assert_eq!(function.base.connection, None);
         Ok(())
     }
 

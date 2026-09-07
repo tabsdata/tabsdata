@@ -2,11 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::{
-    register_dependencies, register_tables, register_triggers, register_workers,
-};
+use crate::function::engine::{Changes, FunctionState, apply};
+use crate::function::workers::register_workers;
 use std::collections::HashMap;
-use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -15,21 +13,17 @@ use td_database::access::{DbPool, InProject};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::and;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB, CollectionParam};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
-use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::dxo::table::TableDB;
-use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::types::basic::{ResetState, ReuseFrozen, WorkerConfig, WorkerTypeDto};
-use td_queries::{HistoricEntry, LiveEntry};
+use td_objects::types::basic::{WorkerConfig, WorkerTypeDto};
+use td_queries::Queries;
 
 #[service_factory]
 async fn delete_function(
     authz: Ctx<AuthzContext>,
     scheduler_notify: Ctx<SchedulerNotify>,
-    msgs: &mut ReqCtx,
     db: DbPool<InProject>,
     request: WithinProject<DeleteRequest<(CollectionParam, FunctionParam)>>,
 ) -> Result<(), TdError> {
@@ -43,93 +37,33 @@ async fn delete_function(
 
     // Bare-table row lock (views with outer joins aren't lockable); the
     // active-view fetch is the liveness check, decided under the lock.
-    let locked: CollectionCreateDB = conn
-        .live()
-        .fetch_one_for_update(&collection_param.collection)
+    let locked: CollectionDB = conn
+        .for_update()
+        .fetch_one(&collection_param.collection)
         .await?;
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&locked.id).await?;
+    let _: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
     let at = ctx.time;
     let current: FunctionDBWithNames = conn
-        .historic(&at)
-        .state(FunctionDBWithNames::available())
+        .as_of(&at)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
-    let previous: FunctionDB = conn.live().fetch_one(&current.base.id).await?;
-    let deleted = previous.deleted(&ctx);
-    conn.live().insert(&deleted).await?;
-
-    let previous_version_id = Some(current.base.id);
-    let existing_tables: Vec<TableDB> = conn
-        .historic(&at)
-        .state(TableDB::active())
-        .fetch_all(&current.base.function_id)
-        .await?;
-    let existing_dependencies: Vec<DependencyDB> = conn
-        .historic(&at)
-        .state(DependencyDB::active())
-        .fetch_all(&current.base.function_id)
-        .await?;
-    let existing_triggers: Vec<TriggerDBWithNames> = conn
-        .historic(&at)
-        .state(TriggerDBWithNames::available())
-        .fetch_all(&current.base.function_id)
-        .await?;
-    let no_tables = None;
-    let no_table_types = None;
-    let no_dependencies = None;
-    let no_triggers = None;
+    let previous_version_id = Some(current.base.base.id.clone());
+    let state = FunctionState::load(conn, &current.base.base.function_id, &at).await?;
+    let changes = Changes::for_delete(&state, &ctx);
+    apply(conn, &changes, &at).await?;
     // An empty workers map so all the previous workers get deleted.
     let empty_workers = Some(HashMap::<WorkerTypeDto, WorkerConfig>::default());
-    // Deletes reuse nothing and never reset state.
-    let reuse_frozen = ReuseFrozen::default();
-    let reset_state = ResetState::default();
-    register_tables(
-        conn,
-        msgs,
-        &ctx,
-        &deleted,
-        &collection.id,
-        &collection.name,
-        &at,
-        &existing_tables,
-        &no_tables,
-        &no_table_types,
-        &reuse_frozen,
-        &reset_state,
-    )
-    .await?;
-    register_dependencies(
-        conn,
-        &ctx,
-        &deleted,
-        &collection.name,
-        &at,
-        &existing_dependencies,
-        &no_dependencies,
-    )
-    .await?;
-    register_triggers(
-        conn,
-        &ctx,
-        &deleted,
-        &collection.name,
-        &at,
-        &existing_triggers,
-        &no_tables,
-        &no_triggers,
-        &no_dependencies,
-    )
-    .await?;
     register_workers(
         conn,
-        &deleted,
-        &project,
+        &current.base.base,
         &previous_version_id,
         &empty_workers,
     )
     .await?;
+    conn.close::<FunctionDB>(&current.base.base.function_id, &at)
+        .await?;
     gated_trx.commit().await?;
 
     // Wake the scheduler so cron/stage workers stop immediately instead of at
@@ -153,6 +87,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{Function, FunctionRegister};
     use td_objects::dxo::worker::WorkerDB;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, UserId, WorkerMessageStatus,
         WorkerStatus, WorkerType,
@@ -160,7 +95,7 @@ mod tests {
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::basic::{CollectionName, TableNameDto};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -559,7 +494,6 @@ mod tests {
         service.delete_function(request).await?;
 
         let function_version: FunctionDBWithNames = db
-            .live()
             .fetch_one::<FunctionDBWithNames>(&(&created_function_version_1.id))
             .await?;
         let function_version = Function::from_dao(function_version)?;
@@ -637,20 +571,20 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
 
-        let workers: Vec<WorkerDB> = db.live().fetch_all::<WorkerDB>(()).await.unwrap();
+        let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(()).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, None);
-        assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.physical_function_run_id, None);
-        assert_eq!(worker.function_version_id, function.id);
-        assert_eq!(worker.message_status, WorkerMessageStatus::None);
-        assert_eq!(worker.started_on, None);
-        assert_eq!(worker.ended_on, None);
-        assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.execution_id, None);
+        assert_eq!(worker.base.transaction_id, None);
+        assert_eq!(worker.base.physical_function_run_id, None);
+        assert_eq!(worker.base.function_version_id, function.id);
+        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.base.started_on, None);
+        assert_eq!(worker.base.ended_on, None);
+        assert_eq!(worker.base.status, WorkerStatus::StopScheduled);
+        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
         Ok(())
     }
 }

@@ -7,35 +7,38 @@ use crate::function::download_bundle::{build_bundle_download, resolve_function_v
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::DevelopProject;
-use td_database::access::{GatedConnection, RO};
+use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::function::FunctionVersionIdParam;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_storage::Storage;
 
 #[service_factory]
 async fn download_bundle(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<FunctionVersionIdParam>,
 ) -> Result<BundleDownload, TdError> {
     let (ctx, param) = request.into_parts();
     let function_version_id = param.function_version_id;
 
-    // The version id is globally unique; resolve it, then pivot into its
-    // project's scope via the collection before the authz check.
-    let conn = gated_conn.get(authz.none());
+    // The version id is globally unique; resolve it, then enter its
+    // project via the collection before the authz check.
+    let mut trx = db.read().await?;
+    let conn = trx.get(authz.none());
     let version = resolve_function_version(conn, &function_version_id).await?;
-    let collection: CollectionDB = conn.live().fetch_one(&version.collection_id).await?;
-    let _grant = authz
-        .require_in_project::<DevelopProject>(conn, &ctx, &collection.base.project_id)
+    let collection: ResolvedCollectionDB = conn.fetch_one(&version.collection_id).await?;
+    let project = collection.base.project_id;
+    let mut trx = trx.enter_project(&project).await?;
+    let grant = authz
+        .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
         .await?;
 
-    build_bundle_download(conn, &storage, &version).await
+    build_bundle_download(trx.get(grant), &storage, &version).await
 }
 
 #[cfg(test)]
@@ -54,14 +57,16 @@ mod tests {
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionParam;
-    use td_objects::dxo::function::{FunctionDB, FunctionPatchDB, FunctionRegister};
+    use td_objects::dxo::function::{
+        FunctionDB, FunctionInsertDB, FunctionPatchInsertDB, FunctionRegister,
+    };
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleHash, BundleId, CollectionIdName, CollectionName, Decorator,
         FunctionIdName, FunctionStatus, FunctionVersionId, ProjectId, UserId,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -112,13 +117,13 @@ mod tests {
         let bundle_b_id =
             upload_bundle(&context, p.id, &collection.name, payload_b.clone()).await?;
 
-        let v2 = FunctionDB {
+        let v2 = FunctionInsertDB {
             id: FunctionVersionId::new(),
             bundle_id: bundle_b_id,
             defined_on: AtTime::now(),
-            ..v1.clone()
+            ..v1.base.clone()
         };
-        db.scoped(p.id).live().insert(&v2).await?;
+        db.scoped(p.id).insert(&v2).await?;
 
         let service = context.clone();
 
@@ -126,7 +131,7 @@ mod tests {
         // is current — v1 → bundle A, v2 → bundle B. The ETag is the bundle's
         // content hash.
         let cases = [
-            (&v1, &bundle_a_id, &payload_a),
+            (&v1.base, &bundle_a_id, &payload_a),
             (&v2, &bundle_b_id, &payload_b),
         ];
         for (expected_fn, expected_bundle, expected_payload) in cases {
@@ -157,7 +162,7 @@ mod tests {
         let payload_patch = b"BUNDLE-PAYLOAD-PATCH".to_vec();
         let bundle_patch_id =
             upload_bundle(&context, p.id, &collection.name, payload_patch.clone()).await?;
-        let patch = FunctionPatchDB {
+        let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
             parent_function_version_id: v2.id.clone().into(),
             function_id: v2.function_id,
@@ -170,7 +175,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).live().insert(&patch).await?;
+        db.scoped(p.id).insert(&patch).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionIdParam {
@@ -189,35 +194,15 @@ mod tests {
         }
         assert_eq!(Bytes::from(buf).as_ref(), payload_patch.as_slice());
 
-        // A version whose function has been deleted (status Deleted) is a
-        // tombstone, not a downloadable artifact: not found.
-        let deleted = FunctionDB {
-            id: FunctionVersionId::new(),
-            defined_on: AtTime::now(),
-            status: FunctionStatus::Deleted,
-            ..v2.clone()
-        };
-        db.scoped(p.id).live().insert(&deleted).await?;
+        // Deleting the function closes its interval, so a prior version of
+        // it (v1) — still readable in its own row — is no longer downloadable.
+        db.scoped(p.id)
+            .close::<FunctionDB>(&v2.function_id, &AtTime::now())
+            .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionIdParam {
-                function_version_id: deleted.id.clone(),
-            },
-        );
-        let err = service
-            .clone()
-            .download_bundle(request)
-            .await
-            .map(|_| ())
-            .unwrap_err();
-        assert_eq!(err.api_error(), ApiError::NotFound);
-
-        // The tombstone above makes the function deleted, so a prior Active
-        // version of it (v1) — still Active in its own row — is no longer
-        // downloadable either.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
-            FunctionVersionIdParam {
-                function_version_id: v1.id.clone(),
+                function_version_id: v1.base.id.clone(),
             },
         );
         let err = service
@@ -230,11 +215,11 @@ mod tests {
 
         // A patch of a deleted function is hidden with it: deletion does not
         // cascade to the patch row, so the parent's status is what decides.
-        let orphan = FunctionPatchDB {
+        let orphan = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: deleted.id.clone().into(),
-            function_id: deleted.function_id,
-            collection_id: deleted.collection_id,
+            parent_function_version_id: v2.id.clone().into(),
+            function_id: v2.function_id,
+            collection_id: v2.collection_id,
             snippet: "orphan snippet".try_into()?,
             bundle_id: bundle_patch_id,
             runtime_values: "rv".try_into()?,
@@ -243,7 +228,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id).live().insert(&orphan).await?;
+        db.scoped(p.id).insert(&orphan).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionIdParam {
@@ -323,11 +308,10 @@ mod tests {
         };
         service
             .clone()
-            .download_bundle(download(version.id.clone()))
+            .download_bundle(download(version.base.id.clone()))
             .await?;
 
-        // Delete the function through the real service (it tombstones a fresh
-        // Deleted version and leaves this one Active).
+        // Delete the function through the real service.
         let delete_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
@@ -342,11 +326,11 @@ mod tests {
             .delete_function(delete_request)
             .await?;
 
-        // The still-Active version is no longer downloadable once its function is
-        // deleted, matching the endpoint's contract and the history surface.
+        // The version is no longer downloadable once its function is deleted,
+        // matching the endpoint's contract and the history surface.
         let err = service
             .clone()
-            .download_bundle(download(version.id))
+            .download_bundle(download(version.base.id))
             .await
             .map(|_| ())
             .unwrap_err();
@@ -356,8 +340,8 @@ mod tests {
     }
 
     async fn bundle_hash(db: &TdPool, bundle_id: &BundleId) -> Result<BundleHash, TdError> {
-        let bundle: BundleDB = db.live().fetch_one::<BundleDB>(bundle_id).await?;
-        Ok(bundle.hash)
+        let bundle: BundleDB = db.fetch_one::<BundleDB>(bundle_id).await?;
+        Ok(bundle.base.hash)
     }
 
     async fn upload_bundle(

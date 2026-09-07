@@ -9,24 +9,26 @@
 //! "which fvid to run" is purely a head-vs-latest-patch choice.
 
 use std::collections::{HashMap, HashSet};
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_objects::and;
 use td_objects::dxo::function::{FunctionDB, FunctionPatchDB};
 use td_objects::types::basic::{AtTime, FunctionVersionId, Parent, Patch};
-use td_queries::{ChunkedQueries, LiveEntry, VersionedEntry};
+use td_queries::Queries;
 
 /// Resolve a fvid to its canonical head: try `functions` first, fall
 /// back to `function_patches`. Returns the parent fvid for patches and
 /// the row's own id for canonicals.
-pub async fn head_of(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn head_of<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     fvid: &FunctionVersionId,
 ) -> Result<FunctionVersionId, TdError> {
-    if let Some(row) = conn.live().fetch_optional::<FunctionDB>(fvid).await? {
-        return Ok(row.id);
+    if let Some(row) = conn.fetch_optional::<FunctionDB>(fvid).await? {
+        return Ok(row.base.id);
     }
-    let patch: FunctionPatchDB = conn.live().fetch_one::<FunctionPatchDB>(fvid).await?;
-    Ok(patch.parent_function_version_id.into_inner())
+    let patch: FunctionPatchDB = conn.fetch_one::<FunctionPatchDB>(fvid).await?;
+    Ok(patch.base.parent_function_version_id.into_inner())
 }
 
 /// The pair of ids needed to mint an FR/TDV: the head fvid (FK-valid
@@ -49,48 +51,51 @@ impl RunnableVersion {
 }
 
 /// Resolve `fvid` to the head fvid + an optional patch id, pinned to
-/// time `at`. Reads `function_patches_current` via the versioned
-/// surface: the partition is the head fvid, so the query returns at
-/// most one row — the latest `Active` patch with `defined_on <= at`.
-/// Plan-build (request time = plan trigger) and replay (request time =
-/// replay request) both call this with their own `at`, so patches
-/// registered later don't backfill into earlier mints.
-pub async fn latest_patch_or_head(
-    conn: &mut DomainConnection<Apiserver>,
+/// time `at` (at most one row per head partition: the latest `Active`
+/// patch with `defined_on <= at`). Plan-build and replay each pass
+/// their own `at`, so patches registered later don't backfill into
+/// earlier mints.
+pub async fn latest_patch_or_head<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     fvid: &FunctionVersionId,
     at: &AtTime,
 ) -> Result<RunnableVersion, TdError> {
     let head_fvid = head_of(conn, fvid).await?;
     let latest: Option<FunctionPatchDB> = conn
-        .versioned(at)
-        .state(FunctionPatchDB::active())
-        .fetch_optional(&Parent::from(head_fvid.clone()))
+        .as_of(at)
+        .fetch_optional(and!(
+            &Parent::from(head_fvid.clone()),
+            FunctionPatchDB::active()
+        ))
         .await?;
     Ok(RunnableVersion {
         function_version_id: head_fvid,
-        function_version_patch_id: latest.map(|v| Patch::from(v.id)),
+        function_version_patch_id: latest.map(|v| Patch::from(v.base.id)),
     })
 }
 
 /// Batched `latest_patch_or_head` for many fvids in one tick, pinned
 /// to time `at`. Returns a map keyed by the *input* fvid so callers
 /// can look up the runnable for each LFR they're minting.
-pub async fn latest_patch_or_head_batch(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn latest_patch_or_head_batch<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     fvids: Vec<FunctionVersionId>,
     at: &AtTime,
 ) -> Result<HashMap<FunctionVersionId, RunnableVersion>, TdError> {
     if fvids.is_empty() {
         return Ok(HashMap::new());
     }
-    // 1. Resolve heads. `functions` covers canonical fvids; any fvid
-    //    missing from that result is presumed to be a patch id (rare
-    //    on the dispatch path — LFRs are minted with head fvids).
+    // Any fvid missing from `functions` is presumed to be a patch id (rare
+    // on the dispatch path — LFRs are minted with head fvids).
     let canonical: Vec<FunctionDB> = conn
-        .fetch_all_chunked::<FunctionDB, FunctionVersionId>(&fvids)
+        .history()
+        .chunked()
+        .fetch_all::<FunctionDB>(&fvids, ())
         .await?;
-    let mut canonical_by_id: HashMap<FunctionVersionId, FunctionDB> =
-        canonical.into_iter().map(|f| (f.id.clone(), f)).collect();
+    let mut canonical_by_id: HashMap<FunctionVersionId, FunctionDB> = canonical
+        .into_iter()
+        .map(|f| (f.base.id.clone(), f))
+        .collect();
     let unresolved: Vec<FunctionVersionId> = fvids
         .iter()
         .filter(|id| !canonical_by_id.contains_key(*id))
@@ -99,27 +104,27 @@ pub async fn latest_patch_or_head_batch(
     let patch_lookups: Vec<FunctionPatchDB> = if unresolved.is_empty() {
         Vec::new()
     } else {
-        conn.fetch_all_chunked::<FunctionPatchDB, FunctionVersionId>(&unresolved)
+        conn.history()
+            .chunked()
+            .fetch_all::<FunctionPatchDB>(&unresolved, ())
             .await?
     };
     let mut patch_lookup_by_id: HashMap<FunctionVersionId, FunctionPatchDB> = patch_lookups
         .into_iter()
-        .map(|p| (p.id.clone(), p))
+        .map(|p| (p.base.id.clone(), p))
         .collect();
 
     let mut head_by_input: HashMap<FunctionVersionId, FunctionVersionId> = HashMap::new();
     for fvid in fvids {
         if let Some(row) = canonical_by_id.remove(&fvid) {
-            head_by_input.insert(fvid, row.id);
+            head_by_input.insert(fvid, row.base.id);
         } else if let Some(patch) = patch_lookup_by_id.remove(&fvid) {
-            head_by_input.insert(fvid, patch.parent_function_version_id.into_inner());
+            head_by_input.insert(fvid, patch.base.parent_function_version_id.into_inner());
         }
     }
 
-    // 2. One versioned read against `function_patches_current` keyed
-    //    by the distinct head fvids. The partition is
-    //    `parent_function_version_id`, so each head fvid returns at
-    //    most one row: the latest Active patch with `defined_on <= at`.
+    // One point-in-time read keyed by the distinct head fvids; the partition
+    // is `parent_function_version_id`, so each head returns at most one row.
     let mut seen: HashSet<&FunctionVersionId> = HashSet::with_capacity(head_by_input.len());
     let head_fvids: Vec<FunctionVersionId> = head_by_input
         .values()
@@ -130,22 +135,21 @@ pub async fn latest_patch_or_head_batch(
         Vec::new()
     } else {
         let head_partitions: Vec<_> = head_fvids.iter().cloned().map(Parent::from).collect();
-        conn.versioned(at)
-            .state(FunctionPatchDB::active())
-            .fetch_all_chunked(&head_partitions)
+        conn.as_of(at)
+            .chunked()
+            .fetch_all(&head_partitions, FunctionPatchDB::active())
             .await?
     };
     let patch_by_head: HashMap<FunctionVersionId, FunctionPatchDB> = latest_patches
         .into_iter()
-        .map(|p| ((*p.parent_function_version_id).clone(), p))
+        .map(|p| ((*p.base.parent_function_version_id).clone(), p))
         .collect();
 
-    // 3. Resolve `RunnableVersion` for each input fvid in-memory.
     let mut out = HashMap::with_capacity(head_by_input.len());
     for (input_fvid, head_fvid) in head_by_input {
         let latest = patch_by_head
             .get(&head_fvid)
-            .map(|p| Patch::from(p.id.clone()));
+            .map(|p| Patch::from(p.base.id.clone()));
         out.insert(
             input_fvid,
             RunnableVersion {
@@ -160,10 +164,12 @@ pub async fn latest_patch_or_head_batch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::access::InProject;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::collection::ActiveCollectionDB;
-    use td_objects::dxo::function::{FunctionDB, FunctionPatchDB, FunctionRegister};
+    use td_objects::dxo::function::FunctionPatchInsertDB;
+    use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
@@ -215,11 +221,11 @@ mod tests {
         defined_on: AtTime,
         snippet: &str,
     ) -> Result<FunctionVersionId, TdError> {
-        let patch = FunctionPatchDB {
+        let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: head.id.clone().into(),
-            function_id: head.function_id,
-            collection_id: head.collection_id,
+            parent_function_version_id: head.base.id.clone().into(),
+            function_id: head.base.function_id,
+            collection_id: head.base.collection_id,
             snippet: Snippet::try_from(RawSnippet::try_from(snippet)?)?,
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv")?,
@@ -228,14 +234,13 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(project_id).live().insert(&patch).await?;
+        db.scoped(project_id).insert(&patch).await?;
         Ok(patch.id)
     }
 
-    /// Plan A semantic: resolving a head fvid at time `T1` returns the
-    /// patch that was active at `T1`, ignoring any patches registered
-    /// after `T1`. Catches the regression where mint reads the freshest
-    /// patch wall-clock-now instead of pinning to the request `AtTime`.
+    /// Resolving a head fvid at time `T1` returns the patch active at `T1`,
+    /// ignoring later patches. Catches the regression where mint reads the
+    /// freshest patch wall-clock-now instead of pinning to the request time.
     #[td_test::test(db)]
     async fn test_latest_patch_or_head_time_pinning(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -251,21 +256,21 @@ mod tests {
         let p1 = insert_patch(&db, p.id, &head, t1, "p1").await?;
         let p2 = insert_patch(&db, p.id, &head, t2, "p2").await?;
 
-        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
 
-        let at_t1 = latest_patch_or_head(&mut conn, &head.id, &t1).await?;
-        assert_eq!(at_t1.function_version_id, head.id);
+        let at_t1 = latest_patch_or_head(&mut conn, &head.base.id, &t1).await?;
+        assert_eq!(at_t1.function_version_id, head.base.id);
         assert_eq!(at_t1.function_version_patch_id, Some(Patch::from(p1)));
 
-        let at_t2 = latest_patch_or_head(&mut conn, &head.id, &t2).await?;
+        let at_t2 = latest_patch_or_head(&mut conn, &head.base.id, &t2).await?;
         assert_eq!(at_t2.function_version_patch_id, Some(Patch::from(p2)));
 
-        let at_before = latest_patch_or_head(&mut conn, &head.id, &before).await?;
+        let at_before = latest_patch_or_head(&mut conn, &head.base.id, &before).await?;
         assert_eq!(at_before.function_version_patch_id, None);
         Ok(())
     }
 
-    /// Versioned partition isolation: two head fvids each have their
+    /// At partition isolation: two head fvids each have their
     /// own patch lineage. Resolving one head must never see the other
     /// head's patches. Catches a regression where `partition_by` drifts
     /// from `parent_function_version_id` (or where the batch resolver
@@ -282,16 +287,19 @@ mod tests {
         let p_a = insert_patch(&db, p.id, &head_a, now, "p-a").await?;
         let p_b = insert_patch(&db, p.id, &head_b, now, "p-b").await?;
 
-        let mut conn = DomainConnection::<Apiserver>::new(db.begin().await.unwrap());
-        let map =
-            latest_patch_or_head_batch(&mut conn, vec![head_a.id.clone(), head_b.id.clone()], &now)
-                .await?;
+        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let map = latest_patch_or_head_batch(
+            &mut conn,
+            vec![head_a.base.id.clone(), head_b.base.id.clone()],
+            &now,
+        )
+        .await?;
 
-        let r_a = map.get(&head_a.id).expect("missing head_a");
-        let r_b = map.get(&head_b.id).expect("missing head_b");
-        assert_eq!(r_a.function_version_id, head_a.id);
+        let r_a = map.get(&head_a.base.id).expect("missing head_a");
+        let r_b = map.get(&head_b.base.id).expect("missing head_b");
+        assert_eq!(r_a.function_version_id, head_a.base.id);
         assert_eq!(r_a.function_version_patch_id, Some(Patch::from(p_a)));
-        assert_eq!(r_b.function_version_id, head_b.id);
+        assert_eq!(r_b.function_version_id, head_b.base.id);
         assert_eq!(r_b.function_version_patch_id, Some(Patch::from(p_b)));
         Ok(())
     }

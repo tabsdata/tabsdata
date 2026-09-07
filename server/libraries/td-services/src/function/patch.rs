@@ -2,11 +2,12 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use td_database::access::SeesProjectRows;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::function::FunctionDB;
-use td_objects::types::basic::{CollectionId, FunctionIdName, FunctionStatus, FunctionVersionId};
-use td_queries::CurrentEntry;
+use td_objects::types::basic::{CollectionId, FunctionIdName, FunctionVersionId};
+use td_queries::Queries;
 
 #[td_error]
 pub enum CreateFunctionPatchError {
@@ -20,30 +21,36 @@ pub enum CreateFunctionPatchError {
 
 /// Validate that the parent fvid (`patch_of`) resolves to a function in the
 /// URL's collection, with the URL's function name/id, and not deleted.
-pub async fn assert_patch_parent_matches_url(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn assert_patch_parent_matches_url<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     parent: &FunctionDB,
     url_collection: &CollectionId,
     url_function: &FunctionIdName,
 ) -> Result<(), TdError> {
-    if parent.collection_id != *url_collection {
-        Err(CreateFunctionPatchError::WrongCollection(parent.id.clone()))?
+    if parent.base.collection_id != *url_collection {
+        Err(CreateFunctionPatchError::WrongCollection(
+            parent.base.id.clone(),
+        ))?
     }
     let url_matches = match url_function {
-        FunctionIdName::Id(id) => *id == parent.function_id,
-        FunctionIdName::Name(name) => *name == parent.name,
+        FunctionIdName::Id(id) => *id == parent.base.function_id,
+        FunctionIdName::Name(name) => *name == parent.base.name,
     };
     if !url_matches {
-        Err(CreateFunctionPatchError::WrongFunction(parent.id.clone()))?
+        Err(CreateFunctionPatchError::WrongFunction(
+            parent.base.id.clone(),
+        ))?
     }
-    // Deletion tombstones a fresh version row — earlier rows stay Active —
-    // so aliveness is the *current* row's status, not the parent row's.
-    let current: FunctionDB = conn
-        .current()
-        .fetch_one::<FunctionDB>(&parent.function_id)
+    // Deletion closes the function's open interval, so aliveness is whether a
+    // current row exists, not the parent row's status.
+    let current = conn
+        .latest()
+        .fetch_optional::<FunctionDB>(&parent.base.function_id)
         .await?;
-    if matches!(current.status, FunctionStatus::Deleted) {
-        Err(CreateFunctionPatchError::DeletedParent(parent.id.clone()))?
+    if current.is_none() {
+        Err(CreateFunctionPatchError::DeletedParent(
+            parent.base.id.clone(),
+        ))?
     }
     Ok(())
 }

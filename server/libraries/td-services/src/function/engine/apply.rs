@@ -1,0 +1,97 @@
+//
+// Copyright 2026 Tabsdata Inc.
+//
+
+use crate::function::engine::diff::{Changes, TableTransition};
+use std::collections::HashMap;
+use td_database::access::{InProject, SeesProjectRows};
+use td_database::domain::{Apiserver, DomainConnection};
+use td_error::TdError;
+use td_objects::and;
+use td_objects::dxo::dependency::DependencyDB;
+use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::table::TableDB;
+use td_objects::dxo::trigger::{TriggerDB, TriggerInsertDB};
+use td_objects::types::basic::{
+    AtTime, FunctionId, TableId, TableStatus, TriggerStatus, TriggerVersionId,
+};
+use td_queries::Queries;
+
+/// Land `changes`. Tables first, so the trigger flips their transitions imply
+/// read the new table versions; the triggers reading a table that froze or
+/// thawed belong to other functions, so they are fetched here, not diffed.
+pub async fn apply(
+    conn: &mut DomainConnection<Apiserver, InProject>,
+    changes: &Changes,
+    at: &AtTime,
+) -> Result<(), TdError> {
+    conn.chunked().insert(&changes.tables).await?;
+    conn.chunked()
+        .close::<TableDB>(&changes.close_tables, (), at)
+        .await?;
+    let flips = trigger_flips(conn, &changes.table_transitions, at).await?;
+    conn.chunked().insert(&flips).await?;
+    conn.chunked().insert(&changes.dependencies).await?;
+    conn.chunked()
+        .close::<DependencyDB>(&changes.close_dependencies, (), at)
+        .await?;
+    conn.chunked().insert(&changes.triggers).await?;
+    conn.chunked()
+        .close::<TriggerDB>(&changes.close_triggers, (), at)
+        .await?;
+    Ok(())
+}
+
+async fn trigger_flips<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    transitions: &[TableTransition],
+    at: &AtTime,
+) -> Result<Vec<TriggerInsertDB>, TdError> {
+    if transitions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let table_ids: Vec<TableId> = transitions.iter().map(|t| t.table_id).collect();
+    let triggers: Vec<TriggerDB> = conn.as_of(at).chunked().fetch_all(&table_ids, ()).await?;
+    let by_table: HashMap<TableId, &TableTransition> =
+        transitions.iter().map(|t| (t.table_id, t)).collect();
+    let mut flips = Vec::new();
+    for trigger in triggers {
+        let Some(transition) = by_table.get(&trigger.base.trigger_by_table_id) else {
+            continue;
+        };
+        match (&transition.status, &trigger.base.status) {
+            (TableStatus::Frozen, TriggerStatus::Active) => flips.push(TriggerInsertDB {
+                id: TriggerVersionId::default(),
+                status: TriggerStatus::Frozen,
+                defined_on: *at,
+                ..trigger.base.clone()
+            }),
+            (TableStatus::Active, TriggerStatus::Frozen) => flips.push(TriggerInsertDB {
+                id: TriggerVersionId::default(),
+                trigger_by_function_id: transition.function_id.into(),
+                status: TriggerStatus::Active,
+                defined_on: *at,
+                ..trigger.base.clone()
+            }),
+            _ => {}
+        }
+    }
+    Ok(flips)
+}
+
+/// The active functions depending on any of `table_ids`, the ones a table or
+/// collection deletion freezes.
+pub async fn dependants_of_tables<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
+    table_ids: &[TableId],
+    at: &AtTime,
+) -> Result<Vec<FunctionDB>, TdError> {
+    let dependencies: Vec<DependencyDB> = conn.as_of(at).chunked().fetch_all(table_ids, ()).await?;
+    let function_ids: Vec<FunctionId> = dependencies.iter().map(|d| d.base.function_id).collect();
+    let functions = conn
+        .as_of(at)
+        .chunked()
+        .fetch_all(&function_ids, and!(FunctionDB::active()))
+        .await?;
+    Ok(functions)
+}

@@ -15,7 +15,7 @@ use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionPatchRecord};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::{HistoricEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn list_function_patches(
@@ -36,15 +36,14 @@ async fn list_function_patches(
     let function_id_name = function_param.function;
     let at = ctx.time;
     let function: FunctionDBWithNames = conn
-        .historic(&at)
-        .state(FunctionDBWithNames::available())
+        .as_of(&at)
         .fetch_one(and!(&collection_id_name, &function_id_name))
         .await?;
 
     let query_params = ListQueryParams::<FunctionPatchRecord>::try_from(&list_params)?;
     let rows = conn
-        .live()
-        .list(&function.base.function_id, &query_params)
+        .history()
+        .list(&function.base.base.function_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -57,17 +56,16 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{ApiError, TdError};
-    use td_objects::and;
     use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::{FunctionPatch, FunctionRegister};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
-        ProjectId, TableNameDto, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
+        TableNameDto, UserId,
     };
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
-    use td_queries::CurrentEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     async fn seed_patches_fixture(db: &TdPool, project_id: ProjectId) -> ActiveCollectionDB {
@@ -132,17 +130,17 @@ mod tests {
         let p = db.seed().test_project().await?;
         let coll = seed_patches_fixture(&db, p.id).await;
         let parent: FunctionDBWithNames = {
-            db.current()
+            db.latest()
                 .fetch_one::<FunctionDBWithNames>(and!(
-                    CollectionName::try_from("c0")?,
-                    FunctionName::try_from("f0")?
+                    &CollectionIdName::from_str("c0")?,
+                    &FunctionIdName::from_str("f0")?
                 ))
                 .await?
         };
 
         for i in 0..2 {
             let body = FunctionPatch {
-                patch_of: parent.base.id.clone(),
+                patch_of: parent.base.base.id.clone(),
                 bundle_id: BundleId::default(),
                 snippet: format!("v{i}").try_into()?,
                 runtime_values: None,
@@ -188,7 +186,7 @@ mod tests {
         };
         let sibling = db.scoped(p.id).seed().function(&coll, &register).await?;
         let body = FunctionPatch {
-            patch_of: sibling.id.clone(),
+            patch_of: sibling.base.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "sibling patch".try_into()?,
             runtime_values: None,
@@ -236,12 +234,15 @@ mod tests {
         assert_eq!(response.data.len(), 2);
         assert!(response.data[0].defined_on >= response.data[1].defined_on);
         for v in &response.data {
-            assert_eq!(*v.parent_function_version_id, parent.base.id);
+            assert_eq!(*v.parent_function_version_id, parent.base.base.id);
         }
 
         let response = list("f1").await?;
         assert_eq!(response.data.len(), 1);
-        assert_eq!(*response.data[0].parent_function_version_id, sibling.id);
+        assert_eq!(
+            *response.data[0].parent_function_version_id,
+            sibling.base.id
+        );
 
         // Deleting a function hides its patches: the function no longer
         // resolves, so the listing is not found rather than leaking rows.

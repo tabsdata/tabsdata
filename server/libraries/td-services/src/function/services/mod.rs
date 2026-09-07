@@ -30,12 +30,12 @@ pub(crate) mod tests {
         SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
     };
     use td_objects::types::basic::{
-        AtTime, DependencyStatus, Enabled, FunctionStatus, TableName, TableStatus, TriggerStatus,
-        UserId,
+        AtTime, CollectionIdName, Enabled, FunctionStatus, TableIdName, TableName, TableStatus,
+        TriggerStatus, UserId,
     };
     use td_objects::types::composed::{TableDependency, TableTrigger, TableTriggerDto};
     use td_objects::types::table_ref::TableRef;
-    use td_queries::{CurrentEntry, HistoricEntry, LiveEntry};
+    use td_queries::Queries;
     pub async fn assert_register(
         db: &TdPool,
         user_id: &UserId,
@@ -45,7 +45,7 @@ pub(crate) mod tests {
     ) -> Result<(), TdError> {
         let req_tables = create.tables.as_deref().unwrap_or(&[]);
         let req_dependencies = create.dependencies.as_deref().unwrap_or(&[]);
-        // Similar to build_trigger_versions
+        // Mirrors build_trigger_versions' default-trigger derivation.
         let req_triggers: Vec<_> = if let Some(req_triggers) = create.triggers.as_deref() {
             req_triggers.to_vec()
         } else {
@@ -78,23 +78,22 @@ pub(crate) mod tests {
         let function_id = response.function_id;
 
         let functions: Vec<FunctionDB> = db
-            .live()
+            .history()
             .fetch_all::<FunctionDB>(&function_version_id)
             .await?;
         assert_eq!(functions.len(), 1);
         let function = &functions[0];
-        assert_eq!(function.collection_id, response.collection_id);
-        assert_eq!(function.name, response.name);
-        assert_eq!(function.function_id, response.function_id);
-        assert_eq!(function.bundle_id, response.bundle_id);
-        assert_eq!(function.snippet, response.snippet);
-        assert_eq!(function.decorator, response.decorator);
-        assert_eq!(function.status, FunctionStatus::Active);
+        assert_eq!(function.base.collection_id, response.collection_id);
+        assert_eq!(function.base.name, response.name);
+        assert_eq!(function.base.function_id, response.function_id);
+        assert_eq!(function.base.bundle_id, response.bundle_id);
+        assert_eq!(function.base.snippet, response.snippet);
+        assert_eq!(function.base.decorator, response.decorator);
+        assert_eq!(function.base.status, FunctionStatus::Active);
 
         let table_versions: Vec<TableDB> = db
-            .current()
-            .state(TableDB::active())
-            .fetch_all(&function_id)
+            .latest()
+            .fetch_all(and!(&function_id, TableDB::active()))
             .await?;
         assert_eq!(
             table_versions.len(),
@@ -103,22 +102,20 @@ pub(crate) mod tests {
         for table in req_tables {
             let found = table_versions
                 .iter()
-                .find(|t| **t.name == **table)
+                .find(|t| **t.base.name == **table)
                 .expect("table version not found");
-            assert_eq!(found.collection_id, function.collection_id);
-            assert_eq!(**found.name, **table);
-            assert_eq!(found.function_version_id, function.id);
-            assert!(found.function_param_pos.is_some());
-            assert_eq!(found.defined_on, function.defined_on);
-            assert_eq!(found.defined_by_id, function.defined_by_id);
-            assert_eq!(found.status, TableStatus::Active);
+            assert_eq!(found.base.collection_id, function.base.collection_id);
+            assert_eq!(**found.base.name, **table);
+            // Defined by this version or by an earlier one it left unchanged.
+            assert_eq!(found.base.function_id, function.base.function_id);
+            assert!(found.base.function_param_pos.is_some());
+            assert!(found.base.defined_on <= function.base.defined_on);
+            assert_eq!(found.base.defined_by_id, function.base.defined_by_id);
+            assert_eq!(found.base.status, TableStatus::Active);
         }
 
-        let dependency_versions: Vec<DependencyDBWithNames> = db
-            .current()
-            .state(DependencyDBWithNames::active())
-            .fetch_all(&function_id)
-            .await?;
+        let dependency_versions: Vec<DependencyDBWithNames> =
+            db.latest().fetch_all(&function_id).await?;
         assert_eq!(
             dependency_versions.len(),
             req_dependencies.len() + SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES.len()
@@ -126,54 +123,62 @@ pub(crate) mod tests {
         for dependency in req_dependencies {
             let dependency = &TableDependency::try_from(dependency)?;
             let dependency_table = db
-                .current()
+                .latest()
                 .fetch_one::<TableDBWithNames>(and!(
-                    &dependency.collection.as_ref().unwrap_or(&collection.name),
-                    &dependency.table,
+                    &CollectionIdName::Name(
+                        dependency
+                            .collection
+                            .clone()
+                            .unwrap_or(collection.name.clone())
+                    ),
+                    &TableIdName::Name(dependency.table.clone())
                 ))
                 .await?;
             let found = dependency_versions
                 .iter()
-                .find(|d| d.base.table_id == dependency_table.base.table_id)
+                .find(|d| d.base.base.table_id == dependency_table.base.base.table_id)
                 .expect("dependency version not found");
-            assert_eq!(found.base.collection_id, function.collection_id);
-            assert_eq!(found.base.function_id, function.function_id);
+            assert_eq!(found.base.base.collection_id, function.base.collection_id);
+            assert_eq!(found.base.base.function_id, function.base.function_id);
             assert_eq!(
                 *found.table_collection,
                 *dependency.collection.as_ref().unwrap_or(&collection.name)
             );
-            assert_eq!(*found.base.table_versions, dependency.versions);
-            assert_eq!(found.base.defined_on, function.defined_on);
-            assert_eq!(found.base.defined_by_id, function.defined_by_id);
-            assert_eq!(found.base.status, DependencyStatus::Active);
+            assert_eq!(*found.base.base.table_versions, dependency.versions);
+            assert!(found.base.base.defined_on <= function.base.defined_on);
+            assert_eq!(found.base.base.defined_by_id, function.base.defined_by_id);
         }
 
         let trigger_versions: Vec<TriggerDBWithNames> = db
-            .current()
-            .state(TriggerDBWithNames::active())
-            .fetch_all(&function_id)
+            .latest()
+            .fetch_all(and!(&function_id, TriggerDBWithNames::active()))
             .await?;
         assert_eq!(trigger_versions.len(), req_triggers.len());
         for trigger in req_triggers {
             let trigger = TableTrigger::try_from(trigger)?;
             let trigger_table = db
-                .current()
+                .latest()
                 .fetch_one::<TableDBWithNames>(and!(
-                    trigger.collection.as_ref().unwrap_or(&collection.name),
-                    &trigger.table,
+                    &CollectionIdName::Name(
+                        trigger
+                            .collection
+                            .clone()
+                            .unwrap_or(collection.name.clone())
+                    ),
+                    &TableIdName::Name(trigger.table.clone())
                 ))
                 .await?;
             let found = trigger_versions
                 .iter()
-                .find(|d| d.base.trigger_by_table_id == trigger_table.base.table_id)
+                .find(|d| d.base.base.trigger_by_table_id == trigger_table.base.base.table_id)
                 .expect("trigger version not found");
-            assert_eq!(found.base.collection_id, function.collection_id);
-            assert_eq!(found.base.function_id, function.function_id);
+            assert_eq!(found.base.base.collection_id, function.base.collection_id);
+            assert_eq!(found.base.base.function_id, function.base.function_id);
             assert_eq!(
                 *found.trigger_by_collection,
                 *trigger.collection.as_ref().unwrap_or(&collection.name)
             );
-            assert_eq!(found.base.status, TriggerStatus::Active);
+            assert_eq!(found.base.base.status, TriggerStatus::Active);
         }
 
         Ok(())
@@ -190,48 +195,55 @@ pub(crate) mod tests {
         response: &Function,
     ) -> Result<(), TdError> {
         let functions: Vec<FunctionDB> = db
-            .live()
-            .fetch_all::<FunctionDB>(&created_function.function_id)
+            .history()
+            .fetch_all::<FunctionDB>(&created_function.base.function_id)
             .await?;
         assert_eq!(functions.len(), 2);
 
         let functions: Vec<FunctionDB> = db
-            .live()
-            .fetch_all::<FunctionDB>(&created_function.id)
+            .history()
+            .fetch_all::<FunctionDB>(&created_function.base.id)
             .await?;
         assert_eq!(functions.len(), 1);
-        assert_eq!(&functions[0], created_function);
+        assert_eq!(functions[0].base, created_function.base);
+        assert!(!functions[0].valid_to.is_infinity());
 
         match &update.snippet {
             Some(snippet) => assert_eq!(*response.snippet, **snippet),
-            None => assert_eq!(response.snippet, created_function.snippet),
+            None => assert_eq!(response.snippet, created_function.base.snippet),
         }
 
+        // A table the update keeps unchanged is not re-versioned: its open
+        // version still belongs to the version that defined it. A dropped
+        // table closes that version and freezes.
         for table_dto in create.tables.as_deref().unwrap_or(&[]) {
             let table = &TableName::try_from(table_dto)?;
-            let old_version = db
-                .live()
-                .fetch_all::<TableDB>(and!(collection.id, table, &created_function.id))
+            let versions = db
+                .history()
+                .fetch_all::<TableDB>(and!(collection.id, table))
                 .await?;
-            assert_eq!(old_version.len(), 1);
-            assert_eq!(old_version[0].status, TableStatus::Active);
-
-            let new_version = db
-                .live()
-                .fetch_all::<TableDB>(and!(collection.id, table, &response.id))
-                .await?;
-            assert_eq!(new_version.len(), 1);
-            let new_status = if update.tables.as_deref().unwrap_or(&[]).contains(table_dto) {
-                TableStatus::Active
+            let created = versions
+                .iter()
+                .find(|v| {
+                    v.base.function_version_id == created_function.base.id
+                        && v.base.status == TableStatus::Active
+                })
+                .expect("the created version of the table");
+            if update.tables.as_deref().unwrap_or(&[]).contains(table_dto) {
+                assert_eq!(versions.len(), 1);
+                assert!(created.valid_to.is_infinity());
             } else {
-                TableStatus::Frozen
-            };
-            assert_eq!(new_version[0].status, new_status);
-
-            assert_eq!(old_version[0].table_id, new_version[0].table_id);
+                assert_eq!(versions.len(), 2);
+                assert!(!created.valid_to.is_infinity());
+                let frozen = versions
+                    .iter()
+                    .find(|v| v.base.status == TableStatus::Frozen)
+                    .expect("the frozen successor");
+                assert!(frozen.valid_to.is_infinity());
+                assert_eq!(frozen.base.table_id, created.base.table_id);
+            }
         }
 
-        // Use at time of the function version minus 1ms (right before the function version was defined)
         let before_at_time = AtTime::from(
             DateTime::from_timestamp_millis(response.defined_on.timestamp_millis() - 1).unwrap(),
         );
@@ -240,93 +252,109 @@ pub(crate) mod tests {
             let dependency = &TableDependency::try_from(dependency_dto)?;
 
             let dependency_table: TableDBWithNames = db
-                .historic(&before_at_time)
-                .fetch_one::<TableDBWithNames>(&dependency.table)
+                .as_of(&before_at_time)
+                .fetch_one::<TableDBWithNames>(and!(
+                    &CollectionIdName::Name(
+                        dependency
+                            .collection
+                            .clone()
+                            .unwrap_or(collection.name.clone())
+                    ),
+                    &TableIdName::Name(dependency.table.clone())
+                ))
                 .await?;
             let old_version = db
-                .historic(&before_at_time)
+                .as_of(&before_at_time)
                 .fetch_all::<DependencyDBWithNames>(and!(
-                    dependency_table.base.table_id,
-                    created_function.function_id
+                    dependency_table.base.base.table_id,
+                    created_function.base.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(old_version[0].base.status, DependencyStatus::Active);
 
             let dependency_table = db
-                .current()
-                .fetch_one::<TableDBWithNames>(&dependency.table)
+                .latest()
+                .fetch_one::<TableDBWithNames>(and!(
+                    &CollectionIdName::Name(
+                        dependency
+                            .collection
+                            .clone()
+                            .unwrap_or(collection.name.clone())
+                    ),
+                    &TableIdName::Name(dependency.table.clone())
+                ))
                 .await?;
             let new_version = db
-                .current()
+                .latest()
                 .fetch_all::<DependencyDBWithNames>(and!(
-                    dependency_table.base.table_id,
+                    dependency_table.base.base.table_id,
                     response.function_id
                 ))
                 .await?;
-            assert_eq!(new_version.len(), 1);
-
-            let new_status = if update
+            if update
                 .dependencies
                 .as_deref()
                 .unwrap_or(&[])
                 .contains(dependency_dto)
             {
-                DependencyStatus::Active
+                assert_eq!(new_version.len(), 1);
+                assert_eq!(
+                    old_version[0].base.base.dependency_id,
+                    new_version[0].base.base.dependency_id
+                );
             } else {
-                DependencyStatus::Deleted
-            };
-            assert_eq!(new_version[0].base.status, new_status);
-
-            assert_eq!(
-                old_version[0].base.dependency_id,
-                new_version[0].base.dependency_id
-            );
+                assert!(new_version.is_empty());
+            }
         }
 
         for trigger_dto in create.triggers.as_deref().unwrap_or(&[]) {
             let trigger = TableTrigger::try_from(trigger_dto)?;
             let trigger_table: TableDBWithNames = db
-                .current()
-                .fetch_one::<TableDBWithNames>(&trigger.table)
+                .latest()
+                .fetch_one::<TableDBWithNames>(and!(
+                    &CollectionIdName::Name(
+                        trigger
+                            .collection
+                            .clone()
+                            .unwrap_or(collection.name.clone())
+                    ),
+                    &TableIdName::Name(trigger.table.clone())
+                ))
                 .await?;
             let old_version: Vec<TriggerDBWithNames> = db
-                .historic(&before_at_time)
+                .as_of(&before_at_time)
                 .fetch_all::<TriggerDBWithNames>(and!(
-                    trigger_table.base.table_id,
-                    created_function.function_id
+                    trigger_table.base.base.table_id,
+                    created_function.base.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
 
             let new_version = db
-                .current()
+                .latest()
                 .fetch_all::<TriggerDBWithNames>(and!(
-                    trigger_table.base.table_id,
+                    trigger_table.base.base.table_id,
                     response.function_id
                 ))
                 .await?;
-            assert_eq!(old_version.len(), 1);
-
-            let new_status = if update
+            if update
                 .triggers
                 .as_deref()
                 .unwrap_or(&[])
                 .contains(trigger_dto)
             {
-                TriggerStatus::Active
+                assert_eq!(new_version.len(), 1);
+                assert_eq!(new_version[0].base.base.status, TriggerStatus::Active);
+                assert_eq!(
+                    old_version[0].base.base.trigger_id,
+                    new_version[0].base.base.trigger_id
+                );
             } else {
-                TriggerStatus::Deleted
-            };
-            assert_eq!(new_version[0].base.status, new_status);
-
-            assert_eq!(
-                old_version[0].base.trigger_id,
-                new_version[0].base.trigger_id
-            );
+                assert!(new_version.is_empty());
+            }
         }
 
-        // And finally, new version should be the exact same as if it just got registered.
+        // The new version must look exactly as if it had just been registered.
         let create = create.clone();
         let update = update.clone();
         let update_as_register = FunctionRegister {
@@ -358,68 +386,111 @@ pub(crate) mod tests {
         create: &FunctionRegister,
         created_function: &FunctionDB,
     ) -> Result<(), TdError> {
-        let functions: Vec<FunctionDB> = db
-            .current()
-            .fetch_all::<FunctionDB>(&created_function.function_id)
+        let live: Option<FunctionDB> = db
+            .latest()
+            .fetch_optional::<FunctionDB>(&created_function.base.function_id)
             .await?;
-        assert_eq!(functions.len(), 1);
-        assert_eq!(functions[0].status, FunctionStatus::Deleted);
+        assert!(live.is_none());
 
         let functions: Vec<FunctionDB> = db
-            .live()
-            .fetch_all::<FunctionDB>(&created_function.id)
+            .history()
+            .fetch_all::<FunctionDB>(&created_function.base.id)
             .await?;
         assert_eq!(functions.len(), 1);
-        assert_eq!(&functions[0], created_function);
+        assert_eq!(functions[0].base, created_function.base);
+        assert!(!functions[0].valid_to.is_infinity());
 
-        let tables: Vec<TableDB> = db
-            .current()
-            .fetch_all::<TableDB>(&created_function.id)
+        let created_tables: Vec<TableDB> = db
+            .history()
+            .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
             .await?;
-        assert!(tables.is_empty());
+        assert!(created_tables.iter().all(|t| !t.valid_to.is_infinity()));
+        let active: Vec<TableDB> = db
+            .latest()
+            .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
+            .await?;
+        assert!(active.is_empty());
+        let current: Vec<TableDB> = db
+            .latest()
+            .fetch_all::<TableDB>(&created_function.base.id)
+            .await?;
+        let user_tables = created_tables
+            .iter()
+            .filter(|t| !t.base.name.is_private())
+            .count();
+        assert_eq!(current.len(), user_tables);
+        assert!(current.iter().all(|t| t.base.status == TableStatus::Frozen));
+        assert!(current.iter().all(|t| !t.base.name.is_private()));
 
         for table_dto in create.tables.as_deref().unwrap_or(&[]) {
             let table = &TableName::try_from(table_dto)?;
-            let old_version = db
-                .live()
-                .fetch_all::<TableDB>(and!(collection.id, table, &created_function.id))
+            let versions = db
+                .history()
+                .fetch_all::<TableDB>(and!(collection.id, table, &created_function.base.id))
                 .await?;
-            assert_eq!(old_version.len(), 1);
-            assert_eq!(old_version[0].status, TableStatus::Active);
+            assert_eq!(versions.len(), 2);
+            let active = versions
+                .iter()
+                .find(|v| v.base.status == TableStatus::Active);
+            let frozen = versions
+                .iter()
+                .find(|v| v.base.status == TableStatus::Frozen);
+            assert!(
+                !active
+                    .expect("closed active version")
+                    .valid_to
+                    .is_infinity()
+            );
+            assert!(frozen.expect("frozen successor").valid_to.is_infinity());
         }
 
         for dependency in create.dependencies.as_deref().unwrap_or(&[]) {
             let dependency = &TableDependency::try_from(dependency)?;
             let table_dependency = db
-                .historic(&created_function.defined_on)
-                .fetch_one::<TableDBWithNames>(&dependency.table)
+                .as_of(&created_function.base.defined_on)
+                .fetch_one::<TableDBWithNames>(and!(
+                    &CollectionIdName::Name(
+                        dependency
+                            .collection
+                            .clone()
+                            .unwrap_or(collection.name.clone())
+                    ),
+                    &TableIdName::Name(dependency.table.clone())
+                ))
                 .await?;
             let old_version = db
-                .historic(&created_function.defined_on)
+                .as_of(&created_function.base.defined_on)
                 .fetch_all::<DependencyDBWithNames>(and!(
-                    table_dependency.base.table_id,
-                    created_function.function_id
+                    table_dependency.base.base.table_id,
+                    created_function.base.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(old_version[0].base.status, DependencyStatus::Active);
         }
 
         for trigger_dto in create.triggers.as_deref().unwrap_or(&[]) {
             let trigger = &TableTrigger::try_from(trigger_dto)?;
             let table_trigger = db
-                .historic(&created_function.defined_on)
-                .fetch_one::<TableDBWithNames>(&trigger.table)
+                .as_of(&created_function.base.defined_on)
+                .fetch_one::<TableDBWithNames>(and!(
+                    &CollectionIdName::Name(
+                        trigger
+                            .collection
+                            .clone()
+                            .unwrap_or(collection.name.clone())
+                    ),
+                    &TableIdName::Name(trigger.table.clone())
+                ))
                 .await?;
             let old_version = db
-                .historic(&created_function.defined_on)
+                .as_of(&created_function.base.defined_on)
                 .fetch_all::<TriggerDBWithNames>(and!(
-                    table_trigger.base.table_id,
-                    created_function.function_id
+                    table_trigger.base.base.table_id,
+                    created_function.base.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(old_version[0].base.status, TriggerStatus::Active);
+            assert_eq!(old_version[0].base.base.status, TriggerStatus::Active);
         }
 
         Ok(())
