@@ -41,22 +41,17 @@ pub fn mode_authz_router(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::router::permissions::PermissionsRouter;
-    use crate::router::roles::RolesRouter;
-    use crate::router::simple_permissions::SimplePermissionsRouter;
-    use crate::router::user_roles::UserRolesRouter;
-    use axum::Extension;
-    use axum::Router;
+    use crate::router::roles::LIST_ROLE_PATH;
+    use crate::router::simple_permissions::LIST_BY_USER_PATH;
     use axum::body::Body;
     use axum::extract::Request;
+    use axum::{Extension, Router};
     use http::{Method, StatusCode};
-    use ta_apiserver::router::RouterExtension;
-    use ta_services::factory::ServiceFactory;
+    use ta_apiserver::router::{Mount, RouterStates, mount_router};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::rest_urls::{LIST_PERMISSION_GRANTS_BY_USER, LIST_ROLES};
     use td_objects::types::basic::{AccessTokenId, UserId};
-    use td_services::{Context, Services};
+    use td_services::Services;
     use tower::ServiceExt;
 
     /// Build the mode-selected authz subtree exactly as `v1.rs` composes it,
@@ -64,13 +59,10 @@ mod tests {
     /// mounted route can reach its handler) and the OpenAPI doc derived from
     /// the mounted routes.
     fn build(db: TdPool, mode: SecurityMode) -> (Router, utoipa::openapi::OpenApi) {
-        let services = Services::build(&Context::with_defaults(db));
-        let rbac_management = OpenApiRouter::new()
-            .merge(PermissionsRouter::router(services.clone()))
-            .merge(RolesRouter::router(services.clone()))
-            .merge(UserRolesRouter::router(services.clone()));
-        let simple_facade =
-            OpenApiRouter::new().merge(SimplePermissionsRouter::router(services.clone()));
+        let services = Services::with_defaults(db);
+        let states = RouterStates::default().with(services);
+        let rbac_management = mount_router(Mount::Rbac, &states);
+        let simple_facade = mount_router(Mount::Simple, &states);
         let (router, openapi) =
             mode_authz_router(mode, rbac_management, simple_facade).split_for_parts();
         let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
@@ -100,25 +92,22 @@ mod tests {
 
         // OpenAPI doc: RBAC paths absent, facade present.
         assert!(
-            !openapi.paths.paths.contains_key(LIST_ROLES),
+            !openapi.paths.paths.contains_key(LIST_ROLE_PATH),
             "RBAC role endpoint must not appear in the OpenAPI doc in simple mode"
         );
         assert!(
-            openapi
-                .paths
-                .paths
-                .contains_key(LIST_PERMISSION_GRANTS_BY_USER),
+            openapi.paths.paths.contains_key(LIST_BY_USER_PATH),
             "the simple-permission facade must appear in the OpenAPI doc in simple mode"
         );
 
         // Routing: RBAC -> 404 (not mounted), facade -> mounted.
         assert_eq!(
-            get_status(router.clone(), LIST_ROLES).await,
+            get_status(router.clone(), LIST_ROLE_PATH).await,
             StatusCode::NOT_FOUND,
             "RBAC role endpoint must not be mounted in simple mode"
         );
         assert_ne!(
-            get_status(router, LIST_PERMISSION_GRANTS_BY_USER).await,
+            get_status(router, LIST_BY_USER_PATH).await,
             StatusCode::NOT_FOUND,
             "the simple-permission facade must be mounted in simple mode"
         );
@@ -131,24 +120,21 @@ mod tests {
         let (router, openapi) = build(db, SecurityMode::Rbac);
 
         assert!(
-            openapi.paths.paths.contains_key(LIST_ROLES),
+            openapi.paths.paths.contains_key(LIST_ROLE_PATH),
             "RBAC role endpoint must appear in the OpenAPI doc in rbac mode"
         );
         assert!(
-            !openapi
-                .paths
-                .paths
-                .contains_key(LIST_PERMISSION_GRANTS_BY_USER),
+            !openapi.paths.paths.contains_key(LIST_BY_USER_PATH),
             "the simple-permission facade must not appear in the OpenAPI doc in rbac mode"
         );
 
         assert_ne!(
-            get_status(router.clone(), LIST_ROLES).await,
+            get_status(router.clone(), LIST_ROLE_PATH).await,
             StatusCode::NOT_FOUND,
             "RBAC role endpoint must be mounted in rbac mode"
         );
         assert_eq!(
-            get_status(router, LIST_PERMISSION_GRANTS_BY_USER).await,
+            get_status(router, LIST_BY_USER_PATH).await,
             StatusCode::NOT_FOUND,
             "the simple-permission facade must not be mounted in rbac mode"
         );

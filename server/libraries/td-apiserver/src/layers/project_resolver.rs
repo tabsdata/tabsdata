@@ -16,8 +16,8 @@ use axum::response::Response;
 use std::collections::HashMap;
 use std::str::FromStr;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_database::domain::{Apiserver, DomainPool};
-use td_database::pool::TdPool;
+use td_database::access::{DbPool, Global, Grant};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
@@ -28,7 +28,7 @@ use td_services::project::ProjectError;
 const PROJECT_PARAM: &str = "project";
 
 pub async fn project_resolver_layer(
-    State(db): State<TdPool>,
+    State(db): State<DbPool<Global>>,
     Path(params): Path<HashMap<String, String>>,
     request: Request,
     next: Next,
@@ -41,7 +41,8 @@ pub async fn project_resolver_layer(
 
     let id_name = ProjectIdName::from_str(&raw)
         .map_err(|_| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
-    let resolved_id = resolve(&db, &id_name)
+    let mut conn = db.read().await?;
+    let resolved_id = resolve(conn.get(Grant::asserted("project resolution")), &id_name)
         .await?
         .ok_or_else(|| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
 
@@ -50,8 +51,11 @@ pub async fn project_resolver_layer(
     Ok(next.run(request).await)
 }
 
-async fn resolve(db: &TdPool, id_name: &ProjectIdName) -> Result<Option<ProjectId>, TdError> {
-    let proj: Option<ActiveProjectDB> = DomainPool::<Apiserver>::over(db)
+async fn resolve(
+    conn: &mut DomainConnection<Apiserver>,
+    id_name: &ProjectIdName,
+) -> Result<Option<ProjectId>, TdError> {
+    let proj: Option<ActiveProjectDB> = conn
         .live()
         .fetch_optional::<ActiveProjectDB>(id_name)
         .await?;

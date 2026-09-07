@@ -10,11 +10,6 @@ use tower_http::cors::CorsLayer;
 pub struct CorsService;
 
 impl CorsService {
-    /// Creates a `CorsLayer` with predefined settings.
-    ///
-    /// - Allows credentials.
-    /// - Allows methods: GET, POST, PUT, DELETE.
-    /// - Allows headers: AUTHORIZATION, ACCEPT, CONTENT_TYPE.
     pub fn layer() -> CorsLayer {
         CorsLayer::new()
             .allow_credentials(false)

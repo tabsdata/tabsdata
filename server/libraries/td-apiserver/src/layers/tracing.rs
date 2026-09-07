@@ -97,10 +97,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_http_span() {
-        // Collect logs in a buffer
         let logs = Arc::new(Mutex::new(Vec::new()));
 
-        // Custom layer to capture span data
         let logs_clone = logs.clone();
         let layer = fmt::layer()
             .with_writer(move || WriterGuard {
@@ -112,7 +110,6 @@ mod tests {
         let subscriber = registry().with(layer);
         let _guard = set_default(subscriber);
 
-        // Create some logs
         let method = Method::POST;
         let uri = Uri::try_from("http://example.com/api/test").unwrap();
         let version = Version::HTTP_2;
@@ -135,7 +132,6 @@ mod tests {
         .instrument(log_span)
         .await;
 
-        // Inspect the logs
         let logs = logs.lock().unwrap().to_vec();
         let log_output = String::from_utf8_lossy(&logs);
         assert!(log_output.contains(&format!(

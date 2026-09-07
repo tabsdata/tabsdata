@@ -36,6 +36,8 @@ pub enum ServerError {
     StdTcpListener(String, std::io::Error),
     #[error("Failed to join Server handles: {0}")]
     JoinHandle(JoinError),
+    #[error("Route registry error: {0}")]
+    Registry(#[from] td_error::TdError),
 }
 
 #[async_trait]
@@ -59,7 +61,6 @@ impl ServerRunnable for dyn Server {
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let handles = self.handles(shutdown.clone()).await;
 
-        // Wrap each handle in a future that also listens the shutdown signal
         let mut futures = FuturesUnordered::new();
 
         for mut handle in handles {
@@ -79,11 +80,10 @@ impl ServerRunnable for dyn Server {
             }));
         }
 
-        // Await all futures, collect results
         let mut run_result = Ok(());
         while let Some(res) = futures.next().await {
             match res {
-                Ok(Ok(())) => {} // handle finished successfully
+                Ok(Ok(())) => {}
                 Ok(Err(e)) => {
                     error!("Server handle error: {e:#?}");
                     run_result = Err(e); // store the last error, continue
@@ -98,10 +98,28 @@ impl ServerRunnable for dyn Server {
     }
 }
 
-/// Builder for [`Server`]. It will bind the addresses used and create the server on build.
+pub(crate) async fn bind(addresses: &NonEmptyAddresses) -> Result<Vec<TcpListener>, ServerError> {
+    let mut listeners = Vec::new();
+    for addr in addresses.iter() {
+        match TcpListener::bind(addr).await {
+            Ok(listener) => listeners.push(listener),
+            Err(e) => Err(ServerError::Bind(*addr, e))?,
+        }
+    }
+    Ok(listeners)
+}
+
+#[derive(Debug)]
+enum Binding {
+    Addresses(NonEmptyAddresses),
+    Bound(Vec<TcpListener>),
+}
+
+/// Builder for [`Server`]. Binds its addresses on build, or serves on
+/// listeners bound earlier with [`bind`].
 #[derive(Debug)]
 pub struct ServerBuilder {
-    addresses: NonEmptyAddresses,
+    binding: Binding,
     router: Router,
     ssl_folder: Option<PathBuf>,
 }
@@ -109,7 +127,15 @@ pub struct ServerBuilder {
 impl ServerBuilder {
     pub fn new<A: Into<NonEmptyAddresses>>(addresses: A, router: Router) -> Self {
         Self {
-            addresses: addresses.into(),
+            binding: Binding::Addresses(addresses.into()),
+            router,
+            ssl_folder: None,
+        }
+    }
+
+    pub fn bound(listeners: Vec<TcpListener>, router: Router) -> Self {
+        Self {
+            binding: Binding::Bound(listeners),
             router,
             ssl_folder: None,
         }
@@ -118,17 +144,6 @@ impl ServerBuilder {
     pub fn tls<P: AsRef<Path>>(mut self, ssl_folder: P) -> Self {
         self.ssl_folder = Some(ssl_folder.as_ref().to_path_buf());
         self
-    }
-
-    async fn bind_listeners(&self) -> Result<Vec<TcpListener>, ServerError> {
-        let mut listeners = Vec::new();
-        for addr in self.addresses.iter() {
-            match TcpListener::bind(addr).await {
-                Ok(listener) => listeners.push(listener),
-                Err(e) => Err(ServerError::Bind(*addr, e))?,
-            }
-        }
-        Ok(listeners)
     }
 
     async fn load_tls(&self) -> Option<RustlsConfig> {
@@ -176,17 +191,21 @@ impl ServerBuilder {
     }
 
     pub async fn build(self) -> Result<Box<dyn Server>, ServerError> {
-        let listeners = self.bind_listeners().await?;
-        match self.load_tls().await {
+        let tls_config = self.load_tls().await;
+        let Self {
+            binding, router, ..
+        } = self;
+        let listeners = match binding {
+            Binding::Addresses(addresses) => bind(&addresses).await?,
+            Binding::Bound(listeners) => listeners,
+        };
+        match tls_config {
             Some(tls_config) => Ok(Box::new(TlsServer {
                 listeners,
                 tls_config,
-                router: self.router,
+                router,
             })),
-            _ => Ok(Box::new(PlainServer {
-                listeners,
-                router: self.router,
-            })),
+            _ => Ok(Box::new(PlainServer { listeners, router })),
         }
     }
 }
@@ -197,8 +216,6 @@ mod tests {
     use nonempty::nonempty;
     use reqwest::Client;
     use std::net::{Ipv4Addr, SocketAddr};
-    use ta_apiserver::router::RouterExtension;
-    use td_apiforge::router_ext;
     const TD_CROSS_BUILD: &str = "TD_CROSS_BUILD";
     use td_common::env::check_flag_env;
 
@@ -206,26 +223,15 @@ mod tests {
     use tokio::fs;
     use tokio::io::AsyncWriteExt;
 
-    #[router_ext(TestRouter)]
-    mod routes {
-        use ta_apiserver::status::error_status::ErrorStatus;
-        use ta_apiserver::status::ok_status::RawStatus;
-        use td_apiforge::apiserver_path;
-
-        const PATH: &str = "/test";
-        const TEST_TAG: &str = "Test";
-
-        #[apiserver_path(method = get, path = PATH, tag = TEST_TAG)]
-        async fn test() -> Result<RawStatus<String>, ErrorStatus> {
-            Ok(RawStatus::OK("test".to_string()))
-        }
+    fn test_router() -> axum::Router {
+        axum::Router::new().route("/test", axum::routing::get(async || axum::Json("test")))
     }
 
     #[tokio::test]
     async fn test_server_run() {
         let server = ServerBuilder::new(
             NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
-            TestRouter::router(()).into(),
+            test_router(),
         )
         .build()
         .await

@@ -2,8 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-//! API Server CLI configuration and parameters.
-
 use clap::{Args, ValueEnum};
 use http::uri::Authority;
 use serde::{Deserialize, Serialize};
@@ -518,7 +516,9 @@ database:
       password: owner_secret
       log_statements: off
     pool:
-      max_connections: 25
+      regular:
+        min_connections: 1
+        max_connections: 25
 "#;
         let built = config::Config::builder()
             .add_source(config::Config::try_from(&Config::default()).unwrap())
@@ -528,13 +528,15 @@ database:
             .unwrap();
         let config: Config = built.try_deserialize().unwrap();
         let entry = config.database.get("apiserver").unwrap();
-        let pg = entry.conn.postgres().unwrap();
+        let pg = &entry.postgres;
         assert_eq!(pg.host, "localhost");
         assert_eq!(pg.database.as_deref(), Some("tabsdata"));
         assert_eq!(pg.password.as_deref(), Some("owner_secret"));
         assert_eq!(pg.log.log_statements, LevelFilter::Off);
-        assert_eq!(entry.pool.max_connections, 25);
-        assert_eq!(entry.pool.min_connections, 1);
+        let regular = entry.pool.regular.as_ref().unwrap();
+        assert_eq!(regular.max_connections, 25);
+        assert_eq!(regular.min_connections, 1);
+        assert!(entry.pool.exclusive.is_none());
     }
 
     #[test]
@@ -578,7 +580,7 @@ database_server:
         propagate_server_target(&mut components, config.database_server.as_ref().unwrap());
 
         for component in ["apiserver", "aiagent"] {
-            let pg = components.get(component).unwrap().conn.postgres().unwrap();
+            let pg = &components.get(component).unwrap().postgres;
             assert_eq!(pg.host, "rds.example.com", "host for {component}");
             assert_eq!(pg.port, 5433, "port for {component}");
             assert_eq!(
@@ -592,9 +594,7 @@ database_server:
             components
                 .get("apiserver")
                 .unwrap()
-                .conn
-                .postgres()
-                .unwrap()
+                .postgres
                 .password
                 .as_deref(),
             Some("apiserver_secret")
@@ -603,9 +603,7 @@ database_server:
             components
                 .get("aiagent")
                 .unwrap()
-                .conn
-                .postgres()
-                .unwrap()
+                .postgres
                 .password
                 .as_deref(),
             Some("aiagent_secret")
@@ -630,7 +628,9 @@ database:
 database:
   apiserver:
     pool:
-      max_connections: 40
+      regular:
+        min_connections: 1
+        max_connections: 40
 "#;
         let storage_yaml = r#"
 storage:
@@ -669,11 +669,8 @@ storage:
         // The pool override from the split file merges into the same entry
         // without clobbering the backend block.
         let entry = config.database.get("apiserver").unwrap();
-        assert_eq!(entry.pool.max_connections, 40);
-        assert_eq!(
-            entry.conn.postgres().unwrap().password.as_deref(),
-            Some("owner_secret")
-        );
+        assert_eq!(entry.pool.regular.as_ref().unwrap().max_connections, 40);
+        assert_eq!(entry.postgres.password.as_deref(), Some("owner_secret"));
         assert_eq!(config.storage_mounts().unwrap().len(), 1);
     }
 
@@ -693,14 +690,12 @@ storage:
             Duration::hours(1).num_seconds()
         );
         assert_eq!(config.request_timeout, 60);
-        // security mode defaults to Simple.
         assert_eq!(config.security_mode, SecurityMode::Simple);
         assert!(config.security_mode.is_simple());
     }
 
     #[test]
     fn test_security_mode_serde_and_parse() {
-        // serde round-trips lowercase names.
         assert_eq!(
             serde_json::to_string(&SecurityMode::Rbac).unwrap(),
             "\"rbac\""
@@ -709,7 +704,6 @@ storage:
             serde_json::from_str::<SecurityMode>("\"simple\"").unwrap(),
             SecurityMode::Simple
         );
-        // CLI / strum parsing accepts lowercase tokens.
         assert_eq!(
             <SecurityMode as FromStr>::from_str("rbac").unwrap(),
             SecurityMode::Rbac
@@ -797,7 +791,6 @@ storage:
             Some(PathBuf::from("/srv/resources"))
         );
 
-        // Test with some fields not set in Params
         let partial_params = Params {
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),

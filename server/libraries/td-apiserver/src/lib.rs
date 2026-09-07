@@ -6,15 +6,15 @@ use crate::apiserver::internal::InternalServer;
 use crate::apiserver::{ApiServer, ApiServerCtx};
 use crate::bridge::ServerBridgeFactory;
 use crate::config::{Config, Params};
-use crate::recovery::{RecoveryCtx, WorkerRecoverer};
-use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
+use crate::recovery::WorkerRecoverer;
+use crate::scheduler::{FunctionDispatcher, FunctionRequester};
 use std::sync::Arc;
 use std::time::Duration;
+use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
-use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify};
-use td_objects::types::addresses::InternalServerEndpoint;
+use td_execution::SchedulerNotify;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -31,14 +31,26 @@ mod recovery;
 mod router;
 mod scheduler;
 
+/// The internal API's route templates, as this server serves them. Exported so
+/// the scheduler that builds callbacks against them — and its tests — read the
+/// served routes rather than a second copy.
+///
+/// The templates are exported as bare `&'static str` rather than as the
+/// assembled `InternalRoutes`: td-services dev-depends on this crate (a
+/// deliberate, test-only cycle), which puts two builds of td-services in that
+/// graph, so one of its types cannot cross back. Plain strings can.
+pub use apiserver::BASE_URL as INTERNAL_BASE_URL;
+pub use router::internal::{
+    DOWNLOAD_STATE_PATH, FUNCTION_RUN_CALLBACK_PATH, FUNCTION_VERSION_EXECUTE_PATH,
+    FUNCTION_VERSION_EXECUTION_STATUS_PATH, WORKER_CALLBACK_PATH, WORKER_MESSAGE_PATH,
+};
+
 pub const CONFIG_NAME: &str = "apiserver";
 
-/// Run the apiserver. This function is the entry point for the `apiserver` binary.
 pub fn run() {
     Cli::<Config, Params>::exec_async(
         CONFIG_NAME,
         |config, params| async move {
-            // Resolve config and params
             let config = params.resolve(config).map_err(|e| {
                 error!("Error resolving API Server configuration: {e:#?}");
                 ExitStatus::GeneralError
@@ -67,22 +79,26 @@ pub fn run() {
             })?;
             info!("Database is up to date, starting apiserver");
 
-            // The apiserver's own pool, for the boot-time wiring below.
+            // The apiserver's regular pool, for the boot-time wiring below
+            // (authz enablement seeds identities).
             let db = serving_pools
                 .get(dbm::APISERVER_COMPONENT_KEY)
                 .map_err(|e| {
                     error!("Error resolving apiserver database pool: {e:#?}");
                     ExitStatus::GeneralError
                 })?
-                .clone();
+                .regular
+                .clone()
+                .ok_or_else(|| {
+                    error!("Error resolving apiserver database pool: regular pool not connected");
+                    ExitStatus::GeneralError
+                })?;
 
-            // setup IdL Generators
             initialize_logical_ids(&db).await.map_err(|e| {
                 error!("Error initializing logical IDs: {e:#?}");
                 ExitStatus::GeneralError
             })?;
 
-            // Create storage
             let mount_defs = config.storage_mounts().map_err(|e| {
                 error!("Error creating storage: {e:#?}");
                 ExitStatus::GeneralError
@@ -91,7 +107,7 @@ pub fn run() {
                 error!("Error creating storage: {e:#?}");
                 ExitStatus::GeneralError
             })?;
-            let storage = Arc::new(storage);
+            let storage = Ctx::new(storage);
 
             info!("Orchestrator: {}", config.orchestrator);
             let bridge_provider = ServerBridgeFactory
@@ -101,9 +117,8 @@ pub fn run() {
                     error!("Error creating bridge provider: {e:#?}");
                     ExitStatus::GeneralError
                 })?;
-            let bridge = Arc::new(BridgeProviderHandle::new(bridge_provider));
+            let bridge = Ctx::new(BridgeProviderHandle::new(bridge_provider));
 
-            // Create runtime context
             let runtime_context =
                 RuntimeContext::new(bridge.server_catalog())
                     .await
@@ -111,10 +126,9 @@ pub fn run() {
                         error!("Error creating runtime context: {e:#?}");
                         ExitStatus::GeneralError
                     })?;
-            let runtime_context = Arc::new(runtime_context);
+            let runtime_context = Ctx::new(runtime_context);
 
-            // Create shared scheduler notify
-            let scheduler_notify = Arc::new(SchedulerNotify::new());
+            let scheduler_notify = Ctx::new(SchedulerNotify::new());
 
             // Bring the authz subsystem online behind one call so run() stays
             // free of authz wiring: build the (extension-augmented) registry,
@@ -132,7 +146,19 @@ pub fn run() {
                 ExitStatus::GeneralError
             })?;
 
-            // Create context
+            // The internal listeners bind before `Services` is assembled so
+            // the callback endpoint workers are minted against exists from
+            // the start — no placeholder, no later swap.
+            let (internal_listeners, internal_endpoint) =
+                InternalServer::bind(&config).await.map_err(|e| {
+                    error!("Error binding the Internal Server: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+            info!(
+                "Workers will call back on {}",
+                internal_endpoint.authority()
+            );
+
             let server_context = ApiServerCtx::new(
                 config.clone(),
                 serving_pools.clone(),
@@ -141,6 +167,7 @@ pub fn run() {
                 scheduler_notify.clone(),
                 bridge.clone(),
                 authz_registry.clone(),
+                Arc::new(internal_endpoint),
             )
             .await
             .map_err(|e| {
@@ -148,71 +175,21 @@ pub fn run() {
                 ExitStatus::GeneralError
             })?;
 
-            // Create required servers
             let api_server = ApiServer::new(&server_context).await.map_err(|e| {
                 error!("Error creating API Server: {e:#?}");
                 ExitStatus::GeneralError
             })?;
-            let internal_server = InternalServer::new(&server_context).await.map_err(|e| {
-                error!("Error creating Internal Server: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
+            let internal_server = InternalServer::new(&server_context, internal_listeners)
+                .await
+                .map_err(|e| {
+                    error!("Error creating Internal Server: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
 
-            // Create scheduler servers
-            let internal_addresses = internal_server.addresses().await.map_err(|e| {
-                error!("Error retrieving internal addresses: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
-            let internal_endpoint = InternalServerEndpoint::new(
-                internal_addresses,
-                config.advertised_internal_host.as_ref(),
-            )
-            .map_err(|e| {
-                error!("Error resolving the internal server endpoint: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
-            info!(
-                "Workers will call back on {}",
-                internal_endpoint.authority()
-            );
-            let internal_endpoint = Arc::new(internal_endpoint);
+            let function_request_server = FunctionRequester::new(&server_context.services).await;
+            let function_dispatch_server = FunctionDispatcher::new(&server_context.services).await;
+            let worker_recovery_server = WorkerRecoverer::new(&server_context.services).await;
 
-            let scheduler_context = SchedulerCtx::new(
-                db.clone(),
-                storage.clone(),
-                bridge.clone(),
-                internal_endpoint.clone(),
-                scheduler_notify.clone(),
-                Arc::new(config.jwt.clone()),
-                Arc::new(SchedulerConfig {
-                    check_frequency: config.check_frequency,
-                    max_functions_per_tick: config.max_functions_per_tick,
-                    tick_timeout: config.tick_timeout,
-                }),
-            );
-            let recovery_context = RecoveryCtx::new(
-                db.clone(),
-                storage.clone(),
-                bridge.clone(),
-                internal_endpoint.clone(),
-                scheduler_notify,
-                Arc::new(config.jwt.clone()),
-                Arc::new(RecoveryConfig {
-                    check_frequency: config.check_frequency,
-                    tick_timeout: config.recovery_tick_timeout,
-                    stuck_requested_timeout: config.stuck_requested_timeout,
-                    dispatch_grace: config.dispatch_grace,
-                    max_pre_running_time: config.max_pre_running_time,
-                    max_running_time: config.max_running_time,
-                    max_completion_time: config.max_completion_time,
-                    max_recoveries_per_tick: config.max_recoveries_per_tick,
-                }),
-            );
-            let function_request_server = FunctionRequester::new(&scheduler_context).await;
-            let function_dispatch_server = FunctionDispatcher::new(&scheduler_context).await;
-            let worker_recovery_server = WorkerRecoverer::new(&recovery_context).await;
-
-            // Start servers
             let outcome = ServerRunner::default()
                 .graceful_timeout_secs(Duration::from_secs(30))
                 .server(api_server)

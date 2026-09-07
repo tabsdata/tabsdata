@@ -49,7 +49,6 @@ impl Server for TlsServer {
                     .handle(handle.clone())
                     .serve(router.into_make_service_with_connect_info::<SocketAddr>());
 
-                // Graceful shutdown via the shutdown signal
                 tokio::select! {
                     res = server => {
                         res.map_err(|e| {

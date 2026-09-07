@@ -31,43 +31,20 @@
 //!                    responses
 //! ```
 
-use crate::apiserver::ApiServerCtx;
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
+use crate::apiserver::{ApiServerCtx, BASE_API_URL, V1};
 use crate::layers::authorization::authorization_layer;
 use crate::layers::compression::CompressionService;
 use crate::layers::cors::CorsService;
 use crate::layers::project_resolver::project_resolver_layer;
 use crate::layers::security_mode::mode_authz_router;
 use crate::layers::tracing::TraceService;
-use crate::router::auth::{SecureAuthRouter, UnsecureAuthRouter};
-use crate::router::collections::{CollectionListRouter, CollectionsRouter};
-use crate::router::executions::ExecutionsRouter;
-use crate::router::function_runs::{FunctionRunListRouter, FunctionRunsRouter};
-use crate::router::functions::{FunctionBundleRouter, FunctionsRouter};
-use crate::router::groups::GroupsRouter;
-use crate::router::logical_versions::LogicalVersionsRouter;
-use crate::router::metrics::{GlobalMetricsRouter, MetricsRouter};
-use crate::router::permissions::PermissionsRouter;
-use crate::router::ping::ping_router;
-use crate::router::projects::ProjectsRouter;
-use crate::router::resources::{ResourcesDir, ResourcesRouter};
-use crate::router::roles::RolesRouter;
-use crate::router::server_status::ServerStatusRouter;
-use crate::router::simple_permissions::SimplePermissionsRouter;
-use crate::router::tables::TablesRouter;
-use crate::router::transactions::{SynchrotronRouter, TransactionsRouter};
-use crate::router::user_roles::UserRolesRouter;
-use crate::router::users::UsersRouter;
-use crate::router::workers::WorkersRouter;
-use axum::Extension;
 use axum::middleware::from_fn_with_state;
 use http::StatusCode;
-use std::sync::Arc;
 use std::time::Duration;
-use ta_apiserver::router::RouterExtension;
+use ta_apiserver::router::{Mount, RouterStates, mount_router, require_registered};
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_error::{ApiError, api_error};
-use te_apiserver::{AuthenticatedExtendedRouter, UnauthenticatedExtendedRouter};
 use tower_http::timeout::TimeoutLayer;
 
 pub struct ApiServerV1 {
@@ -81,122 +58,72 @@ impl ApiServerV1 {
         }
 
         let inner = {
-            // API router
+            // Routes come from the inventory registry; only the topology is
+            // built here.
+            require_registered()?;
+            let states = RouterStates::default()
+                .with(context.services.clone())
+                .with(context.extended_services.clone());
+            let mount = |m: Mount| mount_router(m, &states);
+
             let router = utoipa_axum::router::OpenApiRouter::default()
-                // unsecure endpoints
-                .merge(
-                    utoipa_axum::router::OpenApiRouter::default()
-                        .merge(UnsecureAuthRouter::router(context.services.clone()))
-                        .merge(ping_router()),
-                )
+                .merge(mount(Mount::Unauthenticated))
                 // secure endpoints — split into:
                 //   - global subtree: routes with no `{project}` segment —
-                //     system-scoped routes (auth, users, roles, projects CRUDL
-                //     itself, server status, role permissions) and the
-                //     id-keyed routes (executions, transactions, workers,
-                //     function runs, replay) whose services resolve the
-                //     owning project from the row itself.
-                //   - tenant subtree: routes under `/projects/{project}/...`
-                //     (collections, functions, tables, groups, ...)
+                //     system-scoped routes and the id-keyed routes whose
+                //     services resolve the owning project from the row itself.
+                //   - project subtree: routes under `/projects/{project}/...`,
                 //     where the project_resolver_layer turns the URL segment
-                //     into a real ProjectId on the RequestContext, which the
-                //     ProjectScopeProvider then uses to set the RLS GUC.
+                //     into a real ProjectId on the RequestContext; the
+                //     service's DbPool<InProject> handle then sets the RLS GUC.
                 // Both subtrees sit behind the shared authorization layer.
                 .merge({
-                    let mode = context.config.security_mode;
-
-                    // RBAC-management endpoints: role CRUD, role-permission and
-                    // user-role membership (tags `Roles` / `Permissions` /
-                    // `User Roles`).
-                    let rbac_management = utoipa_axum::router::OpenApiRouter::default()
-                        .merge(PermissionsRouter::router(context.services.clone()))
-                        .merge(RolesRouter::router(context.services.clone()))
-                        .merge(UserRolesRouter::router(context.services.clone()));
-
-                    // Simple Security `/permission-grants` facade (tag
-                    // `Permissions (Simple)`).
-                    let simple_facade = utoipa_axum::router::OpenApiRouter::default()
-                        .merge(SimplePermissionsRouter::router(context.services.clone()));
-
-                    let global = utoipa_axum::router::OpenApiRouter::default()
-                        .merge(SecureAuthRouter::router(context.services.clone()))
-                        .merge(GlobalMetricsRouter::router(context.services.clone()))
-                        .merge(ProjectsRouter::router(context.services.clone()))
-                        .merge(ServerStatusRouter::router(context.services.clone()))
-                        // Authenticated, non-scoped, no RBAC: serve files from
-                        // the configured `resources_folder` (the dir rides in as
-                        // an extension; `None` -> 404).
-                        .merge(
-                            ResourcesRouter::router(context.services.clone()).layer(Extension(
-                                ResourcesDir(Arc::new(context.config.resources_folder.clone())),
-                            )),
-                        )
-                        .merge(UsersRouter::router(context.services.clone()))
+                    let global = mount(Mount::Global)
                         // Mount only the active security mode's authz surface;
                         // the other mode's endpoints are dropped — absent from
                         // routing AND the OpenAPI doc. So `simple` mode exposes
                         // only `Permissions (Simple)` (Roles / Permissions /
                         // User Roles are hidden), and `rbac` mode the reverse.
-                        .merge(mode_authz_router(mode, rbac_management, simple_facade))
-                        .merge(CollectionListRouter::router(context.services.clone()))
-                        .merge(ExecutionsRouter::router(context.services.clone()))
-                        .merge(FunctionRunListRouter::router(context.services.clone()))
-                        .merge(LogicalVersionsRouter::router(context.services.clone()))
-                        .merge(TransactionsRouter::router(context.services.clone()))
-                        .merge(WorkersRouter::router(context.services.clone()))
-                        .merge(FunctionBundleRouter::router(context.services.clone()))
-                        .merge(AuthenticatedExtendedRouter::router(
-                            context.extended_services.clone(),
+                        .merge(mode_authz_router(
+                            context.config.security_mode,
+                            mount(Mount::Rbac),
+                            mount(Mount::Simple),
                         ));
 
-                    let tenant = utoipa_axum::router::OpenApiRouter::default()
-                        .merge(GroupsRouter::router(context.services.clone()))
-                        .merge(CollectionsRouter::router(context.services.clone()))
-                        .merge(FunctionsRouter::router(context.services.clone()))
-                        .merge(FunctionRunsRouter::router(context.services.clone()))
-                        .merge(MetricsRouter::router(context.services.clone()))
-                        .merge(SynchrotronRouter::router(context.services.clone()))
-                        .merge(TablesRouter::router(context.services.clone()))
+                    let project = mount(Mount::Project)
                         // resolver runs after auth, before any service stack;
                         // 404s unknown projects before any RLS-scoped table
                         // is touched.
                         .layer(from_fn_with_state(
-                            context.context.clone(),
+                            context.services.clone(),
                             project_resolver_layer,
                         ));
 
                     global
-                        .merge(tenant)
+                        .merge(project)
                         // authorization layer wraps both subtrees.
                         .layer(from_fn_with_state(
-                            context.context.clone(),
+                            context.services.clone(),
                             authorization_layer,
                         ))
                 });
 
-            // Nest the router in the V1 address.
             let router = utoipa_axum::router::OpenApiRouter::default()
-                .nest(td_objects::rest_urls::V1, router)
+                .nest(V1, router)
                 // Everything going to /api and is not found, is a not found. Only non /api calls get through.
                 .fallback(api_not_found_handler);
-            // Nest the router in the base API URL.
-            let router = utoipa_axum::router::OpenApiRouter::default()
-                .nest(td_objects::rest_urls::BASE_API_URL, router);
+            let router = utoipa_axum::router::OpenApiRouter::default().nest(BASE_API_URL, router);
 
-            // Add any router extensions.
-            let router = router.merge(UnauthenticatedExtendedRouter::router(
-                context.extended_services.clone(),
-            ));
+            // Root-mounted routers sit outside the `/api` nests.
+            let router = router.merge(mount(Mount::Root));
 
-            // Add docs endpoints if the feature is enabled.
             #[allow(unused_mut, unused_variables)]
             let (mut router, openapi) = router.split_for_parts();
 
             #[cfg(feature = "api-docs")]
             {
-                use crate::apiserver::normalize_catch_all_paths;
+                use crate::apiserver::{DOCS_URL, OPENAPI_JSON_URL, normalize_catch_all_paths};
                 use td_build::version::TABSDATA_VERSION;
-                use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
 
                 use utoipa_swagger_ui::{SwaggerUi, Url};
 
@@ -220,7 +147,6 @@ impl ApiServerV1 {
                 ));
             }
 
-            // Default layers
             let router = router
                 .layer(TimeoutLayer::with_status_code(
                     StatusCode::REQUEST_TIMEOUT,
@@ -237,5 +163,33 @@ impl ApiServerV1 {
         }?;
 
         Ok(ApiServerV1 { inner })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::router::collections::LIST_COLLECTIONS_PATH;
+    use crate::router::server_status::STATUS_PATH;
+    use crate::router::users::LIST_USERS_PATH;
+    use td_services::Services;
+    use te_services::ExtendedServices;
+
+    /// Folding the registry's Global mount yields the routes AND their
+    /// utoipa docs, exactly as the hand merge chain did.
+    #[test]
+    fn global_mount_carries_routes_and_docs() {
+        let states = RouterStates::default()
+            .with(Services::default())
+            .with(ExtendedServices::default());
+        let global = mount_router(Mount::Global, &states);
+        let (_, openapi) = global.split_for_parts();
+        for path in [LIST_USERS_PATH, LIST_COLLECTIONS_PATH, STATUS_PATH] {
+            assert!(
+                openapi.paths.paths.contains_key(path),
+                "expected {path} in the OpenAPI doc, got {:?}",
+                openapi.paths.paths.keys().collect::<Vec<_>>()
+            );
+        }
     }
 }

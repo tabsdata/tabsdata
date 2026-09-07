@@ -8,20 +8,20 @@ use rand::RngExt;
 use rand::prelude::{IndexedRandom, IteratorRandom};
 use std::collections::HashMap;
 use std::time::Instant;
-use strum::IntoEnumIterator;
 use td_common::env::DATABASE_DIR_ENV;
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
 use td_database::config::{
-    BackendConfig, ComponentConfig, DatabaseComponents, EMBEDDED_CREDENTIAL, PostgresConfig, Schema,
+    ComponentConfig, DatabaseComponents, EMBEDDED_CREDENTIAL, PoolConfig, PoolsConfig,
+    PostgresConfig, Schema,
 };
 use td_database::server::{start_server, stop_server};
 use td_execution::TransactionBy;
-use td_objects::Buildable;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::transaction::map::TransactionMapper;
+use td_objects::types::basic::ReuseFrozen;
 use td_objects::types::basic::{
     BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus, TableNameDto,
     UserEnabled, UserName,
@@ -123,23 +123,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let server = ComponentConfig {
-        conn: BackendConfig::Postgres(PostgresConfig {
+        postgres: PostgresConfig {
             username: Some(EMBEDDED_CREDENTIAL.to_owned()),
             password: Some(EMBEDDED_CREDENTIAL.to_owned()),
             ..target.clone()
-        }),
+        },
         schema: None,
         app_role: None,
         pool: Default::default(),
     };
     let apiserver_entry = ComponentConfig {
-        conn: BackendConfig::Postgres(PostgresConfig {
+        postgres: PostgresConfig {
             password: Some(EMBEDDED_CREDENTIAL.to_owned()),
             ..target
-        }),
+        },
         schema: Some(Schema::new(LOAD_TEST_SCHEMA)),
         app_role: None,
-        pool: Default::default(),
+        pool: {
+            let pool = PoolConfig {
+                min_connections: 1,
+                max_connections: 10,
+                ..Default::default()
+            };
+            PoolsConfig {
+                regular: Some(pool.clone()),
+                exclusive: Some(pool),
+                admin: None,
+            }
+        },
     };
     let components =
         DatabaseComponents::from([(APISERVER_COMPONENT_KEY.to_owned(), apiserver_entry)]);
@@ -224,7 +235,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(dependency_table) = tables.choose(&mut rand::rng()) {
                 dependencies.push(TableDependencyDto::try_from(format!(
                     "{}/{}",
-                    dependency_table.collection, dependency_table.name
+                    dependency_table.collection, dependency_table.base.name
                 ))?);
             }
         }
@@ -243,7 +254,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(trigger_table) = tables.choose(&mut rand::rng()) {
                 triggers.push(TableTriggerDto::try_from(format!(
                     "{}/{}",
-                    trigger_table.collection, trigger_table.name
+                    trigger_table.collection, trigger_table.base.name
                 ))?);
             }
         }
@@ -263,18 +274,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             triggers.len(),
         );
 
-        let create = FunctionRegister::builder()
-            .name(func_name)
-            .try_description("description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(decorator)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("{}")?
-            .reuse_frozen_tables(false)
-            .build()?;
+        let create = FunctionRegister {
+            name: func_name,
+            description: "description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: decorator.clone(),
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: Some(dependencies),
+            triggers: Some(triggers),
+            tables: Some(tables),
+            table_types: None,
+            runtime_values: "{}".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let (_, coll) = collections.iter().choose(&mut rand::rng()).unwrap();
         let function = db.seed().function(coll, &create).await?;

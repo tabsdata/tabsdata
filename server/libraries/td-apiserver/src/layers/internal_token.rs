@@ -17,8 +17,8 @@ use axum::http;
 use axum::middleware::Next;
 use axum::response::Response;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
+use ta_services::service::Ctx;
 use td_common::jwt::{InternalTokenClaims, JwtConfig, decode_internal_token};
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
@@ -35,7 +35,7 @@ enum InternalTokenError {
 }
 
 pub async fn internal_token_layer(
-    State(jwt): State<Arc<JwtConfig>>,
+    State(jwt): State<Ctx<JwtConfig>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, ErrorStatus> {
@@ -106,6 +106,8 @@ fn token_authorizes_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::apiserver::{BASE_API_URL, BASE_URL, V1};
+    use crate::router::internal::FUNCTION_RUN_CALLBACK_PATH;
     use axum::Router;
     use axum::body::Body;
     use axum::http::Request;
@@ -115,8 +117,6 @@ mod tests {
     use std::collections::BTreeMap;
     use td_common::id;
     use td_common::jwt::{INTERNAL_TOKEN_KIND, encode_internal_token};
-    use td_objects::rest_urls::internal::RESOLVE_FUNCTION_RUN_WORKER;
-    use td_objects::rest_urls::{BASE_API_URL, BASE_URL, V1};
     use tower::ServiceExt;
 
     fn claims(method: &str, scope: &str, bindings: &[(&str, &str)]) -> InternalTokenClaims {
@@ -228,11 +228,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nested_router_authorizes_resolve_token() {
-        let jwt = Arc::new(JwtConfig::new("test-secret".to_string(), 3600));
+    async fn nested_router_authorizes_matching_token() {
+        let jwt = Ctx::new(JwtConfig::new("test-secret".to_string(), 3600));
 
         // Mint the token the same way the scheduler does for this endpoint.
-        let scope = format!("{BASE_URL}{RESOLVE_FUNCTION_RUN_WORKER}");
+        let scope = format!("{BASE_URL}{FUNCTION_RUN_CALLBACK_PATH}");
         let bindings = BTreeMap::from([
             ("function_run_id".to_string(), "F".to_string()),
             ("worker_id".to_string(), "W".to_string()),
@@ -240,16 +240,13 @@ mod tests {
         let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
 
         let inner = Router::new()
-            .route(
-                RESOLVE_FUNCTION_RUN_WORKER,
-                get(|| async { StatusCode::OK }),
-            )
+            .route(FUNCTION_RUN_CALLBACK_PATH, get(|| async { StatusCode::OK }))
             .route_layer(from_fn_with_state(jwt.clone(), internal_token_layer));
         let app = Router::new().nest(BASE_API_URL, Router::new().nest(V1, inner));
 
         let request = Request::builder()
             .method("GET")
-            .uri("/api/v1/internal/function-runs/F/workers/W/message")
+            .uri("/api/v1/internal/function-runs/F/workers/W")
             .header("authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
@@ -259,15 +256,15 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "a correctly minted token for the resolve endpoint must authorize the request"
+            "a correctly minted token for the endpoint must authorize the request"
         );
     }
 
     #[tokio::test]
     async fn nested_router_rejects_wrong_worker() {
-        let jwt = Arc::new(JwtConfig::new("test-secret".to_string(), 3600));
+        let jwt = Ctx::new(JwtConfig::new("test-secret".to_string(), 3600));
 
-        let scope = format!("{BASE_URL}{RESOLVE_FUNCTION_RUN_WORKER}");
+        let scope = format!("{BASE_URL}{FUNCTION_RUN_CALLBACK_PATH}");
         let bindings = BTreeMap::from([
             ("function_run_id".to_string(), "F".to_string()),
             ("worker_id".to_string(), "W".to_string()),
@@ -275,16 +272,13 @@ mod tests {
         let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
 
         let inner = Router::new()
-            .route(
-                RESOLVE_FUNCTION_RUN_WORKER,
-                get(|| async { StatusCode::OK }),
-            )
+            .route(FUNCTION_RUN_CALLBACK_PATH, get(|| async { StatusCode::OK }))
             .route_layer(from_fn_with_state(jwt.clone(), internal_token_layer));
         let app = Router::new().nest(BASE_API_URL, Router::new().nest(V1, inner));
 
         let request = Request::builder()
             .method("GET")
-            .uri("/api/v1/internal/function-runs/F/workers/W2/message")
+            .uri("/api/v1/internal/function-runs/F/workers/W2")
             .header("authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();

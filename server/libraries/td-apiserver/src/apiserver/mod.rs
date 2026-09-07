@@ -5,26 +5,43 @@
 use crate::apiserver::server::ServerError;
 use crate::apiserver::v1::ApiServerV1;
 use crate::config::Config;
+use crate::router::internal::internal_routes;
 use async_trait::async_trait;
 use std::error::Error;
 use std::sync::Arc;
-use ta_services::factory::ServiceFactory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
+use td_authz::rbac::AuthzRegistry;
 use td_authz::session_provider::Sessions;
 use td_bridge::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
-use td_database::components::{APISERVER_COMPONENT_KEY, ServingPools};
+use td_database::components::ServingPools;
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify};
+use td_objects::types::addresses::InternalServerEndpoint;
+use td_services::Services;
 use td_services::execution::services::runtime_info::RuntimeContext;
-use td_services::{Context, Services};
+use td_services::internal_api::InternalApi;
 use td_storage::Storage;
-use te_services::{ContextExt, ExtendedContext, ExtendedServices};
+use te_services::{ContextExt, ExtendedServices};
 use tokio::sync::watch;
 
 pub mod internal;
 mod server;
 pub mod v1;
+
+/// Where the API mounts. Nested in two steps so `/api/<anything else>` still
+/// answers with an API-shaped 404 while non-`/api` paths fall through.
+pub(crate) const BASE_API_URL: &str = "/api";
+pub(crate) const V1: &str = "/v1";
+/// The prefix a nested route's matched path carries, and so the prefix an
+/// internal token's scope is built from.
+pub const BASE_URL: &str = constcat::concat!(BASE_API_URL, V1);
+
+#[cfg(feature = "api-docs")]
+pub(crate) const DOCS_URL: &str = constcat::concat!(BASE_API_URL, "/docs");
+#[cfg(feature = "api-docs")]
+pub(crate) const OPENAPI_JSON_URL: &str = constcat::concat!(BASE_API_URL, "/api-docs/openapi.json");
 
 /// axum catch-all segments (`{*name}`) are invalid OpenAPI path templating —
 /// Swagger substitutes parameters by name, finds no `{name}`, and leaves the
@@ -41,61 +58,73 @@ pub(crate) fn normalize_catch_all_paths(openapi: &mut utoipa::openapi::OpenApi) 
         .collect();
 }
 
-#[allow(dead_code)]
 pub struct ApiServerCtx {
     pub config: Config,
-    pub context: Context,
     pub services: Services,
-    pub extended_context: ExtendedContext,
     pub extended_services: ExtendedServices,
 }
 
 impl ApiServerCtx {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         config: Config,
         serving_pools: ServingPools,
-        storage: Arc<Storage>,
-        runtime_context: Arc<RuntimeContext>,
-        scheduler_notify: Arc<SchedulerNotify>,
-        bridge: Arc<BridgeProviderHandle>,
-        authz_registry: Arc<td_authz::rbac::AuthzRegistry>,
+        storage: Ctx<Storage>,
+        runtime_context: Ctx<RuntimeContext>,
+        scheduler_notify: Ctx<SchedulerNotify>,
+        bridge: Ctx<BridgeProviderHandle>,
+        authz_registry: Arc<AuthzRegistry>,
+        internal_endpoint: Arc<InternalServerEndpoint>,
     ) -> Result<Self, TdError> {
-        let apiserver_pool = serving_pools.get(APISERVER_COMPONENT_KEY)?.clone();
-        let context = Context {
-            apiserver_pool,
-            server_addresses: Arc::new(config.addresses.clone()),
-            jwt_config: Arc::new(config.jwt.clone()),
-            // Authorization source built from the wired registry (built-in kinds
-            // plus extensions, e.g. te-authz's `ai` / `manage_ai`).
-            auth_context: Arc::new(AuthzContext::with_registry(authz_registry)),
-            sessions: Arc::new(Sessions::default()),
+        let jwt_config = Ctx::new(config.jwt.clone());
+        let services = Services {
+            pools: serving_pools.domain_pools(),
+            server_addresses: Ctx::new(config.addresses.clone()),
+            internal_api: Ctx::new(InternalApi::new(
+                internal_routes(),
+                jwt_config.clone(),
+                internal_endpoint,
+            )),
+            jwt_config,
+            // Built-in authz kinds plus extensions (e.g. te-authz's `ai`).
+            auth_context: Ctx::new(AuthzContext::with_registry(authz_registry)),
+            sessions: Ctx::new(Sessions::default()),
             password_settings: {
                 // to verify up front configuration is OK.
                 let password_hash_config = config.password.clone();
                 let _ = password_hash_config.password_hasher();
-                Arc::new(password_hash_config)
+                Ctx::new(password_hash_config)
             },
-            ssl_folder: Arc::new(config.ssl_folder.clone()),
+            ssl_folder: Ctx::new(config.ssl_folder.clone()),
+            resources_dir: Ctx::new(config.resources_folder.clone()),
             storage: storage.clone(),
             runtime_context: runtime_context.clone(),
-            transaction_by: Arc::new(config.transaction_by.clone()),
+            transaction_by: Ctx::new(config.transaction_by.clone()),
             scheduler_notify: scheduler_notify.clone(),
+            scheduler_config: Ctx::new(SchedulerConfig {
+                check_frequency: config.check_frequency,
+                max_functions_per_tick: config.max_functions_per_tick,
+                tick_timeout: config.tick_timeout,
+            }),
+            recovery_config: Ctx::new(RecoveryConfig {
+                check_frequency: config.check_frequency,
+                tick_timeout: config.recovery_tick_timeout,
+                stuck_requested_timeout: config.stuck_requested_timeout,
+                dispatch_grace: config.dispatch_grace,
+                max_pre_running_time: config.max_pre_running_time,
+                max_running_time: config.max_running_time,
+                max_completion_time: config.max_completion_time,
+                max_recoveries_per_tick: config.max_recoveries_per_tick,
+            }),
             bridge,
         };
-        let services = Services::build(&context);
-        // Edition extensions extend the base context with the serving pools (each
-        // grabs the component pool it owns) and the edition's resolved config; the
-        // pools are consumed here, not carried in the base context.
-        let extended_context = context
+        let extended_services = services
             .extend(&serving_pools, &config.extended_config)
             .await?;
-        let extended_services = ExtendedServices::build(&extended_context);
 
         Ok(Self {
             config,
-            context,
             services,
-            extended_context,
             extended_services,
         })
     }

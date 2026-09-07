@@ -22,15 +22,13 @@ version = { workspace = true }
 [features]
 # Defaults to embedded postgres so `cargo run -p td-apiserver` boots a
 # self-contained server without external db config. Production-only builds
-# can drop it via `--no-default-features --features postgres` (etc).
+# can drop it via `--no-default-features`.
 default = ["embedded-postgres"]
 api-docs = []
 enterprise = []
 # `embedded-postgres` enables the apiserver's no-URL fallback to a
 # self-hosted Postgres under `$TD_URI_REPOSITORY/database/`.
 embedded-postgres = ["td-database/embedded-postgres"]
-sqlite = ["td-database/sqlite"]
-mysql = ["td-database/mysql"]
 td-test = [
     "dummy",
     "mock-env",
@@ -49,14 +47,12 @@ td-test = [
     "td-security/td-test",
     "td-services/td-test",
     "td-storage/td-test",
-    "td-tower/td-test",
     "te-apiserver/td-test",
     "te-services/td-test",
 ]
 dummy = []
 mock-env = []
 test_logging = []
-test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
@@ -98,7 +94,6 @@ td-queries = { workspace = true }
 td-security = { workspace = true }
 td-services = { workspace = true }
 td-storage = { workspace = true }
-td-tower = { workspace = true }
 te-apiserver = { workspace = true }
 te-authz = { workspace = true }
 te-database = { workspace = true }
@@ -113,6 +108,7 @@ axum-server = { workspace = true, features = ["tls-rustls"] }
 bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
+constcat = { workspace = true }
 futures = { workspace = true }
 headers = { workspace = true }
 http = { workspace = true }

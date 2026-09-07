@@ -2,23 +2,20 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::scheduler::SchedulerCtx;
 use async_trait::async_trait;
 use std::error::Error;
 use std::future::Future;
 use std::time::{Duration, Instant};
-use ta_services::factory::ServiceFactory;
-use ta_services::service::TdService;
 use td_common::server_runner::ServerRunnable;
 use td_execution::SchedulerNotify;
-use td_services::scheduler::services::FunctionSchedulerServices;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_services::Services;
 use tokio::sync::watch;
-use tower::{BoxError, ServiceBuilder, ServiceExt};
 use tracing::{debug, error, trace, warn};
 
+type BoxError = Box<dyn Error + Send + Sync>;
+
 pub struct FunctionRequesterV1 {
-    request_service: ServiceProvider<(), (), BoxError>,
+    services: Services,
     notify: SchedulerNotify,
     // Failover safety net — `SchedulerNotify` wakes the loop on status
     // changes; the timer also bounds the stuck-run sweep cadence.
@@ -27,41 +24,36 @@ pub struct FunctionRequesterV1 {
 }
 
 impl FunctionRequesterV1 {
-    pub async fn new(context: &SchedulerCtx) -> Self {
-        let services = FunctionSchedulerServices::build(&context.context);
-        let tick_timeout = context.context.scheduler_config.tick_timeout.0;
-        let request_service = ServiceBuilder::new()
-            .buffer(1)
-            .concurrency_limit(1)
-            .timeout(tick_timeout)
-            .service(services.request.service())
-            .into_service_provider();
+    pub async fn new(services: &Services) -> Self {
         FunctionRequesterV1 {
-            request_service,
-            notify: (*context.context.scheduler_notify).clone(),
-            check_frequency: context.context.scheduler_config.check_frequency.0,
-            tick_timeout,
+            services: services.clone(),
+            notify: (*services.scheduler_notify).clone(),
+            check_frequency: services.scheduler_config.check_frequency.0,
+            tick_timeout: services.scheduler_config.tick_timeout.0,
         }
     }
 
     async fn request(&self) -> Result<(), BoxError> {
-        let service = self.request_service.make();
-        let result = timed_tick("request", self.tick_timeout, service.oneshot(())).await;
-        let _ = result?;
+        timed_tick("request", self.tick_timeout, self.services.request(())).await?;
         Ok(())
     }
 }
 
-/// Runs one tick, warning when it consumes half its `tick_timeout` budget —
-/// the early signal that the scheduler is heading for `Elapsed` cancellations
-/// (e.g. a starved connection pool or a slow orchestrator backend).
-pub(crate) async fn timed_tick<T>(
+/// Runs one tick under `tick_timeout` (the loop is sequential, so a pass that
+/// overruns is abandoned and the next tick retries), warning when it consumes
+/// half its budget — the early signal that the scheduler is heading for
+/// timeout cancellations (e.g. a starved connection pool or a slow
+/// orchestrator backend).
+pub(crate) async fn timed_tick<T, E: Into<BoxError>>(
     tick: &str,
     tick_timeout: Duration,
-    fut: impl Future<Output = Result<T, BoxError>>,
+    fut: impl Future<Output = Result<T, E>>,
 ) -> Result<T, BoxError> {
     let started = Instant::now();
-    let result = fut.await;
+    let result = match tokio::time::timeout(tick_timeout, fut).await {
+        Ok(res) => res.map_err(Into::into),
+        Err(_elapsed) => Err(format!("scheduler {tick} tick timed out").into()),
+    };
     let elapsed = started.elapsed();
     if elapsed >= tick_timeout / 2 {
         warn!(
@@ -99,34 +91,24 @@ impl ServerRunnable for FunctionRequesterV1 {
 }
 
 pub struct FunctionDispatcherV1 {
-    commit_service: ServiceProvider<(), (), BoxError>,
+    services: Services,
     notify: SchedulerNotify,
     check_frequency: Duration,
     tick_timeout: Duration,
 }
 
 impl FunctionDispatcherV1 {
-    pub async fn new(context: &SchedulerCtx) -> Self {
-        let services = FunctionSchedulerServices::build(&context.context);
-        let tick_timeout = context.context.scheduler_config.tick_timeout.0;
-        let commit_service = ServiceBuilder::new()
-            .buffer(1)
-            .concurrency_limit(1)
-            .timeout(tick_timeout)
-            .service(services.dispatch.service())
-            .into_service_provider();
+    pub async fn new(services: &Services) -> Self {
         FunctionDispatcherV1 {
-            commit_service,
-            notify: (*context.context.scheduler_notify).clone(),
-            check_frequency: context.context.scheduler_config.check_frequency.0,
-            tick_timeout,
+            services: services.clone(),
+            notify: (*services.scheduler_notify).clone(),
+            check_frequency: services.scheduler_config.check_frequency.0,
+            tick_timeout: services.scheduler_config.tick_timeout.0,
         }
     }
 
     async fn commit(&self) -> Result<(), BoxError> {
-        let service = self.commit_service.make();
-        let result = timed_tick("dispatch", self.tick_timeout, service.oneshot(())).await;
-        let _ = result?;
+        timed_tick("dispatch", self.tick_timeout, self.services.dispatch(())).await?;
         Ok(())
     }
 }
