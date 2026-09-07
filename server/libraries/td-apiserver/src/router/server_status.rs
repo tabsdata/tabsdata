@@ -2,63 +2,47 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use td_apiforge::router_ext;
+use axum::Extension;
+use axum::extract::State;
+use ta_apiserver::status::error_status::ErrorStatus;
+use ta_apiserver::status::ok_status::GetStatus;
+use td_apiforge::apiserver_path;
+use td_objects::dxo::crudl::RequestContext;
+use td_objects::dxo::runtime_info::RuntimeInfo;
+use td_objects::dxo::system::ApiStatus;
+use td_services::Services;
 
-#[router_ext(ServerStatusRouter)]
-mod routes {
-    use axum::Extension;
-    use axum::extract::State;
-    use std::sync::Arc;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::ok_status::GetStatus;
-    use ta_services::service::TdService;
-    use td_apiforge::apiserver_path;
-    use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::runtime_info::RuntimeInfo;
-    use td_objects::dxo::system::ApiStatus;
-    use td_objects::rest_urls::{RUNTIME_INFO, SERVER_STATUS};
-    use td_services::execution::services::ExecutionServices;
-    use td_services::system::services::SystemServices;
-    use tower::ServiceExt;
+const SYSTEM_TAG: &str = "System";
 
-    const SYSTEM_TAG: &str = "System";
+#[apiserver_path(mount = global, method = get, path = "/status", tag = SYSTEM_TAG, doc = "API Server Status")]
+pub async fn status(State(state): State<Services>) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
+    let response = state.status(()).await?;
+    Ok(GetStatus::OK(response))
+}
 
-    #[apiserver_path(method = get, path = SERVER_STATUS, tag = SYSTEM_TAG)]
-    #[doc = "API Server Status"]
-    pub async fn status(
-        State(status_state): State<Arc<SystemServices>>,
-    ) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
-        let response = status_state.status.service().oneshot(()).await?;
-        Ok(GetStatus::OK(response))
-    }
-
-    #[apiserver_path(method = get, path = RUNTIME_INFO, tag = SYSTEM_TAG)]
-    #[doc = "Runtime information"]
-    pub async fn info(
-        State(executions): State<Arc<ExecutionServices>>,
-        Extension(context): Extension<RequestContext>,
-    ) -> Result<GetStatus<RuntimeInfo>, ErrorStatus> {
-        let request = context.read(());
-        let response = executions.info.service().oneshot(request).await?;
-        Ok(GetStatus::OK(response))
-    }
+#[apiserver_path(mount = global, method = get, path = "/runtime-info", tag = SYSTEM_TAG, doc = "Runtime information")]
+pub async fn info(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+) -> Result<GetStatus<RuntimeInfo>, ErrorStatus> {
+    let request = context.read(());
+    let response = state.runtime_info(request).await?;
+    Ok(GetStatus::OK(response))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::STATUS_PATH;
     use axum::body::{Body, to_bytes};
     use axum::extract::Request;
     use axum::{Extension, Router};
     use http::{Method, StatusCode};
-    use ta_apiserver::router::RouterExtension;
-    use ta_services::factory::ServiceFactory;
+    use ta_apiserver::router::{RouterStates, named_router};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::system::{ApiStatus, HealthStatus};
-    use td_objects::rest_urls::SERVER_STATUS;
     use td_objects::types::basic::{AccessTokenId, UserId};
-    use td_services::{Context, Services};
+    use td_services::Services;
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
@@ -69,15 +53,15 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_status(db: TdPool) {
-        let router = ServerStatusRouter::router(Services::build(&Context::with_defaults(db)));
+        let states = RouterStates::default().with(Services::with_defaults(db));
+        let router = named_router(&["status", "info"], &states);
 
-        // Retrieve the status
         let response = to_route(&router)
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(SERVER_STATUS)
+                    .uri(STATUS_PATH)
                     .body(Body::empty())
                     .unwrap(),
             )

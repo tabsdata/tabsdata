@@ -10,27 +10,41 @@
 
 use axum::routing::get;
 use http::StatusCode;
-use td_objects::rest_urls::PING;
+use ta_apiserver::router::{Mount, RouterRegistration, RouterStates, inventory};
 use utoipa_axum::router::OpenApiRouter;
+
+pub(crate) const PING: &str = "/ping";
 
 /// Always `200 OK`, empty body.
 async fn ping() -> StatusCode {
     StatusCode::OK
 }
 
-/// The unsecured ping route, to be merged outside the authorization layer.
+/// The unsecured ping route; deliberately absent from the OpenAPI doc.
 pub(crate) fn ping_router() -> OpenApiRouter {
     OpenApiRouter::default().route(PING, get(ping))
+}
+
+fn registry_build(_states: &RouterStates) -> OpenApiRouter {
+    ping_router()
+}
+
+inventory::submit! {
+    RouterRegistration {
+        name: "ping",
+        mount: Mount::Unauthenticated,
+        build: registry_build,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::apiserver::{BASE_API_URL, V1};
     use axum::Router;
     use axum::body::Body;
     use axum::extract::Request;
     use http::Method;
-    use td_objects::rest_urls::{BASE_API_URL, V1};
     use tower::ServiceExt;
 
     /// Reachable at the production path, with no auth layer in front, returning

@@ -2,108 +2,90 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use td_apiforge::router_ext;
+use axum::Extension;
+use axum::extract::{Path, State};
+use axum_extra::extract::Query;
+use ta_apiserver::status::error_status::ErrorStatus;
+use ta_apiserver::status::extractors::Json;
+use ta_apiserver::status::ok_status::{
+    CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
+};
+use td_apiforge::apiserver_path;
+use td_objects::dxo::crudl::{ListParams, RequestContext};
+use td_objects::dxo::user::{UserCreate, UserParam, UserRead, UserUpdate};
+use td_services::Services;
 
-#[router_ext(UsersRouter)]
-mod routes {
-    use axum::Extension;
-    use axum::extract::{Path, State};
-    use axum_extra::extract::Query;
-    use std::sync::Arc;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::extractors::Json;
-    use ta_apiserver::status::ok_status::{
-        CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
-    };
-    use ta_services::service::TdService;
-    use td_apiforge::apiserver_path;
-    use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::user::{UserCreate, UserRead, UserUpdate};
-    use td_objects::rest_urls::{
-        CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER, UserParam,
-    };
-    use td_services::user::service::UserServices;
-    use tower::ServiceExt;
+const USERS_TAG: &str = "Users";
 
-    const USERS_TAG: &str = "Users";
+#[apiserver_path(mount = global, method = get, path = "/users", tag = USERS_TAG, doc = "Lists users")]
+async fn list_users(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Query(list_params): Query<ListParams>,
+) -> Result<ListStatus<UserRead>, ErrorStatus> {
+    let request = context.list((), list_params);
+    let response = state.list_users(request).await?;
+    Ok(ListStatus::OK(response))
+}
 
-    #[apiserver_path(method = get, path = LIST_USERS, tag = USERS_TAG)]
-    #[doc = "Lists users"]
-    async fn list(
-        State(users_state): State<Arc<UserServices>>,
-        Extension(context): Extension<RequestContext>,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<UserRead>, ErrorStatus> {
-        let request = context.list((), query_params);
-        let response = users_state.list.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
+#[apiserver_path(mount = global, method = get, path = "/users/{user}", tag = USERS_TAG, doc = "Get a user")]
+pub async fn get_user(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Path(user): Path<UserParam>,
+) -> Result<GetStatus<UserRead>, ErrorStatus> {
+    let request = context.read(user);
+    let response = state.read_user(request).await?;
+    Ok(GetStatus::OK(response))
+}
 
-    #[apiserver_path(method = get, path = GET_USER, tag = USERS_TAG)]
-    #[doc = "Get a user"]
-    pub async fn get(
-        State(users_state): State<Arc<UserServices>>,
-        Extension(context): Extension<RequestContext>,
-        Path(path_params): Path<UserParam>,
-    ) -> Result<GetStatus<UserRead>, ErrorStatus> {
-        let request = context.read(path_params);
-        let response = users_state.read.service().oneshot(request).await?;
-        Ok(GetStatus::OK(response))
-    }
+#[apiserver_path(mount = global, method = post, path = "/users", tag = USERS_TAG, doc = "Create a user")]
+pub async fn create_user(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Json(request): Json<UserCreate>,
+) -> Result<CreateStatus<UserRead>, ErrorStatus> {
+    let request = context.create((), request);
+    let response = state.create_user(request).await?;
+    Ok(CreateStatus::CREATED(response))
+}
 
-    #[apiserver_path(method = post, path = CREATE_USER, tag = USERS_TAG)]
-    #[doc = "Create a user"]
-    pub async fn create(
-        State(users_state): State<Arc<UserServices>>,
-        Extension(context): Extension<RequestContext>,
-        Json(request): Json<UserCreate>,
-    ) -> Result<CreateStatus<UserRead>, ErrorStatus> {
-        let request = context.create((), request);
-        let response = users_state.create.service().oneshot(request).await?;
-        Ok(CreateStatus::CREATED(response))
-    }
+#[apiserver_path(mount = global, method = post, path = "/users/{user}", tag = USERS_TAG, doc = "Update a user")]
+pub async fn update_user(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Path(user): Path<UserParam>,
+    Json(request): Json<UserUpdate>,
+) -> Result<UpdateStatus<UserRead>, ErrorStatus> {
+    let request = context.update(user, request);
+    let response = state.update_user(request).await?;
+    Ok(UpdateStatus::OK(response))
+}
 
-    #[apiserver_path(method = post, path = UPDATE_USER, tag = USERS_TAG)]
-    #[doc = "Update a user"]
-    pub async fn update(
-        State(users_state): State<Arc<UserServices>>,
-        Extension(context): Extension<RequestContext>,
-        Path(path_params): Path<UserParam>,
-        Json(request): Json<UserUpdate>,
-    ) -> Result<UpdateStatus<UserRead>, ErrorStatus> {
-        let request = context.update(path_params, request);
-        let response = users_state.update.service().oneshot(request).await?;
-        Ok(UpdateStatus::OK(response))
-    }
-
-    #[apiserver_path(method = delete, path = DELETE_USER, tag = USERS_TAG)]
-    #[doc = "Delete a user"]
-    pub async fn delete(
-        State(users_state): State<Arc<UserServices>>,
-        Extension(context): Extension<RequestContext>,
-        Path(path_params): Path<UserParam>,
-    ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-        let request = context.delete(path_params);
-        let response = users_state.delete.service().oneshot(request).await?;
-        Ok(DeleteStatus::OK(response))
-    }
+#[apiserver_path(mount = global, method = delete, path = "/users/{user}", tag = USERS_TAG, doc = "Delete a user")]
+pub async fn delete_user(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Path(user): Path<UserParam>,
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
+    let request = context.delete(user);
+    let response = state.delete_user(request).await?;
+    Ok(DeleteStatus::OK(response))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{GET_USER_PATH, LIST_USERS_PATH};
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use axum::{Extension, Router};
     use http::method::Method;
     use serde_json::json;
-    use ta_apiserver::router::RouterExtension;
-    use ta_services::factory::ServiceFactory;
+    use ta_apiserver::router::{RouterStates, named_router};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::rest_urls::{CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER};
     use td_objects::types::basic::{AccessTokenId, UserId};
-    use td_services::{Context, Services};
+    use td_services::Services;
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
@@ -114,7 +96,17 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_users_lifecycle(db: TdPool) {
-        let router = UsersRouter::router(Services::build(&Context::with_defaults(db)));
+        let states = RouterStates::default().with(Services::with_defaults(db));
+        let router = named_router(
+            &[
+                "list_users",
+                "get_user",
+                "create_user",
+                "update_user",
+                "delete_user",
+            ],
+            &states,
+        );
 
         // List users — only the seeded `admin` row (`system` is excluded).
         let response = to_route(&router)
@@ -122,7 +114,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_USERS)
+                    .uri(LIST_USERS_PATH)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -134,7 +126,6 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["data"]["len"], 1);
 
-        // Create a new user
         let user_create = json!(
             {
                 "name": "joaquin",
@@ -149,7 +140,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(CREATE_USER)
+                    .uri(LIST_USERS_PATH)
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&user_create).unwrap())
                     .unwrap(),
@@ -170,7 +161,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_USERS)
+                    .uri(LIST_USERS_PATH)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -182,13 +173,12 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["data"]["len"], 2);
 
-        // Get the new user
         let response = to_route(&router)
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(GET_USER.replace("{user}", "joaquin"))
+                    .uri(GET_USER_PATH.replace("{user}", "joaquin"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -202,7 +192,6 @@ mod tests {
         assert_eq!(body["data"]["full_name"], "Joaquin");
         assert_eq!(body["data"]["email"], "joaquin@tabsdata.com");
 
-        // Update the new user
         let user_update = json!(
             {
                 "full_name": "Mister Duck",
@@ -215,7 +204,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(UPDATE_USER.replace("{user}", "joaquin"))
+                    .uri(GET_USER_PATH.replace("{user}", "joaquin"))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&user_update).unwrap())
                     .unwrap(),
@@ -230,13 +219,12 @@ mod tests {
         assert_eq!(body["data"]["full_name"], "Mister Duck");
         assert_eq!(body["data"]["email"], "quack@tabsdata.com");
 
-        // Delete the new user
         let response = to_route(&router)
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::DELETE)
-                    .uri(DELETE_USER.replace("{user}", "joaquin"))
+                    .uri(GET_USER_PATH.replace("{user}", "joaquin"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -250,7 +238,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_USERS)
+                    .uri(LIST_USERS_PATH)
                     .body(Body::empty())
                     .unwrap(),
             )

@@ -13,14 +13,15 @@
 //! Returns `404` when the route is unconfigured, the requested path escapes the
 //! root, or the target is missing / not a regular file.
 
+use axum::extract::{Path, State};
+use bytes::Bytes;
 use std::path::{Component, Path as StdPath, PathBuf};
-use std::sync::Arc;
-use td_apiforge::router_ext;
-
-/// The configured resources root, injected into each request as an extension.
-/// `None` disables the route (every request `404`s).
-#[derive(Clone)]
-pub struct ResourcesDir(pub Arc<Option<PathBuf>>);
+use ta_apiserver::status::error_status::ErrorStatus;
+use td_apiforge::apiserver_path;
+use td_error::{ApiError, TdError, api_error};
+use td_objects::dxo::file::DownloadResponse;
+use td_objects::types::stream::BoxedSyncStream;
+use td_services::Services;
 
 /// The greedy `{*path}` segment of `/resources/{*path}` — the file path
 /// (with subdirectories) relative to the resources directory.
@@ -49,56 +50,42 @@ fn safe_join(root: &StdPath, rel: &str) -> Option<PathBuf> {
     joined.starts_with(&root).then_some(joined)
 }
 
-#[router_ext(ResourcesRouter)]
-mod routes {
-    use super::{ResourcePathParam, ResourcesDir, safe_join};
-    use axum::Extension;
-    use axum::extract::Path;
-    use bytes::Bytes;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use td_apiforge::apiserver_path;
-    use td_error::{ApiError, TdError, api_error};
-    use td_objects::dxo::file::DownloadResponse;
-    use td_objects::rest_urls::RESOURCES;
-    use td_objects::types::stream::BoxedSyncStream;
+const SYSTEM_TAG: &str = "System";
 
-    const SYSTEM_TAG: &str = "System";
+fn not_found() -> ErrorStatus {
+    api_error!(ApiError::NotFound, "resource not found").into()
+}
 
-    fn not_found() -> ErrorStatus {
-        api_error!(ApiError::NotFound, "resource not found").into()
-    }
-
-    #[apiserver_path(
-        method = get,
-        path = RESOURCES,
-        tag = SYSTEM_TAG,
-        content_type = "application/octet-stream",
-    )]
-    #[doc = "Serve a file from the apiserver's configured resources directory"]
-    pub async fn get_resource(
-        Extension(dir): Extension<ResourcesDir>,
-        Path(params): Path<ResourcePathParam>,
-    ) -> Result<DownloadResponse, ErrorStatus> {
-        let root = dir.0.as_ref().as_ref().ok_or_else(not_found)?;
-        let path = safe_join(root, &params.path).ok_or_else(not_found)?;
-        // `read` errors for both missing paths and directories -> 404.
-        let bytes = tokio::fs::read(&path).await.map_err(|_| not_found())?;
-        let stream = BoxedSyncStream::new(futures::stream::once(async move {
-            Ok::<_, TdError>(Bytes::from(bytes))
-        }));
-        Ok(DownloadResponse::octet_stream(stream))
-    }
+#[apiserver_path(mount = global,
+    method = get,
+    path = "/resources/{*path}",
+    tag = SYSTEM_TAG,
+    content_type = "application/octet-stream",
+    doc = "Serve a file from the apiserver's configured resources directory")]
+pub async fn get_resource(
+    State(state): State<Services>,
+    Path(path): Path<ResourcePathParam>,
+) -> Result<DownloadResponse, ErrorStatus> {
+    let root = (*state.resources_dir).as_ref().ok_or_else(not_found)?;
+    let path = safe_join(root, &path.path).ok_or_else(not_found)?;
+    // `read` errors for both missing paths and directories -> 404.
+    let bytes = tokio::fs::read(&path).await.map_err(|_| not_found())?;
+    let stream = BoxedSyncStream::new(futures::stream::once(async move {
+        Ok::<_, TdError>(Bytes::from(bytes))
+    }));
+    Ok(DownloadResponse::octet_stream(stream))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Router;
     use axum::body::{Body, to_bytes};
     use axum::extract::Request;
-    use axum::{Extension, Router};
     use http::header::CONTENT_TYPE;
     use http::{Method, StatusCode};
-    use ta_apiserver::router::RouterExtension;
+    use ta_apiserver::router::{RouterStates, named_router};
+    use ta_services::service::Ctx;
     use tower::ServiceExt;
 
     fn temp_root(tag: &str) -> PathBuf {
@@ -108,8 +95,12 @@ mod tests {
     }
 
     fn app(root: Option<PathBuf>) -> Router {
-        let router: Router = ResourcesRouter::router(()).into();
-        router.layer(Extension(ResourcesDir(Arc::new(root))))
+        let services = td_services::Services {
+            resources_dir: Ctx::new(root),
+            ..td_services::Services::default()
+        };
+        let states = RouterStates::default().with(services);
+        named_router(&["get_resource"], &states).into()
     }
 
     async fn get(app: Router, rel: &str) -> (StatusCode, Option<String>, Vec<u8>) {
@@ -166,9 +157,7 @@ mod tests {
     fn safe_join_rejects_traversal_and_absolute() {
         let root = temp_root("guard");
         std::fs::write(root.join("ok.txt"), b"x").unwrap();
-        // A normal nested path resolves under the root.
         assert!(safe_join(&root, "ok.txt").is_some());
-        // Traversal / current-dir / absolute escapes are rejected.
         assert!(safe_join(&root, "../etc/passwd").is_none());
         assert!(safe_join(&root, "a/../../b").is_none());
         assert!(safe_join(&root, "/etc/passwd").is_none());

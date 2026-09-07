@@ -2,95 +2,66 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use td_apiforge::router_ext;
+//! Transaction routes, plus the project-scoped synchrotron read. Transactions
+//! are top-level: their ids are globally unique, so the services resolve the
+//! owning project from the row.
 
-#[router_ext(TransactionsRouter)]
-mod routes {
-    use axum::Extension;
-    use axum::extract::{Path, State};
-    use axum_extra::extract::Query;
-    use std::sync::Arc;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::ok_status::{ListStatus, NoContent, UpdateStatus};
-    use ta_services::service::TdService;
-    use td_apiforge::apiserver_path;
-    use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::transaction::Transaction;
-    use td_objects::rest_urls::{
-        TRANSACTION_CANCEL, TRANSACTION_RECOVER, TRANSACTIONS_LIST, TransactionParam,
-    };
-    use td_services::transaction::services::TransactionServices;
-    use tower::ServiceExt;
+use crate::extractors::Project;
+use axum::Extension;
+use axum::extract::{Path, State};
+use axum_extra::extract::Query;
+use ta_apiserver::status::error_status::ErrorStatus;
+use ta_apiserver::status::ok_status::{ListStatus, NoContent, UpdateStatus};
+use td_apiforge::apiserver_path;
+use td_database::pool::scoped::ScopedExt;
+use td_objects::dxo::crudl::{ListParams, RequestContext};
+use td_objects::dxo::synchrotron::SynchrotronResponse;
+use td_objects::dxo::transaction::{Transaction, TransactionParam};
+use td_services::Services;
 
-    const TRANSACTIONS_TAG: &str = "Transactions";
+const TRANSACTIONS_TAG: &str = "Transactions";
 
-    #[apiserver_path(method = post, path = TRANSACTION_CANCEL, tag = TRANSACTIONS_TAG)]
-    #[doc = "Cancel all function runs in the given transaction"]
-    pub async fn cancel(
-        State(transaction): State<Arc<TransactionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Path(param): Path<TransactionParam>,
-    ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-        let request = context.update(param, ());
-        let response = transaction.cancel.service().oneshot(request).await?;
-        Ok(UpdateStatus::OK(response))
-    }
-
-    #[apiserver_path(method = get, path = TRANSACTIONS_LIST, tag = TRANSACTIONS_TAG)]
-    #[doc = "List transactions"]
-    pub async fn list(
-        State(transaction): State<Arc<TransactionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<Transaction>, ErrorStatus> {
-        let request = context.list((), query_params);
-        let response = transaction.list.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
-
-    #[apiserver_path(method = post, path = TRANSACTION_RECOVER, tag = TRANSACTIONS_TAG)]
-    #[doc = "Recover all function runs in the given transaction"]
-    pub async fn recover(
-        State(transaction): State<Arc<TransactionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Path(param): Path<TransactionParam>,
-    ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-        let request = context.update(param, ());
-        let response = transaction.recover.service().oneshot(request).await?;
-        Ok(UpdateStatus::OK(response))
-    }
+#[apiserver_path(mount = global, method = post, path = "/transactions/{transaction}/cancel", tag = TRANSACTIONS_TAG, doc = "Cancel all function runs in the given transaction")]
+pub async fn cancel_transaction(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Path(transaction): Path<TransactionParam>,
+) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
+    let request = context.update(transaction, ());
+    let response = state.transaction_cancel(request).await?;
+    Ok(UpdateStatus::OK(response))
 }
 
-#[router_ext(SynchrotronRouter)]
-mod synchrotron_routes {
-    use crate::extractors::Project;
-    use axum::Extension;
-    use axum::extract::State;
-    use axum_extra::extract::Query;
-    use std::sync::Arc;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::ok_status::ListStatus;
-    use ta_services::service::TdService;
-    use td_apiforge::apiserver_path;
-    use td_database::pool::scoped::InProject;
-    use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::synchrotron::SynchrotronResponse;
-    use td_objects::rest_urls::SYNCHROTRON_READ;
-    use td_services::transaction::services::TransactionServices;
-    use tower::ServiceExt;
+#[apiserver_path(mount = global, method = get, path = "/transactions", tag = TRANSACTIONS_TAG, doc = "List transactions")]
+pub async fn list_transactions(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Query(list_params): Query<ListParams>,
+) -> Result<ListStatus<Transaction>, ErrorStatus> {
+    let request = context.list((), list_params);
+    let response = state.transaction_list(request).await?;
+    Ok(ListStatus::OK(response))
+}
 
-    const TRANSACTIONS_TAG: &str = "Transactions";
+#[apiserver_path(mount = global, method = post, path = "/transactions/{transaction}/recover", tag = TRANSACTIONS_TAG, doc = "Recover all function runs in the given transaction")]
+pub async fn recover_transaction(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Path(transaction): Path<TransactionParam>,
+) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
+    let request = context.update(transaction, ());
+    let response = state.transaction_recover(request).await?;
+    Ok(UpdateStatus::OK(response))
+}
 
-    #[apiserver_path(method = get, path = SYNCHROTRON_READ, tag = TRANSACTIONS_TAG)]
-    #[doc = "Synchrotron endpoint to list transactions in the system"]
-    pub async fn synchrotron(
-        State(transaction): State<Arc<TransactionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<SynchrotronResponse>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(project_id);
-        let response = transaction.synchrotron.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/synchrotron", tag = TRANSACTIONS_TAG, doc = "Synchrotron endpoint to list transactions in the system")]
+pub async fn synchrotron(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Query(list_params): Query<ListParams>,
+) -> Result<ListStatus<SynchrotronResponse>, ErrorStatus> {
+    let request = context.list((), list_params).in_project(project_id);
+    let response = state.synchrotron(request).await?;
+    Ok(ListStatus::OK(response))
 }

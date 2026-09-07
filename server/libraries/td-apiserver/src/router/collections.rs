@@ -2,190 +2,147 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use td_apiforge::router_ext;
+use crate::extractors::Project;
+use axum::Extension;
+use axum::extract::{Path, State};
+use axum_extra::extract::Query;
+use ta_apiserver::status::error_status::ErrorStatus;
+use ta_apiserver::status::extractors::Json;
+use ta_apiserver::status::ok_status::ListStatus;
+use ta_apiserver::status::ok_status::{
+    CreateStatus, DeleteStatus, GetStatus, NoContent, UpdateStatus,
+};
+use td_apiforge::apiserver_path;
+use td_database::pool::scoped::ScopedExt;
+use td_objects::dxo::collection::{
+    CollectionCreate, CollectionParam, CollectionRead, CollectionUpdate,
+};
+use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
+use td_objects::dxo::crudl::{ListParams, RequestContext};
+use td_services::Services;
 
-#[router_ext(CollectionListRouter)]
-mod list_routes {
-    use axum::Extension;
-    use axum::extract::State;
-    use axum_extra::extract::Query;
-    use std::sync::Arc;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::ok_status::ListStatus;
-    use ta_services::service::TdService;
-    use td_apiforge::apiserver_path;
-    use td_objects::dxo::collection::CollectionRead;
-    use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::rest_urls::LIST_COLLECTIONS;
-    use td_services::collection::service::CollectionServices;
-    use tower::ServiceExt;
+const COLLECTIONS_TAG: &str = "Collections";
 
-    const COLLECTIONS_TAG: &str = "Collections";
-
-    // Spans every project the caller can view; narrow with the `project`
-    // list filter.
-    #[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
-    #[doc = "Lists collections"]
-    pub async fn list_collections(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
-        let request = context.list((), query_params);
-        let response = collection_state.list.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
+// Spans every project the caller can view; narrow with the `project`
+// list filter.
+#[apiserver_path(mount = global, method = get, path = "/collections", tag = COLLECTIONS_TAG, doc = "Lists collections")]
+pub async fn list_collections(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Query(list_params): Query<ListParams>,
+) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
+    let request = context.list((), list_params);
+    let response = state.list_collections(request).await?;
+    Ok(ListStatus::OK(response))
 }
 
-#[router_ext(CollectionsRouter)]
-mod routes {
-    use crate::extractors::Project;
-    use axum::Extension;
-    use axum::extract::{Path, State};
-    use std::sync::Arc;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::extractors::Json;
-    use ta_apiserver::status::ok_status::{
-        CreateStatus, DeleteStatus, GetStatus, NoContent, UpdateStatus,
-    };
-    use ta_services::service::TdService;
-    use td_apiforge::apiserver_path;
-    use td_database::pool::scoped::InProject;
-    use td_objects::dxo::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
-    use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
-    use td_objects::dxo::crudl::RequestContext;
-    use td_objects::rest_urls::{
-        CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION,
-        GET_COLLECTION_CONNECTION, UPDATE_COLLECTION, UPSERT_COLLECTION_CONNECTION,
-    };
-    use td_services::collection::service::CollectionServices;
-    use tower::ServiceExt;
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}", tag = COLLECTIONS_TAG, doc = "Get a collection")]
+pub async fn get_collection(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
+    let request = context.read(collection).in_project(project_id);
+    let response = state.read_collection(request).await?;
+    Ok(GetStatus::OK(response))
+}
 
-    const COLLECTIONS_TAG: &str = "Collections";
+#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections", tag = COLLECTIONS_TAG, doc = "Create a collection")]
+pub async fn create_collection(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Json(request): Json<CollectionCreate>,
+) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
+    let request = context.create((), request).in_project(project_id);
+    let response = state.create_collection(request).await?;
+    Ok(CreateStatus::CREATED(response))
+}
 
-    #[apiserver_path(method = get, path = GET_COLLECTION, tag = COLLECTIONS_TAG)]
-    #[doc = "Get a collection"]
-    pub async fn get_collection(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(collection_param): Path<CollectionParam>,
-    ) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
-        let request = context.read(collection_param).in_project(project_id);
-        let response = collection_state.read.service().oneshot(request).await?;
-        Ok(GetStatus::OK(response))
-    }
+#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}", tag = COLLECTIONS_TAG, doc = "Update a collection")]
+pub async fn update_collection(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Json(request): Json<CollectionUpdate>,
+) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
+    let request = context.update(collection, request).in_project(project_id);
+    let response = state.update_collection(request).await?;
+    Ok(UpdateStatus::OK(response))
+}
 
-    #[apiserver_path(method = post, path = CREATE_COLLECTION, tag = COLLECTIONS_TAG)]
-    #[doc = "Create a collection"]
-    pub async fn create_collection(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Json(request): Json<CollectionCreate>,
-    ) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
-        let request = context.create((), request).in_project(project_id);
-        let response = collection_state.create.service().oneshot(request).await?;
-        Ok(CreateStatus::CREATED(response))
-    }
+#[apiserver_path(mount = project, method = delete, path = "/projects/{project}/collections/{collection}", tag = COLLECTIONS_TAG, doc = "Delete a collection")]
+pub async fn delete_collection(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
+    // The delete service also drops the connection from the store (its
+    // best-effort cleanup layer) for source/destination collections.
+    let request = context.delete(collection).in_project(project_id);
+    let response = state.delete_collection(request).await?;
+    Ok(DeleteStatus::OK(response))
+}
 
-    #[apiserver_path(method = post, path = UPDATE_COLLECTION, tag = COLLECTIONS_TAG)]
-    #[doc = "Update a collection"]
-    pub async fn update_collection(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(collection_param): Path<CollectionParam>,
-        Json(request): Json<CollectionUpdate>,
-    ) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
-        let request = context
-            .update(collection_param, request)
-            .in_project(project_id);
-        let response = collection_state.update.service().oneshot(request).await?;
-        Ok(UpdateStatus::OK(response))
-    }
+// Connection info of a source/destination collection (1:1 — created with the
+// collection, named by it, deleted with it). The apiserver forwards the
+// dehydrated connection + secrets + vars to the opaque store, keyed by
+// connection id. POST updates an existing connection; GET reads back names
+// only. Both require manage_project ("CRUD sources and destinations").
+#[apiserver_path(mount = project, method = post, path = "/projects/{project}/collections/{collection}/connection", tag = COLLECTIONS_TAG, doc = "Create or update the connection info of a source/destination collection")]
+pub async fn upsert_collection_connection(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Json(request): Json<ConnectionUpsert>,
+) -> Result<CreateStatus<ConnectionRead>, ErrorStatus> {
+    let request = context.update(collection, request).in_project(project_id);
+    let response = state.connection_upsert(request).await?;
+    Ok(CreateStatus::CREATED(response))
+}
 
-    #[apiserver_path(method = delete, path = DELETE_COLLECTION, tag = COLLECTIONS_TAG)]
-    #[doc = "Delete a collection"]
-    pub async fn delete_collection(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(collection_param): Path<CollectionParam>,
-    ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-        // The delete service also drops the connection from the store (its
-        // best-effort cleanup layer) for source/destination collections.
-        let request = context.delete(collection_param).in_project(project_id);
-        let response = collection_state.delete.service().oneshot(request).await?;
-        Ok(DeleteStatus::OK(response))
-    }
-
-    #[apiserver_path(method = post, path = UPSERT_COLLECTION_CONNECTION, tag = COLLECTIONS_TAG)]
-    #[doc = "Create or update the connection info of a source/destination collection"]
-    pub async fn upsert_collection_connection(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(collection_param): Path<CollectionParam>,
-        Json(request): Json<ConnectionUpsert>,
-    ) -> Result<CreateStatus<ConnectionRead>, ErrorStatus> {
-        let request = context
-            .update(collection_param, request)
-            .in_project(project_id);
-        let response = collection_state
-            .connection_upsert
-            .service()
-            .oneshot(request)
-            .await?;
-        Ok(CreateStatus::CREATED(response))
-    }
-
-    #[apiserver_path(method = get, path = GET_COLLECTION_CONNECTION, tag = COLLECTIONS_TAG)]
-    #[doc = "Read the connection info of a source/destination collection (names only, no values)"]
-    pub async fn get_collection_connection(
-        State(collection_state): State<Arc<CollectionServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(collection_param): Path<CollectionParam>,
-    ) -> Result<GetStatus<ConnectionRead>, ErrorStatus> {
-        let request = context.read(collection_param).in_project(project_id);
-        let response = collection_state
-            .connection_read
-            .service()
-            .oneshot(request)
-            .await?;
-        Ok(GetStatus::OK(response))
-    }
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/connection", tag = COLLECTIONS_TAG, doc = "Read the connection info of a source/destination collection (names only, no values)")]
+pub async fn get_collection_connection(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+) -> Result<GetStatus<ConnectionRead>, ErrorStatus> {
+    let request = context.read(collection).in_project(project_id);
+    let response = state.connection_read(request).await?;
+    Ok(GetStatus::OK(response))
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        CREATE_COLLECTION_PATH, GET_COLLECTION_PATH, LIST_COLLECTIONS_PATH,
+        UPSERT_COLLECTION_CONNECTION_PATH,
+    };
     use crate::layers::project_resolver::project_resolver_layer;
-    use crate::router::collections::{CollectionListRouter, CollectionsRouter};
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use axum::middleware::from_fn_with_state;
     use axum::{Extension, Router};
     use http::method::Method;
     use serde_json::json;
-    use std::sync::Arc;
-    use ta_apiserver::router::RouterExtension;
-    use ta_services::factory::ServiceFactory;
+    use ta_apiserver::router::{RouterStates, named_router};
+    use td_database::access::{DbPool, Global};
+    use td_database::domain::{Apiserver, DomainPools};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::rest_urls::{
-        CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, GET_COLLECTION_CONNECTION,
-        LIST_COLLECTIONS, UPDATE_COLLECTION, UPSERT_COLLECTION_CONNECTION,
-    };
     use td_objects::types::basic::{AccessTokenId, UserId};
     use td_queries::test_utils::SeedEntry;
     use td_security::{DESTINATION_GROUP, SOURCE_GROUP};
-    use td_services::Context;
-    use td_services::collection::service::CollectionServices;
+    use td_services::Services;
     use tower::ServiceExt;
     use utoipa::openapi::path::{Operation, ParameterIn};
 
-    /// Mounts the same layers the real apiserver wraps tenant routes with:
+    /// Mounts the same layers the real apiserver wraps project routes with:
     ///   - `project_resolver_layer` to resolve the `{project}` URL segment
     ///     into a real `ProjectId` and stamp it onto `RequestContext`.
     ///   - A pre-populated `RequestContext` extension (bypassing the auth
@@ -194,7 +151,10 @@ mod tests {
         let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let router = router.clone().into();
         router
-            .layer(from_fn_with_state(db, project_resolver_layer))
+            .layer(from_fn_with_state(
+                DbPool::new(DomainPools::default().with::<Apiserver>(db), Global),
+                project_resolver_layer,
+            ))
             .layer(Extension(context))
     }
 
@@ -211,20 +171,29 @@ mod tests {
     }
 
     /// 404 the request if the `{project}` segment doesn't resolve. The
-    /// resolver runs ahead of every tenant-scoped service so the connection's
+    /// resolver runs ahead of every project-scoped service so the connection's
     /// RLS GUC is set from a real registry id, never from a raw URL string.
     #[td_test::test(db)]
     async fn test_unknown_project_segment_yields_404(db: TdPool) {
-        let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
-            &Context::with_defaults(db.clone()),
-        )));
+        let states = RouterStates::default().with(Services::with_defaults(db.clone()));
+        let router = named_router(
+            &[
+                "get_collection",
+                "create_collection",
+                "update_collection",
+                "delete_collection",
+                "upsert_collection_connection",
+                "get_collection_connection",
+            ],
+            &states,
+        );
         let response = to_route(&router, db)
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
                     .uri(
-                        GET_COLLECTION
+                        GET_COLLECTION_PATH
                             .replace("{project}", "does-not-exist")
                             .replace("{collection}", "whatever"),
                     )
@@ -243,9 +212,18 @@ mod tests {
     /// (e.g. `collection`) still come through alongside it.
     #[td_test::test(db)]
     async fn test_openapi_documents_project_path_param(db: TdPool) {
-        let api = CollectionsRouter::router(Arc::new(CollectionServices::build(
-            &Context::with_defaults(db.clone()),
-        )))
+        let states = RouterStates::default().with(Services::with_defaults(db.clone()));
+        let api = named_router(
+            &[
+                "get_collection",
+                "create_collection",
+                "update_collection",
+                "delete_collection",
+                "upsert_collection_connection",
+                "get_collection_connection",
+            ],
+            &states,
+        )
         .into_openapi();
 
         let has_path_param = |op: &Operation, name: &str| {
@@ -277,12 +255,12 @@ mod tests {
             "expected the collections operations, counted {ops}"
         );
 
-        // GET_COLLECTION = /projects/{project}/collections/{collection}: both
+        // GET_COLLECTION_PATH = /projects/{project}/collections/{collection}: both
         // the injected `project` and the handler's own `collection` are present.
         let get_collection = api
             .paths
             .paths
-            .get(GET_COLLECTION)
+            .get(GET_COLLECTION_PATH)
             .and_then(|p| p.get.as_ref())
             .expect("GET collection operation present");
         assert!(has_path_param(get_collection, "project"));
@@ -292,18 +270,26 @@ mod tests {
     #[td_test::test(db)]
     async fn test_collections_lifecycle(db: TdPool) {
         db.seed().test_project().await.unwrap();
-        let services = Arc::new(CollectionServices::build(&Context::with_defaults(
-            db.clone(),
-        )));
-        let router = CollectionsRouter::router(services.clone());
-        let list_router = CollectionListRouter::router(services);
+        let services = Services::with_defaults(db.clone());
+        let states = RouterStates::default().with(services);
+        let router = named_router(
+            &[
+                "get_collection",
+                "create_collection",
+                "update_collection",
+                "delete_collection",
+                "upsert_collection_connection",
+                "get_collection_connection",
+            ],
+            &states,
+        );
+        let list_router = named_router(&["list_collections"], &states);
 
-        // List empty collections
         let response = to_list_route(&list_router)
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_COLLECTIONS)
+                    .uri(LIST_COLLECTIONS_PATH)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -315,7 +301,6 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["data"]["len"], 0);
 
-        // Create a new collection
         let collection_create = json!(
             {
                 "name": "joaquin_collection",
@@ -329,7 +314,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(url(CREATE_COLLECTION))
+                    .uri(url(CREATE_COLLECTION_PATH))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&collection_create).unwrap())
                     .unwrap(),
@@ -343,12 +328,11 @@ mod tests {
         assert_eq!(body["data"]["name"], "joaquin_collection");
         assert_eq!(body["data"]["description"], "mock collection");
 
-        // List again and assert we have 2 collections
         let response = to_list_route(&list_router)
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_COLLECTIONS)
+                    .uri(LIST_COLLECTIONS_PATH)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -360,13 +344,12 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["data"]["len"], 1);
 
-        // Get the new collection
         let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(url(GET_COLLECTION).replace("{collection}", "joaquin_collection"))
+                    .uri(url(GET_COLLECTION_PATH).replace("{collection}", "joaquin_collection"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -379,7 +362,6 @@ mod tests {
         assert_eq!(body["data"]["name"], "joaquin_collection");
         assert_eq!(body["data"]["description"], "mock collection");
 
-        // Update the new collection
         let collection_update = json!(
             {
                 "description": "not a mock anymore",
@@ -392,7 +374,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(url(UPDATE_COLLECTION).replace("{collection}", "joaquin_collection"))
+                    .uri(url(GET_COLLECTION_PATH).replace("{collection}", "joaquin_collection"))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&collection_update).unwrap())
                     .unwrap(),
@@ -406,13 +388,12 @@ mod tests {
         assert_eq!(body["data"]["name"], "joaquin_collection");
         assert_eq!(body["data"]["description"], "not a mock anymore");
 
-        // Delete the new collection
         let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::DELETE)
-                    .uri(url(DELETE_COLLECTION).replace("{collection}", "joaquin_collection"))
+                    .uri(url(GET_COLLECTION_PATH).replace("{collection}", "joaquin_collection"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -420,12 +401,11 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        // List again and assert we are back to 1 collection
         let response = to_list_route(&list_router)
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_COLLECTIONS)
+                    .uri(LIST_COLLECTIONS_PATH)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -463,7 +443,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(url(CREATE_COLLECTION))
+                    .uri(url(CREATE_COLLECTION_PATH))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&body).unwrap())
                     .unwrap(),
@@ -476,9 +456,18 @@ mod tests {
     #[td_test::test(db)]
     async fn test_collection_connection_endpoints(db: TdPool) {
         db.seed().test_project().await.unwrap();
-        let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
-            &Context::with_defaults(db.clone()),
-        )));
+        let states = RouterStates::default().with(Services::with_defaults(db.clone()));
+        let router = named_router(
+            &[
+                "get_collection",
+                "create_collection",
+                "update_collection",
+                "delete_collection",
+                "upsert_collection_connection",
+                "get_collection_connection",
+            ],
+            &states,
+        );
 
         // Source collection (group `source` → CollectionType::Source).
         create_collection_in(&router, db.clone(), "src_coll", Some(SOURCE_GROUP)).await;
@@ -499,7 +488,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(url(UPSERT_COLLECTION_CONNECTION).replace("{collection}", "src_coll"))
+                    .uri(url(UPSERT_COLLECTION_CONNECTION_PATH).replace("{collection}", "src_coll"))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&conn_body).unwrap())
                     .unwrap(),
@@ -518,7 +507,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(url(GET_COLLECTION_CONNECTION).replace("{collection}", "src_coll"))
+                    .uri(url(UPSERT_COLLECTION_CONNECTION_PATH).replace("{collection}", "src_coll"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -537,7 +526,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(url(UPSERT_COLLECTION_CONNECTION).replace("{collection}", "fac_coll"))
+                    .uri(url(UPSERT_COLLECTION_CONNECTION_PATH).replace("{collection}", "fac_coll"))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&conn_body).unwrap())
                     .unwrap(),

@@ -2,180 +2,174 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use td_apiforge::router_ext;
+use crate::extractors::Project;
+use axum::Extension;
+use axum::extract::{Path, State};
+use axum_extra::extract::Query;
+use ta_apiserver::status::error_status::ErrorStatus;
+use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoContent};
+use td_apiforge::apiserver_path;
+use td_database::pool::scoped::ScopedExt;
+use td_objects::dxo::collection::CollectionParam;
+use td_objects::dxo::crudl::{AtTimeParam, ListParams, RequestContext};
+use td_objects::dxo::file::DownloadResponse;
+use td_objects::dxo::logical::TableDataVersion;
+use td_objects::dxo::table::{
+    ExtraColsParam, FileFormatParam, SampleLenParam, SampleOffsetParam, SqlParam, Table,
+    TableFlowGraphResponse, TableParam, TableSchema, UncommittedParam,
+};
+use td_services::Services;
 
-#[router_ext(TablesRouter)]
-mod routes {
-    use crate::extractors::Project;
-    use axum::Extension;
-    use axum::extract::{Path, State};
-    use axum_extra::extract::Query;
-    use std::sync::Arc;
-    use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoContent};
-    use ta_services::service::TdService;
-    use td_apiforge::apiserver_path;
-    use td_database::pool::scoped::InProject;
-    use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::file::DownloadResponse;
-    use td_objects::dxo::logical::TableDataVersion;
-    use td_objects::dxo::table::{Table, TableFlowGraphResponse};
-    use td_objects::rest_urls::params::{
-        TableAtIdName, TableDataVersionAtIdName, TableSampleAtName, TableSchema,
-    };
-    use td_objects::rest_urls::{
-        AtTimeParam, CollectionParam, DOWNLOAD_TABLE, FileFormatParam, LIST_TABLE_DATA_VERSIONS,
-        LIST_TABLES, LIST_TABLES_BY_COLL, SAMPLE_TABLE, SCHEMA_TABLE, SampleOffsetLenParam,
-        SqlParam, TABLE_DELETE, TABLE_FLOW_GRAPH, TableParam, UncommittedParam,
-    };
-    use td_services::table::services::TableServices;
-    use td_tower::ctx_service::RawOneshot;
-    use tower::ServiceExt;
+const TABLES_TAG: &str = "Tables";
 
-    const TABLES_TAG: &str = "Tables";
+#[apiserver_path(mount = project, method = delete, path = "/projects/{project}/collections/{collection}/tables/{table}", tag = TABLES_TAG, doc = "Delete a table")]
+pub async fn delete_table(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Path(table): Path<TableParam>,
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
+    let request = context.delete((collection, table)).in_project(project_id);
+    let response = state.table_delete(request).await?;
+    Ok(DeleteStatus::OK(response))
+}
 
-    #[apiserver_path(method = delete, path = TABLE_DELETE, tag = TABLES_TAG)]
-    #[doc = "Delete a table"]
-    pub async fn delete(
-        State(state): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(table_path): Path<TableParam>,
-    ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-        let request = context.delete(table_path).in_project(project_id);
-        let response = state.delete.service().oneshot(request).await?;
-        Ok(DeleteStatus::OK(response))
-    }
+#[apiserver_path(mount = project,
+    method = get,
+    path = "/projects/{project}/collections/{collection}/tables/{table}/download",
+    tag = TABLES_TAG,
+    content_type = "application/vnd.apache.parquet",
+    doc = "Download a table as a parquet file")]
+pub async fn download(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Path(table): Path<TableParam>,
+    Query(at): Query<AtTimeParam>,
+    Query(uncommitted): Query<UncommittedParam>,
+) -> Result<DownloadResponse, ErrorStatus> {
+    let request = context
+        .read((collection, table, at, uncommitted))
+        .in_project(project_id);
+    let stream = state.table_download(request).await?.data;
+    Ok(DownloadResponse::parquet(stream))
+}
 
-    #[apiserver_path(
-        method = get,
-        path = DOWNLOAD_TABLE,
-        tag = TABLES_TAG,
-        content_type = "application/vnd.apache.parquet",
-    )]
-    #[doc = "Download a table as a parquet file"]
-    pub async fn download(
-        State(tables): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(table_param): Path<TableParam>,
-        Query(at_param): Query<AtTimeParam>,
-        Query(uncommitted_status): Query<UncommittedParam>,
-    ) -> Result<DownloadResponse, ErrorStatus> {
-        let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
-        let request = context.read(name).in_project(project_id);
-        let stream = tables.download.service().raw_oneshot(request).await?;
-        Ok(DownloadResponse::parquet(stream))
-    }
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/tables", tag = TABLES_TAG, doc = "List tables")]
+pub async fn list_tables(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Query(list_params): Query<ListParams>,
+) -> Result<ListStatus<Table>, ErrorStatus> {
+    let request = context.list((), list_params).in_project(project_id);
+    let response = state.table_list(request).await?;
+    Ok(ListStatus::OK(response))
+}
 
-    #[apiserver_path(method = get, path = LIST_TABLES, tag = TABLES_TAG)]
-    #[doc = "List tables"]
-    pub async fn list(
-        State(state): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<Table>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(project_id);
-        let response = state.list.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables", tag = TABLES_TAG, doc = "List tables for a collection")]
+pub async fn list_tables_by_collection(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Query(list_params): Query<ListParams>,
+) -> Result<ListStatus<Table>, ErrorStatus> {
+    let request = context.list(collection, list_params).in_project(project_id);
+    let response = state.table_list_by_collection(request).await?;
+    Ok(ListStatus::OK(response))
+}
 
-    #[apiserver_path(method = get, path = LIST_TABLES_BY_COLL, tag = TABLES_TAG)]
-    #[doc = "List tables for a collection"]
-    pub async fn list_by_collection(
-        State(state): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(collection_param): Path<CollectionParam>,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<Table>, ErrorStatus> {
-        let request = context
-            .list(collection_param, query_params)
-            .in_project(project_id);
-        let response = state.list_by_collection.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
+// Single listing endpoint. Returns LTDV identity rows merged with the
+// currently-bound PTDV's per-attempt audit (row_count, schema, status,
+// storage location, the PTDV id itself). `?at=` is the listing's
+// historical point in time for the LTDV row filter. Committed-only
+// filtering is via the standard `?filter=status:…` mechanism.
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables/{table}/data-versions", tag = TABLES_TAG, doc = "List data versions for a table (logical identity + currently-bound physical)")]
+pub async fn list_data_versions(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Path(table): Path<TableParam>,
+    Query(list_params): Query<ListParams>,
+    Query(at): Query<AtTimeParam>,
+) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
+    let request = context
+        .list((collection, table, at), list_params)
+        .in_project(project_id);
+    let response = state.table_list_data_versions(request).await?;
+    Ok(ListStatus::OK(response))
+}
 
-    // Single listing endpoint. Returns LTDV identity rows merged with the
-    // currently-bound PTDV's per-attempt audit (row_count, schema, status,
-    // storage location, the PTDV id itself). `?at=` is the listing's
-    // historical point in time for the LTDV row filter. Committed-only
-    // filtering is via the standard `?filter=status:…` mechanism.
-    #[apiserver_path(method = get, path = LIST_TABLE_DATA_VERSIONS, tag = TABLES_TAG)]
-    #[doc = "List data versions for a table (logical identity + currently-bound physical)"]
-    pub async fn list_data_versions(
-        State(state): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(table_param): Path<TableParam>,
-        Query(query_params): Query<ListParams>,
-        Query(at_param): Query<AtTimeParam>,
-    ) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
-        let name = TableDataVersionAtIdName::new(table_param, at_param);
-        let request = context.list(name, query_params).in_project(project_id);
-        let response = state.list_data_versions.service().oneshot(request).await?;
-        Ok(ListStatus::OK(response))
-    }
+#[apiserver_path(mount = project,
+    method = get,
+    path = "/projects/{project}/collections/{collection}/tables/{table}/sample",
+    tag = TABLES_TAG,
+    content_type = "text/csv",
+    doc = "Get a sample of a table")]
+#[allow(clippy::too_many_arguments)]
+pub async fn sample(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Path(table): Path<TableParam>,
+    Query(at): Query<AtTimeParam>,
+    Query(uncommitted): Query<UncommittedParam>,
+    Query(offset): Query<SampleOffsetParam>,
+    Query(len): Query<SampleLenParam>,
+    Query(format): Query<FileFormatParam>,
+    Query(sql): Query<SqlParam>,
+    Query(extra_cols): Query<ExtraColsParam>,
+) -> Result<DownloadResponse, ErrorStatus> {
+    let request = context
+        .read((
+            collection,
+            table,
+            at,
+            uncommitted,
+            offset,
+            len,
+            format,
+            sql,
+            extra_cols,
+        ))
+        .in_project(project_id);
+    let stream = state.table_sample(request).await?.data;
+    Ok(DownloadResponse::csv(stream))
+}
 
-    #[allow(clippy::too_many_arguments)]
-    #[apiserver_path(
-        method = get,
-        path = SAMPLE_TABLE,
-        tag = TABLES_TAG,
-        content_type = "text/csv",
-    )]
-    #[doc = "Get a sample of a table"]
-    pub async fn sample(
-        State(tables): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(table_param): Path<TableParam>,
-        Query(at_param): Query<AtTimeParam>,
-        Query(offset_len_param): Query<SampleOffsetLenParam>,
-        Query(file_format_param): Query<FileFormatParam>,
-        Query(sql_param): Query<SqlParam>,
-        Query(uncommitted_status): Query<UncommittedParam>,
-    ) -> Result<DownloadResponse, ErrorStatus> {
-        let name = TableSampleAtName::new(
-            table_param,
-            at_param,
-            uncommitted_status,
-            offset_len_param,
-            file_format_param,
-            sql_param,
-        );
-        let request = context.read(name).in_project(project_id);
-        let stream = tables.sample.service().raw_oneshot(request).await?;
-        Ok(DownloadResponse::csv(stream))
-    }
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables/{table}/schema", tag = TABLES_TAG, doc = "Get the schema of a table")]
+#[allow(clippy::too_many_arguments)]
+pub async fn schema(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Path(table): Path<TableParam>,
+    Query(at): Query<AtTimeParam>,
+    Query(uncommitted): Query<UncommittedParam>,
+    Query(extra_cols): Query<ExtraColsParam>,
+) -> Result<GetStatus<TableSchema>, ErrorStatus> {
+    let request = context
+        .read((collection, table, at, uncommitted, extra_cols))
+        .in_project(project_id);
+    let response = state.table_schema(request).await?;
+    Ok(GetStatus::OK(response))
+}
 
-    #[apiserver_path(method = get, path = SCHEMA_TABLE, tag = TABLES_TAG)]
-    #[doc = "Get the schema of a table"]
-    pub async fn schema(
-        State(state): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(table_param): Path<TableParam>,
-        Query(at_param): Query<AtTimeParam>,
-        Query(uncommitted_status): Query<UncommittedParam>,
-    ) -> Result<GetStatus<TableSchema>, ErrorStatus> {
-        let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
-        let request = context.read(name).in_project(project_id);
-        let response = state.schema.service().oneshot(request).await?;
-        Ok(GetStatus::OK(response))
-    }
-
-    #[apiserver_path(method = get, path = TABLE_FLOW_GRAPH, tag = TABLES_TAG)]
-    #[doc = "Table flow graph"]
-    pub async fn graph(
-        State(state): State<Arc<TableServices>>,
-        Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
-        Path(table_path): Path<TableParam>,
-    ) -> Result<GetStatus<TableFlowGraphResponse>, ErrorStatus> {
-        let request = context.read(table_path).in_project(project_id);
-        let response = state.flow_graph.service().oneshot(request).await?;
-        Ok(GetStatus::OK(response))
-    }
+#[apiserver_path(mount = project, method = get, path = "/projects/{project}/collections/{collection}/tables/{table}/flow", tag = TABLES_TAG, doc = "Table flow graph")]
+pub async fn graph(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Path(table): Path<TableParam>,
+) -> Result<GetStatus<TableFlowGraphResponse>, ErrorStatus> {
+    let request = context.read((collection, table)).in_project(project_id);
+    let response = state.table_flow_graph(request).await?;
+    Ok(GetStatus::OK(response))
 }
