@@ -3,42 +3,36 @@
 //
 
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::Visible;
+use td_database::access::{GatedConnection, RO};
+use td_error::TdError;
 use td_objects::dxo::collection::CollectionRead;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::list::params::ListQueryParams;
-use td_objects::tower_service::with::With;
-use td_queries::By;
-use td_queries::list_filter::VisibleProjectsFilter;
-use td_tower::default_services::ConnectionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::list::response::build_list_response;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = ListCollectionsService,
-    request = ListRequest<()>,
-    response = ListResponse<CollectionRead>,
-    connection = ConnectionProvider,
-    scope = "Global",
-    context = AuthzContext,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Visible::projects),
-        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>),
-        from_fn(By::<()>::list::<VisibleProjectsFilter, CollectionRead>),
-    )
+#[service_factory]
+async fn list_collections(
+    authz: Ctx<AuthzContext>,
+    gated_conn: &mut GatedConnection<RO>,
+    request: ListRequest,
+) -> Result<ListResponse<CollectionRead>, TdError> {
+    let (ctx, _, list_params) = request.into_parts();
+    let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
+    let query_params = ListQueryParams::try_from(&list_params)?;
+    let rows = gated_conn
+        .get(grant)
+        .live()
+        .list(&visible, &query_params)
+        .await?;
+    build_list_response(&list_params, &query_params, rows)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc;
-    use ta_services::service::TdService;
-    use td_authz::AuthzContext;
+    use crate::Services;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
@@ -47,26 +41,6 @@ mod tests {
         UserName,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer};
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_list_collections(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        ListCollectionsService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<ListRequest<()>, ListResponse<CollectionRead>>(&[
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Visible::projects),
-                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(
-                    &With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>,
-                ),
-                type_of_val(&By::<()>::list::<VisibleProjectsFilter, CollectionRead>),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_list_collection(db: TdPool) {
@@ -82,10 +56,10 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default());
 
-        let service = ListCollectionsService::new(db, Arc::new(AuthzContext::default())).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db);
+        let response = service.list_collections(request).await;
         assert!(response.is_ok());
-        let list = response.unwrap();
+        let list = response.unwrap().data;
         assert_eq!(list.len, 1);
         assert_eq!(list.data[0].name, name);
     }
@@ -96,7 +70,7 @@ mod tests {
         // Create new role without permissions
         let user = db
             .seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::TRUE)
             .await?;
         let role = db
             .seed()
@@ -107,7 +81,6 @@ mod tests {
             .await?;
         let _user_role = db.seed().user_role(&user.id, &role.id).await?;
 
-        // Create a collection
         let name = CollectionName::try_from("ds0")?;
         let _ = db
             .scoped(p.id)
@@ -120,10 +93,10 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default());
 
-        let service = ListCollectionsService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let service = Services::with_defaults(db.clone());
+        let response = service.list_collections(request).await;
         assert!(response.is_ok());
-        let list = response?;
+        let list = response?.data;
         assert_eq!(list.len, 1);
         assert_eq!(list.data[0].name, name);
 
@@ -131,8 +104,8 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), user.id).list((), ListParams::default());
 
-        let service = ListCollectionsService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await?;
+        let service = Services::with_defaults(db.clone());
+        let response = service.list_collections(request).await?.data;
         assert_eq!(response.len, 0);
         Ok(())
     }
@@ -150,13 +123,14 @@ mod tests {
             .collection(&CollectionName::try_from("c_alpha")?, &UserId::admin())
             .await?;
 
-        let service = ListCollectionsService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .raw_oneshot(
+            .list_collections(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .list((), ListParams::default()),
             )
-            .await?;
+            .await?
+            .data;
 
         let projects: Vec<_> = response.data.iter().map(|c| c.project.clone()).collect();
         assert!(projects.contains(&base.name));
@@ -179,13 +153,14 @@ mod tests {
 
         let user = seed_project_viewer(&db, base.id).await?;
 
-        let service = ListCollectionsService::with_defaults(db.clone()).service();
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .raw_oneshot(
+            .list_collections(
                 RequestContext::with(AccessTokenId::default(), user.id)
                     .list((), ListParams::default()),
             )
-            .await?;
+            .await?
+            .data;
 
         let projects: Vec<_> = response.data.iter().map(|c| c.project.clone()).collect();
         assert!(projects.contains(&base.name));

@@ -2,17 +2,15 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
+use crate::Services;
 use crate::collection::CollectionError;
-use crate::collection::service::update::UpdateCollectionService;
 use std::str::FromStr;
-use ta_services::service::TdService;
 use td_database::pool::TdPool;
-use td_database::pool::scoped::InProject;
+use td_database::pool::scoped::ScopedExt;
 use td_error::assert_service_error;
-use td_objects::Buildable;
+use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, UserId};
 use td_queries::test_utils::SeedEntry;
 
@@ -26,29 +24,27 @@ async fn test_update_collection_validate(db: TdPool) {
         .collection(&name, &UserId::admin())
         .await;
 
-    let update = CollectionUpdate::builder()
-        .name(None)
-        .description(None)
-        .build()
-        .unwrap();
+    let update = CollectionUpdate {
+        name: None,
+        description: None,
+        base_path: None,
+    };
 
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
         .update(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
-                .build()
-                .unwrap(),
+            CollectionParam {
+                collection: CollectionIdName::from_str(&name.to_string()).unwrap(),
+            },
             update,
         )
         .in_project(p.id);
 
-    let service = UpdateCollectionService::with_defaults(db).service();
-    assert_service_error(service, request, |err| {
+    let service = Services::with_defaults(db);
+    assert_service_error(service.update_collection(request).await, |err| {
         #[allow(unreachable_patterns)]
         match err {
             CollectionError::UpdateRequestHasNothingToUpdate => {}
             other => panic!("Expected 'UpdateRequestHasNothingToUpdate', got {other:?}"),
         }
-    })
-    .await;
+    });
 }

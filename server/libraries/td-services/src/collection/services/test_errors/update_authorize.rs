@@ -2,17 +2,15 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
-use crate::collection::service::update::UpdateCollectionService;
+use crate::Services;
 use std::str::FromStr;
-use ta_services::service::TdService;
 use td_authz::rbac::RbacError;
 use td_database::pool::TdPool;
-use td_database::pool::scoped::InProject;
+use td_database::pool::scoped::ScopedExt;
 use td_error::assert_service_error;
-use td_objects::Buildable;
+use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{
     AccessTokenId, CollectionIdName, CollectionName, Description, RoleName, UserEnabled, UserId,
     UserName,
@@ -33,10 +31,7 @@ async fn test_not_allowed_to_update_collection(db: TdPool) {
     // update collections in it.
     let user = db
         .seed()
-        .user(
-            &UserName::try_from("joaquin").unwrap(),
-            &UserEnabled::from(true),
-        )
+        .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::TRUE)
         .await
         .unwrap();
     let role = db
@@ -49,28 +44,26 @@ async fn test_not_allowed_to_update_collection(db: TdPool) {
         .unwrap();
     let _user_role = db.seed().user_role(&user.id, &role.id).await.unwrap();
 
-    let service = UpdateCollectionService::with_defaults(db).service();
+    let service = Services::with_defaults(db);
 
     let name = CollectionName::try_from("ds00").unwrap();
 
-    let update = CollectionUpdate::builder()
-        .name(Some(name.clone()))
-        .description(None)
-        .build()
-        .unwrap();
+    let update = CollectionUpdate {
+        name: Some(name.clone()),
+        description: None,
+        base_path: None,
+    };
 
     let request = RequestContext::with(AccessTokenId::default(), user.id)
         .update(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
-                .build()
-                .unwrap(),
+            CollectionParam {
+                collection: CollectionIdName::from_str(&name.to_string()).unwrap(),
+            },
             update,
         )
         .in_project(p.id);
 
-    assert_service_error(service, request, |err| match err {
+    assert_service_error(service.update_collection(request).await, |err| match err {
         RbacError::Forbidden(_, _) => {}
-    })
-    .await;
+    });
 }

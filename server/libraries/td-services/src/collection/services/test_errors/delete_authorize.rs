@@ -2,16 +2,14 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
-use crate::collection::service::delete::DeleteCollectionService;
+use crate::Services;
 use std::str::FromStr;
-use ta_services::service::TdService;
 use td_authz::rbac::RbacError;
 use td_database::pool::TdPool;
-use td_database::pool::scoped::InProject;
+use td_database::pool::scoped::ScopedExt;
 use td_error::assert_service_error;
-use td_objects::Buildable;
+use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{
     AccessTokenId, CollectionIdName, CollectionName, Description, RoleName, UserEnabled, UserId,
     UserName,
@@ -32,10 +30,7 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
     // delete collections in it.
     let user = db
         .seed()
-        .user(
-            &UserName::try_from("joaquin").unwrap(),
-            &UserEnabled::from(true),
-        )
+        .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::TRUE)
         .await
         .unwrap();
     let role = db
@@ -48,19 +43,15 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
         .unwrap();
     let _user_role = db.seed().user_role(&user.id, &role.id).await.unwrap();
 
-    let service = DeleteCollectionService::with_defaults(db.clone()).service();
+    let service = Services::with_defaults(db.clone());
 
     let request = RequestContext::with(AccessTokenId::default(), user.id)
-        .delete(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
-                .build()
-                .unwrap(),
-        )
+        .delete(CollectionParam {
+            collection: CollectionIdName::from_str(&name.to_string()).unwrap(),
+        })
         .in_project(p.id);
 
-    assert_service_error(service, request, |err| match err {
+    assert_service_error(service.delete_collection(request).await, |err| match err {
         RbacError::Forbidden(_, _) => {}
-    })
-    .await;
+    });
 }

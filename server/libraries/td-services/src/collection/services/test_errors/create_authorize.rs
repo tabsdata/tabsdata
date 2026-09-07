@@ -2,17 +2,15 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
-use crate::collection::service::create::CreateCollectionService;
-use ta_services::service::TdService;
+use crate::Services;
 use td_authz::rbac::RbacError;
 use td_database::pool::TdPool;
-use td_database::pool::scoped::InProject;
+use td_database::pool::scoped::ScopedExt;
 use td_error::assert_service_error;
-use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{
-    AccessTokenId, CollectionName, Description, RoleName, UserEnabled, UserName,
+    AccessTokenId, CollectionName, Description, GroupName, RoleName, UserEnabled, UserName,
 };
 use td_queries::test_utils::SeedEntry;
 
@@ -23,10 +21,7 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
     // create collections in it.
     let user = db
         .seed()
-        .user(
-            &UserName::try_from("joaquin").unwrap(),
-            &UserEnabled::from(true),
-        )
+        .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::TRUE)
         .await
         .unwrap();
     let role = db
@@ -42,20 +37,23 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let description = Description::try_from("DS0").unwrap();
 
-    let create = CollectionCreate::builder()
-        .name(&name)
-        .description(&description)
-        .build()
-        .unwrap();
+    let create = CollectionCreate {
+        name,
+        description,
+        group: GroupName::default_group(),
+        base_path: None,
+        connection: None,
+        secrets: None,
+        vars: None,
+    };
 
     let request = RequestContext::with(AccessTokenId::default(), user.id)
         .create((), create)
         .in_project(p.id);
 
-    let service = CreateCollectionService::with_defaults(db.clone()).service();
+    let service = Services::with_defaults(db.clone());
 
-    assert_service_error(service, request, |err| match err {
+    assert_service_error(service.create_collection(request).await, |err| match err {
         RbacError::Forbidden(_, _) => {}
-    })
-    .await;
+    });
 }
