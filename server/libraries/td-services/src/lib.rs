@@ -2,36 +2,19 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::services::AuthServices;
-use crate::collection::service::CollectionServices;
-use crate::execution::services::ExecutionServices;
 use crate::execution::services::runtime_info::RuntimeContext;
-use crate::function::services::FunctionServices;
-use crate::function_run::services::FunctionRunServices;
-use crate::group::services::GroupServices;
-use crate::logical::services::LogicalServices;
-use crate::metrics::services::OperationalMetricsServices;
-use crate::permission::services::PermissionServices;
-use crate::project::service::ProjectServices;
-use crate::role::services::RoleServices;
-use crate::simple_permission::services::SimplePermissionServices;
-use crate::system::services::SystemServices;
-use crate::table::services::TableServices;
-use crate::transaction::services::TransactionServices;
-use crate::user::service::UserServices;
-use crate::user_role::services::UserRoleServices;
-use crate::worker::services::WorkerServices;
+use crate::internal_api::InternalApi;
 use axum::extract::FromRef;
 use std::path::PathBuf;
-use std::sync::Arc;
-use ta_services::factory::{FieldAccessors, ServiceFactory};
+use ta_services::factory::FieldAccessors;
+use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_bridge::BridgeProviderHandle;
 use td_common::jwt::JwtConfig;
-use td_database::pool::TdPool;
-use td_execution::SchedulerNotify;
-use td_execution::TransactionBy;
+use td_database::access::{DbPool, Global};
+use td_database::domain::DomainPools;
+use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify, TransactionBy};
 use td_objects::types::addresses::ApiServerAddresses;
 use td_security::config::PasswordHashingConfig;
 use td_storage::Storage;
@@ -43,6 +26,7 @@ pub mod function;
 pub mod function_run;
 pub mod graph;
 pub mod group;
+pub mod internal_api;
 pub mod logical;
 pub mod metrics;
 pub mod permission;
@@ -53,65 +37,85 @@ pub mod scheduler;
 pub mod simple_permission;
 pub mod system;
 pub mod table;
+#[cfg(test)]
+mod tests;
 pub mod transaction;
 pub mod user;
 pub mod user_role;
 pub mod worker;
 
-#[derive(ServiceFactory, FieldAccessors, FromRef, Clone)]
+/// The single service state: the dependency record every `#[service_factory]`
+/// fn's entry method is generated onto. Handlers hold one `State<Services>`;
+/// tests build one with [`Services::with_defaults`].
+#[derive(FieldAccessors, FromRef, Clone)]
 pub struct Services {
-    auth: Arc<AuthServices>,
-    collection: Arc<CollectionServices>,
-    execution: Arc<ExecutionServices>,
-    logical: Arc<LogicalServices>,
-    function: Arc<FunctionServices>,
-    function_run: Arc<FunctionRunServices>,
-    group: Arc<GroupServices>,
-    operational_metrics: Arc<OperationalMetricsServices>,
-    permission: Arc<PermissionServices>,
-    project: Arc<ProjectServices>,
-    role: Arc<RoleServices>,
-    simple_permission: Arc<SimplePermissionServices>,
-    system: Arc<SystemServices>,
-    table: Arc<TableServices>,
-    transaction: Arc<TransactionServices>,
-    user: Arc<UserServices>,
-    user_role: Arc<UserRoleServices>,
-    worker: Arc<WorkerServices>,
+    pub pools: DomainPools,
+    pub server_addresses: Ctx<ApiServerAddresses>,
+    pub jwt_config: Ctx<JwtConfig>,
+    pub auth_context: Ctx<AuthzContext>,
+    pub sessions: Ctx<Sessions>,
+    pub password_settings: Ctx<PasswordHashingConfig>,
+    pub ssl_folder: Ctx<PathBuf>,
+    /// Root served by `GET /resources/{*path}`; `None` 404s every request.
+    pub resources_dir: Ctx<Option<PathBuf>>,
+    pub storage: Ctx<Storage>,
+    pub runtime_context: Ctx<RuntimeContext>,
+    pub transaction_by: Ctx<TransactionBy>,
+    pub scheduler_notify: Ctx<SchedulerNotify>,
+    pub scheduler_config: Ctx<SchedulerConfig>,
+    pub recovery_config: Ctx<RecoveryConfig>,
+    pub bridge: Ctx<BridgeProviderHandle>,
+    pub internal_api: Ctx<InternalApi>,
 }
 
-#[derive(FieldAccessors, FromRef, Clone)]
-pub struct Context {
-    pub apiserver_pool: TdPool,
-    pub server_addresses: Arc<ApiServerAddresses>,
-    pub jwt_config: Arc<JwtConfig>,
-    pub auth_context: Arc<AuthzContext>,
-    pub sessions: Arc<Sessions>,
-    pub password_settings: Arc<PasswordHashingConfig>,
-    pub ssl_folder: Arc<PathBuf>,
-    pub storage: Arc<Storage>,
-    pub runtime_context: Arc<RuntimeContext>,
-    pub transaction_by: Arc<TransactionBy>,
-    pub scheduler_notify: Arc<SchedulerNotify>,
-    pub bridge: Arc<BridgeProviderHandle>,
+/// The same handle the `#[service_factory]` `Extract` impls build, for tower
+/// layers running before any request context exists.
+impl FromRef<Services> for DbPool<Global> {
+    fn from_ref(services: &Services) -> Self {
+        DbPool::new(services.pools.clone(), Global)
+    }
 }
 
 #[cfg(feature = "test-utils")]
-impl Context {
+use crate::internal_api::InternalRoutes;
+#[cfg(feature = "test-utils")]
+use td_database::pool::TdPool;
+
+#[cfg(feature = "test-utils")]
+impl Default for Services {
+    fn default() -> Self {
+        let jwt_config = Ctx::new(JwtConfig::default());
+        Self {
+            pools: DomainPools::default(),
+            server_addresses: Ctx::new(ApiServerAddresses::default()),
+            jwt_config: jwt_config.clone(),
+            auth_context: Ctx::new(AuthzContext::default()),
+            sessions: Ctx::new(Sessions::default()),
+            password_settings: Ctx::new(PasswordHashingConfig::default()),
+            ssl_folder: Ctx::new(PathBuf::default()),
+            resources_dir: Ctx::new(None),
+            storage: Ctx::new(Storage::default()),
+            runtime_context: Ctx::new(RuntimeContext::default()),
+            transaction_by: Ctx::new(TransactionBy::default()),
+            scheduler_notify: Ctx::new(SchedulerNotify::new()),
+            scheduler_config: Ctx::new(SchedulerConfig::default()),
+            recovery_config: Ctx::new(RecoveryConfig::default()),
+            bridge: Ctx::new(BridgeProviderHandle::default()),
+            internal_api: Ctx::new(InternalApi::new(
+                InternalRoutes::default(),
+                jwt_config,
+                std::sync::Arc::default(),
+            )),
+        }
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl Services {
     pub fn with_defaults(db: TdPool) -> Self {
         Self {
-            apiserver_pool: db,
-            server_addresses: Arc::new(ApiServerAddresses::default()),
-            jwt_config: Arc::new(JwtConfig::default()),
-            auth_context: Arc::new(AuthzContext::default()),
-            sessions: Arc::new(Sessions::default()),
-            password_settings: Arc::new(PasswordHashingConfig::default()),
-            ssl_folder: Arc::new(PathBuf::default()),
-            storage: Arc::new(Storage::default()),
-            runtime_context: Arc::new(RuntimeContext::default()),
-            transaction_by: Arc::new(TransactionBy::default()),
-            scheduler_notify: Arc::new(SchedulerNotify::new()),
-            bridge: Arc::new(BridgeProviderHandle::default()),
+            pools: DomainPools::of_apiserver(db),
+            ..Self::default()
         }
     }
 }
