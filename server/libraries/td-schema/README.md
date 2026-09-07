@@ -66,7 +66,7 @@ A schema exposes its content as **structured parts** through `SchemaSource`;
 deltas implement `SchemaDelta`:
 
 ```rust
-/// A derived object (view or trigger) as its create/drop statement pair,
+/// A derived object (view, trigger or index) as its create/drop statement pair,
 /// both rendered from the same definition so they cannot disagree.
 pub struct Derived {
     pub create: Vec<String>,
@@ -80,16 +80,24 @@ pub trait SchemaSource: Send + Sync + 'static {
     fn tables(&self, backend: Backend) -> Vec<String>;          // required
     fn triggers(&self, backend: Backend) -> Vec<Derived> { .. } // default: none
     fn views(&self, backend: Backend) -> Vec<Derived> { .. }    // default: none
-    fn indexes(&self, backend: Backend) -> Vec<String> { .. }   // default: none
+    fn indexes(&self, backend: Backend) -> Vec<Derived> { .. }  // default: none
     fn seeds(&self, backend: Backend) -> Vec<String> { .. }     // default: none
     fn rls(&self, backend: Backend) -> Vec<String> { .. }       // default: none
-    fn delta(&self, target: usize, backend: Backend) -> Vec<String> { .. }
+    fn delta(&self, target: usize, backend: Backend) -> Delta { .. } // default: no-op
+}
+
+/// One rung of the ladder: the content migration, and the drops for the derived
+/// objects that rung retires.
+pub struct Delta {
+    pub up: Vec<String>,
+    pub retired: Vec<String>,
 }
 
 /// An incremental migration from one database version to the next.
 pub trait SchemaDelta {
     const FROM_VERSION: usize;
     const TO_VERSION: usize;
+    fn retired() -> Vec<String>;
     fn up(backend: Backend) -> Vec<String>;
 }
 ```
@@ -117,10 +125,11 @@ crates can gate their own schemas with it — `te-aiagent` does.
 
 | Path | Purpose |
 |------|---------|
-| `install_script(source, backend)` | Composes the **full install** from a source's parts: tables, triggers, views, indexes, seeds, RLS. Triggers precede seeds (so `_current` peers fill during seeding); RLS runs last (so `FORCE RLS` never rejects the seed inserts). |
-| `derived_scripts(source, backend)` | The derived-object lifecycle as a (drop, create) pair from one render of the parts: views dropped in reverse creation order (no `CASCADE`), then triggers; re-created triggers-then-views. |
+| `install_script(source, backend)` | Composes the **full install** from a source's parts: tables, triggers, views, indexes, seeds, RLS. Triggers precede seeds (so SCD2 `valid_to` maintenance covers seeded rows); RLS runs last (so `FORCE RLS` never rejects the seed inserts). |
+| `derived_scripts(source, backend)` | The derived-object lifecycle as a (drop, create) pair from one render of the parts: views dropped in reverse creation order (no `CASCADE`), then triggers, then indexes; re-created triggers-then-views. The drops name only what this source declares — see `Delta::retired`. |
+
 | `archive::source(version)` | The `SchemaSource` for a **previous** version. Panics if no archive exists for it. |
-| `deltas::get(target, backend)` | Dispatches to the `SchemaDelta` that upgrades from `target - 1` to `target`. Panics if no delta exists. |
+| `deltas::get(target, backend)` | The `Delta` upgrading from `target - 1` to `target` — its `up` statements and the derived objects it `retired`. Panics if no delta exists. `retired` is gated by `test_retired_matches_archive_diff`, which computes the true set from the archives. |
 
 **Fresh installs** run `install_script(&CurrentSource, backend)` (also exposed
 as `current::build`, which the DDL snapshots gate).
@@ -130,9 +139,9 @@ as `current::build`, which the DDL snapshots gate).
 calls `deltas::get(target, backend)` for each step. Each delta bumps `db_version`
 itself as its last statement, so a delta reads as a complete step on its own.
 
-The whole upgrade — every delta, the derived-object drop before them and the
-rebuild after (`derived_scripts`), the version and edition rows, and the app-role
-grants — runs as **one transaction**. A ladder that fails part-way up rolls all
+The whole upgrade — every delta, the derived-object drop before them (each
+rung's `retired()`, then the target's own) and the rebuild after, the version
+and edition rows, and the app-role grants — runs as **one transaction**. A ladder that fails part-way up rolls all
 of it back and the next run replays from the version it started at; it never
 leaves a database at an intermediate version, nor without its views and triggers.
 Deltas must therefore emit only transaction-safe SQL: no `CREATE INDEX
@@ -169,17 +178,18 @@ Then clean up the archive copy — the copied `Source` **is** the archive's
   checked by `test_archive_ddl_snapshots`. Archive **before** editing `current/`
   so the snapshots match the version being frozen.
 
-Wire it up in `archive/mod.rs` — dropping the
-`#[allow(clippy::match_single_binding)]` on `source` is part of the step:
+Wire it up in `archive/mod.rs` by appending to `ARCHIVES`. Its length is tied to
+`current::VERSION`, so the bump does not compile until the archive exists:
 
 ```rust
 pub(crate) mod v1;
 
+const ARCHIVED: usize = current::VERSION - 1;
+
+pub(crate) const ARCHIVES: [&'static dyn SchemaSource; ARCHIVED] = [&v1::Source];
+
 pub fn source(version: usize) -> &'static dyn SchemaSource {
-    match version {
-        1 => &v1::Source,
-        _ => panic!("No archived schema for version {version}"),
-    }
+    ARCHIVES[version - 1]
 }
 ```
 
@@ -207,6 +217,17 @@ pub struct Migration;
 impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
+
+    // Derived objects standing at v1 that v2 no longer declares. `current/`'s
+    // own drop list cannot name them, so the ladder would leave them behind:
+    // a retired trigger keeps firing, a retired view blocks the DROP TABLE
+    // under it. Objects on a table `up` drops need no entry (PostgreSQL takes
+    // them with it) but their trigger functions do. Empty is fine; required so
+    // a bump has to answer it. `test_retired_matches_archive_diff` computes
+    // the true set from the archives and names anything missing.
+    fn retired() -> Vec<String> {
+        vec![]
+    }
 
     fn up(b: Backend) -> Vec<String> {
         vec![
@@ -236,10 +257,12 @@ use crate::schema::backend::Backend;
 
 pub(crate) mod v1_to_v2;
 
-pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
-    let backend = backend.into();
+pub fn get(target_version: usize) -> Delta {
+    fn rung<D: SchemaDelta>() -> Delta {
+        Delta { up: D::up(), retired: D::retired() }
+    }
     match target_version {
-        2 => v1_to_v2::Migration::up(backend),
+        2 => rung::<v1_to_v2::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }
@@ -248,10 +271,11 @@ pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
 #### Views and triggers are rebuilt for you
 
 A delta describes the **table** change only. Before the ladder runs, the pool
-drops every view and trigger; after it, they are re-created from `current/`'s
-parts (the `derived_scripts` pair) — so a delta never
-re-states the derived objects over a table it alters, and runs with none of
-them standing. The pre-ladder drop is what lets a destructive delta
+drops everything each rung `retired()` (newest rung first, since a retired view
+can depend on one the target keeps) and then every view and trigger `current/`
+declares (the `derived_scripts` pair); after it, they are re-created from
+`current/`'s parts — so a delta never re-states the derived objects over a table
+it alters, and runs with none of them standing. The pre-ladder drop is what lets a destructive delta
 (`DROP COLUMN`, `ALTER COLUMN ... TYPE`) succeed on PostgreSQL, which records
 per-column dependencies on the `SELECT *` it expanded at `CREATE VIEW`.
 
@@ -266,12 +290,12 @@ creation order and re-creates in creation order, touches no rows, and runs on
 every `db create`/`db upgrade` against an existing database (an up-to-date one
 with drifted views self-heals; a fresh build renders them itself).
 
-`maintain_current` / `versioned_current` triggers are the same story in a place
-that is harder to see: their bodies enumerate the table's columns, and on
-PostgreSQL those columns live in the trigger's supporting function, not in the
-trigger itself — `pg_get_triggerdef` stops at `EXECUTE FUNCTION x_fn()`. A stale
-function silently writes NULL into the `_current` peer for every new column, so
-`migrated_schema_matches_fresh_install` fingerprints `pg_get_functiondef` too.
+Trigger bodies are the same story in a place that is harder to see: on
+PostgreSQL their logic lives in the trigger's supporting function, not in the
+trigger itself — `pg_get_triggerdef` stops at `EXECUTE FUNCTION x_fn()`. A
+stale function (e.g. an SCD2 close-out still naming a renamed column) fails
+silently at best, so `migrated_schema_matches_fresh_install` fingerprints
+`pg_get_functiondef` too.
 
 ### 3. Add validation tests
 

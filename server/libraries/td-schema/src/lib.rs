@@ -32,9 +32,18 @@ pub const DB_EDITION_NAME: &str = "edition";
 /// default reads it, so the connection layer that sets it and the schema that
 /// reads it must name it identically.
 pub const PROJECT_ID_GUC: &str = "app.project_id";
-/// Session variable admitting cross-project work. Same coupling as
-/// [`PROJECT_ID_GUC`].
-pub const BYPASS_RLS_GUC: &str = "app.bypass_rls";
+
+/// Grantee of the `across_projects` policy; deployments grant their own
+/// cross-project role membership in it. A constant, not a configured name:
+/// policies are emitted only on install, so a configured name baked into one
+/// would have nothing to re-render it when it changed.
+pub const ACROSS_PROJECTS_ROLE: &str = "td_across_projects";
+
+/// Session variable pre-v4 policies read to admit cross-project work, before
+/// [`ACROSS_PROJECTS_ROLE`] took that job. No current policy reads it; it
+/// survives because the archived schemas an upgrade ladder starts from carry
+/// policies that do, and those are frozen.
+pub const LEGACY_BYPASS_RLS_GUC: &str = "app.bypass_rls";
 
 /// Tabsdata major-product version this binary speaks.
 ///

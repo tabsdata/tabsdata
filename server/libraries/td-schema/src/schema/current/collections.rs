@@ -96,17 +96,25 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // Resolved-name lookup, as on `projects`. `(project_id, name)`
+            // cannot serve it — the name read is the expression, not the
+            // column — so this is its own index, project-led like the rest.
+            Index::create()
+                .name("collections___project_id__resolved_name___idx")
+                .table(Collections::Table)
+                .col(Collections::ProjectId)
+                .col(Expr::cust("COALESCE(\"name_when_deleted\", \"name\")"))
+                .to_owned(),
+            // A group is hard-deleted; the (project_id, group_id) RESTRICT FK
+            // makes PostgreSQL probe this table per deleted group.
+            Index::create()
+                .name("collections___project_id__group_id___idx")
+                .table(Collections::Table)
+                .col(Collections::ProjectId)
+                .col(Collections::GroupId)
+                .to_owned(),
             // Leads with project_id so it serves the RLS predicate; unique makes
-            // collection names unique within a project, not globally. This is the
-            // one table with a project-wide scan path (`By::<ProjectId>` in the
-            // project-delete emptiness guard), so it earns a project_id-leading
-            // index. The other project-scoped tables deliberately get *no*
-            // standalone project_id index: they're only ever read by their own
-            // keys (execution_id, transaction_id, function_id, …), where the RLS
-            // `project_id = GUC` check is a low-selectivity residual the planner
-            // would not use such an index for — it would be write-amplifying
-            // dead weight. Revisit per-table only if profiling shows a real
-            // project-scoped scan there.
+            // collection names unique within a project, not globally.
             Index::create()
                 .name("collections___project_id__name___idx")
                 .table(Collections::Table)
@@ -114,7 +122,13 @@ impl Entity for Defs {
                 .col(Collections::Name)
                 .unique()
                 .to_owned(),
-            Index::create().name("collections___group_id___idx").table(Collections::Table).col(Collections::GroupId).to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("collections___project_id__id___idx")
+                .table(Collections::Table)
+                .col(Collections::ProjectId)
+                .col(Collections::Id)
+                .to_owned(),
         ]
     }
 

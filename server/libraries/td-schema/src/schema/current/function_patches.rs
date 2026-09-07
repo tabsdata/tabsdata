@@ -2,12 +2,15 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, Table, TableCreateStatement};
+use sea_query::{
+    ColumnDef, ConditionalStatement, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, Table, TableCreateStatement,
+};
 
-use super::function_patches_current::FunctionPatchesCurrent;
 use super::functions::Functions;
 use crate::schema::Entity;
-use crate::schema::sql::{ImmutableTriggerDef, TriggerSpec, VersionedTriggerDef, cols_of};
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, cols_of_except};
 
 /// `function_patches` — code-only overrides of a parent
 /// `FunctionVersionId`. Lives in its own table so every "find latest
@@ -28,16 +31,13 @@ pub enum FunctionPatches {
     DefinedOn,
     DefinedById,
     Status,
+    ValidTo,
 }
 
 pub(super) struct Defs;
 
 impl Entity for Defs {
     fn create_tables(&self) -> Vec<TableCreateStatement> {
-        // function_patches — code-only overrides of a parent fvid.
-        // Must be declared before any table whose FK targets it
-        // (e.g. `physical_function_runs.function_version_patch_id`).
-        // Postgres validates FK targets at CREATE TABLE time within the
         vec![
             Table::create()
                 .table(FunctionPatches::Table)
@@ -53,6 +53,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(FunctionPatches::DefinedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(FunctionPatches::DefinedById).text().not_null())
                 .col(ColumnDef::new(FunctionPatches::Status).text().not_null())
+                .col(ColumnDef::new(FunctionPatches::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(FunctionPatches::Table, FunctionPatches::ParentFunctionVersionId)
@@ -73,34 +74,42 @@ impl Entity for Defs {
                 .col(FunctionPatches::FunctionId)
                 .col(FunctionPatches::DefinedOn)
                 .to_owned(),
-            // Mint (plan build / replay) ranks at-time within
+            // Mint (plan build / replay) reads at-time within
             // `parent_function_version_id` partitions.
             Index::create()
-                .name("function_patches___parent_function_version_id__defined_on__id___idx")
+                .name("function_patches___parent_fv_id__defined_on__id___idx")
                 .table(FunctionPatches::Table)
                 .col(FunctionPatches::ParentFunctionVersionId)
                 .col(FunctionPatches::DefinedOn)
                 .col(FunctionPatches::Id)
                 .to_owned(),
+            Index::create()
+                .name("function_patches___parent_function_version_id___current_uidx")
+                .table(FunctionPatches::Table)
+                .col(FunctionPatches::ParentFunctionVersionId)
+                .unique()
+                .and_where(open_interval(FunctionPatches::ValidTo))
+                .to_owned(),
         ]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
+    fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
-            TriggerSpec::VersionedCurrent(VersionedTriggerDef {
-                name: format!("{}__maintain_current", FunctionPatches::Table.to_string()),
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", FunctionPatches::Table.to_string()),
                 source_table: FunctionPatches::Table.into_iden(),
-                target_table: FunctionPatchesCurrent::Table.into_iden(),
                 partition_col: FunctionPatches::ParentFunctionVersionId.into_iden(),
-                version_col: FunctionPatches::DefinedOn.into_iden(),
-                tie_break_col: FunctionPatches::Id.into_iden(),
-                columns: cols_of::<FunctionPatches>(),
-            }),
+                valid_from_col: FunctionPatches::DefinedOn.into_iden(),
+                pk_col: FunctionPatches::Id.into_iden(),
+            }
+            .derived(),
             // Patches are an event log of code amendments — never updated or deleted.
-            TriggerSpec::Immutable(ImmutableTriggerDef {
+            ImmutableColumnsTriggerDef {
                 name: format!("{}__immutable", FunctionPatches::Table.to_string()),
                 source_table: FunctionPatches::Table.into_iden(),
-            }),
+                columns: cols_of_except(FunctionPatches::ValidTo),
+            }
+            .derived(),
         ]
     }
 }

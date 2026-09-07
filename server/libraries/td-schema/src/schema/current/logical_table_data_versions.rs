@@ -6,8 +6,8 @@
 //!
 //! Insert-once at plan-build (and at lazy-mint over V1-born concrete TDVs).
 //! Owns the cross-cutting `table_data_versions__with_names` view that
-//! merges LTDV identity with the currently-bound PTDV (resolved via the
-//! LTDV pointer event log).
+//! merges LTDV identity with the currently-bound PTDV (the one whose SCD2
+//! binding interval is open).
 
 use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
@@ -18,9 +18,7 @@ use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
-use super::logical_function_run_pointers::POINTER_STATUS_BOUND;
 use super::logical_function_runs::LogicalFunctionRuns;
-use super::logical_table_data_version_pointers_current::LogicalTableDataVersionPointersCurrent;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::physical_table_data_versions::PhysicalTableDataVersions;
 use super::transactions::Transactions;
@@ -28,6 +26,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::scd2::open_interval;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "table_data_versions__with_names"]
@@ -65,7 +64,6 @@ pub(super) struct Defs;
 impl Entity for Defs {
     fn create_tables(&self) -> Vec<TableCreateStatement> {
         vec![
-            // logical_table_data_versions — identity row, insert-once.
             Table::create()
                 .table(LogicalTableDataVersions::Table)
                 .col(ColumnDef::new(LogicalTableDataVersions::Id).text().not_null().primary_key())
@@ -129,6 +127,14 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // The group-delete RESTRICT FK probe (see `collections`); without
+            // it the probe scans the highest-row-count table in the schema.
+            Index::create()
+                .name("logical_table_data_versions___project_id__group_id___idx")
+                .table(LogicalTableDataVersions::Table)
+                .col(LogicalTableDataVersions::ProjectId)
+                .col(LogicalTableDataVersions::GroupId)
+                .to_owned(),
             // LTDV: hot path — `Head(0)` resolution scans by table_id ordered
             // by `(triggered_on DESC, id DESC)`.
             Index::create()
@@ -138,38 +144,36 @@ impl Entity for Defs {
                 .col(LogicalTableDataVersions::TriggeredOn)
                 .col(LogicalTableDataVersions::Id)
                 .to_owned(),
-            // LTDV: lookup by execution / transaction (read-execution and cancel paths).
-            Index::create()
-                .name("logical_table_data_versions___execution_id___idx")
-                .table(LogicalTableDataVersions::Table)
-                .col(LogicalTableDataVersions::ExecutionId)
-                .to_owned(),
-            Index::create()
-                .name("logical_table_data_versions___transaction_id___idx")
-                .table(LogicalTableDataVersions::Table)
-                .col(LogicalTableDataVersions::TransactionId)
-                .to_owned(),
             // LTDV: producer-side lookup (find every output an LFR produces).
+            // Short prefix: the spelled-out name exceeds PostgreSQL's 63-byte
+            // identifier limit and would be silently truncated.
             Index::create()
-                .name("logical_table_data_versions___producer_logical_function_run_id___idx")
+                .name("ltdv___producer_logical_function_run_id___idx")
                 .table(LogicalTableDataVersions::Table)
                 .col(LogicalTableDataVersions::ProducerLogicalFunctionRunId)
                 .to_owned(),
-            // Group-filtered metrics / Sankey hot path.
+            // One row per `(execution, table)`; the plan resolver reads it per
+            // output table, and it covers the executions RESTRICT FK probe.
             Index::create()
-                .name("logical_table_data_versions___group_id___idx")
+                .name("logical_table_data_versions___execution_id__table_id___idx")
                 .table(LogicalTableDataVersions::Table)
-                .col(LogicalTableDataVersions::GroupId)
+                .col(LogicalTableDataVersions::ExecutionId)
+                .col(LogicalTableDataVersions::TableId)
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("logical_table_data_versions___project_id__id___idx")
+                .table(LogicalTableDataVersions::Table)
+                .col(LogicalTableDataVersions::ProjectId)
+                .col(LogicalTableDataVersions::Id)
                 .to_owned(),
         ]
     }
 
     fn create_views(&self) -> Vec<ViewDef> {
-        // table_data_versions__with_names
-        //
         // The single table-data-version listing view: LTDV identity rows
         // merged with the currently-bound PTDV's per-attempt fields,
-        // resolved via the pointer-current snapshot. PTDV-derived fields
+        // resolved via the open binding interval. PTDV-derived fields
         // (and everything reached through PTDV) are NULL when not bound.
         let groups_alias = Alias::new("groups_for_ltdv");
         vec![
@@ -185,7 +189,7 @@ impl Entity for Defs {
                         Alias::new("triggered_by"),
                     )
                     .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
-                    // PTDV-derived columns (bound pointer → PTDV).
+                    // PTDV-derived columns (the bound materialization).
                     .expr_as(
                         Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)),
                         Alias::new("physical_table_data_version_id"),
@@ -257,24 +261,10 @@ impl Entity for Defs {
                     )
                     .join(
                         JoinType::LeftJoin,
-                        LogicalTableDataVersionPointersCurrent::Table,
-                        Expr::col((
-                            LogicalTableDataVersionPointersCurrent::Table,
-                            LogicalTableDataVersionPointersCurrent::LogicalTableDataVersionId,
-                        ))
-                        .equals((LogicalTableDataVersions::Table, LogicalTableDataVersions::Id))
-                        .and(
-                            Expr::col((LogicalTableDataVersionPointersCurrent::Table, LogicalTableDataVersionPointersCurrent::Status))
-                                .eq(POINTER_STATUS_BOUND),
-                        ),
-                    )
-                    .join(
-                        JoinType::LeftJoin,
                         PhysicalTableDataVersions::Table,
-                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)).equals((
-                            LogicalTableDataVersionPointersCurrent::Table,
-                            LogicalTableDataVersionPointersCurrent::PhysicalTableDataVersionId,
-                        )),
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::LogicalTableDataVersionId))
+                            .equals((LogicalTableDataVersions::Table, LogicalTableDataVersions::Id))
+                            .and(open_interval((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::ValidTo))),
                     )
                     .join(
                         JoinType::LeftJoin,

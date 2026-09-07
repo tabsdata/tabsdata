@@ -17,7 +17,7 @@
 //! resolver — not from a DB-level FK. Deletes are soft, so a tagged row's
 //! project id keeps resolving here even after the project is deleted.
 
-use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Func, Iden, JoinType, Query, Table, TableCreateStatement};
+use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Func, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
 
 use super::users::Users;
 use crate::schema::Entity;
@@ -69,6 +69,20 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Projects::ModifiedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Projects::ModifiedById).text().not_null())
                 .col(ColumnDef::new(Projects::NameWhenDeleted).text().null())
+                .to_owned(),
+        ]
+    }
+
+    fn create_indices(&self) -> Vec<IndexCreateStatement> {
+        vec![
+            // The views expose `name` as COALESCE(name_when_deleted, name), so
+            // the base-column UNIQUE cannot serve a name lookup, and the
+            // project resolver runs one on every request. Not unique: two
+            // soft-deleted rows may share a resolved name.
+            Index::create()
+                .name("projects___resolved_name___idx")
+                .table(Projects::Table)
+                .col(Expr::cust("COALESCE(\"name_when_deleted\", \"name\")"))
                 .to_owned(),
         ]
     }

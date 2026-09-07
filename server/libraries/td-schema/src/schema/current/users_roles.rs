@@ -57,6 +57,15 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // `role_id` is only a suffix of `(user_id, role_id)`: the
+            // membership list and the role/project delete cascades filter on it
+            // and order by id.
+            Index::create()
+                .name("users_roles___role_id__id___idx")
+                .table(UsersRoles::Table)
+                .col(UsersRoles::RoleId)
+                .col(UsersRoles::Id)
+                .to_owned(),
             Index::create()
                 .name("roles___user_id__role_id___idx")
                 .table(UsersRoles::Table)

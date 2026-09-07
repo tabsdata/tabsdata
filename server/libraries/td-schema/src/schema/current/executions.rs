@@ -78,14 +78,30 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            Index::create().name("executions___collection_id___idx").table(Executions::Table).col(Executions::CollectionId).to_owned(),
+            // Trigger gate: the latest execution for a function version and
+            // trigger type, on every execution trigger.
             Index::create()
-                .name("executions___function_version_id___idx")
+                .name("executions___fv_id__trigger_type__triggered_on___idx")
                 .table(Executions::Table)
                 .col(Executions::FunctionVersionId)
+                .col(Executions::TriggerType)
+                .col(Executions::TriggeredOn)
                 .to_owned(),
-            Index::create().name("executions___triggered_by_id___idx").table(Executions::Table).col(Executions::TriggeredById).to_owned(),
-            Index::create().name("executions___triggered_on___idx").table(Executions::Table).col(Executions::TriggeredOn).to_owned(),
+            // The execution list's default time ordering, per project.
+            Index::create()
+                .name("executions___project_id__triggered_on__id___idx")
+                .table(Executions::Table)
+                .col(Executions::ProjectId)
+                .col(Executions::TriggeredOn)
+                .col(Executions::Id)
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("executions___project_id__id___idx")
+                .table(Executions::Table)
+                .col(Executions::ProjectId)
+                .col(Executions::Id)
+                .to_owned(),
             // Dedup key: a non-NULL `external_uid` is unique per function.
             // NULLs are distinct on all backends, so untagged triggers are
             // never deduplicated.

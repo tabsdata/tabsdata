@@ -3,8 +3,8 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
-    TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
@@ -12,11 +12,14 @@ use super::connections::Connections;
 use super::executions::Executions;
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
+use super::logical_function_runs::LogicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::ViewDef;
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "physical_function_runs__with_names"]
@@ -61,6 +64,8 @@ pub enum PhysicalFunctionRuns {
     MetricTableVersions,
     MetricRows,
     MetricDataBytes,
+    LogicalFunctionRunId,
+    ValidTo,
 }
 
 pub(super) struct Defs;
@@ -107,6 +112,16 @@ impl Entity for Defs {
                 // Declared last so the appending delta lands on the same attnum a
                 // fresh install does: the with-names view expands `*`.
                 .col(ColumnDef::new(PhysicalFunctionRuns::BasePath).text().not_null())
+                // SCD2 partition: attempts version their logical run by `triggered_on`.
+                .col(ColumnDef::new(PhysicalFunctionRuns::LogicalFunctionRunId).text().not_null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::ValidTo).timestamp_with_time_zone().not_null())
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::LogicalFunctionRunId)
+                        .to(LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
                 .foreign_key(
                     ForeignKey::create()
                         .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId)
@@ -141,41 +156,106 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // The dispatch tick: `status = 'Requested' ORDER BY triggered_on`,
+            // per project; recovery reconciliation reads the same status across
+            // projects, so `project_id` sits after the shared prefix rather
+            // than in front of it.
             Index::create()
-                .name("function_runs___collection_id___idx")
+                .name("pfr___status__project_id__triggered_on___idx")
                 .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::CollectionId)
+                .col(PhysicalFunctionRuns::Status)
+                .col(PhysicalFunctionRuns::ProjectId)
+                .col(PhysicalFunctionRuns::TriggeredOn)
+                .to_owned(),
+            // The stale-dispatch sweep: `status = 'Dispatched' AND
+            // dispatched_on < cutoff`; `dispatched_on` is otherwise unindexed.
+            Index::create()
+                .name("pfr___status__project_id__dispatched_on___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::Status)
+                .col(PhysicalFunctionRuns::ProjectId)
+                .col(PhysicalFunctionRuns::DispatchedOn)
+                .to_owned(),
+            // The `__with_status` views aggregate MIN(started_on) /
+            // MAX(ended_on) per partition on the nullable side of a LEFT JOIN,
+            // so the outer id cannot be pushed down: without the timestamps in
+            // the index every read of those views aggregates the whole table.
+            // Leading with `project_id` keeps the aggregate to the tenant.
+            Index::create()
+                .name("pfr___project_id__execution_id__started_on__ended_on___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::ProjectId)
+                .col(PhysicalFunctionRuns::ExecutionId)
+                .col(PhysicalFunctionRuns::StartedOn)
+                .col(PhysicalFunctionRuns::EndedOn)
                 .to_owned(),
             Index::create()
-                .name("function_runs___function_version_id___idx")
+                .name("pfr___project_id__transaction_id__started_on__ended_on___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::ProjectId)
+                .col(PhysicalFunctionRuns::TransactionId)
+                .col(PhysicalFunctionRuns::StartedOn)
+                .col(PhysicalFunctionRuns::EndedOn)
+                .to_owned(),
+            // Declared FK with no index; the executions-of-a-function-version
+            // list matches patch anchors through this column.
+            Index::create()
+                .name("pfr___function_version_patch_id___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::FunctionVersionPatchId)
+                .to_owned(),
+            Index::create()
+                .name("pfr___function_version_id___idx")
                 .table(PhysicalFunctionRuns::Table)
                 .col(PhysicalFunctionRuns::FunctionVersionId)
                 .to_owned(),
-            // Per-attempt status indices (FR-listing endpoints).
-            Index::create()
-                .name("function_runs___execution_id__status___idx")
-                .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::ExecutionId)
-                .col(PhysicalFunctionRuns::Status)
-                .to_owned(),
-            Index::create()
-                .name("function_runs___transaction_id__status___idx")
-                .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::TransactionId)
-                .col(PhysicalFunctionRuns::Status)
-                .to_owned(),
-            Index::create()
-                .name("function_runs___status___idx")
-                .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::Status)
-                .to_owned(),
             // Metrics / Sankey time-window: the LFR-canonical view resolves
-            // only `ended_on` to this table (status/dimensions are the LFR's).
+            // only `ended_on` to this table (status/dimensions are the LFR's),
+            // and only the open attempt counts.
             Index::create()
-                .name("function_runs___ended_on___idx")
+                .name("pfr___project_id__ended_on___current_idx")
                 .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::ProjectId)
                 .col(PhysicalFunctionRuns::EndedOn)
+                .and_where(open_interval(PhysicalFunctionRuns::ValidTo))
                 .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("pfr___project_id__id___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::ProjectId)
+                .col(PhysicalFunctionRuns::Id)
+                .to_owned(),
+            // One open interval per logical run.
+            Index::create()
+                .name("pfr___logical_function_run_id___current_uidx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::LogicalFunctionRunId)
+                .unique()
+                .and_where(open_interval(PhysicalFunctionRuns::ValidTo))
+                .to_owned(),
+            // At-time reads and the SCD2 close-out trigger's own lookup;
+            // `(triggered_on, id)` is the splice order.
+            Index::create()
+                .name("pfr___logical_function_run_id__triggered_on__id___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::LogicalFunctionRunId)
+                .col(PhysicalFunctionRuns::TriggeredOn)
+                .col(PhysicalFunctionRuns::Id)
+                .to_owned(),
+        ]
+    }
+
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", PhysicalFunctionRuns::Table.to_string()),
+                source_table: PhysicalFunctionRuns::Table.into_iden(),
+                partition_col: PhysicalFunctionRuns::LogicalFunctionRunId.into_iden(),
+                valid_from_col: PhysicalFunctionRuns::TriggeredOn.into_iden(),
+                pk_col: PhysicalFunctionRuns::Id.into_iden(),
+            }
+            .derived(),
         ]
     }
 

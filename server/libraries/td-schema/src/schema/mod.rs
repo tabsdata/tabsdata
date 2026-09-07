@@ -12,7 +12,7 @@ pub mod deltas;
 mod entity;
 pub mod render;
 mod source;
-pub(crate) mod sql;
+pub mod sql;
 mod version;
 
 #[cfg(test)]
@@ -20,5 +20,5 @@ pub(crate) mod tests;
 
 pub use current::Source as CurrentSource;
 pub(crate) use entity::Entity;
-pub use source::{Derived, SchemaSource, derived_scripts, install_script, tabsdata_system_ddl};
+pub use source::{Delta, Derived, SchemaSource, derived_scripts, index_derived, install_script, tabsdata_system_ddl};
 pub use version::SchemaDelta;

@@ -5,7 +5,8 @@
 //! [`Entity`] — one schema unit (a table with its indices, views, triggers, seeds)
 //! that `current/` assembles in FK-safe order.
 
-use super::sql::{SeedCurrent, TriggerSpec, ViewDef};
+use super::source::Derived;
+use super::sql::ViewDef;
 use sea_query::{IndexCreateStatement, InsertStatement, TableCreateStatement};
 
 /// One coherent piece of the schema: a table (or an event-log + `_current`
@@ -28,16 +29,16 @@ pub(crate) trait Entity {
     fn create_views(&self) -> Vec<ViewDef> {
         vec![]
     }
-    /// Trigger specs maintaining this entity.
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
+    /// Triggers maintaining this entity, rendered.
+    fn create_db_triggers(&self) -> Vec<Derived> {
         vec![]
     }
     /// `INSERT` seed statements, emitted in `ENTITIES` order.
     fn seeds(&self) -> Vec<InsertStatement> {
         vec![]
     }
-    /// `_current` snapshot seeding specs.
-    fn seed_current(&self) -> Vec<SeedCurrent> {
+    /// Seed statements that are not plain inserts, emitted after `seeds`.
+    fn seed_statements(&self) -> Vec<String> {
         vec![]
     }
 }

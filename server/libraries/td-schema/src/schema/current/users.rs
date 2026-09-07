@@ -3,8 +3,7 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, InsertStatement, JoinType, Keyword, Query, Table,
-    TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, InsertStatement, JoinType, Keyword, Query, Table, TableCreateStatement,
 };
 
 use crate::schema::Entity;
@@ -54,13 +53,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Users::Enabled).boolean().not_null())
                 .col(ColumnDef::new(Users::System).boolean().not_null())
                 .to_owned(),
-        ]
-    }
-
-    fn create_indices(&self) -> Vec<IndexCreateStatement> {
-        vec![
-            Index::create().name("users___enabled___idx").table(Users::Table).col(Users::Enabled).to_owned(),
-            Index::create().name("users___system___idx").table(Users::Table).col(Users::System).to_owned(),
         ]
     }
 

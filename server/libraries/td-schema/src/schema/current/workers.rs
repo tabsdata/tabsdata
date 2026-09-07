@@ -107,6 +107,39 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // Collection delete stops every cron and stage worker of the
+            // collection with one UPDATE.
+            Index::create().name("workers___collection_id___idx").table(Workers::Table).col(Workers::CollectionId).to_owned(),
+            // Register/update/read list a function version's cron and stage
+            // workers; `worker_type` is always part of that predicate.
+            Index::create()
+                .name("workers___function_version_id__worker_type___idx")
+                .table(Workers::Table)
+                .col(Workers::FunctionVersionId)
+                .col(Workers::WorkerType)
+                .to_owned(),
+            // The scheduler tick claims workers by `(worker_enabled, worker_type,
+            // status)`; one row per run, so without this every tick scans the
+            // table. The tick is per project and the recovery snapshot reads the
+            // same triple across projects, so `project_id` sits after the shared
+            // prefix, where it still narrows the tick and leaves `id` ordering
+            // intact.
+            Index::create()
+                .name("workers___enabled__worker_type__status__project_id__id___idx")
+                .table(Workers::Table)
+                .col(Workers::WorkerEnabled)
+                .col(Workers::WorkerType)
+                .col(Workers::Status)
+                .col(Workers::ProjectId)
+                .col(Workers::Id)
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("workers___project_id__id___idx")
+                .table(Workers::Table)
+                .col(Workers::ProjectId)
+                .col(Workers::Id)
+                .to_owned(),
             // Dispatch poll anti-joins workers on this column to find PFRs
             // without a worker yet; callbacks fetch the worker the same way.
             Index::create()

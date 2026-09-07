@@ -3,19 +3,22 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
-    TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
+use super::logical_table_data_versions::LogicalTableDataVersions;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::ViewDef;
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
 /// View name for `physical_table_data_versions__with_function`, reused by
 /// the `__active` and `__with_names` views below.
@@ -52,6 +55,8 @@ pub enum PhysicalTableDataVersions {
     WithDataTableDataVersionId,
     TriggeredOn,
     BasePath,
+    LogicalTableDataVersionId,
+    ValidTo,
 }
 
 pub(super) struct Defs;
@@ -95,6 +100,16 @@ impl Entity for Defs {
                 // Self-describing: reads use this directly, never recompute, so data stays
                 // findable after the collection/function base_path later changes.
                 .col(ColumnDef::new(PhysicalTableDataVersions::BasePath).text().not_null())
+                // SCD2 partition: materializations version their logical version by `triggered_on`.
+                .col(ColumnDef::new(PhysicalTableDataVersions::LogicalTableDataVersionId).text().not_null())
+                .col(ColumnDef::new(PhysicalTableDataVersions::ValidTo).timestamp_with_time_zone().not_null())
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::LogicalTableDataVersionId)
+                        .to(LogicalTableDataVersions::Table, LogicalTableDataVersions::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
                 .foreign_key(
                     ForeignKey::create()
                         .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::CollectionId)
@@ -136,37 +151,52 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // A run writes each of its tables once; the constraint is what
+            // makes `(physical_function_run_id, table_id)` an addressing read.
+            // Shortened name: PostgreSQL truncates past 63 chars.
             Index::create()
-                .name("physical_table_data_versions___collection_id___idx")
-                .table(PhysicalTableDataVersions::Table)
-                .col(PhysicalTableDataVersions::CollectionId)
-                .to_owned(),
-            Index::create()
-                .name("physical_table_data_versions___execution_id___idx")
-                .table(PhysicalTableDataVersions::Table)
-                .col(PhysicalTableDataVersions::ExecutionId)
-                .to_owned(),
-            Index::create()
-                .name("physical_table_data_versions___physical_function_run_id___idx")
+                .name("ptdv___physical_function_run_id__table_id___uidx")
                 .table(PhysicalTableDataVersions::Table)
                 .col(PhysicalTableDataVersions::PhysicalFunctionRunId)
-                .to_owned(),
-            // Note: single table_id index removed — it's a prefix of these composites
-            Index::create()
-                .name("physical_table_data_versions___table_id___has_data___idx")
-                .table(PhysicalTableDataVersions::Table)
                 .col(PhysicalTableDataVersions::TableId)
-                .col(PhysicalTableDataVersions::HasData)
+                .unique()
                 .to_owned(),
-            // Composite index for versioned queries:
-            // PARTITION BY table_id ORDER BY triggered_on DESC, id DESC
+            // One open interval per logical version.
             Index::create()
-                .name("physical_table_data_versions___table_id__triggered_on__id___idx")
+                .name("ptdv___logical_table_data_version_id___current_uidx")
                 .table(PhysicalTableDataVersions::Table)
-                .col(PhysicalTableDataVersions::TableId)
+                .col(PhysicalTableDataVersions::LogicalTableDataVersionId)
+                .unique()
+                .and_where(open_interval(PhysicalTableDataVersions::ValidTo))
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("ptdv___project_id__id___idx")
+                .table(PhysicalTableDataVersions::Table)
+                .col(PhysicalTableDataVersions::ProjectId)
+                .col(PhysicalTableDataVersions::Id)
+                .to_owned(),
+            // At-time reads; `(triggered_on, id)` is the splice order.
+            Index::create()
+                .name("ptdv___logical_table_data_version_id__triggered_on__id___idx")
+                .table(PhysicalTableDataVersions::Table)
+                .col(PhysicalTableDataVersions::LogicalTableDataVersionId)
                 .col(PhysicalTableDataVersions::TriggeredOn)
                 .col(PhysicalTableDataVersions::Id)
                 .to_owned(),
+        ]
+    }
+
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", PhysicalTableDataVersions::Table.to_string()),
+                source_table: PhysicalTableDataVersions::Table.into_iden(),
+                partition_col: PhysicalTableDataVersions::LogicalTableDataVersionId.into_iden(),
+                valid_from_col: PhysicalTableDataVersions::TriggeredOn.into_iden(),
+                pk_col: PhysicalTableDataVersions::Id.into_iden(),
+            }
+            .derived(),
         ]
     }
 

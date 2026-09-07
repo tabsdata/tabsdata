@@ -5,18 +5,19 @@
 //! `triggers` — the **domain** dataset-triggers entity. A row in this table
 //! registers a function to fire when an upstream table changes. Distinct
 //! from DB triggers (CREATE TRIGGER statements), which this module also
-//! produces via `create_db_triggers` to maintain its `_current` snapshot.
+//! produces via `create_db_triggers` for its SCD2 close-out.
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
-    Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
-use super::triggers_current::TriggersCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
 /// `triggers__with_names` view name. Re-used inside this file by
 /// `triggers__read` and exposed to consumers.
@@ -43,6 +44,7 @@ pub enum Triggers {
     DefinedOn,
     DefinedById,
     System,
+    ValidTo,
 }
 
 pub(super) struct Defs;
@@ -64,6 +66,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Triggers::DefinedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Triggers::DefinedById).text().not_null())
                 .col(ColumnDef::new(Triggers::System).boolean().not_null())
+                .col(ColumnDef::new(Triggers::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Triggers::Table, Triggers::CollectionId)
@@ -77,10 +80,34 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            Index::create().name("triggers___collection_id___idx").table(Triggers::Table).col(Triggers::CollectionId).to_owned(),
+            // The graph recursion's edge set: every open row of the tenant
+            // filtered on status, materialized as a CTE, so the traversal's
+            // own joins land on it and not on the table.
+            Index::create()
+                .name("triggers___project_id__status___current_idx")
+                .table(Triggers::Table)
+                .col(Triggers::ProjectId)
+                .col(Triggers::Status)
+                .and_where(open_interval(Triggers::ValidTo))
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("triggers___project_id__id___idx")
+                .table(Triggers::Table)
+                .col(Triggers::ProjectId)
+                .col(Triggers::Id)
+                .to_owned(),
+            // The at-now twin of `trigger_by_table_id`, read per plan build
+            // and on collection delete.
+            Index::create()
+                .name("triggers___trigger_by_table_id___current_idx")
+                .table(Triggers::Table)
+                .col(Triggers::TriggerByTableId)
+                .and_where(open_interval(Triggers::ValidTo))
+                .to_owned(),
+            // Register and collection delete resolve the triggers fed by a set of tables.
+            Index::create().name("triggers___trigger_by_table_id___idx").table(Triggers::Table).col(Triggers::TriggerByTableId).to_owned(),
             Index::create().name("triggers___function_id___idx").table(Triggers::Table).col(Triggers::FunctionId).to_owned(),
-            // Composite index for versioned queries:
-            // PARTITION BY trigger_id ORDER BY defined_on DESC, id DESC
             Index::create()
                 .name("triggers___trigger_id__defined_on__id___idx")
                 .table(Triggers::Table)
@@ -88,11 +115,18 @@ impl Entity for Defs {
                 .col(Triggers::DefinedOn)
                 .col(Triggers::Id)
                 .to_owned(),
-            // For recursive upstream traversal
             Index::create()
-                .name("triggers___trigger_by_function_id___idx")
+                .name("triggers___trigger_id___current_uidx")
                 .table(Triggers::Table)
-                .col(Triggers::TriggerByFunctionId)
+                .col(Triggers::TriggerId)
+                .unique()
+                .and_where(open_interval(Triggers::ValidTo))
+                .to_owned(),
+            Index::create()
+                .name("triggers___function_id___current_idx")
+                .table(Triggers::Table)
+                .col(Triggers::FunctionId)
+                .and_where(open_interval(Triggers::ValidTo))
                 .to_owned(),
         ]
     }
@@ -111,24 +145,17 @@ impl Entity for Defs {
         ]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Triggers::Table.to_string()),
-            source_table: Triggers::Table.into_iden(),
-            target_table: TriggersCurrent::Table.into_iden(),
-            partition_col: Triggers::TriggerId.into_iden(),
-            columns: cols_of::<Triggers>(),
-        })]
-    }
-
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: TriggersCurrent::Table.into_iden(),
-            source: Triggers::Table.into_iden(),
-            partition_col: Triggers::TriggerId.into_iden(),
-            version_col: Triggers::DefinedOn.into_iden(),
-            columns: cols_of::<Triggers>(),
-        }]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", Triggers::Table.to_string()),
+                source_table: Triggers::Table.into_iden(),
+                partition_col: Triggers::TriggerId.into_iden(),
+                valid_from_col: Triggers::DefinedOn.into_iden(),
+                pk_col: Triggers::Id.into_iden(),
+            }
+            .derived(),
+        ]
     }
 }
 

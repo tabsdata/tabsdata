@@ -21,76 +21,69 @@ CREATE TABLE "permissions" ( "id" text NOT NULL PRIMARY KEY, "role_id" text NOT 
 
 CREATE TABLE "bundles" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "hash" text NOT NULL, "base_path" text NOT NULL, "status" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "functions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "name" text NOT NULL, "description" text NOT NULL, "decorator" text NOT NULL, "runtime_values" text NOT NULL, "function_id" text NOT NULL, "base_path" text NULL, "stage_id" text NOT NULL, "stage_base_path" text NOT NULL, "storage_version" text NOT NULL, "bundle_id" text NOT NULL, "snippet" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, "connector" text NULL, "connection" text NULL, "enabled" bool DEFAULT TRUE, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "functions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "name" text NOT NULL, "description" text NOT NULL, "decorator" text NOT NULL, "runtime_values" text NOT NULL, "function_id" text NOT NULL, "base_path" text NULL, "stage_id" text NOT NULL, "stage_base_path" text NOT NULL, "storage_version" text NOT NULL, "bundle_id" text NOT NULL, "snippet" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, "connector" text NULL, "connection" text NULL, "enabled" bool DEFAULT TRUE, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "functions_current" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "name" text NOT NULL, "description" text NOT NULL, "decorator" text NOT NULL, "runtime_values" text NOT NULL, "function_id" text NOT NULL UNIQUE, "base_path" text NULL, "stage_id" text NOT NULL, "stage_base_path" text NOT NULL, "storage_version" text NOT NULL, "bundle_id" text NOT NULL, "snippet" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, "connector" text NULL, "connection" text NULL, "enabled" bool DEFAULT TRUE )
+CREATE TABLE "function_patches" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "parent_function_version_id" text NOT NULL, "function_id" text NOT NULL, "collection_id" text NOT NULL, "snippet" text NOT NULL, "bundle_id" text NOT NULL, "runtime_values" text NOT NULL, "description" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("parent_function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "function_patches" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "parent_function_version_id" text NOT NULL, "function_id" text NOT NULL, "collection_id" text NOT NULL, "snippet" text NOT NULL, "bundle_id" text NOT NULL, "runtime_values" text NOT NULL, "description" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, FOREIGN KEY ("parent_function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "tables" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "table_id" text NOT NULL, "name" text NOT NULL, "function_id" text NULL, "function_version_id" text NOT NULL, "function_param_pos" integer NULL, "private" bool NOT NULL, "partitioned" bool NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, "table_type" text NOT NULL DEFAULT 'R', "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "function_patches_current" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "parent_function_version_id" text NOT NULL UNIQUE, "function_id" text NOT NULL, "collection_id" text NOT NULL, "snippet" text NOT NULL, "bundle_id" text NOT NULL, "runtime_values" text NOT NULL, "description" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL )
+CREATE TABLE "dependencies" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "dependency_id" text NOT NULL, "function_id" text NOT NULL, "table_collection_id" text NOT NULL, "table_function_id" text NOT NULL, "table_id" text NOT NULL, "table_versions" text NOT NULL, "dep_pos" integer NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "system" bool NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "tables" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "table_id" text NOT NULL, "name" text NOT NULL, "function_id" text NULL, "function_version_id" text NOT NULL, "function_param_pos" integer NULL, "private" bool NOT NULL, "partitioned" bool NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, "table_type" text NOT NULL DEFAULT 'R', FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
-
-CREATE TABLE "tables_current" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "table_id" text NOT NULL UNIQUE, "name" text NOT NULL, "function_id" text NULL, "function_version_id" text NOT NULL, "function_param_pos" integer NULL, "private" bool NOT NULL, "partitioned" bool NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "status" text NOT NULL, "table_type" text NOT NULL DEFAULT 'R' )
-
-CREATE TABLE "dependencies" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "dependency_id" text NOT NULL, "function_id" text NOT NULL, "table_collection_id" text NOT NULL, "table_function_id" text NOT NULL, "table_id" text NOT NULL, "table_versions" text NOT NULL, "dep_pos" integer NOT NULL, "status" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "system" bool NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
-
-CREATE TABLE "dependencies_current" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "dependency_id" text NOT NULL UNIQUE, "function_id" text NOT NULL, "table_collection_id" text NOT NULL, "table_function_id" text NOT NULL, "table_id" text NOT NULL, "table_versions" text NOT NULL, "dep_pos" integer NOT NULL, "status" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "system" bool NOT NULL )
-
-CREATE TABLE "triggers" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "trigger_id" text NOT NULL, "function_id" text NOT NULL, "trigger_by_collection_id" text NOT NULL, "trigger_by_function_id" text NOT NULL, "trigger_by_table_id" text NOT NULL, "status" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "system" bool NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
-
-CREATE TABLE "triggers_current" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "trigger_id" text NOT NULL UNIQUE, "function_id" text NOT NULL, "trigger_by_collection_id" text NOT NULL, "trigger_by_function_id" text NOT NULL, "trigger_by_table_id" text NOT NULL, "status" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "system" bool NOT NULL )
+CREATE TABLE "triggers" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "trigger_id" text NOT NULL, "function_id" text NOT NULL, "trigger_by_collection_id" text NOT NULL, "trigger_by_function_id" text NOT NULL, "trigger_by_table_id" text NOT NULL, "status" text NOT NULL, "defined_on" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL, "system" bool NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "executions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "name" text NULL, "collection_id" text NOT NULL, "function_version_id" text NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "recursion_options" jsonb NULL, "function_id" text NOT NULL DEFAULT '', "trigger_type" text NOT NULL DEFAULT 'M', "external_uid" text NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "transactions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "execution_id" text NOT NULL, "transaction_by" text NOT NULL, "transaction_key" text NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "group_id" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("project_id", "group_id") REFERENCES "groups" ("project_id", "id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "physical_function_runs" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "function_version_id" text NOT NULL, "function_version_patch_id" text NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "trigger" text NOT NULL, "dispatched_on" timestamp with time zone NULL, "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, "function_id" text NOT NULL DEFAULT '', "status" text NOT NULL, "ended_on_hour_ms" bigint NULL, "ended_on_day_ms" bigint NULL, "ended_on_week_ms" bigint NULL, "ended_on_month_ms" bigint NULL, "metric_table_versions" bigint NULL, "metric_rows" bigint NULL, "metric_data_bytes" bigint NULL, "base_path" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "logical_function_runs" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "function_id" text NOT NULL, "function_version_id" text NOT NULL DEFAULT '', "trigger" text NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "status" text NOT NULL, "group_id" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("project_id", "group_id") REFERENCES "groups" ("project_id", "id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "physical_table_data_versions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "table_id" text NOT NULL, "name" text NOT NULL, "table_version_id" text NOT NULL, "function_version_id" text NOT NULL, "function_version_patch_id" text NULL, "has_data" bool NULL, "schema_changed" bool NULL, "column_count" bigint NULL, "row_count" bigint NULL, "data_bytes" bigint NULL, "schema_hash" text NULL, "columnar_lineage" text NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "physical_function_run_id" text NOT NULL, "function_param_pos" integer NOT NULL, "with_data_table_data_version_id" text NULL, "triggered_on" timestamp with time zone NOT NULL, "base_path" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("physical_function_run_id") REFERENCES "physical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "logical_table_data_versions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "table_id" text NOT NULL, "producer_logical_function_run_id" text NULL, "function_param_pos" integer NULL, "private" bool NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "group_id" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("project_id", "group_id") REFERENCES "groups" ("project_id", "id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("producer_logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+
+CREATE TABLE "physical_function_runs" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "function_version_id" text NOT NULL, "function_version_patch_id" text NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "trigger" text NOT NULL, "dispatched_on" timestamp with time zone NULL, "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, "function_id" text NOT NULL DEFAULT '', "status" text NOT NULL, "ended_on_hour_ms" bigint NULL, "ended_on_day_ms" bigint NULL, "ended_on_week_ms" bigint NULL, "ended_on_month_ms" bigint NULL, "metric_table_versions" bigint NULL, "metric_rows" bigint NULL, "metric_data_bytes" bigint NULL, "base_path" text NOT NULL, "logical_function_run_id" text NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+
+CREATE TABLE "physical_table_data_versions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "table_id" text NOT NULL, "name" text NOT NULL, "table_version_id" text NOT NULL, "function_version_id" text NOT NULL, "function_version_patch_id" text NULL, "has_data" bool NULL, "schema_changed" bool NULL, "column_count" bigint NULL, "row_count" bigint NULL, "data_bytes" bigint NULL, "schema_hash" text NULL, "columnar_lineage" text NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "physical_function_run_id" text NOT NULL, "function_param_pos" integer NOT NULL, "with_data_table_data_version_id" text NULL, "triggered_on" timestamp with time zone NOT NULL, "base_path" text NOT NULL, "logical_table_data_version_id" text NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_patch_id") REFERENCES "function_patches" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("physical_function_run_id") REFERENCES "physical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "table_partitions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "table_id" text NOT NULL, "table_version_id" text NOT NULL, "function_version_id" text NOT NULL, "table_data_version_id" text NOT NULL, "partition_key" text NULL, "partition_deleted" bool NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("table_data_version_id") REFERENCES "physical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "workers" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "execution_id" text NULL, "transaction_id" text NULL, "function_version_id" text NOT NULL, "physical_function_run_id" text NULL, "message_status" text NOT NULL, "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, "status" text NOT NULL, "worker_type" text NOT NULL, "worker_enabled" bool NOT NULL, "worker_config" text NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("physical_function_run_id") REFERENCES "physical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "logical_function_runs" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "function_id" text NOT NULL, "function_version_id" text NOT NULL DEFAULT '', "trigger" text NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "status" text NOT NULL, "group_id" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("project_id", "group_id") REFERENCES "groups" ("project_id", "id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
-
-CREATE TABLE "logical_function_run_pointers" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "logical_function_run_id" text NOT NULL, "status" text NOT NULL, "physical_function_run_id" text NULL, "set_on" timestamp with time zone NOT NULL, "set_by_id" text NOT NULL, "reason" text NOT NULL, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
-
-CREATE TABLE "logical_function_run_pointers_current" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "logical_function_run_id" text NOT NULL UNIQUE, "status" text NOT NULL, "physical_function_run_id" text NULL, "set_on" timestamp with time zone NOT NULL, "set_by_id" text NOT NULL, "reason" text NOT NULL )
-
-CREATE TABLE "logical_table_data_versions" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "table_id" text NOT NULL, "producer_logical_function_run_id" text NULL, "function_param_pos" integer NULL, "private" bool NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL, "group_id" text NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("project_id", "group_id") REFERENCES "groups" ("project_id", "id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("producer_logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
-
-CREATE TABLE "logical_table_data_version_pointers" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "logical_table_data_version_id" text NOT NULL, "status" text NOT NULL, "physical_table_data_version_id" text NULL, "set_on" timestamp with time zone NOT NULL, "set_by_id" text NOT NULL, "reason" text NOT NULL, FOREIGN KEY ("logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
-
-CREATE TABLE "logical_table_data_version_pointers_current" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "logical_table_data_version_id" text NOT NULL UNIQUE, "status" text NOT NULL, "physical_table_data_version_id" text NULL, "set_on" timestamp with time zone NOT NULL, "set_by_id" text NOT NULL, "reason" text NOT NULL )
-
 CREATE TABLE "logical_function_run_inputs" ( "id" text NOT NULL PRIMARY KEY, "project_id" text NOT NULL, "collection_id" text NOT NULL, "execution_id" text NOT NULL, "transaction_id" text NOT NULL, "logical_function_run_id" text NOT NULL, "requirement_logical_table_data_version_id" text NULL, "requirement_input_idx" integer NULL, "requirement_dependency_pos" integer NULL, "requirement_version_pos" integer NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("requirement_logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE OR REPLACE FUNCTION functions__maintain_current_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION functions__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO functions_current (id, project_id, collection_id, name, description, decorator, runtime_values, function_id, base_path, stage_id, stage_base_path, storage_version, bundle_id, snippet, defined_on, defined_by_id, status, connector, connection, enabled) VALUES (NEW.id, NEW.project_id, NEW.collection_id, NEW.name, NEW.description, NEW.decorator, NEW.runtime_values, NEW.function_id, NEW.base_path, NEW.stage_id, NEW.stage_base_path, NEW.storage_version, NEW.bundle_id, NEW.snippet, NEW.defined_on, NEW.defined_by_id, NEW.status, NEW.connector, NEW.connection, NEW.enabled)
-  ON CONFLICT (function_id) DO UPDATE SET id = EXCLUDED.id, project_id = EXCLUDED.project_id, collection_id = EXCLUDED.collection_id, name = EXCLUDED.name, description = EXCLUDED.description, decorator = EXCLUDED.decorator, runtime_values = EXCLUDED.runtime_values, base_path = EXCLUDED.base_path, stage_id = EXCLUDED.stage_id, stage_base_path = EXCLUDED.stage_base_path, storage_version = EXCLUDED.storage_version, bundle_id = EXCLUDED.bundle_id, snippet = EXCLUDED.snippet, defined_on = EXCLUDED.defined_on, defined_by_id = EXCLUDED.defined_by_id, status = EXCLUDED.status, connector = EXCLUDED.connector, connection = EXCLUDED.connection, enabled = EXCLUDED.enabled;
+  PERFORM pg_advisory_xact_lock(hashtextextended('functions:' || NEW.function_id, 0));
+  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  FROM functions
+  WHERE function_id = NEW.function_id
+    AND (defined_on, id) > (NEW.defined_on, NEW.id);
+  UPDATE functions SET valid_to = NEW.defined_on
+  WHERE function_id = NEW.function_id
+    AND (defined_on, id) < (NEW.defined_on, NEW.id)
+    AND valid_to > NEW.defined_on;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER functions__maintain_current AFTER INSERT ON functions
-FOR EACH ROW EXECUTE FUNCTION functions__maintain_current_fn()
+CREATE TRIGGER functions__scd2_close BEFORE INSERT ON functions
+FOR EACH ROW EXECUTE FUNCTION functions__scd2_close_fn()
 
-CREATE OR REPLACE FUNCTION function_patches__maintain_current_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION function_patches__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO function_patches_current (id, project_id, parent_function_version_id, function_id, collection_id, snippet, bundle_id, runtime_values, description, defined_on, defined_by_id, status) VALUES (NEW.id, NEW.project_id, NEW.parent_function_version_id, NEW.function_id, NEW.collection_id, NEW.snippet, NEW.bundle_id, NEW.runtime_values, NEW.description, NEW.defined_on, NEW.defined_by_id, NEW.status)
-  ON CONFLICT (parent_function_version_id) DO UPDATE SET id = EXCLUDED.id, project_id = EXCLUDED.project_id, function_id = EXCLUDED.function_id, collection_id = EXCLUDED.collection_id, snippet = EXCLUDED.snippet, bundle_id = EXCLUDED.bundle_id, runtime_values = EXCLUDED.runtime_values, description = EXCLUDED.description, defined_on = EXCLUDED.defined_on, defined_by_id = EXCLUDED.defined_by_id, status = EXCLUDED.status
-  WHERE EXCLUDED.defined_on > function_patches_current.defined_on
-     OR (EXCLUDED.defined_on = function_patches_current.defined_on
-         AND EXCLUDED.id > function_patches_current.id);
+  PERFORM pg_advisory_xact_lock(hashtextextended('function_patches:' || NEW.parent_function_version_id, 0));
+  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  FROM function_patches
+  WHERE parent_function_version_id = NEW.parent_function_version_id
+    AND (defined_on, id) > (NEW.defined_on, NEW.id);
+  UPDATE function_patches SET valid_to = NEW.defined_on
+  WHERE parent_function_version_id = NEW.parent_function_version_id
+    AND (defined_on, id) < (NEW.defined_on, NEW.id)
+    AND valid_to > NEW.defined_on;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER function_patches__maintain_current AFTER INSERT ON function_patches
-FOR EACH ROW EXECUTE FUNCTION function_patches__maintain_current_fn()
+CREATE TRIGGER function_patches__scd2_close BEFORE INSERT ON function_patches
+FOR EACH ROW EXECUTE FUNCTION function_patches__scd2_close_fn()
 
 CREATE OR REPLACE FUNCTION function_patches__immutable_fn() RETURNS TRIGGER AS $$
 BEGIN
@@ -98,44 +91,65 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER function_patches__immutable_no_update BEFORE UPDATE ON function_patches
+CREATE TRIGGER function_patches__immutable_no_update BEFORE UPDATE OF id, project_id, parent_function_version_id, function_id, collection_id, snippet, bundle_id, runtime_values, description, defined_on, defined_by_id, status ON function_patches
 FOR EACH ROW EXECUTE FUNCTION function_patches__immutable_fn()
 
 CREATE TRIGGER function_patches__immutable_no_delete BEFORE DELETE ON function_patches
 FOR EACH ROW EXECUTE FUNCTION function_patches__immutable_fn()
 
-CREATE OR REPLACE FUNCTION tables__maintain_current_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION tables__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO tables_current (id, project_id, collection_id, table_id, name, function_id, function_version_id, function_param_pos, private, partitioned, defined_on, defined_by_id, status, table_type) VALUES (NEW.id, NEW.project_id, NEW.collection_id, NEW.table_id, NEW.name, NEW.function_id, NEW.function_version_id, NEW.function_param_pos, NEW.private, NEW.partitioned, NEW.defined_on, NEW.defined_by_id, NEW.status, NEW.table_type)
-  ON CONFLICT (table_id) DO UPDATE SET id = EXCLUDED.id, project_id = EXCLUDED.project_id, collection_id = EXCLUDED.collection_id, name = EXCLUDED.name, function_id = EXCLUDED.function_id, function_version_id = EXCLUDED.function_version_id, function_param_pos = EXCLUDED.function_param_pos, private = EXCLUDED.private, partitioned = EXCLUDED.partitioned, defined_on = EXCLUDED.defined_on, defined_by_id = EXCLUDED.defined_by_id, status = EXCLUDED.status, table_type = EXCLUDED.table_type;
+  PERFORM pg_advisory_xact_lock(hashtextextended('tables:' || NEW.table_id, 0));
+  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  FROM tables
+  WHERE table_id = NEW.table_id
+    AND (defined_on, id) > (NEW.defined_on, NEW.id);
+  UPDATE tables SET valid_to = NEW.defined_on
+  WHERE table_id = NEW.table_id
+    AND (defined_on, id) < (NEW.defined_on, NEW.id)
+    AND valid_to > NEW.defined_on;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER tables__maintain_current AFTER INSERT ON tables
-FOR EACH ROW EXECUTE FUNCTION tables__maintain_current_fn()
+CREATE TRIGGER tables__scd2_close BEFORE INSERT ON tables
+FOR EACH ROW EXECUTE FUNCTION tables__scd2_close_fn()
 
-CREATE OR REPLACE FUNCTION dependencies__maintain_current_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION dependencies__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO dependencies_current (id, project_id, collection_id, dependency_id, function_id, table_collection_id, table_function_id, table_id, table_versions, dep_pos, status, defined_on, defined_by_id, system) VALUES (NEW.id, NEW.project_id, NEW.collection_id, NEW.dependency_id, NEW.function_id, NEW.table_collection_id, NEW.table_function_id, NEW.table_id, NEW.table_versions, NEW.dep_pos, NEW.status, NEW.defined_on, NEW.defined_by_id, NEW.system)
-  ON CONFLICT (dependency_id) DO UPDATE SET id = EXCLUDED.id, project_id = EXCLUDED.project_id, collection_id = EXCLUDED.collection_id, function_id = EXCLUDED.function_id, table_collection_id = EXCLUDED.table_collection_id, table_function_id = EXCLUDED.table_function_id, table_id = EXCLUDED.table_id, table_versions = EXCLUDED.table_versions, dep_pos = EXCLUDED.dep_pos, status = EXCLUDED.status, defined_on = EXCLUDED.defined_on, defined_by_id = EXCLUDED.defined_by_id, system = EXCLUDED.system;
+  PERFORM pg_advisory_xact_lock(hashtextextended('dependencies:' || NEW.dependency_id, 0));
+  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  FROM dependencies
+  WHERE dependency_id = NEW.dependency_id
+    AND (defined_on, id) > (NEW.defined_on, NEW.id);
+  UPDATE dependencies SET valid_to = NEW.defined_on
+  WHERE dependency_id = NEW.dependency_id
+    AND (defined_on, id) < (NEW.defined_on, NEW.id)
+    AND valid_to > NEW.defined_on;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER dependencies__maintain_current AFTER INSERT ON dependencies
-FOR EACH ROW EXECUTE FUNCTION dependencies__maintain_current_fn()
+CREATE TRIGGER dependencies__scd2_close BEFORE INSERT ON dependencies
+FOR EACH ROW EXECUTE FUNCTION dependencies__scd2_close_fn()
 
-CREATE OR REPLACE FUNCTION triggers__maintain_current_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION triggers__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO triggers_current (id, project_id, collection_id, trigger_id, function_id, trigger_by_collection_id, trigger_by_function_id, trigger_by_table_id, status, defined_on, defined_by_id, system) VALUES (NEW.id, NEW.project_id, NEW.collection_id, NEW.trigger_id, NEW.function_id, NEW.trigger_by_collection_id, NEW.trigger_by_function_id, NEW.trigger_by_table_id, NEW.status, NEW.defined_on, NEW.defined_by_id, NEW.system)
-  ON CONFLICT (trigger_id) DO UPDATE SET id = EXCLUDED.id, project_id = EXCLUDED.project_id, collection_id = EXCLUDED.collection_id, function_id = EXCLUDED.function_id, trigger_by_collection_id = EXCLUDED.trigger_by_collection_id, trigger_by_function_id = EXCLUDED.trigger_by_function_id, trigger_by_table_id = EXCLUDED.trigger_by_table_id, status = EXCLUDED.status, defined_on = EXCLUDED.defined_on, defined_by_id = EXCLUDED.defined_by_id, system = EXCLUDED.system;
+  PERFORM pg_advisory_xact_lock(hashtextextended('triggers:' || NEW.trigger_id, 0));
+  SELECT COALESCE(MIN(defined_on), 'infinity') INTO NEW.valid_to
+  FROM triggers
+  WHERE trigger_id = NEW.trigger_id
+    AND (defined_on, id) > (NEW.defined_on, NEW.id);
+  UPDATE triggers SET valid_to = NEW.defined_on
+  WHERE trigger_id = NEW.trigger_id
+    AND (defined_on, id) < (NEW.defined_on, NEW.id)
+    AND valid_to > NEW.defined_on;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER triggers__maintain_current AFTER INSERT ON triggers
-FOR EACH ROW EXECUTE FUNCTION triggers__maintain_current_fn()
+CREATE TRIGGER triggers__scd2_close BEFORE INSERT ON triggers
+FOR EACH ROW EXECUTE FUNCTION triggers__scd2_close_fn()
 
 CREATE OR REPLACE FUNCTION logical_function_runs__sticky_terminals_fn() RETURNS TRIGGER AS $$
 BEGIN
@@ -149,57 +163,41 @@ $$ LANGUAGE plpgsql
 CREATE TRIGGER logical_function_runs__sticky_terminals BEFORE UPDATE OF status ON logical_function_runs
 FOR EACH ROW EXECUTE FUNCTION logical_function_runs__sticky_terminals_fn()
 
-CREATE OR REPLACE FUNCTION logical_function_run_pointers__maintain_current_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION physical_function_runs__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO logical_function_run_pointers_current (id, project_id, logical_function_run_id, status, physical_function_run_id, set_on, set_by_id, reason) VALUES (NEW.id, NEW.project_id, NEW.logical_function_run_id, NEW.status, NEW.physical_function_run_id, NEW.set_on, NEW.set_by_id, NEW.reason)
-  ON CONFLICT (logical_function_run_id) DO UPDATE SET id = EXCLUDED.id, project_id = EXCLUDED.project_id, status = EXCLUDED.status, physical_function_run_id = EXCLUDED.physical_function_run_id, set_on = EXCLUDED.set_on, set_by_id = EXCLUDED.set_by_id, reason = EXCLUDED.reason
-  WHERE EXCLUDED.set_on > logical_function_run_pointers_current.set_on
-     OR (EXCLUDED.set_on = logical_function_run_pointers_current.set_on
-         AND EXCLUDED.id > logical_function_run_pointers_current.id);
+  PERFORM pg_advisory_xact_lock(hashtextextended('physical_function_runs:' || NEW.logical_function_run_id, 0));
+  SELECT COALESCE(MIN(triggered_on), 'infinity') INTO NEW.valid_to
+  FROM physical_function_runs
+  WHERE logical_function_run_id = NEW.logical_function_run_id
+    AND (triggered_on, id) > (NEW.triggered_on, NEW.id);
+  UPDATE physical_function_runs SET valid_to = NEW.triggered_on
+  WHERE logical_function_run_id = NEW.logical_function_run_id
+    AND (triggered_on, id) < (NEW.triggered_on, NEW.id)
+    AND valid_to > NEW.triggered_on;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER logical_function_run_pointers__maintain_current AFTER INSERT ON logical_function_run_pointers
-FOR EACH ROW EXECUTE FUNCTION logical_function_run_pointers__maintain_current_fn()
+CREATE TRIGGER physical_function_runs__scd2_close BEFORE INSERT ON physical_function_runs
+FOR EACH ROW EXECUTE FUNCTION physical_function_runs__scd2_close_fn()
 
-CREATE OR REPLACE FUNCTION logical_function_run_pointers__immutable_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION physical_table_data_versions__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
-  RAISE EXCEPTION 'logical_function_run_pointers is insert-only';
-END;
-$$ LANGUAGE plpgsql
-
-CREATE TRIGGER logical_function_run_pointers__immutable_no_update BEFORE UPDATE ON logical_function_run_pointers
-FOR EACH ROW EXECUTE FUNCTION logical_function_run_pointers__immutable_fn()
-
-CREATE TRIGGER logical_function_run_pointers__immutable_no_delete BEFORE DELETE ON logical_function_run_pointers
-FOR EACH ROW EXECUTE FUNCTION logical_function_run_pointers__immutable_fn()
-
-CREATE OR REPLACE FUNCTION logical_table_data_version_pointers__maintain_current_fn() RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO logical_table_data_version_pointers_current (id, project_id, logical_table_data_version_id, status, physical_table_data_version_id, set_on, set_by_id, reason) VALUES (NEW.id, NEW.project_id, NEW.logical_table_data_version_id, NEW.status, NEW.physical_table_data_version_id, NEW.set_on, NEW.set_by_id, NEW.reason)
-  ON CONFLICT (logical_table_data_version_id) DO UPDATE SET id = EXCLUDED.id, project_id = EXCLUDED.project_id, status = EXCLUDED.status, physical_table_data_version_id = EXCLUDED.physical_table_data_version_id, set_on = EXCLUDED.set_on, set_by_id = EXCLUDED.set_by_id, reason = EXCLUDED.reason
-  WHERE EXCLUDED.set_on > logical_table_data_version_pointers_current.set_on
-     OR (EXCLUDED.set_on = logical_table_data_version_pointers_current.set_on
-         AND EXCLUDED.id > logical_table_data_version_pointers_current.id);
+  PERFORM pg_advisory_xact_lock(hashtextextended('physical_table_data_versions:' || NEW.logical_table_data_version_id, 0));
+  SELECT COALESCE(MIN(triggered_on), 'infinity') INTO NEW.valid_to
+  FROM physical_table_data_versions
+  WHERE logical_table_data_version_id = NEW.logical_table_data_version_id
+    AND (triggered_on, id) > (NEW.triggered_on, NEW.id);
+  UPDATE physical_table_data_versions SET valid_to = NEW.triggered_on
+  WHERE logical_table_data_version_id = NEW.logical_table_data_version_id
+    AND (triggered_on, id) < (NEW.triggered_on, NEW.id)
+    AND valid_to > NEW.triggered_on;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER logical_table_data_version_pointers__maintain_current AFTER INSERT ON logical_table_data_version_pointers
-FOR EACH ROW EXECUTE FUNCTION logical_table_data_version_pointers__maintain_current_fn()
-
-CREATE OR REPLACE FUNCTION logical_table_data_version_pointers__immutable_fn() RETURNS TRIGGER AS $$
-BEGIN
-  RAISE EXCEPTION 'logical_table_data_version_pointers is insert-only';
-END;
-$$ LANGUAGE plpgsql
-
-CREATE TRIGGER logical_table_data_version_pointers__immutable_no_update BEFORE UPDATE ON logical_table_data_version_pointers
-FOR EACH ROW EXECUTE FUNCTION logical_table_data_version_pointers__immutable_fn()
-
-CREATE TRIGGER logical_table_data_version_pointers__immutable_no_delete BEFORE DELETE ON logical_table_data_version_pointers
-FOR EACH ROW EXECUTE FUNCTION logical_table_data_version_pointers__immutable_fn()
+CREATE TRIGGER physical_table_data_versions__scd2_close BEFORE INSERT ON physical_table_data_versions
+FOR EACH ROW EXECUTE FUNCTION physical_table_data_versions__scd2_close_fn()
 
 CREATE VIEW users__with_names WITH (security_invoker = true) AS SELECT "users".*, COALESCE(created_by_user.name, '[' || users.created_by_id || ']') AS "created_by", COALESCE(modified_by_user.name, '[' || users.modified_by_id || ']') AS "modified_by" FROM "users" LEFT JOIN "users" AS "created_by_user" ON "users"."created_by_id" = "created_by_user"."id" LEFT JOIN "users" AS "modified_by_user" ON "users"."modified_by_id" = "modified_by_user"."id"
 
@@ -227,27 +225,31 @@ CREATE VIEW permissions__with_names WITH (security_invoker = true) AS SELECT "pe
 
 CREATE VIEW functions__with_names WITH (security_invoker = true) AS SELECT "functions".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "collections_resolved"."group_id" AS "group_id", COALESCE(users.name, '[' || functions.defined_by_id || ']') AS "defined_by" FROM "functions" LEFT JOIN "collections_resolved" ON "functions"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "functions"."defined_by_id" = "users"."id"
 
-CREATE VIEW functions_current__with_names WITH (security_invoker = true) AS SELECT "functions_current".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "collections_resolved"."group_id" AS "group_id", COALESCE(users.name, '[' || functions_current.defined_by_id || ']') AS "defined_by" FROM "functions_current" LEFT JOIN "collections_resolved" ON "functions_current"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "functions_current"."defined_by_id" = "users"."id"
-
-CREATE VIEW function_versions__with_names WITH (security_invoker = true) AS SELECT "functions".*, "collections_resolved"."name" AS "collection", COALESCE(users.name, '[' || functions.defined_by_id || ']') AS "defined_by", NULL AS "patch_of" FROM "functions" LEFT JOIN "collections_resolved" ON "functions"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "functions"."defined_by_id" = "users"."id" UNION ALL (SELECT "function_patches"."id", "function_patches"."project_id", "function_patches"."collection_id", "parent"."name", "function_patches"."description", "parent"."decorator", "function_patches"."runtime_values", "function_patches"."function_id", "parent"."base_path", "parent"."stage_id", "parent"."stage_base_path", "parent"."storage_version", "function_patches"."bundle_id", "function_patches"."snippet", "function_patches"."defined_on", "function_patches"."defined_by_id", (CASE WHEN ("parent"."status" = 'D') THEN "parent"."status" ELSE "function_patches"."status" END), "parent"."connector", "parent"."connection", "parent"."enabled", "collections_resolved"."name", COALESCE(users.name, '[' || function_patches.defined_by_id || ']'), "function_patches"."parent_function_version_id" FROM "function_patches" INNER JOIN "functions" AS "parent" ON "function_patches"."parent_function_version_id" = "parent"."id" LEFT JOIN "collections_resolved" ON "function_patches"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "function_patches"."defined_by_id" = "users"."id")
+CREATE VIEW function_versions__with_names WITH (security_invoker = true) AS SELECT "functions".*, "collections_resolved"."name" AS "collection", COALESCE(users.name, '[' || functions.defined_by_id || ']') AS "defined_by", NULL AS "patch_of" FROM "functions" LEFT JOIN "collections_resolved" ON "functions"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "functions"."defined_by_id" = "users"."id" UNION ALL (SELECT "function_patches"."id", "function_patches"."project_id", "function_patches"."collection_id", "parent"."name", "function_patches"."description", "parent"."decorator", "function_patches"."runtime_values", "function_patches"."function_id", "parent"."base_path", "parent"."stage_id", "parent"."stage_base_path", "parent"."storage_version", "function_patches"."bundle_id", "function_patches"."snippet", "function_patches"."defined_on", "function_patches"."defined_by_id", "function_patches"."status", "parent"."connector", "parent"."connection", "parent"."enabled", "function_patches"."valid_to", "collections_resolved"."name", COALESCE(users.name, '[' || function_patches.defined_by_id || ']'), "function_patches"."parent_function_version_id" FROM "function_patches" INNER JOIN "functions" AS "parent" ON "function_patches"."parent_function_version_id" = "parent"."id" LEFT JOIN "collections_resolved" ON "function_patches"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "function_patches"."defined_by_id" = "users"."id")
 
 CREATE VIEW tables__with_names WITH (security_invoker = true) AS SELECT "tables".*, "tables"."function_param_pos" < 0 AS "system", COALESCE(users.name, '[' || tables.defined_by_id || ']') AS "defined_by", "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "functions"."name" AS "function" FROM "tables" LEFT JOIN "collections_resolved" ON "tables"."collection_id" = "collections_resolved"."id" LEFT JOIN "functions" ON "tables"."function_version_id" = "functions"."id" LEFT JOIN "users" ON "tables"."defined_by_id" = "users"."id"
 
-CREATE VIEW tables_current__with_names WITH (security_invoker = true) AS SELECT "tables_current".*, "tables_current"."function_param_pos" < 0 AS "system", COALESCE(users.name, '[' || tables_current.defined_by_id || ']') AS "defined_by", "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "functions"."name" AS "function" FROM "tables_current" LEFT JOIN "collections_resolved" ON "tables_current"."collection_id" = "collections_resolved"."id" LEFT JOIN "functions" ON "tables_current"."function_version_id" = "functions"."id" LEFT JOIN "users" ON "tables_current"."defined_by_id" = "users"."id"
-
 CREATE VIEW dependencies__with_names WITH (security_invoker = true) AS SELECT "dependencies".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "table_collection"."name" AS "table_collection" FROM "dependencies" LEFT JOIN "collections_resolved" ON "dependencies"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "dependencies"."defined_by_id" = "users"."id" LEFT JOIN "collections_resolved" AS "table_collection" ON "dependencies"."table_collection_id" = "table_collection"."id"
-
-CREATE VIEW dependencies_current__with_names WITH (security_invoker = true) AS SELECT "dependencies_current".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "table_collection"."name" AS "table_collection" FROM "dependencies_current" LEFT JOIN "collections_resolved" ON "dependencies_current"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "dependencies_current"."defined_by_id" = "users"."id" LEFT JOIN "collections_resolved" AS "table_collection" ON "dependencies_current"."table_collection_id" = "table_collection"."id"
 
 CREATE VIEW triggers__with_names WITH (security_invoker = true) AS SELECT "triggers".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "trigger_by_collection"."name" AS "trigger_by_collection" FROM "triggers" LEFT JOIN "collections_resolved" ON "triggers"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "triggers"."defined_by_id" = "users"."id" LEFT JOIN "collections_resolved" AS "trigger_by_collection" ON "triggers"."trigger_by_collection_id" = "trigger_by_collection"."id"
 
 CREATE VIEW triggers__read WITH (security_invoker = true) AS SELECT * FROM "triggers__with_names" WHERE "triggers__with_names"."system" = FALSE
 
-CREATE VIEW triggers_current__with_names WITH (security_invoker = true) AS SELECT "triggers_current".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "trigger_by_collection"."name" AS "trigger_by_collection" FROM "triggers_current" LEFT JOIN "collections_resolved" ON "triggers_current"."collection_id" = "collections_resolved"."id" LEFT JOIN "users" ON "triggers_current"."defined_by_id" = "users"."id" LEFT JOIN "collections_resolved" AS "trigger_by_collection" ON "triggers_current"."trigger_by_collection_id" = "trigger_by_collection"."id"
-
 CREATE VIEW executions__with_names WITH (security_invoker = true) AS SELECT "executions".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "functions"."name" AS "function", COALESCE(users.name, '[' || executions.triggered_by_id || ']') AS "triggered_by", "projects_resolved"."name" AS "project" FROM "executions" LEFT JOIN "collections_resolved" ON "executions"."collection_id" = "collections_resolved"."id" LEFT JOIN "functions" ON "executions"."function_version_id" = "functions"."id" LEFT JOIN "users" ON "executions"."triggered_by_id" = "users"."id" LEFT JOIN "projects_resolved" ON "executions"."project_id" = "projects_resolved"."id"
 
 CREATE VIEW transactions__with_names WITH (security_invoker = true) AS SELECT "transactions".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "executions"."name" AS "execution", COALESCE(users.name, '[' || transactions.triggered_by_id || ']') AS "triggered_by", "groups_for_transactions"."name" AS "group", "projects_resolved"."name" AS "project" FROM "transactions" LEFT JOIN "collections_resolved" ON "transactions"."collection_id" = "collections_resolved"."id" LEFT JOIN "executions" ON "transactions"."execution_id" = "executions"."id" LEFT JOIN "users" ON "transactions"."triggered_by_id" = "users"."id" LEFT JOIN "projects_resolved" ON "transactions"."project_id" = "projects_resolved"."id" LEFT JOIN "groups" AS "groups_for_transactions" ON "transactions"."group_id" = "groups_for_transactions"."id" AND "transactions"."project_id" = "groups_for_transactions"."project_id"
+
+CREATE VIEW function_runs__with_names WITH (security_invoker = true) AS SELECT "logical_function_runs".*, "functions"."name" AS "name", "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "executions"."name" AS "execution", COALESCE(users.name, '[' || logical_function_runs.triggered_by_id || ']') AS "triggered_by", "groups_for_lfr"."name" AS "group", "projects_resolved"."name" AS "project", "physical_function_runs"."id" AS "physical_function_run_id", "physical_function_runs"."started_on" AS "started_on", "physical_function_runs"."ended_on" AS "ended_on", "physical_function_runs"."status" AS "physical_status", "physical_function_runs"."function_version_patch_id" AS "function_version_patch_id", "physical_function_runs"."ended_on_hour_ms" AS "ended_on_hour_ms", "physical_function_runs"."ended_on_day_ms" AS "ended_on_day_ms", "physical_function_runs"."ended_on_week_ms" AS "ended_on_week_ms", "physical_function_runs"."ended_on_month_ms" AS "ended_on_month_ms", "physical_function_runs"."metric_table_versions" AS "metric_table_versions", "physical_function_runs"."metric_rows" AS "metric_rows", "physical_function_runs"."metric_data_bytes" AS "metric_data_bytes" FROM "logical_function_runs" LEFT JOIN "collections_resolved" ON "logical_function_runs"."collection_id" = "collections_resolved"."id" LEFT JOIN "groups" AS "groups_for_lfr" ON "logical_function_runs"."group_id" = "groups_for_lfr"."id" AND "logical_function_runs"."project_id" = "groups_for_lfr"."project_id" LEFT JOIN "projects_resolved" ON "logical_function_runs"."project_id" = "projects_resolved"."id" LEFT JOIN "functions" ON "logical_function_runs"."function_version_id" = "functions"."id" LEFT JOIN "executions" ON "logical_function_runs"."execution_id" = "executions"."id" LEFT JOIN "users" ON "logical_function_runs"."triggered_by_id" = "users"."id" LEFT JOIN "physical_function_runs" ON "physical_function_runs"."logical_function_run_id" = "logical_function_runs"."id" AND "physical_function_runs"."valid_to" = ('infinity'::timestamptz)
+
+CREATE VIEW global_status_summary WITH (security_invoker = true) AS SELECT (CASE WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'S' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'F' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'D', 'F', 'H')) THEN 1 END)) = COUNT("logical_function_runs"."status") AND COUNT((CASE WHEN ("logical_function_runs"."status" IN ('F', 'H')) THEN 1 END)) > 0) THEN 'L' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E')) THEN 1 END)) > 0) THEN 'R' ELSE 'U' END) AS "status", COUNT(*) = COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) AS "finished", (SELECT COALESCE(jsonb_object_agg(inner_fr.status, inner_fr.count), '{}'::jsonb) FROM (SELECT "logical_function_runs"."status", COUNT(*) AS "count" FROM "logical_function_runs" GROUP BY "logical_function_runs"."status") AS "inner_fr") AS "function_run_status_count" FROM "logical_function_runs"
+
+CREATE VIEW execution_status_summary WITH (security_invoker = true) AS SELECT "executions"."id" AS "execution_id", (CASE WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'S' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'F' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'D', 'F', 'H')) THEN 1 END)) = COUNT("logical_function_runs"."status") AND COUNT((CASE WHEN ("logical_function_runs"."status" IN ('F', 'H')) THEN 1 END)) > 0) THEN 'L' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E')) THEN 1 END)) > 0) THEN 'R' ELSE 'U' END) AS "status", COUNT(*) = COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) AS "finished", (SELECT COALESCE(jsonb_object_agg(inner_fr.status, inner_fr.count), '{}'::jsonb) FROM (SELECT "logical_function_runs"."status", COUNT(*) AS "count" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = "executions"."id" GROUP BY "logical_function_runs"."status") AS "inner_fr") AS "function_run_status_count" FROM "executions" LEFT JOIN "logical_function_runs" ON "logical_function_runs"."execution_id" = "executions"."id" GROUP BY "executions"."id"
+
+CREATE VIEW transaction_status_summary WITH (security_invoker = true) AS SELECT "transactions"."id" AS "transaction_id", (CASE WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'S' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'C' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('X')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'X' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('Y')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'Y' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('D', 'F', 'H')) THEN 1 END)) = COUNT("logical_function_runs"."status") AND COUNT((CASE WHEN ("logical_function_runs"."status" IN ('F', 'H')) THEN 1 END)) > 0) THEN 'L' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E')) THEN 1 END)) > 0) THEN 'R' ELSE 'U' END) AS "status", COUNT(*) = COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) AS "finished", (SELECT COALESCE(jsonb_object_agg(inner_fr.status, inner_fr.count), '{}'::jsonb) FROM (SELECT "logical_function_runs"."status", COUNT(*) AS "count" FROM "logical_function_runs" WHERE "logical_function_runs"."transaction_id" = "transactions"."id" GROUP BY "logical_function_runs"."status") AS "inner_fr") AS "function_run_status_count" FROM "transactions" LEFT JOIN "logical_function_runs" ON "logical_function_runs"."transaction_id" = "transactions"."id" GROUP BY "transactions"."id"
+
+CREATE VIEW table_data_versions__with_names WITH (security_invoker = true) AS SELECT "logical_table_data_versions".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "executions"."name" AS "execution", COALESCE(users.name, '[' || logical_table_data_versions.triggered_by_id || ']') AS "triggered_by", "groups_for_ltdv"."name" AS "group", "physical_table_data_versions"."id" AS "physical_table_data_version_id", "physical_table_data_versions"."name" AS "name", "physical_table_data_versions"."table_version_id" AS "table_version_id", "physical_table_data_versions"."function_version_id" AS "function_version_id", "physical_table_data_versions"."function_version_patch_id" AS "function_version_patch_id", "physical_table_data_versions"."has_data" AS "has_data", "physical_table_data_versions"."schema_changed" AS "schema_changed", "physical_table_data_versions"."column_count" AS "column_count", "physical_table_data_versions"."row_count" AS "row_count", "physical_table_data_versions"."data_bytes" AS "data_bytes", "physical_table_data_versions"."schema_hash" AS "schema_hash", "physical_table_data_versions"."with_data_table_data_version_id" AS "with_data_table_data_version_id", "physical_table_data_versions"."physical_function_run_id" AS "physical_function_run_id", "physical_function_runs"."started_on" AS "started_on", "physical_function_runs"."ended_on" AS "ended_on", "logical_function_runs"."status" AS "status", "physical_function_runs"."status" AS "physical_status", "functions"."name" AS "function", "functions"."storage_version" AS "storage_version" FROM "logical_table_data_versions" LEFT JOIN "collections_resolved" ON "logical_table_data_versions"."collection_id" = "collections_resolved"."id" LEFT JOIN "executions" ON "logical_table_data_versions"."execution_id" = "executions"."id" LEFT JOIN "users" ON "logical_table_data_versions"."triggered_by_id" = "users"."id" LEFT JOIN "physical_table_data_versions" ON "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "physical_table_data_versions"."valid_to" = ('infinity'::timestamptz) LEFT JOIN "physical_function_runs" ON "physical_function_runs"."id" = "physical_table_data_versions"."physical_function_run_id" LEFT JOIN "logical_function_runs" ON "logical_table_data_versions"."producer_logical_function_run_id" = "logical_function_runs"."id" LEFT JOIN "functions" ON "physical_table_data_versions"."function_version_id" = "functions"."id" LEFT JOIN "groups" AS "groups_for_ltdv" ON "logical_table_data_versions"."group_id" = "groups_for_ltdv"."id" AND "logical_table_data_versions"."project_id" = "groups_for_ltdv"."project_id"
+
+CREATE VIEW logical_table_data_versions__active WITH (security_invoker = true) AS SELECT "logical_table_data_versions".* FROM "logical_table_data_versions" LEFT JOIN "logical_function_runs" ON "logical_table_data_versions"."producer_logical_function_run_id" = "logical_function_runs"."id" WHERE "logical_function_runs"."status" IS NULL OR "logical_function_runs"."status" NOT IN ('Y', 'X')
 
 CREATE VIEW physical_function_runs__with_names WITH (security_invoker = true) AS SELECT "physical_function_runs".*, "functions"."name" AS "name", "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "collections_resolved"."connection_id" AS "connection_id", "connections"."kind" AS "connection", "projects_resolved"."name" AS "project", "executions"."name" AS "execution", "executions"."function_version_id" AS "execution_function_version_id", "functions"."storage_version" AS "storage_version", COALESCE(users.name, '[' || physical_function_runs.triggered_by_id || ']') AS "triggered_by" FROM "physical_function_runs" LEFT JOIN "collections_resolved" ON "physical_function_runs"."collection_id" = "collections_resolved"."id" LEFT JOIN "connections" ON "collections_resolved"."connection_id" = "connections"."id" LEFT JOIN "projects_resolved" ON "physical_function_runs"."project_id" = "projects_resolved"."id" LEFT JOIN "functions" ON "physical_function_runs"."function_version_id" = "functions"."id" LEFT JOIN "executions" ON "physical_function_runs"."execution_id" = "executions"."id" LEFT JOIN "users" ON "physical_function_runs"."triggered_by_id" = "users"."id"
 
@@ -257,35 +259,33 @@ CREATE VIEW physical_table_data_versions__with_names WITH (security_invoker = tr
 
 CREATE VIEW workers__with_names WITH (security_invoker = true) AS SELECT "workers".*, "logical_function_runs"."id" AS "logical_function_run_id", "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "collections_resolved"."connection_id" AS "connection_id", "connections"."kind" AS "connection", "executions"."name" AS "execution", "functions"."name" AS "function", "functions"."enabled" AS "enabled", "projects_resolved"."name" AS "project", "physical_function_runs"."function_version_patch_id" AS "function_version_patch_id" FROM "workers" LEFT JOIN "collections_resolved" ON "workers"."collection_id" = "collections_resolved"."id" LEFT JOIN "connections" ON "collections_resolved"."connection_id" = "connections"."id" LEFT JOIN "executions" ON "workers"."execution_id" = "executions"."id" LEFT JOIN "functions" ON "workers"."function_version_id" = "functions"."id" LEFT JOIN "logical_function_runs" ON "workers"."execution_id" = "logical_function_runs"."execution_id" AND "functions"."function_id" = "logical_function_runs"."function_id" LEFT JOIN "physical_function_runs" ON "workers"."physical_function_run_id" = "physical_function_runs"."id" LEFT JOIN "projects_resolved" ON "workers"."project_id" = "projects_resolved"."id" WHERE "workers"."worker_enabled" = TRUE
 
-CREATE VIEW function_runs__with_names WITH (security_invoker = true) AS SELECT "logical_function_runs".*, "functions"."name" AS "name", "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "executions"."name" AS "execution", COALESCE(users.name, '[' || logical_function_runs.triggered_by_id || ']') AS "triggered_by", "groups_for_lfr"."name" AS "group", "projects_resolved"."name" AS "project", "physical_function_runs"."id" AS "physical_function_run_id", "physical_function_runs"."started_on" AS "started_on", "physical_function_runs"."ended_on" AS "ended_on", "physical_function_runs"."status" AS "physical_status", "physical_function_runs"."function_version_patch_id" AS "function_version_patch_id", "physical_function_runs"."ended_on_hour_ms" AS "ended_on_hour_ms", "physical_function_runs"."ended_on_day_ms" AS "ended_on_day_ms", "physical_function_runs"."ended_on_week_ms" AS "ended_on_week_ms", "physical_function_runs"."ended_on_month_ms" AS "ended_on_month_ms", "physical_function_runs"."metric_table_versions" AS "metric_table_versions", "physical_function_runs"."metric_rows" AS "metric_rows", "physical_function_runs"."metric_data_bytes" AS "metric_data_bytes" FROM "logical_function_runs" LEFT JOIN "collections_resolved" ON "logical_function_runs"."collection_id" = "collections_resolved"."id" LEFT JOIN "groups" AS "groups_for_lfr" ON "logical_function_runs"."group_id" = "groups_for_lfr"."id" AND "logical_function_runs"."project_id" = "groups_for_lfr"."project_id" LEFT JOIN "projects_resolved" ON "logical_function_runs"."project_id" = "projects_resolved"."id" LEFT JOIN "functions" ON "logical_function_runs"."function_version_id" = "functions"."id" LEFT JOIN "executions" ON "logical_function_runs"."execution_id" = "executions"."id" LEFT JOIN "users" ON "logical_function_runs"."triggered_by_id" = "users"."id" LEFT JOIN "logical_function_run_pointers_current" ON "logical_function_run_pointers_current"."logical_function_run_id" = "logical_function_runs"."id" AND "logical_function_run_pointers_current"."status" = 'B' LEFT JOIN "physical_function_runs" ON "physical_function_runs"."id" = "logical_function_run_pointers_current"."physical_function_run_id"
-
-CREATE VIEW global_status_summary WITH (security_invoker = true) AS SELECT (CASE WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'S' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'F' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'D', 'F', 'H')) THEN 1 END)) = COUNT("logical_function_runs"."status") AND COUNT((CASE WHEN ("logical_function_runs"."status" IN ('F', 'H')) THEN 1 END)) > 0) THEN 'L' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E')) THEN 1 END)) > 0) THEN 'R' ELSE 'U' END) AS "status", COUNT(*) = COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) AS "finished", (SELECT COALESCE(jsonb_object_agg(inner_fr.status, inner_fr.count), '{}'::jsonb) FROM (SELECT "logical_function_runs"."status", COUNT(*) AS "count" FROM "logical_function_runs" GROUP BY "logical_function_runs"."status") AS "inner_fr") AS "function_run_status_count" FROM "logical_function_runs"
-
-CREATE VIEW execution_status_summary WITH (security_invoker = true) AS SELECT "executions"."id" AS "execution_id", (CASE WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'S' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'F' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'D', 'F', 'H')) THEN 1 END)) = COUNT("logical_function_runs"."status") AND COUNT((CASE WHEN ("logical_function_runs"."status" IN ('F', 'H')) THEN 1 END)) > 0) THEN 'L' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E')) THEN 1 END)) > 0) THEN 'R' ELSE 'U' END) AS "status", COUNT(*) = COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) AS "finished", (SELECT COALESCE(jsonb_object_agg(inner_fr.status, inner_fr.count), '{}'::jsonb) FROM (SELECT "logical_function_runs"."status", COUNT(*) AS "count" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = "executions"."id" GROUP BY "logical_function_runs"."status") AS "inner_fr") AS "function_run_status_count" FROM "executions" LEFT JOIN "logical_function_runs" ON "logical_function_runs"."execution_id" = "executions"."id" GROUP BY "executions"."id"
-
-CREATE VIEW transaction_status_summary WITH (security_invoker = true) AS SELECT "transactions"."id" AS "transaction_id", (CASE WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'S' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'C' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('X')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'X' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('Y')) THEN 1 END)) = COUNT("logical_function_runs"."status")) THEN 'Y' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('D', 'F', 'H')) THEN 1 END)) = COUNT("logical_function_runs"."status") AND COUNT((CASE WHEN ("logical_function_runs"."status" IN ('F', 'H')) THEN 1 END)) > 0) THEN 'L' WHEN (COUNT((CASE WHEN ("logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E')) THEN 1 END)) > 0) THEN 'R' ELSE 'U' END) AS "status", COUNT(*) = COUNT((CASE WHEN ("logical_function_runs"."status" IN ('C', 'X', 'Y')) THEN 1 END)) AS "finished", (SELECT COALESCE(jsonb_object_agg(inner_fr.status, inner_fr.count), '{}'::jsonb) FROM (SELECT "logical_function_runs"."status", COUNT(*) AS "count" FROM "logical_function_runs" WHERE "logical_function_runs"."transaction_id" = "transactions"."id" GROUP BY "logical_function_runs"."status") AS "inner_fr") AS "function_run_status_count" FROM "transactions" LEFT JOIN "logical_function_runs" ON "logical_function_runs"."transaction_id" = "transactions"."id" GROUP BY "transactions"."id"
-
-CREATE VIEW table_data_versions__with_names WITH (security_invoker = true) AS SELECT "logical_table_data_versions".*, "collections_resolved"."name" AS "collection", "collections_resolved"."deleted" AS "collection_deleted", "executions"."name" AS "execution", COALESCE(users.name, '[' || logical_table_data_versions.triggered_by_id || ']') AS "triggered_by", "groups_for_ltdv"."name" AS "group", "physical_table_data_versions"."id" AS "physical_table_data_version_id", "physical_table_data_versions"."name" AS "name", "physical_table_data_versions"."table_version_id" AS "table_version_id", "physical_table_data_versions"."function_version_id" AS "function_version_id", "physical_table_data_versions"."function_version_patch_id" AS "function_version_patch_id", "physical_table_data_versions"."has_data" AS "has_data", "physical_table_data_versions"."schema_changed" AS "schema_changed", "physical_table_data_versions"."column_count" AS "column_count", "physical_table_data_versions"."row_count" AS "row_count", "physical_table_data_versions"."data_bytes" AS "data_bytes", "physical_table_data_versions"."schema_hash" AS "schema_hash", "physical_table_data_versions"."with_data_table_data_version_id" AS "with_data_table_data_version_id", "physical_table_data_versions"."physical_function_run_id" AS "physical_function_run_id", "physical_function_runs"."started_on" AS "started_on", "physical_function_runs"."ended_on" AS "ended_on", "logical_function_runs"."status" AS "status", "physical_function_runs"."status" AS "physical_status", "functions"."name" AS "function", "functions"."storage_version" AS "storage_version" FROM "logical_table_data_versions" LEFT JOIN "collections_resolved" ON "logical_table_data_versions"."collection_id" = "collections_resolved"."id" LEFT JOIN "executions" ON "logical_table_data_versions"."execution_id" = "executions"."id" LEFT JOIN "users" ON "logical_table_data_versions"."triggered_by_id" = "users"."id" LEFT JOIN "logical_table_data_version_pointers_current" ON "logical_table_data_version_pointers_current"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "logical_table_data_version_pointers_current"."status" = 'B' LEFT JOIN "physical_table_data_versions" ON "physical_table_data_versions"."id" = "logical_table_data_version_pointers_current"."physical_table_data_version_id" LEFT JOIN "physical_function_runs" ON "physical_function_runs"."id" = "physical_table_data_versions"."physical_function_run_id" LEFT JOIN "logical_function_runs" ON "logical_table_data_versions"."producer_logical_function_run_id" = "logical_function_runs"."id" LEFT JOIN "functions" ON "physical_table_data_versions"."function_version_id" = "functions"."id" LEFT JOIN "groups" AS "groups_for_ltdv" ON "logical_table_data_versions"."group_id" = "groups_for_ltdv"."id" AND "logical_table_data_versions"."project_id" = "groups_for_ltdv"."project_id"
-
-CREATE VIEW logical_table_data_versions__active WITH (security_invoker = true) AS SELECT "logical_table_data_versions".* FROM "logical_table_data_versions" LEFT JOIN "logical_function_runs" ON "logical_table_data_versions"."producer_logical_function_run_id" = "logical_function_runs"."id" WHERE "logical_function_runs"."status" IS NULL OR "logical_function_runs"."status" NOT IN ('Y', 'X')
-
 CREATE VIEW executions__with_status WITH (security_invoker = true) AS SELECT "executions__with_names".*, "pfr_agg"."started_on" AS "started_on", (CASE WHEN ("execution_status_summary"."finished") THEN "pfr_agg"."ended_on" END) AS "ended_on", "execution_status_summary"."status" AS "status", "execution_status_summary"."function_run_status_count" AS "function_run_status_count" FROM "executions__with_names" LEFT JOIN (SELECT "physical_function_runs"."execution_id" AS "execution_id", MIN("physical_function_runs"."started_on") AS "started_on", MAX("physical_function_runs"."ended_on") AS "ended_on" FROM "physical_function_runs" GROUP BY "physical_function_runs"."execution_id") AS "pfr_agg" ON "pfr_agg"."execution_id" = "executions__with_names"."id" LEFT JOIN "execution_status_summary" AS "execution_status_summary" ON "execution_status_summary"."execution_id" = "executions__with_names"."id"
 
 CREATE VIEW transactions__with_status WITH (security_invoker = true) AS SELECT "transactions__with_names".*, "pfr_agg"."started_on" AS "started_on", (CASE WHEN ("transaction_status_summary"."finished") THEN "pfr_agg"."ended_on" END) AS "ended_on", "transaction_status_summary"."status" AS "status", "transaction_status_summary"."function_run_status_count" AS "function_run_status_count" FROM "transactions__with_names" LEFT JOIN (SELECT "physical_function_runs"."transaction_id" AS "transaction_id", MIN("physical_function_runs"."started_on") AS "started_on", MAX("physical_function_runs"."ended_on") AS "ended_on" FROM "physical_function_runs" GROUP BY "physical_function_runs"."transaction_id") AS "pfr_agg" ON "pfr_agg"."transaction_id" = "transactions__with_names"."id" LEFT JOIN "transaction_status_summary" AS "transaction_status_summary" ON "transaction_status_summary"."transaction_id" = "transactions__with_names"."id"
 
-CREATE INDEX "users___enabled___idx" ON "users" ("enabled")
+CREATE INDEX "groups___name___idx" ON "groups" ("name")
 
-CREATE INDEX "users___system___idx" ON "users" ("system")
+CREATE INDEX "groups___id___idx" ON "groups" ("id")
 
 CREATE UNIQUE INDEX "groups___project_id__name___idx" ON "groups" ("project_id", "name")
 
+CREATE INDEX "projects___resolved_name___idx" ON "projects" ((COALESCE("name_when_deleted", "name")))
+
+CREATE INDEX "collections___project_id__resolved_name___idx" ON "collections" ("project_id", (COALESCE("name_when_deleted", "name")))
+
+CREATE INDEX "collections___project_id__group_id___idx" ON "collections" ("project_id", "group_id")
+
 CREATE UNIQUE INDEX "collections___project_id__name___idx" ON "collections" ("project_id", "name")
 
-CREATE INDEX "collections___group_id___idx" ON "collections" ("group_id")
+CREATE INDEX "collections___project_id__id___idx" ON "collections" ("project_id", "id")
 
 CREATE INDEX "roles___project_id___idx" ON "roles" ("project_id")
 
+CREATE INDEX "users_roles___role_id__id___idx" ON "users_roles" ("role_id", "id")
+
 CREATE UNIQUE INDEX "roles___user_id__role_id___idx" ON "users_roles" ("user_id", "role_id")
+
+CREATE INDEX "sessions___status___idx" ON "sessions" ("status")
 
 CREATE INDEX "sessions___expires_on___idx" ON "sessions" ("expires_on")
 
@@ -293,97 +293,97 @@ CREATE INDEX "sessions___user_id___idx" ON "sessions" ("user_id")
 
 CREATE UNIQUE INDEX "permissions___role_id__permission_type__entity___idx" ON "permissions" ("role_id", "permission_type", "entity_type", "entity_id")
 
-CREATE INDEX "permissions___entity_id___idx" ON "permissions" ("entity_id")
+CREATE INDEX "functions___collection_id__name___idx" ON "functions" ("collection_id", "name")
 
-CREATE INDEX "bundles___collection_id___idx" ON "bundles" ("collection_id")
+CREATE INDEX "functions___collection_id__name___current_idx" ON "functions" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "functions___collection_id___idx" ON "functions" ("collection_id")
+CREATE INDEX "functions___project_id__status___current_idx" ON "functions" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "functions___project_id__id___idx" ON "functions" ("project_id", "id")
 
 CREATE INDEX "functions___function_id__defined_on__id___idx" ON "functions" ("function_id", "defined_on", "id")
 
-CREATE INDEX "functions_current___collection_id___idx" ON "functions_current" ("collection_id")
-
-CREATE INDEX "functions_current___status___idx" ON "functions_current" ("status")
+CREATE UNIQUE INDEX "functions___function_id___current_uidx" ON "functions" ("function_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
 CREATE INDEX "function_patches___function_id__defined_on___idx" ON "function_patches" ("function_id", "defined_on")
 
-CREATE INDEX "function_patches___parent_function_version_id__defined_on__id___idx" ON "function_patches" ("parent_function_version_id", "defined_on", "id")
+CREATE INDEX "function_patches___parent_fv_id__defined_on__id___idx" ON "function_patches" ("parent_function_version_id", "defined_on", "id")
+
+CREATE UNIQUE INDEX "function_patches___parent_function_version_id___current_uidx" ON "function_patches" ("parent_function_version_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "tables___collection_id__name___current_idx" ON "tables" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "tables___project_id__status___current_idx" ON "tables" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "tables___project_id__id___idx" ON "tables" ("project_id", "id")
+
+CREATE INDEX "tables___collection_id__name___idx" ON "tables" ("collection_id", "name")
+
+CREATE INDEX "tables___function_version_id___idx" ON "tables" ("function_version_id")
 
 CREATE INDEX "tables___function_id__status___idx" ON "tables" ("function_id", "status")
 
-CREATE INDEX "tables___status___idx" ON "tables" ("status")
-
 CREATE INDEX "tables___table_id__defined_on__id___idx" ON "tables" ("table_id", "defined_on", "id")
 
-CREATE INDEX "tables_current___collection_id___idx" ON "tables_current" ("collection_id")
+CREATE UNIQUE INDEX "tables___table_id___current_uidx" ON "tables" ("table_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "tables_current___function_id___idx" ON "tables_current" ("function_id")
+CREATE INDEX "tables___function_id___current_idx" ON "tables" ("function_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "tables_current___status___idx" ON "tables_current" ("status")
+CREATE INDEX "dependencies___project_id___current_idx" ON "dependencies" ("project_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "dependencies___project_id__id___idx" ON "dependencies" ("project_id", "id")
+
+CREATE INDEX "dependencies___table_id___current_idx" ON "dependencies" ("table_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "dependencies___table_id___idx" ON "dependencies" ("table_id")
 
 CREATE INDEX "dependencies___dependency_id__defined_on__id___idx" ON "dependencies" ("dependency_id", "defined_on", "id")
 
 CREATE INDEX "dependencies___function_id___idx" ON "dependencies" ("function_id")
 
-CREATE INDEX "dependencies___table_function_id___idx" ON "dependencies" ("table_function_id")
+CREATE UNIQUE INDEX "dependencies___dependency_id___current_uidx" ON "dependencies" ("dependency_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "dependencies_current___function_id___idx" ON "dependencies_current" ("function_id")
+CREATE INDEX "dependencies___function_id___current_idx" ON "dependencies" ("function_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "dependencies_current___table_function_id___idx" ON "dependencies_current" ("table_function_id")
+CREATE INDEX "triggers___project_id__status___current_idx" ON "triggers" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "triggers___collection_id___idx" ON "triggers" ("collection_id")
+CREATE INDEX "triggers___project_id__id___idx" ON "triggers" ("project_id", "id")
+
+CREATE INDEX "triggers___trigger_by_table_id___current_idx" ON "triggers" ("trigger_by_table_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "triggers___trigger_by_table_id___idx" ON "triggers" ("trigger_by_table_id")
 
 CREATE INDEX "triggers___function_id___idx" ON "triggers" ("function_id")
 
 CREATE INDEX "triggers___trigger_id__defined_on__id___idx" ON "triggers" ("trigger_id", "defined_on", "id")
 
-CREATE INDEX "triggers___trigger_by_function_id___idx" ON "triggers" ("trigger_by_function_id")
+CREATE UNIQUE INDEX "triggers___trigger_id___current_uidx" ON "triggers" ("trigger_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "triggers_current___collection_id___idx" ON "triggers_current" ("collection_id")
+CREATE INDEX "triggers___function_id___current_idx" ON "triggers" ("function_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "triggers_current___function_id___idx" ON "triggers_current" ("function_id")
+CREATE INDEX "executions___fv_id__trigger_type__triggered_on___idx" ON "executions" ("function_version_id", "trigger_type", "triggered_on")
 
-CREATE INDEX "triggers_current___trigger_by_function_id___idx" ON "triggers_current" ("trigger_by_function_id")
+CREATE INDEX "executions___project_id__triggered_on__id___idx" ON "executions" ("project_id", "triggered_on", "id")
 
-CREATE INDEX "executions___collection_id___idx" ON "executions" ("collection_id")
-
-CREATE INDEX "executions___function_version_id___idx" ON "executions" ("function_version_id")
-
-CREATE INDEX "executions___triggered_by_id___idx" ON "executions" ("triggered_by_id")
-
-CREATE INDEX "executions___triggered_on___idx" ON "executions" ("triggered_on")
+CREATE INDEX "executions___project_id__id___idx" ON "executions" ("project_id", "id")
 
 CREATE UNIQUE INDEX "executions___function_id__external_uid___idx" ON "executions" ("function_id", "external_uid")
 
-CREATE INDEX "transactions___collection_id___idx" ON "transactions" ("collection_id")
+CREATE INDEX "transactions___project_id__group_id___idx" ON "transactions" ("project_id", "group_id")
 
 CREATE INDEX "transactions___execution_id___idx" ON "transactions" ("execution_id")
 
-CREATE INDEX "transactions___group_id__collection_id___idx" ON "transactions" ("group_id", "collection_id")
+CREATE INDEX "transactions___project_id__id___idx" ON "transactions" ("project_id", "id")
 
-CREATE INDEX "function_runs___collection_id___idx" ON "physical_function_runs" ("collection_id")
+CREATE INDEX "transactions___project_id__triggered_on__id___idx" ON "transactions" ("project_id", "triggered_on", "id")
 
-CREATE INDEX "function_runs___function_version_id___idx" ON "physical_function_runs" ("function_version_id")
+CREATE INDEX "logical_function_runs___project_id__group_id___idx" ON "logical_function_runs" ("project_id", "group_id")
 
-CREATE INDEX "function_runs___execution_id__status___idx" ON "physical_function_runs" ("execution_id", "status")
+CREATE INDEX "logical_function_runs___status__project_id__triggered_on___idx" ON "logical_function_runs" ("status", "project_id", "triggered_on")
 
-CREATE INDEX "function_runs___transaction_id__status___idx" ON "physical_function_runs" ("transaction_id", "status")
+CREATE INDEX "logical_function_runs___project_id__id___idx" ON "logical_function_runs" ("project_id", "id")
 
-CREATE INDEX "function_runs___status___idx" ON "physical_function_runs" ("status")
-
-CREATE INDEX "function_runs___ended_on___idx" ON "physical_function_runs" ("ended_on")
-
-CREATE INDEX "physical_table_data_versions___collection_id___idx" ON "physical_table_data_versions" ("collection_id")
-
-CREATE INDEX "physical_table_data_versions___execution_id___idx" ON "physical_table_data_versions" ("execution_id")
-
-CREATE INDEX "physical_table_data_versions___physical_function_run_id___idx" ON "physical_table_data_versions" ("physical_function_run_id")
-
-CREATE INDEX "physical_table_data_versions___table_id___has_data___idx" ON "physical_table_data_versions" ("table_id", "has_data")
-
-CREATE INDEX "physical_table_data_versions___table_id__triggered_on__id___idx" ON "physical_table_data_versions" ("table_id", "triggered_on", "id")
-
-CREATE INDEX "workers___physical_function_run_id___idx" ON "workers" ("physical_function_run_id")
+CREATE INDEX "logical_function_runs___function_version_id___idx" ON "logical_function_runs" ("function_version_id")
 
 CREATE UNIQUE INDEX "logical_function_runs___execution_id__function_id___idx" ON "logical_function_runs" ("execution_id", "function_id")
 
@@ -393,35 +393,59 @@ CREATE INDEX "logical_function_runs___execution_id__status___idx" ON "logical_fu
 
 CREATE INDEX "logical_function_runs___transaction_id__status___idx" ON "logical_function_runs" ("transaction_id", "status")
 
-CREATE INDEX "logical_function_runs___status___idx" ON "logical_function_runs" ("status")
-
-CREATE INDEX "logical_function_runs___group_id__collection_id___idx" ON "logical_function_runs" ("group_id", "collection_id")
-
-CREATE INDEX "logical_function_run_pointers___logical_function_run_id__set_on__id___idx" ON "logical_function_run_pointers" ("logical_function_run_id", "set_on", "id")
-
-CREATE INDEX "logical_function_run_pointers___function_run_id___idx" ON "logical_function_run_pointers" ("physical_function_run_id")
-
-CREATE INDEX "lfr_pointers_current___physical_function_run_id___idx" ON "logical_function_run_pointers_current" ("physical_function_run_id")
+CREATE INDEX "logical_table_data_versions___project_id__group_id___idx" ON "logical_table_data_versions" ("project_id", "group_id")
 
 CREATE INDEX "logical_table_data_versions___table_id__triggered_on__id___idx" ON "logical_table_data_versions" ("table_id", "triggered_on", "id")
 
-CREATE INDEX "logical_table_data_versions___execution_id___idx" ON "logical_table_data_versions" ("execution_id")
+CREATE INDEX "ltdv___producer_logical_function_run_id___idx" ON "logical_table_data_versions" ("producer_logical_function_run_id")
 
-CREATE INDEX "logical_table_data_versions___transaction_id___idx" ON "logical_table_data_versions" ("transaction_id")
+CREATE INDEX "logical_table_data_versions___execution_id__table_id___idx" ON "logical_table_data_versions" ("execution_id", "table_id")
 
-CREATE INDEX "logical_table_data_versions___producer_logical_function_run_id___idx" ON "logical_table_data_versions" ("producer_logical_function_run_id")
+CREATE INDEX "logical_table_data_versions___project_id__id___idx" ON "logical_table_data_versions" ("project_id", "id")
 
-CREATE INDEX "logical_table_data_versions___group_id___idx" ON "logical_table_data_versions" ("group_id")
+CREATE INDEX "pfr___status__project_id__triggered_on___idx" ON "physical_function_runs" ("status", "project_id", "triggered_on")
 
-CREATE INDEX "logical_table_data_version_pointers___logical_table_data_version_id__set_on__id___idx" ON "logical_table_data_version_pointers" ("logical_table_data_version_id", "set_on", "id")
+CREATE INDEX "pfr___status__project_id__dispatched_on___idx" ON "physical_function_runs" ("status", "project_id", "dispatched_on")
 
-CREATE INDEX "logical_table_data_version_pointers___table_data_version_id___idx" ON "logical_table_data_version_pointers" ("physical_table_data_version_id")
+CREATE INDEX "pfr___project_id__execution_id__started_on__ended_on___idx" ON "physical_function_runs" ("project_id", "execution_id", "started_on", "ended_on")
+
+CREATE INDEX "pfr___project_id__transaction_id__started_on__ended_on___idx" ON "physical_function_runs" ("project_id", "transaction_id", "started_on", "ended_on")
+
+CREATE INDEX "pfr___function_version_patch_id___idx" ON "physical_function_runs" ("function_version_patch_id")
+
+CREATE INDEX "pfr___function_version_id___idx" ON "physical_function_runs" ("function_version_id")
+
+CREATE INDEX "pfr___project_id__ended_on___current_idx" ON "physical_function_runs" ("project_id", "ended_on") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "pfr___project_id__id___idx" ON "physical_function_runs" ("project_id", "id")
+
+CREATE UNIQUE INDEX "pfr___logical_function_run_id___current_uidx" ON "physical_function_runs" ("logical_function_run_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "pfr___logical_function_run_id__triggered_on__id___idx" ON "physical_function_runs" ("logical_function_run_id", "triggered_on", "id")
+
+CREATE UNIQUE INDEX "ptdv___physical_function_run_id__table_id___uidx" ON "physical_table_data_versions" ("physical_function_run_id", "table_id")
+
+CREATE UNIQUE INDEX "ptdv___logical_table_data_version_id___current_uidx" ON "physical_table_data_versions" ("logical_table_data_version_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE INDEX "ptdv___project_id__id___idx" ON "physical_table_data_versions" ("project_id", "id")
+
+CREATE INDEX "ptdv___logical_table_data_version_id__triggered_on__id___idx" ON "physical_table_data_versions" ("logical_table_data_version_id", "triggered_on", "id")
+
+CREATE INDEX "workers___collection_id___idx" ON "workers" ("collection_id")
+
+CREATE INDEX "workers___function_version_id__worker_type___idx" ON "workers" ("function_version_id", "worker_type")
+
+CREATE INDEX "workers___enabled__worker_type__status__project_id__id___idx" ON "workers" ("worker_enabled", "worker_type", "status", "project_id", "id")
+
+CREATE INDEX "workers___project_id__id___idx" ON "workers" ("project_id", "id")
+
+CREATE INDEX "workers___physical_function_run_id___idx" ON "workers" ("physical_function_run_id")
 
 CREATE INDEX "logical_function_run_inputs___logical_function_run_id___idx" ON "logical_function_run_inputs" ("logical_function_run_id")
 
 CREATE INDEX "logical_function_run_inputs___execution_id___idx" ON "logical_function_run_inputs" ("execution_id")
 
-CREATE INDEX "logical_function_run_inputs___requirement_logical_table_data_version_id___idx" ON "logical_function_run_inputs" ("requirement_logical_table_data_version_id")
+CREATE INDEX "lfri___requirement_logical_table_data_version_id___idx" ON "logical_function_run_inputs" ("requirement_logical_table_data_version_id")
 
 INSERT INTO "tabsdata_system" ("name", "value") VALUES ('tabsdata_version', '2')
 
@@ -451,25 +475,15 @@ INSERT INTO "permissions" ("id", "role_id", "permission_type", "entity_type", "e
 
 INSERT INTO "permissions" ("id", "role_id", "permission_type", "entity_type", "entity_id", "granted_by_id", "granted_on", "fixed") SELECT '0000000000000000000000020s', "roles"."id", 'create_projects', 'system', '00000000000000000000000204', '00000000000000000000000000', CURRENT_TIMESTAMP, TRUE FROM "roles" WHERE "roles"."name" = 'project_creator'
 
-INSERT INTO "functions_current" ("id", "project_id", "collection_id", "name", "description", "decorator", "runtime_values", "function_id", "base_path", "stage_id", "stage_base_path", "storage_version", "bundle_id", "snippet", "defined_on", "defined_by_id", "status", "connector", "connection", "enabled") SELECT "id", "project_id", "collection_id", "name", "description", "decorator", "runtime_values", "function_id", "base_path", "stage_id", "stage_base_path", "storage_version", "bundle_id", "snippet", "defined_on", "defined_by_id", "status", "connector", "connection", "enabled" FROM (SELECT "id", "project_id", "collection_id", "name", "description", "decorator", "runtime_values", "function_id", "base_path", "stage_id", "stage_base_path", "storage_version", "bundle_id", "snippet", "defined_on", "defined_by_id", "status", "connector", "connection", "enabled", row_number() OVER ( PARTITION BY "function_id" ORDER BY "defined_on" DESC, "id" DESC ) AS "rn" FROM "functions") AS "ranked" WHERE "rn" = 1
-
-INSERT INTO "tables_current" ("id", "project_id", "collection_id", "table_id", "name", "function_id", "function_version_id", "function_param_pos", "private", "partitioned", "defined_on", "defined_by_id", "status", "table_type") SELECT "id", "project_id", "collection_id", "table_id", "name", "function_id", "function_version_id", "function_param_pos", "private", "partitioned", "defined_on", "defined_by_id", "status", "table_type" FROM (SELECT "id", "project_id", "collection_id", "table_id", "name", "function_id", "function_version_id", "function_param_pos", "private", "partitioned", "defined_on", "defined_by_id", "status", "table_type", row_number() OVER ( PARTITION BY "table_id" ORDER BY "defined_on" DESC, "id" DESC ) AS "rn" FROM "tables") AS "ranked" WHERE "rn" = 1
-
-INSERT INTO "dependencies_current" ("id", "project_id", "collection_id", "dependency_id", "function_id", "table_collection_id", "table_function_id", "table_id", "table_versions", "dep_pos", "status", "defined_on", "defined_by_id", "system") SELECT "id", "project_id", "collection_id", "dependency_id", "function_id", "table_collection_id", "table_function_id", "table_id", "table_versions", "dep_pos", "status", "defined_on", "defined_by_id", "system" FROM (SELECT "id", "project_id", "collection_id", "dependency_id", "function_id", "table_collection_id", "table_function_id", "table_id", "table_versions", "dep_pos", "status", "defined_on", "defined_by_id", "system", row_number() OVER ( PARTITION BY "dependency_id" ORDER BY "defined_on" DESC, "id" DESC ) AS "rn" FROM "dependencies") AS "ranked" WHERE "rn" = 1
-
-INSERT INTO "triggers_current" ("id", "project_id", "collection_id", "trigger_id", "function_id", "trigger_by_collection_id", "trigger_by_function_id", "trigger_by_table_id", "status", "defined_on", "defined_by_id", "system") SELECT "id", "project_id", "collection_id", "trigger_id", "function_id", "trigger_by_collection_id", "trigger_by_function_id", "trigger_by_table_id", "status", "defined_on", "defined_by_id", "system" FROM (SELECT "id", "project_id", "collection_id", "trigger_id", "function_id", "trigger_by_collection_id", "trigger_by_function_id", "trigger_by_table_id", "status", "defined_on", "defined_by_id", "system", row_number() OVER ( PARTITION BY "trigger_id" ORDER BY "defined_on" DESC, "id" DESC ) AS "rn" FROM "triggers") AS "ranked" WHERE "rn" = 1
-
-INSERT INTO "logical_function_run_pointers_current" ("id", "project_id", "logical_function_run_id", "status", "physical_function_run_id", "set_on", "set_by_id", "reason") SELECT "id", "project_id", "logical_function_run_id", "status", "physical_function_run_id", "set_on", "set_by_id", "reason" FROM (SELECT "id", "project_id", "logical_function_run_id", "status", "physical_function_run_id", "set_on", "set_by_id", "reason", row_number() OVER ( PARTITION BY "logical_function_run_id" ORDER BY "set_on" DESC, "id" DESC ) AS "rn" FROM "logical_function_run_pointers") AS "ranked" WHERE "rn" = 1
-
-INSERT INTO "logical_table_data_version_pointers_current" ("id", "project_id", "logical_table_data_version_id", "status", "physical_table_data_version_id", "set_on", "set_by_id", "reason") SELECT "id", "project_id", "logical_table_data_version_id", "status", "physical_table_data_version_id", "set_on", "set_by_id", "reason" FROM (SELECT "id", "project_id", "logical_table_data_version_id", "status", "physical_table_data_version_id", "set_on", "set_by_id", "reason", row_number() OVER ( PARTITION BY "logical_table_data_version_id" ORDER BY "set_on" DESC, "id" DESC ) AS "rn" FROM "logical_table_data_version_pointers") AS "ranked" WHERE "rn" = 1
-
 ALTER TABLE groups ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
 ALTER TABLE groups ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE groups FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON groups USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON groups USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON groups TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE connections ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -477,7 +491,9 @@ ALTER TABLE connections ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE connections FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON connections USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON connections USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON connections TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE collections ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -485,7 +501,9 @@ ALTER TABLE collections ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE collections FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON collections USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON collections USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON collections TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE bundles ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -493,7 +511,9 @@ ALTER TABLE bundles ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE bundles FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON bundles USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON bundles USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON bundles TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE functions ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -501,15 +521,9 @@ ALTER TABLE functions ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE functions FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON functions USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON functions USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
-ALTER TABLE functions_current ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE functions_current ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE functions_current FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON functions_current USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY across_projects ON functions TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE function_patches ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -517,15 +531,9 @@ ALTER TABLE function_patches ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE function_patches FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON function_patches USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON function_patches USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
-ALTER TABLE function_patches_current ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE function_patches_current ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE function_patches_current FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON function_patches_current USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY across_projects ON function_patches TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE tables ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -533,15 +541,9 @@ ALTER TABLE tables ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE tables FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON tables USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON tables USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
-ALTER TABLE tables_current ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE tables_current ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE tables_current FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON tables_current USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY across_projects ON tables TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE dependencies ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -549,15 +551,9 @@ ALTER TABLE dependencies ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE dependencies FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON dependencies USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON dependencies USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
-ALTER TABLE dependencies_current ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE dependencies_current ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE dependencies_current FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON dependencies_current USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY across_projects ON dependencies TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE triggers ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -565,15 +561,9 @@ ALTER TABLE triggers ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE triggers FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON triggers USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON triggers USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
-ALTER TABLE triggers_current ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE triggers_current ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE triggers_current FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON triggers_current USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY across_projects ON triggers TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE executions ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -581,7 +571,9 @@ ALTER TABLE executions ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE executions FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON executions USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON executions USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON executions TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE transactions ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -589,7 +581,9 @@ ALTER TABLE transactions ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE transactions FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON transactions USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON transactions USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON transactions TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE physical_function_runs ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -597,7 +591,9 @@ ALTER TABLE physical_function_runs ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE physical_function_runs FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON physical_function_runs USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON physical_function_runs USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON physical_function_runs TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE physical_table_data_versions ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -605,7 +601,9 @@ ALTER TABLE physical_table_data_versions ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE physical_table_data_versions FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON physical_table_data_versions USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON physical_table_data_versions USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON physical_table_data_versions TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE table_partitions ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -613,7 +611,9 @@ ALTER TABLE table_partitions ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE table_partitions FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON table_partitions USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON table_partitions USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON table_partitions TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE workers ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -621,7 +621,9 @@ ALTER TABLE workers ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE workers FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON workers USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON workers USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON workers TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE logical_function_runs ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -629,7 +631,9 @@ ALTER TABLE logical_function_runs ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE logical_function_runs FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON logical_function_runs USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON logical_function_runs USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON logical_function_runs TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE logical_table_data_versions ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -637,7 +641,9 @@ ALTER TABLE logical_table_data_versions ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE logical_table_data_versions FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON logical_table_data_versions USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON logical_table_data_versions USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON logical_table_data_versions TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE logical_function_run_inputs ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
@@ -645,36 +651,6 @@ ALTER TABLE logical_function_run_inputs ENABLE ROW LEVEL SECURITY
 
 ALTER TABLE logical_function_run_inputs FORCE ROW LEVEL SECURITY
 
-CREATE POLICY project_isolation ON logical_function_run_inputs USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY project_isolation ON logical_function_run_inputs USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
-ALTER TABLE logical_function_run_pointers ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE logical_function_run_pointers ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE logical_function_run_pointers FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON logical_function_run_pointers USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
-
-ALTER TABLE logical_function_run_pointers_current ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE logical_function_run_pointers_current ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE logical_function_run_pointers_current FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON logical_function_run_pointers_current USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
-
-ALTER TABLE logical_table_data_version_pointers ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE logical_table_data_version_pointers ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE logical_table_data_version_pointers FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON logical_table_data_version_pointers USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
-
-ALTER TABLE logical_table_data_version_pointers_current ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
-
-ALTER TABLE logical_table_data_version_pointers_current ENABLE ROW LEVEL SECURITY
-
-ALTER TABLE logical_table_data_version_pointers_current FORCE ROW LEVEL SECURITY
-
-CREATE POLICY project_isolation ON logical_table_data_version_pointers_current USING (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true)) WITH CHECK (current_setting('app.bypass_rls', true) = 'on' OR project_id = current_setting('app.project_id', true))
+CREATE POLICY across_projects ON logical_function_run_inputs TO td_across_projects USING (true) WITH CHECK (true)

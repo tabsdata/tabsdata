@@ -16,7 +16,6 @@ use sea_query::{Alias, Asterisk, Expr, ExprTrait, Iden, JoinType, Query, UnionTy
 
 use super::collections::{Collections, CollectionsResolved};
 use super::function_patches::FunctionPatches;
-use super::functions::FUNCTION_STATUS_DELETED;
 use super::functions::Functions;
 use super::users::Users;
 use crate::schema::Entity;
@@ -62,16 +61,11 @@ impl Entity for Defs {
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::Snippet)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::DefinedOn)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::DefinedById)))
-            .expr(
-                Expr::case(
-                    Expr::col((parent.clone(), Functions::Status)).eq(FUNCTION_STATUS_DELETED),
-                    Expr::col((parent.clone(), Functions::Status)),
-                )
-                .finally(Expr::col((FunctionPatches::Table, FunctionPatches::Status))),
-            )
+            .expr(Expr::col((FunctionPatches::Table, FunctionPatches::Status)))
             .expr(Expr::col((parent.clone(), Functions::Connector)))
             .expr(Expr::col((parent.clone(), Functions::Connection)))
             .expr(Expr::col((parent.clone(), Functions::Enabled)))
+            .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ValidTo)))
             .expr(Expr::col((CollectionsResolved, Collections::Name)))
             .expr(name_or_id((Users::Table, Users::Name), (FunctionPatches::Table, FunctionPatches::DefinedById)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ParentFunctionVersionId)))

@@ -3,15 +3,16 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
-    Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
-use super::dependencies_current::DependenciesCurrent;
 use super::users::Users;
 use crate::schema::Entity;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "dependencies__with_names"]
@@ -30,10 +31,10 @@ pub enum Dependencies {
     TableId,
     TableVersions,
     DepPos,
-    Status,
     DefinedOn,
     DefinedById,
     System,
+    ValidTo,
 }
 
 pub(super) struct Defs;
@@ -53,10 +54,10 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Dependencies::TableId).text().not_null())
                 .col(ColumnDef::new(Dependencies::TableVersions).text().not_null())
                 .col(ColumnDef::new(Dependencies::DepPos).integer().not_null())
-                .col(ColumnDef::new(Dependencies::Status).text().not_null())
                 .col(ColumnDef::new(Dependencies::DefinedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Dependencies::DefinedById).text().not_null())
                 .col(ColumnDef::new(Dependencies::System).boolean().not_null())
+                .col(ColumnDef::new(Dependencies::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Dependencies::Table, Dependencies::CollectionId)
@@ -70,8 +71,32 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // Composite index for versioned queries:
-            // PARTITION BY dependency_id ORDER BY defined_on DESC, id DESC
+            // The graph recursion's edge set: every open row of the tenant,
+            // materialized as a CTE, so the traversal's own joins land on it
+            // and not on the table.
+            Index::create()
+                .name("dependencies___project_id___current_idx")
+                .table(Dependencies::Table)
+                .col(Dependencies::ProjectId)
+                .and_where(open_interval(Dependencies::ValidTo))
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("dependencies___project_id__id___idx")
+                .table(Dependencies::Table)
+                .col(Dependencies::ProjectId)
+                .col(Dependencies::Id)
+                .to_owned(),
+            // Collection delete and the table-rooted graph build read the
+            // open dependencies of a set of tables.
+            Index::create()
+                .name("dependencies___table_id___current_idx")
+                .table(Dependencies::Table)
+                .col(Dependencies::TableId)
+                .and_where(open_interval(Dependencies::ValidTo))
+                .to_owned(),
+            // Register and collection delete resolve the dependencies on a set of tables.
+            Index::create().name("dependencies___table_id___idx").table(Dependencies::Table).col(Dependencies::TableId).to_owned(),
             Index::create()
                 .name("dependencies___dependency_id__defined_on__id___idx")
                 .table(Dependencies::Table)
@@ -81,17 +106,23 @@ impl Entity for Defs {
                 .to_owned(),
             // For recursive downstream graph traversal (recurse_down column)
             Index::create().name("dependencies___function_id___idx").table(Dependencies::Table).col(Dependencies::FunctionId).to_owned(),
-            // For recursive upstream graph traversal (recurse_up column)
             Index::create()
-                .name("dependencies___table_function_id___idx")
+                .name("dependencies___dependency_id___current_uidx")
                 .table(Dependencies::Table)
-                .col(Dependencies::TableFunctionId)
+                .col(Dependencies::DependencyId)
+                .unique()
+                .and_where(open_interval(Dependencies::ValidTo))
+                .to_owned(),
+            Index::create()
+                .name("dependencies___function_id___current_idx")
+                .table(Dependencies::Table)
+                .col(Dependencies::FunctionId)
+                .and_where(open_interval(Dependencies::ValidTo))
                 .to_owned(),
         ]
     }
 
     fn create_views(&self) -> Vec<ViewDef> {
-        // dependencies__with_names (collections joined twice: once for collection_id, once for table_collection_id)
         let table_collection = Alias::new("table_collection");
         vec![ViewDef::new(
             DependenciesWithNames,
@@ -121,23 +152,16 @@ impl Entity for Defs {
         )]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Dependencies::Table.to_string()),
-            source_table: Dependencies::Table.into_iden(),
-            target_table: DependenciesCurrent::Table.into_iden(),
-            partition_col: Dependencies::DependencyId.into_iden(),
-            columns: cols_of::<Dependencies>(),
-        })]
-    }
-
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: DependenciesCurrent::Table.into_iden(),
-            source: Dependencies::Table.into_iden(),
-            partition_col: Dependencies::DependencyId.into_iden(),
-            version_col: Dependencies::DefinedOn.into_iden(),
-            columns: cols_of::<Dependencies>(),
-        }]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", Dependencies::Table.to_string()),
+                source_table: Dependencies::Table.into_iden(),
+                partition_col: Dependencies::DependencyId.into_iden(),
+                valid_from_col: Dependencies::DefinedOn.into_iden(),
+                pk_col: Dependencies::Id.into_iden(),
+            }
+            .derived(),
+        ]
     }
 }

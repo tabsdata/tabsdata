@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, Table, TableCreateStatement};
+use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table, TableCreateStatement};
 
 use super::collections::Collections;
 use crate::schema::Entity;
@@ -48,9 +48,5 @@ impl Entity for Defs {
                 )
                 .to_owned(),
         ]
-    }
-
-    fn create_indices(&self) -> Vec<IndexCreateStatement> {
-        vec![Index::create().name("bundles___collection_id___idx").table(Bundles::Table).col(Bundles::CollectionId).to_owned()]
     }
 }

@@ -81,17 +81,28 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // The group-delete RESTRICT FK probe (see `collections`).
             Index::create()
-                .name("transactions___collection_id___idx")
+                .name("transactions___project_id__group_id___idx")
                 .table(Transactions::Table)
-                .col(Transactions::CollectionId)
+                .col(Transactions::ProjectId)
+                .col(Transactions::GroupId)
                 .to_owned(),
             Index::create().name("transactions___execution_id___idx").table(Transactions::Table).col(Transactions::ExecutionId).to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
-                .name("transactions___group_id__collection_id___idx")
+                .name("transactions___project_id__id___idx")
                 .table(Transactions::Table)
-                .col(Transactions::GroupId)
-                .col(Transactions::CollectionId)
+                .col(Transactions::ProjectId)
+                .col(Transactions::Id)
+                .to_owned(),
+            // The transaction list's default time ordering.
+            Index::create()
+                .name("transactions___project_id__triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ProjectId)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
                 .to_owned(),
         ]
     }

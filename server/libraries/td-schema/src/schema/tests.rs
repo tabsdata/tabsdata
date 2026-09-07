@@ -8,10 +8,9 @@
 //! that execute SQL against a real database live in `td-database` where
 //! `TdPool` is available.
 
-use super::sql::TriggerSpec;
-use super::{CurrentSource, SchemaDelta, SchemaSource, archive, current, deltas, install_script};
+use super::{CurrentSource, SchemaDelta, SchemaSource, archive, current, deltas, derived_scripts, install_script};
 use crate::schema::render::{render_schema, update_db_version};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::LazyLock;
 
 /// Cached `current::build()` output. The consistency tests only read this —
@@ -57,14 +56,17 @@ pub(crate) fn validate_delta<D: SchemaDelta>() {
     );
 }
 
-// No real deltas exist at the v1 baseline; synthetic ones exercise the
-// migration harness (its application half lives in td-database's
-// `shared_schema` tests).
+// Synthetic deltas exercise the migration harness independently of the real
+// ladder (its application half lives in td-database's `shared_schema` tests).
 struct SyntheticDelta;
 
 impl SchemaDelta for SyntheticDelta {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
+
+    fn retired() -> Vec<String> {
+        vec![]
+    }
 
     fn up() -> Vec<String> {
         vec![
@@ -84,6 +86,10 @@ struct MissingBumpDelta;
 impl SchemaDelta for MissingBumpDelta {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
+
+    fn retired() -> Vec<String> {
+        vec![]
+    }
 
     fn up() -> Vec<String> {
         vec!["ALTER TABLE users ADD COLUMN nickname text".to_string()]
@@ -113,8 +119,7 @@ fn test_schema_ddl_snapshot() {
     crate::snapshot::assert_snapshot(&snapshot_dir("current/snapshots"), current::build);
 }
 
-/// Guards every frozen archive's committed snapshots. No-op at the v1
-/// baseline; activates on the first version bump.
+/// Guards every frozen archive's committed snapshots.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_archive_ddl_snapshots() {
@@ -123,19 +128,18 @@ fn test_archive_ddl_snapshots() {
     }
 }
 
-/// Guards every frozen delta's committed snapshots. No-op at the v1 baseline;
-/// activates on the first version bump.
+/// Guards every frozen delta's committed snapshots.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_delta_ddl_snapshots() {
     for v in 2..=current::VERSION {
-        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("deltas/snapshots/v{}_to_v{v}", v - 1)), || deltas::get(v));
+        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("deltas/snapshots/v{}_to_v{v}", v - 1)), || deltas::get(v).up);
     }
 }
 
 /// On a version bump, archives must exist for every version in
 /// `1..CURRENT_VERSION` and produce non-empty output. Guards against bumping
-/// `CURRENT_VERSION` without creating `archive/vN/`. No-op at v1 baseline.
+/// `CURRENT_VERSION` without creating `archive/vN/`.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_migration_guard_archives_exist() {
@@ -152,12 +156,12 @@ fn test_migration_guard_archives_exist() {
 
 /// On a version bump, deltas must exist for every version in
 /// `2..=CURRENT_VERSION` and produce non-empty output. Guards against bumping
-/// `CURRENT_VERSION` without creating `deltas/vN_to_vM.rs`. No-op at v1 baseline.
+/// `CURRENT_VERSION` without creating `deltas/vN_to_vM.rs`.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_migration_guard_deltas_exist() {
     for v in 2..=current::VERSION {
-        let result = std::panic::catch_unwind(|| deltas::get(v));
+        let result = std::panic::catch_unwind(|| deltas::get(v).up);
         assert!(
             result.is_ok(),
             "Missing delta for version {v}. When bumping CURRENT_VERSION to {}, create deltas/v{}_to_v{v}.rs.",
@@ -170,19 +174,50 @@ fn test_migration_guard_deltas_exist() {
 
 /// Every wired delta must end with the `db_version` bump — without it a
 /// mid-ladder failure replays the committed delta on retry. Unlike
-/// `validate_delta`, this needs no per-module opt-in. No-op at v1 baseline.
+/// `validate_delta`, this needs no per-module opt-in.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
 fn test_migration_guard_deltas_bump_db_version() {
     for v in 2..=current::VERSION {
-        let stmts = deltas::get(v);
+        let stmts = deltas::get(v).up;
         assert_eq!(stmts.last(), Some(&update_db_version(v)), "Delta v{}->v{v} must end with `update_db_version({v})`", v - 1,);
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tier 1 consistency tests over the ENTITIES slice
-// ---------------------------------------------------------------------------
+fn derived_drops(source: &dyn SchemaSource) -> BTreeSet<String> {
+    derived_scripts(source).0.into_iter().collect()
+}
+
+/// Every delta's declared [`SchemaDelta::retired`] set is exactly what the
+/// archives prove disappeared across that rung: the derived objects standing at
+/// `FROM_VERSION` that the target no longer declares. Without this the
+/// declaration rests on the author's judgement; with it, a forgotten trigger or
+/// index is named on the spot.
+#[allow(clippy::reversed_empty_ranges)]
+#[test]
+fn test_retired_matches_archive_diff() {
+    for v in 2..=current::VERSION {
+        let from = archive::source(v - 1);
+        let to: &dyn SchemaSource = if v == current::VERSION {
+            &CurrentSource
+        } else {
+            archive::source(v)
+        };
+        let expected: BTreeSet<String> = derived_drops(from).difference(&derived_drops(to)).cloned().collect();
+        let declared: BTreeSet<String> = deltas::get(v).retired.into_iter().collect();
+        let missing: Vec<&String> = expected.difference(&declared).collect();
+        let extra: Vec<&String> = declared.difference(&expected).collect();
+        assert!(
+            missing.is_empty() && extra.is_empty(),
+            "delta v{}->v{v} `retired()` disagrees with the archives.\n\
+             missing (standing at v{} and left behind by the ladder): {missing:#?}\n\
+             extra (not standing at v{}): {extra:#?}",
+            v - 1,
+            v - 1,
+            v - 1,
+        );
+    }
+}
 
 /// T2: every table created by any entity has a unique name.
 /// Built on top of `Schema::build` output rather than the entity API
@@ -211,13 +246,15 @@ fn test_entities_are_fk_topologically_sorted() {
         for t in e.create_tables() {
             let sql = render_schema(t);
             let table = parse_create_table_name(&sql).unwrap_or_else(|| panic!("could not parse table name from: {sql}"));
+            // Before its own FKs are checked: a table may reference itself
+            // (or an earlier table of the same entity) within its own CREATE.
+            entity_tables.push(table.clone());
             for fk in fk_references(&sql) {
                 if entity_tables.contains(&fk) {
-                    continue; // self-reference within the same entity
+                    continue;
                 }
                 assert!(declared.contains(&fk), "ENTITIES[{i}]: table {table:?} references {fk:?} which is not yet declared in ENTITIES",);
             }
-            entity_tables.push(table.clone());
             declared.insert(table);
         }
     }
@@ -292,27 +329,36 @@ fn test_schema_build_phase_ordering() {
     }
 }
 
-/// T7: every `_current` table has a corresponding source table declared
-/// earlier in the build output. Scans CREATE TABLE statements (in
-/// emission order) for the `_current` suffix and asserts the base name
-/// appeared first.
+/// T11: every table with an SCD2 close-out trigger declares a `valid_to`
+/// column and a unique `WHERE valid_to = 'infinity'` partial index — the
+/// one-open-row invariant every interval read depends on.
 #[test]
-fn test_current_peers_are_paired() {
-    let mut tables_in_order: Vec<String> = Vec::new();
-    for sql in cached_build() {
-        if let Some(name) = parse_create_table_name(sql) {
-            tables_in_order.push(name);
-        }
-    }
-    for (i, name) in tables_in_order.iter().enumerate() {
-        if let Some(base) = name.strip_suffix("_current") {
-            let base_idx = tables_in_order.iter().position(|n| n == base).unwrap_or_else(|| panic!("{name} has no source table {base}"));
-            assert!(base_idx < i, "{name} declared at index {i} but its source {base} is at {base_idx}");
-        }
+fn test_scd2_tables_have_valid_to_and_open_uniqueness() {
+    let build = cached_build();
+    let scd2_tables: Vec<String> = build
+        .iter()
+        .filter_map(|sql| {
+            let rest = sql.strip_prefix("CREATE TRIGGER ")?;
+            let name = rest.split_whitespace().next()?;
+            let table = name.strip_suffix("__scd2_close")?;
+            sql.contains("BEFORE INSERT").then(|| table.to_string())
+        })
+        .collect();
+    assert!(!scd2_tables.is_empty(), "no SCD2 close-out triggers found");
+    for table in &scd2_tables {
+        let create = build
+            .iter()
+            .find(|sql| parse_create_table_name(sql).as_deref() == Some(table))
+            .unwrap_or_else(|| panic!("no CREATE TABLE for {table}"));
+        assert!(create.contains(r#""valid_to" timestamp with time zone NOT NULL"#), "{table} lacks valid_to: {create}");
+        assert!(
+            build.iter().any(|sql| sql.starts_with("CREATE UNIQUE INDEX")
+                && sql.contains(&format!(r#"ON "{table}""#))
+                && sql.contains(r#""valid_to" = ('infinity'::timestamptz)"#)),
+            "{table} lacks the unique open-interval partial index",
+        );
     }
 }
-
-// ---- helpers ----
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -351,8 +397,8 @@ fn classify_stmt(sql: &str) -> Phase {
     } else if s.starts_with("INSERT") {
         Phase::Insert
     } else if s.starts_with("ALTER TABLE") || s.starts_with("CREATE POLICY") {
-        // Phase 6: PostgreSQL row-level security (ALTER TABLE … RLS / SET
-        // DEFAULT, CREATE POLICY). Postgres-only; emitted after seeds.
+        // Row-level security (ALTER TABLE … RLS / SET DEFAULT, CREATE
+        // POLICY), emitted after seeds.
         Phase::Rls
     } else {
         panic!("unrecognized statement kind in Schema::build output: {sql}");
@@ -418,10 +464,6 @@ fn fk_references(sql: &str) -> Vec<String> {
     }
     out
 }
-
-// ---------------------------------------------------------------------------
-// Cross-validation tests
-// ---------------------------------------------------------------------------
 
 /// Extract column names from a `CREATE TABLE` statement.
 ///
@@ -496,33 +538,6 @@ fn test_fk_target_columns_resolve() {
     }
 }
 
-/// T10: every `maintain_current` / `versioned_current` trigger's column
-/// list is a subset of *both* its source and target tables' columns.
-/// Catches the case where a column gets added to the event log but not to
-/// the `_current` peer (or vice versa).
-#[test]
-fn test_maintain_current_trigger_columns_match_tables() {
-    for e in current::ENTITIES {
-        for spec in e.create_db_triggers() {
-            let (source, target, cols): (String, String, Vec<String>) = match &spec {
-                TriggerSpec::MaintainCurrent(d) => {
-                    (d.source_table.to_string(), d.target_table.to_string(), d.columns.iter().map(|c| c.to_string()).collect())
-                }
-                TriggerSpec::VersionedCurrent(d) => {
-                    (d.source_table.to_string(), d.target_table.to_string(), d.columns.iter().map(|c| c.to_string()).collect())
-                }
-                _ => continue,
-            };
-            let source_cols = COLS_BY_TABLE.get(&source).unwrap_or_else(|| panic!("trigger source table {source:?} not declared"));
-            let target_cols = COLS_BY_TABLE.get(&target).unwrap_or_else(|| panic!("trigger target table {target:?} not declared"));
-            for c in &cols {
-                assert!(source_cols.iter().any(|sc| sc == c), "{source}: maintain_current column {c:?} not present (have {source_cols:?})",);
-                assert!(target_cols.iter().any(|tc| tc == c), "{target}: maintain_current column {c:?} not present (have {target_cols:?})",);
-            }
-        }
-    }
-}
-
 /// T11: the hand-maintained `project_scoped_tables` list is exactly the set of
 /// tables that declare a `project_id` column. The schema build attaches an RLS
 /// policy to every table in that list, so a table that grows a `project_id`
@@ -557,4 +572,42 @@ fn test_project_scoped_tables_match_project_id_columns() {
         "project_scoped_tables lists tables that have no `project_id` column: \
          {stale:?}. Remove them from the list or add the column.",
     );
+}
+
+/// PostgreSQL truncates identifiers at `NAMEDATALEN - 1` = 63 bytes, silently:
+/// a longer index name is created under its truncated form, so two names that
+/// agree in their first 63 bytes collide and the second `CREATE` fails.
+#[test]
+fn test_index_names_fit_postgres_identifiers() {
+    let build = cached_build();
+    let long: Vec<String> = build.iter().filter_map(|sql| parse_create_index_name(sql)).filter(|name| name.len() > 63).collect();
+    assert!(long.is_empty(), "index names past PostgreSQL's 63-byte limit: {long:?}");
+}
+
+/// An index whose columns are a leading prefix of another index's, under the
+/// same partial predicate, is dead weight: every scan the shorter one can serve
+/// the longer one serves too, and only the longer is maintained for free.
+#[test]
+fn test_no_index_is_a_prefix_of_another() {
+    let build = cached_build();
+    let mut declared: Vec<(String, String, Vec<String>, String)> = Vec::new();
+    for sql in build.iter() {
+        let Some(name) = parse_create_index_name(sql) else {
+            continue;
+        };
+        let (table, rest) = sql.split_once(" ON \"").and_then(|(_, r)| r.split_once('"')).expect("index on a table");
+        let cols = rest
+            .trim_start()
+            .strip_prefix('(')
+            .and_then(|c| c.split_once(") WHERE ").or_else(|| c.rsplit_once(')')))
+            .expect("index columns");
+        let columns = cols.0.split(", ").map(|c| c.trim().to_string()).collect();
+        declared.push((table.to_string(), name, columns, cols.1.to_string()));
+    }
+    for (table, name, columns, predicate) in &declared {
+        let subsumer = declared.iter().find(|(t, n, c, p)| {
+            t == table && n != name && p == predicate && c.len() > columns.len() && &c[..columns.len()] == columns.as_slice()
+        });
+        assert!(subsumer.is_none(), "{name} is a leading prefix of {}", subsumer.unwrap().1);
+    }
 }

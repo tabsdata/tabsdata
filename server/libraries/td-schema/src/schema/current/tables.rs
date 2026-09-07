@@ -3,17 +3,18 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
-    Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
 use super::functions::Functions;
-use super::tables_current::TablesCurrent;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "tables__with_names"]
@@ -36,6 +37,7 @@ pub enum Tables {
     DefinedById,
     Status,
     TableType,
+    ValidTo,
 }
 
 pub(super) struct Defs;
@@ -59,6 +61,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Tables::DefinedById).text().not_null())
                 .col(ColumnDef::new(Tables::Status).text().not_null())
                 .col(ColumnDef::new(Tables::TableType).text().not_null().default("R"))
+                .col(ColumnDef::new(Tables::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Tables::Table, Tables::CollectionId)
@@ -79,21 +82,61 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // The at-now twin of `(collection_id, name)`, which is
+            // non-partial and so carries every historical version.
+            Index::create()
+                .name("tables___collection_id__name___current_idx")
+                .table(Tables::Table)
+                .col(Tables::CollectionId)
+                .col(Tables::Name)
+                .and_where(open_interval(Tables::ValidTo))
+                .to_owned(),
+            // The graph recursion's reference set: every open row of the
+            // tenant filtered on status, with nothing else to lead on.
+            Index::create()
+                .name("tables___project_id__status___current_idx")
+                .table(Tables::Table)
+                .col(Tables::ProjectId)
+                .col(Tables::Status)
+                .and_where(open_interval(Tables::ValidTo))
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create().name("tables___project_id__id___idx").table(Tables::Table).col(Tables::ProjectId).col(Tables::Id).to_owned(),
+            // At-time `(collection, name)` resolution on every table read and register;
+            // an interval predicate cannot use the open-row partial index.
+            Index::create()
+                .name("tables___collection_id__name___idx")
+                .table(Tables::Table)
+                .col(Tables::CollectionId)
+                .col(Tables::Name)
+                .to_owned(),
+            // Enable re-registers every table of a function version.
+            Index::create().name("tables___function_version_id___idx").table(Tables::Table).col(Tables::FunctionVersionId).to_owned(),
             Index::create()
                 .name("tables___function_id__status___idx")
                 .table(Tables::Table)
                 .col(Tables::FunctionId)
                 .col(Tables::Status)
                 .to_owned(),
-            Index::create().name("tables___status___idx").table(Tables::Table).col(Tables::Status).to_owned(),
-            // Composite index for versioned queries:
-            // PARTITION BY table_id ORDER BY defined_on DESC, id DESC
             Index::create()
                 .name("tables___table_id__defined_on__id___idx")
                 .table(Tables::Table)
                 .col(Tables::TableId)
                 .col(Tables::DefinedOn)
                 .col(Tables::Id)
+                .to_owned(),
+            Index::create()
+                .name("tables___table_id___current_uidx")
+                .table(Tables::Table)
+                .col(Tables::TableId)
+                .unique()
+                .and_where(open_interval(Tables::ValidTo))
+                .to_owned(),
+            Index::create()
+                .name("tables___function_id___current_idx")
+                .table(Tables::Table)
+                .col(Tables::FunctionId)
+                .and_where(open_interval(Tables::ValidTo))
                 .to_owned(),
         ]
     }
@@ -124,23 +167,16 @@ impl Entity for Defs {
         )]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Tables::Table.to_string()),
-            source_table: Tables::Table.into_iden(),
-            target_table: TablesCurrent::Table.into_iden(),
-            partition_col: Tables::TableId.into_iden(),
-            columns: cols_of::<Tables>(),
-        })]
-    }
-
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: TablesCurrent::Table.into_iden(),
-            source: Tables::Table.into_iden(),
-            partition_col: Tables::TableId.into_iden(),
-            version_col: Tables::DefinedOn.into_iden(),
-            columns: cols_of::<Tables>(),
-        }]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", Tables::Table.to_string()),
+                source_table: Tables::Table.into_iden(),
+                partition_col: Tables::TableId.into_iden(),
+                valid_from_col: Tables::DefinedOn.into_iden(),
+                pk_col: Tables::Id.into_iden(),
+            }
+            .derived(),
+        ]
     }
 }

@@ -3,20 +3,17 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
-    Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
-use super::functions_current::FunctionsCurrent;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::{SeedCurrent, TriggerDef, TriggerSpec, ViewDef, cols_of};
-
-/// `FunctionStatus::Deleted` discriminant, hoisted as a `&str` because
-/// td-schema sits below td-objects in the dep graph.
-pub(super) const FUNCTION_STATUS_DELETED: &str = "D";
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{Scd2TriggerDef, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "functions__with_names"]
@@ -45,6 +42,7 @@ pub enum Functions {
     Connector,
     Connection,
     Enabled,
+    ValidTo,
 }
 
 pub(super) struct Defs;
@@ -80,6 +78,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Functions::Connector).text().null())
                 .col(ColumnDef::new(Functions::Connection).text().null())
                 .col(ColumnDef::new(Functions::Enabled).boolean().default(true))
+                .col(ColumnDef::new(Functions::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Functions::Table, Functions::CollectionId)
@@ -93,15 +92,54 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            Index::create().name("functions___collection_id___idx").table(Functions::Table).col(Functions::CollectionId).to_owned(),
-            // Composite index for versioned queries:
-            // PARTITION BY function_id ORDER BY defined_on DESC, id DESC
+            // `(collection, name)` resolution at a point in time on every
+            // function verb; without `name` it is a heap residual over every
+            // historical version in the collection.
+            Index::create()
+                .name("functions___collection_id__name___idx")
+                .table(Functions::Table)
+                .col(Functions::CollectionId)
+                .col(Functions::Name)
+                .to_owned(),
+            // The at-now twin of the pair above.
+            Index::create()
+                .name("functions___collection_id__name___current_idx")
+                .table(Functions::Table)
+                .col(Functions::CollectionId)
+                .col(Functions::Name)
+                .and_where(open_interval(Functions::ValidTo))
+                .to_owned(),
+            // The graph recursion's reference set: every open row of the
+            // tenant filtered on status, with nothing else to lead on.
+            Index::create()
+                .name("functions___project_id__status___current_idx")
+                .table(Functions::Table)
+                .col(Functions::ProjectId)
+                .col(Functions::Status)
+                .and_where(open_interval(Functions::ValidTo))
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("functions___project_id__id___idx")
+                .table(Functions::Table)
+                .col(Functions::ProjectId)
+                .col(Functions::Id)
+                .to_owned(),
             Index::create()
                 .name("functions___function_id__defined_on__id___idx")
                 .table(Functions::Table)
                 .col(Functions::FunctionId)
                 .col(Functions::DefinedOn)
                 .col(Functions::Id)
+                .to_owned(),
+            // One open interval per partition — the SCD2 invariant, and the
+            // at-now lookup path.
+            Index::create()
+                .name("functions___function_id___current_uidx")
+                .table(Functions::Table)
+                .col(Functions::FunctionId)
+                .unique()
+                .and_where(open_interval(Functions::ValidTo))
                 .to_owned(),
         ]
     }
@@ -132,23 +170,16 @@ impl Entity for Defs {
         )]
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::MaintainCurrent(TriggerDef {
-            name: format!("{}__maintain_current", Functions::Table.to_string()),
-            source_table: Functions::Table.into_iden(),
-            target_table: FunctionsCurrent::Table.into_iden(),
-            partition_col: Functions::FunctionId.into_iden(),
-            columns: cols_of::<Functions>(),
-        })]
-    }
-
-    fn seed_current(&self) -> Vec<SeedCurrent> {
-        vec![SeedCurrent {
-            target: FunctionsCurrent::Table.into_iden(),
-            source: Functions::Table.into_iden(),
-            partition_col: Functions::FunctionId.into_iden(),
-            version_col: Functions::DefinedOn.into_iden(),
-            columns: cols_of::<Functions>(),
-        }]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", Functions::Table.to_string()),
+                source_table: Functions::Table.into_iden(),
+                partition_col: Functions::FunctionId.into_iden(),
+                valid_from_col: Functions::DefinedOn.into_iden(),
+                pk_col: Functions::Id.into_iden(),
+            }
+            .derived(),
+        ]
     }
 }

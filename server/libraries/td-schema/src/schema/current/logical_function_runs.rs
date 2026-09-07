@@ -10,7 +10,7 @@
 //! per-attempt audit `status` on `physical_function_runs`.
 //!
 //! This file also owns the cross-cutting views that drive off LFR:
-//! `function_runs__with_names` (LFR + currently-bound PFR via pointer hop)
+//! `function_runs__with_names` (LFR + the attempt whose binding is open)
 //! and the dialect-specific `global_status_summary` / `execution_status_summary`
 //! / `transaction_status_summary` views (LFR-driven aggregations).
 
@@ -23,15 +23,15 @@ use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
-use super::logical_function_run_pointers::POINTER_STATUS_BOUND;
-use super::logical_function_run_pointers_current::LogicalFunctionRunPointersCurrent;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::{json_object_agg, name_or_id};
-use crate::schema::sql::{StickyTerminalsTriggerDef, TriggerSpec, ViewDef};
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{StickyTerminalsTriggerDef, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "function_runs__with_names"]
@@ -77,7 +77,6 @@ pub(super) struct Defs;
 impl Entity for Defs {
     fn create_tables(&self) -> Vec<TableCreateStatement> {
         vec![
-            // logical_function_runs — identity row, insert-once.
             Table::create()
                 .table(LogicalFunctionRuns::Table)
                 .col(ColumnDef::new(LogicalFunctionRuns::Id).text().not_null().primary_key())
@@ -129,6 +128,38 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // The group-delete RESTRICT FK probe (see `collections`).
+            Index::create()
+                .name("logical_function_runs___project_id__group_id___idx")
+                .table(LogicalFunctionRuns::Table)
+                .col(LogicalFunctionRuns::ProjectId)
+                .col(LogicalFunctionRuns::GroupId)
+                .to_owned(),
+            // The scheduler's execute tick: `status IN (..) ORDER BY
+            // triggered_on` — status alone cannot serve the ordering. Ticks are
+            // per project, but the recovery snapshot reads the same status
+            // across projects, so `project_id` sits after the shared prefix.
+            Index::create()
+                .name("logical_function_runs___status__project_id__triggered_on___idx")
+                .table(LogicalFunctionRuns::Table)
+                .col(LogicalFunctionRuns::Status)
+                .col(LogicalFunctionRuns::ProjectId)
+                .col(LogicalFunctionRuns::TriggeredOn)
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("logical_function_runs___project_id__id___idx")
+                .table(LogicalFunctionRuns::Table)
+                .col(LogicalFunctionRuns::ProjectId)
+                .col(LogicalFunctionRuns::Id)
+                .to_owned(),
+            // Executions of one function version; the column is otherwise
+            // unindexed and the lookup drives an OR of two EXISTS probes.
+            Index::create()
+                .name("logical_function_runs___function_version_id___idx")
+                .table(LogicalFunctionRuns::Table)
+                .col(LogicalFunctionRuns::FunctionVersionId)
+                .to_owned(),
             // FR → LFR derivation (status cascade, callback, redirect, replay).
             // Unique by construction: at most one LFR per `(execution_id,
             // function_id)`. The `.unique()` lifts that invariant from
@@ -161,20 +192,6 @@ impl Entity for Defs {
                 .table(LogicalFunctionRuns::Table)
                 .col(LogicalFunctionRuns::TransactionId)
                 .col(LogicalFunctionRuns::Status)
-                .to_owned(),
-            Index::create()
-                .name("logical_function_runs___status___idx")
-                .table(LogicalFunctionRuns::Table)
-                .col(LogicalFunctionRuns::Status)
-                .to_owned(),
-            // Group-filtered metrics / Sankey hot path: covers
-            // `(group_id, collection_id)` to support both group-level
-            // aggregations and per-collection drill-downs.
-            Index::create()
-                .name("logical_function_runs___group_id__collection_id___idx")
-                .table(LogicalFunctionRuns::Table)
-                .col(LogicalFunctionRuns::GroupId)
-                .col(LogicalFunctionRuns::CollectionId)
                 .to_owned(),
         ]
     }
@@ -254,24 +271,15 @@ impl Entity for Defs {
                     Users::Table,
                     Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::TriggeredById)).equals((Users::Table, Users::Id)),
                 )
-                // Currently-bound PFR via the pointer-current snapshot; the
-                // status predicate makes non-Bound rows read as unbound
-                // without relying on their NULL concrete id.
-                .join(
-                    JoinType::LeftJoin,
-                    LogicalFunctionRunPointersCurrent::Table,
-                    Expr::col((LogicalFunctionRunPointersCurrent::Table, LogicalFunctionRunPointersCurrent::LogicalFunctionRunId))
-                        .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id))
-                        .and(
-                            Expr::col((LogicalFunctionRunPointersCurrent::Table, LogicalFunctionRunPointersCurrent::Status))
-                                .eq(POINTER_STATUS_BOUND),
-                        ),
-                )
+                // The attempt currently bound to this run: its open SCD2
+                // interval. Unbound runs (no attempt yet, or all of them
+                // voided) read as NULL on every PFR-derived column.
                 .join(
                     JoinType::LeftJoin,
                     PhysicalFunctionRuns::Table,
-                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id))
-                        .equals((LogicalFunctionRunPointersCurrent::Table, LogicalFunctionRunPointersCurrent::PhysicalFunctionRunId)),
+                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::LogicalFunctionRunId))
+                        .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id))
+                        .and(open_interval((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::ValidTo))),
                 )
                 .to_owned(),
         );
@@ -281,13 +289,16 @@ impl Entity for Defs {
         views
     }
 
-    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::StickyTerminals(StickyTerminalsTriggerDef {
-            name: format!("{}__sticky_terminals", LogicalFunctionRuns::Table.to_string()),
-            source_table: LogicalFunctionRuns::Table.into_iden(),
-            status_col: LogicalFunctionRuns::Status.into_iden(),
-            terminal_values: &["C", "X", "Y"],
-        })]
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            StickyTerminalsTriggerDef {
+                name: format!("{}__sticky_terminals", LogicalFunctionRuns::Table.to_string()),
+                source_table: LogicalFunctionRuns::Table.into_iden(),
+                status_col: LogicalFunctionRuns::Status.into_iden(),
+                terminal_values: &["C", "X", "Y"],
+            }
+            .derived(),
+        ]
     }
 }
 
@@ -299,7 +310,6 @@ impl Entity for Defs {
 /// Status lives on `logical_function_runs.status`; aggregation rows up
 /// from LFRs (one per logical run) rather than FRs (per-attempt audit).
 fn status_summary_views() -> Vec<ViewDef> {
-    // Helper: COUNT(CASE WHEN logical_function_runs.status IN (values) THEN 1 END)
     let count_status_in = |statuses: &[&str]| {
         Expr::expr(Func::count(Expr::expr(Expr::case(
             Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)).is_in(statuses.iter().copied()),
@@ -307,20 +317,16 @@ fn status_summary_views() -> Vec<ViewDef> {
         ))))
     };
 
-    // Helper: COUNT(logical_function_runs.status)
     let count_all = || Expr::expr(Func::count(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status))));
 
-    // --- status CASE (global + execution) ---
     let status_case = Expr::case(count_status_in(&["S"]).eq(count_all()), Expr::val("S"))
         .case(count_status_in(&["C", "X", "Y"]).eq(count_all()), Expr::val("F"))
         .case(count_status_in(&["C", "D", "F", "H"]).eq(count_all()).and(count_status_in(&["F", "H"]).gt(0)), Expr::val("L"))
         .case(count_status_in(&["S", "RR", "RS", "R", "D", "E"]).gt(0), Expr::val("R"))
         .finally(Expr::val("U"));
 
-    // --- finished (global + execution) ---
     let finished = Expr::expr(Func::count(Expr::col(Asterisk))).eq(count_status_in(&["C", "X", "Y"]));
 
-    // --- trx status CASE (transaction — individual C/X/Y branches) ---
     let trx_status_case = Expr::case(count_status_in(&["S"]).eq(count_all()), Expr::val("S"))
         .case(count_status_in(&["C"]).eq(count_all()), Expr::val("C"))
         .case(count_status_in(&["X"]).eq(count_all()), Expr::val("X"))
@@ -329,10 +335,8 @@ fn status_summary_views() -> Vec<ViewDef> {
         .case(count_status_in(&["S", "RR", "RS", "R", "D", "E"]).gt(0), Expr::val("R"))
         .finally(Expr::val("U"));
 
-    // --- trx finished ---
     let trx_finished = Expr::expr(Func::count(Expr::col(Asterisk))).eq(count_status_in(&["C", "X", "Y"]));
 
-    // --- JSON subqueries (fully sea-query; only the dialect JSON aggregate is custom) ---
     let json_agg = json_object_agg("inner_fr.status", "inner_fr.count");
 
     // A per-status `(status, count)` select, ready to be wrapped as a scalar
@@ -365,7 +369,6 @@ fn status_summary_views() -> Vec<ViewDef> {
         Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::TransactionId)).equals((Transactions::Table, Transactions::Id)),
     )));
 
-    // --- View definitions ---
     let global = ViewDef::new(
         Alias::new("global_status_summary"),
         Query::select()

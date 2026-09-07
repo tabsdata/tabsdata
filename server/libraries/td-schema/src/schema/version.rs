@@ -16,6 +16,17 @@ pub trait SchemaDelta {
     const FROM_VERSION: usize;
     /// Version migrated to.
     const TO_VERSION: usize;
+    /// Drop statements for the derived objects this delta retires: standing at
+    /// `FROM_VERSION`, absent at `TO_VERSION`, so the target schema's own drop
+    /// list cannot name them and the ladder would leave them behind. Objects on
+    /// a table `up` drops need no entry — PostgreSQL takes triggers and indexes
+    /// with the table — but their trigger functions do. Empty is a legitimate
+    /// answer, and required rather than defaulted so a bump has to answer it.
+    ///
+    /// `test_retired_matches_archive_diff` computes the true set from the
+    /// archives and fails with the difference.
+    fn retired() -> Vec<String>;
+
     /// Statements upgrading from `FROM_VERSION` to `TO_VERSION`.
     fn up() -> Vec<String>;
 }

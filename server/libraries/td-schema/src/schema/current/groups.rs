@@ -58,6 +58,12 @@ impl Entity for Defs {
         // Leads with project_id so it serves the RLS predicate; unique makes
         // group names unique within a project, not globally.
         vec![
+            // The primary key is `(project_id, id)` and the unique index
+            // `(project_id, name)`; RLS supplies `project_id` through an OR, so
+            // neither leading column is ever an index qual. Reads by name or id
+            // need their own.
+            Index::create().name("groups___name___idx").table(Groups::Table).col(Groups::Name).to_owned(),
+            Index::create().name("groups___id___idx").table(Groups::Table).col(Groups::Id).to_owned(),
             Index::create()
                 .name("groups___project_id__name___idx")
                 .table(Groups::Table)
