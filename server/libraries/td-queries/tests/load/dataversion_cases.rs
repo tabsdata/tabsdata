@@ -7,30 +7,28 @@
 //! table, sized on versions-per-partition (what `Versions` selectors rank
 //! over).
 
-use std::time::Instant;
-
+use crate::bulk::bulk_insert;
+use crate::harness::{analyze, timed, timed_once};
+use crate::profile::SizeProfile;
+use crate::scaling::assert_subquadratic;
 use sea_query::{ColumnDef, Iden, Query, Table};
-use ta_objects::{Buildable, Dao};
+use std::time::Instant;
+use ta_objects::Dao;
+use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_database::components::{SchemaComponent, SchemaSource};
+use td_database::pool::PoolKind;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::types::basic::{AtTime, LogicalTableDataVersionId};
 use td_objects::types::table_ref::{Version, Versions};
 use td_queries::{LiveEntry, VersionedEntry};
-use td_schema::schema::backend::Backend;
+use td_schema::schema::render::{render_query, render_schema};
 
-use crate::bulk::bulk_insert;
-use crate::harness::{analyze, timed, timed_once};
-use crate::profile::SizeProfile;
-use crate::scaling::assert_subquadratic;
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub(crate) struct DvPartition(String);
 
-#[ta_objects::typed(string)]
-#[derive(Eq, PartialEq)]
-struct DvPartition;
-
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
-enum DvStatus {
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub(crate) enum DvStatus {
     #[typed_enum(rename = "A")]
     Active,
 }
@@ -40,14 +38,13 @@ enum DvStatus {
 #[dao(
     data_version,
     sql_table = "load_dv_table",
-    versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id"),
-    states(Active = DvStatus::Active)
+    versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id")
 )]
 pub(crate) struct LoadDvDao {
-    id: LogicalTableDataVersionId,
-    partition_id: DvPartition,
-    status: DvStatus,
-    defined_on: AtTime,
+    pub id: LogicalTableDataVersionId,
+    pub partition_id: DvPartition,
+    pub status: DvStatus,
+    pub defined_on: AtTime,
 }
 
 /// Keyed projection of the same `load_dv_table`, for the keyed write paths.
@@ -55,10 +52,10 @@ pub(crate) struct LoadDvDao {
 #[derive(Eq, PartialEq)]
 #[dao(sql_table = "load_dv_table", key(id))]
 pub(crate) struct LoadDvKeyedDao {
-    id: LogicalTableDataVersionId,
-    partition_id: DvPartition,
-    status: DvStatus,
-    defined_on: AtTime,
+    pub id: LogicalTableDataVersionId,
+    pub partition_id: DvPartition,
+    pub status: DvStatus,
+    pub defined_on: AtTime,
 }
 
 /// `partitions` × `versions_per_partition` Active rows, sized by
@@ -84,8 +81,8 @@ fn dims() -> (usize, usize) {
 
 /// Shared by the env-seeded [`LoadDvFixture`] and the empty
 /// [`LoadDvTableOnly`].
-fn dv_create_table_sql(b: &Backend) -> String {
-    b.build_schema(
+fn dv_create_table_sql() -> String {
+    render_schema(
         Table::create()
             .table(LoadDvTable::Table)
             .col(
@@ -122,10 +119,10 @@ impl SchemaSource for LoadDvSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn tables(&self, b: Backend) -> Vec<String> {
-        vec![dv_create_table_sql(&b)]
+    fn tables(&self) -> Vec<String> {
+        vec![dv_create_table_sql()]
     }
-    fn seeds(&self, b: Backend) -> Vec<String> {
+    fn seeds(&self) -> Vec<String> {
         let (partitions, versions) = dims();
         let mut stmts = Vec::with_capacity(partitions * versions);
         let mut seq = 1u64;
@@ -134,25 +131,18 @@ impl SchemaSource for LoadDvSource {
                 let id = format!("DV20260101.{seq:010}");
                 let defined_on = dv_defined_on(v);
                 let partition = format!("p{p}");
-                stmts.push(
-                    b.build_query(
-                        Query::insert()
-                            .into_table(LoadDvTable::Table)
-                            .columns([
-                                LoadDvTable::Id,
-                                LoadDvTable::PartitionId,
-                                LoadDvTable::Status,
-                                LoadDvTable::DefinedOn,
-                            ])
-                            .values_panic([
-                                id.into(),
-                                partition.into(),
-                                "A".into(),
-                                defined_on.into(),
-                            ])
-                            .to_owned(),
-                    ),
-                );
+                stmts.push(render_query(
+                    Query::insert()
+                        .into_table(LoadDvTable::Table)
+                        .columns([
+                            LoadDvTable::Id,
+                            LoadDvTable::PartitionId,
+                            LoadDvTable::Status,
+                            LoadDvTable::DefinedOn,
+                        ])
+                        .values_panic([id.into(), partition.into(), "A".into(), defined_on.into()])
+                        .to_owned(),
+                ));
                 seq += 1;
             }
         }
@@ -161,6 +151,10 @@ impl SchemaSource for LoadDvSource {
 }
 
 impl SchemaComponent for LoadDvFixture {
+    fn pools(&self) -> &'static [PoolKind] {
+        &[PoolKind::Regular]
+    }
+
     fn key(&self) -> &'static str {
         "load_dv"
     }
@@ -183,12 +177,16 @@ impl SchemaSource for LoadDvTableSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn tables(&self, b: Backend) -> Vec<String> {
-        vec![dv_create_table_sql(&b)]
+    fn tables(&self) -> Vec<String> {
+        vec![dv_create_table_sql()]
     }
 }
 
 impl SchemaComponent for LoadDvTableOnly {
+    fn pools(&self) -> &'static [PoolKind] {
+        &[PoolKind::Regular]
+    }
+
     fn key(&self) -> &'static str {
         "load_dv"
     }
@@ -215,9 +213,9 @@ fn p0() -> DvPartition {
 }
 
 /// Fills `seeded` with the versions-per-partition axis from [`dims`].
-fn record(case: &'static str, db: &TdPool, t: Instant, rows: usize) {
+fn record(case: &'static str, t: Instant, rows: usize) {
     let (_p, versions) = dims();
-    crate::harness::record(case, db, SizeProfile::from_env(), t, rows, versions);
+    crate::harness::record(case, SizeProfile::from_env(), t, rows, versions);
 }
 
 #[td_test::test(db(crate::dataversion_cases::LoadDvFixture))]
@@ -230,7 +228,7 @@ async fn load_data_version_fetch_one(db: TdPool) -> Result<(), TdError> {
         .data_version(&p)
         .fetch_one::<LoadDvDao>(&Versions::Single(Version::Head(0)))
         .await?;
-    record("data_version::fetch_one", &db, t, 1);
+    record("data_version::fetch_one", t, 1);
     Ok(())
 }
 
@@ -244,12 +242,7 @@ async fn load_data_version_fetch_optional(db: TdPool) -> Result<(), TdError> {
         .data_version(&p)
         .fetch_optional::<LoadDvDao>(&Versions::None)
         .await?;
-    record(
-        "data_version::fetch_optional",
-        &db,
-        t,
-        row.is_some() as usize,
-    );
+    record("data_version::fetch_optional", t, row.is_some() as usize);
     assert!(row.is_some());
     Ok(())
 }
@@ -264,7 +257,7 @@ async fn load_data_version_fetch_all(db: TdPool) -> Result<(), TdError> {
         .data_version(&p)
         .fetch_all::<LoadDvDao>(&Versions::Range(Version::Head(-2), Version::Head(0)))
         .await?;
-    record("data_version::fetch_all", &db, t, rows.len());
+    record("data_version::fetch_all", t, rows.len());
     assert!(!rows.is_empty());
     Ok(())
 }
@@ -281,7 +274,6 @@ async fn load_data_version_fetch_relative_offset(db: TdPool) -> Result<(), TdErr
         .await?;
     record(
         "data_version::fetch_relative_offset",
-        &db,
         t,
         offset.is_some() as usize,
     );
@@ -291,19 +283,17 @@ async fn load_data_version_fetch_relative_offset(db: TdPool) -> Result<(), TdErr
 /// Keyed to the first seeded id, so `upsert` replaces it and
 /// `insert_or_ignore` hits the conflict path.
 fn keyed_row() -> Result<LoadDvKeyedDao, TdError> {
-    let defined_on = AtTime::try_from(
+    let defined_on = AtTime::from(
         dv_defined_on(0)
             .parse::<chrono::DateTime<chrono::Utc>>()
             .unwrap(),
-    )?;
-    Ok(LoadDvKeyedDao::builder()
-        .id(LogicalTableDataVersionId::try_from(
-            "DV20260101.0000000001",
-        )?)
-        .partition_id(p0())
-        .status(DvStatus::Active)
-        .defined_on(defined_on)
-        .build()?)
+    );
+    Ok(LoadDvKeyedDao {
+        id: LogicalTableDataVersionId::try_from("DV20260101.0000000001")?,
+        partition_id: p0(),
+        status: DvStatus::Active,
+        defined_on,
+    })
 }
 
 #[td_test::test(db(crate::dataversion_cases::LoadDvFixture))]
@@ -311,7 +301,7 @@ async fn load_data_version_upsert(db: TdPool) -> Result<(), TdError> {
     let row = keyed_row()?;
     let t = Instant::now();
     db.live().upsert(&row).await?;
-    record("live::upsert", &db, t, 1);
+    record("live::upsert", t, 1);
     Ok(())
 }
 
@@ -320,7 +310,7 @@ async fn load_data_version_insert_or_ignore(db: TdPool) -> Result<(), TdError> {
     let row = keyed_row()?;
     let t = Instant::now();
     db.live().insert_or_ignore(&row).await?;
-    record("live::insert_or_ignore", &db, t, 1);
+    record("live::insert_or_ignore", t, 1);
     Ok(())
 }
 
@@ -330,17 +320,17 @@ pub(crate) fn dv_rows(start: usize, count: usize) -> Result<Vec<LoadDvDao>, TdEr
         .map(|v| {
             let id =
                 LogicalTableDataVersionId::try_from(format!("DV20260101.{:010}", v + 1).as_str())?;
-            let defined_on = AtTime::try_from(
+            let defined_on = AtTime::from(
                 dv_defined_on(v)
                     .parse::<chrono::DateTime<chrono::Utc>>()
                     .unwrap(),
-            )?;
-            Ok(LoadDvDao::builder()
-                .id(id)
-                .partition_id(p0())
-                .status(DvStatus::Active)
-                .defined_on(defined_on)
-                .build()?)
+            );
+            Ok(LoadDvDao {
+                id,
+                partition_id: p0(),
+                status: DvStatus::Active,
+                defined_on,
+            })
         })
         .collect()
 }

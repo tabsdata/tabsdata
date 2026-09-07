@@ -4,7 +4,6 @@
 
 use crate::LiveEntry;
 use crate::QueryExecutor;
-use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::and;
@@ -19,7 +18,8 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AtTime, DependencyPos, LogicalPointerReason, LogicalPointerStatus, VersionPos,
+    AtTime, DependencyPos, LogicalFunctionRunInputId, LogicalPointerReason, LogicalPointerStatus,
+    LogicalTableDataVersionId, VersionPos,
 };
 
 /// Seed an LFR_input row mirroring a `(consumer FR, upstream FR + TDV)`
@@ -51,15 +51,7 @@ pub(crate) async fn seed_logical_input(
         ))
         .await?;
     let consumer_lfr_id = consumer_lfr.id.clone();
-    let mut input_builder = LogicalFunctionRunInputDB::builder();
-    input_builder
-        .collection_id(collection.id)
-        .execution_id(&execution.id)
-        .transaction_id(&transaction.id)
-        .logical_function_run_id(consumer_lfr_id)
-        .requirement_input_idx(None)
-        .requirement_dependency_pos(requirement_dependency_pos.cloned())
-        .requirement_version_pos(requirement_version_pos);
+    let mut requirement_ltdv_id = None;
 
     if let (Some(req_fr), Some(req_tdv)) =
         (requirement_function_run, requirement_table_data_version)
@@ -70,18 +62,20 @@ pub(crate) async fn seed_logical_input(
             .fetch_one(and!(&req_fr.execution_id, &req_fr.function_id))
             .await?;
         let producer_lfr_id = producer_lfr.id.clone();
-        let ltdv = LogicalTableDataVersionDB::builder()
-            .project_id(producer_lfr.project_id)
-            .group_id(producer_lfr.group_id)
-            .collection_id(collection.id)
-            .execution_id(&execution.id)
-            .transaction_id(&transaction.id)
-            .table_id(requirement_table.table_id)
-            .producer_logical_function_run_id(Some(producer_lfr_id))
-            .private(requirement_table.private)
-            .triggered_on(transaction.triggered_on)
-            .triggered_by_id(transaction.triggered_by_id)
-            .build()?;
+        let ltdv = LogicalTableDataVersionDB {
+            id: LogicalTableDataVersionId::new(),
+            project_id: producer_lfr.project_id,
+            collection_id: collection.id,
+            execution_id: execution.id.clone(),
+            transaction_id: transaction.id.clone(),
+            table_id: requirement_table.table_id,
+            producer_logical_function_run_id: Some(producer_lfr_id),
+            function_param_pos: None,
+            private: requirement_table.private,
+            triggered_on: transaction.triggered_on,
+            triggered_by_id: transaction.triggered_by_id,
+            group_id: producer_lfr.group_id,
+        };
         executor
             .reuse()
             .live()
@@ -103,10 +97,20 @@ pub(crate) async fn seed_logical_input(
             .insert::<LogicalTableDataVersionPointerDB>(&pointer)
             .await?;
 
-        input_builder.requirement_logical_table_data_version_id(Some(ltdv.id));
+        requirement_ltdv_id = Some(ltdv.id);
     }
 
-    let ffr_input = input_builder.build()?;
+    let ffr_input = LogicalFunctionRunInputDB {
+        id: LogicalFunctionRunInputId::default(),
+        collection_id: collection.id,
+        execution_id: execution.id.clone(),
+        transaction_id: transaction.id.clone(),
+        logical_function_run_id: consumer_lfr_id,
+        requirement_logical_table_data_version_id: requirement_ltdv_id,
+        requirement_input_idx: None,
+        requirement_dependency_pos: requirement_dependency_pos.cloned(),
+        requirement_version_pos: *requirement_version_pos,
+    };
     executor
         .reuse()
         .live()
@@ -121,10 +125,10 @@ mod tests {
     use super::and;
     use crate::test_utils::SeedEntry;
     use crate::{CurrentEntry, LiveEntry};
-    use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, DependencyPos, LogicalFunctionRunStatus, TableNameDto,
         TransactionKey, UserId, VersionPos,
@@ -144,23 +148,24 @@ mod tests {
             .await
             .unwrap();
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")
-            .unwrap()
-            .try_description("function_foo description")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(vec![TableNameDto::try_from("table_1").unwrap()])
-            .try_runtime_values("mock runtime values")
-            .unwrap()
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: "joaquin".try_into().unwrap(),
+            description: "function_foo description".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_1").unwrap()].into(),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function = db
             .scoped(p.id)
@@ -211,23 +216,24 @@ mod tests {
             .await
             .unwrap();
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin_2")
-            .unwrap()
-            .try_description("function_foo description")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")
-            .unwrap()
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: "joaquin_2".try_into().unwrap(),
+            description: "function_foo description".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function = db
             .scoped(p.id)

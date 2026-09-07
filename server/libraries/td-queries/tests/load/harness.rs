@@ -4,14 +4,13 @@
 
 //! Shared scaffolding for the per-family load cases.
 
+use crate::dataset::{self, ChainHandle};
+use crate::metric::{MetricRow, micros};
+use crate::profile::SizeProfile;
 use std::time::Instant;
-
+use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_error::TdError;
-
-use crate::dataset::{self, ChainHandle};
-use crate::metric::{MetricRow, backend_of, micros};
-use crate::profile::SizeProfile;
 
 /// Seed the chain dataset at the env-selected profile size. `seeded` is the
 /// producer-LTDV count; queries scaling on the function-run count recompute
@@ -28,7 +27,7 @@ pub(crate) async fn seed(db: &TdPool) -> Result<(ChainHandle, SizeProfile, usize
 /// isolate on a schema, so the sweep races every concurrent test's teardown.
 pub(crate) async fn analyze(db: &TdPool, what: &str) {
     let mut conn = db
-        .acquire()
+        .begin()
         .await
         .unwrap_or_else(|e| panic!("analyze {what}: {e:?}"));
     conn.analyze_current_schema()
@@ -39,7 +38,6 @@ pub(crate) async fn analyze(db: &TdPool, what: &str) {
 /// `t` is captured immediately before the query, so seeding is excluded.
 pub(crate) fn record(
     case: &'static str,
-    db: &TdPool,
     profile: SizeProfile,
     t: Instant,
     rows: usize,
@@ -47,7 +45,6 @@ pub(crate) fn record(
 ) {
     MetricRow {
         case,
-        backend: backend_of(db),
         profile: profile.name(),
         wall_us: micros(t.elapsed()),
         rows,

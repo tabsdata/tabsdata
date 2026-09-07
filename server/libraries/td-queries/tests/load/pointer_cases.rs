@@ -24,7 +24,6 @@ async fn load_pointers_concrete(db: TdPool) -> Result<(), TdError> {
     let row = (&db).ltdv().pointers().concrete(&h.ltdv_ids[0]).await?;
     record(
         "pointers::concrete",
-        &db,
         profile,
         t,
         row.is_some() as usize,
@@ -47,7 +46,6 @@ async fn load_pointers_at_concrete(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "pointers::at_concrete",
-        &db,
         profile,
         t,
         row.is_some() as usize,
@@ -75,14 +73,7 @@ async fn load_pointers_bind_all(db: TdPool) -> Result<(), TdError> {
         .collect();
     let t = Instant::now();
     let deferred = (&db).ltdv().pointers().bind_all(&binds, &at, &user).await?;
-    record(
-        "pointers::bind_all",
-        &db,
-        profile,
-        t,
-        deferred.len(),
-        seeded,
-    );
+    record("pointers::bind_all", profile, t, deferred.len(), seeded);
     assert_eq!(
         deferred.len(),
         h.ltdv_ids.len(),
@@ -121,7 +112,6 @@ async fn load_pointers_redirect_replay_attempts(db: TdPool) -> Result<(), TdErro
         .await?;
     record(
         "pointers::redirect_replay_attempts",
-        &db,
         profile,
         t,
         items.len(),
@@ -159,7 +149,6 @@ async fn load_pointers_redirect_outputs(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "pointers::redirect_outputs",
-        &db,
         profile,
         t,
         items.len(),
@@ -178,7 +167,6 @@ async fn load_ltdv_latest_bound_tdv_with_data_for_table(db: TdPool) -> Result<()
         .await?;
     record(
         "ltdv::latest_bound_tdv_with_data_for_table",
-        &db,
         profile,
         t,
         row.is_some() as usize,

@@ -4,17 +4,16 @@
 
 use crate::LiveEntry;
 use crate::QueryExecutor;
-use ta_objects::{Buildable, TryUpdater};
 use td_database::domain::{Apiserver, Domained};
-use td_database::pool::scoped::{InProject, Scoped};
+use td_database::pool::scoped::{Scoped, ScopedExt};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
-use td_objects::dxo::project::{
-    ActiveProjectDB, ActiveProjectDBBuilder, ProjectCreate, ProjectCreateDBBuilder,
-};
+use td_objects::dxo::group::{GroupCreate, GroupDB};
+use td_objects::dxo::project::ProjectCreateDB;
+use td_objects::dxo::project::{ActiveProjectDB, ProjectCreate};
 use td_objects::types::basic::{
-    AccessTokenId, Description, GroupId, GroupName, ProjectId, ProjectName, System, UserId,
+    AccessTokenId, BasePath, Description, GroupId, GroupName, ProjectId, ProjectName, System,
+    UserId,
 };
 use td_security::SYSTEM_GROUPS;
 
@@ -33,13 +32,22 @@ where
 {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
-    let project_create = ProjectCreate::builder()
-        .name(name)
-        .description(Description::default())
-        .build()?;
-    let project_db = ProjectCreateDBBuilder::try_from(&project_create)?
-        .try_update_from(&request_context)?
-        .build()?;
+    let project_create = ProjectCreate {
+        name,
+        description: Description::default(),
+        base_path: BasePath::default(),
+    };
+    let project_db = ProjectCreateDB {
+        id: ProjectId::default(),
+        name: project_create.name,
+        description: project_create.description,
+        base_path: project_create.base_path,
+        created_on: request_context.time,
+        created_by_id: request_context.user_id,
+        modified_on: request_context.time,
+        modified_by_id: request_context.user_id,
+        name_when_deleted: None,
+    };
 
     // Everything runs through the new project's scope. The `projects` row itself
     // is not RLS-scoped, so scoping is harmless there; the field-less `GroupDB`
@@ -49,19 +57,24 @@ where
     scoped.live().insert(&project_db).await?;
 
     for (group_id, group_name, group_description) in SYSTEM_GROUPS {
-        let group_create = GroupCreate::builder()
-            .name(GroupName::try_from(group_name)?)
-            .description(Description::try_from(group_description)?)
-            .build()?;
-        let group = GroupDBBuilder::try_from(&group_create)?
-            .try_update_from(&request_context)?
-            .id(GroupId::try_from(group_id)?)
-            .system(System::TRUE)
-            .build()?;
+        let group_create = GroupCreate {
+            name: GroupName::try_from(group_name)?,
+            description: Description::try_from(group_description)?,
+        };
+        let group = GroupDB {
+            id: GroupId::try_from(group_id)?,
+            name: group_create.name,
+            description: group_create.description,
+            created_on: request_context.time,
+            created_by_id: request_context.user_id,
+            modified_on: request_context.time,
+            modified_by_id: request_context.user_id,
+            system: System::TRUE,
+        };
         scoped.live().insert::<GroupDB>(&group).await?;
     }
 
-    Ok(ActiveProjectDBBuilder::try_from(&project_db)?.build()?)
+    Ok(ActiveProjectDB::from(project_db))
 }
 
 #[cfg(test)]

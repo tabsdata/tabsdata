@@ -95,7 +95,7 @@ fn report_regression() {
         // The baseline may predate a case.
         let Some(base) = baseline
             .iter()
-            .find(|b| b.case == cur.case && b.backend == cur.backend && b.profile == cur.profile)
+            .find(|b| b.case == cur.case && b.profile == cur.profile)
         else {
             continue;
         };
@@ -105,8 +105,8 @@ fn report_regression() {
         let limit = base.wall_us as f64 * (1.0 + pct / 100.0);
         if (cur.wall_us as f64) > limit {
             violations.push(format!(
-                "{} [{}/{}]: {}us vs baseline {}us (+{:.0}% allowed)",
-                cur.case, cur.backend, cur.profile, cur.wall_us, base.wall_us, pct
+                "{} [{}]: {}us vs baseline {}us (+{:.0}% allowed)",
+                cur.case, cur.profile, cur.wall_us, base.wall_us, pct
             ));
         }
     }
@@ -123,7 +123,6 @@ fn write_baseline(rows: &[MetricRecord]) -> std::io::Result<()> {
         body.push_str(
             &serde_json::json!({
                 "case": r.case,
-                "backend": r.backend,
                 "profile": r.profile,
                 "wall_us": r.wall_us,
                 "rows": r.rows,

@@ -4,12 +4,11 @@
 
 use crate::LiveEntry;
 use crate::QueryExecutor;
-use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::types::basic::{ExecutionName, TriggerType, TriggeredOn, UserId};
+use td_objects::types::basic::{ExecutionId, ExecutionName, TriggerType, TriggeredOn, UserId};
 
 pub(crate) async fn seed_execution(
     executor: impl QueryExecutor + Domained<Domain = Apiserver>,
@@ -30,16 +29,18 @@ async fn _seed_execution(
     function_version: &FunctionDB,
     trigger_type: TriggerType,
 ) -> Result<ExecutionDB, TdError> {
-    let execution_db = ExecutionDB::builder()
-        .name(ExecutionName::try_from("test_execution")?)
-        .collection_id(function_version.collection_id)
-        .function_id(function_version.function_id)
-        .function_version_id(&function_version.id)
-        .triggered_on(TriggeredOn::now())
-        .triggered_by_id(UserId::admin())
-        .recursion_options(None)
-        .trigger_type(trigger_type)
-        .build()?;
+    let execution_db = ExecutionDB {
+        id: ExecutionId::new(),
+        name: Some(ExecutionName::try_from("test_execution")?),
+        collection_id: function_version.collection_id,
+        function_id: function_version.function_id,
+        function_version_id: function_version.id.clone(),
+        triggered_on: TriggeredOn::now(),
+        triggered_by_id: UserId::admin(),
+        trigger_type,
+        external_uid: None,
+        recursion_options: None,
+    };
 
     // Field-less row; runs on a project-scoped connection so `project_id`
     // defaults from the scope.
@@ -50,9 +51,9 @@ async fn _seed_execution(
 #[cfg(test)]
 mod tests {
     use crate::test_utils::SeedEntry;
-    use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, ExecutionName, TriggeredOn, UserId,
     };
@@ -75,23 +76,24 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")
-            .unwrap()
-            .try_description("function_foo description")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")
-            .unwrap()
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: "joaquin".try_into().unwrap(),
+            description: "function_foo description".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_version = db
             .scoped(p.id)

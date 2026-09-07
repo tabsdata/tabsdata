@@ -4,7 +4,7 @@
 
 use crate::QueryExecutor;
 use crate::{CurrentEntry, LiveEntry};
-use ta_objects::{Buildable, and};
+use ta_objects::and;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -18,7 +18,8 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AtTime, LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
+    AtTime, LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalPointerReason,
+    LogicalPointerStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,
     PhysicalFunctionRunStatus, Trigger,
 };
 
@@ -46,9 +47,7 @@ pub(crate) async fn seed_physical_function_run(
     let logical = match existing {
         Some(existing) => {
             if &existing.status != status {
-                let update = UpdateLogicalFunctionRunDB::builder()
-                    .status(status)
-                    .build()?;
+                let update = UpdateLogicalFunctionRunDB { status: *status };
                 executor
                     .reuse()
                     .live()
@@ -61,19 +60,20 @@ pub(crate) async fn seed_physical_function_run(
             }
         }
         None => {
-            let lfr = LogicalFunctionRunDB::builder()
-                .project_id(collection.project_id)
-                .group_id(collection.group_id)
-                .collection_id(collection.id)
-                .execution_id(&execution.id)
-                .transaction_id(&transaction.id)
-                .function_id(function_version.function_id)
-                .function_version_id(&function_version.id)
-                .trigger(Trigger::Manual)
-                .triggered_on(transaction.triggered_on)
-                .triggered_by_id(transaction.triggered_by_id)
-                .status(status)
-                .build()?;
+            let lfr = LogicalFunctionRunDB {
+                id: LogicalFunctionRunId::new(),
+                project_id: collection.project_id,
+                collection_id: collection.id,
+                execution_id: execution.id.clone(),
+                transaction_id: transaction.id.clone(),
+                function_id: function_version.function_id,
+                function_version_id: function_version.id.clone(),
+                trigger: Trigger::Manual,
+                triggered_on: transaction.triggered_on,
+                triggered_by_id: transaction.triggered_by_id,
+                status: *status,
+                group_id: collection.group_id,
+            };
             executor
                 .reuse()
                 .live()
@@ -83,18 +83,30 @@ pub(crate) async fn seed_physical_function_run(
         }
     };
 
-    let function_db = PhysicalFunctionRunDB::builder()
-        .project_id(collection.project_id)
-        .collection_id(collection.id)
-        .function_id(function_version.function_id)
-        .function_version_id(&function_version.id)
-        .execution_id(&execution.id)
-        .transaction_id(&transaction.id)
-        .triggered_on(transaction.triggered_on)
-        .triggered_by_id(transaction.triggered_by_id)
-        .trigger(Trigger::Manual)
-        .status(PhysicalFunctionRunStatus::from(status))
-        .build()?;
+    let function_db = PhysicalFunctionRunDB {
+        id: PhysicalFunctionRunId::new(),
+        project_id: collection.project_id,
+        collection_id: collection.id,
+        function_id: function_version.function_id,
+        function_version_id: function_version.id.clone(),
+        execution_id: execution.id.clone(),
+        transaction_id: transaction.id.clone(),
+        triggered_on: transaction.triggered_on,
+        triggered_by_id: transaction.triggered_by_id,
+        trigger: Trigger::Manual,
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        status: PhysicalFunctionRunStatus::from(status),
+        function_version_patch_id: None,
+        ended_on_hour_ms: None,
+        ended_on_day_ms: None,
+        ended_on_week_ms: None,
+        ended_on_month_ms: None,
+        metric_table_versions: None,
+        metric_rows: None,
+        metric_data_bytes: None,
+    };
 
     executor
         .reuse()
@@ -128,19 +140,20 @@ pub(crate) async fn seed_physical_function_run(
         .fetch_all::<TableDB>(&function_version.id)
         .await?;
     for t in &tables {
-        let ltdv = LogicalTableDataVersionDB::builder()
-            .project_id(logical.project_id)
-            .group_id(logical.group_id)
-            .collection_id(collection.id)
-            .execution_id(&execution.id)
-            .transaction_id(&transaction.id)
-            .table_id(t.table_id)
-            .producer_logical_function_run_id(Some(logical.id.clone()))
-            .function_param_pos(t.function_param_pos)
-            .private(t.private)
-            .triggered_on(transaction.triggered_on)
-            .triggered_by_id(transaction.triggered_by_id)
-            .build()?;
+        let ltdv = LogicalTableDataVersionDB {
+            id: LogicalTableDataVersionId::new(),
+            project_id: logical.project_id,
+            collection_id: collection.id,
+            execution_id: execution.id.clone(),
+            transaction_id: transaction.id.clone(),
+            table_id: t.table_id,
+            producer_logical_function_run_id: Some(logical.id.clone()),
+            function_param_pos: t.function_param_pos,
+            private: t.private,
+            triggered_on: transaction.triggered_on,
+            triggered_by_id: transaction.triggered_by_id,
+            group_id: logical.group_id,
+        };
         executor
             .reuse()
             .live()
@@ -168,9 +181,9 @@ pub(crate) async fn seed_physical_function_run(
 #[cfg(test)]
 mod tests {
     use crate::test_utils::SeedEntry;
-    use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TransactionKey, Trigger,
         UserId,
@@ -194,23 +207,24 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")
-            .unwrap()
-            .try_description("function_foo description")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")
-            .unwrap()
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: "joaquin".try_into().unwrap(),
+            description: "function_foo description".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_version = db
             .scoped(p.id)

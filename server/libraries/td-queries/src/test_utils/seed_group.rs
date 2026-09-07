@@ -4,28 +4,31 @@
 
 use crate::LiveEntry;
 use crate::QueryExecutor;
-use ta_objects::{Buildable, TryUpdater};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
-use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
+use td_objects::dxo::group::{GroupCreate, GroupDB};
+use td_objects::types::basic::{AccessTokenId, Description, GroupId, GroupName, System, UserId};
 
 pub(crate) async fn seed_group(
     mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     name: GroupName,
     description: Description,
 ) -> Result<GroupDB, TdError> {
-    let group_create = GroupCreate::builder()
-        .name(name)
-        .description(description)
-        .build()?;
+    let group_create = GroupCreate { name, description };
 
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
-    let group_db = GroupDBBuilder::try_from(&group_create)?
-        .try_update_from(&request_context)?
-        .build()?;
+    let group_db = GroupDB {
+        id: GroupId::default(),
+        name: group_create.name,
+        description: group_create.description,
+        created_on: request_context.time,
+        created_by_id: request_context.user_id,
+        modified_on: request_context.time,
+        modified_by_id: request_context.user_id,
+        system: System::FALSE,
+    };
 
     // Runs on a project-scoped connection; the field-less `GroupDB` defaults
     // its `project_id` from that scope.

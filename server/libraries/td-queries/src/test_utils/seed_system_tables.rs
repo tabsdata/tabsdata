@@ -4,20 +4,20 @@
 
 use crate::QueryExecutor;
 use crate::{CurrentEntry, LiveEntry};
-use ta_objects::TryUpdater;
 use ta_objects::and;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::dependency::DependencyDBBuilder;
+use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
+use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
 };
 use td_objects::types::basic::{
-    AccessTokenId, DependencyPos, DependencyStatus, TableFunctionParamPos, TableId, TableName,
-    TableStatus, UserId,
+    AccessTokenId, DependencyId, DependencyPos, DependencyStatus, DependencyVersionId, Partitioned,
+    Private, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType,
+    TableVersionId, UserId,
 };
 use td_objects::types::composed::TableVersions;
 use td_objects::types::table_ref::Versions;
@@ -35,19 +35,21 @@ pub(crate) async fn seed_system_tables(
     // System tables
     let mut system_tables = vec![];
     for (pos, prefix) in SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES.iter().enumerate() {
-        let mut builder = TableDBBuilder::try_from(function)?;
-        let builder = builder.try_update_from(&request_context)?;
-
-        let table = builder
-            .clone()
-            .table_id(TableId::default())
-            .name(TableName::try_from(format!(
-                "{prefix}__{}",
-                function.function_id
-            ))?)
-            .function_param_pos(Some(TableFunctionParamPos::try_from(-(pos as i32 + 1))?))
-            .status(TableStatus::Active)
-            .build()?;
+        let table = TableDB {
+            id: TableVersionId::default(),
+            collection_id: function.collection_id,
+            table_id: TableId::default(),
+            name: TableName::try_from(format!("{prefix}__{}", function.function_id))?,
+            function_id: function.function_id,
+            function_version_id: function.id.clone(),
+            function_param_pos: Some(TableFunctionParamPos::try_from(-(pos as i32 + 1))?),
+            private: Private::FALSE,
+            partitioned: Partitioned::FALSE,
+            defined_on: request_context.time,
+            defined_by_id: request_context.user_id,
+            status: TableStatus::Active,
+            table_type: TableType::default(),
+        };
 
         executor.reuse().live().insert(&table).await?;
         system_tables.push(table);
@@ -55,9 +57,6 @@ pub(crate) async fn seed_system_tables(
 
     // System dependencies
     for (pos, prefix) in SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES.iter().enumerate() {
-        let mut builder = DependencyDBBuilder::try_from(function)?;
-        let builder = builder.try_update_from(&request_context)?;
-
         let (table_collection, table_name) = (
             function.collection_id,
             TableName::try_from(format!("{prefix}__{}", function.function_id))?,
@@ -69,16 +68,21 @@ pub(crate) async fn seed_system_tables(
             .fetch_one::<TableDBWithNames>(and!(table_collection, table_name))
             .await?;
 
-        let dependency = builder
-            .clone()
-            .table_collection_id(table_db.collection_id)
-            .table_function_id(table_db.function_id)
-            .table_id(table_db.table_id)
-            .table_versions(TableVersions::new(Versions::None))
-            .dep_pos(DependencyPos::try_from(-(pos as i32 + 1))?)
-            .status(DependencyStatus::Active)
-            .system(true)
-            .build()?;
+        let dependency = DependencyDB {
+            id: DependencyVersionId::default(),
+            collection_id: function.collection_id,
+            dependency_id: DependencyId::default(),
+            function_id: function.function_id,
+            table_collection_id: table_db.base.collection_id,
+            table_function_id: table_db.base.function_id,
+            table_id: table_db.base.table_id,
+            table_versions: TableVersions::new(Versions::None),
+            dep_pos: DependencyPos::try_from(-(pos as i32 + 1))?,
+            status: DependencyStatus::Active,
+            defined_on: request_context.time,
+            defined_by_id: request_context.user_id,
+            system: System::TRUE,
+        };
 
         executor.reuse().live().insert(&dependency).await?;
     }
@@ -90,10 +94,10 @@ pub(crate) async fn seed_system_tables(
 mod tests {
     use crate::LiveEntry;
     use crate::test_utils::SeedEntry;
-    use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -114,23 +118,24 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")
-            .unwrap()
-            .try_description("function_foo description")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")
-            .unwrap()
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: "joaquin".try_into().unwrap(),
+            description: "function_foo description".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function = db
             .scoped(p.id)

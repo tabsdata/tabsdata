@@ -4,7 +4,6 @@
 
 use crate::LiveEntry;
 use crate::QueryExecutor;
-use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -24,16 +23,16 @@ pub(crate) async fn seed_transaction(
         .live()
         .fetch_one::<ActiveCollectionDB>(&execution.collection_id)
         .await?;
-    let transaction_db = TransactionDB::builder()
-        .id(TransactionId::new())
-        .collection_id(execution.collection_id)
-        .execution_id(&execution.id)
-        .try_transaction_by("ANY")?
-        .transaction_key(transaction_key.clone())
-        .triggered_on(execution.triggered_on)
-        .triggered_by_id(execution.triggered_by_id)
-        .group_id(collection.group_id)
-        .build()?;
+    let transaction_db = TransactionDB {
+        id: TransactionId::new(),
+        collection_id: execution.collection_id,
+        execution_id: execution.id.clone(),
+        transaction_by: "ANY".try_into()?,
+        transaction_key: transaction_key.clone(),
+        triggered_on: execution.triggered_on,
+        triggered_by_id: execution.triggered_by_id,
+        group_id: collection.group_id,
+    };
 
     // Field-less row; runs on a project-scoped connection so `project_id`
     // defaults from the scope.
@@ -44,9 +43,9 @@ pub(crate) async fn seed_transaction(
 #[cfg(test)]
 mod tests {
     use crate::test_utils::SeedEntry;
-    use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{BundleId, CollectionName, Decorator, TransactionKey, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -67,23 +66,24 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")
-            .unwrap()
-            .try_description("function_foo description")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")
-            .unwrap()
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: "joaquin".try_into().unwrap(),
+            description: "function_foo description".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables,
+            table_types: None,
+            runtime_values: "mock runtime values".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_version = db
             .scoped(p.id)

@@ -26,7 +26,7 @@ async fn load_versioned_fetch_one(db: TdPool) -> Result<(), TdError> {
         .versioned(&at)
         .fetch_one::<Ptr>(&h.ltdv_ids[0])
         .await?;
-    record("versioned::fetch_one", &db, profile, t, 1, seeded);
+    record("versioned::fetch_one", profile, t, 1, seeded);
     Ok(())
 }
 
@@ -41,7 +41,6 @@ async fn load_versioned_fetch_optional(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "versioned::fetch_optional",
-        &db,
         profile,
         t,
         row.is_some() as usize,
@@ -62,7 +61,6 @@ async fn load_versioned_fetch_all_for_partition(db: TdPool) -> Result<(), TdErro
         .await?;
     record(
         "versioned::fetch_all_for_partition",
-        &db,
         profile,
         t,
         rows.len(),
@@ -83,7 +81,6 @@ async fn load_versioned_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "versioned::fetch_all_chunked",
-        &db,
         profile,
         t,
         rows.len(),
@@ -99,7 +96,7 @@ async fn load_historic_fetch_one(db: TdPool) -> Result<(), TdError> {
     let at = AtTime::now();
     let t = Instant::now();
     let _row: Ptr = (&db).historic(&at).fetch_one::<Ptr>(&h.ltdv_ids[0]).await?;
-    record("historic::fetch_one", &db, profile, t, 1, seeded);
+    record("historic::fetch_one", profile, t, 1, seeded);
     Ok(())
 }
 
@@ -114,7 +111,6 @@ async fn load_historic_fetch_optional(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "historic::fetch_optional",
-        &db,
         profile,
         t,
         row.is_some() as usize,
@@ -131,7 +127,7 @@ async fn load_historic_fetch_all(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     // `()` matches all → latest row per partition across the whole log.
     let rows = (&db).historic(&at).fetch_all::<Ptr>(()).await?;
-    record("historic::fetch_all", &db, profile, t, rows.len(), seeded);
+    record("historic::fetch_all", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
 }
@@ -147,7 +143,6 @@ async fn load_historic_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "historic::fetch_all_chunked",
-        &db,
         profile,
         t,
         rows.len(),

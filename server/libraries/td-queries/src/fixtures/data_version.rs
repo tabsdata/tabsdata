@@ -4,7 +4,8 @@
 
 use sea_query::{ColumnDef, Iden, Query, Table};
 use td_database::components::{SchemaComponent, SchemaSource};
-use td_schema::schema::backend::Backend;
+use td_database::pool::PoolKind;
+use td_schema::schema::render::{render_query, render_schema};
 
 #[derive(Iden)]
 enum TestDvTable {
@@ -25,29 +26,27 @@ impl SchemaSource for DataVersionSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn tables(&self, b: Backend) -> Vec<String> {
-        vec![
-            b.build_schema(
-                Table::create()
-                    .table(TestDvTable::Table)
-                    .col(
-                        ColumnDef::new(TestDvTable::Id)
-                            .text()
-                            .not_null()
-                            .primary_key(),
-                    )
-                    .col(ColumnDef::new(TestDvTable::PartitionId).text().not_null())
-                    .col(ColumnDef::new(TestDvTable::Status).text().not_null())
-                    .col(
-                        ColumnDef::new(TestDvTable::DefinedOn)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            ),
-        ]
+    fn tables(&self) -> Vec<String> {
+        vec![render_schema(
+            Table::create()
+                .table(TestDvTable::Table)
+                .col(
+                    ColumnDef::new(TestDvTable::Id)
+                        .text()
+                        .not_null()
+                        .primary_key(),
+                )
+                .col(ColumnDef::new(TestDvTable::PartitionId).text().not_null())
+                .col(ColumnDef::new(TestDvTable::Status).text().not_null())
+                .col(
+                    ColumnDef::new(TestDvTable::DefinedOn)
+                        .timestamp_with_time_zone()
+                        .not_null(),
+                )
+                .to_owned(),
+        )]
     }
-    fn seeds(&self, b: Backend) -> Vec<String> {
+    fn seeds(&self) -> Vec<String> {
         let mut stmts = Vec::new();
 
         // Partition p0: 3 active versions
@@ -91,20 +90,18 @@ impl SchemaSource for DataVersionSource {
                 "2026-01-01T00:00:02.000+00:00",
             ),
         ] {
-            stmts.push(
-                b.build_query(
-                    Query::insert()
-                        .into_table(TestDvTable::Table)
-                        .columns([
-                            TestDvTable::Id,
-                            TestDvTable::PartitionId,
-                            TestDvTable::Status,
-                            TestDvTable::DefinedOn,
-                        ])
-                        .values_panic([id.into(), partition.into(), status.into(), time.into()])
-                        .to_owned(),
-                ),
-            );
+            stmts.push(render_query(
+                Query::insert()
+                    .into_table(TestDvTable::Table)
+                    .columns([
+                        TestDvTable::Id,
+                        TestDvTable::PartitionId,
+                        TestDvTable::Status,
+                        TestDvTable::DefinedOn,
+                    ])
+                    .values_panic([id.into(), partition.into(), status.into(), time.into()])
+                    .to_owned(),
+            ));
         }
 
         stmts
@@ -112,6 +109,10 @@ impl SchemaSource for DataVersionSource {
 }
 
 impl SchemaComponent for DataVersion {
+    fn pools(&self) -> &'static [PoolKind] {
+        &[PoolKind::Regular]
+    }
+
     fn key(&self) -> &'static str {
         "test_data_version"
     }

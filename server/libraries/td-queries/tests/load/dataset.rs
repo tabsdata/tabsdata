@@ -7,7 +7,6 @@
 //! through the Seed API (each row's id feeds the next) while the high-volume
 //! run graph is built in memory and bulk-inserted via [`crate::bulk`].
 
-use ta_objects::Buildable;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -21,12 +20,13 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, EpochMs, FunctionId,
-    FunctionVersionId, HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunStatus,
-    LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,
-    PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, ProjectName, RowCount,
-    TableFunctionParamPos, TableId, TableNameDto, TableVersionCount, TransactionKey, Trigger,
-    TriggeredOn, UserId, VersionPos,
+    AtTime, BasePath, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, EpochMs,
+    FunctionId, FunctionVersionId, HasData, InputIdx, LogicalFunctionRunId,
+    LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalPointerReason,
+    LogicalPointerStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,
+    PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private, ProjectId, ProjectName,
+    ReuseFrozen, RowCount, TableFunctionParamPos, TableId, TableNameDto, TableVersionCount,
+    TransactionKey, Trigger, TriggeredOn, UserId, VersionPos,
 };
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::prelude::*;
@@ -159,7 +159,7 @@ struct MetricsStamp {
 
 fn metrics_stamp() -> Result<MetricsStamp, TdError> {
     Ok(MetricsStamp {
-        ended_on: AtTime::try_from(td_common::datetime::Timestamp::try_from(IN_WINDOW_MS)?)?,
+        ended_on: AtTime::from(td_common::datetime::Timestamp::try_from(IN_WINDOW_MS)?),
         bucket: EpochMs::try_from(IN_WINDOW_MS)?,
     })
 }
@@ -183,18 +183,24 @@ async fn make_function(
                 .collect::<Result<Vec<_>, _>>()?,
         )
     };
-    let create = FunctionRegister::builder()
-        .try_name(name)?
-        .try_description("load fn")?
-        .bundle_id(BundleId::default())
-        .try_snippet("snippet")?
-        .decorator(Decorator::Publisher)
-        .dependencies(dependencies)
-        .triggers(None)
-        .tables(vec![TableNameDto::try_from(out_table)?])
-        .try_runtime_values("rv")?
-        .reuse_frozen_tables(false)
-        .build()?;
+    let create = FunctionRegister {
+        name: name.try_into()?,
+        description: "load fn".try_into()?,
+        bundle_id: BundleId::default(),
+        snippet: "snippet".try_into()?,
+        decorator: Decorator::Publisher,
+        connector: None,
+        connection: None,
+        base_path: None,
+        dependencies,
+        triggers: None,
+        tables: Some(vec![TableNameDto::try_from(out_table)?]),
+        table_types: None,
+        runtime_values: "rv".try_into()?,
+        reuse_frozen_tables: ReuseFrozen::FALSE,
+        enabled: None,
+        workers: None,
+    };
     db.scoped(collection.project_id)
         .seed()
         .function(collection, &create)
@@ -389,47 +395,57 @@ async fn build_unit(
         .await?;
     let set_on = AtTime::try_from(trx.triggered_on)?;
 
-    let lfr = LogicalFunctionRunDB::builder()
-        .project_id(collection.project_id)
-        .group_id(collection.group_id)
-        .collection_id(collection.id)
-        .execution_id(&exec.id)
-        .transaction_id(&trx.id)
-        .function_id(func.function_id)
-        .function_version_id(&func.id)
-        .trigger(Trigger::Manual)
-        .triggered_on(trx.triggered_on)
-        .triggered_by_id(trx.triggered_by_id)
-        .status(LogicalFunctionRunStatus::Done)
-        .build()?;
-    let mut pfr_b = PhysicalFunctionRunDB::builder();
-    pfr_b
-        .project_id(collection.project_id)
-        .collection_id(collection.id)
-        .function_id(func.function_id)
-        .function_version_id(&func.id)
-        .execution_id(&exec.id)
-        .transaction_id(&trx.id)
-        .triggered_on(trx.triggered_on)
-        .triggered_by_id(trx.triggered_by_id)
-        .trigger(Trigger::Manual)
-        .status(PhysicalFunctionRunStatus::from(
-            &LogicalFunctionRunStatus::Done,
-        ));
+    let lfr = LogicalFunctionRunDB {
+        id: LogicalFunctionRunId::new(),
+        project_id: collection.project_id,
+        collection_id: collection.id,
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
+        function_id: func.function_id,
+        function_version_id: func.id.clone(),
+        trigger: Trigger::Manual,
+        triggered_on: trx.triggered_on,
+        triggered_by_id: trx.triggered_by_id,
+        status: LogicalFunctionRunStatus::Done,
+        group_id: collection.group_id,
+    };
+    let mut pfr = PhysicalFunctionRunDB {
+        id: PhysicalFunctionRunId::new(),
+        project_id: collection.project_id,
+        collection_id: collection.id,
+        function_id: func.function_id,
+        function_version_id: func.id.clone(),
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
+        triggered_on: trx.triggered_on,
+        triggered_by_id: trx.triggered_by_id,
+        trigger: Trigger::Manual,
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        status: PhysicalFunctionRunStatus::from(&LogicalFunctionRunStatus::Done),
+        function_version_patch_id: None,
+        ended_on_hour_ms: None,
+        ended_on_day_ms: None,
+        ended_on_week_ms: None,
+        ended_on_month_ms: None,
+        metric_table_versions: None,
+        metric_rows: None,
+        metric_data_bytes: None,
+    };
     // Metrics datasets stamp the window/magnitude columns; chain datasets
     // leave them NULL.
     if let Some(s) = stamp {
-        pfr_b
-            .ended_on(Some(s.ended_on))
-            .ended_on_hour_ms(Some(s.bucket))
-            .ended_on_day_ms(Some(s.bucket))
-            .ended_on_week_ms(Some(s.bucket))
-            .ended_on_month_ms(Some(s.bucket))
-            .metric_table_versions(Some(TableVersionCount::try_from(1)?))
-            .metric_rows(Some(RowCount::try_from(10)?))
-            .metric_data_bytes(Some(ByteCount::try_from(100)?));
+        pfr.ended_on = Some(s.ended_on);
+        pfr.ended_on_hour_ms = Some(s.bucket);
+        pfr.ended_on_day_ms = Some(s.bucket);
+        pfr.ended_on_week_ms = Some(s.bucket);
+        pfr.ended_on_month_ms = Some(s.bucket);
+        pfr.metric_table_versions = Some(TableVersionCount::try_from(1)?);
+        pfr.metric_rows = Some(RowCount::try_from(10)?);
+        pfr.metric_data_bytes = Some(ByteCount::try_from(100)?);
     }
-    let pfr = pfr_b.build()?;
+    let pfr = pfr;
     graph
         .lfr_ptrs
         .push(LogicalFunctionRunPointerDB::build_event(
@@ -448,18 +464,20 @@ async fn build_unit(
         .next()
         .expect("function publishes one output table");
 
-    let ltdv = LogicalTableDataVersionDB::builder()
-        .project_id(collection.project_id)
-        .group_id(collection.group_id)
-        .collection_id(collection.id)
-        .execution_id(&exec.id)
-        .transaction_id(&trx.id)
-        .table_id(table.table_id)
-        .producer_logical_function_run_id(Some(lfr.id.clone()))
-        .function_param_pos(table.function_param_pos)
-        .triggered_on(trx.triggered_on)
-        .triggered_by_id(trx.triggered_by_id)
-        .build()?;
+    let ltdv = LogicalTableDataVersionDB {
+        id: LogicalTableDataVersionId::new(),
+        project_id: collection.project_id,
+        collection_id: collection.id,
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
+        table_id: table.table_id,
+        producer_logical_function_run_id: Some(lfr.id.clone()),
+        function_param_pos: table.function_param_pos,
+        private: Private::FALSE,
+        triggered_on: trx.triggered_on,
+        triggered_by_id: trx.triggered_by_id,
+        group_id: collection.group_id,
+    };
     // Pending pointer first (lower id), then Bound (higher id wins the
     // latest-pointer ordering).
     graph
@@ -473,26 +491,31 @@ async fn build_unit(
             trx.triggered_by_id,
             LogicalPointerReason::InitialMint,
         )?);
-    let ptdv = PhysicalTableDataVersionDB::builder()
-        .project_id(collection.project_id)
-        .collection_id(ltdv.collection_id)
-        .table_id(table.table_id)
-        .name(table.name.clone())
-        .table_version_id(table.id)
-        .function_version_id(&table.function_version_id)
-        .has_data(Some(HasData::TRUE))
-        .row_count(Some(RowCount::try_from(10)?))
-        .data_bytes(Some(ByteCount::try_from(100)?))
-        .execution_id(&ltdv.execution_id)
-        .transaction_id(&ltdv.transaction_id)
-        .physical_function_run_id(&pfr.id)
-        .function_param_pos(
-            table
-                .function_param_pos
-                .unwrap_or(TableFunctionParamPos::try_from(0)?),
-        )
-        .triggered_on(pfr.triggered_on)
-        .build()?;
+    let ptdv = PhysicalTableDataVersionDB {
+        id: PhysicalTableDataVersionId::new(),
+        project_id: collection.project_id,
+        collection_id: ltdv.collection_id,
+        table_id: table.table_id,
+        name: table.name.clone(),
+        table_version_id: table.id,
+        function_version_id: table.function_version_id.clone(),
+        function_version_patch_id: None,
+        execution_id: ltdv.execution_id.clone(),
+        transaction_id: ltdv.transaction_id.clone(),
+        physical_function_run_id: pfr.id.clone(),
+        function_param_pos: table
+            .function_param_pos
+            .unwrap_or(TableFunctionParamPos::try_from(0)?),
+        triggered_on: pfr.triggered_on,
+        base_path: BasePath::default(),
+        has_data: Some(HasData::TRUE),
+        schema_changed: None,
+        column_count: None,
+        row_count: Some(RowCount::try_from(10)?),
+        data_bytes: Some(ByteCount::try_from(100)?),
+        schema_hash: None,
+        with_data_table_data_version_id: None,
+    };
     graph
         .ltdv_ptrs
         .push(LogicalTableDataVersionPointerDB::build_event(
@@ -528,14 +551,15 @@ fn build_lfri(
     consumer: &Unit,
     producer_ltdv: &LogicalTableDataVersionDB,
 ) -> Result<LogicalFunctionRunInputDB, TdError> {
-    Ok(LogicalFunctionRunInputDB::builder()
-        .collection_id(collection.id)
-        .execution_id(&consumer.execution_id)
-        .transaction_id(&consumer.transaction_id)
-        .logical_function_run_id(consumer.lfr_id.clone())
-        .requirement_logical_table_data_version_id(Some(producer_ltdv.id.clone()))
-        .requirement_input_idx(Some(InputIdx::try_from(0)?))
-        .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-        .requirement_version_pos(VersionPos::try_from(0)?)
-        .build()?)
+    Ok(LogicalFunctionRunInputDB {
+        id: LogicalFunctionRunInputId::default(),
+        collection_id: collection.id,
+        execution_id: consumer.execution_id.clone(),
+        transaction_id: consumer.transaction_id.clone(),
+        logical_function_run_id: consumer.lfr_id.clone(),
+        requirement_logical_table_data_version_id: Some(producer_ltdv.id.clone()),
+        requirement_input_idx: Some(InputIdx::try_from(0)?),
+        requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+        requirement_version_pos: VersionPos::try_from(0)?,
+    })
 }

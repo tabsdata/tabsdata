@@ -12,7 +12,7 @@ use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_queries::QueryExecutor;
 
-/// Under sqlite's ~999 bind-parameter limit, the tightest backend.
+/// Well under PostgreSQL's 65535 bind-parameter limit.
 const MAX_BIND_PARAMS: usize = 800;
 
 pub async fn bulk_insert<D, E>(executor: E, rows: &[D]) -> Result<u64, SqlError>

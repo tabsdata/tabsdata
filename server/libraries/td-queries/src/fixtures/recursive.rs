@@ -4,7 +4,8 @@
 
 use sea_query::{ColumnDef, Iden, Query, Table};
 use td_database::components::{SchemaComponent, SchemaSource};
-use td_schema::schema::backend::Backend;
+use td_database::pool::PoolKind;
+use td_schema::schema::render::{render_query, render_schema};
 
 #[derive(Iden)]
 enum TestBasicReference {
@@ -31,9 +32,9 @@ impl SchemaSource for RecursiveSource {
     fn current_version(&self) -> usize {
         1
     }
-    fn tables(&self, b: Backend) -> Vec<String> {
+    fn tables(&self) -> Vec<String> {
         vec![
-            b.build_schema(
+            render_schema(
                 Table::create()
                     .table(TestBasicReference::Table)
                     .col(
@@ -49,7 +50,7 @@ impl SchemaSource for RecursiveSource {
                     )
                     .to_owned(),
             ),
-            b.build_schema(
+            render_schema(
                 Table::create()
                     .table(TestBasicTable::Table)
                     .col(
@@ -64,36 +65,32 @@ impl SchemaSource for RecursiveSource {
             ),
         ]
     }
-    fn seeds(&self, b: Backend) -> Vec<String> {
+    fn seeds(&self) -> Vec<String> {
         let mut stmts = Vec::new();
 
         // Chain: ref_0 -> ref_1 -> ref_2
         for (id, ref_id) in [("R0", "ref_0"), ("R1", "ref_1"), ("R2", "ref_2")] {
-            stmts.push(
-                b.build_query(
-                    Query::insert()
-                        .into_table(TestBasicReference::Table)
-                        .columns([TestBasicReference::Id, TestBasicReference::ReferenceId])
-                        .values_panic([id.into(), ref_id.into()])
-                        .to_owned(),
-                ),
-            );
+            stmts.push(render_query(
+                Query::insert()
+                    .into_table(TestBasicReference::Table)
+                    .columns([TestBasicReference::Id, TestBasicReference::ReferenceId])
+                    .values_panic([id.into(), ref_id.into()])
+                    .to_owned(),
+            ));
         }
 
         for (id, current, downstream) in [("N0", "ref_0", "ref_1"), ("N1", "ref_1", "ref_2")] {
-            stmts.push(
-                b.build_query(
-                    Query::insert()
-                        .into_table(TestBasicTable::Table)
-                        .columns([
-                            TestBasicTable::Id,
-                            TestBasicTable::Current,
-                            TestBasicTable::Downstream,
-                        ])
-                        .values_panic([id.into(), current.into(), downstream.into()])
-                        .to_owned(),
-                ),
-            );
+            stmts.push(render_query(
+                Query::insert()
+                    .into_table(TestBasicTable::Table)
+                    .columns([
+                        TestBasicTable::Id,
+                        TestBasicTable::Current,
+                        TestBasicTable::Downstream,
+                    ])
+                    .values_panic([id.into(), current.into(), downstream.into()])
+                    .to_owned(),
+            ));
         }
 
         stmts
@@ -101,6 +98,10 @@ impl SchemaSource for RecursiveSource {
 }
 
 impl SchemaComponent for Recursive {
+    fn pools(&self) -> &'static [PoolKind] {
+        &[PoolKind::Regular]
+    }
+
     fn key(&self) -> &'static str {
         "test_recursive"
     }

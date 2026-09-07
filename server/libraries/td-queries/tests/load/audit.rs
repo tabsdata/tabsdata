@@ -20,7 +20,7 @@ const SKIP_DIRS: &[&str] = &["test_utils", "fixtures"];
 /// - `By::*`, `insert`, `insert_vec`: delegate to the generic
 ///   `Live`/`Current`/`Historic` handles — no distinct SQL of their own.
 /// - `initialize_logical_ids`: one-shot startup bootstrap, not request-path.
-const EXEMPT: &[&str] = &["By::*", "insert", "insert_vec", "initialize_logical_ids"];
+const EXEMPT: &[&str] = &["initialize_logical_ids"];
 
 fn is_exempt(key: &str) -> bool {
     EXEMPT.iter().any(|e| match e.strip_suffix("::*") {

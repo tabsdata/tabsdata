@@ -3,12 +3,11 @@
 //
 
 use crate::{LiveEntry, QueryExecutor};
-use ta_objects::{Buildable, Setter, TryUpdater};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user_role::UserRoleDB;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+use td_objects::types::basic::{AccessTokenId, Fixed, RoleId, UserId, UserRoleId};
 
 pub(crate) async fn seed_user_role(
     db: impl QueryExecutor + Domained<Domain = Apiserver>,
@@ -17,11 +16,14 @@ pub(crate) async fn seed_user_role(
 ) -> Result<UserRoleDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
-    let user_role_db = UserRoleDB::builder()
-        .try_update_from(&request_context)?
-        .set(user)
-        .set(role)
-        .build()?;
+    let user_role_db = UserRoleDB {
+        id: UserRoleId::default(),
+        user_id: *user,
+        role_id: *role,
+        added_on: request_context.time,
+        added_by_id: request_context.user_id,
+        fixed: Fixed::FALSE,
+    };
 
     db.live().insert(&user_role_db).await?;
     Ok(user_role_db)
@@ -39,10 +41,7 @@ pub mod tests {
     async fn test_seed_user_role(db: TdPool) {
         let user = db
             .seed()
-            .user(
-                &UserName::try_from("joaquin").unwrap(),
-                &UserEnabled::from(false),
-            )
+            .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::FALSE)
             .await
             .unwrap();
         let role = db

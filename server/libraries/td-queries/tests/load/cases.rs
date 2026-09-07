@@ -69,7 +69,13 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     LoadCase {
         name: "live::fetch_optional",
-        covers: &["Live::fetch_optional"],
+        // assert_exists / assert_not_exists are thin wrappers over the same
+        // fetch_optional query.
+        covers: &[
+            "Live::fetch_optional",
+            "Live::assert_exists",
+            "Live::assert_not_exists",
+        ],
         family: Family::Live,
         status: Status::Implemented,
     },
@@ -139,6 +145,18 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Live,
         status: Status::Implemented,
     },
+    LoadCase {
+        name: "live::fetch_all_for_update",
+        covers: &["Live::fetch_all_for_update"],
+        family: Family::Live,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "live::claim_all_in",
+        covers: &["Live::claim_all_in"],
+        family: Family::Live,
+        status: Status::Implemented,
+    },
     // generic/current.rs — `_current` view reads.
     LoadCase {
         name: "current::fetch_one",
@@ -204,7 +222,9 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     LoadCase {
         name: "historic::fetch_optional",
-        covers: &["Historic::fetch_optional"],
+        // assert_not_exists is a thin wrapper over the same fetch_optional
+        // query.
+        covers: &["Historic::fetch_optional", "Historic::assert_not_exists"],
         family: Family::Historic,
         status: Status::Implemented,
     },

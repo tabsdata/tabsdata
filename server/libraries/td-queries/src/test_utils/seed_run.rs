@@ -9,9 +9,9 @@
 use crate::test_utils::seed::SeedEntry;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::Buildable;
 use td_objects::dxo::function::FunctionRegister;
 use td_objects::dxo::user::UserDB;
+use td_objects::types::basic::ReuseFrozen;
 use td_objects::types::basic::{
     BundleId, CollectionName, Decorator, Description, EntityId, ExecutionId,
     LogicalFunctionRunStatus, PermissionType, ProjectId, RoleName, TransactionId, TransactionKey,
@@ -30,18 +30,24 @@ pub async fn seed_run(db: &TdPool, project: ProjectId) -> Result<SeededRun, TdEr
         .seed()
         .collection(&CollectionName::try_from("collection")?, &UserId::admin())
         .await?;
-    let create = FunctionRegister::builder()
-        .try_name("joaquin")?
-        .try_description("f")?
-        .bundle_id(BundleId::default())
-        .try_snippet("s")?
-        .decorator(Decorator::Publisher)
-        .dependencies(None)
-        .triggers(None)
-        .tables(None)
-        .try_runtime_values("mock runtime values")?
-        .reuse_frozen_tables(false)
-        .build()?;
+    let create = FunctionRegister {
+        name: "joaquin".try_into()?,
+        description: "f".try_into()?,
+        bundle_id: BundleId::default(),
+        snippet: "s".try_into()?,
+        decorator: Decorator::Publisher,
+        connector: None,
+        connection: None,
+        base_path: None,
+        dependencies: None,
+        triggers: None,
+        tables: None,
+        table_types: None,
+        runtime_values: "mock runtime values".try_into()?,
+        reuse_frozen_tables: ReuseFrozen::FALSE,
+        enabled: None,
+        workers: None,
+    };
     let function_version = db
         .scoped(project)
         .seed()
@@ -103,7 +109,7 @@ pub async fn seed_project_viewer(db: &TdPool, project: ProjectId) -> Result<User
         .await?;
     let user = db
         .seed()
-        .user(&UserName::try_from("viewer")?, &UserEnabled::from(true))
+        .user(&UserName::try_from("viewer")?, &UserEnabled::TRUE)
         .await?;
     db.seed().user_role(&user.id, &role.id).await?;
     Ok(user)

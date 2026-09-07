@@ -32,7 +32,7 @@ async fn load_lfr_to_execute(db: TdPool) -> Result<(), TdError> {
     let seeded = h.fr_ids.len();
     let t = Instant::now();
     let rows = (&db).lfr().to_execute(&h.at, 50).await?;
-    record("lfr::to_execute", &db, profile, t, rows.len(), seeded);
+    record("lfr::to_execute", profile, t, rows.len(), seeded);
     Ok(())
 }
 
@@ -42,7 +42,7 @@ async fn load_lfr_to_commit(db: TdPool) -> Result<(), TdError> {
     let seeded = h.fr_ids.len();
     let t = Instant::now();
     let rows = (&db).lfr().to_commit(&h.execs).await?;
-    record("lfr::to_commit", &db, profile, t, rows.len(), seeded);
+    record("lfr::to_commit", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty(), "all-Done transactions are committable");
     Ok(())
 }
@@ -58,7 +58,6 @@ async fn load_lfr_previous_for_function_at(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "lfr::previous_for_function_at",
-        &db,
         profile,
         t,
         row.is_some() as usize,
@@ -74,7 +73,7 @@ async fn load_lfr_for_dispatch(db: TdPool) -> Result<(), TdError> {
     let seeded = h.fr_ids.len();
     let t = Instant::now();
     let rows = (&db).lfr().for_dispatch(&h.fr_ids).await?;
-    record("lfr::for_dispatch", &db, profile, t, rows.len(), seeded);
+    record("lfr::for_dispatch", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty(), "seeded FR ids enrich to rows");
     Ok(())
 }
@@ -85,7 +84,7 @@ async fn load_lfr_blocked_ids(db: TdPool) -> Result<(), TdError> {
     let seeded = h.fr_ids.len();
     let t = Instant::now();
     let rows = (&db).lfr().blocked_ids(&h.execs[0], &h.at).await?;
-    record("lfr::blocked_ids", &db, profile, t, rows.len(), seeded);
+    record("lfr::blocked_ids", profile, t, rows.len(), seeded);
     Ok(())
 }
 
@@ -98,14 +97,7 @@ async fn load_lfr_downstream_one_hop(db: TdPool) -> Result<(), TdError> {
         .lfr()
         .downstream_one_hop(&h.producer_lfrs, &[])
         .await?;
-    record(
-        "lfr::downstream_one_hop",
-        &db,
-        profile,
-        t,
-        rows.len(),
-        seeded,
-    );
+    record("lfr::downstream_one_hop", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty(), "producers have downstream consumers");
     Ok(())
 }
@@ -119,7 +111,6 @@ async fn load_lfr_effective_output_base_paths(db: TdPool) -> Result<(), TdError>
     let map = db.lfr().effective_output_base_paths(&fvids).await?;
     record(
         "lfr::effective_output_base_paths",
-        &db,
         profile,
         t,
         map.len(),
@@ -135,14 +126,7 @@ async fn load_lfr_with_bundle_base_path(db: TdPool) -> Result<(), TdError> {
     let fvids = [h.producer_function_version_id.clone()];
     let t = Instant::now();
     let rows = db.lfr().with_bundle_base_path(&fvids).await?;
-    record(
-        "lfr::with_bundle_base_path",
-        &db,
-        profile,
-        t,
-        rows.len(),
-        seeded,
-    );
+    record("lfr::with_bundle_base_path", profile, t, rows.len(), seeded);
     Ok(())
 }
 
@@ -152,7 +136,7 @@ async fn load_pfr_to_dispatch(db: TdPool) -> Result<(), TdError> {
     let seeded = h.fr_ids.len();
     let t = Instant::now();
     let rows = (&db).pfr().to_dispatch(50).await?;
-    record("pfr::to_dispatch", &db, profile, t, rows.len(), seeded);
+    record("pfr::to_dispatch", profile, t, rows.len(), seeded);
     Ok(())
 }
 
@@ -162,14 +146,7 @@ async fn load_pfr_dispatched_before(db: TdPool) -> Result<(), TdError> {
     let seeded = h.fr_ids.len();
     let t = Instant::now();
     let rows = (&db).pfr().dispatched_before(&AtTime::now()).await?;
-    record(
-        "pfr::dispatched_before",
-        &db,
-        profile,
-        t,
-        rows.len(),
-        seeded,
-    );
+    record("pfr::dispatched_before", profile, t, rows.len(), seeded);
     Ok(())
 }
 
@@ -184,7 +161,6 @@ async fn load_pfr_in_flight_for(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "pfr::in_flight_for",
-        &db,
         profile,
         t,
         row.is_some() as usize,
@@ -205,7 +181,6 @@ async fn load_executions_list_by_table_data_version(db: TdPool) -> Result<(), Td
         .await?;
     record(
         "executions::list_by_table_data_version",
-        &db,
         profile,
         t,
         rows.len(),
@@ -226,7 +201,6 @@ async fn load_executions_list_by_function_version(db: TdPool) -> Result<(), TdEr
         .await?;
     record(
         "executions::list_by_function_version",
-        &db,
         profile,
         t,
         rows.len(),
@@ -247,7 +221,6 @@ async fn load_dependencies_active_for_function_at(db: TdPool) -> Result<(), TdEr
         .await?;
     record(
         "dependencies::active_for_function_at",
-        &db,
         profile,
         t,
         rows.len(),

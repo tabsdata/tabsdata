@@ -4,7 +4,6 @@
 
 use crate::LiveEntry;
 use crate::QueryExecutor;
-use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::and;
@@ -19,7 +18,8 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AtTime, HasData, LogicalPointerReason, LogicalPointerStatus, TableFunctionParamPos,
+    AtTime, BasePath, HasData, LogicalPointerReason, LogicalPointerStatus,
+    LogicalTableDataVersionId, PhysicalTableDataVersionId, TableFunctionParamPos,
 };
 
 pub(crate) async fn seed_physical_table_data_version_with_data(
@@ -37,7 +37,7 @@ pub(crate) async fn seed_physical_table_data_version_with_data(
         transaction,
         physical_function_run,
         table,
-        Some(&HasData::from(true)),
+        Some(&HasData::TRUE),
     )
     .await
 }
@@ -71,20 +71,29 @@ pub async fn _seed_physical_table_data_version(
     table: &TableDB,
     has_data: Option<&HasData>,
 ) -> Result<PhysicalTableDataVersionDB, TdError> {
-    let table_data_version_db = PhysicalTableDataVersionDB::builder()
-        .project_id(physical_function_run.project_id)
-        .collection_id(collection.id)
-        .table_id(table.table_id)
-        .name(table.name.clone())
-        .table_version_id(table.id)
-        .function_version_id(&table.function_version_id)
-        .has_data(has_data.cloned())
-        .execution_id(&execution.id)
-        .transaction_id(&transaction.id)
-        .physical_function_run_id(&physical_function_run.id)
-        .function_param_pos(TableFunctionParamPos::try_from(0)?)
-        .triggered_on(physical_function_run.triggered_on)
-        .build()?;
+    let table_data_version_db = PhysicalTableDataVersionDB {
+        id: PhysicalTableDataVersionId::new(),
+        project_id: physical_function_run.project_id,
+        collection_id: collection.id,
+        table_id: table.table_id,
+        name: table.name.clone(),
+        table_version_id: table.id,
+        function_version_id: table.function_version_id.clone(),
+        function_version_patch_id: None,
+        execution_id: execution.id.clone(),
+        transaction_id: transaction.id.clone(),
+        physical_function_run_id: physical_function_run.id.clone(),
+        function_param_pos: TableFunctionParamPos::try_from(0)?,
+        triggered_on: physical_function_run.triggered_on,
+        base_path: BasePath::default(),
+        has_data: has_data.cloned(),
+        schema_changed: None,
+        column_count: None,
+        row_count: None,
+        data_bytes: None,
+        schema_hash: None,
+        with_data_table_data_version_id: None,
+    };
 
     // Bind an LTDV to the TDV so the seed mirrors what plan-build +
     // dispatch produce: reuse the LTDV minted by the function-run seed
@@ -108,19 +117,20 @@ pub async fn _seed_physical_table_data_version(
     let logical = match existing {
         Some(ltdv) => ltdv,
         None => {
-            let ltdv = LogicalTableDataVersionDB::builder()
-                .project_id(producer_lfr.project_id)
-                .group_id(producer_lfr.group_id)
-                .collection_id(collection.id)
-                .execution_id(&execution.id)
-                .transaction_id(&transaction.id)
-                .table_id(table.table_id)
-                .producer_logical_function_run_id(Some(producer_lfr.id.clone()))
-                .function_param_pos(Some(TableFunctionParamPos::try_from(0)?))
-                .private(table.private)
-                .triggered_on(physical_function_run.triggered_on)
-                .triggered_by_id(transaction.triggered_by_id)
-                .build()?;
+            let ltdv = LogicalTableDataVersionDB {
+                id: LogicalTableDataVersionId::new(),
+                project_id: producer_lfr.project_id,
+                collection_id: collection.id,
+                execution_id: execution.id.clone(),
+                transaction_id: transaction.id.clone(),
+                table_id: table.table_id,
+                producer_logical_function_run_id: Some(producer_lfr.id.clone()),
+                function_param_pos: Some(TableFunctionParamPos::try_from(0)?),
+                private: table.private,
+                triggered_on: physical_function_run.triggered_on,
+                triggered_by_id: transaction.triggered_by_id,
+                group_id: producer_lfr.group_id,
+            };
             executor
                 .reuse()
                 .live()
@@ -156,11 +166,11 @@ pub async fn _seed_physical_table_data_version(
 mod tests {
     use crate::CurrentEntry;
     use crate::test_utils::SeedEntry;
-    use ta_objects::Buildable;
     use ta_objects::and;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TableName, TableNameDto,
         TransactionKey, UserId,
@@ -186,23 +196,24 @@ mod tests {
         let triggers = None;
         let tables = vec![table_name.clone()];
 
-        let create = FunctionRegister::builder()
-            .try_name("joaquin")
-            .unwrap()
-            .try_description("function_foo description")
-            .unwrap()
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")
-            .unwrap()
-            .decorator(Decorator::Publisher)
-            .dependencies(dependencies)
-            .triggers(triggers)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")
-            .unwrap()
-            .reuse_frozen_tables(false)
-            .build()
-            .unwrap();
+        let create = FunctionRegister {
+            name: "joaquin".try_into().unwrap(),
+            description: "function_foo description".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "function_foo snippet".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies,
+            triggers,
+            tables: Some(tables),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
 
         let function_version = db
             .scoped(p.id)

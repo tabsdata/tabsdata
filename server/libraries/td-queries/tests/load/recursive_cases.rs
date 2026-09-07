@@ -34,7 +34,7 @@ async fn load_recursive_live(db: TdPool) -> Result<(), TdError> {
         .direct_reference(&h.consumer_function_id)
         .fetch_all()
         .await?;
-    record("recursive::live", &db, profile, t, rows.len(), seeded);
+    record("recursive::live", profile, t, rows.len(), seeded);
     Ok(())
 }
 
@@ -49,7 +49,7 @@ async fn load_recursive_current(db: TdPool) -> Result<(), TdError> {
         .direct_reference(&h.consumer_function_id)
         .fetch_all()
         .await?;
-    record("recursive::current", &db, profile, t, rows.len(), seeded);
+    record("recursive::current", profile, t, rows.len(), seeded);
     Ok(())
 }
 
@@ -65,6 +65,6 @@ async fn load_recursive_historic(db: TdPool) -> Result<(), TdError> {
         .direct_reference(&h.consumer_function_id)
         .fetch_all()
         .await?;
-    record("recursive::historic", &db, profile, t, rows.len(), seeded);
+    record("recursive::historic", profile, t, rows.len(), seeded);
     Ok(())
 }

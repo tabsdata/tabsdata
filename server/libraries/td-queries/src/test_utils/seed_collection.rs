@@ -4,13 +4,12 @@
 
 use crate::LiveEntry;
 use crate::QueryExecutor;
-use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB};
 use td_objects::dxo::group::GroupDB;
 use td_objects::types::basic::{
-    AtTime, CollectionName, CollectionType, Description, GroupId, GroupName, UserId,
+    AtTime, CollectionId, CollectionName, CollectionType, Description, GroupId, GroupName, UserId,
 };
 
 pub(crate) async fn seed_collection(
@@ -44,16 +43,20 @@ pub(crate) async fn seed_collection_in_group(
     let collection_type = CollectionType::from_group_id(&group_id);
 
     let created_on = AtTime::now();
-    let collection = CollectionCreateDB::builder()
-        .name(collection_name.clone())
-        .description(Description::default())
-        .created_on(created_on)
-        .created_by_id(created_by)
-        .modified_on(created_on)
-        .modified_by_id(created_by)
-        .group_id(group_id)
-        .collection_type(collection_type)
-        .build()?;
+    let collection = CollectionCreateDB {
+        id: CollectionId::default(),
+        name: collection_name.clone(),
+        description: Description::default(),
+        created_on,
+        created_by_id: *created_by,
+        modified_on: created_on,
+        modified_by_id: *created_by,
+        name_when_deleted: None,
+        group_id,
+        base_path: None,
+        collection_type,
+        connection_id: None,
+    };
 
     executor.reuse().live().insert(&collection).await?;
 

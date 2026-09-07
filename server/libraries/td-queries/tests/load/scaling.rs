@@ -8,9 +8,16 @@
 //! and all its queries are timed against that one seeding; id-scoped queries
 //! staying flat (`k≈0`) is the correct result for them.
 
+use crate::bulk::bulk_insert;
+use crate::cases::LOAD_CASES;
+use crate::dataset::{self, ChainHandle, WINDOW_END_MS, WINDOW_START_MS};
+use crate::dataversion_cases;
+use crate::harness::{analyze, timed, timed_once};
+use crate::profile::{ChainKnobs, MetricsKnobs};
 use sea_query::Condition;
-use ta_objects::list_condition::NoFilter;
-use ta_objects::{Buildable, StateFilter};
+use std::collections::BTreeSet;
+use ta_objects::StateFilter;
+use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionRead};
@@ -28,8 +35,8 @@ use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
 use td_objects::dxo::table::{Table, TableDB};
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
-    AtTime, DependencyPos, Depth, InputIdx, PhysicalFunctionRunStatus, TriggeredOn, UserId,
-    VersionPos,
+    AtTime, DependencyPos, Depth, InputIdx, LogicalFunctionRunInputId, PhysicalFunctionRunStatus,
+    TriggeredOn, UserId, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::{
@@ -38,15 +45,6 @@ use td_queries::{
     SessionsEntry, VersionedEntry,
 };
 use td_security::ENCODED_ID_SYSTEM;
-
-use std::collections::BTreeSet;
-
-use crate::bulk::bulk_insert;
-use crate::cases::LOAD_CASES;
-use crate::dataset::{self, ChainHandle, WINDOW_END_MS, WINDOW_START_MS};
-use crate::dataversion_cases;
-use crate::harness::{analyze, timed, timed_once};
-use crate::profile::{ChainKnobs, MetricsKnobs};
 
 type Ptr = LogicalTableDataVersionPointerDB;
 
@@ -377,24 +375,45 @@ async fn time_chain_queries(
     {
         // `FOR UPDATE` needs the read-write transaction; dropping the tx
         // releases the lock.
-        let mut tx = db.begin().await.expect("write transaction");
+        let mut conn = db.begin().await.expect("write transaction");
         let _ = timed!(
             out,
             "live::fetch_optional_for_update",
-            tx.as_mut_conn()
-                .live()
+            conn.live()
                 .fetch_optional_for_update::<PhysicalFunctionRunDB>(&h.fr_ids[0])
                 .await?
         );
     }
     {
-        let mut tx = db.begin().await.expect("write transaction");
+        let mut conn = db.begin().await.expect("write transaction");
         let _ = timed!(
             out,
             "live::fetch_one_for_update",
-            tx.as_mut_conn()
-                .live()
+            conn.live()
                 .fetch_one_for_update::<PhysicalFunctionRunDB>(&h.fr_ids[0])
+                .await?
+        );
+    }
+    {
+        let mut conn = db.begin().await.expect("write transaction");
+        let _ = timed!(
+            out,
+            "live::fetch_all_for_update",
+            conn.live()
+                .fetch_all_for_update::<PhysicalFunctionRunDB>(&h.fr_ids[0])
+                .await?
+        );
+    }
+    {
+        let mut conn = db.begin().await.expect("write transaction");
+        let _ = timed!(
+            out,
+            "live::claim_all_in",
+            conn.live()
+                .claim_all_in::<PhysicalFunctionRunDB>(
+                    StateFilter::<PhysicalFunctionRunDB>::new(Condition::all()),
+                    ()
+                )
                 .await?
         );
     }
@@ -412,16 +431,17 @@ async fn time_chain_queries(
     // No sessions are seeded: coverage only, the exponent is vacuous.
     timed_once!(out, "sessions::purge", (db).sessions().purge().await?);
 
-    let lfri = LogicalFunctionRunInputDB::builder()
-        .collection_id(h.collection_id)
-        .execution_id(&h.execs[0])
-        .transaction_id(&h.transaction_id)
-        .logical_function_run_id(h.producer_lfrs[0].clone())
-        .requirement_logical_table_data_version_id(Some(h.ltdv_ids[0].clone()))
-        .requirement_input_idx(Some(InputIdx::try_from(0)?))
-        .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-        .requirement_version_pos(VersionPos::try_from(0)?)
-        .build()?;
+    let lfri = LogicalFunctionRunInputDB {
+        id: LogicalFunctionRunInputId::default(),
+        collection_id: h.collection_id,
+        execution_id: h.execs[0].clone(),
+        transaction_id: h.transaction_id.clone(),
+        logical_function_run_id: h.producer_lfrs[0].clone(),
+        requirement_logical_table_data_version_id: Some(h.ltdv_ids[0].clone()),
+        requirement_input_idx: Some(InputIdx::try_from(0)?),
+        requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+        requirement_version_pos: VersionPos::try_from(0)?,
+    };
     // The field-less LFRI sources `project_id` from the scoped connection.
     let scoped = db.scoped(h.project_id);
     let _ = timed_once!(
@@ -440,9 +460,19 @@ async fn time_chain_queries(
             .delete::<LogicalFunctionRunInputDB>(&lfri.id)
             .await?
     );
-    let update = UpdatePhysicalFunctionRunDB::builder()
-        .status(PhysicalFunctionRunStatus::Done)
-        .build()?;
+    let update = UpdatePhysicalFunctionRunDB {
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        status: PhysicalFunctionRunStatus::Done,
+        ended_on_hour_ms: None,
+        ended_on_day_ms: None,
+        ended_on_week_ms: None,
+        ended_on_month_ms: None,
+        metric_table_versions: None,
+        metric_rows: None,
+        metric_data_bytes: None,
+    };
     let _ = timed_once!(
         out,
         "live::update",
@@ -504,30 +534,24 @@ async fn time_chain_queries(
     let coll_params = ListQueryParams::<CollectionRead>::try_from(&ListParams::default())?;
     let table_params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
     let fn_params = ListQueryParams::<Function>::try_from(&ListParams::default())?;
-    let _ = timed!(
-        out,
-        "live::list",
-        (db).live().list((), &NoFilter, &coll_params).await?
-    );
+    let _ = timed!(out, "live::list", (db).live().list((), &coll_params).await?);
     let _ = timed!(
         out,
         "current::list",
-        (db).current()
-            .list::<Table, _>((), &NoFilter, &table_params)
-            .await?
+        (db).current().list::<Table>((), &table_params).await?
     );
     let _ = timed!(
         out,
         "historic::list_versions",
         (db).historic(&at)
-            .list_versions::<Function, _>((), &NoFilter, &fn_params)
+            .list_versions::<Function>((), &fn_params)
             .await?
     );
     let _ = timed!(
         out,
         "historic::list_full",
         (db).historic(&at)
-            .list_full::<Function, _>((), &NoFilter, &fn_params)
+            .list_full::<Function>((), &fn_params)
             .await?
     );
 
@@ -573,8 +597,8 @@ async fn time_metrics_queries(db: &TdPool) -> Result<Vec<(&'static str, f64)>, T
         statuses: vec![],
     };
     // The metrics service's read context: the read-only transaction from
-    // `acquire_for_read`.
-    let mut conn = db.acquire_for_read().await.unwrap();
+    // `begin_ro`.
+    let mut conn = db.begin_ro().await.unwrap();
     let mut out = Vec::new();
     let _ = timed!(
         out,
@@ -608,7 +632,6 @@ async fn time_metrics_queries(db: &TdPool) -> Result<Vec<(&'static str, f64)>, T
 /// fenced — the shape that keeps them O(window) under RLS. Checked on the SQL
 /// text rather than by timing: the cartesian a missing fence causes only
 /// surfaces once a window holds thousands of rows, past the suite's seed sizes.
-#[cfg(postgres)]
 #[test]
 fn metrics_queries_hold_window_first_fenced_contract() {
     use td_objects::dxo::query_filters::WindowUnit::{Day, Hour, Month, Quarter, Week, Year};
@@ -665,7 +688,6 @@ fn metrics_queries_hold_window_first_fenced_contract() {
 /// identity resolved. Multi-project seed is load-bearing — group ids are only
 /// unique per project, so the group-dim name joins must key on
 /// `(project, id)`.
-#[cfg(postgres)]
 #[td_test::test(db)]
 async fn metrics_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
     dataset::metrics_dataset(
@@ -678,7 +700,7 @@ async fn metrics_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
     )
     .await?;
 
-    let mut conn = db.acquire_for_read().await.unwrap();
+    let mut conn = db.begin_ro().await.unwrap();
     for dim in [Dim::Collection, Dim::Group] {
         let mut req = metrics_request();
         req.dim = dim;
@@ -761,7 +783,6 @@ async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
 /// back, so only out-of-window history grows — a history-driven plan fails
 /// the ratio. The plan assertion pins the mechanism: the window is reached
 /// through the pointer-current reverse index.
-#[cfg(postgres)]
 #[ignore = "expensive: seeds the metrics dataset at two history sizes"]
 #[td_test::test(db)]
 async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
@@ -803,7 +824,7 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
     // Mechanism (deterministic): the attempt is resolved to its run by pk, not
     // by re-expanding the LFR-anchored view per window row. The reverse index on
     // the pointer hop is logged, not asserted — discretionary at these sizes.
-    let mut conn = db.acquire_for_read().await.unwrap();
+    let mut conn = db.begin_ro().await.unwrap();
     for (name, sql) in &td_queries::metrics_plan_sql(&metrics_request()) {
         let plan = conn.explain(sql).await.expect("explain").join("\n");
         eprintln!("[query-load] window plan {name}:\n{plan}\n");

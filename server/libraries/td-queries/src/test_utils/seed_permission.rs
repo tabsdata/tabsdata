@@ -3,13 +3,14 @@
 //
 
 use crate::{LiveEntry, QueryExecutor};
-use ta_objects::{Buildable, TryUpdater};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
+use td_objects::dxo::permission::{PermissionCreate, PermissionDB};
 use td_objects::dxo::role::RoleDB;
-use td_objects::types::basic::{AccessTokenId, EntityId, EntityName, PermissionType, UserId};
+use td_objects::types::basic::{
+    AccessTokenId, EntityId, EntityName, Fixed, PermissionId, PermissionType, UserId,
+};
 
 pub async fn seed_permission(
     db: impl QueryExecutor + Domained<Domain = Apiserver>,
@@ -18,25 +19,27 @@ pub async fn seed_permission(
     entity_id: Option<EntityId>,
     role_db: &RoleDB,
 ) -> Result<PermissionDB, TdError> {
-    let permission_create = PermissionCreate::builder()
-        .permission_type(permission_type.clone())
-        .entity_name(entity_name)
-        .build()?;
+    let permission_create = PermissionCreate {
+        permission_type: permission_type.clone(),
+        entity_name,
+    };
 
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
-
-    let mut builder = PermissionDBBuilder::try_from(&permission_create)?;
-    let builder = builder
-        .try_update_from(&request_context)?
-        .try_update_from(role_db)?;
 
     let permission_entity_type = permission_type
         .on_entity_type()
         .expect("seed_permission: permission_type must be a built-in permission");
-    builder.entity_type(permission_entity_type);
     let entity_id = entity_id.unwrap_or_else(EntityId::all_entities);
-    builder.entity_id(entity_id);
-    let permission_db = builder.build()?;
+    let permission_db = PermissionDB {
+        id: PermissionId::default(),
+        role_id: role_db.id,
+        permission_type: permission_create.permission_type.clone(),
+        entity_type: permission_entity_type,
+        entity_id,
+        granted_by_id: request_context.user_id,
+        granted_on: request_context.time,
+        fixed: Fixed::FALSE,
+    };
 
     db.live().insert(&permission_db).await?;
     Ok(permission_db)

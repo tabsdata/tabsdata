@@ -4,17 +4,15 @@
 
 //! Metrics-family load cases — the heaviest aggregations in the crate.
 
+use crate::dataset::{self, WINDOW_END_MS, WINDOW_START_MS};
+use crate::harness::record;
+use crate::profile::SizeProfile;
 use std::time::Instant;
-
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::metrics::{Dim, InflightRequest, MetricsRequest};
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
 use td_queries::MetricsEntry;
-
-use crate::dataset::{self, WINDOW_END_MS, WINDOW_START_MS};
-use crate::harness::record;
-use crate::profile::SizeProfile;
 
 fn metrics_request(dim: Dim) -> MetricsRequest {
     MetricsRequest {
@@ -33,17 +31,10 @@ async fn load_metrics_nodes(db: TdPool) -> Result<(), TdError> {
     let seeded = dataset::metrics_dataset(&db, profile.metrics()).await?;
 
     let req = metrics_request(Dim::Collection);
-    let mut conn = db.acquire().await.unwrap();
+    let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
     let rows = conn.metrics().metrics_nodes(&req).await?;
-    record(
-        "metrics::metrics_nodes",
-        &db,
-        profile,
-        t,
-        rows.len(),
-        seeded,
-    );
+    record("metrics::metrics_nodes", profile, t, rows.len(), seeded);
 
     assert!(!rows.is_empty(), "seeded publishers must yield node rows");
     Ok(())
@@ -55,17 +46,10 @@ async fn load_metrics_edges(db: TdPool) -> Result<(), TdError> {
     let seeded = dataset::metrics_dataset(&db, profile.metrics()).await?;
 
     let req = metrics_request(Dim::Collection);
-    let mut conn = db.acquire().await.unwrap();
+    let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
     let rows = conn.metrics().metrics_edges(&req).await?;
-    record(
-        "metrics::metrics_edges",
-        &db,
-        profile,
-        t,
-        rows.len(),
-        seeded,
-    );
+    record("metrics::metrics_edges", profile, t, rows.len(), seeded);
 
     assert!(
         !rows.is_empty(),
@@ -86,9 +70,9 @@ async fn load_metrics_inflight(db: TdPool) -> Result<(), TdError> {
         groups: DimensionFilter::default(),
         statuses: vec![],
     };
-    let mut conn = db.acquire().await.unwrap();
+    let mut conn = db.begin().await.unwrap();
     let t = Instant::now();
     let rows = conn.metrics().inflight(&req).await?;
-    record("metrics::inflight", &db, profile, t, rows.len(), seeded);
+    record("metrics::inflight", profile, t, rows.len(), seeded);
     Ok(())
 }

@@ -8,13 +8,15 @@
 use std::time::Instant;
 
 use sea_query::Condition;
-use ta_objects::{Buildable, StateFilter};
+use ta_objects::StateFilter;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::logical::LogicalFunctionRunInputDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
-use td_objects::types::basic::{DependencyPos, InputIdx, PhysicalFunctionRunStatus, VersionPos};
+use td_objects::types::basic::{
+    DependencyPos, InputIdx, LogicalFunctionRunInputId, PhysicalFunctionRunStatus, VersionPos,
+};
 use td_queries::LiveEntry;
 
 use crate::dataset::ChainHandle;
@@ -22,16 +24,17 @@ use crate::harness::{record, seed};
 
 /// Build (don't insert) a fresh, FK-valid LFRI from the handle's first unit.
 fn build_lfri(h: &ChainHandle) -> Result<LogicalFunctionRunInputDB, TdError> {
-    Ok(LogicalFunctionRunInputDB::builder()
-        .collection_id(h.collection_id)
-        .execution_id(&h.execs[0])
-        .transaction_id(&h.transaction_id)
-        .logical_function_run_id(h.producer_lfrs[0].clone())
-        .requirement_logical_table_data_version_id(Some(h.ltdv_ids[0].clone()))
-        .requirement_input_idx(Some(InputIdx::try_from(0)?))
-        .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
-        .requirement_version_pos(VersionPos::try_from(0)?)
-        .build()?)
+    Ok(LogicalFunctionRunInputDB {
+        id: LogicalFunctionRunInputId::default(),
+        collection_id: h.collection_id,
+        execution_id: h.execs[0].clone(),
+        transaction_id: h.transaction_id.clone(),
+        logical_function_run_id: h.producer_lfrs[0].clone(),
+        requirement_logical_table_data_version_id: Some(h.ltdv_ids[0].clone()),
+        requirement_input_idx: Some(InputIdx::try_from(0)?),
+        requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
+        requirement_version_pos: VersionPos::try_from(0)?,
+    })
 }
 
 #[td_test::test(db)]
@@ -46,16 +49,26 @@ async fn load_live_insert(db: TdPool) -> Result<(), TdError> {
         .live()
         .insert::<LogicalFunctionRunInputDB>(&row)
         .await?;
-    record("live::insert", &db, profile, t, 1, seeded);
+    record("live::insert", profile, t, 1, seeded);
     Ok(())
 }
 
 #[td_test::test(db)]
 async fn load_live_update(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let update = UpdatePhysicalFunctionRunDB::builder()
-        .status(PhysicalFunctionRunStatus::Done)
-        .build()?;
+    let update = UpdatePhysicalFunctionRunDB {
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        status: PhysicalFunctionRunStatus::Done,
+        ended_on_hour_ms: None,
+        ended_on_day_ms: None,
+        ended_on_week_ms: None,
+        ended_on_month_ms: None,
+        metric_table_versions: None,
+        metric_rows: None,
+        metric_data_bytes: None,
+    };
     let t = Instant::now();
     let r = (&db)
         .live()
@@ -63,7 +76,6 @@ async fn load_live_update(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "live::update",
-        &db,
         profile,
         t,
         r.rows_affected() as usize,
@@ -89,7 +101,6 @@ async fn load_live_delete(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "live::delete",
-        &db,
         profile,
         t,
         r.rows_affected() as usize,
@@ -107,7 +118,7 @@ async fn load_live_fetch_all_in(db: TdPool) -> Result<(), TdError> {
         .live()
         .fetch_all_in::<ActiveCollectionDB>(state, ())
         .await?;
-    record("live::fetch_all_in", &db, profile, t, rows.len(), seeded);
+    record("live::fetch_all_in", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
 }
@@ -123,7 +134,6 @@ async fn load_live_fetch_latest_before(db: TdPool) -> Result<(), TdError> {
         .await?;
     record(
         "live::fetch_latest_before",
-        &db,
         profile,
         t,
         row.is_some() as usize,

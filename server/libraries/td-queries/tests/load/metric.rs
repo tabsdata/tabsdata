@@ -13,8 +13,6 @@ use std::sync::LazyLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
-use td_database::pool::TdPool;
-use td_schema::schema::backend::Backend;
 
 /// One id per test process — lets the report pick the most recent run out of
 /// the append-only file.
@@ -30,7 +28,6 @@ fn now_ms() -> i64 {
 /// One timed query execution.
 pub struct MetricRow {
     pub case: &'static str,
-    pub backend: &'static str,
     pub profile: &'static str,
     pub wall_us: u128,
     pub rows: usize,
@@ -44,7 +41,6 @@ impl MetricRow {
             "run_id": *RUN_ID,
             "ts_ms": now_ms(),
             "case": self.case,
-            "backend": self.backend,
             "profile": self.profile,
             "wall_us": self.wall_us as u64,
             "rows": self.rows,
@@ -68,8 +64,8 @@ impl MetricRow {
             Err(e) => eprintln!("[query-load] could not write {}: {e}", path.display()),
         }
         eprintln!(
-            "[query-load] {:<40} {:>8} backend={:<8} {:>10}us rows={} seeded={}",
-            self.case, self.profile, self.backend, self.wall_us, self.rows, self.seeded
+            "[query-load] {:<40} {:>8} {:>10}us rows={} seeded={}",
+            self.case, self.profile, self.wall_us, self.rows, self.seeded
         );
     }
 }
@@ -79,13 +75,6 @@ pub fn output_path() -> PathBuf {
         Ok(p) => PathBuf::from(p),
         Err(_) => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../../target/query-load/queries.jsonl"),
-    }
-}
-
-pub fn backend_of(db: &TdPool) -> &'static str {
-    match db.backend() {
-        Backend::Postgres => "postgres",
-        _ => "sqlite",
     }
 }
 
@@ -100,7 +89,6 @@ pub struct MetricRecord {
     #[serde(default)]
     pub run_id: i64,
     pub case: String,
-    pub backend: String,
     pub profile: String,
     pub wall_us: u64,
     pub rows: u64,

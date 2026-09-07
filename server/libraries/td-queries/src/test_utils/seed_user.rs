@@ -3,13 +3,13 @@
 //
 
 use crate::{LiveEntry, QueryExecutor};
-use ta_objects::{Buildable, TryUpdater};
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::{UserCreate, UserDB};
 use td_objects::types::basic::{
-    AccessTokenId, Password, UserEnabled, UserId, UserName, UserSystem,
+    AccessTokenId, Password, PasswordChangeTime, PasswordHash, PasswordMustChange, UserEnabled,
+    UserId, UserName, UserSystem,
 };
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
@@ -29,7 +29,7 @@ pub(crate) async fn seed_system_user(
     db: impl QueryExecutor + Domained<Domain = Apiserver>,
     name: &UserName,
 ) -> Result<UserDB, TdError> {
-    seed_user_with(db, name, &UserEnabled::from(true), &UserSystem::TRUE).await
+    seed_user_with(db, name, &UserEnabled::TRUE, &UserSystem::TRUE).await
 }
 
 async fn seed_user_with(
@@ -39,30 +39,34 @@ async fn seed_user_with(
     system: &UserSystem,
 ) -> Result<UserDB, TdError> {
     let password_hashing_config = PasswordHashingConfig::default();
-    let create = UserCreate::builder()
-        .name(name.clone())
-        .try_full_name(name.to_string())?
-        .email(None)
-        .password(Password::try_from("password")?)
-        .enabled(enabled)
-        .build()?;
+    let create = UserCreate {
+        name: name.clone(),
+        full_name: name.to_string().try_into()?,
+        email: None,
+        password: Password::try_from("password")?,
+        enabled: *enabled,
+    };
 
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
-    let user_db = UserDB::builder()
-        .name(create.name)
-        .full_name(create.full_name)
-        .email(create.email.clone())
-        .try_password_hash(create_password_hash(
+    let user_db = UserDB {
+        id: UserId::default(),
+        name: create.name,
+        full_name: create.full_name,
+        email: create.email.clone(),
+        created_on: request_context.time,
+        created_by_id: request_context.user_id,
+        modified_on: request_context.time,
+        modified_by_id: request_context.user_id,
+        password_hash: PasswordHash::try_from(create_password_hash(
             &password_hashing_config,
             create.password.trim(),
-        ))?
-        .try_password_set_on(request_context.time)?
-        .password_must_change(false)
-        .enabled(create.enabled)
-        .system(*system)
-        .try_update_from(&request_context)?
-        .build()?;
+        ))?,
+        password_set_on: PasswordChangeTime::try_from(&request_context.time)?,
+        password_must_change: PasswordMustChange::FALSE,
+        enabled: create.enabled,
+        system: *system,
+    };
 
     db.live().insert(&user_db).await?;
     Ok(user_db)
@@ -80,10 +84,7 @@ mod tests {
     async fn test_seed_user(db: TdPool) {
         let user = db
             .seed()
-            .user(
-                &UserName::try_from("joaquin").unwrap(),
-                &UserEnabled::from(true),
-            )
+            .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::TRUE)
             .await
             .unwrap();
         let found = db.live().fetch_one::<UserDB>(&user.id).await.unwrap();

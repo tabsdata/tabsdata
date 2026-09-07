@@ -3,11 +3,10 @@
 //
 
 //! `list` surfaces — filtered/paginated reads mapped through a `ListDto`,
-//! with `NoFilter` and default pagination, over the chain dataset.
+//! with no filter and default pagination, over the chain dataset.
 
 use std::time::Instant;
 
-use ta_objects::list_condition::NoFilter;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionRead;
@@ -25,8 +24,8 @@ async fn load_live_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let params = ListQueryParams::<CollectionRead>::try_from(&ListParams::default())?;
     let t = Instant::now();
-    let rows = (&db).live().list((), &NoFilter, &params).await?;
-    record("live::list", &db, profile, t, rows.len(), seeded);
+    let rows = (&db).live().list((), &params).await?;
+    record("live::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
 }
@@ -36,11 +35,8 @@ async fn load_current_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
     let t = Instant::now();
-    let rows = (&db)
-        .current()
-        .list::<Table, _>((), &NoFilter, &params)
-        .await?;
-    record("current::list", &db, profile, t, rows.len(), seeded);
+    let rows = (&db).current().list::<Table>((), &params).await?;
+    record("current::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
 }
@@ -53,16 +49,9 @@ async fn load_historic_list_versions(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let rows = (&db)
         .historic(&at)
-        .list_versions::<Function, _>((), &NoFilter, &params)
+        .list_versions::<Function>((), &params)
         .await?;
-    record(
-        "historic::list_versions",
-        &db,
-        profile,
-        t,
-        rows.len(),
-        seeded,
-    );
+    record("historic::list_versions", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
 }
@@ -75,9 +64,9 @@ async fn load_historic_list_full(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let rows = (&db)
         .historic(&at)
-        .list_full::<Function, _>((), &NoFilter, &params)
+        .list_full::<Function>((), &params)
         .await?;
-    record("historic::list_full", &db, profile, t, rows.len(), seeded);
+    record("historic::list_full", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
 }
