@@ -5,9 +5,10 @@
 use proc_macro::TokenStream;
 
 use darling::FromMeta;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{
-    FnArg, GenericArgument, Ident, ItemFn, PathArguments, ReturnType, Type, parse_macro_input,
+    FnArg, GenericArgument, Ident, ItemFn, LitStr, PathArguments, ReturnType, Type,
+    parse_macro_input,
 };
 
 use td_shared::parse_meta;
@@ -15,9 +16,15 @@ use td_shared::parse_meta;
 #[derive(FromMeta)]
 pub struct UtoipaPathArguments {
     #[darling(default)]
+    mount: Option<Ident>,
+    /// The endpoint's one-line description; becomes the fn's doc comment and,
+    /// through it, the OpenAPI summary.
+    #[darling(default)]
+    doc: Option<LitStr>,
+    #[darling(default)]
     method: Option<Ident>,
     #[darling(default)]
-    path: Option<Ident>,
+    path: Option<LitStr>,
     #[darling(default)]
     tag: Option<Ident>,
     /// Document the OK response inline with this content type instead of
@@ -27,16 +34,65 @@ pub struct UtoipaPathArguments {
     content_type: Option<String>,
 }
 
+fn mount_variant(mount: &Option<Ident>, input: &ItemFn) -> Result<Ident, syn::Error> {
+    let mount = mount.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &input.sig.ident,
+            "missing mount class: `#[apiserver_path(mount = <unauthenticated|global|rbac|simple|project|internal|root>, ...)]`",
+        )
+    })?;
+    let variant = match mount.to_string().as_str() {
+        "unauthenticated" => "Unauthenticated",
+        "global" => "Global",
+        "rbac" => "Rbac",
+        "simple" => "Simple",
+        "project" => "Project",
+        "internal" => "Internal",
+        "root" => "Root",
+        other => {
+            return Err(syn::Error::new(
+                mount.span(),
+                format!(
+                    "unknown mount `{other}`; expected one of unauthenticated, global, rbac, simple, project, internal, root"
+                ),
+            ));
+        }
+    };
+    Ok(Ident::new(variant, mount.span()))
+}
+
 /// Utoipa path attribute macro generator. It takes the Axum fn as an argument, as well as
-/// the method, path, and tag attributes. It generates the appropriate utoipa::path attribute.
+/// the mount, method, path, and tag attributes. It generates the appropriate utoipa::path
+/// attribute plus the route's inventory registration.
 pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_args = parse_meta!(UtoipaPathArguments, args).unwrap();
 
     let input = parse_macro_input!(item as ItemFn);
 
+    let mount = match mount_variant(&parsed_args.mount, &input) {
+        Ok(m) => m,
+        Err(e) => return e.to_compile_error().into(),
+    };
+
     // Extract method, path, and tag from the attribute arguments
     let method = parsed_args.method;
-    let path = parsed_args.path;
+    let Some(doc) = parsed_args.doc else {
+        return syn::Error::new_spanned(
+            &input.sig.ident,
+            "missing endpoint doc: `#[apiserver_path(doc = \"...\", ...)]`",
+        )
+        .to_compile_error()
+        .into();
+    };
+    let Some(path) = parsed_args.path else {
+        return syn::Error::new_spanned(
+            &input.sig.ident,
+            "missing route path: `#[apiserver_path(path = \"/...\", ...)]`",
+        )
+        .to_compile_error()
+        .into();
+    };
+    let path = Some(path);
     let tag = parsed_args.tag;
 
     // Extract the type of the `Query` parameter from the function signature
@@ -159,12 +215,72 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
         ),
     };
 
-    // Combine the generated attribute, type alias, and macro invocation with the original function
+    // The route's registration: a one-route `OpenApiRouter` build fn (the
+    // handler plus its schema components, state applied) submitted to the
+    // inventory registry under the declared mount.
+    let mut state_types = extract_type_in_generic_argument(&input, "State");
+    state_types.dedup_by_key(|ty| quote!(#ty).to_string());
+    let state_application = match state_types.as_slice() {
+        [] => quote! {
+            let _ = states;
+            let state = ();
+        },
+        [ty] => quote! {
+            let state = states.get::<#ty>().clone();
+        },
+        _ => {
+            return syn::Error::new_spanned(
+                &input.sig.ident,
+                "route registration requires the handler to extract a single State<T> type",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+    let fn_ident = &input.sig.ident;
+    let fn_name = fn_ident.to_string();
+    let path_const = format_ident!("{}_PATH", fn_name.to_uppercase());
+    let api_ident = format_ident!("__api_{}", fn_ident);
+    let build_ident = format_ident!("__registry_build_{}", fn_ident);
+    let mut schema_components = vec![ok_response.clone(), err_response.clone()];
+    schema_components.extend(query_params.iter().cloned());
+    schema_components.extend(path_params.iter().cloned());
+
     let output = quote! {
+        /// This route's URL template, as declared on the handler. Referenced by
+        /// tests and by the topology assembly; unused for most routes.
+        #[allow(dead_code)]
+        pub const #path_const: &str = #path;
+
         #[utoipa::path(
             #utoipa_attr
         )]
+        #[doc = #doc]
         #input
+
+        #[allow(non_camel_case_types)]
+        #[derive(utoipa::OpenApi)]
+        #[openapi(components(schemas( #(#schema_components),* )))]
+        struct #api_ident;
+
+        fn #build_ident(
+            states: &::ta_apiserver::router::RouterStates,
+        ) -> utoipa_axum::router::OpenApiRouter {
+            #state_application
+            utoipa_axum::router::OpenApiRouter::with_openapi(
+                <#api_ident as utoipa::OpenApi>::openapi(),
+            )
+            .routes(utoipa_axum::routes!(#fn_ident))
+            .with_state(state)
+        }
+
+        ::ta_apiserver::router::inventory::submit! {
+            ::ta_apiserver::router::RouterRegistration {
+                name: #fn_name,
+                mount: ::ta_apiserver::router::Mount::#mount,
+                build: #build_ident,
+            }
+        }
     };
 
     output.into()

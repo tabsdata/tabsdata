@@ -3225,6 +3225,7 @@ dependencies = [
  "openssl",
  "proc-macro2",
  "quote",
+ "regex",
  "syn 2.0.119",
  "td-shared",
 ]
@@ -3243,6 +3244,7 @@ name = "tm-services"
 version = "2.1.0"
 dependencies = [
  "openssl",
+ "proc-macro2",
  "quote",
  "syn 2.0.119",
 ]
@@ -3254,15 +3256,6 @@ dependencies = [
  "darling 0.23.0",
  "openssl",
  "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "tm-tower"
-version = "2.1.0"
-dependencies = [
- "openssl",
  "quote",
  "syn 2.0.119",
 ]

@@ -15,7 +15,7 @@ use quote::quote;
 use syn::ItemFn;
 
 use crate::common::{EmitCtx, get_all_fn_args};
-use crate::db_arm::{DbComponents, db_arms, emit_db_wrapper};
+use crate::db_arm::{DbComponents, db_setup, emit_db_wrapper};
 
 /// Top-level attribute arguments.
 #[derive(Debug, FromMeta)]
@@ -85,6 +85,6 @@ fn try_scoped_test(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         ))
         .with_span(&input.sig.inputs));
     }
-    let arms = db_arms(&ctx.original_name.to_string(), &components);
-    Ok(emit_db_wrapper(&ctx, &fn_args, &arms))
+    let setup = db_setup(&ctx.original_name.to_string(), &components);
+    Ok(emit_db_wrapper(&ctx, &fn_args, &setup))
 }

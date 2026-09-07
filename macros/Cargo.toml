@@ -39,7 +39,6 @@ members = [
     "facets/tm-pyo3",
     "facets/tm-services",
     "facets/tm-test",
-    "facets/tm-tower",
     "facets/tm-workspace"
 ]
 
@@ -127,6 +126,9 @@ features = ["derive"]
 
 [workspace.dependencies.serde_yaml]
 version = "0.9.34"
+
+[workspace.dependencies.regex]
+version = "1.12.3"
 
 [workspace.dependencies.syn]
 version = "2.0.117  "

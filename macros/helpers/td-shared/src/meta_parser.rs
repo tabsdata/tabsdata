@@ -3,8 +3,7 @@
 //
 
 use darling::FromMeta;
-use darling::ast::NestedMeta;
-use quote::{ToTokens, quote};
+use quote::ToTokens;
 use std::any::Any;
 
 /// A macro to parse meta attributes using the `darling` crate.
@@ -37,39 +36,6 @@ macro_rules! parse_meta {
             Ok(args)
         }()
     };
-}
-
-/// OptionWrapper that allows both `name` and `name(...)` in macro attributes.
-#[derive(Debug, Default)]
-pub enum OptionWrapper<T> {
-    #[default]
-    None,
-    Some(T),
-}
-
-impl<T> From<OptionWrapper<T>> for Option<T> {
-    fn from(option: OptionWrapper<T>) -> Self {
-        match option {
-            OptionWrapper::None => None,
-            OptionWrapper::Some(v) => Some(v),
-        }
-    }
-}
-
-impl<T: FromMeta + Default> FromMeta for OptionWrapper<T> {
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        match meta {
-            syn::Meta::Path(_) => Ok(OptionWrapper::None),
-            syn::Meta::NameValue(v) => Ok({
-                let v = T::from_expr(&v.value)?;
-                OptionWrapper::Some(v)
-            }),
-            syn::Meta::List(list) => {
-                let nested = NestedMeta::parse_meta_list(list.tokens.clone())?;
-                Ok(OptionWrapper::Some(T::from_list(&nested)?))
-            }
-        }
-    }
 }
 
 /// A helper struct to parse a `syn::Meta` into a `SynMetaOrLit`. It allows for fn calls,
@@ -166,26 +132,5 @@ impl FromMeta for SynMetaOrLit {
             syn::Meta::Path(path) => Ok(SynMetaOrLit::Path(path.clone())),
             syn::Meta::List(list) => Ok(SynMetaOrLit::Path(list.path.clone())),
         }
-    }
-}
-
-#[macro_export]
-macro_rules! downcast_option {
-    ($meta_or_lit:expr_2021, $T:ty) => {
-        $meta_or_lit.as_ref().and_then(|v| {
-            v.value()
-                .downcast_ref::<String>()
-                .unwrap()
-                .parse::<$T>()
-                .ok()
-        })
-    };
-}
-
-pub fn some_or_none<T: ToTokens>(option: Option<T>) -> proc_macro2::TokenStream {
-    if let Some(v) = option {
-        quote! { Some(#v) }
-    } else {
-        quote! { None }
     }
 }
