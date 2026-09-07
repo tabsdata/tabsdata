@@ -6,10 +6,15 @@
 //! [`AdminPool`] and the provision / upgrade / check orchestration over the
 //! configured [`DatabaseComponents`]. Component registration is the edition
 //! extension's job (`te-database`), so this module stays edition-agnostic.
+//!
+//! Logging shape, kept by every phase here: `info!` announces the phase and
+//! confirms it, once per component, with the component key and its schema;
+//! `debug!` covers the steps inside one; statements are sqlx's business.
 
 mod admin_pool;
 mod apiserver;
 mod component;
+mod plan;
 pub(crate) mod sql;
 mod upgrade;
 
@@ -31,8 +36,10 @@ pub use component::{
     ComponentRegistration, ComponentStatus, ProvisionSpec, SchemaComponent, SchemaSource,
     component, registered, validate_components,
 };
+pub use plan::{ComponentUpgrade, UpgradeAction};
 use sqlx::Connection;
 use std::collections::{BTreeMap, BTreeSet};
+use tracing::{debug, info, warn};
 pub use upgrade::UpgradeTransaction;
 
 /// Copies the connection target of the `database_server:` entry onto every
@@ -242,10 +249,16 @@ pub fn require_absent(found: &[ComponentObjects]) -> Result<(), DbError> {
         .flat_map(|objects| {
             let mut held = Vec::new();
             if objects.schema_present {
-                held.push(format!("schema '{}'", objects.schema));
+                held.push(format!(
+                    "component '{}' schema '{}'",
+                    objects.key, objects.schema
+                ));
             }
             if objects.owner_present {
-                held.push(format!("owner role '{}'", objects.owner));
+                held.push(format!(
+                    "component '{}' owner role '{}'",
+                    objects.key, objects.owner
+                ));
             }
             held
         })
@@ -263,10 +276,16 @@ pub fn require_present(found: &[ComponentObjects]) -> Result<(), DbError> {
         .flat_map(|objects| {
             let mut held = Vec::new();
             if !objects.schema_present {
-                held.push(format!("schema '{}'", objects.schema));
+                held.push(format!(
+                    "component '{}' schema '{}'",
+                    objects.key, objects.schema
+                ));
             }
             if !objects.owner_present {
-                held.push(format!("owner role '{}'", objects.owner));
+                held.push(format!(
+                    "component '{}' owner role '{}'",
+                    objects.key, objects.owner
+                ));
             }
             held
         })
@@ -280,14 +299,37 @@ pub fn require_present(found: &[ComponentObjects]) -> Result<(), DbError> {
 /// Create every registered component's schema, owner role and app role on the
 /// privileged pool. Each component provisions its own entry's app role — not
 /// the privileged entry's — so serving `SET ROLE` targets what was created.
+///
+/// Provisioning owns the create precondition: its DDL is idempotent, so
+/// without the check a `create` over a live database would adopt its schemas
+/// instead of failing. Returns the pre-provision state for the caller's report.
 pub async fn provision_all(
     components: &DatabaseComponents,
     admin: &AdminPool,
-) -> Result<(), DbError> {
+) -> Result<Vec<ComponentObjects>, DbError> {
+    let before = inspect_all(components, admin).await?;
+    require_absent(&before)?;
+    for objects in &before {
+        if objects.app_role_present {
+            warn!(
+                component = objects.key,
+                app_role = %objects.app_role,
+                "App role already exists; provisioning reuses it"
+            );
+        }
+    }
     for component in registered() {
         let entry = component_entry(components, component)?;
         let (owner, password) = owner_credentials(entry, component)?;
         let app_role = entry.app_role()?;
+        info!(
+            component = component.key(),
+            schema = %owner,
+            owner = %owner,
+            app_role = %app_role,
+            version = component.schema_source().current_version(),
+            "Provisioning component"
+        );
         component
             .provision(
                 admin,
@@ -300,17 +342,40 @@ pub async fn provision_all(
             )
             .await?;
     }
-    Ok(())
+    Ok(before)
 }
 
 /// Bring every registered component to its current version, each as its schema
-/// owner (DDL on its own schema — no server handle needed).
-pub async fn upgrade_all(components: &DatabaseComponents) -> Result<(), DbError> {
+/// owner (DDL on its own schema — no server handle needed). Reports the version
+/// transition each component took.
+pub async fn upgrade_all(
+    components: &DatabaseComponents,
+) -> Result<Vec<ComponentUpgrade>, DbError> {
+    let mut upgraded = Vec::new();
     for component in registered() {
+        let schema = resolved_schema(components, component)?;
+        info!(
+            component = component.key(),
+            schema = %schema,
+            version = component.schema_source().current_version(),
+            "Upgrading component"
+        );
         let pool = admin_pool_for(components, component).await?;
-        pool.upgrade(component).await?;
+        let action = pool.upgrade(component).await?;
+        if action.is_none() {
+            warn!(
+                component = component.key(),
+                schema = %schema,
+                "Component reported no schema version transition"
+            );
+        }
+        upgraded.push(ComponentUpgrade {
+            key: component.key(),
+            schema,
+            action,
+        });
     }
-    Ok(())
+    Ok(upgraded)
 }
 
 /// Every declared pool must have its `pool:` block and every serving block
@@ -355,8 +420,11 @@ pub async fn check_all(components: &DatabaseComponents) -> Result<(), DbError> {
 /// only inherit the trait no-op.
 pub async fn seed_all(components: &DatabaseComponents) -> Result<(), DbError> {
     for component in registered() {
+        let schema = resolved_schema(components, component)?;
+        debug!(component = component.key(), schema = %schema, "Seeding baseline");
         let serving = connect_serving(components, component.key()).await?;
         component.seed(&serving).await?;
+        info!(component = component.key(), schema = %schema, "Baseline seeded");
     }
     Ok(())
 }
@@ -385,7 +453,9 @@ pub async fn drop_all(components: &DatabaseComponents, admin: &AdminPool) -> Res
     for component in registered() {
         let entry = component_entry(components, component)?;
         let (owner, _) = owner_credentials(entry, component)?;
+        debug!(component = component.key(), schema = %owner, "Dropping component");
         admin.drop_schema(&owner, &owner).await?;
+        info!(component = component.key(), schema = %owner, "Component dropped");
         app_roles.insert(entry.app_role()?);
     }
     for app_role in app_roles {

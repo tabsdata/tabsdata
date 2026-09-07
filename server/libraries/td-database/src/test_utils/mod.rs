@@ -155,6 +155,7 @@ impl TestDb {
     /// Apply the apiserver schema to its current version, via the real
     /// [`ApiserverComponent`] on the privileged system pool.
     pub async fn upgrade(&self) -> Result<(), DbError> {
-        self.admin.upgrade(&ApiserverComponent).await
+        self.admin.upgrade(&ApiserverComponent).await?;
+        Ok(())
     }
 }

@@ -7,6 +7,7 @@
 
 use crate::components::SchemaComponent;
 use crate::components::admin_pool::AdminPool;
+use crate::components::plan::{UpgradeAction, upgrade_action};
 use crate::components::sql::grant_app_role_privileges_sql;
 use crate::connection::PgConnectionExt;
 use crate::error::DbError;
@@ -15,6 +16,7 @@ use crate::sea_query::builder::SeaQueryExt;
 use sea_query::{Expr, ExprTrait, OnConflict, Query};
 use sqlx::postgres::PgConnection;
 use sqlx::{Postgres, Transaction};
+use std::time::Instant;
 use td_schema::SchemaSource;
 use td_schema::schema::{derived_scripts, install_script};
 use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem, tabsdata_system_ddl};
@@ -27,12 +29,17 @@ impl AdminPool {
     /// version and edition rows, and the app-role grants either all commit or
     /// all roll back. Read-only gates and the cluster-global app role run
     /// first, outside it.
-    pub async fn upgrade(&self, component: &dyn SchemaComponent) -> Result<(), DbError> {
+    pub async fn upgrade(
+        &self,
+        component: &dyn SchemaComponent,
+    ) -> Result<Option<UpgradeAction>, DbError> {
         component.preflight(self).await?;
         self.ensure_app_role().await?;
         let mut tx = self.begin_upgrade().await?;
         component.upgrade(&mut tx).await?;
-        tx.commit().await
+        let action = tx.action.clone();
+        tx.commit().await?;
+        Ok(action)
     }
 
     /// Open the upgrade transaction. Public for components that compose their
@@ -51,7 +58,11 @@ impl AdminPool {
         conn.bypass_project_scope()
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-        Ok(UpgradeTransaction { admin: self, conn })
+        Ok(UpgradeTransaction {
+            admin: self,
+            conn,
+            action: None,
+        })
     }
 
     /// [`Self::upgrade`] for a bare [`SchemaSource`] with no component around
@@ -73,6 +84,8 @@ impl AdminPool {
 pub struct UpgradeTransaction<'a> {
     admin: &'a AdminPool,
     conn: Transaction<'static, Postgres>,
+    /// What [`Self::upgrade_db_version`] did, for the caller's report.
+    action: Option<UpgradeAction>,
 }
 
 impl UpgradeTransaction<'_> {
@@ -99,47 +112,65 @@ impl UpgradeTransaction<'_> {
         self.lock_schema_upgrades().await?;
         self.ensure_system_table().await?;
 
+        let schema = self.admin.schema().to_string();
         let current = source.current_version();
-        let stored = db_version(self.conn()).await?;
-        match stored {
-            Some(version) if version == current => {
-                debug!(version, "Schema version is up to date");
+        let action = upgrade_action(db_version(self.conn()).await?, current);
+        self.action = Some(action.clone());
+        let started = Instant::now();
+        match &action {
+            UpgradeAction::UpToDate { version } => {
+                info!(schema, version, "Schema is up to date");
             }
-            Some(version) if version < current => {
-                info!(from = version, to = current, "Upgrading schema");
+            UpgradeAction::Ladder { from, to, targets } => {
+                info!(schema, from, to, deltas = targets.len(), "Upgrading schema");
                 let (drop, create) = derived_scripts(source);
                 if !drop.is_empty() {
                     self.execute_batch(&drop).await?;
                     debug!(count = drop.len(), "Derived objects dropped");
                 }
-                for target in (version + 1)..=current {
-                    let stmts = source.delta(target);
+                for target in targets {
+                    let stmts = source.delta(*target);
                     self.execute_batch(&stmts).await?;
-                    info!(target, "Schema delta applied");
+                    info!(target, statements = stmts.len(), "Schema delta applied");
                 }
                 self.set_db_version(current).await?;
                 if !create.is_empty() {
                     self.execute_batch(&create).await?;
                     debug!(count = create.len(), "Derived objects rebuilt");
                 }
+                info!(
+                    schema,
+                    from,
+                    to,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "Schema upgraded"
+                );
             }
-            Some(version) => {
+            UpgradeAction::Newer { database, binary } => {
                 warn!(
-                    database_version = version,
-                    binary_version = current,
+                    schema,
+                    database_version = database,
+                    binary_version = binary,
                     "Database is newer than binary"
                 );
-                return Err(DbError::DatabaseIsNewer(version.to_string(), current));
+                return Err(DbError::DatabaseIsNewer(database.to_string(), *binary));
             }
-            None => {
-                info!(
-                    version = current,
-                    "No existing schema found, creating fresh install"
-                );
+            UpgradeAction::Install { version } => {
                 let stmts = install_script(source);
+                info!(
+                    schema,
+                    version,
+                    statements = stmts.len(),
+                    "No existing schema found, installing it"
+                );
                 self.execute_batch(&stmts).await?;
                 self.set_db_version(current).await?;
-                info!(version = current, "Fresh schema created");
+                info!(
+                    schema,
+                    version,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "Schema installed"
+                );
             }
         }
         Ok(())

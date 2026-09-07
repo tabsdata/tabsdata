@@ -176,6 +176,12 @@ pub enum DbError {
     )]
     NoComponentsRegistered = 5032,
     #[error(
+        "Database components '{1}' and '{2}' both resolve to schema '{0}'. Each \
+         component owns its own schema and owner role; give them distinct \
+         `schema:` values, or distinct component keys under a shared database."
+    )]
+    DuplicateComponentSchema(String, String, String) = 5047,
+    #[error(
         "Failed to connect to the database: {0}. Verify the database server is \
          running and reachable, and that the configured host, port, credentials, \
          and database name are correct (and that any firewall or TLS settings \

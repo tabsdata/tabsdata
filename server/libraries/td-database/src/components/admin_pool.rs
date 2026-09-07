@@ -72,6 +72,12 @@ impl AdminPool {
     /// own — not from this (privileged, server-entry) pool's config.
     pub(crate) async fn provision_schema(&self, spec: &ProvisionSpec<'_>) -> Result<(), DbError> {
         {
+            debug!(
+                owner = spec.owner,
+                schema = spec.schema,
+                role = spec.app_role,
+                "Provisioning schema, owner and app role"
+            );
             let stmts = vec![
                 create_owner_role_sql(spec.owner),
                 create_schema_sql(spec.schema, spec.owner),
@@ -84,7 +90,7 @@ impl AdminPool {
                 &stmts,
             )
             .await?;
-            debug!(
+            info!(
                 owner = spec.owner,
                 schema = spec.schema,
                 role = spec.app_role,

@@ -6,12 +6,13 @@
 //! components at runtime; the edition extension (`te-database`) registers
 //! components via `inventory::submit!`.
 
-use crate::components::{AdminPool, UpgradeTransaction};
+use crate::components::{AdminPool, UpgradeTransaction, resolved_schema};
 use crate::config::DatabaseComponents;
 use crate::error::DbError;
 use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use async_trait::async_trait;
+use std::collections::BTreeMap;
 pub use td_schema::SchemaSource;
 
 /// Per-entry inputs to provisioning, resolved from the component's config entry.
@@ -101,7 +102,9 @@ pub fn component(key: &str) -> Result<&'static dyn SchemaComponent, DbError> {
 }
 
 /// Validate the `database:` map against the registry: every registered
-/// component has its own entry and every key names a registered component. An
+/// component has its own entry, every key names a registered component, and no
+/// two components resolve to the same schema — provisioning is idempotent, so a
+/// collision has the second component silently share the first one's tables. An
 /// empty registry means the binary forgot the `force_link!` anchor, which
 /// compiles fine but fails every config at runtime.
 pub fn validate_components(components: &DatabaseComponents) -> Result<(), DbError> {
@@ -114,6 +117,24 @@ pub fn validate_components(components: &DatabaseComponents) -> Result<(), DbErro
     for key in components.keys() {
         let _ = component(key)?;
     }
+    let resolved: Vec<(&'static str, String)> = registered()
+        .map(|c| Ok((c.key(), resolved_schema(components, c)?)))
+        .collect::<Result<_, DbError>>()?;
+    require_distinct_schemas(&resolved)
+}
+
+/// No two components may own the same schema.
+fn require_distinct_schemas(resolved: &[(&str, String)]) -> Result<(), DbError> {
+    let mut owners: BTreeMap<&str, &str> = BTreeMap::new();
+    for (key, schema) in resolved {
+        if let Some(owner) = owners.insert(schema, key) {
+            return Err(DbError::DuplicateComponentSchema(
+                schema.clone(),
+                owner.to_owned(),
+                (*key).to_owned(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -123,4 +144,34 @@ pub struct ComponentStatus {
     pub schema: String,
     pub db_version: Option<usize>,
     pub current: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::require_distinct_schemas;
+    use crate::error::DbError;
+
+    #[test]
+    fn distinct_schemas_pass() {
+        let resolved = [
+            ("apiserver", "td_apiserver".to_owned()),
+            ("aiagent", "td_aiagent".to_owned()),
+        ];
+        assert!(require_distinct_schemas(&resolved).is_ok());
+    }
+
+    #[test]
+    fn shared_schema_is_rejected_naming_both_components() {
+        let resolved = [
+            ("apiserver", "shared".to_owned()),
+            ("aiagent", "shared".to_owned()),
+        ];
+        let error = require_distinct_schemas(&resolved).unwrap_err();
+        let DbError::DuplicateComponentSchema(schema, first, second) = error else {
+            panic!("expected a duplicate-schema error, got {error:?}");
+        };
+        assert_eq!(schema, "shared");
+        assert_eq!(first, "apiserver");
+        assert_eq!(second, "aiagent");
+    }
 }

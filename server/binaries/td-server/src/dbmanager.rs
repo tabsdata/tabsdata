@@ -13,6 +13,7 @@
 
 use std::env;
 use std::process;
+use std::time::Instant;
 
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,8 @@ use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
 use td_process::pathenv::extend_path;
 use te_database as dbm;
-use tracing::{error, info};
+use te_database::UpgradeAction;
+use tracing::{debug, error, info};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -116,20 +118,24 @@ async fn create(
     components: &DatabaseComponents,
     server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
-    with_server(server, async |admin| {
-        info!("Creating database");
-        let before = dbm::inspect_all(components, admin).await?;
-        dbm::require_absent(&before)?;
-        dbm::provision_all(components, admin).await?;
-        dbm::upgrade_all(components).await?;
+    let started = Instant::now();
+    let upgraded = with_server(server, async |admin| {
+        info!(schemas = ?resolved_schemas(components)?, "Creating database");
+        let before = dbm::provision_all(components, admin).await?;
+        let upgraded = dbm::upgrade_all(components).await?;
         report_objects(&before, &dbm::inspect_all(components, admin).await?);
-        Ok(())
+        Ok(upgraded)
     })
     .await?;
     // Baseline *content* is seeded on the serving pools (not the privileged
     // pool), so it runs after the schema structure is provisioned and upgraded.
     dbm::seed_all(components).await?;
-    info!(schemas = ?resolved_schemas(components)?, "Database created");
+    report_versions(&upgraded);
+    info!(
+        schemas = ?resolved_schemas(components)?,
+        elapsed_ms = started.elapsed().as_millis(),
+        "Database created"
+    );
     Ok(())
 }
 
@@ -147,22 +153,56 @@ async fn upgrade(
     components: &DatabaseComponents,
     server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
+    let started = Instant::now();
     let before = with_server(server, async |admin| {
         let found = dbm::inspect_all(components, admin).await?;
         dbm::require_present(&found)?;
         Ok(found)
     })
     .await?;
-    info!("Upgrading database");
-    dbm::upgrade_all(components).await?;
+    info!(schemas = ?resolved_schemas(components)?, "Upgrading database");
+    let upgraded = dbm::upgrade_all(components).await?;
     dbm::seed_all(components).await?;
     let after = with_server(server, async |admin| {
         dbm::inspect_all(components, admin).await
     })
     .await?;
     report_objects(&before, &after);
-    info!("Database upgraded");
+    report_versions(&upgraded);
+    info!(
+        elapsed_ms = started.elapsed().as_millis(),
+        "Database upgraded"
+    );
     Ok(())
+}
+
+/// The version transition each component took, once the run is done.
+fn report_versions(upgraded: &[dbm::ComponentUpgrade]) {
+    for component in upgraded {
+        match &component.action {
+            Some(UpgradeAction::Install { version }) => info!(
+                component = component.key,
+                schema = %component.schema,
+                version,
+                "schema installed"
+            ),
+            Some(UpgradeAction::Ladder { from, to, .. }) => info!(
+                component = component.key,
+                schema = %component.schema,
+                from,
+                to,
+                "schema upgraded"
+            ),
+            Some(UpgradeAction::UpToDate { version }) => info!(
+                component = component.key,
+                schema = %component.schema,
+                version,
+                "schema already current"
+            ),
+            // A newer database never commits; a silent component is warned about at the source.
+            Some(UpgradeAction::Newer { .. }) | None => {}
+        }
+    }
 }
 
 fn report_objects(before: &[dbm::ComponentObjects], after: &[dbm::ComponentObjects]) {
@@ -291,7 +331,8 @@ fn run() {
             if matches!(command, Command::Db(_))
                 && let Err(e) = dbm::validate_components(components)
             {
-                error!("Invalid database configuration: {e:#?}");
+                error!("Invalid database configuration: {e}");
+                debug!("{e:#?}");
                 return ExitStatus::GeneralError;
             }
 
@@ -318,7 +359,8 @@ fn run() {
             match outcome {
                 Ok(()) => ExitStatus::Success,
                 Err(e) => {
-                    error!("db-admin command failed: {e:#?}");
+                    error!("db-admin command failed: {e}");
+                    debug!("{e:#?}");
                     ExitStatus::GeneralError
                 }
             }

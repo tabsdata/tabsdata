@@ -14,10 +14,13 @@
 //!   applied (postgres only).
 //! * [`provisioning`] — [`AdminPool::provision_schema`](crate::components::AdminPool)
 //!   as a non-superuser `CREATEROLE` admin (postgres only).
+//! * [`create_preconditions`] — `create` refusing an already-provisioned
+//!   database (postgres only).
 //!
 //! This module holds the shared query helpers; the submodules reach them via
 //! `super::`.
 
+mod create_preconditions;
 mod delta_data;
 mod migration;
 mod provisioning;

@@ -12,7 +12,7 @@ use crate::error::DbError;
 use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use async_trait::async_trait;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Registry/override key identifying the apiserver component.
 pub const APISERVER_COMPONENT_KEY: &str = "apiserver";
@@ -49,12 +49,9 @@ impl SchemaComponent for ApiserverComponent {
     }
 
     async fn upgrade(&self, tx: &mut UpgradeTransaction<'_>) -> Result<(), DbError> {
-        info!("Starting database upgrade");
         tx.upgrade_db_version(self.schema_source()).await?;
         tx.upgrade_tabsdata_edition().await?;
-        tx.grant_app_role_privileges().await?;
-        info!("Database upgrade complete");
-        Ok(())
+        tx.grant_app_role_privileges().await
     }
 
     async fn check(&self, serving: &TdPool) -> Result<(), DbError> {
