@@ -2,33 +2,50 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! CTE builders for recursive queries.
-//!
-//! The trait + public option types live in
-//! [`crate::generic::recursive`]; everything here is the SQL plumbing
-//! the trait impl orchestrates. All `pub(crate)` so callers can't reach
-//! in.
+//! CTE builders for recursive queries; the public surface is
+//! [`crate::generic::recursive`].
 
 use crate::QueryExecutor;
+use crate::primitives::scd2::{open_interval_at, visible_at};
 use sea_query::{
     Alias, Asterisk, CommonTableExpression, Condition, Expr, ExprTrait, Func, Iden, IntoIden,
-    IntoTableRef, JoinType, Order, OverStatement, Query, UnionType, WindowStatement, WithClause,
+    JoinType, Query, UnionType, WithClause,
 };
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
-use ta_objects::{CurrentDao, Dao, DaoCore, Recursive, VersionedDao};
+use ta_objects::{Dao, HasColumn, RecursiveDao, Scd2Dao, SelectDao};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::types::basic::Depth;
 use td_objects::types::recursion::RecursionOptions;
 
-// ---------------------------------------------------------------------------
-// Types & enums
-// ---------------------------------------------------------------------------
+/// The rows a walk starts from, with the column of `R` their type resolved to.
+pub(crate) struct Start<'a, R: Dao> {
+    col: R::Iden,
+    values: Vec<&'a dyn SeaValue>,
+}
 
-/// Names for the Common Table Expressions used in recursive queries.
-///
-/// Each variant maps to a CTE in the generated `WITH RECURSIVE` clause.
-/// `Rn` is the `ROW_NUMBER` column alias used inside versioned ranking sub-queries.
+impl<'a, R: Dao> Start<'a, R> {
+    pub(crate) fn of<V: SeaValue>(values: Vec<&'a V>) -> Self
+    where
+        R: HasColumn<V>,
+    {
+        Start {
+            col: <R as HasColumn<V>>::COL,
+            values: values.into_iter().map(|v| v as &dyn SeaValue).collect(),
+        }
+    }
+
+    pub(crate) fn matches(&self) -> Expr {
+        Expr::col(self.col).is_in(self.values.iter().map(|v| v.as_sea_value()))
+    }
+
+    pub(crate) fn matches_in(&self, table: impl IntoIden) -> Expr {
+        Expr::col((table.into_iden(), self.col.into_iden()))
+            .is_in(self.values.iter().map(|v| v.as_sea_value()))
+    }
+}
+
+/// CTE names in the generated `WITH RECURSIVE` clauses.
 #[derive(Iden, Clone, Copy)]
 pub(crate) enum Cte {
     ReferenceVersions,
@@ -40,35 +57,23 @@ pub(crate) enum Cte {
     DepthUp,
     PathDown,
     DepthDown,
-    Rn,
-    /// Reachable R partition IDs from `direct_references` via D's join
-    /// graph — used to filter the ranked base CTEs in
-    /// `historic.recursive` so they don't scan the full table.
+    /// R partition ids reachable through D's join graph, so the visible-at
+    /// base CTEs never scan the full table.
     Reachable,
 }
 
-/// Single-column alias for the [`Cte::Reachable`] CTE — every UNION
-/// branch projects its partition-id source as `partition_id` so the
-/// recursive part can self-reference by name.
+/// Every UNION branch projects its partition-id source under this name so the
+/// recursive part can self-reference it.
 #[derive(Iden, Clone, Copy)]
 pub(crate) struct PartitionId;
 
-/// Traversal direction for a recursive CTE.
 #[derive(Clone, Copy)]
 pub(crate) enum Direction {
     Upstream,
     Downstream,
 }
 
-// ---------------------------------------------------------------------------
-// Table aliases
-// ---------------------------------------------------------------------------
-//
-// Zero-sized `Iden` impls — `Copy` lets them be passed by value as many
-// times as needed without `String` allocation per use. `derive(Iden)`
-// snake-cases the type name into the SQL identifier.
-
-/// Row variable in base-table scans and versioned ranked sub-queries.
+/// Row variable in base-table and interval scans.
 #[derive(Iden, Clone, Copy)]
 struct Rv;
 
@@ -84,8 +89,7 @@ struct Rfv;
 #[derive(Iden, Clone, Copy)]
 struct Rfv2;
 
-/// Direction-dependent self-alias for the recursive part of a direction CTE
-/// (`uv` for upstream, `dv` for downstream).
+/// Self-alias for the recursive part of a direction CTE.
 #[derive(Iden, Clone, Copy)]
 pub(crate) enum DirAlias {
     Uv,
@@ -99,27 +103,16 @@ struct Fx;
 #[derive(Iden, Clone, Copy)]
 struct Fy;
 
-// ---------------------------------------------------------------------------
-// Utility helpers
-// ---------------------------------------------------------------------------
-
-/// Returns `true` when the direction should produce a CTE.
-///
-/// `None` means unlimited (enabled), `Some(0)` means disabled,
-/// `Some(n)` where `n > 0` means enabled with a depth cap.
+/// `None` means unlimited (enabled), `Some(0)` disabled, `Some(n > 0)`
+/// enabled with a depth cap.
 pub(crate) fn is_direction_enabled(max_depth: Option<Depth>) -> bool {
     !matches!(max_depth, Some(d) if *d == 0)
 }
 
-// ---------------------------------------------------------------------------
-// CTE builders — non-versioned base CTEs
-// ---------------------------------------------------------------------------
-
-/// Build a simple base CTE for non-versioned tables (`SELECT * FROM T`).
-pub(crate) fn versions_cte_basic<T: DaoCore>(cte_name: Cte) -> CommonTableExpression {
+pub(crate) fn versions_cte_basic<T: Dao>(cte_name: Cte) -> CommonTableExpression {
     let query = Query::select()
         .expr(Expr::col((Rv, Asterisk)))
-        .from_as(T::table(), Rv)
+        .from_as(T::TABLE, Rv)
         .take();
 
     CommonTableExpression::new()
@@ -128,17 +121,16 @@ pub(crate) fn versions_cte_basic<T: DaoCore>(cte_name: Cte) -> CommonTableExpres
         .to_owned()
 }
 
-/// Build a base CTE that scans the `_current` view of a [`CurrentDao`]
-/// instead of the base table — one row per partition, no ranking
-/// needed. Use this when the recursion is at "now". `state_cond` is
-/// AND-ed into the WHERE so callers can narrow to e.g. only Active rows.
-pub(crate) fn versions_cte_current<T: CurrentDao>(
+/// Open intervals only (`valid_to = 'infinity'`): one row per partition,
+/// served by the partial indexes.
+pub(crate) fn versions_cte_current<T: Scd2Dao>(
     state_cond: Condition,
     cte_name: Cte,
 ) -> CommonTableExpression {
     let query = Query::select()
         .expr(Expr::col((Rv, Asterisk)))
-        .from_as(Alias::new(T::current_table_name()), Rv)
+        .from_as(T::TABLE, Rv)
+        .and_where(open_interval_at((Rv, T::VALID_TO)))
         .cond_where(state_cond)
         .take();
 
@@ -148,53 +140,19 @@ pub(crate) fn versions_cte_current<T: CurrentDao>(
         .to_owned()
 }
 
-// ---------------------------------------------------------------------------
-// CTE builders — versioned base CTEs
-// ---------------------------------------------------------------------------
-
-/// Build a versioned base CTE using ROW_NUMBER ranking. `inner_filter`
-/// is AND-ed into the ranking sub-query's WHERE — used to restrict the
-/// scan to a reachable subset of the table (see [`reachable_partitions_cte`]).
-pub(crate) fn versioned_ranked_cte<T: VersionedDao>(
-    defined_on: Option<&dyn SeaValue>,
+/// Visible-at scan of `T`, restricted to `reachable` and `state_cond`.
+pub(crate) fn versioned_visible_cte<T: Scd2Dao, V: SeaValue>(
+    on: &V,
     state_cond: Condition,
-    inner_filter: Option<Condition>,
+    reachable: Condition,
     cte_name: Cte,
 ) -> CommonTableExpression {
-    let window = WindowStatement::new()
-        .partition_by(T::partition_col())
-        .order_by_expr(Expr::col(T::version_order_col()), Order::Desc)
-        .order_by_expr(Expr::col(T::pk_col()), Order::Desc)
-        .take();
-
-    let mut ranked = Query::select()
-        .expr(Expr::col((Rv, Asterisk)))
-        .expr_window_as(
-            Func::cust(Alias::new("ROW_NUMBER")).args(vec![]),
-            window,
-            Cte::Rn,
-        )
-        .from_as(T::table(), Rv)
-        .take();
-
-    if let Some(on) = defined_on {
-        ranked = ranked
-            .and_where(Expr::col((Rv, T::version_order_col())).lte(on.as_sea_value()))
-            .take();
-    }
-
-    if let Some(filter) = inner_filter {
-        ranked = ranked.cond_where(filter).take();
-    }
-
     let query = Query::select()
-        .expr(Expr::col(Asterisk))
-        .from_subquery(ranked, Alias::new("_sub"))
-        .cond_where(
-            Condition::all()
-                .add(Expr::col(Cte::Rn).eq(1_i64))
-                .add(state_cond),
-        )
+        .expr(Expr::col((Rv, Asterisk)))
+        .from_as(T::TABLE, Rv)
+        .cond_where(visible_at((Rv, T::VERSION_ORDER), (Rv, T::VALID_TO), on))
+        .cond_where(reachable)
+        .cond_where(state_cond)
         .take();
 
     CommonTableExpression::new()
@@ -203,99 +161,69 @@ pub(crate) fn versioned_ranked_cte<T: VersionedDao>(
         .to_owned()
 }
 
-/// Build the `ReferenceVersions` CTE for versioned tables.
-///
-/// `direct_reference_state`, when set, OR-s in a permissive branch
-/// matching `direct_references` so the entry-point row passes a
-/// broader filter than `r_state` allows for the rest of the walk.
-pub(crate) fn reference_versions_cte<D, R>(
-    direct_references: &[&dyn SeaValue],
-    r_defined_on: Option<&dyn SeaValue>,
+/// `direct_reference_state`, when set, OR-s in a permissive branch for the
+/// starting rows, so the entry point passes a broader filter than the walk.
+pub(crate) fn reference_state_cond<R: Dao>(
+    start: &Start<'_, R>,
     r_state: &Condition,
     direct_reference_state: Option<&Condition>,
-    reachable: bool,
-) -> Result<CommonTableExpression, SqlError>
-where
-    D: Recursive,
-    R: VersionedDao,
-{
-    let mut state_cond = r_state.clone();
-
-    if let Some(extra) = direct_reference_state {
-        let first_ref = direct_references.first().ok_or_else(|| {
-            SqlError::TypeNotFound(
-                "no direct references".into(),
-                Box::new(R::table().into_table_ref()),
-            )
-        })?;
-        let starting_at = R::col_for_type(first_ref.as_type_id()).ok_or(SqlError::TypeNotFound(
-            format!("{:?}", first_ref),
-            Box::new(R::table().into_table_ref()),
-        ))?;
-        let direct_cond = Condition::all()
-            .add(Expr::col(starting_at).is_in(direct_references.iter().map(|r| r.as_sea_value())))
-            .add(extra.clone());
-        state_cond = Condition::any().add(state_cond).add(direct_cond);
+) -> Condition {
+    match direct_reference_state {
+        Some(extra) => Condition::any()
+            .add(r_state.clone())
+            .add(Condition::all().add(start.matches()).add(extra.clone())),
+        None => r_state.clone(),
     }
-
-    let inner_filter = if reachable {
-        Some(reachable_filter_for_recursion_ref::<D, R>()?)
-    } else {
-        None
-    };
-
-    Ok(versioned_ranked_cte::<R>(
-        r_defined_on,
-        state_cond,
-        inner_filter,
-        Cte::ReferenceVersions,
-    ))
 }
 
-/// Build the `RecursionVersions` CTE for versioned tables.
-pub(crate) fn recursion_versions_cte<D>(
-    d_defined_on: Option<&dyn SeaValue>,
-    d_state: &Condition,
-    reachable: bool,
+pub(crate) fn reference_versions_cte<D, R, V>(
+    start: &Start<'_, R>,
+    on: &V,
+    r_state: &Condition,
+    direct_reference_state: Option<&Condition>,
 ) -> CommonTableExpression
 where
-    D: VersionedDao + Recursive,
+    D: RecursiveDao,
+    R: Scd2Dao + HasColumn<D::Key>,
+    V: SeaValue,
 {
-    let inner_filter = reachable.then(reachable_filter_for_recursion::<D>);
-    versioned_ranked_cte::<D>(
-        d_defined_on,
+    versioned_visible_cte::<R, V>(
+        on,
+        reference_state_cond(start, r_state, direct_reference_state),
+        reachable_filter_for_recursion_ref::<D, R>(),
+        Cte::ReferenceVersions,
+    )
+}
+
+pub(crate) fn recursion_versions_cte<D, V>(on: &V, d_state: &Condition) -> CommonTableExpression
+where
+    D: SelectDao + Scd2Dao + RecursiveDao,
+    V: SeaValue,
+{
+    versioned_visible_cte::<D, V>(
+        on,
         d_state.clone(),
-        inner_filter,
+        reachable_filter_for_recursion::<D>(),
         Cte::RecursionVersions,
     )
 }
 
-/// `R.recursion_ref IN (SELECT partition_id FROM Reachable)` — used by
-/// the reference base CTE when reachability filtering is on. Matches
-/// on the column whose values were collected into `Reachable`, which
-/// may differ from `R::partition_col()` (e.g. for `TableDB`, partition
-/// is `table_id` but `recursion_ref` is `function_id`).
-fn reachable_filter_for_recursion_ref<D, R>() -> Result<Condition, SqlError>
+/// Matches on the column whose values were collected into `Reachable`, which
+/// may differ from `R::PARTITION`.
+fn reachable_filter_for_recursion_ref<D, R>() -> Condition
 where
-    D: Recursive,
-    R: VersionedDao,
+    D: RecursiveDao,
+    R: Scd2Dao + HasColumn<D::Key>,
 {
-    let recursion_ref = R::col_for_type(std::any::TypeId::of::<D::Key>()).ok_or_else(|| {
-        SqlError::TypeNotFound(
-            std::any::type_name::<D::Key>().to_string(),
-            Box::new(R::table().into_table_ref()),
-        )
-    })?;
     let sub = Query::select()
         .column(PartitionId)
         .from(Cte::Reachable)
         .take();
-    Ok(Condition::all().add(Expr::col((Rv, recursion_ref)).in_subquery(sub)))
+    Condition::all().add(Expr::col((Rv, <R as HasColumn<D::Key>>::COL)).in_subquery(sub))
 }
 
-/// `D.recurse_up IN (Reachable) OR D.recurse_down IN (Reachable)` —
-/// used by the recursion base CTE when reachability filtering is on.
-fn reachable_filter_for_recursion<D: VersionedDao + Recursive>() -> Condition {
+/// `D.recurse_up IN (Reachable) OR D.recurse_down IN (Reachable)`.
+fn reachable_filter_for_recursion<D: SelectDao + Scd2Dao + RecursiveDao>() -> Condition {
     let sub_up = Query::select()
         .column(PartitionId)
         .from(Cte::Reachable)
@@ -305,89 +233,44 @@ fn reachable_filter_for_recursion<D: VersionedDao + Recursive>() -> Condition {
         .from(Cte::Reachable)
         .take();
     Condition::any()
-        .add(Expr::col((Rv, D::recurse_up())).in_subquery(sub_up))
-        .add(Expr::col((Rv, D::recurse_down())).in_subquery(sub_down))
+        .add(Expr::col((Rv, D::UP)).in_subquery(sub_up))
+        .add(Expr::col((Rv, D::DOWN)).in_subquery(sub_down))
 }
 
-// ---------------------------------------------------------------------------
-// CTE builder — reachability sub-query (R partition IDs reachable from
-// `direct_references` via D's join graph).
-// ---------------------------------------------------------------------------
-
-/// Recursive CTE that walks the D ↔ R join graph from `direct_references`
-/// and emits the set of R partition IDs reachable in the requested
-/// directions. Output column: `partition_id`.
-///
-/// The walk uses raw base tables (no row-number ranking, no state
-/// filter) and only joins on D's recursion columns — lightweight
-/// compared to the full ranked base CTEs. `UNION` (DISTINCT)
-/// terminates cycles. `version_order <= on` keeps the walk historical
-/// when set.
-///
-/// The output is a SUPERSET of the partitions the proper recursive
-/// walker (with state filter) will visit — feeding it as a partition
-/// filter to [`reference_versions_cte`] / [`recursion_versions_cte`]
-/// preserves correctness while bounding the base CTE scan to
-/// `O(reachable_partitions)` instead of `O(table_size)`.
-pub(crate) fn reachable_partitions_cte<D, R>(
-    direct_references: &[&dyn SeaValue],
-    on: Option<&dyn SeaValue>,
+/// Walks the D ↔ R join graph from `start` and emits the reachable R partition
+/// ids as `partition_id`. Raw base tables, no visibility or state filter, so
+/// the result is a superset of what the filtered walk visits: as a partition
+/// filter that stays correct while bounding the base CTE scans to
+/// `O(reachable_partitions)`. `UNION` terminates cycles.
+pub(crate) fn reachable_partitions_cte<D, R, V>(
+    start: &Start<'_, R>,
+    on: &V,
     up_enabled: bool,
     down_enabled: bool,
-) -> Result<CommonTableExpression, SqlError>
+) -> CommonTableExpression
 where
-    D: VersionedDao + Recursive,
-    R: VersionedDao,
+    D: SelectDao + Scd2Dao + RecursiveDao,
+    R: Scd2Dao + HasColumn<D::Key>,
+    V: SeaValue,
 {
-    debug_assert!(
-        !direct_references.is_empty(),
-        "direct_references must be non-empty; callers gate on this"
-    );
+    let recursion_ref = <R as HasColumn<D::Key>>::COL;
 
-    let first_ref = direct_references[0];
-    let starting_at = R::col_for_type(first_ref.as_type_id()).ok_or(SqlError::TypeNotFound(
-        format!("{:?}", first_ref),
-        Box::new(R::table().into_table_ref()),
-    ))?;
-    let recursion_ref =
-        R::col_for_type(std::any::TypeId::of::<D::Key>()).ok_or(SqlError::TypeNotFound(
-            std::any::type_name::<D::Key>().to_string(),
-            Box::new(R::table().into_table_ref()),
-        ))?;
-
-    // Base case: R rows whose `starting_at` matches direct_references —
-    // emit `recursion_ref` as `partition_id`.
-    let mut base = Query::select()
+    let base = Query::select()
         .expr_as(Expr::col((Rv, recursion_ref)), PartitionId)
-        .from_as(R::table(), Rv)
-        .and_where(
-            Expr::col((Rv, starting_at)).is_in(direct_references.iter().map(|r| r.as_sea_value())),
-        )
+        .from_as(R::TABLE, Rv)
+        .and_where(start.matches_in(Rv))
+        .and_where(Expr::col((Rv, R::VERSION_ORDER)).lte(on.as_sea_value()))
         .take();
-    if let Some(t) = on {
-        base = base
-            .and_where(Expr::col((Rv, R::version_order_col())).lte(t.as_sea_value()))
-            .take();
-    }
 
-    // Build the recursive term as a single SELECT with one self-reference to
-    // `Reachable`. Postgres rejects both (a) recursive references in the
-    // non-recursive (anchor) term and (b) multiple recursive references
-    // anywhere — `base UNION up UNION down` falls into (a), while combining
-    // `up + down` with UNION ALL produces two `JOIN Reachable` and falls into
-    // (b). The portable form is one JOIN to
-    // `Reachable` with a directional OR in the ON-clause, and a CASE in the
-    // projection that picks which column to emit based on which direction
-    // matched.
-    let recurse_up = D::recurse_up();
-    let recurse_down = D::recurse_down();
+    // Postgres rejects recursive references in the anchor term and multiple
+    // recursive references anywhere, so both directions share one JOIN to
+    // `Reachable` with a directional OR, and a CASE picks the column to emit.
+    let recurse_up = D::UP;
+    let recurse_down = D::DOWN;
     let join_cond = match (up_enabled, down_enabled) {
-        (true, true) => {
-            // Match either direction.
-            Condition::any()
-                .add(Expr::col((Rcv, recurse_down)).equals((Fx, PartitionId)))
-                .add(Expr::col((Rcv, recurse_up)).equals((Fx, PartitionId)))
-        }
+        (true, true) => Condition::any()
+            .add(Expr::col((Rcv, recurse_down)).equals((Fx, PartitionId)))
+            .add(Expr::col((Rcv, recurse_up)).equals((Fx, PartitionId))),
         (true, false) => {
             Condition::all().add(Expr::col((Rcv, recurse_down)).equals((Fx, PartitionId)))
         }
@@ -395,11 +278,10 @@ where
             Condition::all().add(Expr::col((Rcv, recurse_up)).equals((Fx, PartitionId)))
         }
         (false, false) => {
-            // No recursion — anchor only.
-            return Ok(CommonTableExpression::new()
+            return CommonTableExpression::new()
                 .query(base)
                 .table_name(Cte::Reachable)
-                .to_owned());
+                .to_owned();
         }
     };
     let emit_col: Expr = match (up_enabled, down_enabled) {
@@ -414,53 +296,38 @@ where
         (false, false) => unreachable!(),
     };
 
-    let mut recursive = Query::select()
+    let recursive = Query::select()
         .expr_as(emit_col, PartitionId)
-        .from_as(D::table(), Rcv)
+        .from_as(D::TABLE, Rcv)
         .join_as(JoinType::InnerJoin, Cte::Reachable, Fx, join_cond)
+        .and_where(Expr::col((Rcv, D::VERSION_ORDER)).lte(on.as_sea_value()))
         .take();
-    if let Some(t) = on {
-        recursive = recursive
-            .and_where(Expr::col((Rcv, D::version_order_col())).lte(t.as_sea_value()))
-            .take();
-    }
 
     let combined = {
         let mut b = base;
         b.union(UnionType::Distinct, recursive).take()
     };
 
-    Ok(CommonTableExpression::new()
+    CommonTableExpression::new()
         .query(combined)
         .table_name(Cte::Reachable)
-        .to_owned())
+        .to_owned()
 }
 
-// ---------------------------------------------------------------------------
-// CTE builders — direction & final union
-// ---------------------------------------------------------------------------
-
-/// Build a direction-specific recursive CTE (upstream or downstream).
 pub(crate) fn direction_versions_cte<D, R>(
     recursion: &RecursionOptions,
-    direct_references: &[&dyn SeaValue],
+    start: &Start<'_, R>,
     direction: Direction,
-    str_search_fn: &str,
-) -> Result<CommonTableExpression, SqlError>
+) -> CommonTableExpression
 where
-    D: Dao + Recursive,
-    R: Dao,
+    D: SelectDao + RecursiveDao,
+    R: SelectDao + HasColumn<D::Key>,
 {
-    debug_assert!(
-        !direct_references.is_empty(),
-        "direct_references must be non-empty; callers gate on this"
-    );
-    // Resolve direction-specific parameters
     let (start_col, follow_col, path_iden, depth_iden, cte_name, self_alias, max_depth) =
         match direction {
             Direction::Upstream => (
-                D::recurse_down(),
-                D::recurse_up(),
+                D::DOWN,
+                D::UP,
                 Cte::PathUp,
                 Cte::DepthUp,
                 Cte::UpstreamVersions,
@@ -468,8 +335,8 @@ where
                 recursion.max_upstream_depth(),
             ),
             Direction::Downstream => (
-                D::recurse_up(),
-                D::recurse_down(),
+                D::UP,
+                D::DOWN,
                 Cte::PathDown,
                 Cte::DepthDown,
                 Cte::DownstreamVersions,
@@ -478,18 +345,8 @@ where
             ),
         };
 
-    let recursion_ref =
-        R::col_for_type(std::any::TypeId::of::<D::Key>()).ok_or(SqlError::TypeNotFound(
-            std::any::type_name::<D::Key>().to_string(),
-            Box::new(R::table().into_table_ref()),
-        ))?;
-    let first_ref = direct_references[0];
-    let starting_at = R::col_for_type(first_ref.as_type_id()).ok_or(SqlError::TypeNotFound(
-        format!("{:?}", first_ref),
-        Box::new(R::table().into_table_ref()),
-    ))?;
+    let recursion_ref = <R as HasColumn<D::Key>>::COL;
 
-    // Base case — common chain (always present)
     let mut base = Query::select()
         .expr(Expr::col((Rcv, Asterisk)))
         .expr_as(Expr::val(1_i32), depth_iden)
@@ -500,9 +357,7 @@ where
             Rfv,
             Expr::col((Rfv, recursion_ref)).equals((Rcv, start_col)),
         )
-        .and_where(
-            Expr::col((Rfv, starting_at)).is_in(direct_references.iter().map(|r| r.as_sea_value())),
-        )
+        .and_where(start.matches_in(Rfv))
         .and_where(Expr::exists(
             Query::select()
                 .expr(Expr::val(1_i32))
@@ -542,26 +397,23 @@ where
             Query::select()
                 .expr(Expr::val(1_i32))
                 .from_as(Cte::ReferenceVersions, Fx)
-                .and_where(Expr::col((Fx, recursion_ref)).equals((Rcv, D::recurse_down())))
+                .and_where(Expr::col((Fx, recursion_ref)).equals((Rcv, D::DOWN)))
                 .take(),
         ))
         .and_where(Expr::exists(
             Query::select()
                 .expr(Expr::val(1_i32))
                 .from_as(Cte::ReferenceVersions, Fy)
-                .and_where(Expr::col((Fy, recursion_ref)).equals((Rcv, D::recurse_up())))
+                .and_where(Expr::col((Fy, recursion_ref)).equals((Rcv, D::UP)))
                 .take(),
         ))
         .take();
 
     let (path_append_col, check_col) = match direction {
-        Direction::Upstream => (
-            Expr::col((Rcv, follow_col)),
-            Expr::col((Rcv, D::recurse_up())),
-        ),
+        Direction::Upstream => (Expr::col((Rcv, follow_col)), Expr::col((Rcv, D::UP))),
         Direction::Downstream => (
             Expr::col((self_alias, follow_col)),
-            Expr::col((Rcv, D::recurse_down())),
+            Expr::col((Rcv, D::DOWN)),
         ),
     };
     recursive_part = recursive_part
@@ -574,7 +426,7 @@ where
         )
         .and_where(
             Expr::from(
-                Func::cust(Alias::new(str_search_fn))
+                Func::cust(Alias::new("STRPOS"))
                     .arg(Expr::col((self_alias, path_iden)))
                     .arg(
                         Func::cust(Alias::new("CONCAT"))
@@ -595,13 +447,12 @@ where
 
     let union_query = base.union(UnionType::All, recursive_part).take();
 
-    Ok(CommonTableExpression::new()
+    CommonTableExpression::new()
         .query(union_query)
         .table_name(cte_name)
-        .to_owned())
+        .to_owned()
 }
 
-/// Build the `RecursiveVersions` CTE that unions the enabled direction CTEs.
 pub(crate) fn recursive_versions_cte(
     has_upstream: bool,
     has_downstream: bool,
@@ -635,45 +486,35 @@ pub(crate) fn recursive_versions_cte(
         .to_owned()
 }
 
-// ---------------------------------------------------------------------------
-// Query execution
-// ---------------------------------------------------------------------------
-
-/// Append direction CTEs and the final union CTE to an existing `WITH`
-/// clause, then execute the resulting `SELECT DISTINCT` query.
 pub(crate) async fn build_and_execute_recursive<D, R, E>(
     executor: E,
     mut with: WithClause,
     recursion: &RecursionOptions,
-    direct_references: &[&dyn SeaValue],
+    start: &Start<'_, R>,
     up_enabled: bool,
     down_enabled: bool,
 ) -> Result<Vec<D>, SqlError>
 where
-    D: Dao + Recursive,
-    R: Dao,
+    D: SelectDao + RecursiveDao,
+    R: SelectDao + HasColumn<D::Key>,
     E: QueryExecutor,
 {
-    let str_search_fn = "STRPOS";
-
     if up_enabled {
         with = with
             .cte(direction_versions_cte::<D, R>(
                 recursion,
-                direct_references,
+                start,
                 Direction::Upstream,
-                str_search_fn,
-            )?)
+            ))
             .to_owned();
     }
     if down_enabled {
         with = with
             .cte(direction_versions_cte::<D, R>(
                 recursion,
-                direct_references,
+                start,
                 Direction::Downstream,
-                str_search_fn,
-            )?)
+            ))
             .to_owned();
     }
     with = with

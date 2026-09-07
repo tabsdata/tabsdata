@@ -2,127 +2,85 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::QueryExecutor;
-use crate::generic::current::Current;
-use crate::generic::historic::Historic;
+use crate::Serves;
+use crate::generic::as_of::AsOf;
+use crate::generic::latest::Latest;
 use crate::primitives::recursive::{
-    Cte, build_and_execute_recursive, is_direction_enabled, reachable_partitions_cte,
-    recursion_versions_cte, reference_versions_cte, versions_cte_basic, versions_cte_current,
+    Cte, Start, build_and_execute_recursive, is_direction_enabled, reachable_partitions_cte,
+    recursion_versions_cte, reference_state_cond, reference_versions_cte, versions_cte_basic,
+    versions_cte_current,
 };
-use sea_query::{Condition, Expr, ExprTrait, IntoTableRef, WithClause};
+use sea_query::{Condition, WithClause};
 use std::marker::PhantomData;
 use ta_objects::SeaValue;
-use ta_objects::StateFilter;
 use ta_objects::errors::SqlError;
-use ta_objects::{CurrentDao, Dao, DaoCore, Recursive, VersionedDao};
-use td_database::domain::Domained;
+use ta_objects::sql_condition::SqlCondition;
+use ta_objects::{Dao, HasColumn, RecursiveDao, Scd2Dao, SelectDao, TimelineDao, UnversionedDao};
 use td_objects::types::recursion::RecursionOptions;
 
-query_handle! {
-    /// Entry trait providing top-level [`recursive`](RecursiveEntry::recursive)
-    /// for non-versioned tables. Versioned recursion goes through
-    /// [`Current::recursive`] / [`Historic::recursive`] instead.
-    pub trait RecursiveEntry {
-        fn recursive<'a, D, R>(self, recursion: RecursionOptions) -> RecursiveQuery<'a, D, R, Self>
-        where
-            D: Dao + Recursive,
-            R: Dao,
-        {
-            RecursiveQuery {
-                recursion,
-                direct_references: vec![],
-                executor: self,
-                _phantom: PhantomData,
-            }
-        }
-    }
+/// Recursion over unversioned tables; the CTE input is the whole table.
+pub struct RecursiveQuery<'a, D, R: Dao, E> {
+    pub(crate) recursion: RecursionOptions,
+    pub(crate) start: Option<Start<'a, R>>,
+    pub(crate) executor: E,
+    pub(crate) _phantom: PhantomData<D>,
 }
 
-// ---------------------------------------------------------------------------
-// Three recursion surfaces, sharing the same `WITH RECURSIVE` walker
-// but feeding it different base CTEs, with cost models matching the
-// parent surface:
-//
-// - top-level [`RecursiveEntry::recursive`] for plain `Dao` tables —
-//   walks `SELECT * FROM table`. Cost O(table). Used for tables that
-//   ARE the data (e.g. physical_function_runs).
-// - [`Current::recursive`] for `CurrentDao` recursion at "now" — walks
-//   `SELECT * FROM _current_view`. Cost O(partitions).
-// - [`Historic::recursive`] for `VersionedDao` recursion at point in
-//   time — walks `versioned_ranked_cte`. Cost O(table). Slow path,
-//   opt-in by name for time-pinned reads.
-// ---------------------------------------------------------------------------
-
-/// Live recursion over plain `Dao` tables. The CTE input is
-/// `SELECT * FROM table`. Reach via [`RecursiveEntry::recursive`].
-pub struct RecursiveQuery<'a, D, R, E> {
+/// Recursion over open intervals: one row per partition, no time travel.
+pub struct LatestRecursive<'a, D, R: Dao, E> {
     recursion: RecursionOptions,
-    direct_references: Vec<&'a dyn SeaValue>,
+    start: Option<Start<'a, R>>,
+    filter: Condition,
+    filter_references: Condition,
+    filter_start: Option<Condition>,
     executor: E,
-    _phantom: PhantomData<(D, R)>,
+    _phantom: PhantomData<D>,
 }
 
-/// Recursion over `CurrentDao` `_current` views — one row per
-/// partition, no ranking, no time travel. Reach via
-/// [`Current::recursive`]. Carries `d_state` / `r_state` /
-/// `direct_reference_state` for state filtering on the live snapshot.
-pub struct CurrentRecursive<'a, D, R, E> {
+/// Recursion at a point in time, over visible-at interval scans.
+pub struct AsOfRecursive<'a, D: TimelineDao, R: Dao, E> {
     recursion: RecursionOptions,
-    direct_references: Vec<&'a dyn SeaValue>,
-    d_state: Condition,
-    r_state: Condition,
-    direct_reference_state: Option<Condition>,
+    start: Option<Start<'a, R>>,
+    on: &'a D::VersionOrder,
+    filter: Condition,
+    filter_references: Condition,
+    filter_start: Option<Condition>,
     executor: E,
-    _phantom: PhantomData<(D, R)>,
+    _phantom: PhantomData<D>,
 }
-
-/// Recursion over `VersionedDao` tables at a point in time — uses
-/// ROW_NUMBER-ranked CTEs and supports `d_state` / `r_state` /
-/// `direct_reference_state`. Reach via [`Historic::recursive`].
-pub struct HistoricRecursive<'a, T, D, R, E> {
-    recursion: RecursionOptions,
-    direct_references: Vec<&'a dyn SeaValue>,
-    on: &'a T,
-    d_state: Condition,
-    r_state: Condition,
-    direct_reference_state: Option<Condition>,
-    executor: E,
-    _phantom: PhantomData<(D, R)>,
-}
-
-// ---------------------------------------------------------------------------
-// Top-level — non-versioned recursion.
-// ---------------------------------------------------------------------------
 
 impl<'a, D, R, E> RecursiveQuery<'a, D, R, E>
 where
-    D: Dao + Recursive,
-    R: Dao,
-    E: QueryExecutor,
+    D: SelectDao + UnversionedDao + RecursiveDao,
+    R: SelectDao + UnversionedDao + Dao<Db = D::Db> + HasColumn<D::Key>,
+    E: Serves<D> + Serves<R>,
 {
-    /// Single-source convenience: equivalent to
-    /// `direct_references(vec![value])`.
-    pub fn direct_reference(mut self, value: &'a dyn SeaValue) -> Self {
-        self.direct_references = vec![value];
-        self
-    }
-
-    /// Multi-source: the CTE anchors on `start_col IN (..)` and walks
-    /// reachable rows from every starting point in a single query.
-    pub fn direct_references(mut self, values: Vec<&'a dyn SeaValue>) -> Self {
-        self.direct_references = values;
-        self
-    }
-
-    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError>
+    pub fn direct_reference<V: SeaValue>(mut self, value: &'a V) -> Self
     where
-        E: Domained<Domain = D::Db>,
-        R: DaoCore<Db = D::Db>,
+        R: HasColumn<V>,
     {
+        self.start = Some(Start::of(vec![value]));
+        self
+    }
+
+    /// The CTE anchors on `start_col IN (..)` and walks from every starting
+    /// point in one query.
+    pub fn direct_references<V: SeaValue>(mut self, values: Vec<&'a V>) -> Self
+    where
+        R: HasColumn<V>,
+    {
+        self.start = Some(Start::of(values));
+        self
+    }
+
+    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError> {
         let up_enabled = is_direction_enabled(self.recursion.max_upstream_depth());
         let down_enabled = is_direction_enabled(self.recursion.max_downstream_depth());
 
-        if !up_enabled && !down_enabled || self.direct_references.is_empty() {
+        let Some(start) = self.start else {
+            return Ok(vec![]);
+        };
+        if !up_enabled && !down_enabled {
             return Ok(vec![]);
         }
 
@@ -136,7 +94,7 @@ where
             self.executor,
             with,
             &self.recursion,
-            &self.direct_references,
+            &start,
             up_enabled,
             down_enabled,
         )
@@ -144,107 +102,87 @@ where
     }
 }
 
-// ---------------------------------------------------------------------------
-// `current().recursive(...)` — recursion over _current views.
-// ---------------------------------------------------------------------------
-
-impl<E> Current<E> {
-    /// Open a recursive walk over the `_current` views of `D` and `R`.
-    /// One row per partition feeds the CTE — no ranking, no time travel.
-    pub fn recursive<'a, D, R>(self, recursion: RecursionOptions) -> CurrentRecursive<'a, D, R, E>
+impl<E> Latest<E> {
+    /// One row per partition feeds the CTE: no ranking, no time travel.
+    pub fn recursive<'a, D, R>(self, recursion: RecursionOptions) -> LatestRecursive<'a, D, R, E>
     where
-        D: CurrentDao + Recursive,
-        R: CurrentDao,
+        D: SelectDao + Scd2Dao + RecursiveDao,
+        R: SelectDao + Scd2Dao,
     {
-        CurrentRecursive {
+        LatestRecursive {
             recursion,
-            direct_references: vec![],
-            d_state: Condition::all(),
-            r_state: Condition::all(),
-            direct_reference_state: None,
+            start: None,
+            filter: Condition::all(),
+            filter_references: Condition::all(),
+            filter_start: None,
             executor: self.executor,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'a, D, R, E> CurrentRecursive<'a, D, R, E>
+impl<'a, D, R, E> LatestRecursive<'a, D, R, E>
 where
-    D: CurrentDao + Recursive,
-    R: CurrentDao,
-    E: QueryExecutor,
+    D: SelectDao + Scd2Dao + RecursiveDao,
+    R: SelectDao + Scd2Dao + Dao<Db = D::Db> + HasColumn<D::Key>,
+    E: Serves<D> + Serves<R>,
 {
-    pub fn direct_reference(mut self, value: &'a dyn SeaValue) -> Self {
-        self.direct_references = vec![value];
-        self
-    }
-
-    pub fn direct_references(mut self, values: Vec<&'a dyn SeaValue>) -> Self {
-        self.direct_references = values;
-        self
-    }
-
-    /// State filter for the recursion DAO. Defaults to All.
-    pub fn d_state(mut self, filter: StateFilter<D>) -> Self {
-        self.d_state = filter.condition().clone();
-        self
-    }
-
-    /// State filter for the reference DAO. Defaults to All.
-    pub fn r_state(mut self, filter: StateFilter<R>) -> Self {
-        self.r_state = filter.condition().clone();
-        self
-    }
-
-    /// Extra state filter OR-ed with `r_state` only for direct-reference
-    /// rows. `None` (the default) means no relaxation.
-    pub fn direct_reference_state(mut self, filter: Option<StateFilter<R>>) -> Self {
-        self.direct_reference_state = filter.map(|f| f.condition().clone());
-        self
-    }
-
-    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError>
+    pub fn direct_reference<V: SeaValue>(mut self, value: &'a V) -> Self
     where
-        E: Domained<Domain = D::Db>,
-        R: DaoCore<Db = D::Db>,
+        R: HasColumn<V>,
     {
+        self.start = Some(Start::of(vec![value]));
+        self
+    }
+
+    /// The CTE anchors on `start_col IN (..)` and walks from every starting
+    /// point in one query.
+    pub fn direct_references<V: SeaValue>(mut self, values: Vec<&'a V>) -> Self
+    where
+        R: HasColumn<V>,
+    {
+        self.start = Some(Start::of(values));
+        self
+    }
+
+    pub fn filter(mut self, cond: impl SqlCondition<D>) -> Self {
+        self.filter = cond.resolve();
+        self
+    }
+
+    pub fn filter_references(mut self, cond: impl SqlCondition<R>) -> Self {
+        self.filter_references = cond.resolve();
+        self
+    }
+
+    /// Starting rows match `filter_references` or this.
+    pub fn filter_start(mut self, cond: impl SqlCondition<R>) -> Self {
+        self.filter_start = Some(cond.resolve());
+        self
+    }
+
+    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError> {
         let up_enabled = is_direction_enabled(self.recursion.max_upstream_depth());
         let down_enabled = is_direction_enabled(self.recursion.max_downstream_depth());
 
-        if !up_enabled && !down_enabled || self.direct_references.is_empty() {
+        let Some(start) = self.start else {
+            return Ok(vec![]);
+        };
+        if !up_enabled && !down_enabled {
             return Ok(vec![]);
         }
 
-        // R-side state, optionally OR-ed with the entry-point relaxation.
-        let r_state = if let Some(extra) = &self.direct_reference_state {
-            let first_ref = self.direct_references.first().ok_or_else(|| {
-                ta_objects::errors::SqlError::TypeNotFound(
-                    "no direct references".into(),
-                    Box::new(R::table().into_table_ref()),
-                )
-            })?;
-            let starting_at = R::col_for_type(first_ref.as_type_id()).ok_or_else(|| {
-                ta_objects::errors::SqlError::TypeNotFound(
-                    format!("{:?}", first_ref),
-                    Box::new(R::table().into_table_ref()),
-                )
-            })?;
-            let direct_cond = Condition::all()
-                .add(
-                    Expr::col(starting_at)
-                        .is_in(self.direct_references.iter().map(|r| r.as_sea_value())),
-                )
-                .add(extra.clone());
-            Condition::any().add(self.r_state.clone()).add(direct_cond)
-        } else {
-            self.r_state.clone()
-        };
+        let filter_references =
+            reference_state_cond(&start, &self.filter_references, self.filter_start.as_ref());
 
         let with = WithClause::new()
             .recursive(true)
-            .cte(versions_cte_current::<R>(r_state, Cte::ReferenceVersions))
+            .cte(versions_cte_current::<R>(
+                filter_references,
+                Cte::ReferenceVersions,
+            ))
             .cte(versions_cte_current::<D>(
-                self.d_state,
+                self.filter,
                 Cte::RecursionVersions,
             ))
             .to_owned();
@@ -253,7 +191,7 @@ where
             self.executor,
             with,
             &self.recursion,
-            &self.direct_references,
+            &start,
             up_enabled,
             down_enabled,
         )
@@ -261,109 +199,100 @@ where
     }
 }
 
-// ---------------------------------------------------------------------------
-// `historic(&t).recursive(...)` — point-in-time recursion via ranked CTE.
-// ---------------------------------------------------------------------------
-
-impl<'a, T, E> Historic<'a, T, E> {
-    /// Open a recursive walk pinned at the wrapper's `on` time. Builds
-    /// ROW_NUMBER-ranked CTEs over `D` and `R`'s base tables; cost is
-    /// O(table-size) per CTE. Supports `d_state` / `r_state` /
-    /// `direct_reference_state`.
-    pub fn recursive<D, R>(self, recursion: RecursionOptions) -> HistoricRecursive<'a, T, D, R, E>
+impl<'a, E, V> AsOf<'a, E, V> {
+    /// Visible-at base CTEs over both DAOs, bounded to the reachable
+    /// partitions.
+    pub fn recursive<D, R>(self, recursion: RecursionOptions) -> AsOfRecursive<'a, D, R, E>
     where
-        D: VersionedDao<VersionOrder = T> + Recursive,
-        R: VersionedDao<VersionOrder = T>,
+        D: SelectDao + Scd2Dao<VersionOrder = V> + RecursiveDao,
+        R: SelectDao + Scd2Dao<VersionOrder = V>,
     {
-        HistoricRecursive {
+        AsOfRecursive {
             recursion,
-            direct_references: vec![],
+            start: None,
             on: self.on,
-            d_state: Condition::all(),
-            r_state: Condition::all(),
-            direct_reference_state: None,
+            filter: Condition::all(),
+            filter_references: Condition::all(),
+            filter_start: None,
             executor: self.executor,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'a, T, D, R, E> HistoricRecursive<'a, T, D, R, E>
+impl<'a, D, R, E> AsOfRecursive<'a, D, R, E>
 where
-    D: VersionedDao<VersionOrder = T> + Recursive,
-    R: VersionedDao<VersionOrder = T>,
-    T: SeaValue,
-    E: QueryExecutor,
+    D: SelectDao + Scd2Dao + RecursiveDao,
+    R: SelectDao + Scd2Dao<VersionOrder = D::VersionOrder> + Dao<Db = D::Db> + HasColumn<D::Key>,
+    E: Serves<D> + Serves<R>,
 {
-    pub fn direct_reference(mut self, value: &'a dyn SeaValue) -> Self {
-        self.direct_references = vec![value];
-        self
-    }
-
-    pub fn direct_references(mut self, values: Vec<&'a dyn SeaValue>) -> Self {
-        self.direct_references = values;
-        self
-    }
-
-    /// State filter for the recursion DAO. Defaults to All.
-    pub fn d_state(mut self, filter: StateFilter<D>) -> Self {
-        self.d_state = filter.condition().clone();
-        self
-    }
-
-    /// State filter for the reference DAO. Defaults to All.
-    pub fn r_state(mut self, filter: StateFilter<R>) -> Self {
-        self.r_state = filter.condition().clone();
-        self
-    }
-
-    /// Extra state filter OR-ed with `r_state` only for direct-reference
-    /// rows. `None` (the default) means no relaxation. Pass
-    /// `cond.then(|| filter)` to set conditionally without breaking the
-    /// chain.
-    pub fn direct_reference_state(mut self, filter: Option<StateFilter<R>>) -> Self {
-        self.direct_reference_state = filter.map(|f| f.condition().clone());
-        self
-    }
-
-    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError>
+    pub fn direct_reference<V: SeaValue>(mut self, value: &'a V) -> Self
     where
-        E: Domained<Domain = D::Db>,
-        R: DaoCore<Db = D::Db>,
+        R: HasColumn<V>,
     {
+        self.start = Some(Start::of(vec![value]));
+        self
+    }
+
+    /// The CTE anchors on `start_col IN (..)` and walks from every starting
+    /// point in one query.
+    pub fn direct_references<V: SeaValue>(mut self, values: Vec<&'a V>) -> Self
+    where
+        R: HasColumn<V>,
+    {
+        self.start = Some(Start::of(values));
+        self
+    }
+
+    pub fn filter(mut self, cond: impl SqlCondition<D>) -> Self {
+        self.filter = cond.resolve();
+        self
+    }
+
+    pub fn filter_references(mut self, cond: impl SqlCondition<R>) -> Self {
+        self.filter_references = cond.resolve();
+        self
+    }
+
+    /// Starting rows match `filter_references` or this.
+    pub fn filter_start(mut self, cond: impl SqlCondition<R>) -> Self {
+        self.filter_start = Some(cond.resolve());
+        self
+    }
+
+    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError> {
         let up_enabled = is_direction_enabled(self.recursion.max_upstream_depth());
         let down_enabled = is_direction_enabled(self.recursion.max_downstream_depth());
 
-        if !up_enabled && !down_enabled || self.direct_references.is_empty() {
+        let Some(start) = self.start else {
+            return Ok(vec![]);
+        };
+        if !up_enabled && !down_enabled {
             return Ok(vec![]);
         }
 
-        let on: Option<&dyn SeaValue> = Some(self.on);
-        // Reachability sub-CTE narrows the base CTE scans from O(table)
-        // to O(reachable partitions) — see [`reachable_partitions_cte`].
         let with = WithClause::new()
             .recursive(true)
-            .cte(reachable_partitions_cte::<D, R>(
-                &self.direct_references,
-                on,
+            .cte(reachable_partitions_cte::<D, R, _>(
+                &start,
+                self.on,
                 up_enabled,
                 down_enabled,
-            )?)
-            .cte(reference_versions_cte::<D, R>(
-                &self.direct_references,
-                on,
-                &self.r_state,
-                self.direct_reference_state.as_ref(),
-                true,
-            )?)
-            .cte(recursion_versions_cte::<D>(on, &self.d_state, true))
+            ))
+            .cte(reference_versions_cte::<D, R, _>(
+                &start,
+                self.on,
+                &self.filter_references,
+                self.filter_start.as_ref(),
+            ))
+            .cte(recursion_versions_cte::<D, _>(self.on, &self.filter))
             .to_owned();
 
         build_and_execute_recursive::<D, R, _>(
             self.executor,
             with,
             &self.recursion,
-            &self.direct_references,
+            &start,
             up_enabled,
             down_enabled,
         )
@@ -374,10 +303,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Queries;
     use crate::primitives::recursive::{
-        Direction, direction_versions_cte, recursive_versions_cte, versioned_ranked_cte,
+        Direction, direction_versions_cte, recursive_versions_cte, versioned_visible_cte,
     };
-    use crate::{HistoricEntry, LiveEntry};
     use chrono::{DateTime, Utc};
     use sea_query::{Asterisk, Query, WithClause};
     use std::sync::LazyLock;
@@ -411,40 +340,40 @@ mod tests {
     // partitioning by id means there are no groups, each entry is independent
     #[Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(
-        sql_table = "test_table",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "id"),
-        recursive(up = "current", down = "downstream")
-    )]
+    #[dao(table = "test_table", ops(select, insert), scd2, recursive)]
     struct TestDao {
+        #[dao(pk, partition_by)]
         id: TestId,
         status: TestStatus,
+        #[dao(recurse_up)]
         current: TestRecursionUp,
+        #[dao(recurse_down)]
         downstream: TestRecursion,
+        #[dao(valid_from)]
         defined_on: AtTime,
     }
 
     impl TestDao {
-        pub fn active() -> StateFilter<Self> {
-            StateFilter::of(TestStatus::Active)
+        pub fn active() -> impl SqlCondition<Self> {
+            TestStatus::Active
         }
     }
 
     #[Dao]
-    #[dao(
-        sql_table = "test_table_reference",
-        versioned(pk = "id", version_by = "defined_on", partition_by = "reference_id")
-    )]
+    #[dao(table = "test_table_reference", ops(select, insert), scd2)]
     struct RecursionReference {
+        #[dao(pk)]
         id: TestId,
+        #[dao(partition_by)]
         reference_id: TestRecursion,
         status: TestStatus,
+        #[dao(valid_from)]
         defined_on: AtTime,
     }
 
     impl RecursionReference {
-        pub fn active() -> StateFilter<Self> {
-            StateFilter::of(TestStatus::Active)
+        pub fn active() -> impl SqlCondition<Self> {
+            TestStatus::Active
         }
     }
 
@@ -547,10 +476,6 @@ mod tests {
         ]
     });
 
-    // ===================================================================
-    // Unit tests — pure functions
-    // ===================================================================
-
     #[test]
     fn test_is_direction_enabled_none_means_unlimited() {
         assert!(is_direction_enabled(None));
@@ -567,24 +492,19 @@ mod tests {
         assert!(is_direction_enabled(Some(Depth::try_from(5).unwrap())));
     }
 
-    // ===================================================================
-    // Non-versioned fetch_all_recursive
-    // ===================================================================
-
     #[Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(
-        sql_table = "test_basic_table",
-        recursive(up = "current", down = "downstream")
-    )]
+    #[dao(table = "test_basic_table", ops(select, insert, delete), recursive)]
     struct BasicTestDao {
         id: TestId,
+        #[dao(recurse_up)]
         current: TestRecursionUp,
+        #[dao(recurse_down)]
         downstream: TestRecursion,
     }
 
     #[Dao]
-    #[dao(sql_table = "test_basic_reference")]
+    #[dao(table = "test_basic_reference", ops(select, insert, delete))]
     struct BasicReference {
         id: TestId,
         reference_id: TestRecursion,
@@ -659,15 +579,11 @@ mod tests {
         Ok(())
     }
 
-    // ===================================================================
-    // Versioned — direction control
-    // ===================================================================
-
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_both_directions_disabled(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 Some(Depth::ZERO),
@@ -683,7 +599,7 @@ mod tests {
     async fn test_both_directions_unlimited(db: TdPool) {
         let id = TestId::try_from("RRR").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
             .fetch_all()
@@ -701,7 +617,7 @@ mod tests {
     async fn test_select_active_versions_none_fetch_all(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -725,7 +641,7 @@ mod tests {
     async fn test_select_active_versions_none_fetch_all_upstream(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 None,
                 Some(Depth::ZERO),
@@ -746,7 +662,7 @@ mod tests {
     async fn test_upstream_only_downstream_disabled(db: TdPool) {
         let id = TestId::try_from("RRR").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 None,
                 Some(Depth::ZERO),
@@ -765,7 +681,7 @@ mod tests {
     async fn test_downstream_only_upstream_disabled(db: TdPool) {
         let id = TestId::try_from("NNN").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -783,15 +699,11 @@ mod tests {
         assert_eq!(result[3], FIXTURE_TEST_DAOS[1]); // BBB
     }
 
-    // ===================================================================
-    // Versioned — depth limits
-    // ===================================================================
-
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_downstream_depth_limit_1(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 Some(Depth::try_from(1).unwrap()),
@@ -809,7 +721,7 @@ mod tests {
     async fn test_downstream_depth_limit_2(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 Some(Depth::try_from(2).unwrap()),
@@ -830,7 +742,7 @@ mod tests {
     async fn test_upstream_depth_limit_2(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(2).unwrap()),
                 Some(Depth::ZERO),
@@ -849,7 +761,7 @@ mod tests {
     async fn test_select_active_versions_none_last_in_stream(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(1).unwrap()),
                 None,
@@ -867,7 +779,7 @@ mod tests {
     async fn test_both_directions_with_depth_limits(db: TdPool) {
         let id = TestId::try_from("NNN").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(1).unwrap()),
                 Some(Depth::try_from(1).unwrap()),
@@ -890,7 +802,7 @@ mod tests {
         // NNN is at ref_1 in the middle. Use upstream=1, downstream=2
         let id = TestId::try_from("NNN").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(1).unwrap()),
                 Some(Depth::try_from(2).unwrap()),
@@ -910,16 +822,12 @@ mod tests {
         assert_eq!(result[4], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    // ===================================================================
-    // Versioned — state & time filtering
-    // ===================================================================
-
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_at_time_fetch_all(db: TdPool) {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&at)
+            .as_of(&at)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -946,7 +854,7 @@ mod tests {
         );
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&early)
+            .as_of(&early)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
             .fetch_all()
@@ -961,14 +869,14 @@ mod tests {
         let id = TestId::try_from("MMM").unwrap();
         // PPP is D at time 2, so it will stop the recursion
         let result: Vec<TestDao> = db
-            .historic(&at)
+            .as_of(&at)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
             ))
             .direct_reference(&id)
-            .d_state(TestDao::active())
-            .r_state(RecursionReference::active())
+            .filter(TestDao::active())
+            .filter_references(RecursionReference::active())
             .fetch_all()
             .await
             .unwrap();
@@ -984,7 +892,7 @@ mod tests {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -1007,14 +915,14 @@ mod tests {
             status: TestStatus::try_from("D")?,
             defined_on: time(5),
         };
-        db.live().insert(&deleted_ref).await?;
+        db.insert(&deleted_ref).await?;
         let target_ref = RecursionReference {
             id: TestId::try_from("TGT")?,
             reference_id: TestRecursion::try_from("ref_tgt")?,
             status: TestStatus::try_from("A")?,
             defined_on: time(5),
         };
-        db.live().insert(&target_ref).await?;
+        db.insert(&target_ref).await?;
         let dao = TestDao {
             id: TestId::try_from("OV1")?,
             status: TestStatus::try_from("A")?,
@@ -1022,34 +930,34 @@ mod tests {
             downstream: TestRecursion::try_from("ref_tgt")?,
             defined_on: time(5),
         };
-        db.live().insert(&dao).await?;
+        db.insert(&dao).await?;
 
         let id = TestId::try_from("DEL")?;
-        // Without direct_reference_state: DEL is deleted, Active filter excludes it.
+        // Without filter_start: DEL is deleted, Active filter excludes it.
         let empty: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
             ))
             .direct_reference(&id)
-            .d_state(TestDao::active())
-            .r_state(RecursionReference::active())
+            .filter(TestDao::active())
+            .filter_references(RecursionReference::active())
             .fetch_all()
             .await?;
         assert_eq!(empty.len(), 0);
 
-        // With direct_reference_state(All): the entry point passes regardless of state.
+        // With filter_start(All): the entry point passes regardless of state.
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
             ))
             .direct_reference(&id)
-            .d_state(TestDao::active())
-            .r_state(RecursionReference::active())
-            .direct_reference_state(Some(StateFilter::all()))
+            .filter(TestDao::active())
+            .filter_references(RecursionReference::active())
+            .filter_start(())
             .fetch_all()
             .await?;
         assert_eq!(result.len(), 1);
@@ -1069,7 +977,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            db.live().insert(&reference).await?;
+            db.insert(&reference).await?;
         }
         let dao_a = TestDao {
             id: TestId::try_from("DSA")?,
@@ -1078,7 +986,7 @@ mod tests {
             downstream: TestRecursion::try_from("ref_ds1")?,
             defined_on: time(5),
         };
-        db.live().insert(&dao_a).await?;
+        db.insert(&dao_a).await?;
         // This DAO is deleted — should be excluded by Active filter on D
         let dao_b = TestDao {
             id: TestId::try_from("DSB")?,
@@ -1087,18 +995,18 @@ mod tests {
             downstream: TestRecursion::try_from("ref_ds2")?,
             defined_on: time(5),
         };
-        db.live().insert(&dao_b).await?;
+        db.insert(&dao_b).await?;
 
         let id = TestId::try_from("DS0")?;
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
             ))
             .direct_reference(&id)
-            .d_state(TestDao::active())
-            .r_state(RecursionReference::active())
+            .filter(TestDao::active())
+            .filter_references(RecursionReference::active())
             .fetch_all()
             .await?;
         // DSA is active and found; DSB is deleted so the chain stops — ref_ds2 is never reached
@@ -1107,15 +1015,11 @@ mod tests {
         Ok(())
     }
 
-    // ===================================================================
-    // Graph topology edge cases
-    // ===================================================================
-
     #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_nonexistent_reference(db: TdPool) {
         let id = TestId::try_from("XXX").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
             .fetch_all()
@@ -1129,7 +1033,7 @@ mod tests {
     async fn test_downstream_from_leaf_node(db: TdPool) {
         let id = TestId::try_from("QQQ").unwrap();
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -1151,7 +1055,7 @@ mod tests {
             status: TestStatus::try_from("A")?,
             defined_on: time(5),
         };
-        db.live().insert(&reference).await?;
+        db.insert(&reference).await?;
         let dao = TestDao {
             id: TestId::try_from("IF0")?,
             status: TestStatus::try_from("A")?,
@@ -1159,11 +1063,11 @@ mod tests {
             downstream: TestRecursion::try_from("ref_nowhere")?,
             defined_on: time(5),
         };
-        db.live().insert(&dao).await?;
+        db.insert(&dao).await?;
 
         let id = TestId::try_from("ISO")?;
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
             .fetch_all()
@@ -1184,7 +1088,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            db.live().insert(&reference).await?;
+            db.insert(&reference).await?;
         }
         for i in 0..4u32 {
             let dao = TestDao {
@@ -1194,12 +1098,12 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("ref_c{}", (i + 1) % 4))?,
                 defined_on: time(5),
             };
-            db.live().insert(&dao).await?;
+            db.insert(&dao).await?;
         }
 
         let id = TestId::try_from("CC0")?;
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -1225,7 +1129,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            db.live().insert(&reference).await?;
+            db.insert(&reference).await?;
         }
         for i in 0..3u32 {
             let dao = TestDao {
@@ -1235,12 +1139,12 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("ref_uc{}", (i + 1) % 3))?,
                 defined_on: time(5),
             };
-            db.live().insert(&dao).await?;
+            db.insert(&dao).await?;
         }
 
         let id = TestId::try_from("UC0")?;
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 None,
                 Some(Depth::ZERO),
@@ -1263,7 +1167,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            db.live().insert(&reference).await?;
+            db.insert(&reference).await?;
         }
         for i in 0..4u32 {
             let dao = TestDao {
@@ -1273,12 +1177,12 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("ref_bc{}", (i + 1) % 4))?,
                 defined_on: time(5),
             };
-            db.live().insert(&dao).await?;
+            db.insert(&dao).await?;
         }
 
         let id = TestId::try_from("BC0")?;
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
             .fetch_all()
@@ -1301,7 +1205,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            db.live().insert(&reference).await?;
+            db.insert(&reference).await?;
         }
         let diamond_edges: Vec<(&str, &str, &str)> = vec![
             ("DA1", "ref_d0", "ref_d1"),
@@ -1318,12 +1222,12 @@ mod tests {
                 downstream: TestRecursion::try_from(*downstream)?,
                 defined_on: time(5),
             };
-            db.live().insert(&dao).await?;
+            db.insert(&dao).await?;
         }
 
         let id = TestId::try_from("D00")?;
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -1341,88 +1245,74 @@ mod tests {
         Ok(())
     }
 
-    // ===================================================================
-    // Type compatibility & stress tests
-    // ===================================================================
-
     #[td_test::test(db)]
     async fn test_select_active_versions_at_types(db: TdPool) -> Result<(), TdError> {
+        use ta_objects::ReachableFrom;
+        use td_database::access::InProject;
         use td_database::domain::Apiserver;
-        async fn test_query<D, R>(
+        async fn test_query<D, R, V>(
             db: &TdPool,
-            d_state: StateFilter<D>,
-            r_state: StateFilter<R>,
-            recursion_ref: &dyn SeaValue,
+            filter: impl SqlCondition<D>,
+            filter_references: impl SqlCondition<R>,
+            recursion_ref: &V,
         ) -> Result<(), TdError>
         where
-            D: VersionedDao<VersionOrder = AtTime> + Recursive + DaoCore<Db = Apiserver>,
-            R: VersionedDao<VersionOrder = AtTime> + DaoCore<Db = Apiserver>,
+            D: SelectDao
+                + Scd2Dao<VersionOrder = AtTime>
+                + RecursiveDao
+                + Dao<Db = Apiserver>
+                + ReachableFrom<InProject>,
+            R: SelectDao
+                + Scd2Dao<VersionOrder = AtTime>
+                + Dao<Db = Apiserver>
+                + ReachableFrom<InProject>
+                + HasColumn<D::Key>
+                + HasColumn<V>,
+            V: SeaValue,
         {
             let _result: Vec<D> = db
-                .historic(&*LATER)
+                .as_of(&*LATER)
                 .recursive::<D, R>(RecursionOptions::new(Some(Depth::ZERO), None))
                 .direct_reference(recursion_ref)
-                .d_state(d_state)
-                .r_state(r_state)
+                .filter(filter)
+                .filter_references(filter_references)
                 .fetch_all()
                 .await?;
             Ok(())
         }
 
-        test_query::<DependencyDB, FunctionDB>(
-            &db,
-            DependencyDB::active(),
-            FunctionDB::available(),
-            &FunctionId::default(),
-        )
-        .await?;
-        test_query::<DependencyDB, FunctionDB>(
-            &db,
-            DependencyDB::active(),
-            FunctionDB::available(),
-            &CollectionId::default(),
-        )
-        .await?;
-        test_query::<DependencyDBWithNames, FunctionDB>(
-            &db,
-            DependencyDBWithNames::active(),
-            FunctionDB::available(),
-            &FunctionId::default(),
-        )
-        .await?;
-        test_query::<DependencyDBWithNames, FunctionDB>(
-            &db,
-            DependencyDBWithNames::active(),
-            FunctionDB::available(),
-            &CollectionId::default(),
-        )
-        .await?;
+        test_query::<DependencyDB, FunctionDB, _>(&db, (), (), &FunctionId::default()).await?;
+        test_query::<DependencyDB, FunctionDB, _>(&db, (), (), &CollectionId::default()).await?;
+        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, (), (), &FunctionId::default())
+            .await?;
+        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, (), (), &CollectionId::default())
+            .await?;
 
-        test_query::<TriggerDB, FunctionDB>(
+        test_query::<TriggerDB, FunctionDB, _>(
             &db,
             TriggerDB::active(),
-            FunctionDB::available(),
+            (),
             &FunctionId::default(),
         )
         .await?;
-        test_query::<TriggerDB, FunctionDB>(
+        test_query::<TriggerDB, FunctionDB, _>(
             &db,
             TriggerDB::active(),
-            FunctionDB::available(),
+            (),
             &CollectionId::default(),
         )
         .await?;
-        test_query::<TriggerDBWithNames, FunctionDB>(
+        test_query::<TriggerDBWithNames, FunctionDB, _>(
             &db,
             TriggerDBWithNames::active(),
-            FunctionDB::available(),
+            (),
             &FunctionId::default(),
         )
         .await?;
-        test_query::<TriggerDBWithNames, FunctionDB>(
+        test_query::<TriggerDBWithNames, FunctionDB, _>(
             &db,
             TriggerDBWithNames::active(),
-            FunctionDB::available(),
+            (),
             &CollectionId::default(),
         )
         .await?;
@@ -1443,7 +1333,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            db.live().insert(&reference).await?;
+            db.insert(&reference).await?;
             let dao = TestDao {
                 id: TestId::try_from(format!("ZZZ{i:04}"))?,
                 status: TestStatus::try_from("A")?,
@@ -1451,13 +1341,13 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("x_ref_{:04}", i + 1))?,
                 defined_on: time(5),
             };
-            db.live().insert(&dao).await?;
+            db.insert(&dao).await?;
             daos.push(dao);
         }
 
         let id = TestId::try_from(format!("YYY{:04}", 0))?;
         let result: Vec<TestDao> = db
-            .historic(&*LATER)
+            .as_of(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -1472,95 +1362,72 @@ mod tests {
         Ok(())
     }
 
-    // ===================================================================
-    // SQL generation tests
-    // ===================================================================
-
     mod sql {
         use super::*;
-        use crate::primitives::recursive::reachable_partitions_cte;
+        use crate::primitives::recursive::{Start, reachable_partitions_cte};
         use sea_query::PostgresQueryBuilder;
 
         #[test]
         fn test_reachable_partitions_cte_emits_recursive_walk() {
             let id = TestId::try_from("MMM").unwrap();
-            let cte = reachable_partitions_cte::<TestDao, RecursionReference>(
-                &[&id as &dyn SeaValue],
-                None,
+            let cte = reachable_partitions_cte::<TestDao, RecursionReference, _>(
+                &Start::of(vec![&id]),
+                &*LATER,
                 true,
                 true,
-            )
-            .unwrap();
+            );
             let sql = Query::select()
                 .column(Asterisk)
                 .from(Cte::Reachable)
                 .to_owned()
                 .with(WithClause::new().recursive(true).cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            assert!(sql.starts_with("WITH RECURSIVE"), "{sql}");
-            assert!(sql.contains(r#""reachable""#), "names the CTE: {sql}");
-            assert!(
-                sql.contains(r#""partition_id""#),
-                "exposes partition_id: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH RECURSIVE "reachable" AS (SELECT "rv"."reference_id" AS "partition_id" FROM "test_table_reference" AS "rv" WHERE "rv"."id" IN ('MMM') AND "rv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00' UNION (SELECT (CASE WHEN ("rcv"."downstream" = "fx"."partition_id") THEN "rcv"."current" ELSE "rcv"."downstream" END) AS "partition_id" FROM "test_table" AS "rcv" INNER JOIN "reachable" AS "fx" ON "rcv"."downstream" = "fx"."partition_id" OR "rcv"."current" = "fx"."partition_id" WHERE "rcv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00')) SELECT * FROM "reachable""#
             );
-            // One UNION (anchor vs. recursive); both directions live inside
-            // the recursive term via an OR-join + CASE projection — the
-            // historical two-UNION shape ran into postgres' single
-            // recursive-self-reference rule.
-            assert!(
-                sql.matches("UNION").count() == 1,
-                "one UNION (anchor + recursive term covers both directions): {sql}"
-            );
-            assert!(
-                sql.contains("CASE"),
-                "directional CASE projection in recursive term: {sql}"
-            );
-            // No row-number ranking — this is the lightweight reachability walk.
-            assert!(!sql.contains("ROW_NUMBER"), "lightweight walk: {sql}");
         }
 
         #[test]
         fn test_reachable_partitions_cte_only_upstream() {
             let id = TestId::try_from("MMM").unwrap();
-            let cte = reachable_partitions_cte::<TestDao, RecursionReference>(
-                &[&id as &dyn SeaValue],
-                None,
+            let cte = reachable_partitions_cte::<TestDao, RecursionReference, _>(
+                &Start::of(vec![&id]),
+                &*LATER,
                 true,
                 false,
-            )
-            .unwrap();
+            );
             let sql = Query::select()
                 .column(Asterisk)
                 .from(Cte::Reachable)
                 .to_owned()
                 .with(WithClause::new().recursive(true).cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            assert!(sql.matches("UNION").count() == 1, "one UNION only: {sql}");
+            assert_eq!(
+                sql,
+                r#"WITH RECURSIVE "reachable" AS (SELECT "rv"."reference_id" AS "partition_id" FROM "test_table_reference" AS "rv" WHERE "rv"."id" IN ('MMM') AND "rv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00' UNION (SELECT "rcv"."current" AS "partition_id" FROM "test_table" AS "rcv" INNER JOIN "reachable" AS "fx" ON "rcv"."downstream" = "fx"."partition_id" WHERE "rcv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00')) SELECT * FROM "reachable""#
+            );
         }
 
         #[test]
         fn test_reference_versions_cte_filtered_by_reachable() {
             let id = TestId::try_from("MMM").unwrap();
-            let cte = reference_versions_cte::<TestDao, RecursionReference>(
-                &[&id as &dyn SeaValue],
-                None,
+            let cte = reference_versions_cte::<TestDao, RecursionReference, _>(
+                &Start::of(vec![&id]),
+                &*LATER,
                 &Condition::all(),
                 None,
-                true,
-            )
-            .unwrap();
+            );
             let sql = Query::select()
                 .column(Asterisk)
                 .from(Cte::ReferenceVersions)
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            // The inner ranking subquery filters by Reachable.partition_id.
-            assert!(
-                sql.contains(r#""reachable""#) && sql.contains(r#""partition_id""#),
-                "filters by reachable partitions: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH "reference_versions" AS (SELECT "rv".* FROM "test_table_reference" AS "rv" WHERE "rv"."defined_on" <= '2025-04-02 08:19:59.543000 +00:00' AND "rv"."valid_to" > '2025-04-02 08:19:59.543000 +00:00' AND "rv"."reference_id" IN (SELECT "partition_id" FROM "reachable")) SELECT * FROM "reference_versions""#
             );
-            assert!(sql.contains("ROW_NUMBER"), "still ranks: {sql}");
         }
 
         #[test]
@@ -1572,43 +1439,14 @@ mod tests {
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
-            assert!(
-                sql.contains(r#""test_basic_table""#),
-                "should select from the DAO table: {sql}"
-            );
-            assert!(
-                sql.contains(r#""reference_versions""#),
-                "should name the CTE: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH "reference_versions" AS (SELECT "rv".* FROM "test_basic_table" AS "rv") SELECT * FROM "reference_versions""#
             );
         }
 
         #[test]
-        fn test_versioned_ranked_cte_no_defined_on() {
-            let state_cond =
-                ta_objects::sql_condition::SqlCondition::<TestDao>::resolve(&TestStatus::Active);
-            let cte =
-                versioned_ranked_cte::<TestDao>(None, state_cond, None, Cte::RecursionVersions);
-            let sql = Query::select()
-                .column(Asterisk)
-                .from(Cte::RecursionVersions)
-                .to_owned()
-                .with(WithClause::new().cte(cte).to_owned())
-                .to_string(PostgresQueryBuilder);
-            assert!(sql.contains("ROW_NUMBER"), "should use ROW_NUMBER: {sql}");
-            assert!(sql.contains(r#""rn" = 1"#), "should filter rn = 1: {sql}");
-            assert!(
-                sql.contains(r#""status" = 'A'"#),
-                "should filter by state: {sql}"
-            );
-            assert!(
-                !sql.contains("<="),
-                "should NOT have defined_on filter: {sql}"
-            );
-        }
-
-        #[test]
-        fn test_versioned_ranked_cte_with_defined_on() {
+        fn test_versioned_visible_cte_with_defined_on() {
             let state_cond =
                 ta_objects::sql_condition::SqlCondition::<TestDao>::resolve(&TestStatus::Active);
             let on = AtTime::from(
@@ -1616,10 +1454,10 @@ mod tests {
                     .parse::<DateTime<Utc>>()
                     .unwrap(),
             );
-            let cte = versioned_ranked_cte::<TestDao>(
-                Some(&on),
+            let cte = versioned_visible_cte::<TestDao, _>(
+                &on,
                 state_cond,
-                None,
+                Condition::all(),
                 Cte::RecursionVersions,
             );
             let sql = Query::select()
@@ -1628,11 +1466,10 @@ mod tests {
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            assert!(
-                sql.contains("<="),
-                "should have defined_on upper bound: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH "recursion_versions" AS (SELECT "rv".* FROM "test_table" AS "rv" WHERE "rv"."defined_on" <= '2025-04-02 08:19:50.543000 +00:00' AND "rv"."valid_to" > '2025-04-02 08:19:50.543000 +00:00' AND "status" = 'A') SELECT * FROM "recursion_versions""#
             );
-            assert!(sql.contains("ROW_NUMBER"), "should use ROW_NUMBER: {sql}");
         }
 
         #[test]
@@ -1641,11 +1478,9 @@ mod tests {
             let direct_ref = TestId::try_from("MMM").unwrap();
             let cte = direction_versions_cte::<BasicTestDao, BasicReference>(
                 &recursion,
-                &[&direct_ref as &dyn SeaValue],
+                &Start::of(vec![&direct_ref]),
                 Direction::Upstream,
-                "INSTR",
-            )
-            .unwrap();
+            );
             let sql = Query::select()
                 .column(Asterisk)
                 .from(Cte::UpstreamVersions)
@@ -1659,21 +1494,10 @@ mod tests {
                         .to_owned(),
                 )
                 .to_string(PostgresQueryBuilder);
-            assert!(sql.contains("RECURSIVE"), "should be recursive: {sql}");
-            assert!(sql.contains("UNION ALL"), "should have UNION ALL: {sql}");
-            assert!(
-                sql.contains(r#""upstream_versions""#),
-                "should name CTE upstream_versions: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH RECURSIVE "reference_versions" AS (SELECT "rv".* FROM "test_basic_reference" AS "rv") , "recursion_versions" AS (SELECT "rv".* FROM "test_basic_table" AS "rv") , "upstream_versions" AS (SELECT "rcv".*, 1 AS "depth_up", CONCAT(',', CAST("rcv"."downstream" AS TEXT), ',') AS "path_up" FROM "recursion_versions" AS "rcv" INNER JOIN "reference_versions" AS "rfv" ON "rfv"."reference_id" = "rcv"."downstream" WHERE "rfv"."id" IN ('MMM') AND EXISTS(SELECT 1 FROM "reference_versions" AS "rfv2" WHERE "rfv2"."reference_id" = "rcv"."current") UNION ALL (SELECT "rcv".*, "uv"."depth_up" + 1 AS "depth_up", CONCAT("uv"."path_up", CAST("rcv"."current" AS TEXT), ',') AS "path_up" FROM "recursion_versions" AS "rcv" INNER JOIN "upstream_versions" AS "uv" ON "uv"."current" = "rcv"."downstream" WHERE EXISTS(SELECT 1 FROM "reference_versions" AS "fx" WHERE "fx"."reference_id" = "rcv"."downstream") AND EXISTS(SELECT 1 FROM "reference_versions" AS "fy" WHERE "fy"."reference_id" = "rcv"."current") AND STRPOS("uv"."path_up", CONCAT(',', "rcv"."current", ',')) = 0)) SELECT * FROM "upstream_versions""#
             );
-            assert!(
-                sql.contains("'MMM'"),
-                "should reference direct value: {sql}"
-            );
-            assert!(
-                sql.contains("INSTR"),
-                "should use INSTR for cycle detection: {sql}"
-            );
-            assert!(sql.contains("CONCAT"), "should use CONCAT for path: {sql}");
         }
 
         #[test]
@@ -1682,11 +1506,9 @@ mod tests {
             let direct_ref = TestId::try_from("MMM").unwrap();
             let cte = direction_versions_cte::<BasicTestDao, BasicReference>(
                 &recursion,
-                &[&direct_ref as &dyn SeaValue],
+                &Start::of(vec![&direct_ref]),
                 Direction::Downstream,
-                "INSTR",
-            )
-            .unwrap();
+            );
             let sql = Query::select()
                 .column(Asterisk)
                 .from(Cte::DownstreamVersions)
@@ -1700,11 +1522,10 @@ mod tests {
                         .to_owned(),
                 )
                 .to_string(PostgresQueryBuilder);
-            assert!(
-                sql.contains(r#""downstream_versions""#),
-                "should name CTE downstream_versions: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH RECURSIVE "reference_versions" AS (SELECT "rv".* FROM "test_basic_reference" AS "rv") , "recursion_versions" AS (SELECT "rv".* FROM "test_basic_table" AS "rv") , "downstream_versions" AS (SELECT "rcv".*, 1 AS "depth_down", CONCAT(',', CAST("rcv"."current" AS TEXT), ',') AS "path_down" FROM "recursion_versions" AS "rcv" INNER JOIN "reference_versions" AS "rfv" ON "rfv"."reference_id" = "rcv"."current" WHERE "rfv"."id" IN ('MMM') AND EXISTS(SELECT 1 FROM "reference_versions" AS "rfv2" WHERE "rfv2"."reference_id" = "rcv"."downstream") UNION ALL (SELECT "rcv".*, "dv"."depth_down" + 1 AS "depth_down", CONCAT("dv"."path_down", CAST("dv"."downstream" AS TEXT), ',') AS "path_down" FROM "recursion_versions" AS "rcv" INNER JOIN "downstream_versions" AS "dv" ON "dv"."downstream" = "rcv"."current" WHERE EXISTS(SELECT 1 FROM "reference_versions" AS "fx" WHERE "fx"."reference_id" = "rcv"."downstream") AND EXISTS(SELECT 1 FROM "reference_versions" AS "fy" WHERE "fy"."reference_id" = "rcv"."current") AND STRPOS("dv"."path_down", CONCAT(',', "rcv"."downstream", ',')) = 0)) SELECT * FROM "downstream_versions""#
             );
-            assert!(sql.contains("UNION ALL"), "should have UNION ALL: {sql}");
         }
 
         #[test]
@@ -1714,11 +1535,9 @@ mod tests {
             let direct_ref = TestId::try_from("MMM").unwrap();
             let cte = direction_versions_cte::<BasicTestDao, BasicReference>(
                 &recursion,
-                &[&direct_ref as &dyn SeaValue],
+                &Start::of(vec![&direct_ref]),
                 Direction::Downstream,
-                "INSTR",
-            )
-            .unwrap();
+            );
             let sql = Query::select()
                 .column(Asterisk)
                 .from(Cte::DownstreamVersions)
@@ -1732,7 +1551,10 @@ mod tests {
                         .to_owned(),
                 )
                 .to_string(PostgresQueryBuilder);
-            assert!(sql.contains("< 3"), "should have depth limit < 3: {sql}");
+            assert_eq!(
+                sql,
+                r#"WITH RECURSIVE "reference_versions" AS (SELECT "rv".* FROM "test_basic_reference" AS "rv") , "recursion_versions" AS (SELECT "rv".* FROM "test_basic_table" AS "rv") , "downstream_versions" AS (SELECT "rcv".*, 1 AS "depth_down", CONCAT(',', CAST("rcv"."current" AS TEXT), ',') AS "path_down" FROM "recursion_versions" AS "rcv" INNER JOIN "reference_versions" AS "rfv" ON "rfv"."reference_id" = "rcv"."current" WHERE "rfv"."id" IN ('MMM') AND EXISTS(SELECT 1 FROM "reference_versions" AS "rfv2" WHERE "rfv2"."reference_id" = "rcv"."downstream") UNION ALL (SELECT "rcv".*, "dv"."depth_down" + 1 AS "depth_down", CONCAT("dv"."path_down", CAST("dv"."downstream" AS TEXT), ',') AS "path_down" FROM "recursion_versions" AS "rcv" INNER JOIN "downstream_versions" AS "dv" ON "dv"."downstream" = "rcv"."current" WHERE EXISTS(SELECT 1 FROM "reference_versions" AS "fx" WHERE "fx"."reference_id" = "rcv"."downstream") AND EXISTS(SELECT 1 FROM "reference_versions" AS "fy" WHERE "fy"."reference_id" = "rcv"."current") AND STRPOS("dv"."path_down", CONCAT(',', "rcv"."downstream", ',')) = 0 AND "dv"."depth_down" < 3)) SELECT * FROM "downstream_versions""#
+            );
         }
 
         #[test]
@@ -1744,15 +1566,10 @@ mod tests {
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            assert!(
-                sql.contains(r#""upstream_versions""#),
-                "should include upstream: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH "recursive_versions" AS (SELECT * FROM "upstream_versions" UNION ALL (SELECT * FROM "downstream_versions")) SELECT * FROM "recursive_versions""#
             );
-            assert!(
-                sql.contains(r#""downstream_versions""#),
-                "should include downstream: {sql}"
-            );
-            assert!(sql.contains("UNION ALL"), "should union both: {sql}");
         }
 
         #[test]
@@ -1764,13 +1581,9 @@ mod tests {
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            assert!(
-                sql.contains(r#""upstream_versions""#),
-                "should include upstream: {sql}"
-            );
-            assert!(
-                !sql.contains(r#""downstream_versions""#),
-                "should NOT include downstream: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH "recursive_versions" AS (SELECT * FROM "upstream_versions") SELECT * FROM "recursive_versions""#
             );
         }
 
@@ -1783,13 +1596,9 @@ mod tests {
                 .to_owned()
                 .with(WithClause::new().cte(cte).to_owned())
                 .to_string(PostgresQueryBuilder);
-            assert!(
-                !sql.contains(r#""upstream_versions""#),
-                "should NOT include upstream: {sql}"
-            );
-            assert!(
-                sql.contains(r#""downstream_versions""#),
-                "should include downstream: {sql}"
+            assert_eq!(
+                sql,
+                r#"WITH "recursive_versions" AS (SELECT * FROM "downstream_versions") SELECT * FROM "recursive_versions""#
             );
         }
     }

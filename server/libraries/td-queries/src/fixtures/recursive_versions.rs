@@ -2,10 +2,12 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{ColumnDef, Iden, Query, Table};
+use sea_query::{ColumnDef, Iden, IntoIden, Query, Table};
 use td_database::components::{SchemaComponent, SchemaSource};
 use td_database::pool::PoolKind;
+use td_schema::schema::Derived;
 use td_schema::schema::render::{render_query, render_schema};
+use td_schema::schema::sql::trigger::Scd2TriggerDef;
 
 #[derive(Iden)]
 enum TestTable {
@@ -15,6 +17,7 @@ enum TestTable {
     Current,
     Downstream,
     DefinedOn,
+    ValidTo,
 }
 
 #[derive(Iden)]
@@ -24,6 +27,7 @@ enum TestTableReference {
     ReferenceId,
     Status,
     DefinedOn,
+    ValidTo,
 }
 
 /// Test-only component: a self-contained versioned reference graph on its own
@@ -37,30 +41,87 @@ impl SchemaSource for RecursiveVersionsSource {
         1
     }
     fn tables(&self) -> Vec<String> {
-        vec![render_schema(
-            Table::create()
-                .table(TestTable::Table)
-                .col(
-                    ColumnDef::new(TestTable::Id)
-                        .text()
-                        .not_null()
-                        .primary_key(),
-                )
-                .col(ColumnDef::new(TestTable::Status).text().not_null())
-                .col(ColumnDef::new(TestTable::Current).text().not_null())
-                .col(ColumnDef::new(TestTable::Downstream).text().not_null())
-                .col(
-                    ColumnDef::new(TestTable::DefinedOn)
-                        .timestamp_with_time_zone()
-                        .not_null(),
-                )
-                .to_owned(),
-        )]
+        vec![
+            render_schema(
+                Table::create()
+                    .table(TestTable::Table)
+                    .col(
+                        ColumnDef::new(TestTable::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(TestTable::Status).text().not_null())
+                    .col(ColumnDef::new(TestTable::Current).text().not_null())
+                    .col(ColumnDef::new(TestTable::Downstream).text().not_null())
+                    .col(
+                        ColumnDef::new(TestTable::DefinedOn)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(TestTable::ValidTo)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            ),
+            render_schema(
+                Table::create()
+                    .table(TestTableReference::Table)
+                    .col(
+                        ColumnDef::new(TestTableReference::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(TestTableReference::ReferenceId)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(TestTableReference::Status).text().not_null())
+                    .col(
+                        ColumnDef::new(TestTableReference::DefinedOn)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(TestTableReference::ValidTo)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            ),
+        ]
+    }
+    fn triggers(&self) -> Vec<Derived> {
+        [
+            Scd2TriggerDef {
+                name: "test_table__scd2_close".to_string(),
+                source_table: TestTable::Table.into_iden(),
+                partition_col: TestTable::Id.into_iden(),
+                valid_from_col: TestTable::DefinedOn.into_iden(),
+                pk_col: TestTable::Id.into_iden(),
+            },
+            Scd2TriggerDef {
+                name: "test_table_reference__scd2_close".to_string(),
+                source_table: TestTableReference::Table.into_iden(),
+                partition_col: TestTableReference::ReferenceId.into_iden(),
+                valid_from_col: TestTableReference::DefinedOn.into_iden(),
+                pk_col: TestTableReference::Id.into_iden(),
+            },
+        ]
+        .into_iter()
+        .map(|t| Derived {
+            create: t.render(),
+            drop: vec![],
+        })
+        .collect()
     }
     fn seeds(&self) -> Vec<String> {
         let mut stmts = Vec::new();
 
-        // 5 test_table rows (AAA-EEE)
         for (id, status, current, downstream, defined_on) in [
             (
                 "AAA",
@@ -119,31 +180,6 @@ impl SchemaSource for RecursiveVersionsSource {
             ));
         }
 
-        // CREATE TABLE test_table_reference
-        stmts.push(render_schema(
-            Table::create()
-                .table(TestTableReference::Table)
-                .col(
-                    ColumnDef::new(TestTableReference::Id)
-                        .text()
-                        .not_null()
-                        .primary_key(),
-                )
-                .col(
-                    ColumnDef::new(TestTableReference::ReferenceId)
-                        .text()
-                        .not_null(),
-                )
-                .col(ColumnDef::new(TestTableReference::Status).text().not_null())
-                .col(
-                    ColumnDef::new(TestTableReference::DefinedOn)
-                        .timestamp_with_time_zone()
-                        .not_null(),
-                )
-                .to_owned(),
-        ));
-
-        // 7 test_table_reference rows (MMM-SSS)
         for (id, ref_id, status, defined_on) in [
             ("MMM", "ref_0", "A", "2025-04-02T08:19:50.543+00:00"),
             ("NNN", "ref_1", "A", "2025-04-02T08:19:50.543+00:00"),
