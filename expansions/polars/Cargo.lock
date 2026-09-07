@@ -6851,7 +6851,6 @@ dependencies = [
  "td-build",
  "tm-error",
  "toml",
- "tower",
 ]
 
 [[package]]

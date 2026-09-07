@@ -27,9 +27,18 @@ script = [
         if eq ${os_family} "windows"
             warp = set false
         end
+        claude = get_env CLAUDECODE
+        gemini = get_env GEMINI_CLI
+        codex = get_env CODEX_THREAD_ID
+        agent = trim "${claude}${gemini}${codex}"
+        in_agent = is_empty ${agent}
+        in_agent = not ${in_agent}
+
         unset_env TD_TMUX
         unset_env TD_WARP
-        if not ${on_ga_true}
+        if ${in_agent}
+            info "🤖 _____ Running inside an AI agent: no group of Rust tests will run on its own pane"
+        elseif not ${on_ga_true}
             if ${warp}
                 info "🖥️ _____ Each group of Rust tests will run on its own Warp pane"
                 set_env TD_WARP true

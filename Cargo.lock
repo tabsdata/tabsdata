@@ -4934,7 +4934,6 @@ dependencies = [
  "jiff",
  "sqlx-core 0.8.6",
  "sqlx-postgres 0.8.6",
- "sqlx-sqlite",
 ]
 
 [[package]]
@@ -5417,7 +5416,6 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
- "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -9388,14 +9386,15 @@ version = "2.1.0"
 dependencies = [
  "axum",
  "http",
+ "inventory",
  "openssl",
  "serde",
  "serde_json",
  "strum 0.28.0",
  "ta-apiserver",
+ "ta-services",
  "td-error",
  "td-objects",
- "td-tower",
  "thiserror 2.0.20",
  "tokio",
  "tower",
@@ -9409,7 +9408,6 @@ name = "ta-objects"
 version = "2.1.0"
 dependencies = [
  "chrono",
- "derive_builder",
  "getset",
  "inventory",
  "openssl",
@@ -9420,11 +9418,12 @@ dependencies = [
  "serde_json",
  "sqlx 0.8.6",
  "strum 0.28.0",
+ "ta-objects",
  "td-build",
  "td-common",
  "td-database",
  "td-error",
- "td-tower",
+ "td-test",
  "thiserror 2.0.20",
  "tm-objects",
  "tokio",
@@ -9437,9 +9436,15 @@ name = "ta-services"
 version = "2.1.0"
 dependencies = [
  "openssl",
+ "serde",
+ "strum 0.28.0",
  "ta-services",
- "td-tower",
+ "td-error",
+ "thiserror 2.0.20",
  "tm-services",
+ "tokio",
+ "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -9540,6 +9545,7 @@ dependencies = [
  "chrono",
  "clap 4.6.6",
  "config",
+ "constcat",
  "futures",
  "headers",
  "http",
@@ -9571,7 +9577,6 @@ dependencies = [
  "td-services",
  "td-storage",
  "td-test",
- "td-tower",
  "te-apiserver",
  "te-authz",
  "te-database",
@@ -9614,7 +9619,6 @@ dependencies = [
  "td-objects",
  "td-queries",
  "td-test",
- "td-tower",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -9757,7 +9761,6 @@ dependencies = [
 name = "td-database"
 version = "2.1.0"
 dependencies = [
- "async-stream",
  "async-trait",
  "fslock",
  "futures-util",
@@ -9772,6 +9775,7 @@ dependencies = [
  "serial_test",
  "sqlx 0.8.6",
  "strum 0.28.0",
+ "ta-services",
  "td-build",
  "td-common",
  "td-database",
@@ -9798,7 +9802,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tm-error",
  "toml 1.1.5+spec-1.1.0",
- "tower",
 ]
 
 [[package]]
@@ -9896,7 +9899,6 @@ dependencies = [
  "constcat",
  "croner",
  "derive-new",
- "derive_builder",
  "futures",
  "headers",
  "http",
@@ -9914,11 +9916,12 @@ dependencies = [
  "sqlx 0.8.6",
  "strum 0.28.0",
  "ta-objects",
+ "td-build",
  "td-common",
+ "td-database",
  "td-error",
  "td-objects",
  "td-security",
- "td-tower",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -9982,7 +9985,6 @@ name = "td-queries"
 version = "2.1.0"
 dependencies = [
  "chrono",
- "derive_builder",
  "openssl",
  "regex",
  "sea-query",
@@ -10001,7 +10003,6 @@ dependencies = [
  "td-schema",
  "td-security",
  "td-test",
- "td-tower",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -10083,12 +10084,13 @@ dependencies = [
  "serde_json",
  "serde_yaml 0.9.34+deprecated",
  "sha2 0.10.9",
+ "sqlx 0.8.6",
  "strum 0.28.0",
  "sync_wrapper",
  "ta-services",
+ "td-apiserver",
  "td-authz",
  "td-bridge",
- "td-build",
  "td-common",
  "td-database",
  "td-error",
@@ -10100,12 +10102,10 @@ dependencies = [
  "td-storage",
  "td-tableframe",
  "td-test",
- "td-tower",
  "temp-env",
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
- "tower",
  "tracing",
  "url",
 ]
@@ -10300,31 +10300,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "td-tower"
-version = "2.1.0"
-dependencies = [
- "derive_builder",
- "futures-util",
- "getset",
- "openssl",
- "serde",
- "sqlx 0.8.6",
- "strum 0.28.0",
- "td-database",
- "td-error",
- "td-test",
- "td-tower",
- "thiserror 2.0.20",
- "tm-tower",
- "tokio",
- "tower",
- "tower-layer",
- "tower-service",
- "tracing",
- "utoipa",
-]
-
-[[package]]
 name = "td-xtask"
 version = "2.1.0"
 dependencies = [
@@ -10346,7 +10321,6 @@ dependencies = [
  "td-build",
  "td-error",
  "te-apiserver",
- "utoipa-axum",
 ]
 
 [[package]]
@@ -10634,6 +10608,7 @@ dependencies = [
  "openssl",
  "proc-macro2",
  "quote",
+ "regex",
  "syn 2.0.119",
  "td-shared",
 ]
@@ -10643,6 +10618,7 @@ name = "tm-services"
 version = "2.1.0"
 dependencies = [
  "openssl",
+ "proc-macro2",
  "quote",
  "syn 2.0.119",
 ]
@@ -10654,15 +10630,6 @@ dependencies = [
  "darling 0.23.0",
  "openssl",
  "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "tm-tower"
-version = "2.1.0"
-dependencies = [
- "openssl",
  "quote",
  "syn 2.0.119",
 ]
