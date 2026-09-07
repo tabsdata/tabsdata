@@ -2,8 +2,6 @@
 //  Copyright 2024 Tabsdata Inc.
 //
 
-//! TdError to Error Response conversion.
-//!
 //! This is the single place that bridges the transport-agnostic [`ApiError`] class to an
 //! HTTP status. `td-error` itself never depends on `http`.
 

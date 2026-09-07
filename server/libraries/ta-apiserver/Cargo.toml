@@ -27,7 +27,6 @@ td-test = [
     "test-utils",
     "td-error/td-test",
     "td-objects/td-test",
-    "td-tower/td-test",
 ]
 dummy = []
 mock-env = []
@@ -49,9 +48,9 @@ ignored = ["openssl", "strum", "thiserror"]
 
 # Internal dependencies
 
+ta-services = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
-td-tower = { workspace = true }
 
 ## Macros
 
@@ -61,6 +60,7 @@ td-tower = { workspace = true }
 
 axum = { workspace = true, features = ["macros"] }
 http = { workspace = true }
+inventory = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
