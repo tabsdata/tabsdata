@@ -9,7 +9,6 @@ extern crate self as td_test;
 
 pub use tm_test::*;
 
-mod backend_cfg;
 pub mod db;
 pub mod domain;
 
@@ -20,7 +19,7 @@ pub mod __private {
 
     /// Per-test teardown the harness runs **after** the test body returns, without
     /// the test fn ever seeing it — e.g. dropping a postgres test's schemas on the
-    /// shared server, or closing a sqlite temp-file connection. Async, so it can do
+    /// shared server. Async, so it can do
     /// real database work.
     ///
     /// Best-effort: skipped if the test panics (the next `cargo make test` setup

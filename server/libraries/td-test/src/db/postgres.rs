@@ -13,10 +13,7 @@
 //! schemas in the database and ensures the cluster-global RLS app role, neither
 //! of which the domain owner can do.
 
-use crate::db::DbBackendProvider;
 use crate::domain::{PostgresDomain, resolve_domain};
-#[cfg(not(postgres))]
-use std::future::Future;
 use td_database::components::SchemaComponent;
 use td_database::config::{PostgresConfig, PostgresConnect};
 use td_database::test_utils::MultiTestDb;
@@ -29,12 +26,6 @@ pub const DEFAULT_DOMAIN: &str = "apiserver_postgres";
 /// Points the db tests at a different domain — for a developer running against
 /// one of their own.
 pub const DOMAIN_ENV: &str = "TD_TEST_DB_DOMAIN";
-
-/// Marker type for the postgres provider. The trait impl is gated on
-/// `cfg(postgres)`; the type itself is always present so the macro can name
-/// it inside a `#[cfg(postgres)]`-gated test arm without confusing path
-/// resolution when postgres is disabled.
-pub struct PostgresProvider;
 
 fn domain_name() -> String {
     std::env::var(DOMAIN_ENV)
@@ -58,34 +49,20 @@ fn admin_connect(domain: &PostgresDomain) -> Result<PostgresConnect, String> {
     })
 }
 
-#[cfg(postgres)]
-impl DbBackendProvider for PostgresProvider {
-    const NAME: &'static str = "postgres";
-    async fn provision(
-        test_name: &'static str,
-        components: &'static [&'static dyn SchemaComponent],
-    ) -> Option<MultiTestDb> {
-        let name = domain_name();
-        let domain = resolve_domain::<PostgresDomain>(&name, test_name)?;
-        let admin = admin_connect(&domain).unwrap_or_else(|why| {
-            panic!("Backend not usable, test: {test_name}. domain '{name}': {why}")
-        });
-        Some(td_database::test_utils::postgres::pools(admin, components).await)
-    }
-}
-
-// Keep the type usable in `cfg(not(postgres))` builds — emitted test arms
-// reference `PostgresProvider` unconditionally and are stripped by their own
-// `#[cfg(postgres)]` gate at the call site.
-#[cfg(not(postgres))]
-impl PostgresProvider {
-    #[allow(dead_code)]
-    pub fn provision(
-        _test_name: &'static str,
-        _components: &'static [&'static dyn SchemaComponent],
-    ) -> impl Future<Output = Option<MultiTestDb>> + Send {
-        async { panic!("postgres backend not enabled") }
-    }
+/// Provision the given components — each on its own schema of the resolved
+/// domain's database — and return a serving pool per component. `None`
+/// declines the test: the domain is out of reach and the policy says skip
+/// rather than fail. `test_name` only labels the diagnostic.
+pub async fn provision(
+    test_name: &'static str,
+    components: &'static [&'static dyn SchemaComponent],
+) -> Option<MultiTestDb> {
+    let name = domain_name();
+    let domain = resolve_domain::<PostgresDomain>(&name, test_name)?;
+    let admin = admin_connect(&domain).unwrap_or_else(|why| {
+        panic!("Database not usable, test: {test_name}. domain '{name}': {why}")
+    });
+    Some(td_database::test_utils::postgres::pools(admin, components).await)
 }
 
 #[cfg(test)]
