@@ -122,15 +122,32 @@ pub enum DbError {
     #[error(
         "The `database_server:` entry must not define an `app_role:`. It is \
          the privileged server connection; each component's own entry carries \
-         the app role it provisions and serves with."
+         the RLS roles it provisions and serves with."
     )]
-    ServerAppRoleNotAllowed = 5042,
+    ServerRlsRolesNotAllowed = 5042,
     #[error(
         "Identifier '{0}' exceeds PostgreSQL's 63-byte limit (it would be \
          silently truncated). Use a shorter database name, or set an explicit \
-         `schema:` / `app_role:` on the entry."
+         `schema:` / `in_project_role:` / `across_projects_role:` on the entry."
     )]
     IdentifierTooLong(String) = 5043,
+    #[error(
+        "No row-level-security role resolved for the PostgreSQL connection. \
+         Component connections derive both from the database name \
+         (`<database>_in_project`, `<database>_across_projects`) or take \
+         explicit `in_project_role:` / `across_projects_role:`; this \
+         connection was built with neither. Set `database:` on the entry, or \
+         both roles explicitly."
+    )]
+    MissingRlsRoleName = 5049,
+    #[error(
+        "The serving tenant role holds membership in the cross-project role,          so the `across_projects` policy applies to every tenant read and          project isolation is void. Revoke it: REVOKE td_across_projects FROM          <in_project_role>."
+    )]
+    TenantRoleSpansProjects = 5050,
+    #[error(
+        "Cross-project row-level-security membership is missing, so the          schema's `across_projects` policy admits nobody: cross-project reads          would return no rows and a data delta would rewrite none. Only the          creator of a cluster-global role may grant it, so a database          administrator has to run: {0}"
+    )]
+    MissingAcrossProjectsMembership(String) = 5051,
     #[error(
         "`${{embedded}}` is not valid for a component's `username`: the owner \
          role name is the schema name, which is already the default when the \
@@ -268,4 +285,14 @@ pub enum DbError {
          once it has finished."
     )]
     ConcurrentUpgradeInProgress(String) = 5046,
+    #[error(
+        "PostgreSQL `max_locks_per_transaction` is too low: {0}, but Tabsdata \
+         requires {1} or more. Versioned tables close their previous version \
+         under a per-row advisory lock held to commit, and a function register \
+         or plan build writes thousands of versioned rows in one transaction; \
+         at a lower setting those transactions abort with 'out of shared \
+         memory'. Raise `max_locks_per_transaction` to {1} in postgresql.conf \
+         and restart the server."
+    )]
+    InsufficientLockCapacity(i32, i32) = 5048,
 }

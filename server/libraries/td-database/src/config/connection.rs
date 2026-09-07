@@ -35,28 +35,32 @@ pub struct DatabaseConfig {
     /// without a home schema — it provisions across schemas with explicit,
     /// schema-qualified DDL.
     pub schema: Option<Schema>,
-    /// The RLS app role serving connections `SET ROLE` to. `None` means the
-    /// global default [`APP_ROLE`](crate::APP_ROLE) (`td_app`). Deployments
-    /// sharing a PostgreSQL cluster set a per-instance role (the fargate
-    /// templates derive one from the database name); tests set a per-test
-    /// role so they can isolate role-level state (e.g. flipping `BYPASSRLS`)
-    /// on the shared server.
-    pub app_role: Option<String>,
+    /// The RLS roles a connection switches between. `None` on the privileged
+    /// system entry, which never serves.
+    pub roles: Option<RlsRoles>,
     /// Connection pool settings.
     pub pool: PoolsConfig,
 }
 
-/// The single home of the app-role default: provisioning and serving must
-/// resolve the same role or `SET ROLE` targets one that was never created.
-pub fn app_role_or_default(app_role: Option<&str>) -> &str {
-    app_role.unwrap_or(crate::APP_ROLE)
+/// The resolved names of a connection's two RLS roles. Provisioning and
+/// serving must resolve the same pair or `SET ROLE` targets a role that was
+/// never created.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RlsRoles {
+    /// Confined to one project by `project_isolation`; the session role of
+    /// every serving connection.
+    pub in_project: String,
+    /// Holds membership in
+    /// [`ACROSS_PROJECTS_ROLE`](td_schema::ACROSS_PROJECTS_ROLE), which the
+    /// `across_projects` policy admits. The tenant role must never hold it.
+    pub across_projects: String,
 }
 
 impl DatabaseConfig {
-    /// The RLS app role serving connections `SET ROLE` to: the configured override,
-    /// else the global default [`APP_ROLE`](crate::APP_ROLE).
-    pub fn app_role(&self) -> &str {
-        app_role_or_default(self.app_role.as_deref())
+    /// The configured RLS roles, or [`DbError::MissingRlsRoleName`] when
+    /// unset (the privileged system entry).
+    pub(crate) fn require_roles(&self) -> Result<&RlsRoles, DbError> {
+        self.roles.as_ref().ok_or(DbError::MissingRlsRoleName)
     }
 
     /// The configured schema, or [`DbError::MissingSchema`] when unset.

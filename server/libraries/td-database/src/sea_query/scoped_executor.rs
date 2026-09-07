@@ -8,8 +8,9 @@
 //! already-scoped connection from their `DbPool` handle.
 //!
 //! For a multi-statement scope, scope one connection with
-//! [`PgConnectionExt::set_project_scope`]; a plain `db.begin()` otherwise inherits
-//! the test serving pool's default (`app.bypass_rls = on`).
+//! [`PgConnectionExt::scope_in_project`]; a plain `db.begin()` otherwise runs
+//! as the connection's session role, which in test builds is the
+//! cross-project one.
 
 use crate::connection::PgConnectionExt;
 use crate::pool::TdPool;
@@ -55,7 +56,7 @@ impl<'a, P: Display + Clone + Sync> SeaExecutor for &'_ Scoped<&'a TdPool, P> {
         let (sql, values) = query.build_sea_query();
         async move {
             let mut trx = pool.begin().await?;
-            trx.set_project_scope(&project).await?;
+            trx.scope_in_project(&project).await?;
             match op(&sql, values, &mut trx).await {
                 Ok(value) => {
                     trx.commit().await?;

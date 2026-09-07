@@ -7,7 +7,7 @@
 //! components via `inventory::submit!`.
 
 use crate::components::{AdminPool, UpgradeTransaction, resolved_schema};
-use crate::config::DatabaseComponents;
+use crate::config::{DatabaseComponents, RlsRoles};
 use crate::error::DbError;
 use crate::pool::PoolKind;
 use crate::pool::TdPool;
@@ -20,9 +20,9 @@ pub struct ProvisionSpec<'a> {
     pub(crate) schema: &'a str,
     pub(crate) owner: &'a str,
     pub(crate) password: &'a str,
-    /// The RLS app role this component's serving connections `SET ROLE` to —
+    /// The RLS roles this component's serving connections switch between —
     /// the entry's own, not the privileged server entry's.
-    pub(crate) app_role: &'a str,
+    pub(crate) roles: &'a RlsRoles,
 }
 
 /// One self-describing schema component. Each phase takes the handle whose
@@ -47,7 +47,7 @@ pub trait SchemaComponent: Send + Sync + 'static {
     /// This component's schema content.
     fn schema_source(&self) -> &'static dyn SchemaSource;
 
-    /// Create the schema, its owner role, and its RLS app role.
+    /// Create the schema, its owner role, and its RLS roles.
     async fn provision(&self, admin: &AdminPool, spec: &ProvisionSpec<'_>) -> Result<(), DbError> {
         admin.provision_schema(spec).await
     }
@@ -59,12 +59,12 @@ pub trait SchemaComponent: Send + Sync + 'static {
         Ok(())
     }
 
-    /// Bring the schema to its current version, then grant the RLS app role.
+    /// Bring the schema to its current version, then grant the RLS roles.
     /// Runs inside the single upgrade transaction [`AdminPool::upgrade`] owns:
     /// every step here commits together or not at all.
     async fn upgrade(&self, tx: &mut UpgradeTransaction<'_>) -> Result<(), DbError> {
         tx.upgrade_db_version(self.schema_source()).await?;
-        tx.grant_app_role_privileges().await
+        tx.grant_rls_role_privileges().await
     }
 
     /// Verify the schema is serveable as-is, on the serving pool only.

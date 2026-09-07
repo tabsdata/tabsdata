@@ -31,6 +31,14 @@ use tracing::debug;
 /// and silently bypass project isolation, so the floor is enforced explicitly.
 const MIN_PG_VERSION_NUM: i32 = 150_000;
 
+/// Minimum supported `max_locks_per_transaction`. A versioned table's close-out
+/// trigger takes one advisory lock per inserted row, keyed on the row's
+/// partition and held to commit, and a register or plan build writes thousands
+/// of versioned rows in one transaction. PostgreSQL's default (64) sizes the
+/// shared lock table too small for that; the embedded server boots with this
+/// value, and an external one has to be configured for it.
+const MIN_MAX_LOCKS_PER_TRANSACTION: i32 = 1_024;
+
 fn map_system_db_error(err: Error) -> DbError {
     match &err {
         Error::Database(database_err) => {
@@ -173,6 +181,31 @@ pub async fn check_pg_min_version(pool: &PgPool) -> Result<(), DbError> {
     debug!(
         server_version_num = version,
         "db.check: postgres version OK"
+    );
+    Ok(())
+}
+
+/// Refuse to run on a server whose lock table cannot hold a bulk versioned
+/// write ([`MIN_MAX_LOCKS_PER_TRANSACTION`]).
+pub async fn check_pg_lock_capacity(pool: &PgPool) -> Result<(), DbError> {
+    let locks: Option<i32> = Query::select()
+        .expr(Expr::cust(
+            "current_setting('max_locks_per_transaction')::int",
+        ))
+        .build_query_scalar()
+        .fetch_optional(pool)
+        .await
+        .map_err(DbError::SqlError)?;
+    let locks = locks.unwrap_or(0);
+    if locks < MIN_MAX_LOCKS_PER_TRANSACTION {
+        return Err(DbError::InsufficientLockCapacity(
+            locks,
+            MIN_MAX_LOCKS_PER_TRANSACTION,
+        ));
+    }
+    debug!(
+        max_locks_per_transaction = locks,
+        "db.check: lock capacity OK"
     );
     Ok(())
 }

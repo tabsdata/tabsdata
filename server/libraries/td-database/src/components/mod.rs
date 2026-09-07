@@ -23,7 +23,7 @@ mod tests;
 
 use crate::config::{
     ComponentConfig, DatabaseComponents, DatabaseConfig, EMBEDDED_CREDENTIAL, PostgresConnect,
-    Schema,
+    RlsRoles, Schema,
 };
 use crate::domain::DomainPools;
 use crate::error::DbError;
@@ -171,7 +171,7 @@ pub fn serving_config(
             password,
         },
         schema: Some(Schema::new(&schema)),
-        app_role: Some(entry.app_role()?),
+        roles: Some(entry.rls_roles()?),
         pool: entry.pool.clone(),
     })
 }
@@ -213,11 +213,11 @@ pub struct ComponentObjects {
     pub schema_present: bool,
     pub owner: String,
     pub owner_present: bool,
-    pub app_role: String,
-    pub app_role_present: bool,
+    pub roles: RlsRoles,
+    pub roles_present: bool,
 }
 
-/// Inspect every registered component's schema, owner role and app role.
+/// Inspect every registered component's schema, owner role and RLS roles.
 pub async fn inspect_all(
     components: &DatabaseComponents,
     admin: &AdminPool,
@@ -227,21 +227,23 @@ pub async fn inspect_all(
         let entry = component_entry(components, component)?;
         let (owner, _) = owner_credentials(entry, component)?;
         let schema = schema_of(entry, component)?;
-        let app_role = entry.app_role()?.to_owned();
+        let roles = entry.rls_roles()?;
+        let roles_present = admin.role_exists(&roles.in_project).await?
+            || admin.role_exists(&roles.across_projects).await?;
         found.push(ComponentObjects {
             key: component.key(),
             schema_present: admin.schema_exists(&schema).await?,
             owner_present: admin.role_exists(&owner).await?,
-            app_role_present: admin.role_exists(&app_role).await?,
+            roles_present,
             schema,
             owner,
-            app_role,
+            roles,
         });
     }
     Ok(found)
 }
 
-/// Refuse to create when a schema or its owner is already present. App roles
+/// Refuse to create when a schema or its owner is already present. RLS roles
 /// are cluster-global and shared, so their presence is reported, not fatal.
 pub fn require_absent(found: &[ComponentObjects]) -> Result<(), DbError> {
     let present: Vec<String> = found
@@ -310,23 +312,25 @@ pub async fn provision_all(
     let before = inspect_all(components, admin).await?;
     require_absent(&before)?;
     for objects in &before {
-        if objects.app_role_present {
+        if objects.roles_present {
             warn!(
                 component = objects.key,
-                app_role = %objects.app_role,
-                "App role already exists; provisioning reuses it"
+                in_project = %objects.roles.in_project,
+                across_projects = %objects.roles.across_projects,
+                "RLS roles already exist; provisioning reuses them"
             );
         }
     }
     for component in registered() {
         let entry = component_entry(components, component)?;
         let (owner, password) = owner_credentials(entry, component)?;
-        let app_role = entry.app_role()?;
+        let roles = entry.rls_roles()?;
         info!(
             component = component.key(),
             schema = %owner,
             owner = %owner,
-            app_role = %app_role,
+            in_project = %roles.in_project,
+            across_projects = %roles.across_projects,
             version = component.schema_source().current_version(),
             "Provisioning component"
         );
@@ -337,7 +341,7 @@ pub async fn provision_all(
                     schema: &owner,
                     owner: &owner,
                     password: &password,
-                    app_role: &app_role,
+                    roles: &roles,
                 },
             )
             .await?;
@@ -345,9 +349,33 @@ pub async fn provision_all(
     Ok(before)
 }
 
+/// Ensure every registered component's RLS roles, the marker and the owner
+/// memberships on the privileged pool — the cluster-global objects a schema
+/// version may newly depend on, which the owner-run [`upgrade_all`] cannot
+/// create itself. Idempotent; runs before it on `db upgrade`.
+pub async fn ensure_roles_all(
+    components: &DatabaseComponents,
+    admin: &AdminPool,
+) -> Result<(), DbError> {
+    for component in registered() {
+        let entry = component_entry(components, component)?;
+        let owner = schema_of(entry, component)?;
+        let roles = entry.rls_roles()?;
+        admin.ensure_rls_roles_for(&owner, &roles).await?;
+        info!(
+            component = component.key(),
+            owner = %owner,
+            in_project = %roles.in_project,
+            across_projects = %roles.across_projects,
+            "RLS roles ensured"
+        );
+    }
+    Ok(())
+}
+
 /// Bring every registered component to its current version, each as its schema
-/// owner (DDL on its own schema — no server handle needed). Reports the version
-/// transition each component took.
+/// owner (DDL on its own schema). Reports the version transition each
+/// component took. Cluster-global roles are [`ensure_roles_all`]'s job.
 pub async fn upgrade_all(
     components: &DatabaseComponents,
 ) -> Result<Vec<ComponentUpgrade>, DbError> {
@@ -447,19 +475,22 @@ pub async fn check(key: &str, serving: &TdPool) -> Result<(), DbError> {
 }
 
 /// Drop every registered component's schema and owner role. Destructive; the
-/// caller guards.
+/// caller guards. The `across_projects` marker is left standing — it is
+/// cluster-global and every deployment's policies name it.
 pub async fn drop_all(components: &DatabaseComponents, admin: &AdminPool) -> Result<(), DbError> {
-    let mut app_roles = BTreeSet::new();
+    let mut rls_roles = BTreeSet::new();
     for component in registered() {
         let entry = component_entry(components, component)?;
         let (owner, _) = owner_credentials(entry, component)?;
         debug!(component = component.key(), schema = %owner, "Dropping component");
         admin.drop_schema(&owner, &owner).await?;
         info!(component = component.key(), schema = %owner, "Component dropped");
-        app_roles.insert(entry.app_role()?);
+        let roles = entry.rls_roles()?;
+        rls_roles.insert(roles.in_project);
+        rls_roles.insert(roles.across_projects);
     }
-    for app_role in app_roles {
-        admin.drop_app_role(&app_role).await?;
+    for role in rls_roles {
+        admin.drop_rls_role(&role).await?;
     }
     Ok(())
 }

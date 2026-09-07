@@ -13,10 +13,11 @@
 //! ```ignore
 //! let grant = authz.require::<System, ManageRoles>(&mut trx, &ctx, &id).await?;
 //! let conn = trx.get(grant);
-//! conn.live().insert(&role).await?;
+//! conn.insert(&role).await?;
 //! trx.commit().await?;
 //! ```
 
+use crate::access::DbScope;
 use crate::domain::{DbDomain, DomainConnection};
 
 /// Proof that an authz decision was made for this request. A zero-sized
@@ -40,17 +41,22 @@ impl Grant {
 
 /// Grant-keyed access to the raw connection behind a service connection
 /// wrapper — the only way queries are reached from service code. Hands out a
-/// borrow, so chaining (`conn.get(g).live()…`) cannot consume a transaction.
+/// borrow, so chaining (`conn.get(g).fetch_one(..)`) cannot consume a transaction.
 pub trait Gated<D: DbDomain> {
-    fn get(&mut self, grant: Grant) -> &mut DomainConnection<D>;
+    /// The RLS scope the connection behind this wrapper was acquired in.
+    type Scope: DbScope;
+
+    fn get(&mut self, grant: Grant) -> &mut DomainConnection<D, Self::Scope>;
 }
 
 /// A raw connection is already unlocked — whoever holds one crossed the seam
 /// to get it. The identity impl lets authz methods and authz-calling helpers
 /// take `&mut impl Gated<D>` and accept wrappers and unlocked connections
 /// alike, so a body that unlocked early can still authorize further.
-impl<D: DbDomain> Gated<D> for DomainConnection<D> {
-    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D> {
+impl<D: DbDomain, S: DbScope> Gated<D> for DomainConnection<D, S> {
+    type Scope = S;
+
+    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D, S> {
         self
     }
 }

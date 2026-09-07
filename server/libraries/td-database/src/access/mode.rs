@@ -37,8 +37,8 @@ pub trait AccessMode: Send + Sync + 'static {
 
     /// End the unit of work; `ok` is whether the service succeeded. Awaited
     /// rather than left to `Drop`, whose rollback sqlx only queues.
-    fn close<D: DbDomain>(
-        conn: DomainConnection<D>,
+    fn close<D: DbDomain, S: DbScope>(
+        conn: DomainConnection<D, S>,
         ok: bool,
     ) -> impl Future<Output = Result<(), TdError>> + Send;
 }
@@ -78,7 +78,10 @@ impl AccessMode for RO {
     /// A read has nothing to commit, but its transaction is still ended
     /// awaited — same as a write's rollback — rather than left to the
     /// rollback sqlx only queues on drop.
-    async fn close<D: DbDomain>(conn: DomainConnection<D>, _ok: bool) -> Result<(), TdError> {
+    async fn close<D: DbDomain, S: DbScope>(
+        conn: DomainConnection<D, S>,
+        _ok: bool,
+    ) -> Result<(), TdError> {
         conn.rollback()
             .await
             .map_err(ServiceDbError::CannotRollbackTransaction)?;
@@ -103,7 +106,10 @@ impl AccessMode for RW {
         pool.begin()
     }
 
-    async fn close<D: DbDomain>(conn: DomainConnection<D>, ok: bool) -> Result<(), TdError> {
+    async fn close<D: DbDomain, S: DbScope>(
+        conn: DomainConnection<D, S>,
+        ok: bool,
+    ) -> Result<(), TdError> {
         end_write(conn, ok).await
     }
 }
@@ -129,7 +135,10 @@ impl AccessMode for XW {
         pool.begin()
     }
 
-    async fn close<D: DbDomain>(conn: DomainConnection<D>, ok: bool) -> Result<(), TdError> {
+    async fn close<D: DbDomain, S: DbScope>(
+        conn: DomainConnection<D, S>,
+        ok: bool,
+    ) -> Result<(), TdError> {
         end_write(conn, ok).await
     }
 }
@@ -159,7 +168,10 @@ impl OpensIn<InProject> for XW {
 impl WriteMode for RW {}
 impl WriteMode for XW {}
 
-async fn end_write<D: DbDomain>(conn: DomainConnection<D>, ok: bool) -> Result<(), TdError> {
+async fn end_write<D: DbDomain, S: DbScope>(
+    conn: DomainConnection<D, S>,
+    ok: bool,
+) -> Result<(), TdError> {
     if ok {
         conn.commit()
             .await

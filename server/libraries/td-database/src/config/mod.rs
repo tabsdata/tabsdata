@@ -35,6 +35,6 @@ pub use schema::Schema;
 
 pub use component::{ComponentConfig, DatabaseComponents, EMBEDDED_CREDENTIAL};
 pub(crate) use connection::DatabaseConfig;
-pub use connection::PostgresConnect;
+pub use connection::{PostgresConnect, RlsRoles};
 pub(crate) use logging::StatementLogConfig;
 pub use pool::{PoolConfig, PoolsConfig};

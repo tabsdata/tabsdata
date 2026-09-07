@@ -4,11 +4,12 @@
 
 //! `Extract` impls for the connection machinery, making `DbPool<..>` and
 //! `GatedConnection<M, S, D>` declarable as `#[service_factory]` fn parameters.
-//! `Global` variants extract from any request; `InProject` variants require a
-//! project-scoped one ([`ProjectScoped`]), so declaring a project-bound
-//! connection on an unscoped request does not compile.
+//! `Global` and `AcrossProjects` variants extract from any request;
+//! `InProject` variants require a project-scoped one ([`ProjectScoped`]), so
+//! declaring a project-bound connection on an unscoped request does not
+//! compile.
 
-use super::{DbPool, GatedConnection, Global, InProject, OpensIn};
+use super::{AcrossProjects, DbPool, GatedConnection, Global, InProject, OpensIn};
 use crate::domain::{DomainPools, ScopedBy, Supports};
 use crate::pool::scoped::Scoped;
 use std::fmt::Display;
@@ -42,6 +43,17 @@ where
     }
 }
 
+impl<Srv, Req, D: ScopedBy<AcrossProjects>> Extract<Srv, Req> for DbPool<AcrossProjects, D>
+where
+    Srv: Sync,
+    Req: Sync,
+    DomainPools: FieldAccessor<Srv>,
+{
+    async fn extract(srv: &Srv, _req: &Req) -> Result<Self, TdError> {
+        Ok(DbPool::new(DomainPools::get_field(srv), AcrossProjects))
+    }
+}
+
 impl<Srv, Req, D: ScopedBy<InProject>> Extract<Srv, Req> for DbPool<InProject, D>
 where
     Srv: Sync,
@@ -67,6 +79,27 @@ where
 
     async fn extract(srv: &Srv, req: &Req) -> Result<Self::Kept, TdError> {
         DbPool::<Global, D>::extract(srv, req)
+            .await?
+            .open::<M>()
+            .await
+    }
+
+    async fn finish(kept: Self::Kept, ok: bool) -> Result<(), TdError> {
+        kept.end(ok).await
+    }
+}
+
+impl<Srv, Req, M: OpensIn<AcrossProjects>, D: Supports<M> + ScopedBy<AcrossProjects>>
+    ExtractMut<Srv, Req> for &mut GatedConnection<M, AcrossProjects, D>
+where
+    Srv: Sync,
+    Req: Sync,
+    DomainPools: FieldAccessor<Srv>,
+{
+    type Kept = GatedConnection<M, AcrossProjects, D>;
+
+    async fn extract(srv: &Srv, req: &Req) -> Result<Self::Kept, TdError> {
+        DbPool::<AcrossProjects, D>::extract(srv, req)
             .await?
             .open::<M>()
             .await

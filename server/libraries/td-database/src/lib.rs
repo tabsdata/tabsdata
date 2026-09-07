@@ -16,11 +16,6 @@ use crate::config::DatabaseConfig;
 use crate::error::DbError;
 use crate::pool::TdPool;
 
-/// Non-superuser, `NOBYPASSRLS` PostgreSQL role the serving pool switches to in
-/// `after_connect` (`SET ROLE`), so row-level security is enforced even when the
-/// pool authenticated as a superuser.
-pub const APP_ROLE: &str = "td_app";
-
 pub mod access;
 pub mod components;
 pub mod config;

@@ -5,7 +5,7 @@
 //! [`TdPool`] — the serving application pool handed to the running server.
 
 use crate::config::DatabaseConfig;
-use crate::connection::PgConnectionExt;
+use crate::connection::{IN_PROJECT_ROLE_GUC, PgConnectionExt};
 use crate::error::DbError;
 use crate::pool::PoolKind;
 use crate::sea_query::builder::SeaQueryExt;
@@ -13,10 +13,11 @@ use sea_query::{Alias, Expr, Query};
 use sqlx::PgPool;
 use sqlx::{Error, Postgres, Transaction};
 use std::time::Duration;
+use td_schema::ACROSS_PROJECTS_ROLE;
 use tracing::{debug, info, instrument};
 
 /// Serving pool handed to the running server and its services. On PostgreSQL its
-/// connections run as the non-bypass [`APP_ROLE`](crate::APP_ROLE), so every
+/// connections run as the non-bypass tenant RLS role, so every
 /// request is enforced by row-level security. It deliberately carries **no**
 /// privileged connection: schema creation/upgrade/checks live in the `components`
 /// module's [`AdminPool`](crate::components::AdminPool).
@@ -40,7 +41,7 @@ impl AsRef<PgPool> for TdPool {
 
 impl TdPool {
     /// Connects to an already-running database as the **serving** role
-    /// (RLS-enforced `td_app` on PostgreSQL). This is a pure application pool: it
+    /// (the RLS-enforced tenant role). This is a pure application pool: it
     /// holds no privileged connection and does not own the database server's
     /// lifecycle — the embedded server, when used, is booted out of band
     /// (`td_dbmanager start`), and this pool connects to it like any other
@@ -78,8 +79,10 @@ impl TdPool {
     }
 
     /// Verify the **serving** pool's connections are correctly scoped for RLS:
-    /// `after_connect` switched them to [`APP_ROLE`](crate::APP_ROLE), and that
-    /// role does **not** bypass row-level security (no SUPERUSER / BYPASSRLS).
+    /// the role `after_connect` switched them to does **not** bypass
+    /// row-level security (no SUPERUSER / BYPASSRLS), and the tenant role does
+    /// not hold the `across_projects` membership — which would make that
+    /// policy apply to tenant reads and collapse isolation.
     /// Project isolation rests entirely on RLS — `FORCE ROW LEVEL SECURITY` only
     /// reaches a non-superuser table owner — so a serving role that bypassed it
     /// would let every project read and write every other project's rows,
@@ -97,6 +100,18 @@ impl TdPool {
             .map_err(DbError::SqlError)?;
         if matches!(bypasses, Some(true)) {
             return Err(DbError::ConnectedRoleBypassesRls);
+        }
+        let tenant_bypasses: Option<bool> = Query::select()
+            .expr(Expr::cust(format!(
+                "pg_has_role(current_setting('{IN_PROJECT_ROLE_GUC}'), \
+                 '{ACROSS_PROJECTS_ROLE}', 'USAGE')"
+            )))
+            .build_query_scalar()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::SqlError)?;
+        if matches!(tenant_bypasses, Some(true)) {
+            return Err(DbError::TenantRoleSpansProjects);
         }
         debug!("db.pool.check: serving RLS posture OK");
         Ok(())
@@ -140,6 +155,11 @@ impl TdPool {
     /// Verify the PostgreSQL server is new enough for the schema's features.
     pub async fn check_pg_min_version(&self) -> Result<(), DbError> {
         crate::pool::state::check_pg_min_version(&self.pool).await
+    }
+
+    /// Verify the server's lock table is sized for bulk versioned writes.
+    pub async fn check_pg_lock_capacity(&self) -> Result<(), DbError> {
+        crate::pool::state::check_pg_lock_capacity(&self.pool).await
     }
 
     pub async fn begin(&self) -> Result<Transaction<'static, Postgres>, Error> {

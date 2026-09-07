@@ -77,25 +77,25 @@ where
         self,
         pool: impl SeaExecutor + 'q,
     ) -> BoxFuture<'q, Result<PgQueryResult, Error>> {
-        pool.execute(self.query)
+        pool.run_execute(self.query)
     }
 
     pub fn fetch_all<'q>(
         self,
         pool: impl SeaExecutor + 'q,
     ) -> BoxFuture<'q, Result<Vec<PgRow>, Error>> {
-        pool.fetch_all(self.query)
+        pool.run_fetch_all(self.query)
     }
 
     pub fn fetch_one<'q>(self, pool: impl SeaExecutor + 'q) -> BoxFuture<'q, Result<PgRow, Error>> {
-        pool.fetch_one(self.query)
+        pool.run_fetch_one(self.query)
     }
 
     pub fn fetch_optional<'q>(
         self,
         pool: impl SeaExecutor + 'q,
     ) -> BoxFuture<'q, Result<Option<PgRow>, Error>> {
-        pool.fetch_optional(self.query)
+        pool.run_fetch_optional(self.query)
     }
 }
 
@@ -108,14 +108,14 @@ where
     where
         O: 'c,
     {
-        pool.fetch_all_as::<O>(self.query)
+        pool.run_fetch_all_as::<O>(self.query)
     }
 
     pub fn fetch_one<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<O, Error>>
     where
         O: 'c,
     {
-        pool.fetch_one_as::<O>(self.query)
+        pool.run_fetch_one_as::<O>(self.query)
     }
 
     pub fn fetch_optional<'c>(
@@ -125,7 +125,7 @@ where
     where
         O: 'c,
     {
-        pool.fetch_optional_as::<O>(self.query)
+        pool.run_fetch_optional_as::<O>(self.query)
     }
 }
 
@@ -138,14 +138,14 @@ where
     where
         O: 'c,
     {
-        pool.fetch_all_scalar::<O>(self.query)
+        pool.run_fetch_all_scalar::<O>(self.query)
     }
 
     pub fn fetch_one<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<O, Error>>
     where
         O: 'c,
     {
-        pool.fetch_one_scalar::<O>(self.query)
+        pool.run_fetch_one_scalar::<O>(self.query)
     }
 
     pub fn fetch_optional<'c>(
@@ -155,6 +155,6 @@ where
     where
         O: 'c,
     {
-        pool.fetch_optional_scalar::<O>(self.query)
+        pool.run_fetch_optional_scalar::<O>(self.query)
     }
 }

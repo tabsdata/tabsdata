@@ -10,14 +10,16 @@
 //! through [`Gated::get`], which requires a [`Grant`](super::Grant).
 //!
 //! `S` is the RLS scope acquired under: an `InProject` parameter only extracts
-//! from a project-scoped request, everything else is cross-project `Global`.
+//! from a project-scoped request, everything else is `Global` or
+//! `AcrossProjects`.
 //! `D` is the domain, and it has to declare `S`
 //! ([`ScopedBy`](crate::domain::ScopedBy)) — a domain whose tables carry no
 //! project cannot be spelled project-scoped.
 
-use super::{AccessMode, DbScope, Gated, Global, WriteMode};
+use super::{AccessMode, DbScope, EntersProject, Gated, Global, InProject, WriteMode};
 use crate::access::Grant;
 use crate::domain::{Apiserver, DomainConnection, ScopedBy};
+use std::fmt::Display;
 use std::marker::PhantomData;
 use td_error::TdError;
 
@@ -25,28 +27,45 @@ use td_error::TdError;
 /// ends it; taken from a [`DbPool`](super::DbPool), the body does.
 #[must_use = "a write is lost unless it is committed"]
 pub struct GatedConnection<M: AccessMode, S: DbScope = Global, D: ScopedBy<S> = Apiserver> {
-    conn: DomainConnection<D>,
+    conn: DomainConnection<D, S>,
     _m: PhantomData<M>,
-    _s: PhantomData<S>,
 }
 
 impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
-    pub(super) fn new(conn: DomainConnection<D>) -> Self {
+    pub(super) fn new(conn: DomainConnection<D, S>) -> Self {
         Self {
             conn,
             _m: PhantomData,
-            _s: PhantomData,
         }
     }
 
     /// Unlock for queries; inherent so bodies need no trait import.
-    pub fn get(&mut self, grant: Grant) -> &mut DomainConnection<D> {
+    pub fn get(&mut self, grant: Grant) -> &mut DomainConnection<D, S> {
         Gated::get(self, grant)
     }
 
     /// For the `ExtractMut` impls, which cannot reach `conn` from their module.
     pub(super) async fn end(self, ok: bool) -> Result<(), TdError> {
         M::close(self.conn, ok).await
+    }
+}
+
+impl<M: AccessMode, S: EntersProject, D: ScopedBy<S> + ScopedBy<InProject>>
+    GatedConnection<M, S, D>
+{
+    /// Enter `project` for the rest of this unit of work: switches to the
+    /// tenant role with `app.project_id` set and re-types the connection.
+    /// Consumes the unprojected view, so the two scopes cannot be held at
+    /// once. Project creation enters the project it just registered; a
+    /// service handed a bare id enters the project it resolved as the owner.
+    pub async fn enter_project(
+        self,
+        project: &impl Display,
+    ) -> Result<GatedConnection<M, InProject, D>, TdError> {
+        let scope = InProject::new(project);
+        let mut conn = DomainConnection::<D, InProject>::new(self.conn.into_transaction());
+        scope.apply(&mut conn).await?;
+        Ok(GatedConnection::new(conn))
     }
 }
 
@@ -57,7 +76,9 @@ impl<M: WriteMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
 }
 
 impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> Gated<D> for GatedConnection<M, S, D> {
-    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D> {
+    type Scope = S;
+
+    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D, S> {
         &mut self.conn
     }
 }

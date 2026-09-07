@@ -11,6 +11,7 @@
 //! brought up out of band by `td_dbmanager` (see [`crate::server`]).
 
 use crate::config::{DatabaseConfig, PoolConfig, Schema};
+use crate::connection::{ACROSS_PROJECTS_ROLE_GUC, IN_PROJECT_ROLE_GUC};
 use crate::error::DbError;
 use crate::pool::PoolKind;
 use crate::pool::options::pg_connect_options;
@@ -18,8 +19,6 @@ use sqlx::pool::PoolOptions;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::{ConnectOptions, Connection, PgPool, Postgres};
 use std::time::Duration;
-#[cfg(feature = "td-test")]
-use td_schema::BYPASS_RLS_GUC;
 use tracing::debug;
 
 /// Result of a connect. Bundles the sqlx pool with the pinned schema.
@@ -106,8 +105,12 @@ impl DatabaseConfig {
 
         let conn_options = pg_connect_options(&self.conn);
         if app_role {
-            self.probe_app_role(&conn_options, pool.acquire_timeout, self.require_schema()?)
-                .await?;
+            let roles = self.require_roles()?;
+            let schema = self.require_schema()?;
+            for role in [&roles.in_project, &roles.across_projects] {
+                self.probe_role(&conn_options, pool.acquire_timeout, schema, role)
+                    .await?;
+            }
         }
         let db_pool = self
             .connect_postgres(&conn_options, pool, app_role, schema.as_deref())
@@ -119,7 +122,7 @@ impl DatabaseConfig {
         })
     }
 
-    /// Prove the app role is switchable on one throwaway connection before
+    /// Prove an RLS role is switchable on one throwaway connection before
     /// building the serving pools. The pools cannot report this themselves: a
     /// failing `after_connect` is retried until the acquire deadline and
     /// surfaces only as `PoolTimedOut`, so an unprovisioned database would
@@ -129,15 +132,16 @@ impl DatabaseConfig {
     /// member); both mean provisioning (`db create`) has not run against this
     /// database. Bounded by the pool's acquire timeout — a raw connect has
     /// none, and the probe must not hang where the pools would have timed out.
-    async fn probe_app_role(
+    async fn probe_role(
         &self,
         conn_options: &PgConnectOptions,
         acquire_timeout: Duration,
         schema: &str,
+        role: &str,
     ) -> Result<(), DbError> {
         let switched = tokio::time::timeout(acquire_timeout, async {
             let mut conn = conn_options.connect().await?;
-            let switched = sqlx::query(&format!("SET ROLE \"{}\"", self.app_role()))
+            let switched = sqlx::query(&format!("SET ROLE \"{}\"", role))
                 .execute(&mut conn)
                 .await;
             let _ = conn.close().await;
@@ -149,7 +153,7 @@ impl DatabaseConfig {
             Ok(_) => Ok(()),
             Err(e) => match e.as_database_error().and_then(|db| db.code()) {
                 Some(code) if code == "22023" || code == "42501" => Err(
-                    DbError::AppRoleNotSwitchable(self.app_role().to_owned(), schema.to_owned(), e),
+                    DbError::AppRoleNotSwitchable(role.to_owned(), schema.to_owned(), e),
                 ),
                 _ => Err(DbError::FailedToConnectToDatabase(e)),
             },
@@ -179,7 +183,7 @@ impl DatabaseConfig {
     /// pool) the connection keeps its raw role and its DDL/provisioning rights.
     /// The role must already exist for `SET ROLE` to succeed — provisioning
     /// (`db create`) creates it before any serving pool opens, and
-    /// [`Self::probe_app_role`] has already proven the switch works.
+    /// [`Self::probe_role`] has already proven the switch works.
     ///
     /// No pool pins its sessions read-only: both serving kinds carry writes,
     /// and a read's `READ ONLY` posture comes from its own begin
@@ -202,13 +206,11 @@ impl DatabaseConfig {
         );
 
         let schema = schema.map(str::to_owned);
-        // The role serving connections switch to (the global `td_app` by
-        // default; per-instance on shared clusters, per-test on the shared
-        // test server). Captured so the closure is 'static.
-        let serving_role = self.app_role().to_owned();
+        // Captured so the closure is 'static.
+        let roles = self.roles.clone();
         let pool_options = Self::pool_options(pool).after_connect(move |conn, _meta| {
             let schema = schema.clone();
-            let serving_role = serving_role.clone();
+            let roles = roles.clone();
             Box::pin(async move {
                 // Pin the schema the app's objects live in, so DDL,
                 // RLS-policy/view resolution, and queries all target it.
@@ -218,16 +220,39 @@ impl DatabaseConfig {
                         .execute(&mut *conn)
                         .await?;
                 }
+                // Also on the admin posture: an upgrade transaction scopes
+                // itself across projects through the same seam.
+                if let Some(roles) = &roles {
+                    sqlx::query(&format!(
+                        "SET {IN_PROJECT_ROLE_GUC} = \"{}\"",
+                        roles.in_project
+                    ))
+                    .execute(&mut *conn)
+                    .await?;
+                    sqlx::query(&format!(
+                        "SET {ACROSS_PROJECTS_ROLE_GUC} = \"{}\"",
+                        roles.across_projects
+                    ))
+                    .execute(&mut *conn)
+                    .await?;
+                }
                 if app_role {
-                    // Session-level: the connection runs as the app role for its
-                    // whole pooled lifetime, so every transaction on it is
-                    // RLS-enforced without a per-request role switch.
-                    sqlx::query(&format!("SET ROLE \"{serving_role}\""))
+                    let roles = roles.expect("a serving pool resolves its RLS roles");
+                    // Session-level, so every transaction is RLS-enforced
+                    // without a per-request switch. Test builds start across
+                    // projects instead, so an unscoped read spans them.
+                    #[cfg(not(feature = "td-test"))]
+                    let session_role = &roles.in_project;
+                    #[cfg(feature = "td-test")]
+                    let session_role = &roles.across_projects;
+                    sqlx::query(&format!("SET ROLE \"{session_role}\""))
                         .execute(&mut *conn)
                         .await?;
 
+                    // Archived schemas carry the pre-v4 policy, which reads
+                    // this instead of the role; the ladder tests install them.
                     #[cfg(feature = "td-test")]
-                    sqlx::query(&format!("SET {BYPASS_RLS_GUC} = on"))
+                    sqlx::query("SET app.bypass_rls = on")
                         .execute(&mut *conn)
                         .await?;
                 }
@@ -244,6 +269,7 @@ impl DatabaseConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RlsRoles;
     use crate::config::{PoolConfig, PoolsConfig, PostgresConfig, PostgresConnect};
     use crate::connection::PgConnectionExt;
     use crate::test_utils::server;
@@ -258,7 +284,7 @@ mod tests {
                 password: "pass".to_string(),
             },
             schema: None,
-            app_role: None,
+            roles: None,
             pool,
         }
     }
@@ -344,7 +370,10 @@ mod tests {
         let config = DatabaseConfig {
             conn: server::admin_base(),
             schema: Some(Schema::new("public")),
-            app_role: Some(format!("td_no_role_{}", td_common::id::id())),
+            roles: Some(RlsRoles {
+                in_project: format!("td_no_role_{}", td_common::id::id()),
+                across_projects: format!("td_no_role_{}", td_common::id::id()),
+            }),
             pool: PoolsConfig {
                 regular: Some(PoolConfig {
                     min_connections: 1,

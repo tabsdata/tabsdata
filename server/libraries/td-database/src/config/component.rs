@@ -7,7 +7,7 @@
 //! `database_server:` section reuses the same shape (see [`crate::server`]).
 
 use super::Schema;
-use super::connection::app_role_or_default;
+use super::connection::RlsRoles;
 use super::pool::PoolsConfig;
 use super::postgres::PostgresConfig;
 use crate::error::DbError;
@@ -45,10 +45,14 @@ pub struct ComponentConfig {
     /// [`Self::schema`]. Not allowed on the `database_server:` entry.
     #[serde(default)]
     pub schema: Option<Schema>,
-    /// RLS app role override; defaults to `<database>_app` — see
-    /// [`Self::app_role`].
+    /// Tenant RLS role override; defaults to `<database>_in_project` — see
+    /// [`Self::in_project_role`].
     #[serde(default)]
-    pub app_role: Option<String>,
+    pub in_project_role: Option<String>,
+    /// Cross-project RLS role override; defaults to
+    /// `<database>_across_projects` — see [`Self::across_projects_role`].
+    #[serde(default)]
+    pub across_projects_role: Option<String>,
     /// Connection pool settings.
     #[serde(default)]
     pub pool: PoolsConfig,
@@ -57,6 +61,9 @@ pub struct ComponentConfig {
 /// PostgreSQL truncates longer identifiers silently (`NAMEDATALEN`), so the
 /// created role/schema would not match the configured name.
 const POSTGRES_IDENTIFIER_BYTES: usize = 63;
+
+const IN_PROJECT_SUFFIX: &str = "in_project";
+const ACROSS_PROJECTS_SUFFIX: &str = "across_projects";
 
 fn checked_identifier(name: String) -> Result<String, DbError> {
     if name.len() > POSTGRES_IDENTIFIER_BYTES {
@@ -78,15 +85,36 @@ impl ComponentConfig {
         })
     }
 
-    /// The entry's RLS app role: the explicit `app_role:`, else
-    /// `<database>_app` (see [`Self::schema`]), else the global
-    /// [`APP_ROLE`](crate::APP_ROLE).
-    pub(crate) fn app_role(&self) -> Result<String, DbError> {
-        checked_identifier(match (&self.app_role, self.postgres.database.as_deref()) {
-            (Some(app_role), _) => app_role.clone(),
-            (None, Some(database)) => format!("{database}_app"),
-            (None, None) => app_role_or_default(None).to_owned(),
+    /// The entry's tenant RLS role: the explicit `in_project_role:`, else
+    /// `<database>_in_project` (see [`Self::schema`]).
+    pub(crate) fn in_project_role(&self) -> Result<String, DbError> {
+        self.rls_role(&self.in_project_role, IN_PROJECT_SUFFIX)
+    }
+
+    /// The entry's cross-project RLS role: the explicit
+    /// `across_projects_role:`, else `<database>_across_projects`. Provisioned
+    /// with the tenant role's privileges plus membership in
+    /// [`ACROSS_PROJECTS_ROLE`], which is what the `across_projects` policy
+    /// admits.
+    pub(crate) fn across_projects_role(&self) -> Result<String, DbError> {
+        self.rls_role(&self.across_projects_role, ACROSS_PROJECTS_SUFFIX)
+    }
+
+    /// Both RLS roles, resolved together — provisioning and serving take the
+    /// pair, never one of the two.
+    pub(crate) fn rls_roles(&self) -> Result<RlsRoles, DbError> {
+        Ok(RlsRoles {
+            in_project: self.in_project_role()?,
+            across_projects: self.across_projects_role()?,
         })
+    }
+
+    fn rls_role(&self, explicit: &Option<String>, suffix: &str) -> Result<String, DbError> {
+        match (explicit, self.postgres.database.as_deref()) {
+            (Some(role), _) => checked_identifier(role.clone()),
+            (None, Some(database)) => checked_identifier(format!("{database}_{suffix}")),
+            (None, None) => Err(DbError::MissingRlsRoleName),
+        }
     }
 }
 
@@ -103,7 +131,7 @@ postgres:
   database: postgres
   password: owner_secret
 schema: td_apiserver
-app_role: td_app_i1
+in_project_role: ip_i1
 pool:
   regular:
     min_connections: 1
@@ -114,7 +142,7 @@ pool:
         assert!(entry.postgres.username.is_none());
         assert_eq!(entry.postgres.password.as_deref(), Some("owner_secret"));
         assert_eq!(entry.schema.as_deref(), Some("td_apiserver"));
-        assert_eq!(entry.app_role.as_deref(), Some("td_app_i1"));
+        assert_eq!(entry.in_project_role.as_deref(), Some("ip_i1"));
         assert_eq!(entry.pool.regular.as_ref().unwrap().max_connections, 10);
         assert!(entry.pool.exclusive.is_none());
     }
@@ -165,9 +193,9 @@ pool:
         assert_eq!(entry, restored);
     }
 
-    /// Names derive from the database (`<db>_<key>`, `<db>_app`) so instances
+    /// Names derive from the database (`<db>_<key>`, `<db>_in_project`) so instances
     /// sharing a cluster never collide on cluster-global role names; explicit
-    /// config wins; an entry with no database name keeps the static defaults.
+    /// config wins; an entry with no database name has no role default at all.
     #[test]
     fn component_config_derived_names() {
         let entry: ComponentConfig = serde_yaml::from_str(
@@ -182,7 +210,11 @@ postgres:
             entry.schema("apiserver", "td_apiserver").unwrap(),
             "d_tenant_apiserver"
         );
-        assert_eq!(entry.app_role().unwrap(), "d_tenant_app");
+        assert_eq!(entry.in_project_role().unwrap(), "d_tenant_in_project");
+        assert_eq!(
+            entry.across_projects_role().unwrap(),
+            "d_tenant_across_projects"
+        );
 
         let explicit: ComponentConfig = serde_yaml::from_str(
             "
@@ -190,7 +222,8 @@ postgres:
   host: localhost
   database: d_tenant
 schema: my_schema
-app_role: my_app
+in_project_role: my_ip
+across_projects_role: my_ap
 ",
         )
         .unwrap();
@@ -198,7 +231,8 @@ app_role: my_app
             explicit.schema("apiserver", "td_apiserver").unwrap(),
             "my_schema"
         );
-        assert_eq!(explicit.app_role().unwrap(), "my_app");
+        assert_eq!(explicit.in_project_role().unwrap(), "my_ip");
+        assert_eq!(explicit.across_projects_role().unwrap(), "my_ap");
 
         let no_database: ComponentConfig = serde_yaml::from_str(
             "
@@ -211,7 +245,10 @@ postgres:
             no_database.schema("apiserver", "td_apiserver").unwrap(),
             "td_apiserver"
         );
-        assert_eq!(no_database.app_role().unwrap(), crate::APP_ROLE);
+        assert!(matches!(
+            no_database.in_project_role(),
+            Err(DbError::MissingRlsRoleName)
+        ));
 
         let long: ComponentConfig = serde_yaml::from_str(&format!(
             "

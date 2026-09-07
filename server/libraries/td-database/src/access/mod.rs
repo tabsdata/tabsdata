@@ -12,15 +12,17 @@
 //! share the component's regular pool, [`XW`] draws from the exclusive one and
 //! serializes on the project it is scoped to.
 //!
-//! A handle carries both the scope it applies and the domain it opens on:
-//! `DbPool<InProject>` binds to one project (`SET LOCAL app.project_id`),
-//! `DbPool<Global>` spans all of them (`SET LOCAL app.bypass_rls = on`), which
-//! makes `Global` parameters the audit list of cross-project escape hatches.
+//! A handle carries both the scope it applies and the domain it opens on.
+//! [`InProject`] runs as the tenant role with `app.project_id` set, letting
+//! RLS draw the boundary; [`Global`] runs as the tenant role with no project,
+//! because the relations it reaches carry none; [`AcrossProjects`] alone
+//! switches to the cross-project role, for a query that spans projects on
+//! purpose and narrows by `project_id` itself.
 //! Both default to the [`Apiserver`](crate::domain::Apiserver) domain, and a
 //! domain that declares no project scope ([`ScopedBy`](crate::domain::ScopedBy))
 //! cannot be paired with `InProject` at all.
 //!
-//! Global work has no GUC project, so an insert it makes into a
+//! Cross-project work has no GUC project, so an insert it makes into a
 //! project-scoped table must set `project_id` explicitly — omitting it hits
 //! NOT NULL, fail-closed. Project-scoped work may omit it: the column default
 //! reads the GUC and RLS `WITH CHECK` enforces the match.
@@ -67,13 +69,31 @@ pub trait DbScope: Clone + Send + Sync + 'static {
     fn apply(&self, conn: &mut PgConnection) -> impl Future<Output = Result<(), TdError>> + Send;
 }
 
-/// Cross-project scope: every acquire bypasses RLS.
+/// No project: the relations reached carry no `project_id`, so there is
+/// nothing for `app.project_id` to scope. It stays on the tenant role with the
+/// project unset, so a policed relation is fail-closed at the database as well
+/// as unreachable in the types — spanning projects is [`AcrossProjects`].
 #[derive(Debug, Clone, Copy)]
 pub struct Global;
 
 impl DbScope for Global {
     async fn apply(&self, conn: &mut PgConnection) -> Result<(), TdError> {
-        conn.bypass_project_scope()
+        conn.scope_global()
+            .await
+            .map_err(|e| TdError::from(ServiceDbError::CannotSetProjectScope(e)))
+    }
+}
+
+/// Every project at once, on purpose: RLS is bypassed and the tenant boundary
+/// moves into the query, which must narrow by `project_id` itself (see
+/// `NarrowsProjects`). What the cross-project metrics and the scheduler's
+/// project sweep run under.
+#[derive(Debug, Clone, Copy)]
+pub struct AcrossProjects;
+
+impl DbScope for AcrossProjects {
+    async fn apply(&self, conn: &mut PgConnection) -> Result<(), TdError> {
+        conn.scope_across_projects()
             .await
             .map_err(|e| TdError::from(ServiceDbError::CannotBypassProjectScope(e)))
     }
@@ -96,11 +116,32 @@ impl InProject {
 
 impl DbScope for InProject {
     async fn apply(&self, conn: &mut PgConnection) -> Result<(), TdError> {
-        conn.set_project_scope(&self.0)
+        conn.scope_in_project(&self.0)
             .await
             .map_err(|e| TdError::from(ServiceDbError::CannotSetProjectScope(e)))
     }
 }
+
+/// The scopes a unit of work enters a project from: the two that carry none.
+/// Work handed an id resolves the project owning it and pivots with
+/// [`GatedConnection::enter_project`], which re-types the connection to
+/// [`InProject`] so the rest of the body reads as project-scoped work.
+pub trait EntersProject: DbScope {}
+
+impl EntersProject for Global {}
+impl EntersProject for AcrossProjects {}
+
+/// The scopes a project-partitioned relation is reachable from: `InProject`,
+/// where RLS draws the tenant boundary, and `AcrossProjects`, where the query
+/// does. Not `Global` — its relations carry no project to scope by.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot reach a project-partitioned relation",
+    note = "use `InProject` to let RLS scope it, or `AcrossProjects` and narrow the query by project"
+)]
+pub trait SeesProjectRows: DbScope {}
+
+impl SeesProjectRows for InProject {}
+impl SeesProjectRows for AcrossProjects {}
 
 /// A handle over one domain's serving pools, in one scope. Both are the
 /// handle's own type: which database it opens on is settled where it is
@@ -155,16 +196,16 @@ impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
         let conn = M::open(pool)
             .await
             .map_err(ServiceDbError::CannotBeginTransaction)?;
-        let mut conn = DomainConnection::<D>::new(conn);
+        let mut conn = DomainConnection::<D, S>::new(conn);
         self.scope.apply(&mut conn).await?;
         M::opened(&mut conn, &self.scope, pool).await?;
         Ok(GatedConnection::new(conn))
     }
 }
 
-impl<D: ScopedBy<Global> + ScopedBy<InProject>> DbPool<Global, D> {
-    /// Re-scope to one project — for global work that creates a project, or
-    /// discovers which one it is about, and then operates inside it.
+impl<S: DbScope, D: ScopedBy<S> + ScopedBy<InProject>> DbPool<S, D> {
+    /// Re-scope to one project — for work that creates a project, or discovers
+    /// which one it is about, and then operates inside it.
     pub fn in_project(&self, project: &impl Display) -> DbPool<InProject, D> {
         DbPool::new(self.pools.clone(), InProject::new(project))
     }

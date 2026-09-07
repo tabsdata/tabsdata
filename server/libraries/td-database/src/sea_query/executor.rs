@@ -7,6 +7,10 @@
 //! [`PgConnection`] and applies a [`RunOp`]; every method a caller reaches for
 //! is provided on top of it.
 //!
+//! Every method is `run_`-prefixed: this is the raw seam, and the unprefixed
+//! names belong to the typed surface in `td-queries`, which is in scope on
+//! the same executors.
+//!
 //! [`RunOp`] is a `fn` pointer rather than a closure on purpose: it makes the
 //! `for<'a>` binding explicit, which closure inference will not produce for a
 //! future borrowing its connection argument.
@@ -69,8 +73,10 @@ mod op {
 /// Sqlx executor for SeaQueries; serves exactly one database domain
 /// ([`Domained`] supertrait).
 pub trait SeaExecutor: Domained + Sized {
-    /// A short-lived executor obtained by reborrowing `self`.
-    type Reused<'a>: SeaExecutor + Send + Domained<Domain = Self::Domain>
+    /// A short-lived executor obtained by reborrowing `self` — the same
+    /// database in the same RLS scope, so a reused executor reaches exactly
+    /// what its parent does.
+    type Reused<'a>: SeaExecutor + Send + Domained<Domain = Self::Domain, Scope = Self::Scope>
     where
         Self: 'a;
 
@@ -87,7 +93,7 @@ pub trait SeaExecutor: Domained + Sized {
     where
         Self: 'e;
 
-    fn execute<'e>(
+    fn run_execute<'e>(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<PgQueryResult, Error>>
@@ -97,7 +103,7 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::execute)
     }
 
-    fn fetch_all<'e>(
+    fn run_fetch_all<'e>(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<Vec<PgRow>, Error>>
@@ -107,14 +113,14 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::fetch_all)
     }
 
-    fn fetch_one<'e>(self, query: impl SeaQuerySqlxBuild) -> BoxFuture<'e, Result<PgRow, Error>>
+    fn run_fetch_one<'e>(self, query: impl SeaQuerySqlxBuild) -> BoxFuture<'e, Result<PgRow, Error>>
     where
         Self: 'e,
     {
         self.run(query, op::fetch_one)
     }
 
-    fn fetch_optional<'e>(
+    fn run_fetch_optional<'e>(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<Option<PgRow>, Error>>
@@ -124,7 +130,7 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::fetch_optional)
     }
 
-    fn fetch_all_as<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(
+    fn run_fetch_all_as<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<Vec<O>, Error>>
@@ -134,7 +140,7 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::fetch_all_as::<O>)
     }
 
-    fn fetch_one_as<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(
+    fn run_fetch_one_as<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<O, Error>>
@@ -144,7 +150,7 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::fetch_one_as::<O>)
     }
 
-    fn fetch_optional_as<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(
+    fn run_fetch_optional_as<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<Option<O>, Error>>
@@ -154,7 +160,10 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::fetch_optional_as::<O>)
     }
 
-    fn fetch_all_scalar<'e, O: Send + Unpin + for<'r> Decode<'r, Postgres> + Type<Postgres> + 'e>(
+    fn run_fetch_all_scalar<
+        'e,
+        O: Send + Unpin + for<'r> Decode<'r, Postgres> + Type<Postgres> + 'e,
+    >(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<Vec<O>, Error>>
@@ -164,7 +173,10 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::fetch_all_scalar::<O>)
     }
 
-    fn fetch_one_scalar<'e, O: Send + Unpin + for<'r> Decode<'r, Postgres> + Type<Postgres> + 'e>(
+    fn run_fetch_one_scalar<
+        'e,
+        O: Send + Unpin + for<'r> Decode<'r, Postgres> + Type<Postgres> + 'e,
+    >(
         self,
         query: impl SeaQuerySqlxBuild,
     ) -> BoxFuture<'e, Result<O, Error>>
@@ -174,7 +186,7 @@ pub trait SeaExecutor: Domained + Sized {
         self.run(query, op::fetch_one_scalar::<O>)
     }
 
-    fn fetch_optional_scalar<
+    fn run_fetch_optional_scalar<
         'e,
         O: Send + Unpin + for<'r> Decode<'r, Postgres> + Type<Postgres> + 'e,
     >(

@@ -10,11 +10,16 @@
 use sqlx::postgres::PgConnection;
 use sqlx::{Error, Executor};
 use std::time::Duration;
-use td_schema::{BYPASS_RLS_GUC, PROJECT_ID_GUC};
+use td_schema::{LEGACY_BYPASS_RLS_GUC, PROJECT_ID_GUC};
 use tracing::debug;
 
 const ADVISORY_XACT_LOCK: &str = "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))";
 const TRY_ADVISORY_XACT_LOCK: &str = "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))";
+
+/// Set once per connection, so the per-transaction scope switch is a single
+/// statement needing no configuration of its own.
+pub(crate) const IN_PROJECT_ROLE_GUC: &str = "td.in_project_role";
+pub(crate) const ACROSS_PROJECTS_ROLE_GUC: &str = "td.across_projects_role";
 
 pub trait PgConnectionExt {
     fn execute_batch(&mut self, stmts: &[String])
@@ -50,14 +55,24 @@ pub trait PgConnectionExt {
         value: &str,
     ) -> impl Future<Output = Result<(), Error>> + Send;
 
-    /// Cross-project scope, which the RLS policies admit for system work.
-    fn bypass_project_scope(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
+    /// Cross-project scope for the rest of the transaction.
+    fn scope_across_projects(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
 
-    /// Sets `app.project_id` **and clears `app.bypass_rls`**. Clearing matters
-    /// when re-scoping from an earlier bypass — project creation registers the
-    /// project under bypass, then scopes to it to seed — where a lingering
-    /// bypass would leave those writes un-isolated.
-    fn set_project_scope(
+    /// No project for the rest of the transaction: the tenant role with
+    /// `app.project_id` unset, so unpoliced relations read normally and a
+    /// policed one yields nothing. Fail-closed by construction — the
+    /// cross-project role is never taken for work that has no project.
+    fn scope_global(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
+
+    /// The same, for pre-v4 policies: they read
+    /// [`LEGACY_BYPASS_RLS_GUC`] instead of the `across_projects` role, and
+    /// the archived schemas an upgrade ladder starts from carry them.
+    fn admit_legacy_project_scope(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
+
+    /// Scopes the rest of the transaction to one project. Switching the role
+    /// matters when re-scoping from an earlier cross-project scope, where a
+    /// lingering cross-project role would un-isolate the writes.
+    fn scope_in_project(
         &mut self,
         project_id: &str,
     ) -> impl Future<Output = Result<(), Error>> + Send;
@@ -123,22 +138,40 @@ impl PgConnectionExt for PgConnection {
         Ok(())
     }
 
-    async fn bypass_project_scope(&mut self) -> Result<(), Error> {
+    async fn scope_across_projects(&mut self) -> Result<(), Error> {
         sqlx::query(&format!(
-            "SELECT set_config('{BYPASS_RLS_GUC}', 'on', true)"
+            "SELECT set_config('role', current_setting('{ACROSS_PROJECTS_ROLE_GUC}'), true)"
         ))
         .execute(&mut *self)
         .await?;
         Ok(())
     }
 
-    async fn set_project_scope(&mut self, project_id: &str) -> Result<(), Error> {
+    async fn scope_global(&mut self) -> Result<(), Error> {
+        sqlx::query(&format!(
+            "SELECT set_config('role', current_setting('{IN_PROJECT_ROLE_GUC}'), true)"
+        ))
+        .execute(&mut *self)
+        .await?;
+        Ok(())
+    }
+
+    async fn admit_legacy_project_scope(&mut self) -> Result<(), Error> {
+        sqlx::query(&format!(
+            "SELECT set_config('{LEGACY_BYPASS_RLS_GUC}', 'on', true)"
+        ))
+        .execute(&mut *self)
+        .await?;
+        Ok(())
+    }
+
+    async fn scope_in_project(&mut self, project_id: &str) -> Result<(), Error> {
         let id = project_id.replace('\'', "''");
         // Simple-query protocol: one round trip for both, where the prepared
         // path `sqlx::query` uses would reject a multi-statement string.
         let sql = format!(
-            "SELECT set_config('{PROJECT_ID_GUC}', '{id}', true); \
-             SELECT set_config('{BYPASS_RLS_GUC}', 'off', true)"
+            "SELECT set_config('role', current_setting('{IN_PROJECT_ROLE_GUC}'), true); \
+             SELECT set_config('{PROJECT_ID_GUC}', '{id}', true)"
         );
         self.execute(sql.as_str()).await?;
         Ok(())

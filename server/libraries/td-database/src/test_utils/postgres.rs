@@ -25,11 +25,12 @@
 //! # Project scope in tests
 //!
 //! In test builds the `td-test` feature is on, so the serving pool's
-//! `after_connect` runs `SET app.bypass_rls = on`: RLS is **disabled by default**
-//! in tests. Use `db.scoped(p)` (or a service) to re-enforce RLS for a query.
+//! `after_connect` makes the cross-project role the session role, so RLS is
+//! **not confining by default** in tests. Use `db.scoped(p)` (or a service)
+//! to re-enforce it for a query.
 
 use crate::components::{AdminPool, SchemaComponent};
-use crate::config::{DatabaseConfig, PostgresConnect, Schema};
+use crate::config::{DatabaseConfig, PostgresConnect, RlsRoles, Schema};
 use crate::pool::TdPool;
 #[cfg(test)]
 use crate::test_utils::TestDb;
@@ -48,15 +49,24 @@ fn unique_schema(index: usize) -> String {
     format!("tdt_{}_{index}", td_common::id::id())
 }
 
+/// The RLS roles every test schema shares. Cluster-global like the schemas'
+/// roles in a deployment, but fixed rather than derived: a test's schema is
+/// unique, its roles need not be.
+pub(crate) fn test_rls_roles() -> RlsRoles {
+    RlsRoles {
+        in_project: "tdt_in_project".to_string(),
+        across_projects: "tdt_across_projects".to_string(),
+    }
+}
+
 /// A superuser connectable pinned to `schema`. Used for both the privileged
 /// ([`AdminPool`]) and serving ([`TdPool`]) connects — the schema is
-/// superuser-owned, so there is no per-test owner role; serving `SET ROLE`s the
-/// shared `td_app`.
+/// superuser-owned, so there is no per-test owner role.
 pub(crate) fn schema_connectable(admin: &PostgresConnect, schema: &str) -> DatabaseConfig {
     DatabaseConfig {
         conn: admin.clone(),
         schema: Some(Schema::new(schema)),
-        app_role: None,
+        roles: Some(test_rls_roles()),
         pool: test_pool_config(),
     }
 }
@@ -67,7 +77,7 @@ fn admin_connectable(admin: &PostgresConnect) -> DatabaseConfig {
     DatabaseConfig {
         conn: admin.clone(),
         schema: None,
-        app_role: None,
+        roles: Some(test_rls_roles()),
         pool: test_pool_config(),
     }
 }
@@ -84,11 +94,15 @@ async fn provision_schema(
     let schema = unique_schema(index);
     let config = schema_connectable(admin_connect, &schema);
     let admin = AdminPool::connect(&config).await.expect("privileged pool");
-    admin.ensure_app_role().await.expect("create app role");
+    admin.ensure_rls_roles().await.expect("create RLS roles");
     admin
         .create_schema(&schema)
         .await
         .expect("create test schema");
+    admin
+        .grant_rls_role_schema_usage(&schema)
+        .await
+        .expect("grant RLS roles schema usage");
     (schema, config, admin)
 }
 
@@ -96,8 +110,7 @@ async fn provision_schema(
 /// own `components`/RLS tests — which connect their own pools as arbitrary roles via
 /// [`server::admin_base`] and create their own roles when they need
 /// to mutate role-level state. The schema is superuser-owned and left un-upgraded;
-/// the caller applies it via [`TestDb::upgrade`]. Serving `SET ROLE`s the shared
-/// `td_app`. [`TestDb::drop`] drops the schema.
+/// the caller applies it via [`TestDb::upgrade`]. [`TestDb::drop`] drops the schema.
 #[cfg(test)]
 pub(crate) async fn pool() -> TestDb {
     server::ensure_started().await;
@@ -138,7 +151,7 @@ pub async fn pools(
         let (schema, config, admin) = provision_schema(&admin_connect, index).await;
         admin.upgrade(*component).await.expect("upgrade component");
         admin
-            .grant_app_role_maintain(&schema)
+            .grant_rls_role_maintain(&schema)
             .await
             .expect("grant app role MAINTAIN");
         admin.close().await;

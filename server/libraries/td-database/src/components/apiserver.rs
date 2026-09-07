@@ -42,16 +42,18 @@ impl SchemaComponent for ApiserverComponent {
         &td_schema::CurrentSource
     }
 
-    /// Fail fast on server version / upgrader privileges before any delta.
+    /// Fail fast on server version / lock capacity / upgrader privileges
+    /// before any delta.
     async fn preflight(&self, admin: &AdminPool) -> Result<(), DbError> {
         admin.check_pg_min_version().await?;
+        admin.check_pg_lock_capacity().await?;
         admin.check_upgrader_permissions().await
     }
 
     async fn upgrade(&self, tx: &mut UpgradeTransaction<'_>) -> Result<(), DbError> {
         tx.upgrade_db_version(self.schema_source()).await?;
         tx.upgrade_tabsdata_edition().await?;
-        tx.grant_app_role_privileges().await
+        tx.grant_rls_role_privileges().await
     }
 
     async fn check(&self, serving: &TdPool) -> Result<(), DbError> {
@@ -62,6 +64,7 @@ impl SchemaComponent for ApiserverComponent {
         serving.check_tabsdata_edition().await?;
         debug!("db.check: edition OK");
         serving.check_pg_min_version().await?;
+        serving.check_pg_lock_capacity().await?;
         serving.check_rls_posture().await?;
         Ok(())
     }

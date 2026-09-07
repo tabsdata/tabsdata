@@ -15,7 +15,7 @@
 mod connection;
 mod pools;
 
-use crate::access::{AccessMode, DbScope, Global, InProject, RO, RW, XW};
+use crate::access::{AccessMode, AcrossProjects, DbScope, Global, InProject, RO, RW, XW};
 use crate::components::APISERVER_COMPONENT_KEY;
 use crate::pool::PoolKind;
 use crate::pool::TdPool;
@@ -68,11 +68,13 @@ impl Supports<RW> for Apiserver {}
 impl Supports<XW> for Apiserver {}
 
 impl ScopedBy<Global> for Apiserver {}
+impl ScopedBy<AcrossProjects> for Apiserver {}
 impl ScopedBy<InProject> for Apiserver {}
 
-/// The domain an executor serves.
+/// The domain an executor serves, and the RLS scope it serves it in.
 pub trait Domained {
     type Domain: DbDomain;
+    type Scope: DbScope;
 }
 
 /// What plain executors serve in production builds: no DAO declares it, so a
@@ -92,18 +94,27 @@ type PlainExecutorDomain = Apiserver;
 #[cfg(not(any(test, feature = "test-utils")))]
 type PlainExecutorDomain = NoDomain;
 
+/// A bare pool connects as the schema owner, which RLS does not police, so a
+/// test executor reaches project rows as an in-project connection would.
+/// Outside test builds it is paired with `NoDomain`, so nothing typechecks.
+type PlainExecutorScope = InProject;
+
 impl Domained for &'_ mut PgConnection {
     type Domain = PlainExecutorDomain;
+    type Scope = PlainExecutorScope;
 }
 
 impl Domained for &'_ TdPool {
     type Domain = PlainExecutorDomain;
+    type Scope = PlainExecutorScope;
 }
 
 impl Domained for &'_ PgPool {
     type Domain = PlainExecutorDomain;
+    type Scope = PlainExecutorScope;
 }
 
 impl<P> Domained for &'_ Scoped<&'_ TdPool, P> {
     type Domain = PlainExecutorDomain;
+    type Scope = InProject;
 }
