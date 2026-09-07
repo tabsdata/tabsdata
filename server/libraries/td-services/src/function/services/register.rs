@@ -105,9 +105,9 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
-        AccessTokenId, BasePath, BundleStatus, ConnectionKind, Decorator, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, SNIPPET_MAX_LEN, UserId,
-        WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, BasePath, BundleStatus, CollectionType, ConnectionKind, Decorator,
+        FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, SNIPPET_MAX_LEN,
+        UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{
         BundleId, CollectionIdName, CollectionName, ReuseFrozen, TableNameDto, WorkerConfig,
@@ -1783,15 +1783,53 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_transformer_with_connector_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "src_tf", Some(GroupName::source())).await;
+        let collection_name = CollectionName::try_from("fac_tf")?;
+        db.scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
         let create = pubsub_register("tf_fn", Decorator::Transformer, Some("mysqlSrcConn"))?;
-        let err = register_in_kubernetes(&db, p.id, "src_tf", create)
+        let err = register_in_kubernetes(&db, p.id, "fac_tf", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
         assert!(matches!(
             err,
             RegisterFunctionError::ConnectionKindNotAllowed(_)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_transformer_in_source_collection_err(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "src_tf", Some(GroupName::source())).await;
+        let create = pubsub_register("src_tf_fn", Decorator::Transformer, None)?;
+        let err = register_in_kubernetes(&db, p.id, "src_tf", create)
+            .await
+            .unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::TransformerInConnectedCollection(_, CollectionType::Source)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_transformer_in_destination_collection_err(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "dst_tf", Some(GroupName::destination())).await;
+        let create = pubsub_register("dst_tf_fn", Decorator::Transformer, None)?;
+        let err = register_in_kubernetes(&db, p.id, "dst_tf", create)
+            .await
+            .unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::TransformerInConnectedCollection(_, CollectionType::Destination)
         ));
         Ok(())
     }

@@ -10,7 +10,9 @@ use td_error::{TdError, td_error};
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::function::FunctionInsertDB;
-use td_objects::types::basic::{CollectionName, ConnectionKind, Decorator, TableName};
+use td_objects::types::basic::{
+    CollectionName, CollectionType, ConnectionKind, Decorator, TableName,
+};
 use td_objects::types::composed::{TableDependency, TableTrigger};
 use td_queries::Queries;
 
@@ -38,11 +40,13 @@ pub enum RegisterFunctionError {
     CollectionHasNoConnection(CollectionName) = 9,
     #[error("Connection kind '{0}' does not match collection '{2}' connection kind '{1}'")]
     ConnectionKindMismatch(ConnectionKind, ConnectionKind, CollectionName) = 10,
+    #[error("A transformer function cannot be registered in collection '{0}', a {1:?} collection")]
+    TransformerInConnectedCollection(CollectionName, CollectionType) = 11,
 }
 
 /// A publisher/subscriber must declare the connection kind it uses, its
 /// collection must carry a connection, and the two kinds must match. A
-/// transformer must declare none.
+/// transformer must declare none and live in a `DataFactory` collection.
 ///
 /// TODO FOR 2.0: this contract is enforced only under the Kubernetes
 /// orchestrator (the 2.x deployment). The 1.x local Supervisor still runs
@@ -81,6 +85,12 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows>(
             if let Some(connection) = function.connection.as_ref() {
                 Err(RegisterFunctionError::ConnectionKindNotAllowed(
                     connection.clone(),
+                ))?
+            }
+            if !matches!(collection.collection_type, CollectionType::DataFactory) {
+                Err(RegisterFunctionError::TransformerInConnectedCollection(
+                    collection.name.clone(),
+                    collection.collection_type.clone(),
                 ))?
             }
         }
