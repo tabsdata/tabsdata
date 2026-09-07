@@ -24,16 +24,15 @@ td-test = [
     "dummy",
     "mock-env",
     "test-utils",
-    "td-tower/td-test",
+    "td-error/td-test",
 ]
 dummy = []
 mock-env = []
 test_logging = []
-test_tower_metadata = ["td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "ta-services"]
+ignored = ["openssl", "strum", "ta-services", "thiserror"]
 
 # Build dependencies
 
@@ -53,15 +52,22 @@ tm-services = { workspace = true }
 
 ## Libraries
 
-td-tower = { workspace = true }
+td-error = { workspace = true }
 
 ## Extensions
 
 
 # External dependencies
 
+serde = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+
 [dev-dependencies]
 ta-services = { workspace = true, features = ["td-test"] }
+tokio = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
