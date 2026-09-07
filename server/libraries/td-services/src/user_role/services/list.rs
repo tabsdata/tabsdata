@@ -14,7 +14,7 @@ use td_objects::dxo::role::RoleParam;
 use td_objects::dxo::user_role::UserRole;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn list_user_role(
@@ -32,9 +32,9 @@ async fn list_user_role(
         .await?;
     let conn = gated_conn.get(grant);
 
-    let role: RoleDB = conn.live().fetch_one(&param.role).await?;
+    let role: RoleDB = conn.fetch_one(&param.role).await?;
     let query_params = ListQueryParams::<UserRole>::try_from(&list_params)?;
-    let rows = conn.live().list(&role.id, &query_params).await?;
+    let rows = conn.list(&role.id, &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -51,7 +51,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Description, RoleName, UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -81,7 +81,7 @@ mod tests {
         let response = response?.data;
 
         assert_eq!(response.len, 1);
-        let found = db.live().fetch_one::<UserRoleDB>(&user_role.id).await?;
+        let found = db.fetch_one::<UserRoleDB>(&user_role.id).await?;
         let response = response.data.first().unwrap();
         assert_eq!(response.id, found.id);
         assert_eq!(response.user_id, found.user_id);

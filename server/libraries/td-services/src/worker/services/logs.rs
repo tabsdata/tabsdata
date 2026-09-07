@@ -6,27 +6,31 @@ use crate::worker::logs::{worker_logs, worker_logs_tail};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::DevelopProject;
+use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{GatedConnection, RO};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::worker::{LogsExtensionParam, LogsRetryParam, WorkerDB, WorkerParam};
 use td_objects::types::stream::BoxedSyncStream;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn worker_log(
     authz: Ctx<AuthzContext>,
     bridge: Ctx<BridgeProviderHandle>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<(WorkerParam, LogsExtensionParam, LogsRetryParam)>,
 ) -> Result<BoxedSyncStream, TdError> {
     let (ctx, (worker_param, extension, retry)) = request.into_parts();
-    let conn = gated_conn.get(authz.none());
-    let worker: WorkerDB = conn.live().fetch_one(&worker_param.worker).await?;
+    let mut trx = db.read().await?;
+    let worker: WorkerDB = trx
+        .get(authz.none())
+        .fetch_one(&worker_param.worker)
+        .await?;
+    let mut trx = trx.enter_project(&worker.project_id).await?;
     let _grant = authz
-        .require_in_project::<DevelopProject>(conn, &ctx, &worker.project_id)
+        .require::<Project, DevelopProject>(&mut trx, &ctx, &worker.project_id)
         .await?;
 
     worker_logs(&bridge, &worker, &extension.extension, &retry.retry).await
@@ -36,14 +40,18 @@ async fn worker_log(
 async fn worker_log_tail(
     authz: Ctx<AuthzContext>,
     bridge: Ctx<BridgeProviderHandle>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<(WorkerParam, LogsExtensionParam, LogsRetryParam)>,
 ) -> Result<BoxedSyncStream, TdError> {
     let (ctx, (worker_param, extension, retry)) = request.into_parts();
-    let conn = gated_conn.get(authz.none());
-    let worker: WorkerDB = conn.live().fetch_one(&worker_param.worker).await?;
+    let mut trx = db.read().await?;
+    let worker: WorkerDB = trx
+        .get(authz.none())
+        .fetch_one(&worker_param.worker)
+        .await?;
+    let mut trx = trx.enter_project(&worker.project_id).await?;
     let _grant = authz
-        .require_in_project::<DevelopProject>(conn, &ctx, &worker.project_id)
+        .require::<Project, DevelopProject>(&mut trx, &ctx, &worker.project_id)
         .await?;
 
     worker_logs_tail(&bridge, &worker, &extension.extension, &retry.retry).await
@@ -168,7 +176,7 @@ mod tests {
                     let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                         .read((
                             WorkerParam {
-                                worker: workers[0].id.clone(),
+                                worker: workers[0].base.id.clone(),
                             },
                             LogsExtensionParam {
                                 extension: vec![LogsExtension::All],

@@ -9,7 +9,7 @@
 use super::fetch_run;
 use crate::Services;
 use crate::function_run::raw_data::raw_data_file;
-use crate::tests::fixtures::{register, seed_ready_lfr, set_collection_base_path};
+use crate::tests::fixtures::{register, seed_dispatched_run, set_collection_base_path};
 use bytes::Bytes;
 use futures::StreamExt;
 use std::str::FromStr;
@@ -27,7 +27,7 @@ use td_objects::types::basic::{
     UncommittedStatus, UserId,
 };
 use td_objects::types::stream::BoxedSyncStream;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 use td_storage::location::StorageLocation;
 
@@ -103,10 +103,10 @@ async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdErro
     let old = BasePath::try_from("/old")?;
     let coll = set_collection_base_path(&db, p.id, &coll, Some(&old)).await?;
 
-    let (_, pfr) = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
-    assert_eq!(pfr.base_path, old);
+    let pfr = seed_dispatched_run(&db, p.id, &coll, "fa", None).await?;
+    assert_eq!(pfr.base.base_path, old);
     let idx = InputIdx::try_from(0)?;
-    let run = fetch_run(&db, &pfr.id).await?;
+    let run = fetch_run(&db, &pfr.base.id).await?;
     let stamped_path = raw_data_file(&run, &idx)?;
     services
         .storage
@@ -116,13 +116,13 @@ async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdErro
     let coll =
         set_collection_base_path(&db, p.id, &coll, Some(&BasePath::try_from("/new")?)).await?;
 
-    let bytes = get_raw_data(&services, &p, &coll, &pfr.id, &idx).await?;
+    let bytes = get_raw_data(&services, &p, &coll, &pfr.base.id, &idx).await?;
     assert_eq!(bytes, Bytes::from_static(BYTES));
 
     // Control: a live-resolved path would look under the moved prefix, where
     // nothing exists — proving the read really came off the stamped one.
     let mut live_run = run;
-    live_run.base.base_path = coll.effective_base_path.clone();
+    live_run.base.base.base_path = coll.effective_base_path.clone();
     let live_path = raw_data_file(&live_run, &idx)?;
     assert_ne!(live_path, stamped_path);
     assert!(!services.storage.exists(&live_path).await?);
@@ -165,22 +165,26 @@ async fn test_table_download_survives_collection_move(db: TdPool) -> Result<(), 
             &LogicalFunctionRunStatus::Committed,
         )
         .await?;
-    let table: TableDB = db.live().fetch_one(&func.id).await?;
+    let table: TableDB = db
+        .latest()
+        .fetch_first(&func.base.id)
+        .await?
+        .expect("row must exist");
     let tdv = db
         .scoped(p.id)
         .seed()
         .physical_table_data_version_with_data(&coll, &exec, &trx, &pfr, &table)
         .await?;
     assert_eq!(
-        tdv.base_path, old,
+        tdv.base.base_path, old,
         "the seeded TDV mirrors the mint stamping"
     );
 
     let (stamped_path, _) = StorageLocation::from(&StorageVersion::default())
-        .builder(&tdv.base_path)
-        .collection(&tdv.collection_id)
-        .data(&tdv.id)
-        .table(&tdv.table_id, &tdv.table_version_id)
+        .builder(&tdv.base.base_path)
+        .collection(&tdv.base.collection_id)
+        .data(&tdv.base.id)
+        .table(&tdv.base.table_id, &tdv.base.table_version_id)
         .build()?;
     services
         .storage

@@ -17,7 +17,7 @@ use td_objects::dxo::physical_function_run::{
 };
 use td_objects::types::basic::Decorator;
 use td_objects::types::stream::BoxedSyncStream;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_storage::Storage;
 
 #[service_factory]
@@ -34,10 +34,10 @@ async fn function_run_raw_data(
         .await?;
     let conn = gated_conn.get(grant);
 
-    let collection: ActiveCollectionDB = conn.live().fetch_one(&collection.collection).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&collection.collection).await?;
     let run_id = function_run.function_run_id;
-    let run: PhysicalFunctionRunDBWithNames = conn.live().fetch_one(&run_id).await?;
-    if run.base.collection_id != collection.id {
+    let run: PhysicalFunctionRunDBWithNames = conn.fetch_one(&run_id).await?;
+    if run.base.base.collection_id != collection.id {
         return Err(api_error!(
             ApiError::NotFound,
             "function run {} does not belong to collection {}",
@@ -46,13 +46,13 @@ async fn function_run_raw_data(
         ));
     }
     // Only a publisher ingests, so only a publisher run has raw data at all.
-    let function: FunctionDB = conn.live().fetch_one(&run.base.function_version_id).await?;
-    if function.decorator != Decorator::Publisher {
+    let function: FunctionDB = conn.fetch_one(&run.base.base.function_version_id).await?;
+    if function.base.decorator != Decorator::Publisher {
         return Err(api_error!(
             ApiError::NotFound,
             "function run {} is a {:?}, which ingests no raw data",
             run_id,
-            function.decorator
+            function.base.decorator
         ));
     }
 
@@ -159,9 +159,9 @@ mod tests {
         input_idx: &InputIdx,
     ) -> Result<(), TdError> {
         let (path, _) = StorageLocation::from(&StorageVersion::default())
-            .builder(&run.base_path)
+            .builder(&run.base.base_path)
             .collection(&collection.id)
-            .function_run(&run.id)
+            .function_run(&run.base.id)
             .raw_input(input_idx)
             .build()?;
         context.storage.write(&path, RAW.to_vec()).await?;
@@ -181,7 +181,7 @@ mod tests {
                     collection: CollectionIdName::from_str(collection)?,
                 },
                 FunctionRunIdParam {
-                    function_run_id: run.id.clone(),
+                    function_run_id: run.base.id.clone(),
                 },
                 InputIdxParam {
                     input_idx: *input_idx,

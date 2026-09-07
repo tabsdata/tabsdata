@@ -18,13 +18,13 @@ fn worker_log_target(
     extensions: &[LogsExtension],
     casts: &[LogsCastNumber],
 ) -> WorkerLogTarget {
-    let worker_kind = match worker.worker_type {
+    let worker_kind = match worker.base.worker_type {
         WorkerType::FunctionRunner => WorkerName::Function,
         WorkerType::CronTrigger => WorkerName::CronTrigger,
         WorkerType::StageTrigger => WorkerName::StageTrigger,
     };
     WorkerLogTarget {
-        worker_id: worker.id.to_string(),
+        worker_id: worker.base.id.to_string(),
         worker_kind,
         log_patterns: extensions.iter().map(LogsExtension::glob_pattern).collect(),
         casts: casts.iter().map(|cast| cast.to_string()).collect(),

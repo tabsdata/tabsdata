@@ -13,7 +13,7 @@ use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user::UserParam;
 use td_objects::dxo::user_role::UserRoleDB;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn delete_user(
@@ -29,11 +29,11 @@ async fn delete_user(
     let conn = trx.get(grant);
 
     let id_name = param.user;
-    let user: UserDB = conn.live().fetch_one(&id_name).await?;
+    let user: UserDB = conn.fetch_one(&id_name).await?;
     delete_user_validate(&user, &ctx.user_id)?;
 
-    conn.live().delete::<UserRoleDB>(user.id).await?;
-    conn.live().delete::<UserDB>(user.id).await?;
+    conn.delete::<UserRoleDB>(user.id).await?;
+    conn.delete::<UserDB>(user.id).await?;
     trx.commit().await?;
 
     // The cascade dropped role memberships; invalidate the cached authz
@@ -52,7 +52,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::user::{UserDB, UserParam};
     use td_objects::types::basic::{AccessTokenId, UserEnabled, UserId, UserIdName, UserName};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -73,17 +73,12 @@ mod tests {
         assert!(response.is_ok());
 
         let res: Option<UserDB> = db
-            .live()
             .fetch_optional::<UserDB>(&UserName::try_from("u0").unwrap())
             .await
             .unwrap();
         assert!(res.is_none());
 
-        let res: Option<UserRoleDB> = db
-            .live()
-            .fetch_optional::<UserRoleDB>(&user.id)
-            .await
-            .unwrap();
+        let res: Option<UserRoleDB> = db.fetch_first::<UserRoleDB>(&user.id).await.unwrap();
         assert!(res.is_none());
     }
 }

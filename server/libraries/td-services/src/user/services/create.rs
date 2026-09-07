@@ -14,7 +14,7 @@ use td_objects::dxo::user::{UserCreate, UserDB, UserDBWithNames, UserRead};
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::Fixed;
 use td_objects::types::basic::RoleId;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_security::config::PasswordHashingConfig;
 
 #[service_factory]
@@ -33,13 +33,13 @@ async fn create_user(
     let user = create.to_dao(&ctx, &password_hashing_config)?;
     // A duplicate user name reports a clean "already exists" error instead
     // of the raw unique-constraint violation from the insert.
-    conn.live().assert_not_exists::<UserDB>(&user.name).await?;
-    conn.live().insert(&user).await?;
+    conn.assert_not_exists::<UserDB>(&user.name).await?;
+    conn.insert(&user).await?;
 
     let user_role = UserRoleDB::new(user.id, RoleId::default_role(), &ctx, Fixed::TRUE);
-    conn.live().insert(&user_role).await?;
+    conn.insert(&user_role).await?;
 
-    let with_names: UserDBWithNames = conn.live().fetch_one(&user.id).await?;
+    let with_names: UserDBWithNames = conn.fetch_one(&user.id).await?;
     let read = UserRead::from_dao(with_names)?;
     Ok(read)
 }
@@ -53,7 +53,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AtTime, Email, FullName, RoleId, UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
 
     async fn test_create_user(
         db: &TdPool,
@@ -99,11 +99,7 @@ mod tests {
         assert_eq!(*created.modified_by, UserName::admin());
         assert_eq!(*created.enabled, expected_enabled);
 
-        let res: Option<UserRoleDB> = db
-            .live()
-            .fetch_optional::<UserRoleDB>(&created.id)
-            .await
-            .unwrap();
+        let res: Option<UserRoleDB> = db.fetch_first::<UserRoleDB>(&created.id).await.unwrap();
         assert!(res.is_some());
         assert_eq!(RoleId::default_role(), res.unwrap().role_id)
     }

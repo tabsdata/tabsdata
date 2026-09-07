@@ -17,7 +17,7 @@ use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::{
     UserDB, UserDBWithNames, UserParam, UserRead, UserUpdate, UserUpdateDB,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_security::config::PasswordHashingConfig;
 
 #[service_factory]
@@ -30,7 +30,7 @@ async fn update_user(
     let (ctx, param, update) = request.into_parts();
     let id_name = param.user;
     let conn = gated_trx.get(authz.none());
-    let user: UserDB = conn.live().fetch_one(&id_name).await?;
+    let user: UserDB = conn.fetch_one(&id_name).await?;
     assert_user_is_not_system(&user)?;
     let _grant = authz
         .require::<User, (SelfUser, ManageAccess)>(conn, &ctx, &user.id)
@@ -42,11 +42,9 @@ async fn update_user(
 
     let user_id = user.id;
     let update_db = update.to_dao(user, &ctx, &password_hashing_config)?;
-    conn.live()
-        .update::<UserUpdateDB, UserDB>(&update_db, user_id)
-        .await?;
+    conn.update::<UserUpdateDB>(&update_db, user_id).await?;
 
-    let with_names: UserDBWithNames = conn.live().fetch_one(&user_id).await?;
+    let with_names: UserDBWithNames = conn.fetch_one(&user_id).await?;
     let read = UserRead::from_dao(with_names)?;
     Ok(read)
 }
@@ -63,7 +61,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AtTime, Email, FullName, Password, UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -111,7 +109,7 @@ mod tests {
         assert!(!*updated.enabled);
         assert!(*updated.password_must_change);
 
-        let user: UserDB = db.live().fetch_one::<UserDB>(()).await.unwrap();
+        let user: UserDB = db.fetch_one::<UserDB>(&updated.id).await.unwrap();
         assert!(*user.password_must_change)
     }
 
@@ -217,7 +215,7 @@ mod tests {
         assert!(cleared.email.is_none(), "email cleared via null");
 
         // It persisted as NULL on the row.
-        let db_user: UserDB = db.live().fetch_one::<UserDB>(&user.id).await.unwrap();
+        let db_user: UserDB = db.fetch_one::<UserDB>(&user.id).await.unwrap();
         assert!(db_user.email.is_none());
     }
 }

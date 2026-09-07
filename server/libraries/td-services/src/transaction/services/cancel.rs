@@ -7,22 +7,22 @@ use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::DevelopProject;
-use td_database::access::{DbPool, Global};
+use td_authz::rbac::{DevelopProject, Project};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunUpdateDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
 use td_objects::dxo::transaction::{TransactionDB, TransactionParam};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn transaction_cancel(
     authz: Ctx<AuthzContext>,
     scheduler_notify: Ctx<SchedulerNotify>,
     msgs: &mut ReqCtx,
-    db: DbPool<Global>,
+    db: DbPool<AcrossProjects>,
     request: UpdateRequest<(), TransactionParam>,
 ) -> Result<(), TdError> {
     let (ctx, param, _) = request.into_parts();
@@ -31,20 +31,21 @@ async fn transaction_cancel(
     let (project, grant) = {
         let mut trx = db.read().await?;
         let conn = trx.get(authz.none());
-        let transaction: TransactionDB = conn.live().fetch_one(&transaction_id).await?;
-        let collection: CollectionDB = conn.live().fetch_one(&transaction.collection_id).await?;
+        let transaction: TransactionDB = conn.fetch_one(&transaction_id).await?;
+        let collection: ResolvedCollectionDB =
+            conn.fetch_one(&transaction.base.collection_id).await?;
         let project = collection.base.project_id;
         // before the exclusive lock: unauthorized callers must not queue on it
         let grant = authz
-            .require_in_project::<DevelopProject>(&mut trx, &ctx, &project)
+            .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
         (project, grant)
     };
     let mut trx = db.in_project(&project).begin_exclusive().await?;
     let conn = trx.get(grant);
 
-    let lfrs: Vec<LogicalFunctionRunDB> = conn.live().fetch_all(&transaction_id).await?;
-    let update = LogicalFunctionRunUpdateDB::cancel();
+    let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&transaction_id).await?;
+    let update = LogicalFunctionRunStatusUpdateDB::cancel();
     update_function_run_status(msgs, conn, &lfrs, &update).await?;
     trx.commit().await?;
 
@@ -84,7 +85,7 @@ mod tests {
                 .flat_map(|e| &e.transactions)
                 .nth(cancel_on)
                 .unwrap();
-            let transaction = t[&test_transaction].id.to_string();
+            let transaction = t[&test_transaction].base.id.to_string();
 
             async move {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())

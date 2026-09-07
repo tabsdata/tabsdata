@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::group::{Group, GroupCreate, GroupDB, GroupDBWithNames};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn create_group(
@@ -31,12 +31,10 @@ async fn create_group(
     // matching the `groups___project_id__name___idx` UNIQUE index) reports a
     // clean "already exists" error instead of the raw unique-constraint
     // violation from the insert.
-    conn.live()
-        .assert_not_exists::<GroupDB>(&group.name)
-        .await?;
-    conn.live().insert(&group).await?;
+    conn.assert_not_exists::<GroupDB>(&group.name).await?;
+    conn.insert(&group).await?;
 
-    let with_names: GroupDBWithNames = conn.live().fetch_one(&group.id).await?;
+    let with_names: GroupDBWithNames = conn.fetch_one(&group.id).await?;
     let read = Group::from_dao(with_names)?;
     Ok(read)
 }
@@ -54,7 +52,7 @@ mod tests {
     use td_objects::errors::SqlError;
     use td_objects::types::basic::ProjectName;
     use td_objects::types::basic::{AccessTokenId, BasePath, Description, GroupName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -73,22 +71,21 @@ mod tests {
         let response = service.create_group(request).await?.data;
 
         let found = db
-            .live()
             .fetch_one::<GroupDB>(&GroupName::try_from("analytics")?)
             .await?;
-        assert_eq!(response.id, found.id);
-        assert_eq!(response.name, found.name);
-        assert_eq!(response.description, found.description);
-        assert_eq!(response.created_by_id, found.created_by_id);
-        assert_eq!(response.modified_by_id, found.modified_by_id);
+        assert_eq!(response.id, found.base.id);
+        assert_eq!(response.name, found.base.name);
+        assert_eq!(response.description, found.base.description);
+        assert_eq!(response.created_by_id, found.base.created_by_id);
+        assert_eq!(response.modified_by_id, found.base.modified_by_id);
         // User-created groups are never system.
-        assert!(!*found.system);
+        assert!(!*found.base.system);
         Ok(())
     }
 
     /// Creating a group with a name that already exists in the project is
     /// rejected up front with a clean `SqlError::EntityAlreadyExists` (via the
-    /// `By::<GroupName>::assert_not_exists` pre-check) rather than the raw
+    /// `assert_not_exists` pre-check) rather than the raw
     /// `UniqueViolation` from the `groups___project_id__name___idx` constraint.
     /// (Case-insensitive uniqueness is a follow-up; for now the check is
     /// exact-match, matching the collections convention.)

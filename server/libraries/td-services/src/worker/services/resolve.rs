@@ -8,8 +8,7 @@ use crate::scheduler::message_builder::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::scope_to_project;
-use td_database::access::{GatedConnection, RW};
+use td_database::access::{AcrossProjects, DbPool, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::ReadRequest;
@@ -20,7 +19,7 @@ use td_objects::dxo::yaml::WorkerInput;
 use td_objects::types::basic::{
     AtTime, PhysicalFunctionRunStatus, WorkerId, WorkerStatus, WorkerType,
 };
-use td_queries::{LfrEntry, LiveEntry};
+use td_queries::Queries;
 use td_storage::Storage;
 use tracing::instrument;
 
@@ -28,16 +27,17 @@ use tracing::instrument;
 async fn resolve_worker_message(
     storage: Ctx<Storage>,
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<WorkerIdParam>,
 ) -> Result<WorkerInput, TdError> {
     let (ctx, param) = request.into_parts();
-    let conn = gated_trx.get(authz.none());
     let worker_id = param.worker_id;
-    let worker: WorkerDB = conn.live().fetch_one(&worker_id).await?;
-    scope_to_project(conn, &worker.project_id).await?;
+    let mut trx = db.begin().await?;
+    let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
+    let mut trx = trx.enter_project(&worker.project_id).await?;
     let at = ctx.time;
-    let input = resolve_worker_message(conn, &storage, &worker_id, &at).await?;
+    let input = resolve_worker_message(trx.get(authz.none()), &storage, &worker_id, &at).await?;
+    trx.commit().await?;
     Ok(input)
 }
 
@@ -52,41 +52,37 @@ async fn resolve_worker_message(
     level = "debug",
     err(Debug)
 )]
-pub async fn resolve_worker_message(
-    conn: &mut DomainConnection<Apiserver>,
+pub async fn resolve_worker_message<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S>,
     storage: &Storage,
     worker_id: &WorkerId,
     at: &AtTime,
 ) -> Result<WorkerInput, TdError> {
     // 404 guard + type dispatch: a rolled-back request leaves no worker
     // row, so an orphan pod resolving its message gets a clean not-found.
-    let worker: WorkerDBWithNames = conn
-        .live()
-        .fetch_one::<WorkerDBWithNames>(worker_id)
-        .await?;
+    let worker: WorkerDBWithNames = conn.fetch_one::<WorkerDBWithNames>(worker_id).await?;
 
-    let input = match worker.base.worker_type {
+    let input = match worker.base.base.worker_type {
         WorkerType::FunctionRunner => {
-            let function_run_id =
-                worker
-                    .base
-                    .physical_function_run_id
-                    .clone()
-                    .ok_or_else(|| {
-                        api_error!(
-                            ApiError::InternalError,
-                            "function-runner worker [{}] has no physical_function_run_id",
-                            worker_id,
-                        )
-                    })?;
+            let function_run_id = worker
+                .base
+                .base
+                .physical_function_run_id
+                .clone()
+                .ok_or_else(|| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "function-runner worker [{}] has no physical_function_run_id",
+                        worker_id,
+                    )
+                })?;
 
             // A pod resolving a terminalized attempt gets a clean
             // not-found instead of work.
             let pfr: PhysicalFunctionRunDB = conn
-                .live()
                 .fetch_one::<PhysicalFunctionRunDB>(&function_run_id)
                 .await?;
-            if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status) {
+            if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status) {
                 return Err(api_error!(
                     ApiError::NotFound,
                     "function run [{}] for worker [{}] is not in flight",
@@ -97,7 +93,7 @@ pub async fn resolve_worker_message(
 
             // Dispatch projection for this FR (patch-aware fvid COALESCE).
             let fr_ids = [function_run_id.clone()];
-            let frs = conn.lfr().for_dispatch(&fr_ids).await?;
+            let frs = conn.logical_runs().for_dispatch(&fr_ids).await?;
             let f = frs.into_iter().next().ok_or_else(|| {
                 api_error!(
                     ApiError::NotFound,
@@ -118,7 +114,7 @@ pub async fn resolve_worker_message(
             // row at Failed/Done while recovery restarts the workload, and
             // the restarted pod's re-pull must succeed.
             if matches!(
-                worker.base.status,
+                worker.base.base.status,
                 WorkerStatus::StopScheduled | WorkerStatus::StopRequested | WorkerStatus::Stopped
             ) {
                 return Err(api_error!(
@@ -127,7 +123,7 @@ pub async fn resolve_worker_message(
                     worker_id,
                 ));
             }
-            match worker.base.worker_type {
+            match worker.base.base.worker_type {
                 WorkerType::StageTrigger => {
                     let streamer_input = build_streamer_input(&mut *conn, storage, worker).await?;
                     WorkerInput::Streamer(Box::new(streamer_input))
@@ -143,9 +139,7 @@ pub async fn resolve_worker_message(
     // Flip Locked → Unlocked — the "make ready" the dispatch tick did for
     // the supervisor path. Idempotent: a pod restart can re-pull.
     let update = WorkerMessageStatusUpdateDB::unlocked();
-    conn.live()
-        .update::<_, WorkerDB>(&update, worker_id)
-        .await?;
+    conn.update(&update, worker_id).await?;
 
     Ok(input)
 }
@@ -162,7 +156,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
         LogicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, WorkerMessageStatus,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     /// Seed a publisher + a Locked function-runner worker, then resolve its
@@ -223,7 +217,7 @@ mod tests {
             .await?;
 
         let param = WorkerIdParam {
-            worker_id: worker.id.clone(),
+            worker_id: worker.base.id.clone(),
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(param);
         let response = Services::with_defaults(db.clone())
@@ -234,10 +228,13 @@ mod tests {
         let WorkerInput::Function(message) = response else {
             panic!("expected Function");
         };
-        assert_eq!(message.info.function_run_id, pfr.id);
+        assert_eq!(message.info.function_run_id, pfr.base.id);
 
-        let worker_after: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker.id).await?;
-        assert_eq!(worker_after.message_status, WorkerMessageStatus::Unlocked);
+        let worker_after: WorkerDB = db.fetch_one::<WorkerDB>(&worker.base.id).await?;
+        assert_eq!(
+            worker_after.base.message_status,
+            WorkerMessageStatus::Unlocked
+        );
 
         Ok(())
     }

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function_run::resolve_bound_function_run;
+use crate::function_run::resolve_current_function_run;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -16,7 +16,7 @@ use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
 use td_objects::{FromDao, and};
-use td_queries::{CurrentEntry, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn function_run_read(
@@ -32,23 +32,23 @@ async fn function_run_read(
     let conn = gated_conn.get(grant);
 
     let collection_id_name = collection_param.collection;
-    let _collection: ActiveCollectionDB = conn.live().fetch_one(&collection_id_name).await?;
+    let _collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
 
     let function_id_name = function_param.function;
     let function: FunctionDBWithNames = conn
-        .current()
-        .state(FunctionDBWithNames::executable())
-        .fetch_one(and!(&collection_id_name, &function_id_name))
+        .latest()
+        .fetch_one(and!(
+            &collection_id_name,
+            &function_id_name,
+            FunctionDBWithNames::executable()
+        ))
         .await?;
     let execution_id = execution_param.execution;
-    conn.live()
-        .assert_exists::<ExecutionDB>(&execution_id)
-        .await?;
+    conn.assert_exists::<ExecutionDB>(&execution_id).await?;
 
-    // find function run via LFR pointer: replays mint multiple FRs
-    // under one LFR identity; the canonical one is whatever the
-    // pointer currently binds to.
-    let run = resolve_bound_function_run(conn, &execution_id, &function.base.id).await?;
+    // Replays mint several attempts under one LFR; the current one is canonical.
+    let run =
+        resolve_current_function_run(conn, &execution_id, &function.base.base.function_id).await?;
     PhysicalFunctionRun::from_dao(run)
 }
 #[cfg(test)]
@@ -130,10 +130,10 @@ mod tests {
                     collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                 },
                 FunctionParam {
-                    function: FunctionIdName::from_str(&format!("{}", function_version.name))?,
+                    function: FunctionIdName::from_str(&format!("{}", function_version.base.name))?,
                 },
                 ExecutionParam {
-                    execution: execution.id.clone(),
+                    execution: execution.base.id.clone(),
                 },
             ))
             .in_project(p.id);
@@ -141,25 +141,34 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let response = service.function_run_read(request).await;
         let response = response?;
-        assert_eq!(response.id, physical_function_run.id);
-        assert_eq!(response.collection_id, physical_function_run.collection_id);
+        assert_eq!(response.id, physical_function_run.base.id);
+        assert_eq!(
+            response.collection_id,
+            physical_function_run.base.collection_id
+        );
         assert_eq!(
             response.function_version_id,
-            physical_function_run.function_version_id
+            physical_function_run.base.function_version_id
         );
-        assert_eq!(response.execution_id, physical_function_run.execution_id);
+        assert_eq!(
+            response.execution_id,
+            physical_function_run.base.execution_id
+        );
         assert_eq!(
             response.transaction_id,
-            physical_function_run.transaction_id
+            physical_function_run.base.transaction_id
         );
-        assert_eq!(response.triggered_on, physical_function_run.triggered_on);
-        assert_eq!(response.trigger, physical_function_run.trigger);
-        assert_eq!(response.started_on, physical_function_run.started_on);
-        assert_eq!(response.ended_on, physical_function_run.ended_on);
+        assert_eq!(
+            response.triggered_on,
+            physical_function_run.base.triggered_on
+        );
+        assert_eq!(response.trigger, physical_function_run.base.trigger);
+        assert_eq!(response.started_on, physical_function_run.base.started_on);
+        assert_eq!(response.ended_on, physical_function_run.base.ended_on);
         assert_eq!(response.status, PhysicalFunctionRunStatus::Done);
         assert_eq!(response.name, FunctionName::try_from("joaquin")?);
         assert_eq!(response.collection, collection.name);
-        assert_eq!(response.execution, execution.name);
+        assert_eq!(response.execution, execution.base.name);
         assert_eq!(response.triggered_by, UserName::admin());
         Ok(())
     }

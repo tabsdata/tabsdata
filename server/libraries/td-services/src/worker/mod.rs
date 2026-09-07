@@ -23,14 +23,14 @@ pub(crate) mod tests {
             .join(WORK_FOLDER)
             .join(PROC_FOLDER)
             .join(Ephemeral.as_ref())
-            .join(match worker_db.worker_type {
+            .join(match worker_db.base.worker_type {
                 WorkerType::FunctionRunner => WorkerName::Function.as_ref(),
                 WorkerType::CronTrigger => WorkerName::CronTrigger.as_ref(),
                 WorkerType::StageTrigger => WorkerName::StageTrigger.as_ref(),
             })
             .join(WORK_FOLDER)
             .join(CAST_FOLDER)
-            .join(format!("{}_{}", worker_db.id, cast))
+            .join(format!("{}_{}", worker_db.base.id, cast))
             .join(WORK_FOLDER)
             .join(LOG_FOLDER)
     }

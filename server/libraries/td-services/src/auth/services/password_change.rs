@@ -10,13 +10,13 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::session_provider::Sessions;
 use td_common::provider::Provider;
-use td_database::access::{DbPool, Global, Grant};
+use td_database::access::{DbPool, DbScope, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::auth::{PasswordChange, SessionDB, SessionPasswordChangeDB};
-use td_objects::dxo::user::UserDB;
-use td_objects::types::basic::{AtTime, PasswordChangeTime, PasswordMustChange};
-use td_queries::LiveEntry;
+use td_objects::dxo::auth::{PasswordChange, SessionInvalidateDB};
+use td_objects::dxo::user::{UserDB, UserUpdateDB};
+use td_objects::types::basic::{AtTime, PasswordChangeTime, PasswordMustChange, SessionStatus};
+use td_queries::Queries;
 use td_security::config::PasswordHashingConfig;
 
 #[service_factory]
@@ -40,21 +40,21 @@ async fn password_change(
     assert_user_enabled(&user)?;
 
     let hash = create_password_hash(&password_hashing_config, &request.new_password)?;
-    let updated = UserDB {
+    let updated = UserUpdateDB {
+        full_name: user.full_name.clone(),
+        email: Some(user.email.clone()),
+        modified_on: at.into(),
+        modified_by_id: user.id.into(),
         password_hash: hash,
         password_set_on: PasswordChangeTime::try_from(&at)?,
         password_must_change: PasswordMustChange::FALSE,
-        ..user.clone()
+        enabled: user.enabled,
     };
-    conn.live()
-        .update::<UserDB, UserDB>(&updated, user.id)
-        .await?;
+    conn.update::<UserUpdateDB>(&updated, user.id).await?;
 
     // invalidate all existing sessions for the user id
-    let invalidate = SessionPasswordChangeDB::new(at);
-    conn.live()
-        .update::<SessionPasswordChangeDB, SessionDB>(&invalidate, user.id)
-        .await?;
+    let invalidate = SessionInvalidateDB::new(at, SessionStatus::InvalidPasswordChange);
+    conn.update(&invalidate, user.id).await?;
 
     // Housekeeping purge commits with the transaction; the cache invalidation
     // must wait for the commit (see LoginService).
@@ -65,11 +65,11 @@ async fn password_change(
     Ok(())
 }
 
-async fn authenticate(
-    conn: &mut DomainConnection<Apiserver>,
+async fn authenticate<S: DbScope>(
+    conn: &mut DomainConnection<Apiserver, S>,
     request: &PasswordChange,
 ) -> Result<UserDB, TdError> {
-    let user: UserDB = conn.live().fetch_one(&request.name).await?;
+    let user: UserDB = conn.fetch_one(&request.name).await?;
     assert_current_password(&user.password_hash, &request.old_password)?;
     Ok(user)
 }
@@ -82,12 +82,13 @@ mod tests {
     use td_common::jwt::decode_token;
     use td_database::pool::TdPool;
     use td_error::assert_service_error;
+    use td_objects::dxo::auth::SessionDB;
     use td_objects::dxo::auth::{Login, PasswordChange};
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::UserName;
     use td_objects::types::basic::{NewPassword, OldPassword};
     use td_objects::types::basic::{Password, SessionStatus};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
 
     #[td_test::test(db)]
     async fn test_password_change_ok(db: TdPool) -> Result<(), TdError> {
@@ -118,10 +119,7 @@ mod tests {
         let res = service.password_change(request).await;
         assert!(res.is_ok());
 
-        let session = db
-            .live()
-            .fetch_optional::<SessionDB>(access_token_id)
-            .await?;
+        let session = db.fetch_optional::<SessionDB>(access_token_id).await?;
         match session {
             Some(session) => {
                 assert_eq!(session.status, SessionStatus::InvalidPasswordChange);

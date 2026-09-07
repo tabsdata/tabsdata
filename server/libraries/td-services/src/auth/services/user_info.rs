@@ -13,7 +13,7 @@ use td_objects::dxo::role::{Role, RoleDBWithNames};
 use td_objects::dxo::user::{UserDBWithNames, UserInfo};
 use td_objects::dxo::user_role::UserRoleDBWithNames;
 use td_objects::types::basic::RoleId;
-use td_queries::{ChunkedQueries, LiveEntry};
+use td_queries::Queries;
 
 #[service_factory]
 async fn user_info(
@@ -25,11 +25,11 @@ async fn user_info(
     let conn = gated_conn.get(authz.none());
     let user_id = ctx.user_id;
 
-    let user: UserDBWithNames = conn.live().fetch_one(&user_id).await?;
+    let user: UserDBWithNames = conn.fetch_one(&user_id).await?;
 
-    let memberships: Vec<UserRoleDBWithNames> = conn.live().fetch_all(&user_id).await?;
+    let memberships: Vec<UserRoleDBWithNames> = conn.fetch_all(&user_id).await?;
     let role_ids: Vec<RoleId> = memberships.iter().map(|x| x.base.role_id).collect();
-    let role_rows: Vec<RoleDBWithNames> = conn.fetch_all_chunked::<_, RoleId>(&role_ids).await?;
+    let role_rows: Vec<RoleDBWithNames> = conn.chunked().fetch_all(&role_ids, ()).await?;
     let roles = role_rows
         .into_iter()
         .map(Role::from_dao)

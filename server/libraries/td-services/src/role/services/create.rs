@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::role::{Role, RoleCreate, RoleDBWithNames};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn create_role(
@@ -26,9 +26,9 @@ async fn create_role(
     let conn = gated_trx.get(grant);
 
     let role = create.to_dao(&ctx);
-    conn.live().insert(&role).await?;
+    conn.insert(&role).await?;
 
-    let with_names: RoleDBWithNames = conn.live().fetch_one(&role.id).await?;
+    let with_names: RoleDBWithNames = conn.fetch_one(&role.id).await?;
     let read = Role::from_dao(with_names)?;
     Ok(read)
 }
@@ -42,7 +42,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::role::RoleDB;
     use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
 
     #[td_test::test(db)]
     async fn test_create_role(db: TdPool) -> Result<(), TdError> {
@@ -58,10 +58,7 @@ mod tests {
         let response = service.create_role(request).await;
         let response = response?;
 
-        let found = db
-            .live()
-            .fetch_one::<RoleDB>(&RoleName::try_from("test")?)
-            .await?;
+        let found = db.fetch_one::<RoleDB>(&RoleName::try_from("test")?).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.name, found.name);
         assert_eq!(response.description, found.description);

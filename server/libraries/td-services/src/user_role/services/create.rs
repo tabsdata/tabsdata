@@ -16,7 +16,7 @@ use td_objects::dxo::role::RoleParam;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::{UserRole, UserRoleCreate, UserRoleDB, UserRoleDBWithNames};
 use td_objects::types::basic::Fixed;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn create_user_role(
@@ -31,15 +31,15 @@ async fn create_user_role(
         .await?;
     let conn = trx.get(grant);
 
-    let role: RoleDB = conn.live().fetch_one(&param.role).await?;
+    let role: RoleDB = conn.fetch_one(&param.role).await?;
 
-    let user: UserDB = conn.live().fetch_one(&create.user).await?;
+    let user: UserDB = conn.fetch_one(&create.user).await?;
     assert_user_is_not_system(&user)?;
 
     let user_role = UserRoleDB::new(user.id, role.id, &ctx, Fixed::FALSE);
-    conn.live().insert(&user_role).await?;
+    conn.insert(&user_role).await?;
 
-    let with_names: UserRoleDBWithNames = conn.live().fetch_one(&user_role.id).await?;
+    let with_names: UserRoleDBWithNames = conn.fetch_one(&user_role.id).await?;
     let read = UserRole::from_dao(with_names)?;
     trx.commit().await?;
 
@@ -63,7 +63,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Description, RoleIdName, RoleName, UserEnabled, UserId, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -95,7 +95,7 @@ mod tests {
         let response = service.create_user_role(request).await;
         let response = response?;
 
-        let found = db.live().fetch_one::<UserRoleDB>(&response.id).await?;
+        let found = db.fetch_one::<UserRoleDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.user_id, found.user_id);
         assert_eq!(response.role_id, found.role_id);

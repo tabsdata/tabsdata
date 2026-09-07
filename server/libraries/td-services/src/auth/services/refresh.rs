@@ -16,11 +16,12 @@ use td_common::provider::Provider;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
 use td_objects::and;
-use td_objects::dxo::auth::{SessionDB, SessionNewTokenDB, TokenResponse};
+use td_objects::dxo::auth::{SessionDB, SessionInvalidateDB, TokenResponse};
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::RefreshToken;
-use td_queries::LiveEntry;
+use td_objects::types::basic::SessionStatus;
+use td_queries::Queries;
 
 #[service_factory]
 async fn refresh(
@@ -41,20 +42,18 @@ async fn refresh(
     // find and lock the session by access token ID and refresh token ID; the
     // lock serializes concurrent refreshes so the token can be redeemed once
     let session: SessionDB = conn
-        .live()
-        .fetch_one_for_update(and!(&access_token_id, &refresh_token_id))
+        .for_update()
+        .fetch_one(and!(&access_token_id, &refresh_token_id))
         .await?;
     assert_session_active(&session)?;
-    let user: UserDB = conn.live().fetch_one(&ctx.user_id).await?;
+    let user: UserDB = conn.fetch_one(&ctx.user_id).await?;
     assert_user_enabled(&user)?;
 
-    let new_token = SessionNewTokenDB::new(at);
-    conn.live()
-        .update::<SessionNewTokenDB, SessionDB>(&new_token, access_token_id)
-        .await?;
+    let new_token = SessionInvalidateDB::new(at, SessionStatus::InvalidNewToken);
+    conn.update(&new_token, access_token_id).await?;
 
     let new_session = SessionDB::new(ctx.user_id, at, session_expiration(&jwt_config)?);
-    conn.live().insert(&new_session).await?;
+    conn.insert(&new_session).await?;
 
     let token = create_access_token(&jwt_config, &new_session)?;
 
@@ -79,7 +78,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::UserId;
     use td_objects::types::basic::{AccessTokenId, Password, SessionStatus, UserName};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
 
     #[td_test::test(db)]
     async fn test_refresh_ok(db: TdPool) -> Result<(), TdError> {
@@ -114,7 +113,6 @@ mod tests {
         assert_session(&db, &Some(access_token_id)).await;
 
         let session = db
-            .live()
             .fetch_optional::<SessionDB>(original_access_token_id)
             .await?;
         match session {

@@ -33,7 +33,7 @@ async fn test_create_already_existing(db: TdPool) {
     let request =
         RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create);
 
-    // The `By::<UserName>::assert_not_exists` pre-check rejects the duplicate
+    // The `assert_not_exists` pre-check rejects the duplicate
     // up front with a clean `EntityAlreadyExists` rather than the raw
     // `UniqueViolation` from the insert.
     assert_service_error(service.create_user(request).await, |err| match err {

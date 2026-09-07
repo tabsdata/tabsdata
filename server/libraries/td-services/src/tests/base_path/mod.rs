@@ -26,20 +26,27 @@ mod reads;
 mod stamping;
 
 use crate::logical::dispatch_mint::{MintedDispatch, mint_function_runs_on_dispatch};
-use td_database::domain::DomainConnection;
+use td_database::access::InProject;
+use td_database::connection::PgConnectionExt;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBWithNames;
 use td_objects::types::basic::{AtTime, PhysicalFunctionRunId};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 /// Dispatch-mint `ready` and commit, so reads observe what mint wrote.
 async fn mint_committed(
     db: &TdPool,
     ready: &[LogicalFunctionRunDB],
 ) -> Result<Vec<MintedDispatch>, TdError> {
-    let mut conn = DomainConnection::new(db.begin().await.unwrap());
+    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+    if let Some(first) = ready.first() {
+        conn.scope_in_project(&first.project_id.to_string())
+            .await
+            .unwrap();
+    }
     let minted = mint_function_runs_on_dispatch(&mut conn, ready, &AtTime::now()).await?;
     conn.commit().await.unwrap();
     Ok(minted)
@@ -49,9 +56,6 @@ async fn fetch_run(
     db: &TdPool,
     id: &PhysicalFunctionRunId,
 ) -> Result<PhysicalFunctionRunDBWithNames, TdError> {
-    let run = db
-        .live()
-        .fetch_one::<PhysicalFunctionRunDBWithNames>(id)
-        .await?;
+    let run = db.fetch_one::<PhysicalFunctionRunDBWithNames>(id).await?;
     Ok(run)
 }

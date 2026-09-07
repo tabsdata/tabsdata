@@ -13,7 +13,7 @@ use td_objects::dxo::role::{RoleDB, RoleParam};
 use td_objects::dxo::user::{UserDB, UserParam};
 use td_objects::dxo::user_role::{UserRole, UserRoleDBWithNames};
 use td_objects::{FromDao, and};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn read_user_role(
@@ -31,9 +31,9 @@ async fn read_user_role(
         .await?;
     let conn = gated_conn.get(grant);
 
-    let role: RoleDB = conn.live().fetch_one(&role_param.role).await?;
-    let user: UserDB = conn.live().fetch_one(&user_param.user).await?;
-    let with_names: UserRoleDBWithNames = conn.live().fetch_one(and!(&role.id, &user.id)).await?;
+    let role: RoleDB = conn.fetch_one(&role_param.role).await?;
+    let user: UserDB = conn.fetch_one(&user_param.user).await?;
+    let with_names: UserRoleDBWithNames = conn.fetch_one(and!(&role.id, &user.id)).await?;
     UserRole::from_dao(with_names)
 }
 
@@ -49,7 +49,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Description, RoleIdName, RoleName, UserEnabled, UserId, UserIdName, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -80,7 +80,7 @@ mod tests {
         let response = service.read_user_role(request).await;
         let response = response?;
 
-        let found = db.live().fetch_one::<UserRoleDB>(&user_role.id).await?;
+        let found = db.fetch_one::<UserRoleDB>(&user_role.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.user_id, found.user_id);
         assert_eq!(response.role_id, found.role_id);

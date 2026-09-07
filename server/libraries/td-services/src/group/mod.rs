@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use td_database::access::InProject;
 use td_error::td_error;
 use td_objects::types::basic::GroupName;
 
@@ -15,17 +16,17 @@ pub enum GroupError {
 
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::DaoCore;
+use td_objects::Dao;
 use td_objects::dxo::group::{GroupDB, GroupDBWithNames, GroupUpdate};
 use td_objects::errors::SqlError;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 /// Rejects mutation of a row whose `system` flag is true. The seeded
 /// `default` / `source` / `destination` groups are protected from
 /// update and delete by this guard.
 pub fn assert_not_system(group: &GroupDBWithNames) -> Result<(), TdError> {
-    if *group.base.system {
-        Err(GroupError::SystemGroup(group.base.name.clone()))?
+    if *group.base.base.system {
+        Err(GroupError::SystemGroup(group.base.base.name.clone()))?
     }
     Ok(())
 }
@@ -37,17 +38,13 @@ pub fn assert_not_system(group: &GroupDBWithNames) -> Result<(), TdError> {
 /// The connection is project-scoped, matching the `(project_id, name)` unique
 /// index — names collide only within a project.
 pub async fn assert_group_rename_available(
-    conn: &mut DomainConnection<Apiserver>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     update: &GroupUpdate,
     current: &GroupDBWithNames,
 ) -> Result<(), TdError> {
     if let Some(new_name) = &update.name
-        && new_name != &current.base.name
-        && conn
-            .live()
-            .fetch_optional::<GroupDB>(new_name)
-            .await?
-            .is_some()
+        && new_name != &current.base.base.name
+        && conn.fetch_optional::<GroupDB>(new_name).await?.is_some()
     {
         Err(SqlError::EntityAlreadyExists(
             GroupDB::display_name().to_string(),

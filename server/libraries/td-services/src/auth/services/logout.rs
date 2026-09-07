@@ -9,9 +9,10 @@ use td_authz::session_provider::Sessions;
 use td_common::provider::Provider;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
-use td_objects::dxo::auth::{SessionDB, SessionLogoutDB};
+use td_objects::dxo::auth::SessionInvalidateDB;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_queries::LiveEntry;
+use td_objects::types::basic::SessionStatus;
+use td_queries::Queries;
 
 #[service_factory]
 async fn logout(
@@ -24,10 +25,8 @@ async fn logout(
     let mut gated_trx = db.begin().await?;
     let conn = gated_trx.get(authz.none());
 
-    let logout = SessionLogoutDB::new(ctx.time);
-    conn.live()
-        .update::<SessionLogoutDB, SessionDB>(&logout, ctx.access_token_id)
-        .await?;
+    let logout = SessionInvalidateDB::new(ctx.time, SessionStatus::InvalidLogout);
+    conn.update(&logout, ctx.access_token_id).await?;
 
     // Housekeeping purge commits with the transaction; the cache invalidation
     // must wait for the commit (see LoginService).
@@ -40,16 +39,15 @@ async fn logout(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::Services;
     use td_common::jwt::decode_token;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::auth::Login;
+    use td_objects::dxo::auth::{Login, SessionDB};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::{Password, SessionStatus, UserId, UserName};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
 
     #[td_test::test(db)]
     async fn test_logout_ok(db: TdPool) -> Result<(), TdError> {
@@ -74,10 +72,7 @@ mod tests {
         let res = service.logout(request).await;
         assert!(res.is_ok());
 
-        let session = db
-            .live()
-            .fetch_optional::<SessionDB>(access_token_id)
-            .await?;
+        let session = db.fetch_optional::<SessionDB>(access_token_id).await?;
         match session {
             Some(session) => {
                 assert_eq!(session.status, SessionStatus::InvalidLogout);

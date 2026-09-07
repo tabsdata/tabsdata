@@ -11,7 +11,7 @@ use td_database::access::{GatedConnection, InProject, RW};
 use td_error::TdError;
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::group::{GroupDB, GroupDBWithNames, GroupParam};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn delete_group(
@@ -26,12 +26,12 @@ async fn delete_group(
         .await?;
     let conn = gated_trx.get(grant);
 
-    let current: GroupDBWithNames = conn.live().fetch_one(&param.group).await?;
+    let current: GroupDBWithNames = conn.fetch_one(&param.group).await?;
     // Reject deletion of the seeded system groups via the `system`
     // flag — `default` / `source` / `destination` carry it and
     // therefore cannot be deleted.
     assert_not_system(&current)?;
-    conn.live().delete::<GroupDB>(current.base.id).await?;
+    conn.delete::<GroupDB>(current.base.base.id).await?;
     Ok(())
 }
 
@@ -45,8 +45,9 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::group::GroupDB;
     use td_objects::types::basic::{AccessTokenId, Description, GroupIdName, GroupName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
     use td_security::SOURCE_GROUP;
 
@@ -64,7 +65,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete(GroupParam {
-                group: GroupIdName::from_str(&format!("~{}", group.id))?,
+                group: GroupIdName::from_str(&format!("~{}", group.base.id))?,
             })
             .in_project(p.id);
 
@@ -73,11 +74,10 @@ mod tests {
 
         // The user-created group is gone; the seeded system rows remain.
         let gone = db
-            .live()
             .fetch_all::<GroupDB>(&GroupName::try_from("analytics")?)
             .await?;
         assert!(gone.is_empty());
-        let remaining = db.live().fetch_all::<GroupDB>(()).await?;
+        let remaining = db.fetch_all::<GroupDB>(()).await?;
         assert_eq!(remaining.len(), 3);
         Ok(())
     }

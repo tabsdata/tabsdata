@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::role::{Role, RoleDBWithNames, RoleParam};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn read_role(
@@ -28,7 +28,7 @@ async fn read_role(
         )
         .await?;
     let conn = gated_conn.get(grant);
-    let with_names: RoleDBWithNames = conn.live().fetch_one(&param.role).await?;
+    let with_names: RoleDBWithNames = conn.fetch_one(&param.role).await?;
     Role::from_dao(with_names)
 }
 
@@ -42,7 +42,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::role::RoleDB;
     use td_objects::types::basic::{AccessTokenId, Description, RoleIdName, RoleName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -64,7 +64,6 @@ mod tests {
         let response = service.read_role(request).await;
         let response = response?;
         let found = db
-            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await?;
         assert_eq!(response.id, found.id);
@@ -97,7 +96,6 @@ mod tests {
         let response = service.read_role(request).await;
         let response = response?;
         let found = db
-            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await?;
         assert_eq!(response.id, found.id);

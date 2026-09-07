@@ -5,25 +5,25 @@
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{GatedConnection, RO};
+use td_database::access::{AcrossProjects, GatedConnection, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::worker::Worker;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn worker_list(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    gated_conn: &mut GatedConnection<RO, AcrossProjects>,
     request: ListRequest,
 ) -> Result<ListResponse<Worker>, TdError> {
     let (ctx, _, list_params) = request.into_parts();
     let (grant, visible) = authz.visible_projects(gated_conn, &ctx).await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Worker>::try_from(&list_params)?;
-    let rows = conn.live().list(&visible, &query_params).await?;
+    let rows = conn.list(&visible, &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -152,23 +152,38 @@ mod tests {
 
         let response = service.worker_list(request).await?.data;
         assert_eq!(response.len, workers.len());
-        assert_eq!(response.data[0].id, workers[0].id);
-        assert_eq!(response.data[0].message_status, workers[0].message_status);
-        assert_eq!(response.data[0].worker_type, workers[0].worker_type);
+        assert_eq!(response.data[0].id, workers[0].base.id);
+        assert_eq!(
+            response.data[0].message_status,
+            workers[0].base.message_status
+        );
+        assert_eq!(response.data[0].worker_type, workers[0].base.worker_type);
         assert_eq!(response.data[0].worker_type, WorkerType::FunctionRunner);
-        assert_eq!(response.data[1].id, workers[1].id);
-        assert_eq!(response.data[1].message_status, workers[1].message_status);
-        assert_eq!(response.data[1].worker_type, workers[1].worker_type);
-        assert_eq!(response.data[2].id, workers[2].id);
-        assert_eq!(response.data[2].message_status, workers[2].message_status);
-        assert_eq!(response.data[2].worker_type, workers[2].worker_type);
-        assert_eq!(response.data[3].id, workers[3].id);
-        assert_eq!(response.data[3].message_status, workers[3].message_status);
-        assert_eq!(response.data[3].worker_type, workers[3].worker_type);
-        assert_eq!(response.data[4].worker_type, workers[4].worker_type);
-        assert_eq!(response.data[4].id, workers[4].id);
-        assert_eq!(response.data[4].message_status, workers[4].message_status);
-        assert_eq!(response.data[4].worker_type, workers[4].worker_type);
+        assert_eq!(response.data[1].id, workers[1].base.id);
+        assert_eq!(
+            response.data[1].message_status,
+            workers[1].base.message_status
+        );
+        assert_eq!(response.data[1].worker_type, workers[1].base.worker_type);
+        assert_eq!(response.data[2].id, workers[2].base.id);
+        assert_eq!(
+            response.data[2].message_status,
+            workers[2].base.message_status
+        );
+        assert_eq!(response.data[2].worker_type, workers[2].base.worker_type);
+        assert_eq!(response.data[3].id, workers[3].base.id);
+        assert_eq!(
+            response.data[3].message_status,
+            workers[3].base.message_status
+        );
+        assert_eq!(response.data[3].worker_type, workers[3].base.worker_type);
+        assert_eq!(response.data[4].worker_type, workers[4].base.worker_type);
+        assert_eq!(response.data[4].id, workers[4].base.id);
+        assert_eq!(
+            response.data[4].message_status,
+            workers[4].base.message_status
+        );
+        assert_eq!(response.data[4].worker_type, workers[4].base.worker_type);
         assert_eq!(response.data[4].worker_type, WorkerType::CronTrigger);
         let expected_project = Some(p.name.clone());
         assert!(response.data.iter().all(|w| w.project == expected_project));

@@ -12,7 +12,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::user::{UserDBWithNames, UserParam, UserRead};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn read_user(
@@ -23,7 +23,7 @@ async fn read_user(
     let (ctx, param) = request.into_parts();
     let id_name = param.user;
     let conn = gated_conn.get(authz.none());
-    let row: UserDBWithNames = conn.live().fetch_one(&id_name).await?;
+    let row: UserDBWithNames = conn.fetch_one(&id_name).await?;
     assert_user_readable(&row)?;
     let _grant = authz
         .require::<User, (SelfUser, ManageAccess)>(conn, &ctx, &row.base.id)

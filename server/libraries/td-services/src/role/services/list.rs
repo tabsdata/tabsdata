@@ -12,7 +12,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::role::Role;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn list_role(
@@ -30,7 +30,7 @@ async fn list_role(
         .await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Role>::try_from(&list_params)?;
-    let rows = conn.live().list(&(), &query_params).await?;
+    let rows = conn.list(&(), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -42,7 +42,7 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::role::RoleDB;
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -71,7 +71,6 @@ mod tests {
         assert_eq!(response[2].name, RoleName::try_from("project_creator")?);
 
         let found = db
-            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await?;
         let role = response.get(3).unwrap();

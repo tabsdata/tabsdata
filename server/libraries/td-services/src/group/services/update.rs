@@ -11,10 +11,8 @@ use td_database::access::{GatedConnection, InProject, RW};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
-use td_objects::dxo::group::{
-    Group, GroupDB, GroupDBUpdate, GroupDBWithNames, GroupParam, GroupUpdate,
-};
-use td_queries::LiveEntry;
+use td_objects::dxo::group::{Group, GroupDBWithNames, GroupParam, GroupUpdate, GroupUpdateDB};
+use td_queries::Queries;
 
 #[service_factory]
 async fn update_group(
@@ -29,14 +27,14 @@ async fn update_group(
         .await?;
     let conn = gated_trx.get(grant);
 
-    let update_db = GroupDBUpdate {
+    let update_db = GroupUpdateDB {
         name: update.name.clone(),
         description: update.description.clone(),
         modified_on: ctx.time.into(),
         modified_by_id: ctx.user_id.into(),
     };
 
-    let current: GroupDBWithNames = conn.live().fetch_one(&param.group).await?;
+    let current: GroupDBWithNames = conn.fetch_one(&param.group).await?;
     // Reject mutation of the seeded system groups via the `system`
     // flag — `default` / `source` / `destination` carry it.
     assert_not_system(&current)?;
@@ -45,10 +43,9 @@ async fn update_group(
     // unique-constraint violation from the update write.
     assert_group_rename_available(conn, &update, &current).await?;
 
-    conn.live()
-        .update::<GroupDBUpdate, GroupDB>(&update_db, current.base.id)
+    conn.update::<GroupUpdateDB>(&update_db, current.base.base.id)
         .await?;
-    let with_names: GroupDBWithNames = conn.live().fetch_one(&current.base.id).await?;
+    let with_names: GroupDBWithNames = conn.fetch_one(&current.base.base.id).await?;
     let read = Group::from_dao(with_names)?;
     Ok(read)
 }
@@ -63,8 +60,9 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{TdError, assert_service_error};
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::group::GroupDB;
     use td_objects::types::basic::{AccessTokenId, Description, GroupIdName, GroupName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -96,14 +94,11 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let response = service.update_group(request).await?.data;
 
-        let found = db
-            .live()
-            .fetch_one::<GroupDB>(&GroupName::try_from("ml")?)
-            .await?;
-        assert_eq!(response.id, found.id);
-        assert_eq!(response.name, found.name);
-        assert_eq!(response.description, found.description);
-        assert!(!*found.system);
+        let found = db.fetch_one::<GroupDB>(&GroupName::try_from("ml")?).await?;
+        assert_eq!(response.id, found.base.id);
+        assert_eq!(response.name, found.base.name);
+        assert_eq!(response.description, found.base.description);
+        assert!(!*found.base.system);
         Ok(())
     }
 

@@ -6,31 +6,31 @@ use crate::execution::update_status::update_worker_status;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::scope_to_project;
-use td_database::access::{GatedConnection, RW};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::worker::{
     CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerIdParam, WorkerUpdateDB,
 };
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn worker_callback(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW>,
+    db: DbPool<AcrossProjects>,
     request: UpdateRequest<CallbackRequest, WorkerIdParam>,
 ) -> Result<(), TdError> {
     let (_, param, callback) = request.into_parts();
-    let conn = gated_trx.get(authz.none());
     let update = WorkerExecutionUpdate::try_from(&callback)?;
 
     let worker_id = param.worker_id;
-    let worker: WorkerDB = conn.live().fetch_one(&worker_id).await?;
-    scope_to_project(conn, &worker.project_id).await?;
+    let mut trx = db.begin().await?;
+    let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
+    let mut trx = trx.enter_project(&worker.project_id).await?;
 
     let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
-    update_worker_status(conn, &worker_update, &worker_id).await?;
+    update_worker_status(trx.get(authz.none()), &worker_update, &worker_id).await?;
+    trx.commit().await?;
     Ok(())
 }
 
@@ -51,7 +51,7 @@ mod tests {
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, Ended, FunctionRuntimeValues,
         Started, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -110,7 +110,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
             WorkerIdParam {
-                worker_id: worker.id.clone(),
+                worker_id: worker.base.id.clone(),
             },
             response,
         );
@@ -118,12 +118,11 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         service.worker_callback(request).await?;
 
-        let worker: WorkerDBWithNames =
-            db.live().fetch_one::<WorkerDBWithNames>(&worker.id).await?;
-        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.base.status, WorkerStatus::Running);
-        assert_eq!(worker.base.started_on, Some(Started::from(started_on)));
-        assert_eq!(worker.base.ended_on, None);
+        let worker: WorkerDBWithNames = db.fetch_one::<WorkerDBWithNames>(&worker.base.id).await?;
+        assert_eq!(worker.base.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.base.status, WorkerStatus::Running);
+        assert_eq!(worker.base.base.started_on, Some(Started::from(started_on)));
+        assert_eq!(worker.base.base.ended_on, None);
 
         let ended_on = AtTime::now();
         let response: CallbackRequest = ResponseMessagePayload {
@@ -138,7 +137,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
             WorkerIdParam {
-                worker_id: worker.base.id.clone(),
+                worker_id: worker.base.base.id.clone(),
             },
             response,
         );
@@ -147,13 +146,12 @@ mod tests {
         service.worker_callback(request).await?;
 
         let worker: WorkerDBWithNames = db
-            .live()
-            .fetch_one::<WorkerDBWithNames>(&worker.base.id)
+            .fetch_one::<WorkerDBWithNames>(&worker.base.base.id)
             .await?;
-        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.base.status, WorkerStatus::Done);
-        assert_eq!(worker.base.started_on, Some(Started::from(started_on)));
-        assert_eq!(worker.base.ended_on, Some(Ended::from(ended_on)));
+        assert_eq!(worker.base.base.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.base.base.status, WorkerStatus::Done);
+        assert_eq!(worker.base.base.started_on, Some(Started::from(started_on)));
+        assert_eq!(worker.base.base.ended_on, Some(Ended::from(ended_on)));
 
         Ok(())
     }

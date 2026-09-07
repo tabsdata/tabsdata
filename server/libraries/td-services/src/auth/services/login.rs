@@ -18,7 +18,7 @@ use td_error::TdError;
 use td_objects::dxo::auth::{Login, SessionDB, TokenResponse};
 use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::AtTime;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn login(
@@ -35,14 +35,14 @@ async fn login(
     // unknown user and wrong password both surface as AuthenticationFailed so
     // neither can be distinguished; enabled/password-change errors below keep
     // their own codes so a valid login can act on them
-    let user: Option<UserDB> = conn.live().fetch_optional(&request.name).await?;
+    let user: Option<UserDB> = conn.fetch_optional(&request.name).await?;
     let user = assert_login_user(user)?;
     assert_current_password(&user.password_hash, &request.password)?;
     assert_user_enabled(&user)?;
     assert_no_password_change_required(&user)?;
 
     let session = SessionDB::new(user.id, at, session_expiration(&jwt_config)?);
-    conn.live().insert(&session).await?;
+    conn.insert(&session).await?;
 
     let token = create_access_token(&jwt_config, &session)?;
 

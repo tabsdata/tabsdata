@@ -14,7 +14,7 @@ use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::role::{RoleCreate, RoleDB};
 use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[td_error]
 enum ProbeError {
@@ -29,7 +29,7 @@ async fn probe_commits(
 ) -> Result<(), TdError> {
     let (ctx, _, create) = request.into_parts();
     let conn = gated_trx.get(Grant::asserted("test: connection lifecycle probe"));
-    conn.live().insert(&create.to_dao(&ctx)).await?;
+    conn.insert(&create.to_dao(&ctx)).await?;
     Ok(())
 }
 
@@ -40,7 +40,7 @@ async fn probe_rolls_back(
 ) -> Result<(), TdError> {
     let (ctx, _, create) = request.into_parts();
     let conn = gated_trx.get(Grant::asserted("test: connection lifecycle probe"));
-    conn.live().insert(&create.to_dao(&ctx)).await?;
+    conn.insert(&create.to_dao(&ctx)).await?;
     Err(ProbeError::Failed.into())
 }
 
@@ -53,7 +53,7 @@ fn request(name: &str) -> Result<CreateRequest<RoleCreate>, TdError> {
 }
 
 async fn stored(db: &TdPool, name: &str) -> Result<Option<RoleDB>, TdError> {
-    Ok(db.live().fetch_optional(&RoleName::try_from(name)?).await?)
+    Ok(db.fetch_optional(&RoleName::try_from(name)?).await?)
 }
 
 #[td_test::test(db)]

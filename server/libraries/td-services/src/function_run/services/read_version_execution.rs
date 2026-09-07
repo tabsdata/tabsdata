@@ -2,41 +2,40 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function_run::resolve_bound_function_run;
+use crate::function_run::resolve_current_function_run;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::scope_to_project;
-use td_database::access::{GatedConnection, RO};
+use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::FromDao;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionParam};
-use td_objects::dxo::function::FunctionVersionIdParam;
+use td_objects::dxo::function::{FunctionDB, FunctionVersionIdParam};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn function_version_execution_read(
     authz: Ctx<AuthzContext>,
-    gated_conn: &mut GatedConnection<RO>,
+    db: DbPool<AcrossProjects>,
     request: ReadRequest<(FunctionVersionIdParam, ExecutionParam)>,
 ) -> Result<PhysicalFunctionRun, TdError> {
     let (_, (version, execution)) = request.into_parts();
-    let conn = gated_conn.get(authz.none());
     let function_version_id = version.function_version_id;
     let execution_id = execution.execution;
 
-    // Find execution and pivot into its project's scope via the collection.
-    let execution: ExecutionDB = conn.live().fetch_one(&execution_id).await?;
-    let collection: CollectionDB = conn.live().fetch_one(&execution.collection_id).await?;
-    scope_to_project(conn, &collection.base.project_id).await?;
+    let mut trx = db.read().await?;
+    let conn = trx.get(authz.none());
+    let execution: ExecutionDB = conn.fetch_one(&execution_id).await?;
+    let collection: ResolvedCollectionDB = conn.fetch_one(&execution.base.collection_id).await?;
+    let mut trx = trx.enter_project(&collection.base.project_id).await?;
+    let conn = trx.get(authz.none());
 
-    // find function run via LFR pointer: replays mint multiple FRs
-    // under one LFR identity; the canonical one is whatever the
-    // pointer currently binds to.
-    let run = resolve_bound_function_run(conn, &execution_id, &function_version_id).await?;
+    // Replays mint several attempts under one LFR; the current one is canonical.
+    let function: FunctionDB = conn.fetch_one(&function_version_id).await?;
+    let run = resolve_current_function_run(conn, &execution_id, &function.base.function_id).await?;
     PhysicalFunctionRun::from_dao(run)
 }
 #[cfg(test)]
@@ -111,36 +110,45 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
             FunctionVersionIdParam {
-                function_version_id: function_version.id,
+                function_version_id: function_version.base.id,
             },
             ExecutionParam {
-                execution: execution.id.clone(),
+                execution: execution.base.id.clone(),
             },
         ));
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_version_execution_read(request).await;
         let response = response?;
-        assert_eq!(response.id, physical_function_run.id);
-        assert_eq!(response.collection_id, physical_function_run.collection_id);
+        assert_eq!(response.id, physical_function_run.base.id);
+        assert_eq!(
+            response.collection_id,
+            physical_function_run.base.collection_id
+        );
         assert_eq!(
             response.function_version_id,
-            physical_function_run.function_version_id
+            physical_function_run.base.function_version_id
         );
-        assert_eq!(response.execution_id, physical_function_run.execution_id);
+        assert_eq!(
+            response.execution_id,
+            physical_function_run.base.execution_id
+        );
         assert_eq!(
             response.transaction_id,
-            physical_function_run.transaction_id
+            physical_function_run.base.transaction_id
         );
-        assert_eq!(response.triggered_on, physical_function_run.triggered_on);
-        assert_eq!(response.trigger, physical_function_run.trigger);
-        assert_eq!(response.started_on, physical_function_run.started_on);
-        assert_eq!(response.ended_on, physical_function_run.ended_on);
+        assert_eq!(
+            response.triggered_on,
+            physical_function_run.base.triggered_on
+        );
+        assert_eq!(response.trigger, physical_function_run.base.trigger);
+        assert_eq!(response.started_on, physical_function_run.base.started_on);
+        assert_eq!(response.ended_on, physical_function_run.base.ended_on);
         // Status lives on the LFR; the read endpoint joins it in.
         assert_eq!(response.status, PhysicalFunctionRunStatus::Done);
         assert_eq!(response.name, FunctionName::try_from("joaquin")?);
         assert_eq!(response.collection, collection.name);
-        assert_eq!(response.execution, execution.name);
+        assert_eq!(response.execution, execution.base.name);
         assert_eq!(response.triggered_by, UserName::admin());
         Ok(())
     }

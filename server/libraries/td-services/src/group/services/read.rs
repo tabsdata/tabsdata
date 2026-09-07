@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::group::{Group, GroupDBWithNames, GroupParam};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn read_group(
@@ -27,7 +27,7 @@ async fn read_group(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let with_names: GroupDBWithNames = conn.live().fetch_one(&param.group).await?;
+    let with_names: GroupDBWithNames = conn.fetch_one(&param.group).await?;
     Group::from_dao(with_names)
 }
 
@@ -42,7 +42,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::group::GroupDB;
     use td_objects::types::basic::{AccessTokenId, Description, GroupIdName, GroupName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -66,12 +66,11 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let response = service.read_group(request).await?.data;
         let found = db
-            .live()
             .fetch_one::<GroupDB>(&GroupName::try_from("analytics")?)
             .await?;
-        assert_eq!(response.id, found.id);
-        assert_eq!(response.name, found.name);
-        assert_eq!(response.description, found.description);
+        assert_eq!(response.id, found.base.id);
+        assert_eq!(response.name, found.base.name);
+        assert_eq!(response.description, found.base.description);
         Ok(())
     }
 

@@ -10,13 +10,15 @@ use crate::function::topology::RunnableVersion;
 use crate::function_run::raw_data::raw_data_dir;
 use crate::logical::mint::{mint_function_run, resolve_output_base_path};
 use crate::tests::fixtures::{seed_ready_lfr, set_collection_base_path};
-use td_database::domain::DomainConnection;
+use td_database::access::InProject;
+use td_database::connection::PgConnectionExt;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::types::basic::{AtTime, BasePath, CollectionName, UserId};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
 /// Moving the collection prefix redirects new mints and leaves prior runs'
@@ -32,7 +34,7 @@ async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdErr
     let old = BasePath::try_from("/old")?;
     let coll = set_collection_base_path(&db, p.id, &coll, Some(&old)).await?;
 
-    let (lfr_before, _) = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
+    let lfr_before = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
     let minted_before = mint_committed(&db, std::slice::from_ref(&lfr_before)).await?;
     let before = &minted_before[0];
     assert_eq!(before.fr.base_path, old);
@@ -41,22 +43,29 @@ async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdErr
     let coll = set_collection_base_path(&db, p.id, &coll, Some(&new)).await?;
 
     // The live resolution moved...
-    let mut conn = DomainConnection::new(db.begin().await.unwrap());
+    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+    conn.scope_in_project(&p.id.to_string()).await.unwrap();
     assert_eq!(
-        resolve_output_base_path(&mut conn, &lfr_before.function_version_id).await?,
+        resolve_output_base_path(&mut conn, &lfr_before.base.function_version_id).await?,
         new,
         "the live effective prefix follows the collection"
     );
     drop(conn);
 
     // ...the stamped rows did not.
-    let fr_row: PhysicalFunctionRunDB = db.live().fetch_one(&before.fr.id).await?;
-    assert_eq!(fr_row.base_path, old, "prior FR keeps its frozen prefix");
-    let tdv_row: PhysicalTableDataVersionDB = db.live().fetch_one(&before.tdvs[0].id).await?;
-    assert_eq!(tdv_row.base_path, old, "prior TDV keeps its frozen prefix");
+    let fr_row: PhysicalFunctionRunDB = db.fetch_one(&before.fr.id).await?;
+    assert_eq!(
+        fr_row.base.base_path, old,
+        "prior FR keeps its frozen prefix"
+    );
+    let tdv_row: PhysicalTableDataVersionDB = db.fetch_one(&before.tdvs[0].id).await?;
+    assert_eq!(
+        tdv_row.base.base_path, old,
+        "prior TDV keeps its frozen prefix"
+    );
 
     // A run minted after the move stamps the new prefix.
-    let (lfr_after, _) = seed_ready_lfr(&db, p.id, &coll, "fb", None).await?;
+    let lfr_after = seed_ready_lfr(&db, p.id, &coll, "fb", None).await?;
     let minted_after = mint_committed(&db, std::slice::from_ref(&lfr_after)).await?;
     assert_eq!(minted_after[0].fr.base_path, new);
     assert_eq!(minted_after[0].tdvs[0].base_path, new);
@@ -76,20 +85,20 @@ async fn test_collection_clear_falls_back_to_project(db: TdPool) -> Result<(), T
     let own = BasePath::try_from("/own")?;
     let coll = set_collection_base_path(&db, p.id, &coll, Some(&own)).await?;
 
-    let (lfr_owned, _) = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
+    let lfr_owned = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
     let minted_owned = mint_committed(&db, std::slice::from_ref(&lfr_owned)).await?;
     assert_eq!(minted_owned[0].fr.base_path, own);
 
     let coll = set_collection_base_path(&db, p.id, &coll, None).await?;
     assert_eq!(coll.effective_base_path, p.base_path);
 
-    let (lfr_inherited, _) = seed_ready_lfr(&db, p.id, &coll, "fb", None).await?;
+    let lfr_inherited = seed_ready_lfr(&db, p.id, &coll, "fb", None).await?;
     let minted_inherited = mint_committed(&db, std::slice::from_ref(&lfr_inherited)).await?;
     assert_eq!(minted_inherited[0].fr.base_path, p.base_path);
 
-    let fr_row: PhysicalFunctionRunDB = db.live().fetch_one(&minted_owned[0].fr.id).await?;
+    let fr_row: PhysicalFunctionRunDB = db.fetch_one(&minted_owned[0].fr.id).await?;
     assert_eq!(
-        fr_row.base_path, own,
+        fr_row.base.base_path, own,
         "the earlier run keeps the cleared prefix"
     );
     Ok(())
@@ -108,20 +117,22 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
         .await?;
     let old = BasePath::try_from("/old")?;
     let coll = set_collection_base_path(&db, p.id, &coll, Some(&old)).await?;
-    let (lfr, _) = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
+    let lfr = seed_ready_lfr(&db, p.id, &coll, "fa", None).await?;
     let runnable = RunnableVersion {
-        function_version_id: lfr.function_version_id.clone(),
+        function_version_id: lfr.base.function_version_id.clone(),
         function_version_patch_id: None,
     };
 
-    let mut conn = DomainConnection::new(db.begin().await.unwrap());
+    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+    conn.scope_in_project(&p.id.to_string()).await.unwrap();
     let attempt_1 = mint_function_run(&mut conn, &lfr, &runnable, &AtTime::now()).await?;
     conn.commit().await.unwrap();
 
     let new = BasePath::try_from("/new")?;
     set_collection_base_path(&db, p.id, &coll, Some(&new)).await?;
 
-    let mut conn = DomainConnection::new(db.begin().await.unwrap());
+    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+    conn.scope_in_project(&p.id.to_string()).await.unwrap();
     let attempt_2 = mint_function_run(&mut conn, &lfr, &runnable, &AtTime::now()).await?;
     conn.commit().await.unwrap();
 

@@ -14,7 +14,7 @@ use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::role::{RoleDB, RoleParam};
 use td_objects::dxo::user::{UserDB, UserParam};
 use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBWithNames};
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn delete_user_role(
@@ -29,14 +29,12 @@ async fn delete_user_role(
         .await?;
     let conn = trx.get(grant);
 
-    let role: RoleDB = conn.live().fetch_one(&role_param.role).await?;
-    let user: UserDB = conn.live().fetch_one(&user_param.user).await?;
+    let role: RoleDB = conn.fetch_one(&role_param.role).await?;
+    let user: UserDB = conn.fetch_one(&user_param.user).await?;
 
-    let row: UserRoleDBWithNames = conn.live().fetch_one(and!(&role.id, &user.id)).await?;
+    let row: UserRoleDBWithNames = conn.fetch_one(and!(&role.id, &user.id)).await?;
     assert_not_fixed(&row)?;
-    conn.live()
-        .delete::<UserRoleDB>(and!(&role.id, &user.id))
-        .await?;
+    conn.delete::<UserRoleDB>(and!(&role.id, &user.id)).await?;
     trx.commit().await?;
 
     // Removed a role membership; with the transaction committed, invalidate
@@ -59,7 +57,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Description, RoleIdName, RoleName, UserEnabled, UserId, UserIdName, UserName,
     };
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -89,7 +87,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         service.delete_user_role(request).await?;
 
-        let not_found = db.live().fetch_one::<UserRoleDB>(&user_role.id).await;
+        let not_found = db.fetch_one::<UserRoleDB>(&user_role.id).await;
         assert!(not_found.is_err());
         Ok(())
     }

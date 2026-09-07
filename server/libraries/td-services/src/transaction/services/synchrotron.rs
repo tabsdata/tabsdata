@@ -12,7 +12,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::synchrotron::SynchrotronResponse;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn synchrotron(
@@ -27,7 +27,7 @@ async fn synchrotron(
         .await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<SynchrotronResponse>::try_from(&list_params)?;
-    let rows = conn.live().list(&(), &query_params).await?;
+    let rows = conn.list(&(), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -114,11 +114,11 @@ mod tests {
         let response = service.synchrotron(request).await?.data;
         assert_eq!(response.len, transactions.len());
         // Shared `triggered_on`: paging by id makes seed order the response order.
-        let expected: Vec<_> = transactions.iter().map(|t| t.id.clone()).collect();
+        let expected: Vec<_> = transactions.iter().map(|t| t.base.id.clone()).collect();
         let listed: Vec<_> = response.data.iter().map(|t| t.id.clone()).collect();
         assert_eq!(listed, expected);
         for t in &response.data {
-            assert_eq!(t.triggered_on, transactions[0].triggered_on);
+            assert_eq!(t.triggered_on, transactions[0].base.triggered_on);
         }
         Ok(())
     }

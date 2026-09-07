@@ -10,8 +10,8 @@ use td_database::access::{GatedConnection, RW};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::role::{Role, RoleDB, RoleDBUpdate, RoleDBWithNames, RoleParam, RoleUpdate};
-use td_queries::LiveEntry;
+use td_objects::dxo::role::{Role, RoleDBWithNames, RoleParam, RoleUpdate, RoleUpdateDB};
+use td_queries::Queries;
 
 #[service_factory]
 async fn update_role(
@@ -25,19 +25,18 @@ async fn update_role(
         .await?;
     let conn = gated_trx.get(grant);
 
-    let update_db = RoleDBUpdate {
+    let update_db = RoleUpdateDB {
         name: update.name,
         description: update.description,
         modified_on: ctx.time.into(),
         modified_by_id: ctx.user_id.into(),
     };
 
-    let current: RoleDBWithNames = conn.live().fetch_one(&param.role).await?;
-    conn.live()
-        .update::<RoleDBUpdate, RoleDB>(&update_db, current.base.id)
+    let current: RoleDBWithNames = conn.fetch_one(&param.role).await?;
+    conn.update::<RoleUpdateDB>(&update_db, current.base.id)
         .await?;
 
-    let with_names: RoleDBWithNames = conn.live().fetch_one(&current.base.id).await?;
+    let with_names: RoleDBWithNames = conn.fetch_one(&current.base.id).await?;
     let read = Role::from_dao(with_names)?;
     Ok(read)
 }
@@ -50,8 +49,9 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::role::RoleDB;
     use td_objects::types::basic::{AccessTokenId, Description, RoleIdName, RoleName, UserId};
-    use td_queries::LiveEntry;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -81,13 +81,11 @@ mod tests {
         let response = response?;
 
         let not_found = db
-            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin")?)
             .await;
         assert!(not_found.is_err());
 
         let found = db
-            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("not_joaquin_anymore")?)
             .await?;
         assert_eq!(response.id, found.id);

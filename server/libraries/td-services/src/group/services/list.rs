@@ -12,7 +12,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::group::Group;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_queries::LiveEntry;
+use td_queries::Queries;
 
 #[service_factory]
 async fn list_group(
@@ -28,7 +28,7 @@ async fn list_group(
         .await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Group>::try_from(&list_params)?;
-    let rows = conn.live().list(&(), &query_params).await?;
+    let rows = conn.list(&(), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
