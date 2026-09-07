@@ -24,7 +24,7 @@ use td_objects::dxo::execution::{
     ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse,
 };
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::types::basic::{AtTime, ExecutionId, FunctionId, TriggerType, TriggeredOn};
+use td_objects::types::basic::{ExecutionId, FunctionId, TriggerType, TriggeredOn};
 use td_objects::types::json::Json;
 use td_queries::Queries;
 
@@ -99,14 +99,7 @@ pub(crate) async fn execute(
     let function_only = request.function_only;
     let recursion_options = with_recursion_options(&function_only, &override_disabled_trigger)?;
     let config = GraphConfig::defaults(FunctionDB::executable());
-    let graph = generate_td_graph(
-        conn,
-        config,
-        &AtTime::from(at),
-        &entrypoint,
-        &recursion_options,
-    )
-    .await?;
+    let graph = generate_td_graph(conn, config, None, &entrypoint, &recursion_options).await?;
 
     let execution_plan = build_execution_plan(&graph, &function)?;
     validate_execution_plan(transaction_by, &execution_plan)?;

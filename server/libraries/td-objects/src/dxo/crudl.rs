@@ -234,3 +234,9 @@ pub struct AtTimeParam {
     #[serde(default)]
     pub at: AtTime,
 }
+
+/// `?at=` whose absence means the live state rather than now.
+#[ta_objects::QueryParam]
+pub struct OptionalAtTimeParam {
+    pub at: Option<AtTime>,
+}

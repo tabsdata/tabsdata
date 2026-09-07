@@ -11,7 +11,7 @@ use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoCon
 use td_apiforge::apiserver_path;
 use td_database::pool::scoped::ScopedExt;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::crudl::{AtTimeParam, ListParams, RequestContext};
+use td_objects::dxo::crudl::{AtTimeParam, ListParams, OptionalAtTimeParam, RequestContext};
 use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::logical::TableDataVersion;
 use td_objects::dxo::table::{
@@ -208,8 +208,9 @@ pub async fn graph(
     Project(project_id): Project,
     Path(collection): Path<CollectionParam>,
     Path(table): Path<TableParam>,
+    Query(at): Query<OptionalAtTimeParam>,
 ) -> Result<GetStatus<TableFlowGraphResponse>, ErrorStatus> {
-    let request = context.read((collection, table)).in_project(project_id);
+    let request = context.read((collection, table, at)).in_project(project_id);
     let response = state.table_flow_graph(request).await?;
     Ok(GetStatus::OK(response))
 }

@@ -12,7 +12,7 @@ use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::crudl::{ReadRequest, WithinProject};
+use td_objects::dxo::crudl::{OptionalAtTimeParam, ReadRequest, WithinProject};
 use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse, TableParam};
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
@@ -21,10 +21,10 @@ use td_queries::Queries;
 async fn table_flow_graph(
     authz: Ctx<AuthzContext>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<ReadRequest<(CollectionParam, TableParam)>>,
+    request: WithinProject<ReadRequest<(CollectionParam, TableParam, OptionalAtTimeParam)>>,
 ) -> Result<TableFlowGraphResponse, TdError> {
     let (project, request) = request.into_parts();
-    let (ctx, (collection_param, table_param)) = request.into_parts();
+    let (ctx, (collection_param, table_param, at_param)) = request.into_parts();
     let grant = authz
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
@@ -32,13 +32,21 @@ async fn table_flow_graph(
 
     let collection_id_name = collection_param.collection;
     let table_id_name = table_param.table;
-    let at = ctx.time;
+    let at = at_param.at.as_ref();
 
-    let table: TableDBWithNames = conn
-        .scd2()
-        .as_of(&at)
-        .fetch_one(and!(&collection_id_name, &table_id_name))
-        .await?;
+    let table: TableDBWithNames = match at {
+        Some(at) => {
+            conn.scd2()
+                .as_of(at)
+                .fetch_one(and!(&collection_id_name, &table_id_name))
+                .await?
+        }
+        None => {
+            conn.scd2()
+                .fetch_one(and!(&collection_id_name, &table_id_name))
+                .await?
+        }
+    };
 
     let table_id = table.base.base.table_id;
     let entrypoint = FunctionOrTable::from(&table_id);
@@ -47,7 +55,7 @@ async fn table_flow_graph(
         include_dependency_functions: true,
         ..GraphConfig::defaults(())
     };
-    let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion).await?;
+    let graph = generate_td_graph(conn, config, at, &entrypoint, &recursion).await?;
 
     build_response(&table, &graph).await
 }
@@ -71,7 +79,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
         TableName, TableNameDto, UserId,
     };
-    use td_objects::types::basic::{CollectionIdName, TableIdName};
+    use td_objects::types::basic::{AtTime, CollectionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -133,6 +141,7 @@ mod tests {
                 TableParam {
                     table: TableIdName::from_str("table_0")?,
                 },
+                OptionalAtTimeParam { at: None },
             ))
             .in_project(p.id);
 
@@ -285,6 +294,7 @@ mod tests {
                 TableParam {
                     table: TableIdName::from_str("table_0")?,
                 },
+                OptionalAtTimeParam { at: None },
             ))
             .in_project(p.id);
 
@@ -458,6 +468,7 @@ mod tests {
                 TableParam {
                     table: TableIdName::from_str("table_3")?,
                 },
+                OptionalAtTimeParam { at: None },
             ))
             .in_project(p.id);
 
@@ -515,6 +526,81 @@ mod tests {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
         }
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_table_graph_after_collection_delete(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("doomed")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+        let create = FunctionRegister {
+            name: FUNCTION_NAMES[0].clone(),
+            description: "foo description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "foo snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let function = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let table: TableDBWithNames = db
+            .scd2()
+            .fetch_one(and!(&collection.id, &TableIdName::from_str("table_0")?))
+            .await?;
+        let registered_at = AtTime::now();
+
+        let service = Services::with_defaults(db.clone());
+        service
+            .delete_collection(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete(CollectionParam {
+                        collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                    })
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let request = |at: Option<AtTime>| {
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read((
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection_name.to_string())
+                            .unwrap(),
+                    },
+                    TableParam {
+                        table: TableIdName::from_str("table_0").unwrap(),
+                    },
+                    OptionalAtTimeParam { at },
+                ))
+                .in_project(p.id)
+        };
+
+        let response = service
+            .table_flow_graph(request(Some(registered_at)))
+            .await?
+            .data;
+        assert_eq!(response.table, table.base.base.id);
+        assert!(response.all_functions.contains_key(&function.base.id));
+
+        assert!(service.table_flow_graph(request(None)).await.is_err());
         Ok(())
     }
 }

@@ -66,13 +66,8 @@ async fn execution_read(
     } else {
         Box::new(FunctionDB::executable())
     };
-    // Plan-reading rebuilds the graph as it existed at the plan's
-    // `TriggeredOn` — point-in-time SQL via visible-at interval scans.
-    let config = GraphConfig {
-        historic: true,
-        ..GraphConfig::defaults(function_state)
-    };
-    let graph = generate_td_graph(conn, config, &at, &entrypoint, &recursion_options).await?;
+    let config = GraphConfig::defaults(function_state);
+    let graph = generate_td_graph(conn, config, Some(&at), &entrypoint, &recursion_options).await?;
 
     let execution_plan = build_execution_plan(&graph, &function)?;
     let transactions: Vec<TransactionInsertDB> = conn

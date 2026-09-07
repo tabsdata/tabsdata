@@ -19,38 +19,15 @@ use td_objects::types::recursion::RecursionOptions;
 use td_objects::{ReachableFrom, Scd2Dao, SelectDao, TimelineDao};
 use td_queries::Queries;
 
-/// Pick `current()` or `find_at(at)` once at the call site, then run the
-/// same chain body — expanded per arm, since `Current` and `FindAt` are
-/// distinct types with parallel surfaces and no trait spans them.
-///
-/// Only the recursive walks still need it: their chain is six steps, and
-/// writing it twice per site is what lets the two arms drift apart. The
-/// one-step reads go through [`GraphBuilder::chunked_at`] and a plain
-/// `if`/`else` instead.
-macro_rules! read_chain {
-    ($historic:expr, $conn:expr, $at:expr, |$entry:ident| $body:block) => {{
-        if $historic {
-            let $entry = $conn.scd2().as_of(&*$at);
-            $body
-        } else {
-            let $entry = $conn.scd2();
-            $body
-        }
-    }};
-}
-
 pub struct GraphBuilder {
     pub(crate) config: GraphConfig,
 }
 
 impl GraphBuilder {
-    /// One chunked read at the configured grain: live now, or visible at
-    /// `at`. Holds the `historic` branch for every caller that needs nothing
-    /// but this one step.
     async fn chunked_at<S, D>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at: &AtTime,
+        at: Option<&AtTime>,
         values: &[impl SqlCondition<D>],
         extra: impl SqlCondition<D>,
     ) -> Result<Vec<D>, TdError>
@@ -61,14 +38,15 @@ impl GraphBuilder {
             + TimelineDao<VersionOrder = Scd2ValidFrom>
             + ReachableFrom<S>,
     {
-        let rows = if self.config.historic {
-            conn.scd2()
-                .as_of(at)
-                .chunked()
-                .fetch_all::<D>(values, extra)
-                .await?
-        } else {
-            conn.scd2().chunked().fetch_all::<D>(values, extra).await?
+        let rows = match at {
+            Some(at) => {
+                conn.scd2()
+                    .as_of(at)
+                    .chunked()
+                    .fetch_all(values, extra)
+                    .await?
+            }
+            None => conn.scd2().chunked().fetch_all(values, extra).await?,
         };
         Ok(rows)
     }
@@ -76,15 +54,17 @@ impl GraphBuilder {
     pub async fn find_recursive_trigger_graph<S: SeesProjectRows>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at_time: &AtTime,
+        at_time: Option<&AtTime>,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
     ) -> Result<Vec<TriggerDBWithNames>, TdError> {
         let trigger_graph: Vec<TriggerDBWithNames> = match function_or_table {
-            FunctionOrTable::Function(function_id) => {
-                read_chain!(self.config.historic, conn, at_time, |entry| {
-                    let walk = entry
-                        .recursive::<TriggerDBWithNames, FunctionDB>(*recursion_options)
+            FunctionOrTable::Function(function_id) => match at_time {
+                Some(at) => {
+                    let walk = conn
+                        .scd2()
+                        .as_of(at)
+                        .recursive(*recursion_options)
                         .start_at(function_id)
                         .where_edges(&self.config.trigger_state)
                         .where_nodes(&self.config.function_state);
@@ -94,18 +74,41 @@ impl GraphBuilder {
                         walk
                     };
                     walk.fetch_all().await?
-                })
-            }
-            FunctionOrTable::Table(table_id) => {
-                read_chain!(self.config.historic, conn, at_time, |entry| {
-                    entry
-                        .recursive::<TriggerDBWithNames, TableDB>(*recursion_options)
+                }
+                None => {
+                    let walk = conn
+                        .scd2()
+                        .recursive(*recursion_options)
+                        .start_at(function_id)
+                        .where_edges(&self.config.trigger_state)
+                        .where_nodes(&self.config.function_state);
+                    let walk = if recursion_options.override_disabled_trigger() {
+                        walk.where_start(FunctionDB::active())
+                    } else {
+                        walk
+                    };
+                    walk.fetch_all().await?
+                }
+            },
+            FunctionOrTable::Table(table_id) => match at_time {
+                Some(at) => {
+                    conn.scd2()
+                        .as_of(at)
+                        .recursive::<_, TableDB>(*recursion_options)
                         .start_at(table_id)
                         .where_edges(&self.config.trigger_state)
                         .fetch_all()
                         .await?
-                })
-            }
+                }
+                None => {
+                    conn.scd2()
+                        .recursive::<_, TableDB>(*recursion_options)
+                        .start_at(table_id)
+                        .where_edges(&self.config.trigger_state)
+                        .fetch_all()
+                        .await?
+                }
+            },
         };
 
         Ok(trigger_graph)
@@ -114,30 +117,47 @@ impl GraphBuilder {
     pub async fn find_recursive_dependency_graph<S: SeesProjectRows>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at_time: &AtTime,
+        at_time: Option<&AtTime>,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
         let dep_graph: Vec<DependencyDBWithNames> = match function_or_table {
-            FunctionOrTable::Function(function_id) => {
-                read_chain!(self.config.historic, conn, at_time, |entry| {
-                    entry
-                        .recursive::<DependencyDBWithNames, FunctionDB>(*recursion_options)
+            FunctionOrTable::Function(function_id) => match at_time {
+                Some(at) => {
+                    conn.scd2()
+                        .as_of(at)
+                        .recursive(*recursion_options)
                         .start_at(function_id)
                         .where_nodes(&self.config.function_state)
                         .fetch_all()
                         .await?
-                })
-            }
-            FunctionOrTable::Table(table_id) => {
-                read_chain!(self.config.historic, conn, at_time, |entry| {
-                    entry
-                        .recursive::<DependencyDBWithNames, TableDB>(*recursion_options)
+                }
+                None => {
+                    conn.scd2()
+                        .recursive(*recursion_options)
+                        .start_at(function_id)
+                        .where_nodes(&self.config.function_state)
+                        .fetch_all()
+                        .await?
+                }
+            },
+            FunctionOrTable::Table(table_id) => match at_time {
+                Some(at) => {
+                    conn.scd2()
+                        .as_of(at)
+                        .recursive::<_, TableDB>(*recursion_options)
                         .start_at(table_id)
                         .fetch_all()
                         .await?
-                })
-            }
+                }
+                None => {
+                    conn.scd2()
+                        .recursive::<_, TableDB>(*recursion_options)
+                        .start_at(table_id)
+                        .fetch_all()
+                        .await?
+                }
+            },
         };
 
         Ok(dep_graph)
@@ -146,19 +166,15 @@ impl GraphBuilder {
     pub async fn main_function_id<S: SeesProjectRows>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at_time: &AtTime,
+        at_time: Option<&AtTime>,
         function_or_table: &FunctionOrTable,
     ) -> Result<FunctionId, TdError> {
         let function_id = match function_or_table {
             FunctionOrTable::Function(function_id) => *function_id,
             FunctionOrTable::Table(table_id) => {
-                let table: TableDB = if self.config.historic {
-                    conn.scd2()
-                        .as_of(at_time)
-                        .fetch_one::<TableDB>(table_id)
-                        .await?
-                } else {
-                    conn.scd2().fetch_one::<TableDB>(table_id).await?
+                let table: TableDB = match at_time {
+                    Some(at) => conn.scd2().as_of(at).fetch_one(table_id).await?,
+                    None => conn.scd2().fetch_one(table_id).await?,
                 };
                 table.base.function_id
             }
@@ -208,7 +224,7 @@ impl GraphBuilder {
     pub async fn find_triggered_functions_dependency_graph<S: SeesProjectRows>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at_time: &AtTime,
+        at_time: Option<&AtTime>,
         triggered_functions: &[FunctionId],
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
         self.chunked_at(conn, at_time, triggered_functions, ())
@@ -218,7 +234,7 @@ impl GraphBuilder {
     pub async fn find_functions_output_tables<S: SeesProjectRows>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at_time: &AtTime,
+        at_time: Option<&AtTime>,
         functions: &[FunctionId],
     ) -> Result<Vec<TableDBWithNames>, TdError> {
         self.chunked_at(conn, at_time, functions, TableDBWithNames::active())
@@ -228,7 +244,7 @@ impl GraphBuilder {
     pub async fn find_all_tables_map<S: SeesProjectRows>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at_time: &AtTime,
+        at_time: Option<&AtTime>,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],
         output_tables: &[TableDBWithNames],
@@ -259,7 +275,7 @@ impl GraphBuilder {
     pub async fn find_all_functions_map<S: SeesProjectRows>(
         &self,
         conn: &mut DomainConnection<Apiserver, S>,
-        at_time: &AtTime,
+        at_time: Option<&AtTime>,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],
         output_tables: &[TableDBWithNames],

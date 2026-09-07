@@ -22,22 +22,17 @@ pub mod build;
 /// [`GraphConfig::defaults`] and override what differs via struct update:
 ///
 /// ```ignore
-/// GraphConfig { historic: true, ..GraphConfig::defaults(FunctionDB::active()) }
+/// GraphConfig { include_dependency_functions: true, ..GraphConfig::defaults(FunctionDB::active()) }
 /// ```
 ///
 /// Authorization is owned by the calling service: projects are silos, so
 /// the caller gates access with its own project-scoped check and the graph
 /// module carries no authz.
 ///
-/// `historic` picks the read mode: `false` (default) reads live state from
-/// the open SCD2 intervals; `true` rebuilds graph state at the request's
-/// `AtTime` via visible-at interval scans — used only by plan-reading
-/// services that need the graph as it existed at dispatch.
 pub struct GraphConfig {
     pub trigger_state: Box<dyn SqlCondition<TriggerDBWithNames>>,
     pub function_state: Box<dyn SqlCondition<FunctionDB>>,
     pub include_dependency_functions: bool,
-    pub historic: bool,
 }
 
 impl GraphConfig {
@@ -46,7 +41,6 @@ impl GraphConfig {
             trigger_state: Box::new(TriggerDBWithNames::active()),
             function_state: Box::new(function_state),
             include_dependency_functions: false,
-            historic: false,
         }
     }
 }
@@ -70,12 +64,12 @@ impl From<&TableId> for FunctionOrTable {
 }
 
 /// Generate the trigger/dependency graph around `function_or_table`, per the
-/// [`GraphConfig`] knobs. Authorization is owned by the calling service (see
-/// [`GraphConfig`]).
+/// [`GraphConfig`] knobs, live (`None`) or as it existed at `at_time`.
+/// Authorization is owned by the calling service (see [`GraphConfig`]).
 pub async fn generate_td_graph<S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S>,
     config: GraphConfig,
-    at_time: &AtTime,
+    at_time: Option<&AtTime>,
     function_or_table: &FunctionOrTable,
     recursion_options: &RecursionOptions,
 ) -> Result<TdGraph, TdError> {
