@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use td_common::crypto::SSL_CERT_PEM_FILE;
 use td_error::{TdError, td_error};
 use td_objects::types::stream::BoxedSyncStream;
-use td_tower::extractors::Ref;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 
@@ -22,9 +21,7 @@ enum CertDownloadError {
     Read(std::io::Error) = 5001,
 }
 
-pub async fn get_certificate_pem_file(
-    ssl_folder: Ref<PathBuf>,
-) -> Result<BoxedSyncStream, TdError> {
+pub async fn get_certificate_pem_file(ssl_folder: &PathBuf) -> Result<BoxedSyncStream, TdError> {
     let cert_file = ssl_folder.join(SSL_CERT_PEM_FILE);
     if !cert_file.exists() {
         Err(CertDownloadError::NotFound)?

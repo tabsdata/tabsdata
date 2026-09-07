@@ -2,134 +2,84 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::layers::assert_current_password::assert_current_password;
-use crate::auth::layers::assert_login_user::assert_login_user;
-use crate::auth::layers::assert_no_password_change_required::assert_no_password_change_required;
-use crate::auth::layers::assert_user_enabled::assert_user_enabled;
-use crate::auth::layers::create_access_token::create_access_token;
-use crate::auth::layers::refresh_sessions::refresh_sessions;
-use crate::auth::layers::set_session_expiration::set_session_expiration;
+use crate::auth::assert_current_password::assert_current_password;
+use crate::auth::assert_login_user::assert_login_user;
+use crate::auth::assert_no_password_change_required::assert_no_password_change_required;
+use crate::auth::assert_user_enabled::assert_user_enabled;
+use crate::auth::create_access_token::create_access_token;
+use crate::auth::set_session_expiration::session_expiration;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
 use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
-use td_objects::dxo::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
+use td_common::provider::Provider;
+use td_database::access::{DbPool, Global, Grant};
+use td_error::TdError;
+use td_objects::dxo::auth::{Login, SessionDB, TokenResponseX};
 use td_objects::dxo::user::UserDB;
-use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{AtTime, Password, PasswordHash, UserId, UserName};
-use td_queries::{By, insert};
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::types::basic::AtTime;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = LoginService,
-    request = Login,
-    response = TokenResponseX,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = JwtConfig,
-    context = Sessions,
-)]
-fn service() {
-    layers!(
-        // setting request time (we don't have request context in this service)
-        from_fn(With::<AtTime>::default),
-        // extract info from request
-        from_fn(With::<Login>::extract::<UserName>),
-        from_fn(With::<Login>::extract::<Password>),
-        // unknown user and wrong password both surface as AuthenticationFailed so
-        // neither can be distinguished; enabled/password-change errors below keep
-        // their own codes so a valid login can act on them
-        from_fn(By::<UserName>::fetch_optional::<UserDB>),
-        from_fn(assert_login_user),
-        from_fn(With::<UserDB>::extract::<PasswordHash>),
-        from_fn(assert_current_password::<Password>),
-        // check user is enabled
-        from_fn(assert_user_enabled),
-        // check password is not required to be changed
-        from_fn(assert_no_password_change_required),
-        // create user session
-        from_fn(With::<UserDB>::extract::<UserId>),
-        from_fn(builder::<SessionDB>),
-        from_fn(With::<UserId>::set::<SessionDBBuilder>),
-        from_fn(With::<AtTime>::set::<SessionDBBuilder>),
-        from_fn(set_session_expiration),
-        from_fn(With::<SessionDBBuilder>::build::<SessionDB>),
-        from_fn(insert::<SessionDB>),
-        // create access token
-        from_fn(create_access_token),
-        // invalidate sessions cache
-        from_fn(refresh_sessions),
-    )
+#[service_factory]
+async fn login(
+    jwt_config: Ctx<JwtConfig>,
+    sessions: Ctx<Sessions>,
+    db: DbPool<Global>,
+    request: Login,
+) -> Result<TokenResponseX, TdError> {
+    let mut gated_trx = db.begin().await?;
+    let conn = gated_trx.get(Grant::asserted("login credential verification"));
+    // request time (we don't have a request context in this service)
+    let at = AtTime::default();
+
+    // unknown user and wrong password both surface as AuthenticationFailed so
+    // neither can be distinguished; enabled/password-change errors below keep
+    // their own codes so a valid login can act on them
+    let user: Option<UserDB> = conn.live().fetch_optional(&request.name).await?;
+    let user = assert_login_user(user)?;
+    assert_current_password(&user.password_hash, &request.password)?;
+    assert_user_enabled(&user)?;
+    assert_no_password_change_required(&user)?;
+
+    let session = SessionDB::new(user.id, at, session_expiration(&jwt_config)?);
+    conn.live().insert(&session).await?;
+
+    let token = create_access_token(&jwt_config, &session)?;
+
+    // Housekeeping purge of expired session rows commits with this
+    // transaction; the authoritative cache invalidation must wait for the
+    // commit (invalidating earlier races a concurrent reader repopulating the
+    // cache from a pre-commit snapshot that omits the new session).
+    sessions.purge(conn).await?;
+    gated_trx.commit().await?;
+    sessions.invalidate().await;
+
+    Ok(token)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Context;
+    use crate::Services;
     use crate::auth::AuthError;
-    use crate::auth::services::AuthServices;
     use crate::auth::services::tests::assert_session;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
     use td_common::jwt::decode_token;
     use td_database::pool::TdPool;
     use td_error::assert_service_error;
-    use td_objects::Buildable;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_login(db: TdPool) {
-        use crate::auth::layers::assert_current_password::assert_current_password;
-        use crate::auth::layers::assert_login_user::assert_login_user;
-        use crate::auth::layers::assert_no_password_change_required::assert_no_password_change_required;
-        use crate::auth::layers::assert_user_enabled::assert_user_enabled;
-        use crate::auth::layers::create_access_token::create_access_token;
-        use crate::auth::layers::refresh_sessions::refresh_sessions;
-        use crate::auth::layers::set_session_expiration::set_session_expiration;
-        use crate::auth::services::login::LoginService;
-        use td_objects::dxo::user::UserDB;
-        use td_objects::tower_service::with::{With, builder};
-        use td_queries::{By, insert};
-        use td_tower::metadata::type_of_val;
-
-        LoginService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<Login, TokenResponseX>(&[
-                type_of_val(&With::<AtTime>::default),
-                type_of_val(&With::<Login>::extract::<UserName>),
-                type_of_val(&With::<Login>::extract::<Password>),
-                type_of_val(&By::<UserName>::fetch_optional::<UserDB>),
-                type_of_val(&assert_login_user),
-                type_of_val(&With::<UserDB>::extract::<PasswordHash>),
-                type_of_val(&assert_current_password::<Password>),
-                type_of_val(&assert_user_enabled),
-                type_of_val(&assert_no_password_change_required),
-                type_of_val(&With::<UserDB>::extract::<UserId>),
-                type_of_val(&builder::<SessionDB>),
-                type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
-                type_of_val(&With::<AtTime>::set::<SessionDBBuilder>),
-                type_of_val(&set_session_expiration),
-                type_of_val(&With::<SessionDBBuilder>::build::<SessionDB>),
-                type_of_val(&insert::<SessionDB>),
-                type_of_val(&create_access_token),
-                type_of_val(&refresh_sessions),
-            ]);
-    }
+    use td_objects::types::basic::Password;
+    use td_objects::types::basic::UserName;
 
     #[td_test::test(db)]
     async fn test_login_ok(db: TdPool) -> Result<(), td_error::TdError> {
-        let context = Context::with_defaults(db.clone());
-        let auth_services = AuthServices::build(&context);
-        let service = auth_services.login.service();
+        let context = Services::with_defaults(db.clone());
+        let auth_services = context.clone();
+        let service = auth_services.clone();
 
-        let request = Login::builder()
-            .name(UserName::try_from("admin")?)
-            .password(Password::try_from("tabsdata")?)
-            .build()?;
-        let res = service.raw_oneshot(request).await;
+        let request = Login {
+            name: UserName::try_from("admin")?,
+            password: Password::try_from("tabsdata")?,
+        };
+        let res = service.login(request).await;
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = &token_response.access_token;
@@ -147,19 +97,18 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_login_wrong_user_unauthz(db: TdPool) -> Result<(), td_error::TdError> {
-        let auth_services = AuthServices::build(&Context::with_defaults(db.clone()));
-        let service = auth_services.login.service();
+        let auth_services = Services::with_defaults(db.clone());
+        let service = auth_services.clone();
 
-        let request = Login::builder()
-            .name(UserName::try_from("invalid")?)
-            .password(Password::try_from("tabsdata")?)
-            .build()?;
+        let request = Login {
+            name: UserName::try_from("invalid")?,
+            password: Password::try_from("tabsdata")?,
+        };
 
-        assert_service_error(service, request, |err| match err {
+        assert_service_error(service.login(request).await, |err| match err {
             AuthError::AuthenticationFailed => {}
             other => panic!("Expected 'AuthenticationFailed', got {other:?}"),
-        })
-        .await;
+        });
 
         assert_session(&db, &None).await;
         Ok(())
@@ -167,19 +116,18 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_login_wrong_password_unauthz(db: TdPool) -> Result<(), td_error::TdError> {
-        let auth_services = AuthServices::build(&Context::with_defaults(db.clone()));
-        let service = auth_services.login.service();
+        let auth_services = Services::with_defaults(db.clone());
+        let service = auth_services.clone();
 
-        let request = Login::builder()
-            .name(UserName::try_from("admin")?)
-            .password(Password::try_from("invalidpassword")?)
-            .build()?;
+        let request = Login {
+            name: UserName::try_from("admin")?,
+            password: Password::try_from("invalidpassword")?,
+        };
 
-        assert_service_error(service, request, |err| match err {
+        assert_service_error(service.login(request).await, |err| match err {
             AuthError::AuthenticationFailed => {}
             other => panic!("Expected 'AuthenticationFailed', got {other:?}"),
-        })
-        .await;
+        });
         Ok(())
     }
 }

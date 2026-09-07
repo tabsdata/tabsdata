@@ -9,18 +9,14 @@ use std::ops::Deref;
 use td_error::TdError;
 use td_objects::types::basic::PasswordHash;
 use td_security::config::PasswordHashingConfig;
-use td_tower::extractors::Ref;
 
-pub async fn create_password_hash<P: Deref<Target = String>>(
-    password_hashing_config: Ref<PasswordHashingConfig>,
-    password: Ref<P>,
+pub fn create_password_hash<P: Deref<Target = String>>(
+    password_hashing_config: &PasswordHashingConfig,
+    password: &P,
 ) -> Result<PasswordHash, TdError> {
     let hash = password_hashing_config
         .password_hasher()
-        .hash_password(
-            password.deref().as_bytes(),
-            &SaltString::generate(&mut OsRng),
-        )
+        .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
         .unwrap()
         .to_string();
 

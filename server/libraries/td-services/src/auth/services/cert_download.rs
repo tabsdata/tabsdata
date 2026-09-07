@@ -2,46 +2,29 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::layers::cert_download::get_certificate_pem_file;
+use crate::auth::cert_download::get_certificate_pem_file;
 use std::path::PathBuf;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
+use td_error::TdError;
 use td_objects::types::stream::BoxedSyncStream;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
 
-#[service_factory(
-    name = CertDownloadService,
-    request = (),
-    response = BoxedSyncStream,
-    context = PathBuf,
-)]
-fn service() {
-    layers!(from_fn(get_certificate_pem_file))
+#[service_factory]
+async fn cert_download(ssl_folder: Ctx<PathBuf>, _request: ()) -> Result<BoxedSyncStream, TdError> {
+    get_certificate_pem_file(&ssl_folder).await
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::Services;
+
     use futures_util::StreamExt;
-    use std::sync::Arc;
-    use ta_services::service::TdService;
+    use ta_services::service::Ctx;
     use td_common::crypto::SSL_CERT_PEM_FILE;
 
     use td_error::TdError;
-    use td_tower::ctx_service::RawOneshot;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_cert_download() {
-        use td_tower::metadata::type_of_val;
-
-        CertDownloadService::with_defaults()
-            .metadata()
-            .await
-            .assert_service::<(), BoxedSyncStream>(&[type_of_val(&get_certificate_pem_file)]);
-    }
 
     #[tokio::test]
     async fn test_cert_download_ok() -> Result<(), TdError> {
@@ -56,8 +39,11 @@ mod tests {
             .await
             .unwrap();
 
-        let service = CertDownloadService::new(Arc::new(tls_path)).service();
-        let response = service.raw_oneshot(()).await?;
+        let service = Services {
+            ssl_folder: Ctx::new(tls_path),
+            ..Services::default()
+        };
+        let response = service.cert_download(()).await?.data;
         let mut response = response.into_inner();
         let bytes = response.next().await.unwrap()?;
 
@@ -69,8 +55,11 @@ mod tests {
     #[tokio::test]
     async fn test_cert_download_err() -> Result<(), TdError> {
         let tls_path = td_common::tdtestdir!();
-        let service = CertDownloadService::new(Arc::new(tls_path)).service();
-        let response = service.raw_oneshot(()).await;
+        let service = Services {
+            ssl_folder: Ctx::new(tls_path),
+            ..Services::default()
+        };
+        let response = service.cert_download(()).await;
         assert!(response.is_err());
         Ok(())
     }

@@ -5,9 +5,8 @@
 use crate::auth::AuthError;
 use td_error::TdError;
 use td_objects::dxo::user::UserDB;
-use td_tower::extractors::Ref;
 
-pub async fn assert_user_enabled(user: Ref<UserDB>) -> Result<(), TdError> {
+pub fn assert_user_enabled(user: &UserDB) -> Result<(), TdError> {
     if *user.enabled {
         Ok(())
     } else {

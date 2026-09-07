@@ -2,30 +2,12 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::services::cert_download::CertDownloadService;
-use crate::auth::services::login::LoginService;
-use crate::auth::services::logout::LogoutService;
-use crate::auth::services::password_change::PasswordChangeService;
-use crate::auth::services::refresh::RefreshService;
-use crate::auth::services::user_info::UserInfoService;
-use ta_services::factory::ServiceFactory;
-
 mod cert_download;
 mod login;
 mod logout;
 mod password_change;
 mod refresh;
 mod user_info;
-
-#[derive(ServiceFactory)]
-pub struct AuthServices {
-    pub login: LoginService,
-    pub refresh: RefreshService,
-    pub logout: LogoutService,
-    pub user_info: UserInfoService,
-    pub password_change: PasswordChangeService,
-    pub cert_download: CertDownloadService,
-}
 
 #[cfg(test)]
 mod tests {

@@ -2,102 +2,76 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::layers::refresh_sessions::refresh_sessions;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
-use td_objects::dxo::auth::{SessionDB, SessionLogoutDB, SessionLogoutDBBuilder};
-use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AccessTokenId, AtTime};
-use td_queries::By;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_common::provider::Provider;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_objects::dxo::auth::{SessionDB, SessionLogoutDB};
+use td_objects::dxo::crudl::UpdateRequest;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = LogoutService,
-    request = UpdateRequest<(), ()>,
-    response = (),
-    connection = TransactionProvider,
-    scope = "Global",
-    context = Sessions,
-)]
-fn service() {
-    layers!(
-        // extract access token id and request time from request context
-        from_fn(With::<UpdateRequest<(), ()>>::extract::<RequestContext>),
-        from_fn(With::<RequestContext>::extract::<AccessTokenId>),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        // logout corresponding session
-        from_fn(With::<SessionLogoutDBBuilder>::default),
-        from_fn(With::<AtTime>::set::<SessionLogoutDBBuilder>),
-        from_fn(With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB>),
-        from_fn(By::<AccessTokenId>::update::<SessionLogoutDB, SessionDB>),
-        // invalidate sessions cache
-        from_fn(refresh_sessions),
-    )
+#[service_factory]
+async fn logout(
+    authz: Ctx<AuthzContext>,
+    sessions: Ctx<Sessions>,
+    db: DbPool<Global>,
+    request: UpdateRequest<()>,
+) -> Result<(), TdError> {
+    let (ctx, _, _) = request.into_parts();
+    let mut gated_trx = db.begin().await?;
+    let conn = gated_trx.get(authz.none());
+
+    let logout = SessionLogoutDB::new(ctx.time);
+    conn.live()
+        .update::<SessionLogoutDB, SessionDB>(&logout, ctx.access_token_id)
+        .await?;
+
+    // Housekeeping purge commits with the transaction; the cache invalidation
+    // must wait for the commit (see LoginService).
+    sessions.purge(conn).await?;
+    gated_trx.commit().await?;
+    sessions.invalidate().await;
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Context;
-    use crate::auth::services::AuthServices;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
+    use crate::Services;
     use td_common::jwt::decode_token;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::{Password, SessionStatus, UserId, UserName};
     use td_queries::LiveEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_logout(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        LogoutService::with_defaults(db.clone())
-            .metadata()
-            .await
-            .assert_service::<UpdateRequest<(), ()>, ()>(&[
-                // extract access token id and request time from request context
-                type_of_val(&With::<UpdateRequest<(), ()>>::extract::<RequestContext>),
-                type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                // logout corresponding session
-                type_of_val(&With::<SessionLogoutDBBuilder>::default),
-                type_of_val(&With::<AtTime>::set::<SessionLogoutDBBuilder>),
-                type_of_val(&With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB>),
-                type_of_val(&By::<AccessTokenId>::update::<SessionLogoutDB, SessionDB>),
-                // invalidate sessions cache
-                type_of_val(&refresh_sessions),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_logout_ok(db: TdPool) -> Result<(), TdError> {
-        let context = Context::with_defaults(db.clone());
-        let auth_services = AuthServices::build(&context);
-        let service = auth_services.login.service();
+        let context = Services::with_defaults(db.clone());
+        let auth_services = context.clone();
+        let service = auth_services.clone();
 
-        let request = Login::builder()
-            .name(UserName::try_from("admin")?)
-            .password(Password::try_from("tabsdata")?)
-            .build()?;
-        let res = service.raw_oneshot(request).await;
+        let request = Login {
+            name: UserName::try_from("admin")?,
+            password: Password::try_from("tabsdata")?,
+        };
+        let res = service.login(request).await;
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = &token_response.access_token;
         let access_token_id =
             AccessTokenId::from(decode_token(&context.jwt_config, access_token)?.jti);
 
-        let service = auth_services.logout.service();
+        let service = auth_services.clone();
 
         let request = RequestContext::with(access_token_id, UserId::admin()).update((), ());
-        let res = service.raw_oneshot(request).await;
+        let res = service.logout(request).await;
         assert!(res.is_ok());
 
         let session = db

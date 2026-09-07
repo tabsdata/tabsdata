@@ -2,148 +2,98 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::auth::layers::assert_session_active::assert_session_active;
-use crate::auth::layers::assert_user_enabled::assert_user_enabled;
-use crate::auth::layers::create_access_token::create_access_token;
-use crate::auth::layers::decode_refresh_token::decode_refresh_token;
-use crate::auth::layers::refresh_sessions::refresh_sessions;
-use crate::auth::layers::set_session_expiration::set_session_expiration;
+use crate::auth::assert_session_active::assert_session_active;
+use crate::auth::assert_user_enabled::assert_user_enabled;
+use crate::auth::create_access_token::create_access_token;
+use crate::auth::decode_refresh_token::decode_refresh_token;
+use crate::auth::set_session_expiration::session_expiration;
 use ta_services::factory::service_factory;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
-use td_objects::And;
-use td_objects::dxo::auth::{
-    SessionDB, SessionDBBuilder, SessionNewTokenDB, SessionNewTokenDBBuilder, TokenResponseX,
-};
-use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_common::provider::Provider;
+use td_database::access::{DbPool, Global};
+use td_error::TdError;
+use td_objects::and;
+use td_objects::dxo::auth::{SessionDB, SessionNewTokenDB, TokenResponseX};
+use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::UserDB;
-use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{AccessTokenId, AtTime, RefreshToken, RefreshTokenId, UserId};
-use td_queries::By;
-use td_queries::insert;
-use td_tower::default_services::TransactionProvider;
-use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_objects::types::basic::RefreshToken;
+use td_queries::LiveEntry;
 
-#[service_factory(
-    name = RefreshService,
-    request = UpdateRequest<(), RefreshToken>,
-    response = TokenResponseX,
-    connection = TransactionProvider,
-    scope = "Global",
-    context = JwtConfig,
-    context = Sessions,
-)]
-fn service() {
-    layers!(
-        from_fn(With::<UpdateRequest<(), RefreshToken>>::extract::<RequestContext>),
-        // extract access token id, user id and request time from request context
-        from_fn(With::<RequestContext>::extract::<AccessTokenId>),
-        from_fn(With::<RequestContext>::extract::<UserId>),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
-        // extract refresh token from request
-        from_fn(With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
-        from_fn(decode_refresh_token),
-        // find and lock the session by access token ID and refresh token ID; the
-        // lock serializes concurrent refreshes so the token can be redeemed once
-        from_fn(By::<And![AccessTokenId, RefreshTokenId]>::fetch_one_for_update::<SessionDB>),
-        from_fn(assert_session_active),
-        // reject a refresh from a disabled user
-        from_fn(By::<UserId>::fetch_one::<UserDB>),
-        from_fn(assert_user_enabled),
-        // invalidate session entry with old access token id because of token renewal
-        from_fn(With::<SessionNewTokenDBBuilder>::default),
-        from_fn(With::<AtTime>::set::<SessionNewTokenDBBuilder>),
-        from_fn(With::<SessionNewTokenDBBuilder>::build::<SessionNewTokenDB>),
-        from_fn(By::<AccessTokenId>::update::<SessionNewTokenDB, SessionDB>),
-        // create new session entry with new access token id and refresh token id
-        from_fn(builder::<SessionDB>),
-        from_fn(With::<UserId>::set::<SessionDBBuilder>),
-        from_fn(With::<AtTime>::set::<SessionDBBuilder>),
-        from_fn(set_session_expiration),
-        from_fn(With::<SessionDBBuilder>::build::<SessionDB>),
-        from_fn(insert::<SessionDB>),
-        // create access token
-        from_fn(create_access_token),
-        // invalidate sessions cache
-        from_fn(refresh_sessions),
-    )
+#[service_factory]
+async fn refresh(
+    authz: Ctx<AuthzContext>,
+    jwt_config: Ctx<JwtConfig>,
+    sessions: Ctx<Sessions>,
+    db: DbPool<Global>,
+    request: UpdateRequest<RefreshToken>,
+) -> Result<TokenResponseX, TdError> {
+    let (ctx, _, refresh_token) = request.into_parts();
+    let mut gated_trx = db.begin().await?;
+    let conn = gated_trx.get(authz.none());
+    let access_token_id = ctx.access_token_id;
+    let at = ctx.time;
+
+    let refresh_token_id = decode_refresh_token(&jwt_config, &refresh_token)?;
+
+    // find and lock the session by access token ID and refresh token ID; the
+    // lock serializes concurrent refreshes so the token can be redeemed once
+    let session: SessionDB = conn
+        .live()
+        .fetch_one_for_update(and!(&access_token_id, &refresh_token_id))
+        .await?;
+    assert_session_active(&session)?;
+    let user: UserDB = conn.live().fetch_one(&ctx.user_id).await?;
+    assert_user_enabled(&user)?;
+
+    let new_token = SessionNewTokenDB::new(at);
+    conn.live()
+        .update::<SessionNewTokenDB, SessionDB>(&new_token, access_token_id)
+        .await?;
+
+    let new_session = SessionDB::new(ctx.user_id, at, session_expiration(&jwt_config)?);
+    conn.live().insert(&new_session).await?;
+
+    let token = create_access_token(&jwt_config, &new_session)?;
+
+    // Housekeeping purge commits with the transaction; the cache invalidation
+    // must wait for the commit (see LoginService).
+    sessions.purge(conn).await?;
+    gated_trx.commit().await?;
+    sessions.invalidate().await;
+
+    Ok(token)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Context;
-    use crate::auth::services::AuthServices;
+    use crate::Services;
     use crate::auth::services::tests::assert_session;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
     use td_common::jwt::decode_token;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
-    use td_objects::types::basic::{Password, SessionStatus, UserName};
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::UserId;
+    use td_objects::types::basic::{AccessTokenId, Password, SessionStatus, UserName};
     use td_queries::LiveEntry;
-    use td_tower::ctx_service::RawOneshot;
-
-    #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(db)]
-    async fn test_tower_metadata_refresh(db: TdPool) {
-        use td_tower::metadata::type_of_val;
-
-        RefreshService::with_defaults(db)
-            .metadata()
-            .await
-            .assert_service::<UpdateRequest<(), RefreshToken>, TokenResponseX>(&[
-                type_of_val(&With::<UpdateRequest<(), RefreshToken>>::extract::<RequestContext>),
-                // extract access token id, user id and request time from request context
-                type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
-                type_of_val(&With::<RequestContext>::extract::<UserId>),
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                // extract refresh token from request
-                type_of_val(&With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
-                type_of_val(&decode_refresh_token),
-                // find and lock the session by access token ID and refresh token ID
-                type_of_val(
-                    &By::<And![AccessTokenId, RefreshTokenId]>::fetch_one_for_update::<SessionDB>,
-                ),
-                type_of_val(&assert_session_active),
-                // reject a refresh from a disabled user
-                type_of_val(&By::<UserId>::fetch_one::<UserDB>),
-                type_of_val(&assert_user_enabled),
-                // invalidate session entry with old access token id because of token renewal
-                type_of_val(&With::<SessionNewTokenDBBuilder>::default),
-                type_of_val(&With::<AtTime>::set::<SessionNewTokenDBBuilder>),
-                type_of_val(&With::<SessionNewTokenDBBuilder>::build::<SessionNewTokenDB>),
-                type_of_val(&By::<AccessTokenId>::update::<SessionNewTokenDB, SessionDB>),
-                // create new session entry with new access token id and refresh token id
-                type_of_val(&builder::<SessionDB>),
-                type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
-                type_of_val(&With::<AtTime>::set::<SessionDBBuilder>),
-                type_of_val(&set_session_expiration),
-                type_of_val(&With::<SessionDBBuilder>::build::<SessionDB>),
-                type_of_val(&insert::<SessionDB>),
-                // create access token
-                type_of_val(&create_access_token),
-                // invalidate sessions cache
-                type_of_val(&refresh_sessions),
-            ]);
-    }
 
     #[td_test::test(db)]
     async fn test_refresh_ok(db: TdPool) -> Result<(), TdError> {
-        let context = Context::with_defaults(db.clone());
-        let auth_services = AuthServices::build(&context);
+        let context = Services::with_defaults(db.clone());
+        let auth_services = context.clone();
 
         // doing a login before password change to verify it will be invalidated
-        let service = auth_services.login.service();
+        let service = auth_services.clone();
 
-        let request = Login::builder()
-            .name(UserName::try_from("admin")?)
-            .password(Password::try_from("tabsdata")?)
-            .build()?;
-        let res = service.raw_oneshot(request).await;
+        let request = Login {
+            name: UserName::try_from("admin")?,
+            password: Password::try_from("tabsdata")?,
+        };
+        let res = service.login(request).await;
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = &token_response.access_token;
@@ -151,11 +101,11 @@ mod tests {
             AccessTokenId::from(decode_token(&context.jwt_config, access_token)?.jti);
         let refresh_token = &token_response.refresh_token;
 
-        let service = auth_services.refresh.service();
+        let service = auth_services.clone();
 
         let request = RequestContext::with(original_access_token_id, UserId::admin())
             .update((), refresh_token.clone());
-        let res = service.raw_oneshot(request).await;
+        let res = service.refresh(request).await;
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = &token_response.access_token;
@@ -181,14 +131,14 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_refresh_rejects_reused_token(db: TdPool) -> Result<(), TdError> {
-        let context = Context::with_defaults(db.clone());
-        let auth_services = AuthServices::build(&context);
+        let context = Services::with_defaults(db.clone());
+        let auth_services = context.clone();
 
-        let request = Login::builder()
-            .name(UserName::try_from("admin")?)
-            .password(Password::try_from("tabsdata")?)
-            .build()?;
-        let token_response = auth_services.login.service().raw_oneshot(request).await?;
+        let request = Login {
+            name: UserName::try_from("admin")?,
+            password: Password::try_from("tabsdata")?,
+        };
+        let token_response = auth_services.login(request).await?.data;
         let original_access_token_id = AccessTokenId::from(
             decode_token(&context.jwt_config, &token_response.access_token)?.jti,
         );
@@ -196,11 +146,11 @@ mod tests {
 
         let request = RequestContext::with(original_access_token_id, UserId::admin())
             .update((), refresh_token.clone());
-        auth_services.refresh.service().raw_oneshot(request).await?;
+        auth_services.refresh(request).await?.data;
 
         let request = RequestContext::with(original_access_token_id, UserId::admin())
             .update((), refresh_token);
-        let reused = auth_services.refresh.service().raw_oneshot(request).await;
+        let reused = auth_services.refresh(request).await;
         assert!(
             reused.is_err(),
             "a redeemed refresh token must not be reusable"

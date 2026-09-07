@@ -2,7 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-pub mod layers;
 pub mod services;
 
 use td_error::td_error;
@@ -28,3 +27,14 @@ pub enum AuthError {
     #[error("Internal error: {0}")]
     InternalError(String) = 5000,
 }
+
+pub mod assert_current_password;
+pub mod assert_login_user;
+pub mod assert_no_password_change_required;
+pub mod assert_session_active;
+pub mod assert_user_enabled;
+pub mod cert_download;
+pub mod create_access_token;
+pub mod create_password_hash;
+pub mod decode_refresh_token;
+pub mod set_session_expiration;

@@ -7,14 +7,13 @@ use std::ops::Deref;
 use td_error::TdError;
 use td_objects::types::basic::PasswordHash;
 use td_security::password;
-use td_tower::extractors::Ref;
 use tracing::error;
 
-pub async fn assert_current_password<P: Deref<Target = String>>(
-    password_hash: Ref<PasswordHash>,
-    password: Ref<P>,
+pub fn assert_current_password<P: Deref<Target = String>>(
+    password_hash: &PasswordHash,
+    password: &P,
 ) -> Result<(), TdError> {
-    password::verify_password(password_hash.as_str(), password.deref())
+    password::verify_password(password_hash.as_str(), password)
         .then_some(())
         .ok_or_else(|| {
             error!("Authentication failed: invalid password");
