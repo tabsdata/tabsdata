@@ -11,8 +11,9 @@ use ta_objects::FromDao;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "roles")]
+#[dao(table = "roles", ops(select, insert, delete), unique(RoleName))]
 pub struct RoleDB {
+    #[dao(pk)]
     pub id: RoleId,
     pub name: RoleName,
     pub description: Description,
@@ -29,7 +30,7 @@ pub struct RoleDB {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "roles__with_names")]
+#[dao(view = "roles__with_names", unique(RoleName))]
 pub struct RoleDBWithNames {
     #[dao(flatten)]
     pub base: RoleDB,
@@ -65,8 +66,8 @@ impl RoleCreate {
 }
 
 #[ta_objects::Dao]
-#[dao(update, sql_table = "roles")]
-pub struct RoleDBUpdate {
+#[dao(table = "roles", ops(update(RoleDB)))]
+pub struct RoleUpdateDB {
     pub name: Option<RoleName>,
     pub description: Option<Description>,
     pub modified_on: Modified<AtTime>,

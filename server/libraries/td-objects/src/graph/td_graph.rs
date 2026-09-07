@@ -64,12 +64,14 @@ impl<'a> TdGraphBuilder<'a> {
         for trigger in triggers {
             let table = self
                 .all_tables_map
-                .get(&trigger.base.trigger_by_table_id)
-                .ok_or(GraphError::MissingTable(trigger.base.trigger_by_table_id))?;
+                .get(&trigger.base.base.trigger_by_table_id)
+                .ok_or(GraphError::MissingTable(
+                    trigger.base.base.trigger_by_table_id,
+                ))?;
             let function = self
                 .all_functions_map
-                .get(&trigger.base.function_id)
-                .ok_or(GraphError::MissingFunction(trigger.base.function_id))?;
+                .get(&trigger.base.base.function_id)
+                .ok_or(GraphError::MissingFunction(trigger.base.base.function_id))?;
 
             let (function_node, table_node) = GraphNode::pair(function, table)?;
             let function_idx = self.add_if_absent(function_node);
@@ -86,15 +88,15 @@ impl<'a> TdGraphBuilder<'a> {
         for table in outputs {
             let function = self
                 .all_functions_map
-                .get(&table.base.function_id)
-                .ok_or(GraphError::MissingFunction(table.base.function_id))?;
+                .get(&table.base.base.function_id)
+                .ok_or(GraphError::MissingFunction(table.base.base.function_id))?;
 
             let (function_node, table_node) = GraphNode::pair(function, table)?;
             let function_idx = self.add_if_absent(function_node);
             let table_idx = self.add_if_absent(table_node);
 
             let graph_output = GraphOutput {
-                output_pos: table.base.function_param_pos,
+                output_pos: table.base.base.function_param_pos,
             };
 
             // note it is inverted in dep and trigger edges
@@ -111,21 +113,21 @@ impl<'a> TdGraphBuilder<'a> {
         for dep in deps {
             let table = self
                 .all_tables_map
-                .get(&dep.base.table_id)
-                .ok_or(GraphError::MissingTable(dep.base.table_id))?;
+                .get(&dep.base.base.table_id)
+                .ok_or(GraphError::MissingTable(dep.base.base.table_id))?;
             let function = self
                 .all_functions_map
-                .get(&dep.base.function_id)
-                .ok_or(GraphError::MissingFunction(dep.base.function_id))?;
+                .get(&dep.base.base.function_id)
+                .ok_or(GraphError::MissingFunction(dep.base.base.function_id))?;
 
             let (function_node, table_node) = GraphNode::pair(function, table)?;
             let function_idx = self.add_if_absent(function_node);
             let table_idx = self.add_if_absent(table_node);
 
             let graph_dep = GraphDependency {
-                dep_pos: dep.base.dep_pos,
+                dep_pos: dep.base.base.dep_pos,
                 self_dependency: SelfDependency::from(
-                    function.base.id == table.base.function_version_id,
+                    function.base.base.id == table.base.base.function_version_id,
                 ),
             };
 
@@ -133,7 +135,7 @@ impl<'a> TdGraphBuilder<'a> {
             self.graph.add_edge(
                 table_idx,
                 function_idx,
-                GraphEdge::dependency(dep.base.table_versions.deref().clone(), graph_dep),
+                GraphEdge::dependency(dep.base.base.table_versions.deref().clone(), graph_dep),
             );
         }
         Ok(self)

@@ -5,7 +5,7 @@
 //! Aggregated outcome of a single physical function run.
 //!
 //! Computed once from the worker callback at terminalization, then
-//! flattened into `UpdatePhysicalFunctionRunDB` (whose columns are the
+//! flattened into `PhysicalFunctionRunUpdateDB` (whose columns are the
 //! SQL representation). Wrapping the three values in one struct keeps
 //! "no output yet" (None) distinct from "output, but data_bytes omitted
 //! by an older worker yaml" (Some(RunMetrics { data_bytes: None, .. })).

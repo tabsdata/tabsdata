@@ -60,13 +60,15 @@ pub struct InternalExecutionRequest {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "executions", order_by(col = "triggered_on", dir = "desc"))]
-pub struct ExecutionDB {
+#[dao(table = "executions", ops(insert), project_scoped)]
+pub struct ExecutionInsertDB {
+    #[dao(pk)]
     pub id: ExecutionId,
     pub name: Option<ExecutionName>,
     pub collection_id: CollectionId,
     pub function_id: FunctionId,
     pub function_version_id: FunctionVersionId,
+    #[dao(order_by)]
     pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
     pub trigger_type: TriggerType,
@@ -78,8 +80,22 @@ pub struct ExecutionDB {
     pub recursion_options: Option<Json<RecursionOptions>>,
 }
 
+/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
 #[ta_objects::Dao]
-#[dao(sql_table = "executions__with_names")]
+#[dao(
+    table = "executions",
+    ops(select),
+    unique(FunctionId, ExternalUid),
+    project_scoped
+)]
+pub struct ExecutionDB {
+    #[dao(flatten)]
+    pub base: ExecutionInsertDB,
+    pub project_id: ProjectId,
+}
+
+#[ta_objects::Dao]
+#[dao(view = "executions__with_names", project_scoped)]
 pub struct ExecutionDBWithNames {
     #[dao(flatten)]
     pub base: ExecutionDB,
@@ -93,11 +109,10 @@ pub struct ExecutionDBWithNames {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "executions__with_status")]
+#[dao(view = "executions__with_status", project_scoped)]
 pub struct ExecutionDBWithStatus {
     #[dao(flatten)]
     pub base: ExecutionDBWithNames,
-    pub project_id: ProjectId,
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
     pub status: ExecutionStatus,
@@ -149,21 +164,21 @@ impl FromDao for Execution {
 
     fn from_dao(dao: ExecutionDBWithStatus) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.base.id,
-            name: dao.base.base.name,
-            collection_id: dao.base.base.collection_id,
-            function_id: dao.base.base.function_id,
-            function_version_id: dao.base.base.function_version_id,
-            triggered_on: dao.base.base.triggered_on,
-            triggered_by_id: dao.base.base.triggered_by_id,
-            trigger_type: dao.base.base.trigger_type,
-            external_uid: dao.base.base.external_uid,
+            id: dao.base.base.base.id,
+            name: dao.base.base.base.name,
+            collection_id: dao.base.base.base.collection_id,
+            function_id: dao.base.base.base.function_id,
+            function_version_id: dao.base.base.base.function_version_id,
+            triggered_on: dao.base.base.base.triggered_on,
+            triggered_by_id: dao.base.base.base.triggered_by_id,
+            trigger_type: dao.base.base.base.trigger_type,
+            external_uid: dao.base.base.base.external_uid,
             collection: dao.base.collection,
             collection_deleted: dao.base.collection_deleted,
             function: dao.base.function,
             triggered_by: dao.base.triggered_by,
             project: dao.base.project,
-            project_id: dao.project_id,
+            project_id: dao.base.base.project_id,
             started_on: dao.started_on,
             ended_on: dao.ended_on,
             status: dao.status,
@@ -262,12 +277,12 @@ impl From<&TableNode> for TableNodeResponse {
 impl From<&FunctionDBWithNames> for FunctionNode {
     fn from(src: &FunctionDBWithNames) -> Self {
         FunctionNode {
-            collection_id: src.base.collection_id,
+            collection_id: src.base.base.collection_id,
             collection: src.collection.clone(),
-            function_id: src.base.function_id,
-            function_version_id: src.base.id.clone(),
-            name: src.base.name.clone(),
-            enabled: src.base.enabled,
+            function_id: src.base.base.function_id,
+            function_version_id: src.base.base.id.clone(),
+            name: src.base.base.name.clone(),
+            enabled: src.base.base.enabled,
             group_id: src.group_id,
         }
     }
@@ -276,27 +291,27 @@ impl From<&FunctionDBWithNames> for FunctionNode {
 impl From<&PhysicalTableDataVersionDBWithFunction> for ExecutionTableDataVersionRead {
     fn from(src: &PhysicalTableDataVersionDBWithFunction) -> Self {
         ExecutionTableDataVersionRead {
-            id: src.base.id.clone(),
+            id: src.base.base.id.clone(),
             project_id: src.base.project_id,
-            collection_id: src.base.collection_id,
-            table_id: src.base.table_id,
-            name: src.base.name.clone(),
-            table_version_id: src.base.table_version_id,
-            function_version_id: src.base.function_version_id.clone(),
-            function_version_patch_id: src.base.function_version_patch_id.clone(),
-            execution_id: src.base.execution_id.clone(),
-            transaction_id: src.base.transaction_id.clone(),
-            physical_function_run_id: src.base.physical_function_run_id.clone(),
-            function_param_pos: src.base.function_param_pos,
-            triggered_on: src.base.triggered_on,
-            base_path: src.base.base_path.clone(),
-            has_data: src.base.has_data,
-            schema_changed: src.base.schema_changed,
-            column_count: src.base.column_count,
-            row_count: src.base.row_count,
-            data_bytes: src.base.data_bytes,
-            schema_hash: src.base.schema_hash.clone(),
-            with_data_table_data_version_id: src.base.with_data_table_data_version_id.clone(),
+            collection_id: src.base.base.collection_id,
+            table_id: src.base.base.table_id,
+            name: src.base.base.name.clone(),
+            table_version_id: src.base.base.table_version_id,
+            function_version_id: src.base.base.function_version_id.clone(),
+            function_version_patch_id: src.base.base.function_version_patch_id.clone(),
+            execution_id: src.base.base.execution_id.clone(),
+            transaction_id: src.base.base.transaction_id.clone(),
+            physical_function_run_id: src.base.base.physical_function_run_id.clone(),
+            function_param_pos: src.base.base.function_param_pos,
+            triggered_on: src.base.base.triggered_on,
+            base_path: src.base.base.base_path.clone(),
+            has_data: src.base.base.has_data,
+            schema_changed: src.base.base.schema_changed,
+            column_count: src.base.base.column_count,
+            row_count: src.base.base.row_count,
+            data_bytes: src.base.base.data_bytes,
+            schema_hash: src.base.base.schema_hash.clone(),
+            with_data_table_data_version_id: src.base.base.with_data_table_data_version_id.clone(),
             triggered_by_id: src.triggered_by_id,
             started_on: src.started_on,
             ended_on: src.ended_on,

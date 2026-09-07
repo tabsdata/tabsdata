@@ -10,8 +10,13 @@ use ta_objects::FromDao;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "permissions")]
+#[dao(
+    table = "permissions",
+    ops(select, insert, delete),
+    unique(RoleId, PermissionType, PermissionEntityType, EntityId)
+)]
 pub struct PermissionDB {
+    #[dao(pk)]
     pub id: PermissionId,
     pub role_id: RoleId,
     pub permission_type: PermissionType,
@@ -25,8 +30,12 @@ pub struct PermissionDB {
 // Flat, not nested on `PermissionDB`: the view relaxes `entity_id` to
 // nullable (NULL = ALL), so the table row's shape doesn't embed.
 #[ta_objects::Dao]
-#[dao(sql_table = "permissions__with_names")]
+#[dao(
+    view = "permissions__with_names",
+    unique(RoleId, PermissionType, PermissionEntityType, EntityId)
+)]
 pub struct PermissionDBWithNames {
+    #[dao(pk)]
     pub id: PermissionId,
     pub role_id: RoleId,
     pub permission_type: PermissionType,

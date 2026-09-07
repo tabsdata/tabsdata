@@ -14,8 +14,9 @@ use ta_objects::FromDao;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "transactions")]
-pub struct TransactionDB {
+#[dao(table = "transactions", ops(insert), project_scoped)]
+pub struct TransactionInsertDB {
+    #[dao(pk)]
     pub id: TransactionId,
     pub collection_id: CollectionId,
     pub execution_id: ExecutionId,
@@ -27,6 +28,15 @@ pub struct TransactionDB {
     // mint; immutable thereafter so a collection's later group
     // reassignment doesn't shift historical transactions.
     pub group_id: GroupId,
+}
+
+/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
+#[ta_objects::Dao]
+#[dao(table = "transactions", ops(select), project_scoped)]
+pub struct TransactionDB {
+    #[dao(flatten)]
+    pub base: TransactionInsertDB,
+    pub project_id: ProjectId,
 }
 
 #[ta_objects::Dlo]
@@ -42,11 +52,10 @@ pub struct TransactionValue {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "transactions__with_status")]
+#[dao(view = "transactions__with_status", project_scoped)]
 pub struct TransactionDBWithStatus {
     #[dao(flatten)]
     pub base: TransactionDB,
-    pub project_id: ProjectId,
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
     pub status: TransactionStatus,
@@ -103,15 +112,15 @@ impl FromDao for Transaction {
 
     fn from_dao(dao: TransactionDBWithStatus) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            collection_id: dao.base.collection_id,
-            execution_id: dao.base.execution_id,
-            transaction_by: dao.base.transaction_by,
-            transaction_key: dao.base.transaction_key,
-            triggered_on: dao.base.triggered_on,
-            triggered_by_id: dao.base.triggered_by_id,
-            group_id: dao.base.group_id,
-            project_id: dao.project_id,
+            id: dao.base.base.id,
+            collection_id: dao.base.base.collection_id,
+            execution_id: dao.base.base.execution_id,
+            transaction_by: dao.base.base.transaction_by,
+            transaction_key: dao.base.base.transaction_key,
+            triggered_on: dao.base.base.triggered_on,
+            triggered_by_id: dao.base.base.triggered_by_id,
+            group_id: dao.base.base.group_id,
+            project_id: dao.base.project_id,
             started_on: dao.started_on,
             ended_on: dao.ended_on,
             status: dao.status,
@@ -125,8 +134,8 @@ impl FromDao for Transaction {
     }
 }
 
-impl From<&TransactionDB> for TransactionValue {
-    fn from(src: &TransactionDB) -> Self {
+impl From<&TransactionInsertDB> for TransactionValue {
+    fn from(src: &TransactionInsertDB) -> Self {
         TransactionValue {
             id: src.id.clone(),
             collection_id: src.collection_id,

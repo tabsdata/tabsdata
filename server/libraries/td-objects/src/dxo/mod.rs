@@ -33,7 +33,6 @@ pub mod execution;
 pub mod file;
 pub mod function;
 pub mod function_upload;
-pub mod global_status;
 pub mod graph;
 pub mod group;
 pub mod logical;

@@ -7,27 +7,22 @@ use crate::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
     ConnectionKind, Decorator, Dispatched, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek,
     EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx,
-    OfExecution, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, ProjectName,
-    RowCount, StageId, Started, StorageVersion, TableVersionCount, TransactionId, Trigger,
-    TriggeredOn, UserId, UserName,
+    LogicalFunctionRunId, OfExecution, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
+    ProjectId, ProjectName, RowCount, StageId, Started, StorageVersion, TableVersionCount,
+    TransactionId, Trigger, TriggeredOn, UserId, UserName, ValidTo,
 };
 use chrono::{DateTime, Utc};
 use ta_objects::FromDao;
 use td_common::bucket::BucketFloors;
 use td_error::TdError;
 
+/// One attempt at a logical function run. Attempts are the run's SCD2
+/// versions, ordered by `triggered_on`: the newest is the current one.
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "physical_function_runs",
-    order_by(col = "triggered_on", dir = "desc")
-)]
-pub struct PhysicalFunctionRunDB {
+#[dao(table = "physical_function_runs", ops(insert), scd2, project_scoped)]
+pub struct PhysicalFunctionRunInsertDB {
+    #[dao(pk)]
     pub id: PhysicalFunctionRunId,
-    /// The project this run belongs to. Inherited from the parent LFR
-    /// at mint; required at construction — there is no default project
-    /// fallback because that would mask a builder forgetting to thread the
-    /// project from upstream.
-    pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub function_id: FunctionId,
     // The fvid of the function being run — distinct from
@@ -35,6 +30,9 @@ pub struct PhysicalFunctionRunDB {
     pub function_version_id: FunctionVersionId,
     pub execution_id: ExecutionId,
     pub transaction_id: TransactionId,
+    #[dao(partition_by)]
+    pub logical_function_run_id: LogicalFunctionRunId,
+    #[dao(valid_from, order_by)]
     pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
     pub trigger: Trigger,
@@ -70,7 +68,17 @@ pub struct PhysicalFunctionRunDB {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "physical_function_runs__with_names")]
+#[dao(table = "physical_function_runs", ops(select), scd2, project_scoped)]
+pub struct PhysicalFunctionRunDB {
+    #[dao(flatten)]
+    pub base: PhysicalFunctionRunInsertDB,
+    pub project_id: ProjectId,
+    #[dao(valid_to)]
+    pub valid_to: ValidTo,
+}
+
+#[ta_objects::Dao]
+#[dao(view = "physical_function_runs__with_names", scd2, project_scoped)]
 pub struct PhysicalFunctionRunDBWithNames {
     #[dao(flatten)]
     pub base: PhysicalFunctionRunDB,
@@ -85,7 +93,7 @@ pub struct PhysicalFunctionRunDBWithNames {
 }
 
 #[ta_objects::Dlo]
-#[derive(sqlx::FromRow)] // not a Dao, just a logical layer built from combining them
+#[derive(sqlx::FromRow)] // not a SelectDao, just a logical layer built from combining them
 pub struct PhysicalFunctionRunToExecute {
     #[sqlx(flatten)]
     pub base: PhysicalFunctionRunDBWithNames,
@@ -147,16 +155,16 @@ impl FromDao for PhysicalFunctionRun {
 
     fn from_dao(dao: PhysicalFunctionRunDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            collection_id: dao.base.collection_id,
-            function_version_id: dao.base.function_version_id,
-            execution_id: dao.base.execution_id,
-            transaction_id: dao.base.transaction_id,
-            triggered_on: dao.base.triggered_on,
-            trigger: dao.base.trigger,
-            started_on: dao.base.started_on,
-            ended_on: dao.base.ended_on,
-            status: dao.base.status,
+            id: dao.base.base.id,
+            collection_id: dao.base.base.collection_id,
+            function_version_id: dao.base.base.function_version_id,
+            execution_id: dao.base.base.execution_id,
+            transaction_id: dao.base.base.transaction_id,
+            triggered_on: dao.base.base.triggered_on,
+            trigger: dao.base.base.trigger,
+            started_on: dao.base.base.started_on,
+            ended_on: dao.base.base.ended_on,
+            status: dao.base.base.status,
             name: dao.name,
             collection: dao.collection,
             execution: dao.execution,
@@ -168,7 +176,7 @@ impl FromDao for PhysicalFunctionRun {
 
 // Per-attempt timing + status on the concrete FR. The worker callback
 // writes both via WorkerExecutionUpdate → builder. The LFR's
-// canonical status is updated separately via LogicalFunctionRunUpdateDB
+// canonical status is updated separately via LogicalFunctionRunStatusUpdateDB
 // (sticky-Committed gate applies there, not here).
 //
 // At terminalization, the same UPDATE also writes the four
@@ -177,8 +185,12 @@ impl FromDao for PhysicalFunctionRun {
 // attempt produced output — the three `metric_*` aggregates from
 // the callback's `RunMetrics`. Single atomic write.
 #[ta_objects::Dao]
-#[dao(update, sql_table = "physical_function_runs")]
-pub struct UpdatePhysicalFunctionRunDB {
+#[dao(
+    table = "physical_function_runs",
+    ops(update(PhysicalFunctionRunDB)),
+    project_scoped
+)]
+pub struct PhysicalFunctionRunUpdateDB {
     pub dispatched_on: Option<Dispatched<AtTime>>,
     #[dao(immutable)]
     pub started_on: Option<Started<AtTime>>,
@@ -195,7 +207,7 @@ pub struct UpdatePhysicalFunctionRunDB {
     pub metric_data_bytes: Option<ByteCount>,
 }
 
-impl UpdatePhysicalFunctionRunDB {
+impl PhysicalFunctionRunUpdateDB {
     /// Status transition for the request-layer's dispatch step:
     /// `Requested → Dispatched`, stamped at `dispatched_on`. The same
     /// tx creates the WorkerDB row; the pair (PFR.status=Dispatched,
@@ -239,10 +251,10 @@ impl UpdatePhysicalFunctionRunDB {
     }
 }
 
-impl TryFrom<&WorkerExecutionUpdate> for UpdatePhysicalFunctionRunDB {
+impl TryFrom<&WorkerExecutionUpdate> for PhysicalFunctionRunUpdateDB {
     type Error = TdError;
     fn try_from(src: &WorkerExecutionUpdate) -> Result<Self, Self::Error> {
-        Ok(UpdatePhysicalFunctionRunDB {
+        Ok(PhysicalFunctionRunUpdateDB {
             dispatched_on: None,
             started_on: src.started_on,
             ended_on: src.ended_on,
@@ -278,7 +290,7 @@ mod tests {
     #[tokio::test]
     async fn test_dispatched_helper_sets_status_and_dispatched_on() {
         let at = AtTime::now();
-        let update = UpdatePhysicalFunctionRunDB::dispatched(&at);
+        let update = PhysicalFunctionRunUpdateDB::dispatched(&at);
         assert_eq!(update.status, PhysicalFunctionRunStatus::Dispatched);
         assert_eq!(update.dispatched_on, Some(Dispatched::from(at)));
         assert!(update.started_on.is_none());

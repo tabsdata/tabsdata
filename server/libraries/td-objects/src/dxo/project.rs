@@ -16,8 +16,9 @@ use td_common::id::Id;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "projects")]
-pub struct ProjectCreateDB {
+#[dao(table = "projects", ops(insert))]
+pub struct ProjectInsertDB {
+    #[dao(pk)]
     pub id: ProjectId,
     pub name: ProjectName,
     pub description: Description,
@@ -31,8 +32,9 @@ pub struct ProjectCreateDB {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "projects_active")]
+#[dao(view = "projects_active", unique(ProjectName))]
 pub struct ActiveProjectDB {
+    #[dao(pk)]
     pub id: ProjectId,
     pub name: ProjectName,
     pub description: Description,
@@ -58,8 +60,10 @@ impl ActiveProjectDB {
 
 // Canonical read/join surface: the `projects_resolved` view — every row, real
 // name resolved. Same columns as `ActiveProjectDB` plus the `deleted` flag.
+// The name is not unique here: the view resolves the freed name back, so a
+// delete/recreate cycle leaves two rows under it. Only the id addresses a row.
 #[ta_objects::Dao]
-#[dao(sql_table = "projects_resolved")]
+#[dao(view = "projects_resolved")]
 pub struct ProjectDB {
     #[dao(flatten)]
     pub base: ActiveProjectDB,
@@ -67,7 +71,7 @@ pub struct ProjectDB {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "projects")]
+#[dao(table = "projects", ops(update(ProjectInsertDB)))]
 pub struct ProjectDeleteDB {
     pub name: ProjectName,
 
@@ -82,7 +86,7 @@ pub fn generate_deleted_name() -> ProjectName {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "projects__with_names")]
+#[dao(view = "projects__with_names", unique(ProjectName))]
 pub struct ActiveProjectDBWithNames {
     #[dao(flatten)]
     pub base: ActiveProjectDB,
@@ -101,8 +105,8 @@ pub struct ProjectCreate {
 }
 
 impl ProjectCreate {
-    pub fn to_dao(self, ctx: &RequestContext) -> ProjectCreateDB {
-        ProjectCreateDB {
+    pub fn to_dao(self, ctx: &RequestContext) -> ProjectInsertDB {
+        ProjectInsertDB {
             id: ProjectId::default(),
             name: self.name,
             description: self.description,
@@ -123,7 +127,7 @@ pub struct ProjectUpdate {
 }
 
 #[ta_objects::Dao]
-#[dao(update, sql_table = "projects")]
+#[dao(table = "projects", ops(update(ProjectInsertDB)))]
 pub struct ProjectUpdateDB {
     pub name: ProjectName,
     pub description: Description,
@@ -169,8 +173,8 @@ impl FromDao for ProjectRead {
     }
 }
 
-impl From<ProjectCreateDB> for ActiveProjectDB {
-    fn from(src: ProjectCreateDB) -> Self {
+impl From<ProjectInsertDB> for ActiveProjectDB {
+    fn from(src: ProjectInsertDB) -> Self {
         ActiveProjectDB {
             id: src.id,
             name: src.name,

@@ -121,6 +121,7 @@ mod tests {
     pub struct StringType(String);
 
     #[ta_objects::Dao]
+    #[dao(table = "testdao", ops(select, insert, delete))]
     struct TestDao {
         pub a: StringType,
     }

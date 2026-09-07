@@ -36,8 +36,9 @@ pub struct PasswordChange {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "sessions")]
+#[dao(table = "sessions", ops(select, insert), unique(RefreshTokenId))]
 pub struct SessionDB {
+    #[dao(pk)]
     pub access_token_id: AccessTokenId,
     pub refresh_token_id: RefreshTokenId,
     pub user_id: UserId,
@@ -63,57 +64,27 @@ impl SessionDB {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "sessions__with_names")]
+#[dao(view = "sessions__with_names")]
 pub struct SessionDBWithNames {
     #[dao(flatten)]
     pub base: SessionDB,
     pub user_name: UserName,
 }
 
+/// The session-invalidating update: one shape, the reason carried by
+/// `status`.
 #[ta_objects::Dao]
-#[dao(sql_table = "sessions")]
-pub struct SessionLogoutDB {
+#[dao(table = "sessions", ops(update(SessionDB)))]
+pub struct SessionInvalidateDB {
     pub status_change_on: StatusChange<AtTime>,
     pub status: SessionStatus,
 }
 
-impl SessionLogoutDB {
-    pub fn new(at: AtTime) -> Self {
+impl SessionInvalidateDB {
+    pub fn new(at: AtTime, status: SessionStatus) -> Self {
         Self {
             status_change_on: at.into(),
-            status: SessionStatus::InvalidLogout,
-        }
-    }
-}
-
-#[ta_objects::Dao]
-#[dao(sql_table = "sessions")]
-pub struct SessionPasswordChangeDB {
-    pub status_change_on: StatusChange<AtTime>,
-    pub status: SessionStatus,
-}
-
-impl SessionPasswordChangeDB {
-    pub fn new(at: AtTime) -> Self {
-        Self {
-            status_change_on: at.into(),
-            status: SessionStatus::InvalidPasswordChange,
-        }
-    }
-}
-
-#[ta_objects::Dao]
-#[dao(sql_table = "sessions")]
-pub struct SessionNewTokenDB {
-    pub status_change_on: StatusChange<AtTime>,
-    pub status: SessionStatus,
-}
-
-impl SessionNewTokenDB {
-    pub fn new(at: AtTime) -> Self {
-        Self {
-            status_change_on: at.into(),
-            status: SessionStatus::InvalidNewToken,
+            status,
         }
     }
 }

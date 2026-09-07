@@ -3,16 +3,18 @@
 //
 
 use crate::dxo::crudl::RequestContext;
+use crate::types::basic::ValidTo;
 use crate::types::basic::{
-    AtTime, BasePath, BundleId, CollectionId, CollectionName, ConnectionKind, Connector, Decorator,
-    Description, Enabled, FunctionId, FunctionIdName, FunctionName, FunctionRuntimeValues,
-    FunctionStatus, FunctionVersionId, GroupId, Parent, RawSnippet, ResetStage, ResetState,
-    ReuseFrozen, Snippet, StageId, StorageVersion, TableName, TableNameDto, TableType, UserId,
-    UserName, WorkerConfig, WorkerId, WorkerTypeDto,
+    AtTime, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, ConnectionKind,
+    Connector, Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
+    FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Parent, ProjectId,
+    RawSnippet, ResetStage, ResetState, ReuseFrozen, Snippet, StageId, StorageVersion, TableName,
+    TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
 };
 use crate::types::composed::{TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto};
 use std::collections::HashMap;
-use ta_objects::{FromDao, StateFilter, and, or};
+use ta_objects::sql_condition::SqlCondition;
+use ta_objects::{FromDao, and};
 use td_error::TdError;
 
 #[ta_objects::Dto]
@@ -24,7 +26,6 @@ pub struct FunctionRegister {
     pub decorator: Decorator,
     pub connector: Option<Connector>,
     pub connection: Option<ConnectionKind>,
-    // Optional storage-prefix override for this function's output table data.
     #[serde(default)]
     pub base_path: Option<BasePath>,
     pub dependencies: Option<Vec<TableDependencyDto>>,
@@ -47,8 +48,8 @@ impl FunctionRegister {
         ctx: &RequestContext,
         collection_id: CollectionId,
         stage_base_path: BasePath,
-    ) -> Result<FunctionDB, TdError> {
-        Ok(FunctionDB {
+    ) -> Result<FunctionInsertDB, TdError> {
+        Ok(FunctionInsertDB {
             id: FunctionVersionId::new(),
             collection_id,
             name: self.name.clone(),
@@ -103,21 +104,18 @@ pub struct FunctionUpdate {
 }
 
 impl FunctionUpdate {
-    /// The new function version row for an update: the previous version's
-    /// fields with a fresh version id, Active status, a fresh storage
-    /// version, and the update's changes applied on top.
     pub fn to_dao(
         &self,
         previous: &FunctionDB,
         ctx: &RequestContext,
-    ) -> Result<FunctionDB, TdError> {
-        let mut function = FunctionDB {
+    ) -> Result<FunctionInsertDB, TdError> {
+        let mut function = FunctionInsertDB {
             id: FunctionVersionId::new(),
             status: FunctionStatus::Active,
             defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             storage_version: StorageVersion::default(),
-            ..previous.clone()
+            ..previous.base.clone()
         };
         if let Some(name) = &self.name {
             function.name = name.clone();
@@ -149,9 +147,8 @@ impl FunctionUpdate {
         if let Some(base_path) = &self.base_path {
             function.base_path = Some(base_path.clone());
         }
-        // reset-stage: fresh stage id (new stage/checkpoint dir). The stage_base_path is
-        // carried forward from the previous version, so the fresh stage lands at the same
-        // stamped prefix — it is not relocated by an unrelated collection base_path change.
+        // stage_base_path is carried forward, so the fresh stage lands at the same
+        // stamped prefix — not relocated by a later collection base_path change.
         if *self.reset_stage {
             function.stage_id = StageId::default();
         }
@@ -164,15 +161,12 @@ pub struct FunctionEnable {
     pub enabled: Enabled,
 }
 
-/// Body for `POST /api/v1/collections/{coll}/functions/{name}/patch`.
-///
 /// A patch is a code-only override of a specific `FunctionVersionId`
-/// (`patch_of`). It shares the parent's topology — no `tables`,
-/// `dependencies`, `triggers`, `workers` — and is reachable only by
-/// explicit fvid (replay). Fields not set fall back to parent values.
+/// (`patch_of`): it shares the parent's topology — no tables, dependencies,
+/// triggers, workers — and is reachable only by explicit fvid (replay).
+/// Fields not set fall back to parent values.
 #[ta_objects::Dto]
 pub struct FunctionPatch {
-    /// The function version this patches. Required.
     pub patch_of: FunctionVersionId,
     pub bundle_id: BundleId,
     pub snippet: RawSnippet,
@@ -183,22 +177,20 @@ pub struct FunctionPatch {
 }
 
 impl FunctionPatch {
-    /// The new patch row: fields not set in the body fall back to the
-    /// parent function version's values.
     pub fn to_dao(
         self,
         parent: FunctionDB,
         ctx: &RequestContext,
-    ) -> Result<FunctionPatchDB, TdError> {
-        Ok(FunctionPatchDB {
+    ) -> Result<FunctionPatchInsertDB, TdError> {
+        Ok(FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: parent.id.into(),
-            function_id: parent.function_id,
-            collection_id: parent.collection_id,
+            parent_function_version_id: parent.base.id.into(),
+            function_id: parent.base.function_id,
+            collection_id: parent.base.collection_id,
             snippet: Snippet::try_from(&self.snippet)?,
             bundle_id: self.bundle_id,
-            runtime_values: self.runtime_values.unwrap_or(parent.runtime_values),
-            description: self.description.unwrap_or(parent.description),
+            runtime_values: self.runtime_values.unwrap_or(parent.base.runtime_values),
+            description: self.description.unwrap_or(parent.base.description),
             defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             status: FunctionStatus::Active,
@@ -208,16 +200,9 @@ impl FunctionPatch {
 
 #[ta_objects::Dao]
 #[derive(Eq, PartialEq)]
-#[dao(
-    sql_table = "functions",
-    versioned(
-        pk = "id",
-        version_by = "defined_on",
-        partition_by = "function_id",
-        current = "functions_current",
-    )
-)]
-pub struct FunctionDB {
+#[dao(table = "functions", ops(insert), scd2, project_scoped)]
+pub struct FunctionInsertDB {
+    #[dao(pk)]
     pub id: FunctionVersionId,
     pub collection_id: CollectionId,
     pub name: FunctionName,
@@ -226,97 +211,77 @@ pub struct FunctionDB {
     pub connector: Option<Connector>,
     pub connection: Option<ConnectionKind>,
     pub runtime_values: FunctionRuntimeValues,
+    #[dao(partition_by)]
     pub function_id: FunctionId,
-    // Optional storage-prefix override for this version's output table data.
-    // NULL → inherit the collection base_path at mint. Mapped from
-    // `FunctionRegister::base_path`; carried forward from the previous version on
-    // update unless `FunctionUpdate::base_path` overrides it.
+    // Storage-prefix override for output table data. NULL → inherit the collection
+    // base_path at mint; carried forward on update unless FunctionUpdate::base_path.
     pub base_path: Option<BasePath>,
-    // Stage/checkpoint identity. Fresh at register, carried forward on update
-    // (via try_from FunctionDB), regenerated when FunctionUpdate::reset_stage.
+    // Stage/checkpoint identity: carried forward on update, regenerated when
+    // FunctionUpdate::reset_stage.
     pub stage_id: StageId,
-    // Storage prefix for the stage/checkpoint dirs, stamped at register from the
-    // collection base_path and carried forward, so a function's state does not
-    // silently relocate when the collection base_path later changes.
+    // Stamped from the collection base_path at register and carried forward, so
+    // stage state does not relocate when the collection base_path later changes.
     pub stage_base_path: BasePath,
     pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub snippet: Snippet,
+    #[dao(valid_from)]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
     pub enabled: Enabled,
 }
 
+#[ta_objects::Dao]
+#[derive(Eq, PartialEq)]
+#[dao(table = "functions", ops(select), scd2, project_scoped)]
+pub struct FunctionDB {
+    #[dao(flatten)]
+    pub base: FunctionInsertDB,
+    pub project_id: ProjectId,
+    #[dao(valid_to)]
+    pub valid_to: ValidTo,
+}
+
 impl FunctionDB {
-    /// Non-deleted functions with active dependencies.
-    pub fn active() -> StateFilter<Self> {
-        StateFilter::of(FunctionStatus::Active)
+    pub fn active() -> impl SqlCondition<Self> {
+        FunctionStatus::Active
     }
 
-    /// A new Deleted version of this function.
-    pub fn deleted(&self, ctx: &RequestContext) -> Self {
-        Self {
-            id: FunctionVersionId::new(),
-            status: FunctionStatus::Deleted,
-            defined_on: ctx.time,
-            defined_by_id: ctx.user_id,
-            ..self.clone()
-        }
-    }
-
-    /// A new Frozen version of this function.
-    pub fn frozen(&self, ctx: &RequestContext) -> Self {
-        Self {
+    pub fn frozen_version(&self, ctx: &RequestContext) -> FunctionInsertDB {
+        FunctionInsertDB {
             id: FunctionVersionId::new(),
             status: FunctionStatus::Frozen,
             defined_on: ctx.time,
             defined_by_id: ctx.user_id,
-            ..self.clone()
+            ..self.base.clone()
         }
     }
 
-    /// A new version of this function with `enabled` flipped.
-    pub fn re_registered(&self, ctx: &RequestContext, enabled: Enabled) -> Self {
-        Self {
+    pub fn re_registered(&self, ctx: &RequestContext, enabled: Enabled) -> FunctionInsertDB {
+        FunctionInsertDB {
             id: FunctionVersionId::new(),
             defined_on: ctx.time,
             defined_by_id: ctx.user_id,
             enabled,
-            ..self.clone()
+            ..self.base.clone()
         }
     }
 
-    /// Every non-deleted, readable function (active or frozen).
-    pub fn available() -> StateFilter<Self> {
-        StateFilter::of(or!(FunctionStatus::Active, FunctionStatus::Frozen))
-    }
-
-    /// Runnable functions: active (not frozen or deleted) and enabled.
-    pub fn executable() -> StateFilter<Self> {
-        StateFilter::of(and!(FunctionStatus::Active, Enabled::TRUE))
+    pub fn executable() -> impl SqlCondition<Self> {
+        and!(FunctionStatus::Active, Enabled::TRUE)
     }
 }
 
-/// Patch DAO — code-only override of a parent function version.
-/// Lives in its own `function_patches` table so every "find latest
-/// version" query against `functions` is patch-blind by
-/// construction. Reachable only by explicit fvid (replay) or via
-/// the patches list endpoint.
+/// Lives in its own `function_patches` table so every "find latest version"
+/// query against `functions` is patch-blind by construction.
 #[ta_objects::Dao]
 #[derive(Eq, PartialEq)]
-#[dao(
-    sql_table = "function_patches",
-    order_by(col = "defined_on", dir = "desc"),
-    versioned(
-        pk = "id",
-        version_by = "defined_on",
-        partition_by = "parent_function_version_id",
-        current = "function_patches_current",
-    )
-)]
-pub struct FunctionPatchDB {
+#[dao(table = "function_patches", ops(insert), scd2, project_scoped)]
+pub struct FunctionPatchInsertDB {
+    #[dao(pk)]
     pub id: FunctionVersionId,
+    #[dao(partition_by)]
     pub parent_function_version_id: Parent<FunctionVersionId>,
     pub function_id: FunctionId,
     pub collection_id: CollectionId,
@@ -324,21 +289,30 @@ pub struct FunctionPatchDB {
     pub bundle_id: BundleId,
     pub runtime_values: FunctionRuntimeValues,
     pub description: Description,
+    #[dao(valid_from, order_by)]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
 }
 
+/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
+#[ta_objects::Dao]
+#[derive(Eq, PartialEq)]
+#[dao(table = "function_patches", ops(select), scd2, project_scoped)]
+pub struct FunctionPatchDB {
+    #[dao(flatten)]
+    pub base: FunctionPatchInsertDB,
+    pub project_id: ProjectId,
+    #[dao(valid_to)]
+    pub valid_to: ValidTo,
+}
+
 impl FunctionPatchDB {
-    /// Non-deleted patches.
-    pub fn active() -> StateFilter<Self> {
-        StateFilter::of(FunctionStatus::Active)
+    pub fn active() -> impl SqlCondition<Self> {
+        FunctionStatus::Active
     }
 }
 
-/// Public DTO for a patch — the response shape for patch create
-/// and list-patches endpoints. Mirrors `FunctionPatchDB` 1:1;
-/// clients resolve parent details separately via the parent fvid.
 #[ta_objects::Dto]
 #[dto(list(on = FunctionPatchDB))]
 pub struct FunctionPatchRecord {
@@ -368,29 +342,28 @@ impl FromDao for FunctionPatchRecord {
 
     fn from_dao(dao: FunctionPatchDB) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.id,
-            parent_function_version_id: dao.parent_function_version_id,
-            function_id: dao.function_id,
-            collection_id: dao.collection_id,
-            snippet: dao.snippet,
-            bundle_id: dao.bundle_id,
-            runtime_values: dao.runtime_values,
-            description: dao.description,
-            defined_on: dao.defined_on,
-            defined_by_id: dao.defined_by_id,
-            status: dao.status,
+            id: dao.base.id,
+            parent_function_version_id: dao.base.parent_function_version_id,
+            function_id: dao.base.function_id,
+            collection_id: dao.base.collection_id,
+            snippet: dao.base.snippet,
+            bundle_id: dao.base.bundle_id,
+            runtime_values: dao.base.runtime_values,
+            description: dao.base.description,
+            defined_on: dao.base.defined_on,
+            defined_by_id: dao.base.defined_by_id,
+            status: dao.base.status,
         })
     }
 }
 
 #[ta_objects::Dao]
 #[dao(
-    sql_table = "functions__with_names",
-    versioned(
-        pk = "id",
-        version_by = "defined_on",
-        partition_by = "function_id",
-        current = "functions_current__with_names"
+    view = "functions__with_names",
+    scd2,
+    project_scoped(
+        unique_at(CollectionIdName, FunctionIdName),
+        unique_at(CollectionId, FunctionIdName)
     )
 )]
 pub struct FunctionDBWithNames {
@@ -405,30 +378,19 @@ pub struct FunctionDBWithNames {
 }
 
 impl FunctionDBWithNames {
-    /// Every non-deleted, readable function (active or frozen).
-    pub fn available() -> StateFilter<Self> {
-        StateFilter::of(or!(FunctionStatus::Active, FunctionStatus::Frozen))
-    }
-
-    /// Runnable functions: active (not frozen or deleted) and enabled.
-    pub fn executable() -> StateFilter<Self> {
-        StateFilter::of(and!(FunctionStatus::Active, Enabled::TRUE))
+    pub fn executable() -> impl SqlCondition<Self> {
+        and!(FunctionStatus::Active, Enabled::TRUE)
     }
 }
 
-/// Head versions and patches unified, for version history and
-/// fvid-addressed reads — the only patch-aware query surface; every
-/// other function DAO stays patch-blind by construction. Patch rows
-/// borrow the identity columns they don't own (name, decorator,
-/// storage fields, ...) from their parent head version and carry
-/// `patch_of`; head rows have it NULL.
+/// Head versions and patches unified — the only patch-aware query surface;
+/// every other function DAO stays patch-blind. Patch rows borrow the identity
+/// columns they don't own (name, decorator, storage fields, ...) from their
+/// parent head version and carry `patch_of`; head rows have it NULL.
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "function_versions__with_names",
-    order_by(col = "defined_on", dir = "desc"),
-    versioned(pk = "id", version_by = "defined_on", partition_by = "function_id")
-)]
+#[dao(view = "function_versions__with_names", timeline, project_scoped)]
 pub struct FunctionVersionDBWithNames {
+    #[dao(pk)]
     pub id: FunctionVersionId,
     pub collection_id: CollectionId,
     pub name: FunctionName,
@@ -437,6 +399,7 @@ pub struct FunctionVersionDBWithNames {
     pub connector: Option<Connector>,
     pub connection: Option<ConnectionKind>,
     pub runtime_values: FunctionRuntimeValues,
+    #[dao(partition_by)]
     pub function_id: FunctionId,
     pub base_path: Option<BasePath>,
     pub stage_id: StageId,
@@ -444,6 +407,7 @@ pub struct FunctionVersionDBWithNames {
     pub storage_version: StorageVersion,
     pub bundle_id: BundleId,
     pub snippet: Snippet,
+    #[dao(order_by, version_by)]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
@@ -453,16 +417,10 @@ pub struct FunctionVersionDBWithNames {
     pub patch_of: Option<FunctionVersionId>,
 }
 
-impl FunctionVersionDBWithNames {
-    /// Every non-deleted, readable function version (active or frozen).
-    pub fn available() -> StateFilter<Self> {
-        StateFilter::of(or!(FunctionStatus::Active, FunctionStatus::Frozen))
-    }
-}
+impl FunctionVersionDBWithNames {}
 
-/// One row of a function's version history: head versions and
-/// patches interleaved by `defined_on`. `patch_of` is the parent
-/// head fvid on patch rows and NULL on head versions.
+/// One version-history row; `patch_of` is the parent head fvid on patch
+/// rows and NULL on head versions.
 #[ta_objects::Dto]
 #[dto(list(on = FunctionVersionDBWithNames))]
 pub struct FunctionVersion {
@@ -533,13 +491,10 @@ impl FromDao for FunctionVersion {
     }
 }
 
-/// FunctionDB enriched with the effective bundle's stamped
-/// `base_path`, populated by a single `functions ⋈ bundles` query so
-/// the stage-trigger builder reads the bundle prefix off the same row
-/// rather than issuing a second per-bundle fetch. Not a Dao — a
-/// logical-layer projection (like PhysicalFunctionRunToExecute): the
+/// Not a Dao — a logical-layer projection: a single `functions ⋈ bundles`
 /// query SELECTs all FunctionDB columns plus
-/// `COALESCE(bundles.base_path, functions.stage_base_path) AS bundle_base_path`.
+/// `COALESCE(bundles.base_path, functions.stage_base_path) AS bundle_base_path`,
+/// so the stage-trigger builder avoids a second per-bundle fetch.
 #[ta_objects::Dlo]
 #[derive(sqlx::FromRow)]
 pub struct FunctionDBWithBundleBasePath {
@@ -591,25 +546,25 @@ impl FromDao for Function {
 
     fn from_dao(dao: FunctionDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            collection_id: dao.base.collection_id,
-            name: dao.base.name,
-            description: dao.base.description,
-            decorator: dao.base.decorator,
-            connector: dao.base.connector,
-            connection: dao.base.connection,
-            runtime_values: dao.base.runtime_values,
-            function_id: dao.base.function_id,
-            base_path: dao.base.base_path,
-            stage_id: dao.base.stage_id,
-            stage_base_path: dao.base.stage_base_path,
-            storage_version: dao.base.storage_version,
-            bundle_id: dao.base.bundle_id,
-            snippet: dao.base.snippet,
-            defined_on: dao.base.defined_on,
-            defined_by_id: dao.base.defined_by_id,
-            status: dao.base.status,
-            enabled: dao.base.enabled,
+            id: dao.base.base.id,
+            collection_id: dao.base.base.collection_id,
+            name: dao.base.base.name,
+            description: dao.base.base.description,
+            decorator: dao.base.base.decorator,
+            connector: dao.base.base.connector,
+            connection: dao.base.base.connection,
+            runtime_values: dao.base.base.runtime_values,
+            function_id: dao.base.base.function_id,
+            base_path: dao.base.base.base_path,
+            stage_id: dao.base.base.stage_id,
+            stage_base_path: dao.base.base.stage_base_path,
+            storage_version: dao.base.base.storage_version,
+            bundle_id: dao.base.base.bundle_id,
+            snippet: dao.base.base.snippet,
+            defined_on: dao.base.base.defined_on,
+            defined_by_id: dao.base.base.defined_by_id,
+            status: dao.base.base.status,
+            enabled: dao.base.base.enabled,
             collection: dao.collection,
             group_id: dao.group_id,
             defined_by: dao.defined_by,

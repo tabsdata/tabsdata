@@ -14,7 +14,8 @@ use crate::types::basic::{
     WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 use chrono::{DateTime, Utc};
-use ta_objects::{FromDao, StateFilter, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, or};
+use ta_objects::sql_condition::SqlCondition;
+use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, or};
 use td_common::bucket::BucketFloors;
 use td_common::datetime::Timestamp;
 use td_common::execution_status::WorkerCallbackStatus;
@@ -26,16 +27,10 @@ use td_common::worker::{
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "workers")]
-pub struct WorkerDB {
+#[dao(table = "workers", ops(insert), project_scoped)]
+pub struct WorkerInsertDB {
+    #[dao(pk)]
     pub id: WorkerId,
-    /// The project this worker belongs to. Workers always belong to the
-    /// same project as the function-run they process. Set explicitly (not
-    /// mapped from `FunctionDB`, which no longer carries `project_id`): the
-    /// scheduler stamps it from the physical run, the register path from the
-    /// request scope. No builder default: a missing setter is a programmer
-    /// error, not a silent project fallback.
-    pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub execution_id: Option<ExecutionId>,
     pub transaction_id: Option<TransactionId>,
@@ -51,25 +46,32 @@ pub struct WorkerDB {
     pub worker_config: Option<WorkerConfig>,
 }
 
+/// The row as the database holds it: `project_id` is the `project_isolation`
+/// policy's, defaulted from the connection the insert ran on.
+#[ta_objects::Dao]
+#[dao(table = "workers", ops(select), project_scoped)]
+pub struct WorkerDB {
+    #[dao(flatten)]
+    pub base: WorkerInsertDB,
+    pub project_id: ProjectId,
+}
+
 impl WorkerDB {
     /// On the base table so the readiness read can be claimed —
     /// `workers__with_names` is a view, not lockable.
-    pub fn triggers_to_schedule(worker_type: WorkerType) -> StateFilter<Self> {
-        StateFilter::of(and!(Enabled::TRUE, worker_type, WorkerStatus::Scheduled))
+    pub fn triggers_to_schedule(worker_type: WorkerType) -> impl SqlCondition<Self> {
+        and!(Enabled::TRUE, worker_type, WorkerStatus::Scheduled)
     }
 
-    /// Trigger workers awaiting a stop. See [`triggers_to_schedule`](Self::triggers_to_schedule).
-    pub fn triggers_to_stop(worker_type: WorkerType) -> StateFilter<Self> {
-        StateFilter::of(and!(
-            Enabled::TRUE,
-            worker_type,
-            WorkerStatus::StopScheduled
-        ))
+    /// See [`triggers_to_schedule`](Self::triggers_to_schedule) for why this
+    /// is on the base table.
+    pub fn triggers_to_stop(worker_type: WorkerType) -> impl SqlCondition<Self> {
+        and!(Enabled::TRUE, worker_type, WorkerStatus::StopScheduled)
     }
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "workers__with_names")]
+#[dao(view = "workers__with_names", project_scoped)]
 pub struct WorkerDBWithNames {
     #[dao(flatten)]
     pub base: WorkerDB,
@@ -89,18 +91,17 @@ pub struct WorkerDBWithNames {
 }
 
 impl WorkerDBWithNames {
-    /// Enabled cron/stage trigger workers.
-    pub fn enabled_triggers() -> StateFilter<Self> {
-        StateFilter::of(and!(
+    pub fn enabled_triggers() -> impl SqlCondition<Self> {
+        and!(
             Enabled::TRUE,
             or!(WorkerType::CronTrigger, WorkerType::StageTrigger)
-        ))
+        )
     }
 
     /// In flight = started and not stopping. Cron rows can park at
     /// Done/Failed via fire-side reports and recovery must keep owning them.
-    pub fn cron_triggers_in_flight() -> StateFilter<Self> {
-        StateFilter::of(and!(
+    pub fn cron_triggers_in_flight() -> impl SqlCondition<Self> {
+        and!(
             Enabled::TRUE,
             WorkerType::CronTrigger,
             or!(
@@ -109,13 +110,13 @@ impl WorkerDBWithNames {
                 WorkerStatus::Done,
                 WorkerStatus::Failed
             )
-        ))
+        )
     }
 
     /// A stage worker's own Failed callback is terminal (re-armed by
     /// enable/update), so Failed is excluded here.
-    pub fn stage_triggers_in_flight() -> StateFilter<Self> {
-        StateFilter::of(and!(
+    pub fn stage_triggers_in_flight() -> impl SqlCondition<Self> {
+        and!(
             Enabled::TRUE,
             WorkerType::StageTrigger,
             or!(
@@ -123,7 +124,7 @@ impl WorkerDBWithNames {
                 WorkerStatus::Running,
                 WorkerStatus::Done
             )
-        ))
+        )
     }
 }
 
@@ -175,22 +176,22 @@ impl FromDao for Worker {
 
     fn from_dao(dao: WorkerDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
+            id: dao.base.base.id,
             project_id: dao.base.project_id,
-            collection_id: dao.base.collection_id,
-            execution_id: dao.base.execution_id,
-            transaction_id: dao.base.transaction_id,
-            physical_function_run_id: dao.base.physical_function_run_id,
-            function_version_id: dao.base.function_version_id,
-            message_status: dao.base.message_status,
-            started_on: dao.base.started_on,
-            ended_on: dao.base.ended_on,
-            status: dao.base.status,
+            collection_id: dao.base.base.collection_id,
+            execution_id: dao.base.base.execution_id,
+            transaction_id: dao.base.base.transaction_id,
+            physical_function_run_id: dao.base.base.physical_function_run_id,
+            function_version_id: dao.base.base.function_version_id,
+            message_status: dao.base.base.message_status,
+            started_on: dao.base.base.started_on,
+            ended_on: dao.base.base.ended_on,
+            status: dao.base.base.status,
             logical_function_run_id: dao.logical_function_run_id,
             collection: dao.collection,
             execution: dao.execution,
             function: dao.function,
-            worker_type: dao.base.worker_type,
+            worker_type: dao.base.base.worker_type,
             function_version_patch_id: dao.function_version_patch_id,
             project: dao.project,
         })
@@ -231,18 +232,15 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
             })
             .transpose()?;
 
-        // Compute bucket floors from `ended_on` if present. Single
-        // atomic site for derivation: every PFR row whose `ended_on`
-        // is set also gets its four bucket-floor columns set.
+        // Single derivation site: every row whose `ended_on` is set also
+        // gets its four bucket-floor columns set.
         let floors = ended_on.map(|t| {
             let dt: DateTime<Utc> = ***t;
             BucketFloors::from_utc(dt)
         });
 
-        // Aggregate per-attempt metrics from the worker's Function
-        // output into a single RunMetrics. `None` = no output payload
-        // (E/F/X/Y/U); `Some(_)` = output, with `data_bytes` itself
-        // optional for the older-worker-yaml case.
+        // `None` = no output payload; `data_bytes` itself stays optional
+        // for the older-worker-yaml case.
         let metrics: Option<RunMetrics> = match &value.context {
             Some(WorkerOutput::Function(o)) => {
                 let mut tables: i64 = 0;
@@ -270,11 +268,6 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
             _ => None,
         };
 
-        // Flatten RunMetrics into the three nullable DAO fields. The
-        // SQL boundary is column-per-metric, so we expand here at
-        // the in-memory → DAO seam (rather than carrying an
-        // `Option<RunMetrics>` field into a struct sea-query maps
-        // 1:1 to columns).
         let metric_table_versions = metrics.as_ref().map(|m| m.table_versions);
         let metric_rows = metrics.as_ref().map(|m| m.rows);
         let metric_data_bytes = metrics.as_ref().and_then(|m| m.data_bytes);
@@ -309,7 +302,7 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
 }
 
 #[ta_objects::Dao]
-#[dao(update, sql_table = "workers")]
+#[dao(table = "workers", ops(update(WorkerDB)), project_scoped)]
 pub struct WorkerUpdateDB {
     #[dao(immutable)]
     pub started_on: Option<Started<AtTime>>,
@@ -352,7 +345,7 @@ impl WorkerUpdateDB {
 }
 
 #[ta_objects::Dao]
-#[dao(update, sql_table = "workers")]
+#[dao(table = "workers", ops(update(WorkerDB)), project_scoped)]
 pub struct WorkerMessageStatusUpdateDB {
     pub message_status: WorkerMessageStatus,
 }

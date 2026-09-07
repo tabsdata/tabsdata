@@ -12,9 +12,7 @@ use sea_query::{
 };
 use std::str::FromStr;
 use std::sync::LazyLock;
-use ta_objects::{
-    FromDao, ListDto, SeaValue, TypedColumns, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx,
-};
+use ta_objects::{Dao, FromDao, ListDto, SeaValue, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::{TdError, td_error};
 
 #[td_error]
@@ -51,7 +49,7 @@ pub enum ListError {
 
 /// Parse a typed column value string for this order's field.
 fn parse_val<D: ListDto>(
-    field: &<<D as FromDao>::Dao as TypedColumns>::Iden,
+    field: &<<D as FromDao>::Dao as Dao>::Iden,
     value: &str,
 ) -> Result<Box<dyn SeaValue>, ListError> {
     D::parse_filter_value(field, value)
@@ -62,7 +60,7 @@ fn parse_val<D: ListDto>(
 /// Parse a filter-condition value, rejecting the empty NULL marker — in a
 /// comparison it would build a never-true `col = NULL` predicate.
 fn parse_cond_val<D: ListDto>(
-    field: &<<D as FromDao>::Dao as TypedColumns>::Iden,
+    field: &<<D as FromDao>::Dao as Dao>::Iden,
     value: &str,
 ) -> Result<Box<dyn SeaValue>, ListError> {
     let val = parse_val::<D>(field, value)?;
@@ -72,17 +70,25 @@ fn parse_cond_val<D: ListDto>(
     Ok(val)
 }
 
-// ---------------------------------------------------------------------------
-// Order
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Order<D>
 where
     D: ListDto,
 {
-    Asc(<<D as FromDao>::Dao as TypedColumns>::Iden),
-    Desc(<<D as FromDao>::Dao as TypedColumns>::Iden),
+    Asc(<<D as FromDao>::Dao as Dao>::Iden),
+    Desc(<<D as FromDao>::Dao as Dao>::Iden),
+}
+
+impl<D> Clone for Order<D>
+where
+    D: ListDto,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Order::Asc(f) => Order::Asc(*f),
+            Order::Desc(f) => Order::Desc(*f),
+        }
+    }
 }
 
 impl<D> Order<D>
@@ -96,7 +102,7 @@ where
         }
     }
 
-    pub fn field(&self) -> &<<D as FromDao>::Dao as TypedColumns>::Iden {
+    pub fn field(&self) -> &<<D as FromDao>::Dao as Dao>::Iden {
         match self {
             Order::Asc(f) | Order::Desc(f) => f,
         }
@@ -144,10 +150,6 @@ where
     }
 }
 
-// ---------------------------------------------------------------------------
-// IsFilter
-// ---------------------------------------------------------------------------
-
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub enum IsFilter {
     #[typed_enum(rename = "null")]
@@ -155,10 +157,6 @@ pub enum IsFilter {
     #[typed_enum(rename = "not_null")]
     NotNull,
 }
-
-// ---------------------------------------------------------------------------
-// Keyset Pagination
-// ---------------------------------------------------------------------------
 
 /// Keyset cursor expressed as typed Sea Query values.
 ///
@@ -175,15 +173,15 @@ where
     D: ListDto,
 {
     Previous {
-        order_col: <<D as FromDao>::Dao as TypedColumns>::Iden,
+        order_col: <<D as FromDao>::Dao as Dao>::Iden,
         order_val: Box<dyn SeaValue>,
-        id_col: <<D as FromDao>::Dao as TypedColumns>::Iden,
+        id_col: <<D as FromDao>::Dao as Dao>::Iden,
         id_val: Box<dyn SeaValue>,
     },
     Next {
-        order_col: <<D as FromDao>::Dao as TypedColumns>::Iden,
+        order_col: <<D as FromDao>::Dao as Dao>::Iden,
         order_val: Box<dyn SeaValue>,
-        id_col: <<D as FromDao>::Dao as TypedColumns>::Iden,
+        id_col: <<D as FromDao>::Dao as Dao>::Iden,
         id_val: Box<dyn SeaValue>,
     },
 }
@@ -252,7 +250,7 @@ where
     pub fn order_exprs(
         &self,
         natural_order: &Order<D>,
-    ) -> Vec<(<<D as FromDao>::Dao as TypedColumns>::Iden, SeaOrder)> {
+    ) -> Vec<(<<D as FromDao>::Dao as Dao>::Iden, SeaOrder)> {
         let (order_col, id_col, forward) = match self {
             Pagination::Next {
                 order_col, id_col, ..
@@ -272,10 +270,6 @@ where
         vec![(*order_col, dir.clone()), (*id_col, dir)]
     }
 }
-
-// ---------------------------------------------------------------------------
-// ListQueryParams
-// ---------------------------------------------------------------------------
 
 pub struct ListQueryParams<D>
 where
@@ -346,17 +340,13 @@ where
     }
 }
 
-// ---------------------------------------------------------------------------
-// Condition parsing
-// ---------------------------------------------------------------------------
-
 /// Parse a single filter string into a `(column_key, Expr)` pair.
 ///
 /// The `column_key` is the string representation of the resolved column and is
 /// used to group multiple filters on the same column with OR.
 pub(crate) fn parse_condition<D: ListDto>(
     s: &str,
-) -> Result<(<<D as FromDao>::Dao as TypedColumns>::Iden, Expr), TdError> {
+) -> Result<(<<D as FromDao>::Dao as Dao>::Iden, Expr), TdError> {
     const EQ: &str = ":eq:";
     const NE: &str = ":ne:";
     const GT: &str = ":gt:";
@@ -586,8 +576,8 @@ impl<D: ListDto> TryFrom<&ListParams> for ListQueryParams<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_objects::Dao;
     use ta_objects::FromDao;
-    use ta_objects::TypedColumns;
     use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_error::TdError;
 
@@ -595,6 +585,7 @@ mod tests {
     pub struct StringType(String);
 
     #[ta_objects::Dao]
+    #[dao(table = "testdao", ops(select, insert, delete))]
     struct TestDao {
         a: StringType,
     }
@@ -621,15 +612,15 @@ mod tests {
         assert!(Order::<TestDto>::parse("a=").is_err());
         assert!(matches!(
             Order::<TestDto>::parse("a").unwrap(),
-            Order::<TestDto>::Asc(<TestDao as TypedColumns>::Iden::A)
+            Order::<TestDto>::Asc(<TestDao as Dao>::Iden::A)
         ));
         assert!(matches!(
             Order::<TestDto>::parse("a+").unwrap(),
-            Order::<TestDto>::Asc(<TestDao as TypedColumns>::Iden::A)
+            Order::<TestDto>::Asc(<TestDao as Dao>::Iden::A)
         ));
         assert!(matches!(
             Order::<TestDto>::parse("a-").unwrap(),
-            Order::<TestDto>::Desc(<TestDao as TypedColumns>::Iden::A)
+            Order::<TestDto>::Desc(<TestDao as Dao>::Iden::A)
         ));
     }
 
@@ -652,18 +643,20 @@ mod tests {
     #[test]
     fn test_list_query() {
         #[ta_objects::Dao]
+        #[dao(table = "daodef", ops(select, insert, delete))]
         struct DaoDef {
+            #[dao(pk)]
             id: StringType,
         }
 
         #[ta_objects::Dto]
         #[dto(list(on = DaoDef))]
         struct Def {
-            #[dto(list(pagination_by = "+", col = "id"))]
+            #[dto(list(pagination_by = "+"))]
             order: StringType,
-            #[dto(list(filter, col = "id"))]
+            #[dto(list(filter))]
             filter: StringType,
-            #[dto(list(filter_like, col = "id"))]
+            #[dto(list(filter_like))]
             like: StringType,
         }
 
@@ -831,6 +824,7 @@ mod tests {
     struct RunName(String);
 
     #[ta_objects::Dao]
+    #[dao(table = "rundao", ops(select, insert, delete))]
     struct RunDao {
         id: StringType,
         name: RunName,
@@ -862,8 +856,8 @@ mod tests {
         let qp: ListQueryParams<RunDto> = list_params.try_into().unwrap();
         qp.apply_to(
             Query::select()
-                .column(<RunDao as TypedColumns>::Iden::Id)
-                .from(<RunDao as TypedColumns>::Iden::Table)
+                .column(<RunDao as Dao>::Iden::Id)
+                .from(<RunDao as Dao>::Iden::Table)
                 .to_owned(),
         )
         .to_string(PostgresQueryBuilder)
@@ -920,6 +914,7 @@ mod tests {
     }
 
     #[ta_objects::Dao]
+    #[dao(table = "nullabledao", ops(select, insert, delete))]
     struct NullableDao {
         id: StringType,
         ended: Option<StringType>,
@@ -951,8 +946,8 @@ mod tests {
         let qp: ListQueryParams<NullableDto> = list_params.try_into().unwrap();
         qp.apply_to(
             Query::select()
-                .column(<NullableDao as TypedColumns>::Iden::Id)
-                .from(<NullableDao as TypedColumns>::Iden::Table)
+                .column(<NullableDao as Dao>::Iden::Id)
+                .from(<NullableDao as Dao>::Iden::Table)
                 .to_owned(),
         )
         .to_string(PostgresQueryBuilder)
@@ -1050,8 +1045,8 @@ mod tests {
         let sql = qp
             .apply_to(
                 Query::select()
-                    .column(<TestDao as TypedColumns>::Iden::A)
-                    .from(<TestDao as TypedColumns>::Iden::Table)
+                    .column(<TestDao as Dao>::Iden::A)
+                    .from(<TestDao as Dao>::Iden::Table)
                     .to_owned(),
             )
             .to_string(PostgresQueryBuilder);
@@ -1084,8 +1079,8 @@ mod tests {
         let sql = qp
             .apply_to(
                 Query::select()
-                    .column(<TestDao as TypedColumns>::Iden::A)
-                    .from(<TestDao as TypedColumns>::Iden::Table)
+                    .column(<TestDao as Dao>::Iden::A)
+                    .from(<TestDao as Dao>::Iden::Table)
                     .to_owned(),
             )
             .to_string(PostgresQueryBuilder);
@@ -1118,8 +1113,8 @@ mod tests {
         let sql = qp
             .apply_to(
                 Query::select()
-                    .column(<TestDao as TypedColumns>::Iden::A)
-                    .from(<TestDao as TypedColumns>::Iden::Table)
+                    .column(<TestDao as Dao>::Iden::A)
+                    .from(<TestDao as Dao>::Iden::Table)
                     .to_owned(),
             )
             .to_string(PostgresQueryBuilder);

@@ -5,31 +5,27 @@
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use crate::dxo::graph::GraphEdge;
+use crate::types::basic::ValidTo;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, Partitioned,
-    Private, SampleLen, SampleOffset, SchemaFieldName, SchemaFieldType, Sql, System,
-    TableFunctionParamPos, TableId, TableIdName, TableName, TableStatus, TableType, TableVersionId,
-    UncommittedStatus, UserId, UserName,
+    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
+    FunctionVersionId, Partitioned, Private, ProjectId, SampleLen, SampleOffset, SchemaFieldName,
+    SchemaFieldType, Sql, System, TableFunctionParamPos, TableId, TableIdName, TableName,
+    TableStatus, TableType, TableVersionId, UncommittedStatus, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use polars::prelude::Field;
 use std::collections::{HashMap, HashSet};
-use ta_objects::{FromDao, StateFilter, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, or};
+use ta_objects::sql_condition::SqlCondition;
+use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, or};
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "tables",
-    versioned(
-        pk = "id",
-        version_by = "defined_on",
-        partition_by = "table_id",
-        current = "tables_current",
-    )
-)]
-pub struct TableDB {
+#[dao(table = "tables", ops(insert), scd2, project_scoped)]
+pub struct TableInsertDB {
+    #[dao(pk)]
     pub id: TableVersionId,
     pub collection_id: CollectionId,
+    #[dao(partition_by)]
     pub table_id: TableId,
     pub name: TableName,
     pub function_id: FunctionId,
@@ -37,59 +33,49 @@ pub struct TableDB {
     pub function_param_pos: Option<TableFunctionParamPos>,
     pub private: Private,
     pub partitioned: Partitioned,
+    #[dao(valid_from)]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: TableStatus,
     pub table_type: TableType,
 }
 
+#[ta_objects::Dao]
+#[dao(table = "tables", ops(select), scd2, project_scoped)]
+pub struct TableDB {
+    #[dao(flatten)]
+    pub base: TableInsertDB,
+    pub project_id: ProjectId,
+    #[dao(valid_to)]
+    pub valid_to: ValidTo,
+}
+
 impl TableDB {
+    /// The frozen successor of this version, still attached to the function
+    /// version that owned it.
+    pub fn frozen_version(&self, ctx: &RequestContext) -> TableInsertDB {
+        TableInsertDB {
+            id: TableVersionId::default(),
+            status: TableStatus::Frozen,
+            defined_on: ctx.time,
+            defined_by_id: ctx.user_id,
+            ..self.base.clone()
+        }
+    }
+
     /// Tables that can be generated and consumed.
-    pub fn active() -> StateFilter<Self> {
-        StateFilter::of(TableStatus::Active)
-    }
-
-    /// A new Deleted version of this table.
-    pub fn deleted(&self, ctx: &RequestContext) -> Self {
-        Self {
-            id: TableVersionId::default(),
-            status: TableStatus::Deleted,
-            defined_on: ctx.time,
-            defined_by_id: ctx.user_id,
-            ..self.clone()
-        }
-    }
-
-    /// A new version of this table bound to a re-registered function version.
-    pub fn re_registered(
-        &self,
-        ctx: &RequestContext,
-        function_version_id: FunctionVersionId,
-    ) -> Self {
-        Self {
-            id: TableVersionId::default(),
-            function_version_id,
-            defined_on: ctx.time,
-            defined_by_id: ctx.user_id,
-            ..self.clone()
-        }
-    }
-
-    /// Every non-deleted table (active or frozen).
-    pub fn available() -> StateFilter<Self> {
-        StateFilter::of(or!(TableStatus::Active, TableStatus::Frozen))
+    pub fn active() -> impl SqlCondition<Self> {
+        TableStatus::Active
     }
 }
 
 #[ta_objects::Dao]
 #[dao(
-    sql_table = "tables__with_names",
-    order_by(col = "function_param_pos", dir = "desc"),
-    versioned(
-        pk = "id",
-        version_by = "defined_on",
-        partition_by = "table_id",
-        current = "tables_current__with_names"
+    view = "tables__with_names",
+    scd2,
+    project_scoped(
+        unique_at(CollectionIdName, TableIdName),
+        unique_at(CollectionId, TableIdName)
     )
 )]
 pub struct TableDBWithNames {
@@ -103,34 +89,21 @@ pub struct TableDBWithNames {
 
 impl TableDBWithNames {
     /// Tables that can be generated and consumed.
-    pub fn active() -> StateFilter<Self> {
-        StateFilter::of(TableStatus::Active)
+    pub fn active() -> impl SqlCondition<Self> {
+        TableStatus::Active
     }
 
     /// Tables that cannot be generated but can still be consumed.
-    pub fn frozen() -> StateFilter<Self> {
-        StateFilter::of(TableStatus::Frozen)
+    pub fn frozen() -> impl SqlCondition<Self> {
+        TableStatus::Frozen
     }
 
-    /// Every non-deleted table (active or frozen).
-    pub fn available() -> StateFilter<Self> {
-        StateFilter::of(or!(TableStatus::Active, TableStatus::Frozen))
+    pub fn user() -> impl SqlCondition<Self> {
+        and!(or!(TableStatus::Active, TableStatus::Frozen), System::FALSE)
     }
 
-    /// Non-deleted user tables.
-    pub fn user() -> StateFilter<Self> {
-        StateFilter::of(and!(
-            or!(TableStatus::Active, TableStatus::Frozen),
-            System::FALSE
-        ))
-    }
-
-    /// Non-deleted system tables.
-    pub fn system() -> StateFilter<Self> {
-        StateFilter::of(and!(
-            or!(TableStatus::Active, TableStatus::Frozen),
-            System::TRUE
-        ))
+    pub fn system() -> impl SqlCondition<Self> {
+        and!(or!(TableStatus::Active, TableStatus::Frozen), System::TRUE)
     }
 }
 
@@ -165,19 +138,19 @@ impl FromDao for Table {
 
     fn from_dao(dao: TableDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            collection_id: dao.base.collection_id,
-            table_id: dao.base.table_id,
-            name: dao.base.name,
-            function_id: dao.base.function_id,
-            function_version_id: dao.base.function_version_id,
-            function_param_pos: dao.base.function_param_pos,
-            private: dao.base.private,
-            partitioned: dao.base.partitioned,
-            defined_on: dao.base.defined_on,
-            defined_by_id: dao.base.defined_by_id,
-            status: dao.base.status,
-            table_type: dao.base.table_type,
+            id: dao.base.base.id,
+            collection_id: dao.base.base.collection_id,
+            table_id: dao.base.base.table_id,
+            name: dao.base.base.name,
+            function_id: dao.base.base.function_id,
+            function_version_id: dao.base.base.function_version_id,
+            function_param_pos: dao.base.base.function_param_pos,
+            private: dao.base.base.private,
+            partitioned: dao.base.base.partitioned,
+            defined_on: dao.base.base.defined_on,
+            defined_by_id: dao.base.base.defined_by_id,
+            status: dao.base.base.status,
+            table_type: dao.base.base.table_type,
             system: dao.system,
             defined_by: dao.defined_by,
             collection: dao.collection,

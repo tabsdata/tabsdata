@@ -3,12 +3,13 @@
 //
 
 use crate::types::basic::{
-    AtTime, BasePath, BundleHash, BundleId, BundleStatus, CollectionId, UserId,
+    AtTime, BasePath, BundleHash, BundleId, BundleStatus, CollectionId, ProjectId, UserId,
 };
 
 #[ta_objects::Dao]
-#[dao(sql_table = "bundles")]
-pub struct BundleDB {
+#[dao(table = "bundles", ops(insert), project_scoped)]
+pub struct BundleInsertDB {
+    #[dao(pk)]
     pub id: BundleId,
     pub collection_id: CollectionId,
     pub hash: BundleHash,
@@ -21,6 +22,15 @@ pub struct BundleDB {
     pub created_by_id: UserId,
 }
 
+/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
+#[ta_objects::Dao]
+#[dao(table = "bundles", ops(select), project_scoped)]
+pub struct BundleDB {
+    #[dao(flatten)]
+    pub base: BundleInsertDB,
+    pub project_id: ProjectId,
+}
+
 #[ta_objects::Dto]
 pub struct Bundle {
     pub id: BundleId,
@@ -31,11 +41,12 @@ pub struct Bundle {
 /// not deleted, so the bundle artifact stays a durable record).
 /// Constructed by struct literal at the call site.
 #[ta_objects::Dao]
-#[dao(update, sql_table = "bundles")]
-pub struct BundleRegisteredDB {
+#[dao(table = "bundles", ops(update(BundleDB)), project_scoped)]
+pub struct BundleStatusUpdateDB {
     pub status: BundleStatus,
 }
-impl BundleRegisteredDB {
+
+impl BundleStatusUpdateDB {
     /// The bundle-claim update: a function register/update/patch flips the
     /// uploaded bundle's status to `Registered` (kept, not deleted).
     pub fn registered() -> Self {
@@ -45,8 +56,8 @@ impl BundleRegisteredDB {
     }
 }
 
-impl From<&BundleDB> for Bundle {
-    fn from(src: &BundleDB) -> Self {
+impl From<&BundleInsertDB> for Bundle {
+    fn from(src: &BundleInsertDB) -> Self {
         Bundle { id: src.id }
     }
 }

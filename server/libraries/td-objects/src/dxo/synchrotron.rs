@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::transaction::{TransactionDBWithStatus, TransactionDBWithStatusIden};
+use crate::dxo::transaction::TransactionDBWithStatus;
 use crate::types::basic::{
     CollectionId, ExecutionId, TransactionId, TransactionStatus, TriggeredOn, UserId,
 };
@@ -31,11 +31,11 @@ impl FromDao for SynchrotronResponse {
 
     fn from_dao(dao: TransactionDBWithStatus) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            collection_id: dao.base.collection_id,
-            execution_id: dao.base.execution_id,
-            triggered_on: dao.base.triggered_on,
-            triggered_by_id: dao.base.triggered_by_id,
+            id: dao.base.base.id,
+            collection_id: dao.base.base.collection_id,
+            execution_id: dao.base.base.execution_id,
+            triggered_on: dao.base.base.triggered_on,
+            triggered_by_id: dao.base.base.triggered_by_id,
             status: dao.status,
         })
     }

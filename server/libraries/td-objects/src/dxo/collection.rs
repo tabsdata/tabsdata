@@ -14,8 +14,9 @@ use td_common::id::Id;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "collections")]
-pub struct CollectionCreateDB {
+#[dao(table = "collections", ops(insert), project_scoped)]
+pub struct CollectionInsertDB {
+    #[dao(pk)]
     pub id: CollectionId,
     pub name: CollectionName,
     pub description: Description,
@@ -35,9 +36,25 @@ pub struct CollectionCreateDB {
     pub connection_id: Option<ConnectionId>,
 }
 
+/// The row as the database holds it: `project_id` is the `project_isolation`
+/// policy's, defaulted from the connection the insert ran on. The base table,
+/// so it is the lock target the delete guard takes `FOR UPDATE`.
 #[ta_objects::Dao]
-#[dao(sql_table = "collections_active")]
+#[dao(
+    table = "collections",
+    ops(select),
+    project_scoped(unique(CollectionName))
+)]
+pub struct CollectionDB {
+    #[dao(flatten)]
+    pub base: CollectionInsertDB,
+    pub project_id: ProjectId,
+}
+
+#[ta_objects::Dao]
+#[dao(view = "collections_active", project_scoped(unique(CollectionName)))]
 pub struct ActiveCollectionDB {
+    #[dao(pk)]
     pub id: CollectionId,
     /// The project that owns this collection. Read from the DB column when
     /// SELECT'd so downstream constructions (functions, runs, workers) can
@@ -66,7 +83,8 @@ impl ActiveCollectionDB {
     /// freeing the name for reuse.
     pub fn to_delete_dao(&self, ctx: &RequestContext) -> CollectionDeleteDB {
         CollectionDeleteDB {
-            name: generate_deleted_name(),
+            name: CollectionName::try_from(format!("deleted_{}", Id::default()))
+                .expect("invalid collection name"),
             modified_on: ctx.time.into(),
             modified_by_id: ctx.user_id.into(),
             name_when_deleted: self.name.clone().into(),
@@ -74,20 +92,16 @@ impl ActiveCollectionDB {
     }
 }
 
-// Canonical read/join surface: the `collections_resolved` view — every row,
-// including soft-deleted, with the real name resolved. Same columns as
-// `ActiveCollectionDB` plus the `deleted` flag; resolve a collection
-// referenced by an entity that can outlive it through this type.
 #[ta_objects::Dao]
-#[dao(sql_table = "collections_resolved")]
-pub struct CollectionDB {
+#[dao(view = "collections_resolved", project_scoped)]
+pub struct ResolvedCollectionDB {
     #[dao(flatten)]
     pub base: ActiveCollectionDB,
     pub deleted: CollectionWhenDeleted,
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "collections")]
+#[dao(table = "collections", ops(update(CollectionDB)), project_scoped)]
 pub struct CollectionDeleteDB {
     pub name: CollectionName,
 
@@ -97,12 +111,11 @@ pub struct CollectionDeleteDB {
     pub name_when_deleted: WhenDeleted<CollectionName>,
 }
 
-pub fn generate_deleted_name() -> CollectionName {
-    CollectionName::try_from(format!("deleted_{}", Id::default())).unwrap()
-}
-
 #[ta_objects::Dao]
-#[dao(sql_table = "collections__with_names")]
+#[dao(
+    view = "collections__with_names",
+    project_scoped(unique(CollectionName))
+)]
 pub struct ActiveCollectionDBWithNames {
     #[dao(flatten)]
     pub base: ActiveCollectionDB,
@@ -169,7 +182,7 @@ impl CollectionUpdate {
 }
 
 #[ta_objects::Dao]
-#[dao(update, sql_table = "collections")]
+#[dao(table = "collections", ops(update(CollectionDB)), project_scoped)]
 pub struct CollectionUpdateDB {
     pub name: CollectionName,
     pub description: Description,

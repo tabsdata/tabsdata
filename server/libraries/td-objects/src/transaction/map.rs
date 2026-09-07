@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::execution::ExecutionDB;
+use crate::dxo::execution::ExecutionInsertDB;
 use crate::dxo::graph::FunctionNode;
 use crate::dxo::transaction::TransactionValue;
 use crate::types::basic::{TransactionByStr, TransactionId, TransactionKey};
@@ -55,7 +55,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
         &self.mapper
     }
 
-    pub fn add(&mut self, e: &ExecutionDB, v: &FunctionNode) -> Result<(), TdError> {
+    pub fn add(&mut self, e: &ExecutionInsertDB, v: &FunctionNode) -> Result<(), TdError> {
         let key = self.mapper.key(v)?;
         if !self.map.contains_key(&key) {
             let value = TransactionValue {
@@ -85,13 +85,12 @@ impl<T: TransactionMapper> TransactionMap<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::execution::ExecutionDB;
     use crate::test_utils::graph::{FUNCTION_NAMES, function_node};
     use crate::test_utils::transaction::TestTransactionBy;
     use crate::types::basic::{ExecutionId, FunctionVersionId, TriggerType};
 
-    fn dummy_execution() -> ExecutionDB {
-        ExecutionDB {
+    fn dummy_execution() -> ExecutionInsertDB {
+        ExecutionInsertDB {
             id: ExecutionId::new(),
             name: None,
             collection_id: Default::default(),

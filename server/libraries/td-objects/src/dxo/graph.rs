@@ -76,23 +76,23 @@ impl GraphNode<FunctionNode, TableNode> {
     ) -> Result<(Self, Self), TdError> {
         Ok((
             GraphNode::Function(FunctionNode {
-                collection_id: function.base.collection_id,
+                collection_id: function.base.base.collection_id,
                 collection: function.collection.clone(),
-                function_id: function.base.function_id,
-                function_version_id: function.base.id.clone(),
-                name: function.base.name.clone(),
-                enabled: function.base.enabled,
+                function_id: function.base.base.function_id,
+                function_version_id: function.base.base.id.clone(),
+                name: function.base.base.name.clone(),
+                enabled: function.base.base.enabled,
                 group_id: function.group_id,
             }),
             GraphNode::Table(TableNode {
-                collection_id: table.base.collection_id,
+                collection_id: table.base.base.collection_id,
                 collection: table.collection.clone(),
-                function_version_id: table.base.function_version_id.clone(),
-                table_id: table.base.table_id,
-                table_version_id: table.base.id,
-                name: table.base.name.clone(),
+                function_version_id: table.base.base.function_version_id.clone(),
+                table_id: table.base.base.table_id,
+                table_version_id: table.base.base.id,
+                name: table.base.base.name.clone(),
                 system: table.system,
-                private: table.base.private,
+                private: table.base.base.private,
             }),
         ))
     }
@@ -239,23 +239,26 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Function(function) = function_node {
-            assert_eq!(function.collection_id, table.base.collection_id);
+            assert_eq!(function.collection_id, table.base.base.collection_id);
             assert_eq!(function.collection, table.collection);
-            assert_eq!(function.function_version_id, table.base.function_version_id);
+            assert_eq!(
+                function.function_version_id,
+                table.base.base.function_version_id
+            );
             assert_eq!(function.name, table.function);
         } else {
             panic!("Expected GraphNode::Function");
         }
 
         if let GraphNode::Table(table_node) = table_node {
-            assert_eq!(table_node.collection_id, table.base.collection_id);
+            assert_eq!(table_node.collection_id, table.base.base.collection_id);
             assert_eq!(table_node.collection, table.collection);
             assert_eq!(
                 table_node.function_version_id,
-                table.base.function_version_id
+                table.base.base.function_version_id
             );
-            assert_eq!(table_node.table_version_id, table.base.id);
-            assert_eq!(table_node.name, table.base.name);
+            assert_eq!(table_node.table_version_id, table.base.base.id);
+            assert_eq!(table_node.name, table.base.base.name);
         } else {
             panic!("Expected GraphNode::Table");
         }
@@ -270,20 +273,26 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
-            assert_eq!(node.collection_id, *dependency.base.table_collection_id);
+            assert_eq!(
+                node.collection_id,
+                *dependency.base.base.table_collection_id
+            );
             assert_eq!(node.collection, *dependency.table_collection);
-            assert_eq!(node.function_version_id, table.base.function_version_id);
-            assert_eq!(node.table_version_id, table.base.id);
-            assert_eq!(node.name, table.base.name);
+            assert_eq!(
+                node.function_version_id,
+                table.base.base.function_version_id
+            );
+            assert_eq!(node.table_version_id, table.base.base.id);
+            assert_eq!(node.name, table.base.base.name);
         } else {
             panic!("Expected GraphNode::Table");
         }
 
         if let GraphNode::Function(node) = function_node {
-            assert_eq!(node.collection_id, dependency.base.collection_id);
+            assert_eq!(node.collection_id, dependency.base.base.collection_id);
             assert_eq!(node.collection, dependency.collection);
-            assert_eq!(node.function_version_id, function.base.id);
-            assert_eq!(node.name, function.base.name);
+            assert_eq!(node.function_version_id, function.base.base.id);
+            assert_eq!(node.name, function.base.base.name);
         } else {
             panic!("Expected GraphNode::Function");
         }
@@ -298,19 +307,25 @@ mod tests {
         let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
-            assert_eq!(node.collection_id, *trigger.base.trigger_by_collection_id);
+            assert_eq!(
+                node.collection_id,
+                *trigger.base.base.trigger_by_collection_id
+            );
             assert_eq!(node.collection, *trigger.trigger_by_collection);
-            assert_eq!(node.function_version_id, table.base.function_version_id);
-            assert_eq!(node.table_version_id, table.base.id);
-            assert_eq!(node.name, table.base.name);
+            assert_eq!(
+                node.function_version_id,
+                table.base.base.function_version_id
+            );
+            assert_eq!(node.table_version_id, table.base.base.id);
+            assert_eq!(node.name, table.base.base.name);
         } else {
             panic!("Expected GraphNode::Table");
         }
 
         if let GraphNode::Function(node) = function_node {
-            assert_eq!(node.collection_id, trigger.base.collection_id);
+            assert_eq!(node.collection_id, trigger.base.base.collection_id);
             assert_eq!(node.collection, trigger.collection);
-            assert_eq!(node.function_version_id, function.base.id);
+            assert_eq!(node.function_version_id, function.base.base.id);
             assert_eq!(node.name, node.name);
         } else {
             panic!("Expected GraphNode::Function");

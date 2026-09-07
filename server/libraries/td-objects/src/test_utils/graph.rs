@@ -2,28 +2,30 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames};
-use crate::dxo::function::{FunctionDB, FunctionDBWithNames};
+use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames, DependencyInsertDB};
+use crate::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionInsertDB};
 use crate::dxo::graph::{FunctionNode, TableNode};
-use crate::dxo::table::{TableDB, TableDBWithNames};
-use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames};
+use crate::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
+use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames, TriggerInsertDB};
 use crate::graph::{TdGraph, TdGraphBuilder};
+use crate::types::basic::ValidTo;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId,
-    DependencyPos, DependencyStatus, DependencyVersionId, Description, Enabled, FunctionId,
-    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Partitioned,
-    Private, RawSnippet, Snippet, StageId, StorageVersion, System, TableId, TableName, TableStatus,
-    TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
+    DependencyPos, DependencyVersionId, Description, Enabled, FunctionId, FunctionName,
+    FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Partitioned, Private,
+    ProjectId, RawSnippet, Snippet, StageId, StorageVersion, System, TableId, TableName,
+    TableStatus, TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId,
+    UserName,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+static PROJECT_ID: LazyLock<ProjectId> = LazyLock::new(ProjectId::default);
 static COLLECTION_ID: LazyLock<CollectionId> = LazyLock::new(CollectionId::default);
 static COLLECTION_NAME: LazyLock<CollectionName> =
     LazyLock::new(|| CollectionName::try_from("test").unwrap());
-// Synthetic in-memory nodes; the specific group is irrelevant, only that it's
-// stable across the graph the test builds.
+// The specific group is irrelevant; it only has to be stable across the graph.
 static GROUP_ID: LazyLock<GroupId> = LazyLock::new(GroupId::default);
 
 pub static FUNCTION_NAMES: LazyLock<Vec<FunctionName>> = LazyLock::new(|| {
@@ -43,8 +45,6 @@ pub static TABLE_NAMES: LazyLock<Vec<TableName>> = LazyLock::new(|| {
     ]
 });
 
-// 2 possible functions to use, [0] or [1], each with its own version and table. And each
-// table with its own version.
 pub static FUNCTIONS: LazyLock<HashMap<FunctionName, Vec<TableName>>> = LazyLock::new(|| {
     let mut map = HashMap::new();
     map.insert(FUNCTION_NAMES[0].clone(), vec![TABLE_NAMES[0].clone()]);
@@ -94,9 +94,6 @@ pub static TABLE_VERSION_IDS: LazyLock<HashMap<TableName, TableVersionId>> = Laz
     map
 });
 
-// Outputs: F0 -> T0 ; F1 -> (T1, T2) ; F2 -> T3
-// Triggers: T0 -> F1
-// Dependencies: T0 -> F0 ; T0 -> F1 ; T1 -> F2
 pub async fn test_graph() -> TdGraph {
     let all_tables = vec![
         table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
@@ -112,11 +109,11 @@ pub async fn test_graph() -> TdGraph {
 
     let all_tables_map = all_tables
         .iter()
-        .map(|t| (t.base.table_id, t.clone()))
+        .map(|t| (t.base.base.table_id, t.clone()))
         .collect();
     let all_functions_map = all_functions
         .iter()
-        .map(|f| (f.base.function_id, f.clone()))
+        .map(|f| (f.base.base.function_id, f.clone()))
         .collect();
 
     let output_tables = all_tables;
@@ -182,19 +179,23 @@ pub fn table_node(table: &TableName) -> TableNode {
 pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
     TableDBWithNames {
         base: TableDB {
-            id: *TABLE_VERSION_IDS.get(table).unwrap(),
-            collection_id: *COLLECTION_ID,
-            table_id: *TABLE_IDS.get(table).unwrap(),
-            name: table.clone(),
-            function_id: *FUNCTION_IDS.get(function).unwrap(),
-            function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
-            function_param_pos: None,
-            private: Private::FALSE,
-            partitioned: Partitioned::FALSE,
-            defined_on: AtTime::now(),
-            defined_by_id: UserId::default(),
-            status: TableStatus::Active,
-            table_type: TableType::Regular,
+            base: TableInsertDB {
+                id: *TABLE_VERSION_IDS.get(table).unwrap(),
+                collection_id: *COLLECTION_ID,
+                table_id: *TABLE_IDS.get(table).unwrap(),
+                name: table.clone(),
+                function_id: *FUNCTION_IDS.get(function).unwrap(),
+                function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+                function_param_pos: None,
+                private: Private::FALSE,
+                partitioned: Partitioned::FALSE,
+                defined_on: AtTime::now(),
+                defined_by_id: UserId::default(),
+                status: TableStatus::Active,
+                table_type: TableType::Regular,
+            },
+            project_id: *PROJECT_ID,
+            valid_to: ValidTo::infinity(),
         },
         system: System::FALSE,
         defined_by: UserName::try_from("joaquin").unwrap(),
@@ -206,25 +207,29 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
 pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
     FunctionDBWithNames {
         base: FunctionDB {
-            id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
-            collection_id: *COLLECTION_ID,
-            name: function.clone(),
-            description: Description::default(),
-            decorator: Decorator::Publisher,
-            connector: None,
-            connection: None,
-            runtime_values: FunctionRuntimeValues::default(),
-            function_id: *FUNCTION_IDS.get(function).unwrap(),
-            base_path: None,
-            stage_id: StageId::default(),
-            stage_base_path: BasePath::default(),
-            storage_version: StorageVersion::default(),
-            bundle_id: BundleId::default(),
-            snippet: Snippet::try_from(RawSnippet::try_from("test").unwrap()).unwrap(),
-            defined_on: AtTime::now(),
-            defined_by_id: UserId::default(),
-            status: FunctionStatus::Active,
-            enabled: Enabled::TRUE,
+            base: FunctionInsertDB {
+                id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+                collection_id: *COLLECTION_ID,
+                name: function.clone(),
+                description: Description::default(),
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                runtime_values: FunctionRuntimeValues::default(),
+                function_id: *FUNCTION_IDS.get(function).unwrap(),
+                base_path: None,
+                stage_id: StageId::default(),
+                stage_base_path: BasePath::default(),
+                storage_version: StorageVersion::default(),
+                bundle_id: BundleId::default(),
+                snippet: Snippet::try_from(RawSnippet::try_from("test").unwrap()).unwrap(),
+                defined_on: AtTime::now(),
+                defined_by_id: UserId::default(),
+                status: FunctionStatus::Active,
+                enabled: Enabled::TRUE,
+            },
+            project_id: *PROJECT_ID,
+            valid_to: ValidTo::infinity(),
         },
         collection: COLLECTION_NAME.clone(),
         group_id: *GROUP_ID,
@@ -240,19 +245,22 @@ pub async fn dependency(table: &TableName, function: &FunctionName) -> Dependenc
         .unwrap();
     DependencyDBWithNames {
         base: DependencyDB {
-            id: DependencyVersionId::default(),
-            collection_id: *COLLECTION_ID,
-            dependency_id: DependencyId::default(),
-            function_id: *FUNCTION_IDS.get(function).unwrap(),
-            table_collection_id: (*COLLECTION_ID).into(),
-            table_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
-            table_id: *TABLE_IDS.get(table).unwrap(),
-            table_versions: TableVersions::try_from("HEAD").unwrap(),
-            dep_pos: DependencyPos::default(),
-            status: DependencyStatus::Active,
-            defined_on: AtTime::now(),
-            defined_by_id: UserId::default(),
-            system: System::FALSE,
+            base: DependencyInsertDB {
+                id: DependencyVersionId::default(),
+                collection_id: *COLLECTION_ID,
+                dependency_id: DependencyId::default(),
+                function_id: *FUNCTION_IDS.get(function).unwrap(),
+                table_collection_id: (*COLLECTION_ID).into(),
+                table_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
+                table_id: *TABLE_IDS.get(table).unwrap(),
+                table_versions: TableVersions::try_from("HEAD").unwrap(),
+                dep_pos: DependencyPos::default(),
+                defined_on: AtTime::now(),
+                defined_by_id: UserId::default(),
+                system: System::FALSE,
+            },
+            project_id: *PROJECT_ID,
+            valid_to: ValidTo::infinity(),
         },
         collection: COLLECTION_NAME.clone(),
         table_collection: COLLECTION_NAME.clone().into(),
@@ -267,17 +275,21 @@ pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWit
         .unwrap();
     TriggerDBWithNames {
         base: TriggerDB {
-            id: TriggerVersionId::default(),
-            collection_id: *COLLECTION_ID,
-            trigger_id: TriggerId::default(),
-            function_id: *FUNCTION_IDS.get(function).unwrap(),
-            trigger_by_collection_id: (*COLLECTION_ID).into(),
-            trigger_by_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
-            trigger_by_table_id: *TABLE_IDS.get(table).unwrap(),
-            status: TriggerStatus::Active,
-            defined_on: AtTime::now(),
-            defined_by_id: UserId::default(),
-            system: System::FALSE,
+            base: TriggerInsertDB {
+                id: TriggerVersionId::default(),
+                collection_id: *COLLECTION_ID,
+                trigger_id: TriggerId::default(),
+                function_id: *FUNCTION_IDS.get(function).unwrap(),
+                trigger_by_collection_id: (*COLLECTION_ID).into(),
+                trigger_by_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
+                trigger_by_table_id: *TABLE_IDS.get(table).unwrap(),
+                status: TriggerStatus::Active,
+                defined_on: AtTime::now(),
+                defined_by_id: UserId::default(),
+                system: System::FALSE,
+            },
+            project_id: *PROJECT_ID,
+            valid_to: ValidTo::infinity(),
         },
         collection: COLLECTION_NAME.clone(),
         trigger_by_collection: COLLECTION_NAME.clone().into(),

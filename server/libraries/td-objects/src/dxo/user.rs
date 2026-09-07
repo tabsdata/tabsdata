@@ -15,8 +15,9 @@ use td_security::password::create_password_hash;
 
 #[ta_objects::Dao]
 #[derive(Eq, PartialEq)]
-#[dao(sql_table = "users")]
+#[dao(table = "users", ops(select, insert, delete), unique(UserName))]
 pub struct UserDB {
+    #[dao(pk)]
     pub id: UserId,
     pub name: UserName,
     pub full_name: FullName,
@@ -33,7 +34,7 @@ pub struct UserDB {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "users__with_names")]
+#[dao(view = "users__with_names", unique(UserName))]
 pub struct UserDBWithNames {
     #[dao(flatten)]
     pub base: UserDB,
@@ -125,7 +126,7 @@ impl UserUpdate {
 }
 
 #[ta_objects::Dao]
-#[dao(update, sql_table = "users")]
+#[dao(table = "users", ops(update(UserDB)))]
 pub struct UserUpdateDB {
     pub full_name: FullName,
     // Tri-state for update_values: outer `None` skips the column (unchanged),

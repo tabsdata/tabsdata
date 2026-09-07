@@ -8,8 +8,13 @@ use ta_objects::FromDao;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "users_roles")]
+#[dao(
+    table = "users_roles",
+    ops(select, insert, delete),
+    unique(UserId, RoleId)
+)]
 pub struct UserRoleDB {
+    #[dao(pk)]
     pub id: UserRoleId,
     pub user_id: UserId,
     pub role_id: RoleId,
@@ -32,7 +37,7 @@ impl UserRoleDB {
 }
 
 #[ta_objects::Dao]
-#[dao(sql_table = "users_roles__with_names")]
+#[dao(view = "users_roles__with_names", unique(UserId, RoleId))]
 pub struct UserRoleDBWithNames {
     #[dao(flatten)]
     pub base: UserRoleDB,

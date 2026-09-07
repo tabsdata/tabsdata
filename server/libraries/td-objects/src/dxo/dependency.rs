@@ -2,72 +2,49 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::crudl::RequestContext;
+use crate::types::basic::ValidTo;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus,
-    DependencyVersionId, FunctionId, OfTable, System, TableId, UserId,
+    AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId,
+    FunctionId, OfTable, ProjectId, System, TableId, UserId,
 };
 use crate::types::composed::TableVersions;
-use ta_objects::StateFilter;
-use ta_objects::and;
+use ta_objects::sql_condition::SqlCondition;
 
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "dependencies",
-    order_by(col = "dep_pos", dir = "desc"),
-    versioned(
-        pk = "id",
-        version_by = "defined_on",
-        partition_by = "dependency_id",
-        current = "dependencies_current"
-    ),
-    recursive(up = "table_function_id", down = "function_id")
-)]
-pub struct DependencyDB {
+#[dao(table = "dependencies", ops(insert), scd2, recursive, project_scoped)]
+pub struct DependencyInsertDB {
+    #[dao(pk)]
     pub id: DependencyVersionId,
     pub collection_id: CollectionId,
+    #[dao(partition_by)]
     pub dependency_id: DependencyId,
+    #[dao(recurse_down)]
     pub function_id: FunctionId,
     pub table_collection_id: OfTable<CollectionId>,
+    #[dao(recurse_up)]
     pub table_function_id: OfTable<FunctionId>,
     pub table_id: TableId,
     pub table_versions: TableVersions,
+    #[dao(order_by)]
     pub dep_pos: DependencyPos,
-    pub status: DependencyStatus,
+    #[dao(valid_from)]
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub system: System,
 }
 
-impl DependencyDB {
-    /// Dependencies usable in executions.
-    pub fn active() -> StateFilter<Self> {
-        StateFilter::of(DependencyStatus::Active)
-    }
-
-    /// A new Deleted version of this dependency.
-    pub fn deleted(&self, ctx: &RequestContext) -> Self {
-        Self {
-            id: DependencyVersionId::default(),
-            status: DependencyStatus::Deleted,
-            defined_on: ctx.time,
-            defined_by_id: ctx.user_id,
-            ..self.clone()
-        }
-    }
+#[ta_objects::Dao]
+#[dao(table = "dependencies", ops(select), scd2, recursive, project_scoped)]
+pub struct DependencyDB {
+    #[dao(flatten)]
+    pub base: DependencyInsertDB,
+    pub project_id: ProjectId,
+    #[dao(valid_to)]
+    pub valid_to: ValidTo,
 }
 
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "dependencies__with_names",
-    versioned(
-        pk = "id",
-        version_by = "defined_on",
-        partition_by = "dependency_id",
-        current = "dependencies_current__with_names"
-    ),
-    recursive(up = "table_function_id", down = "function_id")
-)]
+#[dao(view = "dependencies__with_names", scd2, recursive, project_scoped)]
 pub struct DependencyDBWithNames {
     #[dao(flatten)]
     pub base: DependencyDB,
@@ -77,12 +54,7 @@ pub struct DependencyDBWithNames {
 
 impl DependencyDBWithNames {
     /// Dependencies usable in executions.
-    pub fn active() -> StateFilter<Self> {
-        StateFilter::of(DependencyStatus::Active)
-    }
-
-    /// Active user (non-system) dependencies.
-    pub fn user() -> StateFilter<Self> {
-        StateFilter::of(and!(DependencyStatus::Active, System::FALSE))
+    pub fn user() -> impl SqlCondition<Self> {
+        System::FALSE
     }
 }

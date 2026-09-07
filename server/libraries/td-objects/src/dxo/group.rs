@@ -15,15 +15,16 @@
 
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, Created, Description, GroupId, GroupIdName, GroupName, Modified, System, UserId,
-    UserName,
+    AtTime, Created, Description, GroupId, GroupIdName, GroupName, Modified, ProjectId, System,
+    UserId, UserName,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(sql_table = "groups")]
-pub struct GroupDB {
+#[dao(table = "groups", ops(insert), project_scoped)]
+pub struct GroupInsertDB {
+    #[dao(pk)]
     pub id: GroupId,
     pub name: GroupName,
     pub description: Description,
@@ -34,8 +35,21 @@ pub struct GroupDB {
     pub system: System,
 }
 
+/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
 #[ta_objects::Dao]
-#[dao(sql_table = "groups__with_names")]
+#[dao(
+    table = "groups",
+    ops(select, delete),
+    project_scoped(unique(GroupName))
+)]
+pub struct GroupDB {
+    #[dao(flatten)]
+    pub base: GroupInsertDB,
+    pub project_id: ProjectId,
+}
+
+#[ta_objects::Dao]
+#[dao(view = "groups__with_names", project_scoped(unique(GroupName)))]
 pub struct GroupDBWithNames {
     #[dao(flatten)]
     pub base: GroupDB,
@@ -51,8 +65,8 @@ pub struct GroupCreate {
 }
 
 impl GroupCreate {
-    pub fn to_dao(self, ctx: &RequestContext) -> GroupDB {
-        GroupDB {
+    pub fn to_dao(self, ctx: &RequestContext) -> GroupInsertDB {
+        GroupInsertDB {
             id: GroupId::default(),
             name: self.name,
             description: self.description,
@@ -66,8 +80,8 @@ impl GroupCreate {
 }
 
 #[ta_objects::Dao]
-#[dao(update, sql_table = "groups")]
-pub struct GroupDBUpdate {
+#[dao(table = "groups", ops(update(GroupDB)), project_scoped)]
+pub struct GroupUpdateDB {
     pub name: Option<GroupName>,
     pub description: Option<Description>,
     pub modified_on: Modified<AtTime>,
@@ -103,14 +117,14 @@ impl FromDao for Group {
 
     fn from_dao(dao: GroupDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            name: dao.base.name,
-            description: dao.base.description,
-            created_on: dao.base.created_on,
-            created_by_id: dao.base.created_by_id,
-            modified_on: dao.base.modified_on,
-            modified_by_id: dao.base.modified_by_id,
-            system: dao.base.system,
+            id: dao.base.base.id,
+            name: dao.base.base.name,
+            description: dao.base.base.description,
+            created_on: dao.base.base.created_on,
+            created_by_id: dao.base.base.created_by_id,
+            modified_on: dao.base.base.modified_on,
+            modified_by_id: dao.base.base.modified_by_id,
+            system: dao.base.base.system,
             created_by: dao.created_by,
             modified_by: dao.modified_by,
         })

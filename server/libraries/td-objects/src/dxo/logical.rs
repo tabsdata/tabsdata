@@ -2,129 +2,29 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! DAO / DLO models for the logical-version layer.
+//! DAO / DLO models for the logical-version layer: LFR / LTDV insert-once
+//! identity rows and the LFR → LTDV dependency-binding rows.
 //!
-//! Five tables. Two pairs of identity-row + pointer-event-log, plus the
-//! N:M dependency-binding rows:
-//!
-//! - `LogicalFunctionRunDB` — the LFR identity row, insert-once.
-//! - `LogicalFunctionRunPointerDB` — append-only pointer-change event log.
-//!   The latest row by `(set_on DESC, id DESC)` for a given
-//!   `logical_function_run_id` is the current pointer.
-//! - `LogicalTableDataVersionDB` — the LTDV identity row, insert-once.
-//! - `LogicalTableDataVersionPointerDB` — append-only pointer-change event log.
-//! - `LogicalFunctionRunInputDB` — V2 dependency-binding row (LFR → LTDV).
-//!
-//! Plan-build inserts an LFR / LTDV identity row plus a `Pending`
-//! `InitialMint` pointer-event row. Dispatch appends a `Bound` event with
-//! a freshly minted concrete `PhysicalFunctionRunId` / `PhysicalTableDataVersionId`.
-//! Cancellation appends a `Voided` event. Operator redirect appends a
-//! fresh `Bound` event with a different concrete id. Lazy-mint of a
-//! V1-born concrete TDV inserts the LTDV identity row and a single
-//! `Bound` `InitialMaterialization` event.
-
-use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{CurrentDao, Dao, SeaValue, VersionedDao};
-
-/// Pointer-event-log DAO for a logical identity.
-///
-/// Implemented (via the `Dao` macro's `logical_pointer(...)` arg) by
-/// the two pointer-event tables that track LFR / LTDV state:
-/// `LogicalFunctionRunPointerDB` and `LogicalTableDataVersionPointerDB`.
-/// Carries the schema metadata, row accessors, and event constructors —
-/// no I/O. State-machine logic (bind / redirect / void) lives on
-/// `td_queries::LogicalPointers<P, E>`, reached via
-/// `conn.logical_pointers::<P>()`.
-///
-/// Each pointer-event table is `event_log` (multi-row per partition)
-/// and `versioned`, partitioned by the logical identity and ordered
-/// by `set_on: AtTime`. Those structural invariants are encoded in the
-/// trait's `VersionedDao` super-bounds: `Partition = LogicalId` and
-/// `VersionOrder = AtTime`. So `db.versioned(&at).fetch_one::<P>(logical_id)`
-/// type-checks for any `P: LogicalPointerDao`.
-pub trait LogicalPointerDao:
-    VersionedDao<VersionOrder = AtTime, Partition = <Self as LogicalPointerDao>::LogicalId>
-    + CurrentDao
-    + Sized
-{
-    /// The logical identity column's value type (e.g. `LogicalFunctionRunId`).
-    type LogicalId: SeaValue + SqlCondition<Self> + Clone + Send + Sync + std::fmt::Display;
-
-    /// The concrete-binding column's value type when present (e.g.
-    /// `PhysicalFunctionRunId` / `PhysicalTableDataVersionId`). The column itself is
-    /// `Option<ConcreteId>` — Pending and Voided rows store `NULL`.
-    type ConcreteId: SeaValue
-        + Clone
-        + PartialEq
-        + Send
-        + Sync
-        + std::fmt::Debug
-        + std::fmt::Display;
-
-    /// The insert-once identity-row DAO this pointer-event row references.
-    type IdentityDB: Dao;
-
-    /// Human-readable kind tag for error messages ("function run" or "table data version").
-    const KIND: &'static str;
-
-    /// Iden for the logical-identity column (partition column).
-    fn logical_id_col() -> Self::Iden;
-
-    fn concrete_id_col() -> Self::Iden;
-
-    fn status_col() -> Self::Iden;
-
-    fn status(&self) -> LogicalPointerStatus;
-
-    fn logical_id(&self) -> &Self::LogicalId;
-
-    /// Concrete id at this event row (`None` for Pending / Voided).
-    fn concrete_id(&self) -> Option<&Self::ConcreteId>;
-
-    /// Build a fresh pointer-event row. `project_id` is the project of the
-    /// logical identity this event belongs to — passed in (not derived from
-    /// `logical_id`) so the scheduler's bypass dispatch tick can stamp it
-    /// explicitly rather than leaning on the connection GUC default.
-    fn build_event(
-        project_id: ProjectId,
-        logical_id: &Self::LogicalId,
-        status: LogicalPointerStatus,
-        concrete_id: Option<Self::ConcreteId>,
-        set_on: AtTime,
-        set_by_id: UserId,
-        reason: LogicalPointerReason,
-    ) -> Result<Self, TdError>;
-
-    /// Build the `InitialMint` event that pairs an identity row at
-    /// plan-build (Pending status, no concrete id, `set_on` /
-    /// `set_by_id` derived from the identity's plan-time fields).
-    fn initial_mint_for(identity: &Self::IdentityDB) -> Result<Self, TdError>;
-}
+//! Plan-build inserts the identity rows alone; their attempts are SCD2
+//! versions on `physical_function_runs` / `physical_table_data_versions`,
+//! the newest being the current one.
 
 use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
     DataChanged, DependencyPos, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek, EpochMs,
     ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, GroupId, GroupName,
-    HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunInputId,
-    LogicalFunctionRunPointerId, LogicalFunctionRunStatus, LogicalPointerReason,
-    LogicalPointerStatus, LogicalTableDataVersionId, LogicalTableDataVersionPointerId, Patch,
-    PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
-    ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started,
-    StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount, TableVersionId,
-    TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos, WithData,
+    HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
+    LogicalTableDataVersionId, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
+    PhysicalTableDataVersionId, Private, ProjectId, ProjectName, RowCount, SchemaChanged,
+    SchemaDataChanged, SchemaHash, Started, StorageVersion, TableFunctionParamPos, TableId,
+    TableName, TableVersionCount, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId,
+    UserName, VersionPos, WithData,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
 
-// -----------------------------------------------------------------------
-// Replay endpoint DTOs
-// -----------------------------------------------------------------------
-
-/// Response body for `POST .../logical-function-runs/{lfr}/replay`.
-/// `new_function_run_id` is the freshly-minted FR. `previous_function_run_id`
-/// is the FR the pointer currently points at (still bound until the
-/// new attempt finishes successfully).
+/// `previous_function_run_id` is the attempt the replay supersedes.
 #[ta_objects::Dto]
 pub struct LogicalFunctionRunReplayResponse {
     pub logical_function_run_id: LogicalFunctionRunId,
@@ -133,66 +33,60 @@ pub struct LogicalFunctionRunReplayResponse {
     pub function_version_id: FunctionVersionId,
 }
 
-// -----------------------------------------------------------------------
-// logical_function_runs (LFR) — per-run plan-time identity
-// -----------------------------------------------------------------------
-
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "logical_function_runs",
-    order_by(col = "triggered_on", dir = "desc")
-)]
-pub struct LogicalFunctionRunDB {
+#[dao(table = "logical_function_runs", ops(insert), project_scoped)]
+pub struct LogicalFunctionRunInsertDB {
+    #[dao(pk)]
     pub id: LogicalFunctionRunId,
-    /// The project this run belongs to. Inherited from the parent
-    /// collection at LFR mint; threaded forward to the FR + worker rows
-    /// the LFR spawns so the RLS GUC matches end-to-end.
-    pub project_id: ProjectId,
     pub collection_id: CollectionId,
-    // (execution_id, function_id) is the natural key for an LFR —
-    // one LFR per logical run within an execution. The FR → LFR
-    // derivation (callback, redirect, replay, dispatch) uses these
-    // two as composite filter; both are marked as extractors so
-    // `fetch_one::<LogicalFunctionRunDB>(and!(&exec_id, &fn_id))`
-    // resolves directly.
+    // (execution_id, function_id) is an LFR's natural key — one LFR per
+    // logical run within an execution.
     pub execution_id: ExecutionId,
     pub transaction_id: TransactionId,
-    // Logical function identity. The *function version* (i.e. which
-    // code) the LFR's concrete attempts run is on each concrete FR
-    // row, not here — replays can attach a fresh concrete FR with a
-    // different function_version_id under the same LFR identity.
+    // The *function version* an attempt runs lives on each concrete FR row —
+    // replays can attach a fresh FR with a different function_version_id
+    // under the same LFR identity.
     pub function_id: FunctionId,
-    // Plan-time fvid this LFR was minted against. Topology
-    // reference for primitives (mint / bind): a target fvid's
+    // Plan-time fvid this LFR was minted against; set once at plan-build,
+    // never updated. Topology reference for mint / bind: a target fvid's
     // head must equal `head_of(function_version_id)`.
-    // Set once at plan-build; never updated.
     pub function_version_id: FunctionVersionId,
     pub trigger: Trigger,
+    #[dao(order_by)]
     pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
-    // Canonical execution status. Sticky once Committed: no future
-    // write moves it. Replay attempts still mint a new FR and
-    // (on success) redirect the pointer, but never demote a
-    // Committed LFR.
+    // Canonical execution status. Sticky once Committed: replay attempts
+    // still mint a new FR, but never demote a Committed LFR.
     pub status: LogicalFunctionRunStatus,
-    // Group snapshot copied from collections.group_id at LFR mint;
-    // immutable thereafter so a collection's later group reassignment
-    // doesn't shift historical runs. No default: the group is
-    // project-scoped, so it must be stamped explicitly from the run's
-    // collection — a global fallback would mis-tag runs in any other
-    // project.
+    // Group snapshot copied from collections.group_id at LFR mint; immutable
+    // so a later group reassignment doesn't shift historical runs. No
+    // default: the group is project-scoped and must be stamped explicitly
+    // from the run's collection.
     pub group_id: GroupId,
 }
 
-// Names-joined view of the LFR identity row, merged with the
-// currently-bound PFR's per-attempt fields (started_on, ended_on,
-// function_version_patch_id, the PFR id itself). PFR-derived fields
-// are NULL when no PFR is currently bound (Pending/Voided).
-//
-// `status` is the canonical LFR-level (sticky-Committed) flow-control
-// status — not the PFR's per-attempt status.
+/// The row as the database holds it: `project_id` is the `project_isolation`
+/// policy's, defaulted from the connection the insert ran on. The
+/// cross-project scheduler reads it back.
 #[ta_objects::Dao]
-#[dao(sql_table = "function_runs__with_names")]
+#[dao(
+    table = "logical_function_runs",
+    ops(select),
+    unique(ExecutionId, FunctionId),
+    project_scoped
+)]
+pub struct LogicalFunctionRunDB {
+    #[dao(flatten)]
+    pub base: LogicalFunctionRunInsertDB,
+    pub project_id: ProjectId,
+}
+
+// LFR identity row joined with the current PFR's per-attempt fields;
+// PFR-derived fields are NULL when there is no current PFR.
+// `status` is the canonical LFR-level (sticky-Committed) status — not the
+// PFR's per-attempt status.
+#[ta_objects::Dao]
+#[dao(view = "function_runs__with_names", project_scoped)]
 pub struct FunctionRunDBWithNames {
     #[dao(flatten)]
     pub base: LogicalFunctionRunDB,
@@ -204,21 +98,17 @@ pub struct FunctionRunDBWithNames {
     pub execution: Option<ExecutionName>,
     pub triggered_by: UserName,
     pub group: Option<GroupName>,
-    /// Display name resolved from `projects.name` via the view join.
     pub project: Option<ProjectName>,
-    // PFR id currently bound to this LFR (resolved from the pointer
-    // event log); NULL while Pending/Voided.
+    // This LFR's current PFR; NULL while none was minted, or after a void.
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
-    // Per-attempt audit status from the bound PFR. The canonical
-    // sticky-Committed `status` field lives on the LFR side
-    // (inherited via `LogicalFunctionRunDB`).
+    // Per-attempt audit status from the current PFR; the canonical
+    // sticky-Committed `status` lives on the LFR side.
     pub physical_status: Option<PhysicalFunctionRunStatus>,
     pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
-    // Bucket floors / aggregated metrics from the bound PFR. NULL
-    // until the attempt terminates; metric_* additionally NULL for
-    // non-output statuses (E/F/X/Y).
+    // Bucket floors / aggregated metrics from the current PFR. NULL until the
+    // attempt terminates; metric_* additionally NULL for non-output statuses.
     pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
     pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
     pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
@@ -228,11 +118,10 @@ pub struct FunctionRunDBWithNames {
     pub metric_data_bytes: Option<ByteCount>,
 }
 
-/// Public DTO for a function run — one row per
-/// `(execution_id, function_id)`. Carries the LFR identity (canonical
-/// status, sticky-Committed semantics) merged with the per-attempt
-/// fields of the currently-bound PFR. Per-attempt drill-downs
-/// (workers, logs) go through `physical_function_run_id`.
+/// One row per `(execution_id, function_id)`: the LFR identity (canonical
+/// sticky-Committed status) merged with the current PFR's per-attempt
+/// fields. Per-attempt drill-downs (workers, logs) go through
+/// `physical_function_run_id`.
 #[ta_objects::Dto]
 #[dto(list(on = FunctionRunDBWithNames))]
 pub struct FunctionRun {
@@ -268,19 +157,16 @@ pub struct FunctionRun {
     #[dto(list(filter, filter_like, order_by))]
     pub project: Option<ProjectName>,
     pub triggered_by: UserName,
-    // Resolved per-attempt fields from the currently-bound PFR.
-    // `physical_function_run_id` is the PFR id; NULL while
-    // Pending/Voided. UI/CLI use this to drill into PFR-keyed
-    // entities (workers, logs).
+    // Per-attempt fields from the current PFR;
+    // `physical_function_run_id` is NULL while there is none.
     #[dto(list(filter, order_by))]
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     #[dto(list(filter, order_by))]
     pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter, order_by))]
     pub ended_on: Option<Ended<AtTime>>,
-    // PFR-side per-attempt status (Running, Done, …). The canonical
-    // LFR status — what callers use for committed-only filters —
-    // lives in the `status` field above.
+    // PFR-side per-attempt status; committed-only filters use the canonical
+    // LFR `status` above.
     #[dto(list(filter, order_by))]
     pub physical_status: Option<PhysicalFunctionRunStatus>,
     #[dto(list(filter, order_by))]
@@ -292,17 +178,17 @@ impl FromDao for FunctionRun {
 
     fn from_dao(dao: FunctionRunDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
+            id: dao.base.base.id,
             project_id: dao.base.project_id,
-            collection_id: dao.base.collection_id,
-            execution_id: dao.base.execution_id,
-            transaction_id: dao.base.transaction_id,
-            function_id: dao.base.function_id,
-            function_version_id: dao.base.function_version_id,
-            trigger: dao.base.trigger,
-            triggered_on: dao.base.triggered_on,
-            triggered_by_id: dao.base.triggered_by_id,
-            status: dao.base.status,
+            collection_id: dao.base.base.collection_id,
+            execution_id: dao.base.base.execution_id,
+            transaction_id: dao.base.base.transaction_id,
+            function_id: dao.base.base.function_id,
+            function_version_id: dao.base.base.function_version_id,
+            trigger: dao.base.base.trigger,
+            triggered_on: dao.base.base.triggered_on,
+            triggered_by_id: dao.base.base.triggered_by_id,
+            status: dao.base.base.status,
             name: dao.name,
             collection: dao.collection,
             collection_deleted: dao.collection_deleted,
@@ -318,16 +204,19 @@ impl FromDao for FunctionRun {
     }
 }
 
-// Status update on the LFR identity row. Drives flow control
-// (readiness, dispatch, cancel, recover, commit). Per-attempt
-// wall-clock fields (started_on, ended_on) live on PhysicalFunctionRunDB.
+// Per-attempt wall-clock fields (started_on, ended_on) live on
+// PhysicalFunctionRunDB, not here.
 #[ta_objects::Dao]
-#[dao(update, sql_table = "logical_function_runs")]
-pub struct LogicalFunctionRunUpdateDB {
+#[dao(
+    table = "logical_function_runs",
+    ops(update(LogicalFunctionRunDB)),
+    project_scoped
+)]
+pub struct LogicalFunctionRunStatusUpdateDB {
     pub status: LogicalFunctionRunStatus,
 }
 
-impl LogicalFunctionRunUpdateDB {
+impl LogicalFunctionRunStatusUpdateDB {
     pub fn scheduled() -> Self {
         Self {
             status: LogicalFunctionRunStatus::Scheduled,
@@ -357,137 +246,87 @@ impl LogicalFunctionRunUpdateDB {
             status: LogicalFunctionRunStatus::Canceled,
         }
     }
-}
 
-#[ta_objects::Dao]
-#[dao(update, sql_table = "logical_function_runs")]
-pub struct LogicalFunctionRunCommitDB {
-    pub status: LogicalFunctionRunStatus,
-}
-
-impl Default for LogicalFunctionRunCommitDB {
-    fn default() -> Self {
+    pub fn committed() -> Self {
         Self {
             status: LogicalFunctionRunStatus::Committed,
         }
     }
 }
 
-// -----------------------------------------------------------------------
-// logical_function_run_pointers — append-only pointer-event log
-// -----------------------------------------------------------------------
-
 #[ta_objects::Dao]
 #[dao(
-    sql_table = "logical_function_run_pointers",
-    order_by(col = "set_on", dir = "asc"),
-    event_log,
-    versioned(
-        pk = "id",
-        version_by = "set_on",
-        partition_by = "logical_function_run_id",
-        current = "logical_function_run_pointers_current"
-    ),
-    logical_pointer(
-        logical_id_col = "logical_function_run_id",
-        concrete_id_col = "physical_function_run_id",
-        identity = LogicalFunctionRunDB,
-        kind = "function run"
-    )
+    table = "logical_table_data_versions",
+    ops(insert),
+    timeline,
+    project_scoped
 )]
-pub struct LogicalFunctionRunPointerDB {
-    pub id: LogicalFunctionRunPointerId,
-    // Project of the LFR this event belongs to. Carried explicitly so the
-    // scheduler's cross-project dispatch tick (bypass scope, no request
-    // GUC) can append bind events without relying on the `app.project_id`
-    // column default — fail-closed.
-    pub project_id: ProjectId,
-    pub logical_function_run_id: LogicalFunctionRunId,
-    pub status: LogicalPointerStatus,
-    // NULL on Pending and Voided rows; populated on Bound rows with the
-    // concrete FR the LFR was bound to at this event.
-    pub physical_function_run_id: Option<PhysicalFunctionRunId>,
-    pub set_on: AtTime,
-    pub set_by_id: UserId,
-    pub reason: LogicalPointerReason,
-}
-
-// -----------------------------------------------------------------------
-// logical_table_data_versions (LTDV) — per-output plan-time identity
-// -----------------------------------------------------------------------
-
-#[ta_objects::Dao]
-#[dao(
-    data_version,
-    sql_table = "logical_table_data_versions",
-    order_by(col = "triggered_on", dir = "desc"),
-    versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id")
-)]
-pub struct LogicalTableDataVersionDB {
+pub struct LogicalTableDataVersionInsertDB {
+    #[dao(pk)]
     pub id: LogicalTableDataVersionId,
-    /// The project this version belongs to. Inherited from the producing
-    /// LFR at mint; threaded forward to the pointer-event rows so the RLS
-    /// GUC matches end-to-end on the cross-project scheduler dispatch tick.
-    pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub execution_id: ExecutionId,
     pub transaction_id: TransactionId,
+    #[dao(partition_by)]
     pub table_id: TableId,
     // NULL when the LTDV is a lazy-mint over a V1-born concrete TDV
     // whose producer pre-dates the logical layer.
     pub producer_logical_function_run_id: Option<LogicalFunctionRunId>,
     pub function_param_pos: Option<TableFunctionParamPos>,
-    // Table privateness snapshot, copied from the output table at
-    // mint. Lets metrics exclude private tables without joining
-    // the versioned `tables` table.
+    // Table privateness snapshot, copied from the output table at mint.
+    // Lets metrics exclude private tables without joining the versioned
+    // `tables` table.
     pub private: Private,
-    // Logical table identity is on `table_id` above. The *table version*
-    // (i.e. which schema) the LTDV's concrete attempts produce lives
-    // on each concrete TDV row, not here — replays can attach a
-    // concrete TDV with a different table_version_id under the same
-    // LTDV identity (e.g. when the function version evolves the
-    // schema between attempts).
+    // The *table version* (schema) an attempt produces lives on each
+    // concrete TDV row — replays can attach a concrete TDV with a different
+    // table_version_id under the same LTDV identity.
+    #[dao(order_by, version_by)]
     pub triggered_on: TriggeredOn,
     pub triggered_by_id: UserId,
-    // Equal by construction to the producing LFR's group_id (both
-    // copied off the same FunctionNode at plan-build). No default: the
-    // group is project-scoped and must be stamped explicitly.
+    // Equal by construction to the producing LFR's group_id (both copied
+    // off the same FunctionNode at plan-build). No default: the group is
+    // project-scoped and must be stamped explicitly.
     pub group_id: GroupId,
+}
+
+/// The row as the database holds it: `project_id` is the `project_isolation`
+/// policy's, defaulted from the connection the insert ran on. The
+/// cross-project dispatch tick reads it back.
+#[ta_objects::Dao]
+#[dao(
+    table = "logical_table_data_versions",
+    ops(select),
+    timeline,
+    project_scoped
+)]
+pub struct LogicalTableDataVersionDB {
+    #[dao(flatten)]
+    pub base: LogicalTableDataVersionInsertDB,
+    pub project_id: ProjectId,
 }
 
 // LTDV identity rows whose producer LFR is not Canceled/Yanked — the
 // version resolver's "active" timeline.
 #[ta_objects::Dao]
-#[dao(
-    data_version,
-    sql_table = "logical_table_data_versions__active",
-    versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id")
-)]
+#[dao(view = "logical_table_data_versions__active", timeline, project_scoped)]
 pub struct ActiveLogicalTableDataVersionDB {
     #[dao(flatten)]
     pub base: LogicalTableDataVersionDB,
 }
 
-// Names-joined view of the LTDV identity row, merged with the
-// currently-bound PTDV's per-attempt fields (and the producer PFR's
-// started/ended/status reached through the PTDV). PTDV/PFR-derived
-// fields are NULL when no PTDV is currently bound (Pending/Voided).
+// LTDV identity row joined with the current PTDV's per-attempt fields (and
+// its producer PFR's); PTDV/PFR-derived fields are NULL when there is no
+// current PTDV.
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "table_data_versions__with_names",
-    versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id"),
-    data_version
-)]
+#[dao(view = "table_data_versions__with_names", timeline, project_scoped)]
 pub struct TableDataVersionDBWithNames {
     #[dao(flatten)]
     pub base: LogicalTableDataVersionDB,
     pub collection: CollectionName,
     pub execution: Option<ExecutionName>,
     pub triggered_by: UserName,
-    // Resolved group display name from the joined groups row.
     pub group: Option<GroupName>,
-    // PTDV id currently bound to this LTDV (resolved from the pointer
-    // event log); NULL while Pending/Voided.
+    // This LTDV's current PTDV; NULL while none was minted, or after a void.
     pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
     pub name: Option<TableName>,
     pub table_version_id: Option<TableVersionId>,
@@ -503,8 +342,8 @@ pub struct TableDataVersionDBWithNames {
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
-    // Canonical (sticky-Committed) status from the LTDV's producer
-    // LFR. Use this for committed-only filters.
+    // Canonical (sticky-Committed) status from the LTDV's producer LFR;
+    // use this for committed-only filters.
     pub status: Option<LogicalFunctionRunStatus>,
     // PFR-side per-attempt status (Running, Done, …).
     pub physical_status: Option<PhysicalFunctionRunStatus>,
@@ -512,10 +351,9 @@ pub struct TableDataVersionDBWithNames {
     pub storage_version: Option<StorageVersion>,
 }
 
-/// Public DTO for a table data version — one row per LTDV identity.
-/// Carries the logical identity merged with the per-attempt fields of
-/// the currently-bound PTDV (and that PTDV's producer PFR). The
-/// per-attempt drill (download, schema, sample) goes through
+/// One row per LTDV identity: the logical identity merged with the
+/// current PTDV's (and its producer PFR's) per-attempt fields.
+/// Per-attempt drill (download, schema, sample) goes through
 /// `physical_table_data_version_id`.
 #[ta_objects::Dto]
 #[dto(list(on = TableDataVersionDBWithNames))]
@@ -534,7 +372,7 @@ pub struct TableDataVersion {
     pub producer_logical_function_run_id: Option<LogicalFunctionRunId>,
     #[dto(list(filter, order_by))]
     pub function_param_pos: Option<TableFunctionParamPos>,
-    #[dto(list(filter, order_by, col = "triggered_on"))]
+    #[dto(list(filter, order_by))]
     pub created_at: TriggeredOn,
     #[dto(list(filter, order_by))]
     pub triggered_by_id: UserId,
@@ -545,8 +383,8 @@ pub struct TableDataVersion {
     pub execution: Option<ExecutionName>,
     pub created_by: UserName,
 
-    // Bound PTDV identity + derived per-attempt audit. NULL while
-    // Pending/Voided.
+    // Current PTDV identity + derived per-attempt audit; NULL while there
+    // is none.
     #[dto(list(filter, order_by))]
     pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
     #[dto(list(filter, filter_like, order_by))]
@@ -557,9 +395,9 @@ pub struct TableDataVersion {
     pub function_version_id: Option<FunctionVersionId>,
     #[dto(list(filter, order_by))]
     pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
-    #[dto(list(filter, col = "has_data"))]
+    #[dto(list(filter, col = HasData))]
     pub data_changed: DataChanged,
-    #[dto(list(filter, col = "schema_changed"))]
+    #[dto(list(filter, col = SchemaChanged))]
     pub schema_data_changed: SchemaDataChanged,
     pub column_count: Option<ColumnCount>,
     pub row_count: Option<RowCount>,
@@ -573,8 +411,8 @@ pub struct TableDataVersion {
     pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter, order_by))]
     pub ended_on: Option<Ended<AtTime>>,
-    // Canonical LFR-level status (sticky-Committed). Filter on this
-    // for committed-only.
+    // Canonical LFR-level status (sticky-Committed); filter on this for
+    // committed-only.
     #[dto(list(filter, order_by))]
     pub status: Option<LogicalFunctionRunStatus>,
     // PFR-side per-attempt status (Running, Done, …).
@@ -590,15 +428,15 @@ impl FromDao for TableDataVersion {
 
     fn from_dao(dao: TableDataVersionDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            collection_id: dao.base.collection_id,
-            table_id: dao.base.table_id,
-            execution_id: dao.base.execution_id,
-            transaction_id: dao.base.transaction_id,
-            producer_logical_function_run_id: dao.base.producer_logical_function_run_id,
-            function_param_pos: dao.base.function_param_pos,
-            created_at: dao.base.triggered_on,
-            triggered_by_id: dao.base.triggered_by_id,
+            id: dao.base.base.id,
+            collection_id: dao.base.base.collection_id,
+            table_id: dao.base.base.table_id,
+            execution_id: dao.base.base.execution_id,
+            transaction_id: dao.base.base.transaction_id,
+            producer_logical_function_run_id: dao.base.base.producer_logical_function_run_id,
+            function_param_pos: dao.base.base.function_param_pos,
+            created_at: dao.base.base.triggered_on,
+            triggered_by_id: dao.base.base.triggered_by_id,
             collection: dao.collection,
             execution: dao.execution,
             created_by: dao.triggered_by,
@@ -625,69 +463,37 @@ impl FromDao for TableDataVersion {
     }
 }
 
-// -----------------------------------------------------------------------
-// logical_table_data_version_pointers — append-only pointer-event log
-// -----------------------------------------------------------------------
-
 #[ta_objects::Dao]
-#[dao(
-    sql_table = "logical_table_data_version_pointers",
-    order_by(col = "set_on", dir = "asc"),
-    event_log,
-    versioned(
-        pk = "id",
-        version_by = "set_on",
-        partition_by = "logical_table_data_version_id",
-        current = "logical_table_data_version_pointers_current"
-    ),
-    logical_pointer(
-        logical_id_col = "logical_table_data_version_id",
-        concrete_id_col = "physical_table_data_version_id",
-        identity = LogicalTableDataVersionDB,
-        kind = "table data version"
-    )
-)]
-pub struct LogicalTableDataVersionPointerDB {
-    pub id: LogicalTableDataVersionPointerId,
-    // Project of the LTDV this event belongs to. Carried explicitly for
-    // the same fail-closed reason as the LFR pointer above.
-    pub project_id: ProjectId,
-    pub logical_table_data_version_id: LogicalTableDataVersionId,
-    pub status: LogicalPointerStatus,
-    // NULL on Pending and Voided rows; populated on Bound rows with the
-    // concrete TDV the LTDV was bound to at this event.
-    pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
-    pub set_on: AtTime,
-    pub set_by_id: UserId,
-    pub reason: LogicalPointerReason,
-}
-
-// -----------------------------------------------------------------------
-// logical_function_run_inputs — V2 dependency-binding rows
-// -----------------------------------------------------------------------
-
-#[ta_objects::Dao]
-#[dao(sql_table = "logical_function_run_inputs")]
-pub struct LogicalFunctionRunInputDB {
+#[dao(table = "logical_function_run_inputs", ops(insert), project_scoped)]
+pub struct LogicalFunctionRunInputInsertDB {
+    #[dao(pk)]
     pub id: LogicalFunctionRunInputId,
     pub collection_id: CollectionId,
     pub execution_id: ExecutionId,
     pub transaction_id: TransactionId,
     pub logical_function_run_id: LogicalFunctionRunId,
-    // NULL when the dep edge resolved to no LTDV at plan-build (e.g.
-    // self-dep on first execution). The row is still emitted so the
-    // worker yaml renders the input slot with table info derived from
-    // `DependencyDB` at dispatch.
+    // NULL when the dep edge resolved to no LTDV at plan-build (e.g. self-dep
+    // on first execution); the row is still emitted so the worker yaml
+    // renders the input slot from `DependencyDB` at dispatch.
     pub requirement_logical_table_data_version_id: Option<LogicalTableDataVersionId>,
-    // NULL on trigger-edge rows (mirrors V1 function_requirements).
+    // NULL on trigger-edge rows.
     pub requirement_input_idx: Option<InputIdx>,
     pub requirement_dependency_pos: Option<DependencyPos>,
     pub requirement_version_pos: VersionPos,
 }
-impl TryFrom<&WorkerExecutionUpdate> for LogicalFunctionRunUpdateDB {
+
+/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
+#[ta_objects::Dao]
+#[dao(table = "logical_function_run_inputs", ops(select), project_scoped)]
+pub struct LogicalFunctionRunInputDB {
+    #[dao(flatten)]
+    pub base: LogicalFunctionRunInputInsertDB,
+    pub project_id: ProjectId,
+}
+impl TryFrom<&WorkerExecutionUpdate> for LogicalFunctionRunStatusUpdateDB {
     type Error = TdError;
     fn try_from(src: &WorkerExecutionUpdate) -> Result<Self, Self::Error> {
-        Ok(LogicalFunctionRunUpdateDB {
+        Ok(LogicalFunctionRunStatusUpdateDB {
             status: src.status.clone().try_into()?,
         })
     }

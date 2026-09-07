@@ -69,7 +69,7 @@ pub struct ConnectionHydrated {
     pub vars: Vec<KeyValue>,
 }
 
-use crate::types::basic::{AtTime, ConnectionKind, Created, Modified, UserId};
+use crate::types::basic::{AtTime, ConnectionKind, Created, Modified, ProjectId, UserId};
 
 /// A connection row: stable identity + connector kind, 1:1 with its
 /// source/destination collection (created with it, named by it, deleted
@@ -79,12 +79,22 @@ use crate::types::basic::{AtTime, ConnectionKind, Created, Modified, UserId};
 /// succeeded (store-first ordering), so its presence IS the confirmation.
 /// `project_id` is owned by RLS (field-less, like groups).
 #[ta_objects::Dao]
-#[dao(sql_table = "connections")]
-pub struct ConnectionDB {
+#[dao(table = "connections", ops(insert), project_scoped)]
+pub struct ConnectionInsertDB {
+    #[dao(pk)]
     pub id: ConnectionId,
     pub kind: ConnectionKind,
     pub created_on: Created<AtTime>,
     pub created_by_id: Created<UserId>,
     pub modified_on: Modified<AtTime>,
     pub modified_by_id: Modified<UserId>,
+}
+
+/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
+#[ta_objects::Dao]
+#[dao(table = "connections", ops(select), project_scoped)]
+pub struct ConnectionDB {
+    #[dao(flatten)]
+    pub base: ConnectionInsertDB,
+    pub project_id: ProjectId,
 }
