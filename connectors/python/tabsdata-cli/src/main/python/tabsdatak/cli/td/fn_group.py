@@ -135,22 +135,21 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                 table.add_column("Patches", no_wrap=True)
                 table.add_column("Name")
                 table.add_column("Description")
+                table.add_column("Status")
                 table.add_column("Created by")
                 table.add_column("Created on")
-                table.add_column("Dependencies")
-                table.add_column("Triggers (functions)")
-                table.add_column("Tables")
                 for function in function_list:
+                    data = function._data or {}
                     table.add_row(
                         str(function.id),
                         str(function.patch_of or ""),
                         function.name,
                         function.description,
+                        _FUNCTION_STATUS_LABELS.get(
+                            data.get("status"), data.get("status") or "-"
+                        ),
                         function.defined_by,
                         function.defined_on_str,
-                        beautify_list(function.dependencies),
-                        beautify_list(function.triggers),
-                        beautify_list([t.name for t in function.tables]),
                     )
                 click.echo()
                 make_console().print(table)
@@ -1094,7 +1093,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
                     p.get("description") or "",
                     beautify_time(defined_on) if defined_on else "",
                     p.get("defined_by") or p.get("defined_by_id") or "",
-                    p.get("status") or "",
+                    _FUNCTION_STATUS_LABELS.get(p.get("status"), p.get("status") or ""),
                 )
             click.echo()
             make_console().print(table)

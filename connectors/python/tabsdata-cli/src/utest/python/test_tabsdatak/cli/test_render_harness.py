@@ -181,6 +181,21 @@ _FN_INFO = {
     "snippet": "@publisher()\ndef fn_a():\n    ...\n",
 }
 
+# ``fn get --show-history`` lists version rows; the history endpoint carries no
+# per-version tables, dependencies or triggers.
+_FN_VERSION = {
+    "id": "FID_1",
+    "patch_of": "FV_0",
+    "name": "fn-a",
+    "description": "publishes stuff",
+    "type": "P",
+    "status": "A",
+    "enabled": True,
+    "defined_on_str": "2026-02-01",
+    "defined_by": "admin",
+    "snippet": "@publisher()\ndef fn_a():\n    ...\n",
+}
+
 # ``plan get`` nests ``collection``/``function`` objects
 # (``execution.collection.name``); the machine payload keeps them as dicts.
 _EXECUTION = {
@@ -609,10 +624,7 @@ def _set_metrics_inflight(c: MagicMock) -> None:
 
 
 def _set_fn_info_history(c: MagicMock) -> None:
-    # ``fn get --show-history`` lists versions; same DTO shape as ``fn get``.
-    c.list_function_history.return_value = [
-        _DTO(_FN_INFO, tables=[_DTO({"name": t}) for t in _FN_INFO["tables"]])
-    ]
+    c.list_function_history.return_value = [_DTO(_FN_VERSION)]
 
 
 def _set_fn_list_patches(c: MagicMock) -> None:
@@ -793,8 +805,8 @@ CASES: tuple[RenderCase, ...] = (
         # --show-history returns a list of versions via list_function_history.
         "fn-get-history",
         ["fn", "get", "-n", "fn-a", "-c", "coll-a", "--show-history"],
-        _set_fn_info_history, [_FN_INFO],
-        ("fn-a", "FID_1", "FV_0", "publishes stuff", "dep1", "trig1", "t1", "t2"),
+        _set_fn_info_history, [_FN_VERSION],
+        ("fn-a", "FID_1", "FV_0", "publishes stuff", "Active", "admin", "2026-02-01"),
     ),
     RenderCase(
         # epoch defined_on (1704067200000) is kept raw in json/yaml but rendered
