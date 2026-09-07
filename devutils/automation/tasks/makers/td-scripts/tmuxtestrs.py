@@ -12,13 +12,11 @@ import tempfile
 import threading
 import time
 
+from testrs import make_command, outcome, quote, read
+
 SESSION = "td-test-rs"
 
 HOLD = 3.0
-
-
-def quote(command: list[str]) -> str:
-    return " ".join(shlex.quote(part) for part in command)
 
 
 def tmux_command(tmux: str, *arguments: str, check: bool = False) -> None:
@@ -60,20 +58,7 @@ def main() -> int:
         print("Required tool tmux not found.", file=sys.stderr)
         return 2
 
-    makefile = os.environ.get("CARGO_MAKE_MAKEFILE_PATH", "Makefile.toml")
-    profile = os.environ.get("CARGO_MAKE_PROFILE", "development")
-    base = [
-        "cargo",
-        "make",
-        "--disable-check-for-updates",
-        "--no-on-error",
-        "--loglevel=info",
-        f"--profile={profile}",
-        "--allow-private",
-        "--skip-init-end-tasks",
-        "--makefile",
-        makefile,
-    ]
+    base = make_command()
 
     codes = tempfile.mkdtemp(prefix="td-test-rs-")
     columns, rows = shutil.get_terminal_size((160, 40))
@@ -125,27 +110,18 @@ def main() -> int:
         print(f"\n{'-' * 30} {name} {'-' * 30}")
         print(transcript)
 
-    outcome = 0
-    unknown = []
-    for name in names:
-        marker = os.path.join(codes, f"{name}.code")
-        try:
-            with open(marker, encoding="utf-8") as handle:
-                code = int(handle.read().strip() or 0)
-        except (OSError, ValueError):
-            unknown.append(name)
-            continue
-        if code and not outcome:
-            outcome = code
+    reported = {
+        name: read(pathlib.Path(codes) / f"{name}.code").strip() for name in names
+    }
     shutil.rmtree(codes, ignore_errors=True)
 
+    result, unknown = outcome(reported)
     if unknown:
         print(
             f"No exit code reported by: {', '.join(unknown)}; treating as failed.",
             file=sys.stderr,
         )
-        return outcome or 1
-    return outcome
+    return result
 
 
 if __name__ == "__main__":

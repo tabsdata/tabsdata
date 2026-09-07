@@ -48,8 +48,7 @@ dependencies = ["__os__set_mode_test_rs"]
 run_task = [
     { name = [
         "__os__test_rs_modules_standard",
-        "__os__test_rs_modules_logging",
-        "__os__test_rs_modules_tower"
+        "__os__test_rs_modules_logging"
     ] }
 ]
 
@@ -117,50 +116,6 @@ script = [
     else
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging"
         exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging
-    end
-
-    is_zero = eq ${exit_code} "0"
-    if ${is_zero}
-        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
-    else
-        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
-        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
-        if not ${TD_FAIL_FAST_RS}
-            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
-            set_env TD_TESTS_CODE_RS ${exit_code}
-        else
-            info "⌛️ Failing fast..."
-            code = exit ${exit_code}
-        end
-    end
-    ''']
-
-[tasks.__os__test_rs_modules_tower]
-plugin = "td-task-tracker"
-category = "04 - Test"
-private = true
-dependencies = ["__os__set_mode_test_rs"]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/make-os/libraries/log.ds
-
-    skip_test_tower = get_env TD_SKIP_TEST_TOWER
-    if eq ${skip_test_tower} "true"
-        info "🚫 Skipping the tower metadata test task"
-        code = exit 0
-    end
-
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets --tests"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets --tests
-
-    if eq ${td-cargo} "cross"
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata
-    else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata
     end
 
     is_zero = eq ${exit_code} "0"

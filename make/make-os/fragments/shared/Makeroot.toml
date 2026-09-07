@@ -90,6 +90,7 @@ SPINNER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/librari
 EXPORTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/exports.py", normalize = true }
 WARMUP_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/warmup.py", normalize = true }
 TMUX_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/tmuxtestrs.py", normalize = true }
+WARP_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/warptestrs.py", normalize = true }
 
 BRUSH_NATIVE_LIBS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/brush_native_libs.py", normalize = true }
 BUMP_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }

@@ -21,9 +21,19 @@ script = [
         on_ga = get_env TD_ON_GA
         on_ga_true = eq ${on_ga} "true"
         tmux = which tmux
+        terminal = get_env TERM_PROGRAM
+        warp = eq "${terminal}" "WarpTerminal"
+        os_family = os_family
+        if eq ${os_family} "windows"
+            warp = set false
+        end
         unset_env TD_TMUX
+        unset_env TD_WARP
         if not ${on_ga_true}
-            if ${tmux}
+            if ${warp}
+                info "🖥️ _____ Each group of Rust tests will run on its own Warp pane"
+                set_env TD_WARP true
+            elseif ${tmux}
                 info "🖥️ _____ Each group of Rust tests will run on its own tmux pane"
                 set_env TD_TMUX true
             end
