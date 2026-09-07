@@ -12,52 +12,45 @@
 //! | [`Dlo`]  | logic | an in-memory domain/logic object |
 //! | [`Dto`]  | API   | a request/response contract      |
 //!
-//! Each layer macro generates a `…Builder`, the relevant trait impls (for
-//! `Dao`: an `Iden` column enum, `FromRow`, and the `Dao` trait), and the
-//! conversions declared via `#[dxo(...)]`. Conversions are emitted by
-//! `type_builder::gen_conversions`; the layer macros differ only in which
-//! extra impls they add.
+//! Each layer macro generates the relevant trait impls (for `Dao`: an
+//! `Iden` column enum, `FromRow`, and the `Dao` trait); the layer macros
+//! differ only in which extra impls they add.
 //!
-//! # The `#[dxo(...)]` conversion DSL
+//! # Typed values
 //!
-//! `#[dxo(...)]` appears at two scopes:
+//! Field values are newtypes and closed string sets built from facet
+//! derives — the derive list shows exactly which external contracts a type
+//! participates in:
 //!
-//! **Struct scope** declares whole-struct conversions into *this* type's
-//! builder:
-//! - `builder(try_from = Src)` generates `TryFrom<&Src> for ThisBuilder`.
-//! - `updater(try_from = Src)` generates `TryUpdater<Src> for ThisBuilder`
-//!   (used to fold audit context — e.g. `RequestContext` — onto a builder).
-//! - `skip_all` starts from *no* fields copied; fields opt in individually.
-//!   Without it, fields are copied by matching name.
+//! | derive         | role                                               |
+//! |----------------|----------------------------------------------------|
+//! | [`Typed`]      | domain core: the `ta_objects::Typed::try_new` construction gate (from `#[typed(...)]` constraints), conversions, Deref/Display, SeaValue/SqlCondition |
+//! | [`TypedEnum`]  | closed string set over unit variants (`#[typed_enum(rename)]`) |
+//! | [`TypedTag`]   | prefix-tagged union of newtypes (`#[tag("…")]`)     |
+//! | [`TypedSerde`] | wire: Serialize/Deserialize, deserializing through the gate |
+//! | [`TypedSqlx`]  | database: Type/Encode/Decode, decoding through the gate |
+//! | [`TypedOpenApi`] | API docs: inline schema carrying the constraints  |
 //!
-//! **Field scope** tunes one field within a struct-scope conversion:
-//! - `builder(include)` / `updater(include)` — copy this field from the source
-//!   (needed under `skip_all`).
-//! - `builder(skip)` / `updater(skip)` — drop this field from a name-matched
-//!   conversion (the counterpart of `include` without `skip_all`).
-//! - `builder(field = "src_name")` — copy from a differently named source field.
-//! - `updater(include, field = "user_id")` — fill this field from the named
-//!   field of the updater source.
-//! - `builder(try_from = Src, …)` — scope the tuning to the conversion from
-//!   `Src` only; without it the tuning applies to every declared source.
+//! Every construction path routes through the gate, so a held value always
+//! satisfies its constraints; see `ta_objects::typed` for the invariant.
 //!
-//! Each copied field goes through `src.field.clone().try_into()?`, so the
-//! target field type's `TryFrom`/validation runs during conversion; a failure
-//! is reported as `…BuilderError::ValidationError("Src.field -> This.field: …")`.
-//!
-//! Two more field attributes generate accessor impls:
-//! - `#[dxo(extractor)]` — `Extractor<FieldType> for This` (clone the field out).
-//! - `#[dxo(setter)]` — `Setter<FieldType> for ThisBuilder`.
-//!
-//! On a `Dao` field, `#[dxo(immutable)]` gives the column set-once semantics
+//! On a `Dao` field, `#[dao(immutable)]` gives the column set-once semantics
 //! in generated UPDATEs: `CASE WHEN col IS NULL THEN ? ELSE col END`.
 //!
-//! # Module-level `#[dxo]` and inheritance
+//! # `#[dao(flatten)]`
 //!
-//! Applied to a `mod`, [`macro@dxo`] enables field/attribute inheritance between
-//! sibling structs: a struct tagged `#[inherits(Base)]` merges `Base`'s fields
-//! and `#[dxo]` attributes, and `#[exclude]` drops an inherited field. The
-//! module is made private and its contents re-exported.
+//! A DAO field marked `#[dao(flatten)]` embeds another DAO whose columns this
+//! DAO also projects (base first): row decoding delegates via
+//! `#[sqlx(flatten)]`, and all column metadata (`Iden`, `columns()`,
+//! `insert_values()`, `col_for_type`, …) delegates to the base. A structural
+//! column named in `#[dao(...)]` args that isn't an own field resolves into
+//! the flattened base at any nesting depth.
+//!
+//! On a collision the two resolvers deliberately disagree: by *name* (the
+//! Iden's `FromStr`) the own field wins — it shadows the base's, like a
+//! re-declared field on the merged struct would; by *type*
+//! (`col_for_type`) the base wins — base fields come first in merged-field
+//! order, and conditions on a shared domain type should hit the base column.
 
 extern crate proc_macro;
 use proc_macro::TokenStream;
@@ -65,53 +58,44 @@ use proc_macro::TokenStream;
 mod dao;
 mod dlo;
 mod dto;
-mod dxo;
 mod type_builder;
 mod typed_types;
 mod url;
 
-/// Module attribute enabling field/attribute inheritance between sibling
-/// DAO/DLO/DTO structs via `#[inherits(Base)]` and `#[exclude]`. See the crate
-/// docs.
-#[proc_macro_attribute]
-pub fn dxo(attr: TokenStream, item: TokenStream) -> TokenStream {
-    dxo::dxo(attr, item)
-}
-
-#[proc_macro_derive(DaoType, attributes(inherits, exclude, dxo, dao, sqlx))]
+#[proc_macro_derive(DaoType, attributes(dao, sqlx))]
 pub fn dao_type(input: TokenStream) -> TokenStream {
     dao::dao_type(input)
 }
 
 /// Define a DAO: the data-layer type mapping to one SQL table. Requires
-/// `#[dao(sql_table = "…")]`. Generates an `Iden` column enum, `FromRow`, the
-/// `Dao` trait, a builder, and any `#[dxo(...)]` conversions. See the crate docs.
+/// `#[dao(sql_table = "…")]`. Generates an `Iden` column enum, `FromRow`,
+/// and the `Dao` trait. See the crate docs.
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn Dao(args: TokenStream, item: TokenStream) -> TokenStream {
     dao::dao(args, item)
 }
 
-#[proc_macro_derive(DloType, attributes(inherits, exclude, dxo, dlo))]
+#[proc_macro_derive(DloType, attributes(dlo))]
 pub fn dlo_type(input: TokenStream) -> TokenStream {
     dlo::dlo_type(input)
 }
 
-/// Define a DLO: the logic-layer domain object. Generates a builder and any
-/// `#[dxo(...)]` conversions, without binding to a SQL table. See the crate docs.
+/// Define a DLO: the logic-layer domain object, not bound to a SQL table.
+/// See the crate docs.
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn Dlo(args: TokenStream, item: TokenStream) -> TokenStream {
     dlo::dlo(args, item)
 }
 
-#[proc_macro_derive(DtoType, attributes(inherits, exclude, dxo, dto))]
+#[proc_macro_derive(DtoType, attributes(dto))]
 pub fn dto_type(input: TokenStream) -> TokenStream {
     dto::dto_type(input)
 }
 
-/// Define a DTO: the API-layer request/response contract. Generates a builder,
-/// `#[dxo(...)]` conversions, and list/serialization support. See the crate docs.
+/// Define a DTO: the API-layer request/response contract, with
+/// list/serialization support. See the crate docs.
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn Dto(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -127,20 +111,60 @@ pub fn UrlParam(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn QueryParam(args: TokenStream, item: TokenStream) -> TokenStream {
-    url::url_param(args, item)
+    url::query_param(args, item)
 }
 
-#[proc_macro_attribute]
-pub fn typed(args: TokenStream, item: TokenStream) -> TokenStream {
-    typed_types::typed_basic(args, item)
+/// A URL param struct's path placeholders: `NAMES` from the field names,
+/// `values()` via `to_string`. Bundled by `#[UrlParam]`.
+#[proc_macro_derive(PathParams)]
+pub fn path_params(input: TokenStream) -> TokenStream {
+    url::derive_path_params(input)
 }
 
-#[proc_macro_attribute]
-pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
-    typed_types::typed_enum(args, item)
+/// Newtype over a primitive (`String`, `i16..f64`, `bool`, `Id`, `IdL<K>`,
+/// `Timestamp`) or a `ComposedString` type, detected from the single unnamed
+/// field. Implements the construction gate (`ta_objects::Typed::try_new`)
+/// from the `#[typed(...)]` constraints (`len`/`min_len`/`max_len`/`regex`/
+/// `parser`/`secret` for strings, `min`/`max` for numerics, `default`,
+/// `try_from` siblings) plus the domain plumbing. External contracts are the
+/// facet derives: [`TypedSerde`], [`TypedSqlx`], [`TypedOpenApi`].
+#[proc_macro_derive(Typed, attributes(typed))]
+pub fn typed(input: TokenStream) -> TokenStream {
+    typed_types::derive_typed(input)
 }
 
-#[proc_macro_attribute]
-pub fn typed_tag(args: TokenStream, item: TokenStream) -> TokenStream {
-    typed_types::typed_tag(args, item)
+/// Wire contract facet: Serialize/Deserialize, deserializing through the
+/// `ta_objects::Typed::try_new` gate. Requires `#[derive(Typed)]`.
+#[proc_macro_derive(TypedSerde)]
+pub fn typed_serde(input: TokenStream) -> TokenStream {
+    typed_types::derive_typed_serde(input)
+}
+
+/// Database contract facet: sqlx Type/Encode/Decode (transparent over the
+/// inner), decoding through the `ta_objects::Typed::try_new` gate. Requires
+/// `#[derive(Typed)]`.
+#[proc_macro_derive(TypedSqlx)]
+pub fn typed_sqlx(input: TokenStream) -> TokenStream {
+    typed_types::derive_typed_sqlx(input)
+}
+
+/// API docs contract facet: utoipa schema (inline, from the inner type).
+#[proc_macro_derive(TypedOpenApi)]
+pub fn typed_openapi(input: TokenStream) -> TokenStream {
+    typed_types::derive_typed_openapi(input)
+}
+
+/// Closed string set over unit variants; `#[typed_enum(rename = "…")]` sets
+/// the canonical form. FromStr is the gate. External contracts come from the
+/// same facet derives as newtypes.
+#[proc_macro_derive(TypedEnum, attributes(typed_enum))]
+pub fn typed_enum(input: TokenStream) -> TokenStream {
+    typed_types::derive_typed_enum(input)
+}
+
+/// Newtype variants distinguished by a `#[tag("…")]` string prefix; Display
+/// renders tag + inner, FromStr strips the longest matching tag.
+#[proc_macro_derive(TypedTag, attributes(tag))]
+pub fn typed_tag(input: TokenStream) -> TokenStream {
+    typed_types::derive_typed_tag(input)
 }

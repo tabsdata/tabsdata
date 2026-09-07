@@ -2,8 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dao::{iden_variant, option_inner_type};
-use crate::type_builder::{DxoFields, parse_input_item_struct, td_type};
+use crate::dao::option_inner_type;
+use crate::type_builder::parse_input_item_struct;
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
@@ -20,18 +20,6 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let ident = &input.ident;
     let fields = &input.fields;
     let (impl_generics, _ty_generics, where_clause) = input.generics.split_for_impl();
-
-    // If #[dto(list(on = X))] is present, inject #[dxo(builder(try_from = X))]
-    // automatically — no need to write it manually on the struct.
-    let list_dao = DtoArguments::from_derive_input(&input.clone().into())
-        .ok()
-        .and_then(|a| a.list)
-        .and_then(|l| l.on);
-    let injected_builder = list_dao.map(|dao| {
-        quote! {
-            #[dxo(builder(try_from = #dao))]
-        }
-    });
 
     // Generate doc comments for fields summarising their list roles.
     let fields_with_docs = fields.iter().map(|field| {
@@ -67,11 +55,9 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     quote! {
         #[derive(
-            Debug, Clone, ta_objects::DtoType, derive_builder::Builder,
+            Debug, Clone, ta_objects::DtoType,
             serde::Serialize, serde::Deserialize, utoipa::ToSchema
         )]
-        #[builder(try_setter, setter(into))]
-        #injected_builder
         #(#attrs)*
         #vis #struct_token #ident #impl_generics #where_clause {
             #(#fields_with_docs)*
@@ -114,6 +100,9 @@ struct FieldListArguments {
     filter_like: bool,
     #[darling(default)]
     order_by: bool,
+    /// DAO column backing this DTO field when the names differ.
+    #[darling(default)]
+    col: Option<String>,
 }
 
 /// Derive macro that generates the Dto and optional ListDto trait impls for a DTO struct.
@@ -127,7 +116,6 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
         Ok(item) => item,
         Err(e) => return e.to_compile_error().into(),
     };
-    let td_type = td_type(&input, &item);
 
     let ident = &item.ident;
     let fields = &item.fields;
@@ -148,6 +136,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
             &impl_generics,
             &ty_generics,
             where_clause,
+            item.generics.params.is_empty(),
         ) {
             Ok(ts) => ts,
             Err(e) => return e.to_compile_error().into(),
@@ -157,12 +146,12 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
     quote! {
         #dto
         #list_query
-        #td_type
     }
     .into()
 }
 
 /// Generate the `ListDto` trait implementation for query filtering, ordering, and pagination.
+#[allow(clippy::too_many_arguments)]
 fn gen_list_query(
     ident: &Ident,
     fields: &syn::Fields,
@@ -170,6 +159,7 @@ fn gen_list_query(
     impl_generics: &syn::ImplGenerics,
     ty_generics: &syn::TypeGenerics,
     where_clause: Option<&syn::WhereClause>,
+    registrable: bool,
 ) -> syn::Result<proc_macro2::TokenStream> {
     // Collect per-field metadata in one pass.
     struct FieldMeta<'a> {
@@ -188,18 +178,10 @@ fn gen_list_query(
 
     for f in fields.iter() {
         let f_ident = f.ident.as_ref().unwrap();
-        let td_args = DxoFields::from_field(f)
-            .map_err(|e| syn::Error::new_spanned(f_ident, e.to_string()))?;
         let dto_args = DtoFieldArguments::from_field(f)
             .map_err(|e| syn::Error::new_spanned(f_ident, e.to_string()))?;
 
-        // DAO field mapping from #[dxo(builder(try_from = DaoIdent, field = "dao_field"))]
-        let dao_field = td_args
-            .builder
-            .iter()
-            .find(|b| b.try_from.as_ref().is_none_or(|t| t == dao_ident))
-            .and_then(|b| b.field.as_ref())
-            .map(|f| f.to_string());
+        let dao_field = dto_args.list.iter().find_map(|l| l.col.clone());
 
         let mut meta = FieldMeta {
             ident: f_ident,
@@ -251,51 +233,54 @@ fn gen_list_query(
     // The DAO's Iden enum — by convention FooDB → FooDBIden
     let dao_iden = format_ident!("{}Iden", dao_ident);
 
-    // Resolve a DTO field name to the DAO Iden variant.
-    // If a dao_field mapping exists, use that; otherwise assume same name.
-    let dao_col_for = |f: &FieldMeta| -> proc_macro2::TokenStream {
-        let dao_field_name = f.dao_field.clone().unwrap_or_else(|| f.ident.to_string());
-        let variant = iden_variant(&format_ident!("{}", &dao_field_name));
-        quote! { #dao_iden::#variant }
+    // The DAO column backing a DTO field: `col = "..."` override, else same
+    // name. Resolved through the DAO Iden's `FromStr` — a column of a
+    // `#[dao(flatten)]` base is not a direct variant of the DAO's Iden enum.
+    let dao_col_name =
+        |f: &FieldMeta| -> String { f.dao_field.clone().unwrap_or_else(|| f.ident.to_string()) };
+    let dao_col_expr = |f: &FieldMeta| -> proc_macro2::TokenStream {
+        let col = dao_col_name(f);
+        quote! { <#dao_iden as std::str::FromStr>::from_str(#col).ok() }
     };
 
     // filter_col match arms
     let filter_arms = metas.iter().filter(|m| m.is_filter).map(|m| {
         let name = m.ident.to_string();
-        let col = dao_col_for(m);
-        quote! { #name => Some(#col), }
+        let col = dao_col_expr(m);
+        quote! { #name => #col, }
     });
 
     // filter_like_col match arms
     let filter_like_arms = metas.iter().filter(|m| m.is_filter_like).map(|m| {
         let name = m.ident.to_string();
-        let col = dao_col_for(m);
-        quote! { #name => Some(#col), }
+        let col = dao_col_expr(m);
+        quote! { #name => #col, }
     });
 
     // order_by_col match arms
     let order_by_arms = metas.iter().filter(|m| m.is_order_by).map(|m| {
         let name = m.ident.to_string();
-        let col = dao_col_for(m);
-        quote! { #name => Some(#col), }
+        let col = dao_col_expr(m);
+        quote! { #name => #col, }
     });
 
     // pagination_col
     let pag_meta = metas.iter().find(|m| m.is_pagination).unwrap();
-    let pag_col = dao_col_for(pag_meta);
+    let pag_col_name = dao_col_name(pag_meta);
     let pag_dir = if pag_meta.pagination_dir == "-" {
         quote! { sea_query::Order::Desc }
     } else {
         quote! { sea_query::Order::Asc }
     };
 
-    // parse_filter_value match arms — all fields that participate in filtering or ordering
+    // parse_filter_value match arms — all fields that participate in filtering
+    // or ordering, matched by column name (the Iden may be a nested enum).
     let filterable_fields: Vec<_> = metas
         .iter()
         .filter(|m| m.is_filter || m.is_order_by)
         .collect();
     let parse_arms = filterable_fields.iter().map(|m| {
-        let col = dao_col_for(m);
+        let col = dao_col_name(m);
         let ty = m.ty;
         quote! {
             #col => <#ty as ta_objects::ListFilterStr>::parse_filter_str(value)
@@ -306,14 +291,72 @@ fn gen_list_query(
 
     // order_by_value match arms
     let order_by_value_arms = metas.iter().filter(|m| m.is_order_by).map(|m| {
-        let name = dao_col_for(m);
+        let col = dao_col_name(m);
         let f_ident = m.ident;
-        quote! { #name => Some(self.#f_ident.as_string()), }
+        quote! { #col => Some(self.#f_ident.as_string()), }
     });
 
+    // Field-to-column resolution happens at runtime: forcing every declared
+    // role here turns a field/`col = ".."` typo into a registry-walking test
+    // failure instead of a silently dead filter or a first-call panic.
+    let filter_names: Vec<String> = metas
+        .iter()
+        .filter(|m| m.is_filter)
+        .map(|m| m.ident.to_string())
+        .collect();
+    let filter_like_names: Vec<String> = metas
+        .iter()
+        .filter(|m| m.is_filter_like)
+        .map(|m| m.ident.to_string())
+        .collect();
+    let order_by_names: Vec<String> = metas
+        .iter()
+        .filter(|m| m.is_order_by)
+        .map(|m| m.ident.to_string())
+        .collect();
+    let list_dto_registration = if registrable {
+        quote! {
+            #[cfg(not(test))]
+            ta_objects::inventory::submit! {
+                ta_objects::RegisteredListDto {
+                    name: stringify!(#ident),
+                    validate: || {
+                        let _ = <#ident as ta_objects::ListDto>::pagination_col();
+                        #(assert!(
+                            <#ident as ta_objects::ListDto>::filter_col(#filter_names).is_some(),
+                            concat!(
+                                stringify!(#ident), ": filter field `", #filter_names,
+                                "` does not resolve to a DAO column",
+                            ),
+                        );)*
+                        #(assert!(
+                            <#ident as ta_objects::ListDto>::filter_like_col(#filter_like_names)
+                                .is_some(),
+                            concat!(
+                                stringify!(#ident), ": filter_like field `", #filter_like_names,
+                                "` does not resolve to a DAO column",
+                            ),
+                        );)*
+                        #(assert!(
+                            <#ident as ta_objects::ListDto>::order_by_col(#order_by_names)
+                                .is_some(),
+                            concat!(
+                                stringify!(#ident), ": order_by field `", #order_by_names,
+                                "` does not resolve to a DAO column",
+                            ),
+                        );)*
+                    },
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
+        #list_dto_registration
+
         impl #impl_generics ta_objects::ListDto for #ident #ty_generics #where_clause {
-            type Dao = #dao_ident;
 
             fn filter_col(field: &str) -> Option<<Self::Dao as ta_objects::TypedColumns>::Iden> {
                 match field {
@@ -337,14 +380,16 @@ fn gen_list_query(
             }
 
             fn pagination_col() -> (<Self::Dao as ta_objects::TypedColumns>::Iden, sea_query::Order) {
-                (#pag_col, #pag_dir)
+                let col = <#dao_iden as std::str::FromStr>::from_str(#pag_col_name)
+                    .expect("pagination_by names a DAO column");
+                (col, #pag_dir)
             }
 
             fn parse_filter_value(
                 field: &<Self::Dao as ta_objects::TypedColumns>::Iden,
                 value: &str,
             ) -> Result<Option<Box<dyn ta_objects::SeaValue>>, td_error::TdError> {
-                match field {
+                match sea_query::Iden::to_string(field).as_str() {
                     #(#parse_arms)*
                     _ => Ok(None),
                 }
@@ -356,17 +401,12 @@ fn gen_list_query(
 
             fn order_by_value(&self, field: &<Self::Dao as ta_objects::TypedColumns>::Iden) -> Option<String> {
                 use ta_objects::ListFilterStr;
-                match field {
+                match sea_query::Iden::to_string(field).as_str() {
                     #(#order_by_value_arms)*
                     _ => None,
                 }
             }
 
-            fn from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError> {
-                use ta_objects::Buildable;
-                let builder = <Self as Buildable>::Builder::try_from(dao)?;
-                Self::build(&builder)
-            }
         }
     })
 }
