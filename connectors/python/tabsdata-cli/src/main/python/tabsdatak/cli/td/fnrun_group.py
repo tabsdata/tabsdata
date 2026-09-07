@@ -268,7 +268,8 @@ def replay(ctx: click.Context, fnrun: str):
 def recover(ctx: click.Context, fnrun: str):
     """
     Recover the transaction a function run belongs to: the transaction's
-    failed or on-hold function runs are re-scheduled.
+    failed or on-hold function runs are re-scheduled, each re-running its
+    pinned function version and that version's latest patch.
     """
     verify_login_or_prompt(ctx)
     try:

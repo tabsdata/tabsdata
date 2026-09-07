@@ -808,6 +808,11 @@ def update(
     Dynamically imports the symbol named by ``--path`` (a tabsdatak
     ``*Info`` descriptor) and updates the existing function via the
     v2 bundle producer (``tabsdatak.common._archive.bundle.build_bundle``).
+
+    The new version applies to runs planned from here on. Runs already
+    planned keep the version they were planned with, so an update does
+    not reach a stalled plan: to change the code such a run executes,
+    patch its version with 'tdk fn patch'.
     """
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be updated")
@@ -990,7 +995,13 @@ def patch(
 
     A patch shares the parent's topology (tables, dependencies, triggers,
     workers) — only bundle / snippet / runtime values / description can be
-    overridden. Patches are reachable only by explicit fvid via replay.
+    overridden.
+
+    A patch is the only way to change the code a planned run executes:
+    both 'tdk fnrun replay' and 'tdk plan recover' / 'tdk fnrun recover'
+    re-run the function version the plan pinned, picking up its latest
+    patch. Registering a new version with 'tdk fn update' does not affect
+    runs that are already planned.
     """
     verify_login_or_prompt(ctx)
     coll = (
@@ -1029,8 +1040,9 @@ def patch(
         click.echo(f"Patches:  {record.get('parent_function_version_id')}")
         show_hint(
             ctx,
-            "Replay a finished function run against the latest patch "
-            "with 'tdk fnrun replay --fnrun <RUN-ID>'.",
+            "Re-run against the latest patch with 'tdk plan recover "
+            "--plan <PLAN-ID>' to resume a stalled plan, or 'tdk fnrun "
+            "replay --fnrun <RUN-ID>' to re-run a finished run.",
             final_empty_line=True,
         )
     except Exception as e:

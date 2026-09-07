@@ -264,7 +264,8 @@ def cancel(ctx: click.Context, trx: str, confirm: str):
 def recover(ctx: click.Context, trx: str):
     """
     Recover a transaction: its failed or on-hold function runs are
-    re-scheduled.
+    re-scheduled, each re-running its pinned function version and that
+    version's latest patch.
     """
     verify_login_or_prompt(ctx)
     click.echo(f"Recovering transaction with ID '{trx}'")

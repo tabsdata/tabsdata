@@ -261,7 +261,9 @@ def cancel(ctx: click.Context, plan: str, confirm: str):
 @click.pass_context
 def recover(ctx: click.Context, plan: str):
     """
-    Recover a plan: its failed or on-hold function runs are re-scheduled.
+    Recover a plan: its failed or on-hold function runs are re-scheduled,
+    each re-running its pinned function version and that version's latest
+    patch.
     """
     verify_login_or_prompt(ctx)
     click.echo(f"Recovering plan with ID '{plan}'")
