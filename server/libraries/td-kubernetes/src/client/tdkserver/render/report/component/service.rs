@@ -11,7 +11,7 @@ use tracing::info;
 use crate::base::constants::{DEFAULT_LOG_LEVEL, INIT_FOLDER, INPUT_FOLDER};
 #[cfg(feature = "enterprise")]
 use crate::client::registry::ag_venv_activate_file;
-use crate::client::registry::{InstanceSettings, td_venv_activate_file};
+use crate::client::registry::{InstanceSettings, fn_venv_activate_file, td_venv_activate_file};
 use crate::client::tdkserver::render::preview::render_summary_lines;
 use crate::client::tdkserver::render::report::helper::common::{
     ABSENT_CELL, STATUS_RUNNING, STATUS_STOPPED, UNGATHERED_CELL, activation_command,
@@ -177,12 +177,21 @@ pub fn instance_inspect(settings: &InstanceSettings, folder: &Path, alive: Optio
         info!("  - {}: {}", entry.caption, entry.port);
     }
 
+    let mut activations = Vec::new();
     if let Ok(td_activate) = td_venv_activate_file(&settings.name) {
+        activations.push(("td", td_activate));
+    }
+    if let Ok(fn_activate) = fn_venv_activate_file(&settings.name) {
+        activations.push(("fn", fn_activate));
+    }
+    #[cfg(feature = "enterprise")]
+    if let Ok(ag_activate) = ag_venv_activate_file(&settings.name) {
+        activations.push(("ai", ag_activate));
+    }
+    if !activations.is_empty() {
         info!("Environment activation:");
-        info!("  td: {}", activation_command(&td_activate));
-        #[cfg(feature = "enterprise")]
-        if let Ok(ag_activate) = ag_venv_activate_file(&settings.name) {
-            info!("  ai: {}", activation_command(&ag_activate));
+        for (label, activate) in &activations {
+            info!("  {label}: {}", activation_command(activate));
         }
     }
 
