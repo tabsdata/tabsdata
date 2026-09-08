@@ -626,7 +626,10 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
         format!("CREATE ROLE \"{owner}\" LOGIN PASSWORD 'own_pw'"),
         format!("CREATE SCHEMA \"{schema}\" AUTHORIZATION \"{owner}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 
     let across = format!("ap_{uid}");
@@ -639,7 +642,10 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
         format!("GRANT \"{tenant}\" TO \"{owner}\""),
         format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{across}\", \"{tenant}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 
     let mut identity = server::admin_base();
@@ -661,7 +667,10 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
              USING (true) WITH CHECK (true)"
         ),
     ] {
-        sqlx::query(&stmt).execute(&as_owner).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&as_owner)
+            .await
+            .unwrap();
     }
 
     let visible_rows = async |member: bool| -> u64 {
@@ -670,13 +679,13 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
             true => &across,
             false => &tenant,
         };
-        sqlx::query(&format!("SET LOCAL ROLE \"{role}\""))
+        sqlx::query(sqlx::AssertSqlSafe(format!("SET LOCAL ROLE \"{role}\"")))
             .execute(&mut *tx)
             .await
             .unwrap();
-        let updated = sqlx::query(&format!(
+        let updated = sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE \"{schema}\".scoped SET project_id = project_id"
-        ))
+        )))
         .execute(&mut *tx)
         .await
         .unwrap()
@@ -705,7 +714,10 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
         format!("DROP ROLE \"{tenant}\""),
         format!("DROP ROLE \"{owner}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 }
 
@@ -751,7 +763,10 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
         format!("GRANT \"{across}\" TO \"{owner}\""),
         format!("CREATE SCHEMA \"{schema}\" AUTHORIZATION \"{owner}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 
     let mut identity = server::admin_base();
@@ -773,18 +788,23 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
     // scoping to the seeded project satisfies every `WITH CHECK`.
     let as_owner = connect(&identity).await;
     let mut tx = as_owner.begin().await.unwrap();
-    sqlx::query(&format!("SET LOCAL search_path TO \"{schema}\""))
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "SET LOCAL search_path TO \"{schema}\""
+    )))
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT set_config('{PROJECT_ID_GUC}', 'p0', true)"
-    ))
+    )))
     .execute(&mut *tx)
     .await
     .unwrap();
     for stmt in seed_v3_function_versions_sql() {
-        sqlx::query(&stmt).execute(&mut *tx).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&mut *tx)
+            .await
+            .unwrap();
     }
     tx.commit().await.unwrap();
 
@@ -793,11 +813,11 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
         .await
         .expect("upgrading v3 -> current as the owner");
 
-    let chains: Vec<String> = sqlx::query_scalar(&format!(
+    let chains: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT id || '=' || CASE WHEN valid_to = 'infinity' THEN 'infinity' \
            ELSE to_char(valid_to AT TIME ZONE 'UTC', 'YYYY-MM-DD') END \
          FROM \"{schema}\".functions ORDER BY id"
-    ))
+    )))
     .fetch_all(&as_owner)
     .await
     .unwrap();
@@ -824,7 +844,10 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
         format!("DROP ROLE \"{across}\""),
         format!("DROP ROLE \"{owner}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 }
 
@@ -854,7 +877,10 @@ async fn upgrade_refuses_a_missing_across_projects_membership_postgres() {
         // to the cross-project one and the owner cannot grant it itself.
         format!("CREATE SCHEMA \"{schema}\" AUTHORIZATION \"{owner}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 
     let mut identity = server::admin_base();
@@ -891,6 +917,9 @@ async fn upgrade_refuses_a_missing_across_projects_membership_postgres() {
         format!("DROP ROLE \"{across}\""),
         format!("DROP ROLE \"{owner}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 }

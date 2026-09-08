@@ -88,6 +88,6 @@ impl<D: DbDomain, S: DbScope> SeaExecutor for &mut DomainConnection<D, S> {
         Self: 'e,
     {
         let (sql, values) = query.build_sea_query();
-        async move { op(&sql, values, &mut self.conn).await }.boxed()
+        async move { op(sql, values, &mut self.conn).await }.boxed()
     }
 }

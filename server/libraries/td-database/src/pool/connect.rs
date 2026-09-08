@@ -17,7 +17,7 @@ use crate::pool::PoolKind;
 use crate::pool::options::pg_connect_options;
 use sqlx::pool::PoolOptions;
 use sqlx::postgres::PgConnectOptions;
-use sqlx::{ConnectOptions, Connection, PgPool, Postgres};
+use sqlx::{AssertSqlSafe, ConnectOptions, Connection, PgPool, Postgres};
 use std::time::Duration;
 use tracing::debug;
 
@@ -141,7 +141,7 @@ impl DatabaseConfig {
     ) -> Result<(), DbError> {
         let switched = tokio::time::timeout(acquire_timeout, async {
             let mut conn = conn_options.connect().await?;
-            let switched = sqlx::query(&format!("SET ROLE \"{}\"", role))
+            let switched = sqlx::query(AssertSqlSafe(format!("SET ROLE \"{}\"", role)))
                 .execute(&mut conn)
                 .await;
             let _ = conn.close().await;
@@ -216,23 +216,23 @@ impl DatabaseConfig {
                 // RLS-policy/view resolution, and queries all target it.
                 // The admin/system pool has no home schema and skips this.
                 if let Some(schema) = schema {
-                    sqlx::query(&format!("SET search_path TO \"{schema}\""))
+                    sqlx::query(AssertSqlSafe(format!("SET search_path TO \"{schema}\"")))
                         .execute(&mut *conn)
                         .await?;
                 }
                 // Also on the admin posture: an upgrade transaction scopes
                 // itself across projects through the same seam.
                 if let Some(roles) = &roles {
-                    sqlx::query(&format!(
+                    sqlx::query(AssertSqlSafe(format!(
                         "SET {IN_PROJECT_ROLE_GUC} = \"{}\"",
                         roles.in_project
-                    ))
+                    )))
                     .execute(&mut *conn)
                     .await?;
-                    sqlx::query(&format!(
+                    sqlx::query(AssertSqlSafe(format!(
                         "SET {ACROSS_PROJECTS_ROLE_GUC} = \"{}\"",
                         roles.across_projects
-                    ))
+                    )))
                     .execute(&mut *conn)
                     .await?;
                 }
@@ -245,7 +245,7 @@ impl DatabaseConfig {
                     let session_role = &roles.in_project;
                     #[cfg(feature = "td-test")]
                     let session_role = &roles.across_projects;
-                    sqlx::query(&format!("SET ROLE \"{session_role}\""))
+                    sqlx::query(AssertSqlSafe(format!("SET ROLE \"{session_role}\"")))
                         .execute(&mut *conn)
                         .await?;
 

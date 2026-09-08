@@ -56,8 +56,8 @@ impl SchemaSource for WidgetSource {
 }
 
 /// Read a scalar `i64` on the serving pool (same schema as the system pool).
-async fn scalar(db: &TestDb, sql: &str) -> i64 {
-    sqlx::query_scalar(sql)
+async fn scalar(db: &TestDb, sql: impl Into<String>) -> i64 {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql.into()))
         .fetch_one(db.serving.as_ref())
         .await
         .unwrap()

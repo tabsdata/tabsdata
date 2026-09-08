@@ -598,7 +598,7 @@ version = "1.0.0-rc.31"
 features = ["with-chrono", "with-json"]
 
 [workspace.dependencies.sea-query-sqlx]
-version = "0.8.0-rc.14"
+version = "0.9.1"
 features = ["with-chrono", "with-json"]
 
 [workspace.dependencies.semver]

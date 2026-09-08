@@ -206,8 +206,8 @@ mod tests {
         }
     }
 
-    async fn count(pool: &TdPool, sql: &str) -> i64 {
-        sqlx::query_scalar(sql)
+    async fn count(pool: &TdPool, sql: impl Into<String>) -> i64 {
+        sqlx::query_scalar(sqlx::AssertSqlSafe(sql.into()))
             .fetch_one(pool.as_ref())
             .await
             .unwrap()

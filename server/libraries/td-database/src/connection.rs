@@ -8,7 +8,7 @@
 //! [`DomainConnection`](crate::domain::DomainConnection) through deref.
 
 use sqlx::postgres::PgConnection;
-use sqlx::{Error, Executor};
+use sqlx::{AssertSqlSafe, Error, Executor};
 use std::time::Duration;
 use td_schema::{LEGACY_BYPASS_RLS_GUC, PROJECT_ID_GUC};
 use tracing::debug;
@@ -97,7 +97,9 @@ impl PgConnectionExt for PgConnection {
                 sql = stmt.as_str(),
                 "Executing batch statement"
             );
-            sqlx::query(stmt).execute(&mut *self).await?;
+            sqlx::query(AssertSqlSafe(stmt.clone()))
+                .execute(&mut *self)
+                .await?;
         }
         Ok(())
     }
@@ -108,7 +110,7 @@ impl PgConnectionExt for PgConnection {
         wait: Duration,
     ) -> Result<bool, Error> {
         let millis = wait.as_millis().max(1);
-        sqlx::query(&format!("SET LOCAL lock_timeout = {millis}"))
+        sqlx::query(AssertSqlSafe(format!("SET LOCAL lock_timeout = {millis}")))
             .execute(&mut *self)
             .await?;
         match sqlx::query(ADVISORY_XACT_LOCK)
@@ -139,27 +141,27 @@ impl PgConnectionExt for PgConnection {
     }
 
     async fn scope_across_projects(&mut self) -> Result<(), Error> {
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             "SELECT set_config('role', current_setting('{ACROSS_PROJECTS_ROLE_GUC}'), true)"
-        ))
+        )))
         .execute(&mut *self)
         .await?;
         Ok(())
     }
 
     async fn scope_global(&mut self) -> Result<(), Error> {
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             "SELECT set_config('role', current_setting('{IN_PROJECT_ROLE_GUC}'), true)"
-        ))
+        )))
         .execute(&mut *self)
         .await?;
         Ok(())
     }
 
     async fn admit_legacy_project_scope(&mut self) -> Result<(), Error> {
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             "SELECT set_config('{LEGACY_BYPASS_RLS_GUC}', 'on', true)"
-        ))
+        )))
         .execute(&mut *self)
         .await?;
         Ok(())
@@ -173,13 +175,13 @@ impl PgConnectionExt for PgConnection {
             "SELECT set_config('role', current_setting('{IN_PROJECT_ROLE_GUC}'), true); \
              SELECT set_config('{PROJECT_ID_GUC}', '{id}', true)"
         );
-        self.execute(sql.as_str()).await?;
+        self.execute(AssertSqlSafe(sql)).await?;
         Ok(())
     }
 
     #[cfg(feature = "td-test")]
     async fn explain(&mut self, sql: &str) -> Result<Vec<String>, Error> {
-        sqlx::query_scalar::<_, String>(&format!("EXPLAIN {sql}"))
+        sqlx::query_scalar::<_, String>(AssertSqlSafe(format!("EXPLAIN {sql}")))
             .fetch_all(&mut *self)
             .await
     }
@@ -193,7 +195,7 @@ impl PgConnectionExt for PgConnection {
         .fetch_all(&mut *self)
         .await?;
         if !tables.is_empty() {
-            sqlx::query(&format!("ANALYZE {}", tables.join(", ")))
+            sqlx::query(AssertSqlSafe(format!("ANALYZE {}", tables.join(", "))))
                 .execute(&mut *self)
                 .await?;
         }

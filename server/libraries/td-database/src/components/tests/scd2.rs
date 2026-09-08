@@ -138,11 +138,11 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
     seed_prelude(&db.serving).await;
 
     let mut tx1 = db.serving.as_ref().begin().await.unwrap();
-    sqlx::query(&insert_function_version(
+    sqlx::query(sqlx::AssertSqlSafe(insert_function_version(
         "fv1",
         "f-a",
         "2026-01-01T00:00:00Z",
-    ))
+    )))
     .execute(&mut *tx1)
     .await
     .unwrap();
@@ -150,11 +150,11 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
     let pool = db.serving.as_ref().clone();
     let racer = tokio::spawn(async move {
         let mut tx2 = pool.begin().await.unwrap();
-        sqlx::query(&insert_function_version(
+        sqlx::query(sqlx::AssertSqlSafe(insert_function_version(
             "fv2",
             "f-a",
             "2026-01-02T00:00:00Z",
-        ))
+        )))
         .execute(&mut *tx2)
         .await
         .unwrap();
@@ -320,7 +320,7 @@ async fn scd2_attempts_void_leaves_no_current_row_postgres() {
                WHERE id = '{id}' AND valid_to = 'infinity'"
         )
     };
-    let closed = sqlx::query(&void("pfr2"))
+    let closed = sqlx::query(sqlx::AssertSqlSafe(void("pfr2")))
         .execute(db.serving.as_ref())
         .await
         .unwrap()
@@ -338,7 +338,7 @@ async fn scd2_attempts_void_leaves_no_current_row_postgres() {
         "a voided run has no current attempt: {open:?}"
     );
 
-    let again = sqlx::query(&void("pfr1"))
+    let again = sqlx::query(sqlx::AssertSqlSafe(void("pfr1")))
         .execute(db.serving.as_ref())
         .await
         .unwrap()

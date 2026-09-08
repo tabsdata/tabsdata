@@ -19,7 +19,7 @@ use td_schema::ACROSS_PROJECTS_ROLE;
 
 /// Scope one transaction the way a serving connection does.
 async fn scope(tx: &mut sqlx::Transaction<'static, sqlx::Postgres>, tenant: &str, project: &str) {
-    sqlx::query(&format!("SET LOCAL ROLE \"{tenant}\""))
+    sqlx::query(sqlx::AssertSqlSafe(format!("SET LOCAL ROLE \"{tenant}\"")))
         .execute(&mut **tx)
         .await
         .unwrap();
@@ -84,7 +84,10 @@ async fn test_rls_project_isolation() {
             "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'B', 'g', 'd', now(), 'u', now(), 'u', false)"
         ),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 
     let app_connect = PostgresConnect {
@@ -153,7 +156,7 @@ async fn test_rls_project_isolation() {
     t.rollback().await.unwrap();
 
     let mut t = app.begin().await.unwrap();
-    sqlx::query(&format!("SET LOCAL ROLE \"{tenant}\""))
+    sqlx::query(sqlx::AssertSqlSafe(format!("SET LOCAL ROLE \"{tenant}\"")))
         .execute(&mut *t)
         .await
         .unwrap();
@@ -165,7 +168,7 @@ async fn test_rls_project_isolation() {
     t.rollback().await.unwrap();
 
     let mut t = app.begin().await.unwrap();
-    sqlx::query(&format!("SET LOCAL ROLE \"{across}\""))
+    sqlx::query(sqlx::AssertSqlSafe(format!("SET LOCAL ROLE \"{across}\"")))
         .execute(&mut *t)
         .await
         .unwrap();
@@ -175,7 +178,7 @@ async fn test_rls_project_isolation() {
 
     // The scope switch is transaction-local: on an autocommit connection it
     // does not outlive its own statement, and the next read runs fail-closed.
-    sqlx::query(&format!("SET LOCAL ROLE \"{across}\""))
+    sqlx::query(sqlx::AssertSqlSafe(format!("SET LOCAL ROLE \"{across}\"")))
         .execute(&app)
         .await
         .unwrap();
@@ -197,7 +200,10 @@ async fn test_rls_project_isolation() {
         format!("DROP OWNED BY \"{tenant}\""),
         format!("DROP ROLE \"{tenant}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
 }
 
@@ -224,10 +230,12 @@ async fn test_check_rejects_bypassing_serving_role() {
         .await
         .unwrap();
     let bypassing = format!("b_{}", td_common::id::id());
-    sqlx::query(&format!("CREATE ROLE \"{bypassing}\" BYPASSRLS"))
-        .execute(&su)
-        .await
-        .unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "CREATE ROLE \"{bypassing}\" BYPASSRLS"
+    )))
+    .execute(&su)
+    .await
+    .unwrap();
 
     // Pin the bypassing role so the pool's connections `SET ROLE` it (the
     // superuser may switch to any role).
@@ -249,10 +257,12 @@ async fn test_check_rejects_bypassing_serving_role() {
 
     // Drop the per-test role (close the probe pool first so it isn't in use).
     other.shutdown().await;
-    sqlx::query(&format!("DROP ROLE IF EXISTS \"{bypassing}\""))
-        .execute(&su)
-        .await
-        .unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "DROP ROLE IF EXISTS \"{bypassing}\""
+    )))
+    .execute(&su)
+    .await
+    .unwrap();
 }
 
 /// The SCD2 close-out trigger's predecessor UPDATE succeeds under RLS (the
@@ -286,12 +296,12 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
             ("fn1", "2026-01-01T00:00:00Z"),
             ("fn2", "2026-01-02T00:00:00Z"),
         ] {
-            sqlx::query(&format!(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 "INSERT INTO functions \
                  (id, collection_id, name, description, decorator, runtime_values, function_id, \
                   stage_id, stage_base_path, storage_version, bundle_id, snippet, valid_from, defined_by_id, status) \
                  VALUES ('{id}', 'col', 'f', 'd', 'dec', '{{}}', 'fid', 'stg', '/', '1', 'bun', 'snip', '{on}', 'u', 'active')",
-            ))
+            )))
             .execute(&mut *c)
             .await
             .unwrap();

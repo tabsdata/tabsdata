@@ -66,17 +66,24 @@ async fn create_admin(su: &PgPool, admin_role: &str) {
     }
 }
 
-async fn scalar(su: &PgPool, sql: &str) -> String {
-    let (value,): (String,) = sqlx::query_as(sql).fetch_one(su).await.unwrap();
+async fn scalar(su: &PgPool, sql: impl Into<String>) -> String {
+    let (value,): (String,) = sqlx::query_as(sqlx::AssertSqlSafe(sql.into()))
+        .fetch_one(su)
+        .await
+        .unwrap();
     value
 }
 
 /// Concurrent `GRANT ... ON DATABASE` from parallel tests race on the one
 /// `pg_database` ACL tuple (`XX000` "tuple concurrently updated"); retry
 /// instead of serializing the suite.
-async fn execute_retrying(su: &PgPool, sql: &str) {
+async fn execute_retrying(su: &PgPool, sql: impl Into<String>) {
+    let sql = sql.into();
     for _ in 0..10 {
-        match sqlx::query(sql).execute(su).await {
+        match sqlx::query(sqlx::AssertSqlSafe(sql.clone()))
+            .execute(su)
+            .await
+        {
             Ok(_) => return,
             Err(sqlx::Error::Database(e)) if e.message().contains("tuple concurrently") => {
                 tokio::time::sleep(Duration::from_millis(50)).await;
@@ -203,7 +210,10 @@ async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
         format!("CREATE ROLE \"{owner}\" LOGIN PASSWORD 'own_pw'"),
         format!("CREATE SCHEMA \"{owner}\" AUTHORIZATION \"{owner}\""),
     ] {
-        sqlx::query(&stmt).execute(&su).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&su)
+            .await
+            .unwrap();
     }
     let as_owner = AdminPool::connect(&config(login(&owner, "own_pw"), &owner, &roles))
         .await
@@ -310,10 +320,12 @@ async fn test_provision_leaves_foreign_owner_role_untouched() {
         );
     }
 
-    sqlx::query(&format!("DROP SCHEMA IF EXISTS \"{foreign}\" CASCADE"))
-        .execute(&su)
-        .await
-        .unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "DROP SCHEMA IF EXISTS \"{foreign}\" CASCADE"
+    )))
+    .execute(&su)
+    .await
+    .unwrap();
     for stmt in [
         format!("DROP ROLE IF EXISTS \"{}\"", roles.in_project),
         format!("DROP ROLE IF EXISTS \"{}\"", roles.across_projects),

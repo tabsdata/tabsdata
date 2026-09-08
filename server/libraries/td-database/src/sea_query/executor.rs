@@ -14,6 +14,10 @@
 //! [`RunOp`] is a `fn` pointer rather than a closure on purpose: it makes the
 //! `for<'a>` binding explicit, which closure inference will not produce for a
 //! future borrowing its connection argument.
+//!
+//! The SQL arrives owned because sqlx admits only `'static` query text or an
+//! [`AssertSqlSafe`] wrapper around an owned string; a borrow cannot satisfy
+//! either.
 
 use crate::domain::Domained;
 use crate::pool::TdPool;
@@ -22,12 +26,12 @@ use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use sea_query_sqlx::SqlxValues;
 use sqlx::postgres::{PgConnection, PgPool, PgQueryResult, PgRow};
-use sqlx::{Decode, Error, FromRow, Postgres, Type};
+use sqlx::{AssertSqlSafe, Decode, Error, FromRow, Postgres, Type};
 
-/// The `'a` binds the SQL, the connection and the future together, so the
-/// future may borrow both.
+/// The `'a` binds the connection and the future together, so the future may
+/// borrow it.
 pub type RunOp<T> =
-    for<'a> fn(&'a str, SqlxValues, &'a mut PgConnection) -> BoxFuture<'a, Result<T, Error>>;
+    for<'a> fn(String, SqlxValues, &'a mut PgConnection) -> BoxFuture<'a, Result<T, Error>>;
 
 mod op {
     use super::*;
@@ -35,20 +39,20 @@ mod op {
     macro_rules! op {
         ($name:ident, $ret:ty, $query:ident, $fetch:ident) => {
             pub(super) fn $name<'a>(
-                sql: &'a str,
+                sql: String,
                 values: SqlxValues,
                 conn: &'a mut PgConnection,
             ) -> BoxFuture<'a, Result<$ret, Error>> {
-                async move { sqlx::$query(sql, values).$fetch(conn).await }.boxed()
+                async move { sqlx::$query(AssertSqlSafe(sql), values).$fetch(conn).await }.boxed()
             }
         };
         ($name:ident, $ret:ty, $query:ident, $fetch:ident, $o:ident: $($bound:tt)+) => {
             pub(super) fn $name<'a, $o: Send + Unpin + $($bound)+>(
-                sql: &'a str,
+                sql: String,
                 values: SqlxValues,
                 conn: &'a mut PgConnection,
             ) -> BoxFuture<'a, Result<$ret, Error>> {
-                async move { sqlx::$query(sql, values).$fetch(conn).await }.boxed()
+                async move { sqlx::$query(AssertSqlSafe(sql), values).$fetch(conn).await }.boxed()
             }
         };
     }
@@ -223,7 +227,7 @@ impl SeaExecutor for &'_ PgPool {
         let pool = self.clone();
         async move {
             let mut conn = pool.acquire().await?;
-            op(&sql, values, &mut conn).await
+            op(sql, values, &mut conn).await
         }
         .boxed()
     }
@@ -270,6 +274,6 @@ impl SeaExecutor for &mut PgConnection {
         Self: 'e,
     {
         let (sql, values) = query.build_sea_query();
-        async move { op(&sql, values, self).await }.boxed()
+        async move { op(sql, values, self).await }.boxed()
     }
 }

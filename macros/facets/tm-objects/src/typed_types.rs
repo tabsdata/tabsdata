@@ -891,7 +891,7 @@ fn expand_sqlx(
         {
             fn encode_by_ref(
                 &self,
-                buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
+                buf: &mut <DB as sqlx::Database>::ArgumentBuffer,
             ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
                 <#inner as sqlx::encode::Encode<'q, DB>>::encode_by_ref(&self.0, buf)
             }

@@ -57,7 +57,7 @@ impl<'a, P: Display + Clone + Sync> SeaExecutor for &'_ Scoped<&'a TdPool, P> {
         async move {
             let mut trx = pool.begin().await?;
             trx.scope_in_project(&project).await?;
-            match op(&sql, values, &mut trx).await {
+            match op(sql, values, &mut trx).await {
                 Ok(value) => {
                     trx.commit().await?;
                     Ok(value)
