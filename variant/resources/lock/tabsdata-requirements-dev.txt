@@ -16,7 +16,7 @@ archspec==0.2.5
 argcomplete==3.7.2
 argon2-cffi==25.1.0
 argon2-cffi-bindings==26.1.0
-ast-serialize==0.10.0
+ast-serialize==0.11.0
 attrs==23.2.0
 azure-core==1.41.0
 azure-storage-blob==12.28.0
@@ -25,7 +25,7 @@ beautifulsoup4==4.15.0
 black==26.5.1
 boolean-py==5.0
 boto3==1.43.78
-botocore==1.43.89
+botocore==1.43.90
 build==1.4.0
 cachecontrol==0.14.4
 cattrs==24.1.3
@@ -145,7 +145,7 @@ pathspec==1.1.1
 pdoc==16.0.0
 pillow==12.1.1
 pip==26.2.1
-pip-api==0.0.34
+pip-api==0.0.35
 pip-audit==2.10.0
 pip-requirements-parser==32.0.1
 pip-tools==7.5.3
