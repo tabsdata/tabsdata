@@ -26,11 +26,11 @@ pods:
   # `selectors` chooses which nodes a pod may land on; `tolerations` lets it onto
   # nodes that are otherwise reserved. A tolerations list replaces what tabsdata
   # would apply, so it must be complete.
-    #
-    # Both are needed. A toleration permits the tainted pool without requiring it,
-    # and the pools are fixed shapes rather than provisioned per pod, so a function
-    # with no selector schedules onto the services pool and gets its boot disk
-    # instead of the local NVMe the query engine spills to.
+  #
+  # Both are needed. A toleration permits the tainted pool without requiring it,
+  # and the pools are fixed shapes rather than provisioned per pod, so a function
+  # with no selector schedules onto the services pool and gets its boot disk
+  # instead of the local NVMe the query engine spills to.
   service:
     priority: tabsdata-service
     # dbmanager / pymanager / inspector / venvloader

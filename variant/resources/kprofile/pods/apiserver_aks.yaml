@@ -151,11 +151,11 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
-            - name: config
-              mountPath: /tabsdata/config
-              readOnly: true
             - name: certs
               mountPath: /tabsdata/certs
+              readOnly: true
+            - name: config
+              mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
               mountPath: /tabsdata/runtimes
@@ -191,13 +191,13 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: resources
               mountPath: /tabsdata/resources
             - name: runtimes
               mountPath: /tabsdata/runtimes
-              readOnly: true
-            - name: certs
-              mountPath: /tabsdata/certs
               readOnly: true
       containers:
         - name: 1000-apiserver
@@ -239,20 +239,20 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config
               mountPath: /tabsdata/config
-              readOnly: true
-            - name: settings
-              mountPath: /tabsdata/settings
               readOnly: true
             - name: resources
               mountPath: /tabsdata/resources
               readOnly: true
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
             - name: runtimes
               mountPath: /tabsdata/runtimes
+              readOnly: true
+            - name: settings
+              mountPath: /tabsdata/settings
               readOnly: true
           env:
             - name: CONTAINER_ROOT
@@ -278,37 +278,37 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
       volumes:
-        - name: config
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.service.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.database.yaml
-              - configMap:
-                  name: td-app-dbmanager-config-dbmanager.database.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.log.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.yaml
         - name: assets
           projected:
             defaultMode: 493
             sources:
               - configMap:
-                  name: td-app-venvloader-asset-venvloader.sh
-              - configMap:
                   name: td-app-venvloader-asset-venvloader.py
-        - name: settings
-          configMap:
-            name: td-sys-tabsdata-settings-settings.json
-        - name: resources
-          emptyDir: {}
+              - configMap:
+                  name: td-app-venvloader-asset-venvloader.sh
         - name: certs
+          emptyDir: {}
+        - name: config
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.database.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.log.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.service.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-dbmanager-config-dbmanager.database.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.yaml
+        - name: resources
           emptyDir: {}
         - name: runtimes
           emptyDir: {}
+        - name: settings
+          configMap:
+            name: td-sys-tabsdata-settings-settings.json

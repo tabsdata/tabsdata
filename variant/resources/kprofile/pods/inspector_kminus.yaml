@@ -74,13 +74,13 @@ spec:
           projected:
             sources:
               - configMap:
-                  name: td-app-apiserver-config-apiserver.service.yaml
-              - configMap:
                   name: td-app-apiserver-config-apiserver.database.yaml
               - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-              - configMap:
                   name: td-app-apiserver-config-apiserver.log.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.service.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.yaml
         - name: pods

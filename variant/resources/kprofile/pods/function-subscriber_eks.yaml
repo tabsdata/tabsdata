@@ -146,19 +146,19 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-inspect-function
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0030-apiready
@@ -200,14 +200,14 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-apiready
               mountPath: /tabsdata/config
               readOnly: true
             - name: runtimes
               mountPath: /tabsdata/runtimes
-              readOnly: true
-            - name: certs
-              mountPath: /tabsdata/certs
               readOnly: true
         - name: 0040-begin-execution
           image: ubuntu:24.04
@@ -256,19 +256,19 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-begin-execution
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0050-fetch-request
@@ -326,19 +326,19 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-fetch-request
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0060-localize-fn-bundle
@@ -404,19 +404,19 @@ spec:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
               prefix: SECRETS__
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-localize-fn-bundle
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0070-prep-localize-state
@@ -480,19 +480,19 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-prep-localize-state
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0080-run-transporter-localize
@@ -550,19 +550,19 @@ spec:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
               prefix: SECRETS__
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-run-transporter-localize
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0090-run-function
@@ -624,19 +624,19 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-run-function
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0100-run-destination-plugin
@@ -697,22 +697,22 @@ spec:
             - secretRef:
                 name: ${{system:tdk_connection_secret_name}}
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-run-destination-plugin
               mountPath: /tabsdata/config
               readOnly: true
             - name: connection
               mountPath: /tabsdata/connection
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0110-prep-upload-state
@@ -770,19 +770,19 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-prep-upload-state
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
         - name: 0120-run-transporter-state-upload
@@ -840,19 +840,19 @@ spec:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
               prefix: SECRETS__
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-run-transporter-state-upload
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
       containers:
@@ -911,22 +911,30 @@ spec:
             - name: TD_AFTER_PATH
               value: ""
           volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
             - name: config-report-completion
               mountPath: /tabsdata/config
               readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-            - name: certs
-              mountPath: /tabsdata/certs
-              readOnly: true
-            - name: liveness
-              mountPath: /tabsdata/liveness
             - name: work
               mountPath: /tabsdata/work
       volumes:
+        - name: assets
+          projected:
+            defaultMode: 493
+            sources:
+              - configMap:
+                  name: td-app-venvloader-asset-venvloader.py
+              - configMap:
+                  name: td-app-venvloader-asset-venvloader.sh
         - name: certs
           emptyDir: {}
         - name: config-apiready
@@ -936,13 +944,6 @@ spec:
                   name: td-app-apiserver-config-apiserver.service.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
-        - name: config-inspect-function
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-begin-execution
           projected:
             sources:
@@ -957,34 +958,41 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-inspect-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-localize-fn-bundle
           projected:
             sources:
               - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
         - name: config-prep-localize-state
           projected:
             sources:
               - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-transporter-localize
+        - name: config-prep-upload-state
           projected:
             sources:
               - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-function
+        - name: config-report-completion
           projected:
             sources:
               - configMap:
@@ -998,6 +1006,36 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-localize
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-state-upload
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-storage
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
         - name: connection
           projected:
             sources:
@@ -1006,49 +1044,11 @@ spec:
                   items:
                     - key: connection.yaml
                       path: connection.yaml
-        - name: config-prep-upload-state
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-transporter-state-upload
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-report-completion
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: assets
-          projected:
-            defaultMode: 493
-            sources:
-              - configMap:
-                  name: td-app-venvloader-asset-venvloader.sh
-              - configMap:
-                  name: td-app-venvloader-asset-venvloader.py
-        - name: config-storage
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
+        - name: liveness
+          emptyDir: {}
         - name: runtimes
           emptyDir: {}
         - name: shared
-          emptyDir: {}
-        - name: liveness
           emptyDir: {}
         - name: work
           emptyDir: {}

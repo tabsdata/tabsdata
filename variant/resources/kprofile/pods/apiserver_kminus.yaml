@@ -162,14 +162,14 @@ spec:
             - name: config
               mountPath: /tabsdata/config
               readOnly: true
-            - name: settings
-              mountPath: /tabsdata/settings
-              readOnly: true
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
             - name: resources
               mountPath: /tabsdata/resources
+              readOnly: true
+            - name: settings
+              mountPath: /tabsdata/settings
               readOnly: true
           env:
             - name: CONTAINER_ROOT
@@ -202,24 +202,24 @@ spec:
           projected:
             sources:
               - configMap:
-                  name: td-app-apiserver-config-apiserver.service.yaml
-              - configMap:
                   name: td-app-apiserver-config-apiserver.database.yaml
               - configMap:
-                  name: td-app-dbmanager-config-dbmanager.database.yaml
+                  name: td-app-apiserver-config-apiserver.log.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.service.yaml
               - configMap:
                   name: td-app-apiserver-config-apiserver.storage.yaml
               - configMap:
-                  name: td-app-apiserver-config-apiserver.log.yaml
+                  name: td-app-dbmanager-config-dbmanager.database.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.yaml
-        - name: settings
-          configMap:
-            name: td-sys-tabsdata-settings-settings.json
         - name: pyenv
           hostPath:
             path: "${{system:tdk_pyenv_td_root}}"
         - name: resources
           emptyDir: {}
+        - name: settings
+          configMap:
+            name: td-sys-tabsdata-settings-settings.json

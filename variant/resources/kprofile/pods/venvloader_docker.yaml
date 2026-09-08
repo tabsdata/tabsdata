@@ -74,8 +74,6 @@ spec:
             name: td-app-apiserver-secret-config-apiserver.storage.yaml
           prefix: SECRETS__
         volumeMounts:
-        - name: storage
-          mountPath: /tabsdata/repository/storage
         - name: assets
           mountPath: /tabsdata/assets
           readOnly: true
@@ -84,19 +82,17 @@ spec:
           readOnly: true
         - name: runtimes
           mountPath: /tabsdata/runtimes
+        - name: storage
+          mountPath: /tabsdata/repository/storage
       volumes:
-      - name: storage
-        hostPath:
-          path: ${{system:tdk_storage_path}}
-          type: DirectoryOrCreate
       - name: assets
         projected:
           defaultMode: 493
           sources:
           - configMap:
-              name: td-app-venvloader-asset-venvloader.sh
-          - configMap:
               name: td-app-venvloader-asset-venvloader.py
+          - configMap:
+              name: td-app-venvloader-asset-venvloader.sh
       - name: config
         projected:
           sources:
@@ -106,3 +102,7 @@ spec:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
       - name: runtimes
         emptyDir: {}
+      - name: storage
+        hostPath:
+          path: ${{system:tdk_storage_path}}
+          type: DirectoryOrCreate

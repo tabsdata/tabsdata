@@ -90,9 +90,9 @@ spec:
           defaultMode: 493
           sources:
           - configMap:
-              name: td-app-venvloader-asset-venvloader.sh
-          - configMap:
               name: td-app-venvloader-asset-venvloader.py
+          - configMap:
+              name: td-app-venvloader-asset-venvloader.sh
       - name: config
         projected:
           sources:

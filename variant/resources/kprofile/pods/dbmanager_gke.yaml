@@ -139,35 +139,35 @@ spec:
         - name: TD_AFTER_PATH
           value: ""
         volumeMounts:
+        - name: certs
+          mountPath: /tabsdata/certs
+          readOnly: true
         - name: config
           mountPath: /tabsdata/config
           readOnly: true
         - name: runtimes
           mountPath: /tabsdata/runtimes
-        - name: certs
-          mountPath: /tabsdata/certs
-          readOnly: true
       volumes:
       - name: assets
         projected:
           defaultMode: 493
           sources:
           - configMap:
-              name: td-app-venvloader-asset-venvloader.sh
-          - configMap:
               name: td-app-venvloader-asset-venvloader.py
+          - configMap:
+              name: td-app-venvloader-asset-venvloader.sh
+      - name: certs
+        emptyDir: {}
       - name: config
         projected:
           sources:
           - configMap:
-              name: td-app-apiserver-config-apiserver.storage.yaml
-          - configMap:
               name: td-app-apiserver-config-apiserver.database.yaml
+          - configMap:
+              name: td-app-apiserver-config-apiserver.storage.yaml
           - configMap:
               name: td-app-dbmanager-config-dbmanager.database.yaml
           - configMap:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-      - name: certs
-        emptyDir: {}
       - name: runtimes
         emptyDir: {}

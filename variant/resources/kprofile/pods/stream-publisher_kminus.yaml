@@ -388,11 +388,11 @@ spec:
           projected:
             sources:
               - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
         - name: config-manifest-trigger
           projected:
             sources:

@@ -34,7 +34,8 @@ pods:
       memory: 1Gi
       disk: 16Gi
     placement:
-      selectors: {}
+      selectors:
+        role: tabsdata-services
       tolerations: []
     apiserver:
       resources:
@@ -42,7 +43,8 @@ pods:
         memory: 4Gi
         disk: 16Gi
       placement:
-        selectors: {}
+        selectors:
+          role: tabsdata-services
         tolerations: []
 
   function:
@@ -52,7 +54,8 @@ pods:
       memory: 16Gi
       disk: 64Gi
     placement:
-      selectors: {}
+      selectors:
+        role: tabsdata-functions
       tolerations:
         - key: workload
           value: batch

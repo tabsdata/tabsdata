@@ -92,11 +92,11 @@ spec:
         - name: config
           mountPath: /tabsdata/config
           readOnly: true
+        - name: database
+          mountPath: /tabsdata/database
         - name: pyenv
           mountPath: /tabsdata/pyenv
           readOnly: true
-        - name: database
-          mountPath: /tabsdata/database
       volumes:
       - name: config
         projected:
@@ -105,9 +105,9 @@ spec:
               name: td-app-dbmanager-config-dbmanager.database.yaml
           - configMap:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-      - name: pyenv
-        hostPath:
-          path: "${{system:tdk_pyenv_td_root}}"
       - name: database
         hostPath:
           path: "${{system:tdk_database_path}}"
+      - name: pyenv
+        hostPath:
+          path: "${{system:tdk_pyenv_td_root}}"

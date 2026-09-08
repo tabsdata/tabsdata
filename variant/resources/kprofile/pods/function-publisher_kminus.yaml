@@ -1088,13 +1088,6 @@ spec:
                   name: td-app-apiserver-config-apiserver.service.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
-        - name: config-inspect-function
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-begin-execution
           projected:
             sources:
@@ -1109,34 +1102,116 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-inspect-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-localize-fn-bundle
           projected:
             sources:
               - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
         - name: config-prep-localize-state
           projected:
             sources:
               - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-prep-upload-raw
+          projected:
+            sources:
               - configMap:
                   name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-transporter-state-download
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-prep-upload-state
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-prep-upload-tables
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-report-completion
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-source-plugin
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-raw-upload
+          projected:
+            sources:
               - configMap:
                   name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-source-plugin
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-state-download
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-state-upload
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-tables-upload
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-stamp-inputs
           projected:
             sources:
               - configMap:
@@ -1151,81 +1226,6 @@ spec:
                   items:
                     - key: connection.yaml
                       path: connection.yaml
-        - name: config-stamp-inputs
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-prep-upload-raw
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-transporter-raw-upload
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-function
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-prep-upload-state
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-transporter-state-upload
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-prep-upload-tables
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-run-transporter-tables-upload
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-        - name: config-report-completion
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: pyenv
           hostPath:
             path: "${{system:tdk_pyenv_fn_root}}"

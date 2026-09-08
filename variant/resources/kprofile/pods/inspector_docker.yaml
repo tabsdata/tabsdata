@@ -63,13 +63,26 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: pods
-              mountPath: /tabsdata/pods
-              readOnly: true
             - name: configs
               mountPath: /tabsdata/configs
               readOnly: true
+            - name: pods
+              mountPath: /tabsdata/pods
+              readOnly: true
       volumes:
+        - name: configs
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.database.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.log.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.service.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.yaml
         - name: pods
           projected:
             sources:
@@ -87,16 +100,3 @@ spec:
                   name: td-sys-inspector-pod-inspector.yaml
               - configMap:
                   name: td-sys-stream-publisher-pod-stream-publisher.yaml
-        - name: configs
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.service.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.database.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.log.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.yaml

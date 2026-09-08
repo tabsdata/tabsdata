@@ -105,13 +105,13 @@ spec:
           defaultMode: 493
           sources:
           - configMap:
-              name: td-app-venvbuilder-asset-venvbuilder.sh
+              name: td-app-requirements-fn-asset-requirements-fn.txt
           - configMap:
               name: td-app-requirements-td-asset-requirements-td.txt
           - configMap:
-              name: td-app-requirements-fn-asset-requirements-fn.txt
-          - configMap:
               name: td-app-tabsdata-requirements-asset-tabsdata-requirements.txt
+          - configMap:
+              name: td-app-venvbuilder-asset-venvbuilder.sh
       - name: config
         projected:
           sources:

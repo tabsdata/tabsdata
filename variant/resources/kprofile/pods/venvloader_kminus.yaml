@@ -79,11 +79,11 @@ spec:
         - name: config
           mountPath: /tabsdata/config
           readOnly: true
-        - name: runtimes
-          mountPath: /tabsdata/runtimes
         - name: pyenv
           mountPath: /tabsdata/pyenv
           readOnly: true
+        - name: runtimes
+          mountPath: /tabsdata/runtimes
       volumes:
       - name: assets
         projected:
@@ -97,9 +97,9 @@ spec:
               name: td-app-apiserver-config-apiserver.storage.yaml
           - configMap:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-      - name: runtimes
-        hostPath:
-          path: "${{system:tdk_runtimes_root}}"
       - name: pyenv
         hostPath:
           path: "${{system:tdk_pyenv_base_root}}"
+      - name: runtimes
+        hostPath:
+          path: "${{system:tdk_runtimes_root}}"
