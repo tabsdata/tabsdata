@@ -79,6 +79,7 @@ impl Instance for CloudInstance {
             .map(|name| name.to_owned())
             .unwrap_or_default();
         let mut system = system_values_for(
+            self.provider,
             &instance_name,
             &self.config.default_namespace,
             &self.cluster_name,

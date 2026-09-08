@@ -304,7 +304,7 @@ impl KubernetesOrchestratorMessageQueue {
             | ClusterProvider::Aks
             | ClusterProvider::Gke
             | ClusterProvider::Fargate => {
-                cloud_system_values_for(&settings.name, namespace, cluster)
+                cloud_system_values_for(settings.provider, &settings.name, namespace, cluster)
             }
         }
         .map_err(|error| QueueError::BackendError {

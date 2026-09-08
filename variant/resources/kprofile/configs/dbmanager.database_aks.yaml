@@ -12,9 +12,10 @@ database_server:
     ssl_mode: ${{system:tdk_database_ssl_mode}}
     ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}
   pool:
-    min_connections: 1
-    max_connections: 2
-    acquire_timeout: 30
-    max_lifetime: 1800
-    idle_timeout: 30
-    test_before_acquire: true
+    admin:
+      min_connections: 1
+      max_connections: 1
+      acquire_timeout: 30
+      max_lifetime: 1800
+      idle_timeout: 30
+      test_before_acquire: true

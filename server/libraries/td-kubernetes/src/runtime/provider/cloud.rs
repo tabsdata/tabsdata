@@ -17,8 +17,8 @@ use td_common::settings::DEFAULT_INSTANCE;
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, CONTAINER_PYENV_AG_ROOT, CONTAINER_PYENV_FN_ROOT,
     CONTAINER_PYENV_SCRIPTS_FOLDER, CONTAINER_PYENV_TD_ROOT, CONTAINER_RUNTIMES_ROOT,
-    DATABASE_SSL_MODE_VERIFY_CA, DATABASE_SSL_ROOT_CERT, FOLDER_REPOSITORY, FOLDER_STORAGE,
-    IndexReach,
+    DATABASE_SSL_MODE_VERIFY_CA, DATABASE_SSL_ROOT_CERT_AWS, DATABASE_SSL_ROOT_CERT_AZURE,
+    FOLDER_REPOSITORY, FOLDER_STORAGE, IndexReach, YAML_NULL,
 };
 use td_python::tabsdata::tabsdata_version;
 
@@ -226,6 +226,7 @@ impl Provider for CloudKubernetes {
 
     fn system_values(&self) -> CommandResult<SystemValues> {
         system_values_for(
+            self.provider,
             &self.name,
             &self.config.default_namespace,
             &self.cluster_name,
@@ -441,7 +442,18 @@ impl ContainerProvider for CloudKubernetes {
 
 impl CloudProvider for CloudKubernetes {}
 
+fn database_ssl_root_cert_for(provider: ClusterProvider) -> String {
+    match provider {
+        ClusterProvider::Eks | ClusterProvider::Fargate => DATABASE_SSL_ROOT_CERT_AWS.to_owned(),
+        ClusterProvider::Aks => DATABASE_SSL_ROOT_CERT_AZURE.to_owned(),
+        ClusterProvider::Gke | ClusterProvider::Kminus | ClusterProvider::Docker => {
+            YAML_NULL.to_owned()
+        }
+    }
+}
+
 pub fn system_values_for(
+    provider: ClusterProvider,
     name: &str,
     namespace: &str,
     cluster: &str,
@@ -457,10 +469,13 @@ pub fn system_values_for(
         pyenv_fn_root: Some(CONTAINER_PYENV_FN_ROOT.to_owned()),
         pyenv_scripts_folder: Some(CONTAINER_PYENV_SCRIPTS_FOLDER.to_owned()),
         database_ssl_mode: Some(DATABASE_SSL_MODE_VERIFY_CA.to_owned()),
-        database_ssl_root_cert: Some(DATABASE_SSL_ROOT_CERT.to_owned()),
+        database_ssl_root_cert: Some(database_ssl_root_cert_for(provider)),
         uv_default_index: Some(SystemValues::uv_default_index(IndexReach::Cluster)?),
         uv_index: Some(SystemValues::uv_index(IndexReach::Cluster)?),
         uv_index_strategy: Some(SystemValues::uv_index_strategy()?),
         ..SystemValues::default()
     })
 }
+
+#[cfg(test)]
+mod tests;

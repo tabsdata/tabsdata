@@ -53,9 +53,9 @@ spec:
           - |
             set -eu
             curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
-               --output /tabsdata/certs/ca-public.pem https://curl.se/ca/cacert.pem
+               --output /tabsdata/certs/ca-mozilla.pem https://curl.se/ca/cacert.pem
             curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
-               --output /tabsdata/certs/ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+               --output /tabsdata/certs/ca-aws.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -138,7 +138,7 @@ spec:
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
-              value: "/tabsdata/certs/ca-public.pem"
+              value: "/tabsdata/certs/ca-mozilla.pem"
             - name: TD_BEFORE_PATH
               value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
@@ -208,7 +208,7 @@ spec:
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
-              value: "/tabsdata/certs/ca-public.pem"
+              value: "/tabsdata/certs/ca-mozilla.pem"
             - name: TD_BEFORE_PATH
               value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
@@ -282,7 +282,7 @@ spec:
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
-              value: "/tabsdata/certs/ca-public.pem"
+              value: "/tabsdata/certs/ca-mozilla.pem"
             - name: TD_BEFORE_PATH
               value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
@@ -359,7 +359,7 @@ spec:
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
-              value: "/tabsdata/certs/ca-public.pem"
+              value: "/tabsdata/certs/ca-mozilla.pem"
             - name: TD_BEFORE_PATH
               value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
@@ -434,7 +434,7 @@ spec:
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
             - name: SSL_CERT_FILE
-              value: "/tabsdata/certs/ca-public.pem"
+              value: "/tabsdata/certs/ca-mozilla.pem"
             - name: TD_BEFORE_PATH
               value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH

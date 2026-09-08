@@ -410,11 +410,17 @@ pub const YAML_NULL: &str = "null";
 pub const DATABASE_SSL_MODE_PREFER: &str = "prefer";
 pub const DATABASE_SSL_MODE_VERIFY_CA: &str = "verify-ca";
 pub const CONTAINER_CERTS_ROOT: &str = "/tabsdata/certs";
-pub const DATABASE_CA_BUNDLE_FILE: &str = "ca.pem";
-pub const DATABASE_CA_BUNDLE_URL: &str =
+
+pub const DATABASE_CA_BUNDLE_FILE_AWS: &str = "ca-aws.pem";
+pub const DATABASE_CA_BUNDLE_FILE_AZURE: &str = "ca-azure.pem";
+pub const DATABASE_CA_BUNDLE_URL_AWS: &str =
     "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
-pub const DATABASE_SSL_ROOT_CERT: &str =
-    concatcp!(CONTAINER_CERTS_ROOT, "/", DATABASE_CA_BUNDLE_FILE);
+pub const DATABASE_CA_BUNDLE_URL_AZURE: &str =
+    "https://cacerts.digicert.com/DigiCertGlobalRootG2.crt.pem";
+pub const DATABASE_SSL_ROOT_CERT_AWS: &str =
+    concatcp!(CONTAINER_CERTS_ROOT, "/", DATABASE_CA_BUNDLE_FILE_AWS);
+pub const DATABASE_SSL_ROOT_CERT_AZURE: &str =
+    concatcp!(CONTAINER_CERTS_ROOT, "/", DATABASE_CA_BUNDLE_FILE_AZURE);
 
 pub const TABSDATA_LABEL_NAMESPACE: &str = "tabsdata.com/";
 pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
