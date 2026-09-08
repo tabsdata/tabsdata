@@ -72,6 +72,7 @@ from tabsdatak.dataquality._classifier import (
     MonomialScale,
     ScaleCategorizer,
 )
+from tabsdatak.dataquality._dataquality import reserved_prefix
 from tabsdatak.dataquality._error import (
     DataQualityErrorCode,
     DataQualityProcessingError,
@@ -1078,6 +1079,7 @@ class CriteriaMetadata:
 
 @dataclass
 class ColumnInfo:
+    column: str
     family: ClassifierFamily
     classifier: Classifier
 
@@ -1115,7 +1117,10 @@ class DataQualityEngine:
 
             # ToDo: before cloning we need to review in detail the chained dq loop.
             # dq_o._cols = (
-            #     {k: ColumnInfo(v.family, v.classifier) for k, v in dq_i._cols.items()}
+            #     {
+            #         k: ColumnInfo(v.column, v.family, v.classifier)
+            #         for k, v in dq_i._cols.items()
+            #     }
             #     if cols is None and dq_i._cols is not None
             #     else cols if cols is not None else {}
             # )
@@ -1246,6 +1251,49 @@ class DataQualityEngine:
     ) -> str:
         return dq_column if dq_column is not None else f"{lf_column}{classifier}"
 
+    def _check_verdict_column(
+        self,
+        dq_column: str,
+        lf_column: str,
+        classifier: Classifier,
+    ) -> None:
+        classifier_name = type(classifier).__name__
+
+        prefix = reserved_prefix(dq_column)
+        if prefix is not None:
+            raise DataQualityErrorCode.DQPE_19.exception(
+                column=dq_column,
+                classifier=classifier_name,
+                prefix=prefix,
+            )
+
+        registered = self._cols.get(dq_column)
+        if registered is not None:
+            raise DataQualityErrorCode.DQPE_17.exception(
+                column=dq_column,
+                registered_classifier=type(registered.classifier).__name__,
+                registered_source=registered.column,
+                classifier=classifier_name,
+                source=lf_column,
+            )
+
+        if dq_column in self._schema.names():
+            from tabsdatak.extensions.tableframe._engine.column.registry import registry
+
+            kind = registry().kind_of(dq_column)
+            table_name = (
+                self._tf._data_table.name
+                if hasattr(self._tf, "_data_table") and self._tf._data_table is not None
+                else "undefined"
+            )
+            raise DataQualityErrorCode.DQPE_18.exception(
+                column=dq_column,
+                classifier=classifier_name,
+                source=lf_column,
+                table=table_name,
+                kind=kind.name.lower(),
+            )
+
     def _run(
         self,
         expression: td_expr.Expr,
@@ -1310,8 +1358,11 @@ class DataQualityEngine:
             except DataQualityProcessingError:
                 raise
 
+            self._check_verdict_column(dq_column, lf_column, classifier)
+
             self._cols.update({
                 dq_column: ColumnInfo(
+                    column=lf_column,
                     family=metadata.classifier_family,
                     classifier=classifier,
                 )

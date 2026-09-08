@@ -673,3 +673,55 @@ def test_on_wrong_value_ignore_parametrized(classifier_type, param_values):
     result_df = result_dq.tf()._lf.collect()
     expected_col_suffix = method_name
     assert f"int_col_{expected_col_suffix}" not in result_df.columns
+
+
+def verdict_collision_dataset():
+    return tableframe_of(pl.LazyFrame({"order_id": [1, 2, 3], "d": [10.0, 25.0, 60.0]}))
+
+
+def test_two_wildcard_classifiers_of_one_type_collide_at_run_time():
+    dq_engine = DataQualityEngine(verdict_collision_dataset())
+    dq_engine = dq_engine.is_between(IsBetween(None, min_val=0.0, max_val=15.0))
+    with pytest.raises(DataQualityProcessingError) as exc:
+        dq_engine.is_between(IsBetween(None, min_val=0.0, max_val=40.0))
+    assert exc.value.api_error is DataQualityErrorCode.DQPE_17
+    assert "(column, verdict_column)" in str(exc.value)
+
+
+def test_an_alias_colliding_with_an_inferred_verdict_column_is_rejected():
+    dq_engine = DataQualityEngine(verdict_collision_dataset())
+    dq_engine = dq_engine.is_between(IsBetween(["d"], min_val=0.0, max_val=15.0))
+    with pytest.raises(DataQualityProcessingError) as exc:
+        dq_engine.is_not_between(
+            IsNotBetween([("order_id", "d_is_between")], min_val=0.0, max_val=1.0)
+        )
+    assert exc.value.api_error is DataQualityErrorCode.DQPE_17
+
+
+def test_a_verdict_column_overwriting_a_user_column_is_rejected():
+    dq_engine = DataQualityEngine(verdict_collision_dataset())
+    with pytest.raises(DataQualityProcessingError) as exc:
+        dq_engine.is_between(IsBetween([("d", "order_id")], min_val=0.0, max_val=15.0))
+    assert exc.value.api_error is DataQualityErrorCode.DQPE_18
+    assert "order_id" in str(exc.value)
+
+
+def test_distinct_verdict_columns_on_one_source_column_are_kept():
+    dq_engine = DataQualityEngine(verdict_collision_dataset())
+    dq_engine = dq_engine.is_between(
+        IsBetween([("d", "d_within_15")], min_val=0.0, max_val=15.0)
+    )
+    dq_engine = dq_engine.is_between(
+        IsBetween([("d", "d_within_40")], min_val=0.0, max_val=40.0)
+    )
+    result = dq_engine.tf()._lf.collect()
+    assert result["d_within_15"].to_list() == [
+        ByteSentinel.TRUE,
+        ByteSentinel.FALSE,
+        ByteSentinel.FALSE,
+    ]
+    assert result["d_within_40"].to_list() == [
+        ByteSentinel.TRUE,
+        ByteSentinel.TRUE,
+        ByteSentinel.FALSE,
+    ]

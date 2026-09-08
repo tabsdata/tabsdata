@@ -54,3 +54,58 @@ def test_data_quality_loads_polymorphically_via_on_tables_action():
     back = m.OnTablesAction.from_json(action.to_json())
     assert isinstance(back, dq.DataQuality)
     assert back == action
+
+
+def _between(columns, max_val: float) -> dq.IsBetween:
+    return dq.IsBetween(columns, min_val=0.0, max_val=max_val)
+
+
+def _with_classifiers(*classifiers: dq.Classifier) -> dq.DataQuality:
+    return dq.DataQuality("t", classifiers=list(classifiers), operators=[dq.Summary()])
+
+
+def test_two_classifiers_inferring_one_verdict_column_are_rejected():
+    with pytest.raises(ParameterValidationError) as exc:
+        _with_classifiers(_between(["d"], 15.0), _between(["d"], 40.0))
+    assert exc.value.api_error is DataQualityErrorCode.DQC_202
+    assert "source column 'd'" in str(exc.value)
+    assert "(column, verdict_column)" in str(exc.value)
+
+
+def test_two_classifiers_sharing_an_explicit_verdict_column_are_rejected():
+    with pytest.raises(ParameterValidationError) as exc:
+        _with_classifiers(
+            _between([("d", "verdict")], 15.0), _between([("d", "verdict")], 40.0)
+        )
+    assert exc.value.api_error is DataQualityErrorCode.DQC_202
+    assert "'verdict'" in str(exc.value)
+
+
+def test_naming_the_verdict_columns_resolves_the_collision():
+    action = _with_classifiers(
+        _between([("d", "d_within_15")], 15.0), _between([("d", "d_within_40")], 40.0)
+    )
+    assert len(action.classifiers) == 2
+
+
+def test_classifiers_of_different_types_on_one_column_are_allowed():
+    action = _with_classifiers(_between(["d"], 15.0), dq.IsPositive(["d"]))
+    assert len(action.classifiers) == 2
+
+
+def test_verdict_column_equal_to_its_source_column_is_rejected():
+    with pytest.raises(ParameterValidationError) as exc:
+        _with_classifiers(_between([("d", "d")], 15.0))
+    assert exc.value.api_error is DataQualityErrorCode.DQC_204
+
+
+@pytest.mark.parametrize("name", ["$td.x", "@td.x", "@td.dq.d_is_between"])
+def test_verdict_column_with_a_reserved_prefix_is_rejected(name: str):
+    with pytest.raises(ParameterValidationError) as exc:
+        _with_classifiers(_between([("d", name)], 15.0))
+    assert exc.value.api_error is DataQualityErrorCode.DQC_203
+
+
+def test_a_single_wildcard_classifier_is_allowed():
+    action = _with_classifiers(_between(None, 15.0))
+    assert action.classifiers[0].column_names is None

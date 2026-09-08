@@ -172,6 +172,35 @@ class DataQualityErrorCode(ErrorCode):
     DQC_201 = ErrorDef(
         ParameterValidationError, "Invalid parameters for the 'DataQuality' action."
     )
+    DQC_202 = ErrorDef(
+        ParameterValidationError,
+        "{count} classifiers of this data quality action write to the same verdict "
+        "column {column} ({detail}), so all but the last would be lost. Each "
+        "classifier must write to a distinct verdict column: name them explicitly "
+        "with a '(column, verdict_column)' tuple, for example "
+        '\'{classifier}([("{source}", "{source}_variant_1")], ...)\'.',
+    )
+    DQC_203 = ErrorDef(
+        ParameterValidationError,
+        "Verdict column name '{column}' declared by classifier '{classifier}' uses "
+        "the reserved prefix '{prefix}'. Column names starting with '$td.' or '@td.' "
+        "are managed by Tabsdata; choose a name without that prefix.",
+    )
+    DQC_204 = ErrorDef(
+        ParameterValidationError,
+        "Classifier '{classifier}' names verdict column '{column}' for source column "
+        "'{column}'. Writing the verdict into its own source column would destroy "
+        "the classified data; choose a distinct verdict column name.",
+    )
+    DQC_205 = ErrorDef(
+        ParameterValidationError,
+        "Classifier '{classifier}' classifies column '{column}', which is the verdict "
+        "column produced by classifier '{producer}' on source column '{source}'. "
+        "Classifiers of one data quality action all read the table as it was before "
+        "the action ran, so a verdict column cannot itself be classified; classify "
+        "'{source}' instead, or move the second check to a separate data quality "
+        "action on a table that already carries '{column}'.",
+    )
 
     # DQPE codes (DataQualityProcessingError)
     DQPE_1 = ErrorDef(
@@ -255,6 +284,29 @@ class DataQualityErrorCode(ErrorCode):
         "Column '{column}' has incompatible value for classifier '{classifier}'. The "
         "classifier's parameter '{parameter}' with value '{value}' cannot be converted "
         "to the column's data type '{dtype}'.",
+    )
+    DQPE_17 = ErrorDef(
+        DataQualityProcessingError,
+        "Verdict column '{column}' is already produced by classifier "
+        "'{registered_classifier}' on source column '{registered_source}'; classifier "
+        "'{classifier}' on source column '{source}' would overwrite it and its "
+        "verdicts would be lost. Name the verdict columns explicitly with a "
+        "'(column, verdict_column)' tuple, for example "
+        '\'{classifier}([("{source}", "{source}_variant_1")], ...)\'.',
+    )
+    DQPE_18 = ErrorDef(
+        DataQualityProcessingError,
+        "Verdict column '{column}' produced by classifier '{classifier}' on source "
+        "column '{source}' already exists in table '{table}' as a {kind} column; "
+        "writing the verdict would destroy that column's data. Name the verdict "
+        "column explicitly with a '(column, verdict_column)' tuple, for example "
+        '\'{classifier}([("{source}", "{source}_verdict")], ...)\'.',
+    )
+    DQPE_19 = ErrorDef(
+        DataQualityProcessingError,
+        "Verdict column name '{column}' produced by classifier '{classifier}' uses "
+        "the reserved prefix '{prefix}'. Column names starting with '$td.' or '@td.' "
+        "are managed by Tabsdata; choose a name without that prefix.",
     )
 
     # TUCE codes (TableURIConfigurationError)
