@@ -11,7 +11,8 @@ use std::time::Instant;
 use tracing::{debug, info};
 
 use crate::base::constants::{
-    KM_IO_CAPTURE_POLL, KM_IO_CAPTURE_QUIET, KM_IO_CAPTURE_TIMEOUT, LOG_FOLDER,
+    KM_IO_CAPTURE_POLL, KM_IO_CAPTURE_QUIET, KM_IO_CAPTURE_TIMEOUT, KM_STARTUP_MARKER_PREFIX,
+    LOG_FOLDER,
 };
 
 pub fn stdio_log(instance_root: &Path, prefix: &str, stamp: &str) -> Option<PathBuf> {
@@ -48,9 +49,16 @@ pub fn relay(path: &Path, label: &str, child: &mut Child, verbose: bool) {
     let started = Instant::now();
     let mut latest = Instant::now();
     loop {
-        let moved = relay_available(&mut reader, &mut offset, label, verbose);
-        if moved {
+        let seen = relay_available(&mut reader, &mut offset, label, verbose);
+        if seen.moved {
             latest = Instant::now();
+        }
+        if seen.completed {
+            debug!(
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "{label} reported startup complete"
+            );
+            return;
         }
         if matches!(child.try_wait(), Ok(Some(_))) {
             relay_available(&mut reader, &mut offset, label, verbose);
@@ -66,16 +74,22 @@ pub fn relay(path: &Path, label: &str, child: &mut Child, verbose: bool) {
     }
 }
 
+#[derive(Default)]
+struct Relayed {
+    moved: bool,
+    completed: bool,
+}
+
 fn relay_available(
     reader: &mut BufReader<File>,
     offset: &mut u64,
     label: &str,
     verbose: bool,
-) -> bool {
+) -> Relayed {
+    let mut seen = Relayed::default();
     if reader.seek(SeekFrom::Start(*offset)).is_err() {
-        return false;
+        return seen;
     }
-    let mut moved = false;
     let mut line = String::new();
     loop {
         line.clear();
@@ -86,8 +100,11 @@ fn relay_available(
                     break;
                 }
                 *offset += read as u64;
-                moved = true;
+                seen.moved = true;
                 let text = line.trim_end();
+                if text.starts_with(KM_STARTUP_MARKER_PREFIX) {
+                    seen.completed = true;
+                }
                 if verbose {
                     info!("  [{label} stdio] {text}");
                 } else {
@@ -97,7 +114,7 @@ fn relay_available(
             Err(_) => break,
         }
     }
-    moved
+    seen
 }
 
 #[cfg(test)]

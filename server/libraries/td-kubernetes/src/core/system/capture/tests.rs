@@ -42,8 +42,48 @@ fn only_complete_lines_are_relayed() {
     let file = File::open(&path).expect("the file opens");
     let mut reader = BufReader::new(file);
     let mut offset = 0u64;
-    assert!(relay_available(&mut reader, &mut offset, "km", false));
+    assert!(relay_available(&mut reader, &mut offset, "km", false).moved);
     assert_eq!(offset, "complete\n".len() as u64);
+}
+
+#[test]
+fn the_startup_marker_is_reported_once_it_is_a_complete_line() {
+    let root = tempfile::tempdir().expect("a temporary instance root");
+    let path = stdio_log(root.path(), "km.io", "stamp").expect("a path");
+    {
+        let mut writer = writer_for(&path).expect("a writer");
+        write!(writer, "booting\n{KM_STARTUP_MARKER_PREFIX} ready")
+            .expect("the content is written");
+    }
+    let file = File::open(&path).expect("the file opens");
+    let mut reader = BufReader::new(file);
+    let mut offset = 0u64;
+
+    let seen = relay_available(&mut reader, &mut offset, "km", false);
+    assert!(seen.moved);
+    assert!(!seen.completed, "a partial marker line is not the marker");
+
+    {
+        let mut writer = writer_for(&path).expect("a writer");
+        writeln!(writer).expect("the line is completed");
+    }
+    assert!(relay_available(&mut reader, &mut offset, "km", false).completed);
+}
+
+#[test]
+fn output_without_a_marker_reports_no_completion() {
+    let root = tempfile::tempdir().expect("a temporary instance root");
+    let path = stdio_log(root.path(), "km.io", "stamp").expect("a path");
+    {
+        let mut writer = writer_for(&path).expect("a writer");
+        writeln!(writer, "booting").expect("the content is written");
+    }
+    let file = File::open(&path).expect("the file opens");
+    let mut reader = BufReader::new(file);
+    let mut offset = 0u64;
+    let seen = relay_available(&mut reader, &mut offset, "km", false);
+    assert!(seen.moved);
+    assert!(!seen.completed);
 }
 
 #[test]
