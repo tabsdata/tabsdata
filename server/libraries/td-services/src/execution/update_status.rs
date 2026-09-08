@@ -54,7 +54,7 @@ pub async fn update_worker_status<S: SeesProjectRows>(
 ) -> Result<(), TdError> {
     // Worker status update is never conditional, we want to know exactly what got reported,
     // as it doesn't affect execution flow, it's just informational.
-    let _ = conn.update(update, &*worker_id).await?;
+    let _ = conn.update(update, worker_id).await?;
 
     Ok(())
 }
