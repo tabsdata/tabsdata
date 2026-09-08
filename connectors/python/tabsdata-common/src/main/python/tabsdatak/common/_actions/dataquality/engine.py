@@ -83,6 +83,7 @@ from tabsdatak.dataquality._operator import (
     Enrich,
     Fail,
 )
+from tabsdatak.dataquality._typing import DEFAULT_VERDICT_COLUMN_PREFIX
 from tabsdatak.tableframe._core.hooks import tableframe_of
 from tabsdatak.tableframe._engine.taxonomy.column import ColumnKind
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
@@ -1248,8 +1249,11 @@ class DataQualityEngine:
         classifier: str,
         lf_column: str,
         dq_column: str | None = None,
+        dq_prefix: str | None = None,
     ) -> str:
-        return dq_column if dq_column is not None else f"{lf_column}{classifier}"
+        name = dq_column if dq_column is not None else f"{lf_column}{classifier}"
+        prefix = DEFAULT_VERDICT_COLUMN_PREFIX if dq_prefix is None else dq_prefix
+        return f"{prefix}{name}"
 
     def _check_verdict_column(
         self,
@@ -1340,7 +1344,12 @@ class DataQualityEngine:
 
         for column in columns:
             lf_column = column.data_column
-            dq_column = self._name(metadata.column_suffix, lf_column, column.dq_column)
+            dq_column = self._name(
+                metadata.column_suffix,
+                lf_column,
+                column.dq_column,
+                classifier.prefix,
+            )
             lf_dtype = self._schema[lf_column]
 
             try:

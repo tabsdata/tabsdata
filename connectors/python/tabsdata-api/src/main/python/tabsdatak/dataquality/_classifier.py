@@ -33,6 +33,7 @@ from tabsdatak.dataquality._typing import (
     LenSpec,
     OnInvalidColumnSpec,
     OnInvalidValueSpec,
+    PrefixSpec,
     RangeClosedOnSpec,
     RangeValueSpec,
     ScaleBaseSpec,
@@ -543,6 +544,10 @@ class IsTrue(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -564,6 +569,7 @@ class IsTrue(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -595,6 +601,10 @@ class IsFalse(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -610,6 +620,7 @@ class IsFalse(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -638,6 +649,10 @@ class IsNull(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
@@ -660,6 +675,7 @@ class IsNull(BoolClassifier):
     column_names: ColumnNamesWithAltSpec | None = None
     on_missing_column: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_type: ClassVar[OnInvalidColumnSpec] = "ignore"
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
@@ -689,6 +705,10 @@ class IsNotNull(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
@@ -712,6 +732,7 @@ class IsNotNull(BoolClassifier):
     column_names: ColumnNamesWithAltSpec | None = None
     on_missing_column: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_type: ClassVar[OnInvalidColumnSpec] = "ignore"
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
@@ -744,6 +765,10 @@ class IsNan(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -759,6 +784,7 @@ class IsNan(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -790,6 +816,10 @@ class IsNotNan(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -805,6 +835,7 @@ class IsNotNan(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -836,6 +867,10 @@ class IsNullOrNan(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -851,6 +886,7 @@ class IsNullOrNan(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -882,6 +918,10 @@ class IsNotNullNorNan(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -903,6 +943,7 @@ class IsNotNullNorNan(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -934,6 +975,10 @@ class IsZero(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -949,6 +994,7 @@ class IsZero(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -980,6 +1026,10 @@ class IsNotZero(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -995,6 +1045,7 @@ class IsNotZero(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -1026,6 +1077,10 @@ class IsPositive(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1041,6 +1096,7 @@ class IsPositive(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -1072,6 +1128,10 @@ class IsPositiveOrZero(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1087,6 +1147,7 @@ class IsPositiveOrZero(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -1118,6 +1179,10 @@ class IsNegative(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1133,6 +1198,7 @@ class IsNegative(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -1164,6 +1230,10 @@ class IsNegativeOrZero(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1179,6 +1249,7 @@ class IsNegativeOrZero(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -1218,6 +1289,10 @@ class BetweenClassifier(BoolClassifier, ABC):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
 
     Examples:
         The concrete range classifiers are `IsBetween` and `IsNotBetween`:
@@ -1238,6 +1313,7 @@ class BetweenClassifier(BoolClassifier, ABC):
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     on_wrong_value: OnInvalidValueSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     @classmethod
     def supported_dtypes(cls) -> frozenset:
@@ -1286,6 +1362,10 @@ class IsBetween(BetweenClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
 
     Examples:
         .. code-block:: python
@@ -1328,6 +1408,10 @@ class IsNotBetween(BetweenClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
 
     Examples:
         .. code-block:: python
@@ -1375,6 +1459,10 @@ class InClassifier(BoolClassifier, ABC):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
 
@@ -1394,6 +1482,7 @@ class InClassifier(BoolClassifier, ABC):
     on_wrong_value: OnInvalidValueSpec = "ignore"
     values: ValuesSpec = field(kw_only=True)
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_type: ClassVar[OnInvalidColumnSpec] = "ignore"
 
@@ -1428,6 +1517,10 @@ class IsIn(InClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
 
@@ -1466,6 +1559,10 @@ class IsNotIn(InClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
 
@@ -1507,6 +1604,10 @@ class MatchClassifier(BoolClassifier, ABC):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1526,6 +1627,7 @@ class MatchClassifier(BoolClassifier, ABC):
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     pattern: str = field(kw_only=True)
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -1563,6 +1665,10 @@ class Matches(MatchClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1599,6 +1705,10 @@ class DoesNotMatch(MatchClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1638,6 +1748,10 @@ class HasLength(BoolClassifier):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
 
@@ -1655,6 +1769,7 @@ class HasLength(BoolClassifier):
     on_missing_column: OnInvalidColumnSpec = "ignore"
     on_wrong_type: OnInvalidColumnSpec = "ignore"
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     on_wrong_value: ClassVar[OnInvalidValueSpec] = "ignore"
 
@@ -1703,6 +1818,10 @@ class ScaleCategorizer(Categorizer):
         tags: Optional labels for this classifier. An operator given the same
             tag applies only to the classifiers carrying it; untagged operators
             apply to all of them.
+        prefix: Prepended verbatim to every verdict column name this
+            classifier produces, inferred or explicit. `None` (the default)
+            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            given.
 
     Examples:
         .. code-block:: python
@@ -1718,6 +1837,7 @@ class ScaleCategorizer(Categorizer):
     on_wrong_value: OnInvalidValueSpec = "ignore"
     scale: Scale = field(kw_only=True)
     tags: TagsSpec | None = field(default=None, kw_only=True)
+    prefix: PrefixSpec | None = field(default=None, kw_only=True)
 
     @classmethod
     def supported_dtypes(cls) -> frozenset:

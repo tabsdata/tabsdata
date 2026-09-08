@@ -75,12 +75,14 @@ def _convert_classifier_values(classifier, dtype):
                 column_names=classifier.column_names,
                 tags=classifier.tags,
                 values=frozenset(converted_values),
+                prefix="",
             )
         else:
             return IsNotIn(
                 column_names=classifier.column_names,
                 tags=classifier.tags,
                 values=frozenset(converted_values),
+                prefix="",
             )
     elif isinstance(classifier, (IsBetween, IsNotBetween)):
         if is_uint:
@@ -105,10 +107,14 @@ def _convert_classifier_values(classifier, dtype):
                 converted_max = None
         else:
             converted_min = (
-                converter(classifier.min_val) if classifier.min_val is not None else None
+                converter(classifier.min_val)
+                if classifier.min_val is not None
+                else None
             )
             converted_max = (
-                converter(classifier.max_val) if classifier.max_val is not None else None
+                converter(classifier.max_val)
+                if classifier.max_val is not None
+                else None
             )
 
         if isinstance(classifier, IsBetween):
@@ -118,6 +124,7 @@ def _convert_classifier_values(classifier, dtype):
                 min_val=converted_min,
                 max_val=converted_max,
                 closed_on=classifier.closed_on,
+                prefix="",
             )
         else:
             return IsNotBetween(
@@ -126,6 +133,7 @@ def _convert_classifier_values(classifier, dtype):
                 min_val=converted_min,
                 max_val=converted_max,
                 closed_on=classifier.closed_on,
+                prefix="",
             )
     return None
 
@@ -353,6 +361,7 @@ def test_categorizer_with_negative_values(scale, dtype):
     categorizer = ScaleCategorizer(
         column_names=[("value", "value_category")],
         scale=scale,
+        prefix="",
     )
 
     dq_engine = DataQualityEngine(tf).categorizer(categorizer)
@@ -441,6 +450,7 @@ def test_on_wrong_value_ignore_is_between():
         min_val="invalid_string",
         max_val="valid_string_larger",
         on_wrong_value="ignore",
+        prefix="",
     )
     dq = dq_engine.is_between(classifier)
     df = dq.tf()._lf.collect()
@@ -457,6 +467,7 @@ def test_on_wrong_value_fail_is_between_min():
         min_val="invalid_string",
         max_val="valid_string_larger",
         on_wrong_value="fail",
+        prefix="",
     )
     with pytest.raises(DataQualityProcessingError) as exc_info:
         dq_engine.is_between(classifier)
@@ -476,6 +487,7 @@ def test_on_wrong_value_fail_is_between_max():
         min_val="not_a_number",
         max_val="really_not_a_number",
         on_wrong_value="fail",
+        prefix="",
     )
     with pytest.raises(DataQualityProcessingError) as exc_info:
         dq_engine.is_between(classifier)
@@ -494,6 +506,7 @@ def test_on_wrong_value_ignore_is_not_between():
         min_val="bad_value",
         max_val="good_value_larger",
         on_wrong_value="ignore",
+        prefix="",
     )
     dq = dq_engine.is_not_between(classifier)
     df = dq.tf()._lf.collect()
@@ -509,6 +522,7 @@ def test_on_wrong_value_fail_is_not_between():
         min_val="invalid_max",
         max_val="valid_max_larger",
         on_wrong_value="fail",
+        prefix="",
     )
     with pytest.raises(DataQualityProcessingError) as exc_info:
         dq_engine.is_not_between(classifier)
@@ -525,6 +539,7 @@ def test_on_wrong_value_ignore_is_in():
         column_names=["int_col"],
         values=frozenset(["abc", "def", "ghi"]),
         on_wrong_value="ignore",
+        prefix="",
     )
     dq = dq_engine.is_in(classifier)
     df = dq.tf()._lf.collect()
@@ -539,6 +554,7 @@ def test_on_wrong_value_fail_is_in():
         column_names=["int_col"],
         values=frozenset(["not", "numbers"]),
         on_wrong_value="fail",
+        prefix="",
     )
     with pytest.raises(DataQualityProcessingError) as exc_info:
         dq_engine.is_in(classifier)
@@ -555,6 +571,7 @@ def test_on_wrong_value_ignore_is_not_in():
         column_names=["float_col"],
         values=frozenset(["invalid", "float", "values"]),
         on_wrong_value="ignore",
+        prefix="",
     )
     result_dq = dq_engine.is_not_in(classifier)
     result_df = result_dq.tf()._lf.collect()
@@ -569,6 +586,7 @@ def test_on_wrong_value_fail_is_not_in():
         column_names=["int_col"],
         values=frozenset(["x", "y", "z"]),
         on_wrong_value="fail",
+        prefix="",
     )
     with pytest.raises(DataQualityProcessingError) as exc_info:
         dq_engine.is_not_in(classifier)
@@ -584,6 +602,7 @@ def test_on_wrong_value_ignore_multiple_columns():
         min_val="a",
         max_val="b",
         on_wrong_value="ignore",
+        prefix="",
     )
     dq = dq_engine.is_between(classifier)
     df = dq.tf()._lf.collect()
@@ -601,6 +620,7 @@ def test_on_wrong_value_with_valid_values():
         min_val=0,
         max_val=100,
         on_wrong_value="fail",
+        prefix="",
     )
     result_dq = dq_engine.is_between(classifier)
     result_df = result_dq.tf()._lf.collect()
@@ -701,7 +721,9 @@ def test_an_alias_colliding_with_an_inferred_verdict_column_is_rejected():
 def test_a_verdict_column_overwriting_a_user_column_is_rejected():
     dq_engine = DataQualityEngine(verdict_collision_dataset())
     with pytest.raises(DataQualityProcessingError) as exc:
-        dq_engine.is_between(IsBetween([("d", "order_id")], min_val=0.0, max_val=15.0))
+        dq_engine.is_between(
+            IsBetween([("d", "order_id")], min_val=0.0, max_val=15.0, prefix="")
+        )
     assert exc.value.api_error is DataQualityErrorCode.DQPE_18
     assert "order_id" in str(exc.value)
 
@@ -709,10 +731,10 @@ def test_a_verdict_column_overwriting_a_user_column_is_rejected():
 def test_distinct_verdict_columns_on_one_source_column_are_kept():
     dq_engine = DataQualityEngine(verdict_collision_dataset())
     dq_engine = dq_engine.is_between(
-        IsBetween([("d", "d_within_15")], min_val=0.0, max_val=15.0)
+        IsBetween([("d", "d_within_15")], min_val=0.0, max_val=15.0, prefix="")
     )
     dq_engine = dq_engine.is_between(
-        IsBetween([("d", "d_within_40")], min_val=0.0, max_val=40.0)
+        IsBetween([("d", "d_within_40")], min_val=0.0, max_val=40.0, prefix="")
     )
     result = dq_engine.tf()._lf.collect()
     assert result["d_within_15"].to_list() == [

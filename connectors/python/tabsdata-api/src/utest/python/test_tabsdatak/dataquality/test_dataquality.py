@@ -56,8 +56,8 @@ def test_data_quality_loads_polymorphically_via_on_tables_action():
     assert back == action
 
 
-def _between(columns, max_val: float) -> dq.IsBetween:
-    return dq.IsBetween(columns, min_val=0.0, max_val=max_val)
+def _between(columns, max_val: float, **kwargs) -> dq.IsBetween:
+    return dq.IsBetween(columns, min_val=0.0, max_val=max_val, **kwargs)
 
 
 def _with_classifiers(*classifiers: dq.Classifier) -> dq.DataQuality:
@@ -75,7 +75,8 @@ def test_two_classifiers_inferring_one_verdict_column_are_rejected():
 def test_two_classifiers_sharing_an_explicit_verdict_column_are_rejected():
     with pytest.raises(ParameterValidationError) as exc:
         _with_classifiers(
-            _between([("d", "verdict")], 15.0), _between([("d", "verdict")], 40.0)
+            _between([("d", "verdict")], 15.0, prefix=""),
+            _between([("d", "verdict")], 40.0, prefix=""),
         )
     assert exc.value.api_error is DataQualityErrorCode.DQC_202
     assert "'verdict'" in str(exc.value)
@@ -95,15 +96,21 @@ def test_classifiers_of_different_types_on_one_column_are_allowed():
 
 def test_verdict_column_equal_to_its_source_column_is_rejected():
     with pytest.raises(ParameterValidationError) as exc:
-        _with_classifiers(_between([("d", "d")], 15.0))
+        _with_classifiers(_between([("d", "d")], 15.0, prefix=""))
     assert exc.value.api_error is DataQualityErrorCode.DQC_204
 
 
-@pytest.mark.parametrize("name", ["$td.x", "@td.x", "@td.dq.d_is_between"])
+@pytest.mark.parametrize("name", ["$td.x", "$td.id", "$td.ver.version"])
 def test_verdict_column_with_a_reserved_prefix_is_rejected(name: str):
     with pytest.raises(ParameterValidationError) as exc:
-        _with_classifiers(_between([("d", name)], 15.0))
+        _with_classifiers(_between([("d", name)], 15.0, prefix=""))
     assert exc.value.api_error is DataQualityErrorCode.DQC_203
+
+
+@pytest.mark.parametrize("name", ["@td.x", "@td.dq.d_is_between", "@td.origin.file.n"])
+def test_verdict_column_in_the_connector_namespace_is_allowed(name: str):
+    action = _with_classifiers(_between([("d", name)], 15.0, prefix=""))
+    assert len(action.classifiers) == 1
 
 
 def test_a_single_wildcard_classifier_is_allowed():

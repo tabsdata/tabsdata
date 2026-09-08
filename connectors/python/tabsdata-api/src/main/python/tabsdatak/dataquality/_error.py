@@ -183,8 +183,8 @@ class DataQualityErrorCode(ErrorCode):
     DQC_203 = ErrorDef(
         ParameterValidationError,
         "Verdict column name '{column}' declared by classifier '{classifier}' uses "
-        "the reserved prefix '{prefix}'. Column names starting with '$td.' or '@td.' "
-        "are managed by Tabsdata; choose a name without that prefix.",
+        "the reserved prefix '{prefix}'. Column names starting with '$td.' are "
+        "managed by Tabsdata; choose a name without that prefix.",
     )
     DQC_204 = ErrorDef(
         ParameterValidationError,
@@ -305,8 +305,8 @@ class DataQualityErrorCode(ErrorCode):
     DQPE_19 = ErrorDef(
         DataQualityProcessingError,
         "Verdict column name '{column}' produced by classifier '{classifier}' uses "
-        "the reserved prefix '{prefix}'. Column names starting with '$td.' or '@td.' "
-        "are managed by Tabsdata; choose a name without that prefix.",
+        "the reserved prefix '{prefix}'. Column names starting with '$td.' are "
+        "managed by Tabsdata; choose a name without that prefix.",
     )
 
     # TUCE codes (TableURIConfigurationError)

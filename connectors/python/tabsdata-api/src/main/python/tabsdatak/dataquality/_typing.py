@@ -43,6 +43,17 @@ A list of column references. Each element is a source column name or a
 ``(source, destination)`` tuple; the two forms may be mixed.
 """
 
+DEFAULT_VERDICT_COLUMN_PREFIX = "td.dq."
+"""The prefix prepended to verdict column names when ``prefix`` is ``None``."""
+
+PrefixSpec: TypeAlias = str
+"""
+A prefix prepended verbatim to every verdict column name a classifier
+produces, whether the name is inferred or given explicitly. ``None`` (the
+default) means :data:`DEFAULT_VERDICT_COLUMN_PREFIX`, ``""`` means no prefix,
+and any other string is used as given.
+"""
+
 # --- Tag Specifications ---
 
 TagSpec: TypeAlias = str

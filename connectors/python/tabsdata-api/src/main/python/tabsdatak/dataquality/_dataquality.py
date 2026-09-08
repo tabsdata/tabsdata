@@ -18,15 +18,12 @@ from tabsdatak.api import OnTablesAction, TableNameSpec
 from tabsdatak.dataquality._classifier import Classifier
 from tabsdatak.dataquality._error import DataQualityErrorCode
 from tabsdatak.dataquality._operator import Operator
+from tabsdatak.dataquality._typing import DEFAULT_VERDICT_COLUMN_PREFIX
 from tabsdatak.tableframe._engine.constant.column.prefixes import (
-    TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
     TD_SYSTEM_COLUMN_PREFIX,
 )
 
-RESERVED_COLUMN_PREFIXES = (
-    TD_SYSTEM_COLUMN_PREFIX,
-    TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
-)
+RESERVED_COLUMN_PREFIXES = (TD_SYSTEM_COLUMN_PREFIX,)
 
 
 def reserved_prefix(name: str) -> str | None:
@@ -98,32 +95,48 @@ class DataQuality(OnTablesAction):
 
     @model_validator(mode="after")
     def validate_verdict_columns(self) -> "DataQuality":
-        claims: dict[tuple[type, str] | str, list[tuple[str, str, str]]] = {}
+        claims: dict[tuple[type, str, str] | str, list[tuple[str, str, str]]] = {}
         aliases: dict[str, tuple[str, str]] = {}
         sources: dict[str, str] = {}
         for classifier in self.classifiers:
             name = type(classifier).__name__
+            prefix = (
+                DEFAULT_VERDICT_COLUMN_PREFIX
+                if classifier.prefix is None
+                else classifier.prefix
+            )
+            reserved = reserved_prefix(prefix)
+            if reserved is not None:
+                raise DataQualityErrorCode.DQC_203.exception(
+                    column=f"{prefix}...",
+                    classifier=name,
+                    prefix=reserved,
+                )
+
             for source, verdict in declared_columns(classifier):
                 sources.setdefault(source, name)
                 if verdict is None:
-                    key = (type(classifier), source)
+                    key = (type(classifier), source, prefix)
                     column = f"inferred from source column '{source}'"
+                    if prefix:
+                        column = f"{column} with prefix '{prefix}'"
                 else:
-                    prefix = reserved_prefix(verdict)
-                    if prefix is not None:
+                    dq_column = f"{prefix}{verdict}"
+                    reserved = reserved_prefix(dq_column)
+                    if reserved is not None:
                         raise DataQualityErrorCode.DQC_203.exception(
-                            column=verdict,
+                            column=dq_column,
                             classifier=name,
-                            prefix=prefix,
+                            prefix=reserved,
                         )
-                    if verdict == source:
+                    if dq_column == source:
                         raise DataQualityErrorCode.DQC_204.exception(
                             classifier=name,
-                            column=verdict,
+                            column=dq_column,
                         )
-                    key = verdict
-                    column = f"'{verdict}'"
-                    aliases.setdefault(verdict, (name, source))
+                    key = dq_column
+                    column = f"'{dq_column}'"
+                    aliases.setdefault(dq_column, (name, source))
                 claims.setdefault(key, []).append((name, source, column))
 
         for verdict, (producer, source) in aliases.items():
