@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+from tabsdatak.server._tdserver.render.assess.core import task as task_module
 from tabsdatak.server._tdserver.render.assess.core.provider import Provider
 from tabsdatak.server._tdserver.render.assess.core.schedule import scheduled
 from tabsdatak.server._tdserver.render.assess.core.task import Task
@@ -83,3 +84,26 @@ def test_a_need_on_a_dropped_check_is_dropped_with_it():
 
 def test_no_provider_keeps_every_check():
     assert len(scheduled(plan(), None)) == len(plan())
+
+
+def test_an_enterprise_check_is_dropped_from_the_standard_edition(monkeypatch):
+    monkeypatch.setattr(task_module, "ENTERPRISE", False)
+    wanted = [*plan(), task("Local", "agent", enterprise=True)]
+    assert "Local/agent" not in keys(scheduled(wanted, Provider.AKS))
+
+
+def test_an_enterprise_check_is_kept_in_the_enterprise_edition(monkeypatch):
+    monkeypatch.setattr(task_module, "ENTERPRISE", True)
+    wanted = [*plan(), task("Local", "agent", enterprise=True)]
+    assert "Local/agent" in keys(scheduled(wanted, Provider.AKS))
+
+
+def test_a_need_on_an_enterprise_check_is_dropped_with_it(monkeypatch):
+    monkeypatch.setattr(task_module, "ENTERPRISE", False)
+    wanted = [
+        *plan(),
+        task("Local", "agent", enterprise=True),
+        task("Local", "keys", needs=("Local/agent",)),
+    ]
+    found = needs_of(scheduled(wanted, Provider.AKS), "Local/keys")
+    assert "Local/agent" not in found

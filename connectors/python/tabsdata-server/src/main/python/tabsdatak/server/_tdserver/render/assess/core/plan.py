@@ -406,6 +406,7 @@ TASKS: tuple[Task, ...] = (
         run=coherence.assess_agent_keys,
         tier=Tier.LOCAL,
         providers=EVERY_PROVIDER,
+        enterprise=True,
     ),
     Task(
         concern=CONCERN_DATABASE,

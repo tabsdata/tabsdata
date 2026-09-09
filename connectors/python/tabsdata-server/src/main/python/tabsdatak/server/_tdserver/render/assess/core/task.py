@@ -13,6 +13,7 @@ from tabsdatak.common._interpreter.python.venv import (
     BinaryNotFoundError,
     PythonEnvironment,
 )
+from tabsdatak.extensions.variant.edition import ENTERPRISE
 from tabsdatak.server._tdserver.render.assess import Check, Help, State
 from tabsdatak.server._tdserver.render.assess.core.provider import Provider
 from tabsdatak.server._tdserver.render.assess.core.vantage import Tier
@@ -58,6 +59,7 @@ class Task:
     tier: Tier = Tier.LOCAL
     providers: frozenset[Provider] = field(default_factory=lambda: frozenset(Provider))
     gate: bool = False
+    enterprise: bool = False
     asserts: str = ""
     detail: Callable[[], str] | str = ""
 
@@ -70,6 +72,8 @@ class Task:
         return self.detail() if callable(self.detail) else self.detail
 
     def applies_to(self, provider: Provider | None) -> bool:
+        if self.enterprise and not ENTERPRISE:
+            return False
         return provider is None or provider in self.providers
 
 
