@@ -9,15 +9,11 @@ use chrono::Utc;
 use regex::Regex;
 use tracing::info;
 
-use crate::base::constants::{
-    FOREIGN_ASSETS, Family, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
-};
+use crate::base::constants::{FOREIGN_ASSETS, Family, KPROFILE_ASSETS_FAMILY};
 use crate::base::error::upgrade::UpgradeError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::configmap::{
-    delete_configmap, exists_configmap, get_configmap, upsert_configmap,
-};
+use crate::kube::api::configmap::upsert_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::Manifest;
 use crate::runtime::instance::profile::resolve_foreign_path;
@@ -27,34 +23,40 @@ use crate::runtime::instance::upgrade::spec::{
     Action, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf, NestChildrenIfFlat,
     Operation, Placement, Scope,
 };
+use crate::runtime::instance::upgrade::store::Store;
 
 pub struct Outcome {
     pub applied: usize,
     pub stamped: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Applied {
+    Stamped(bool),
+    Dropped,
+}
+
+impl Applied {
+    pub fn changed(&self) -> bool {
+        match self {
+            Self::Stamped(touched) => *touched,
+            Self::Dropped => true,
+        }
+    }
+}
+
 pub async fn apply_step(
-    context: &KubeContext,
+    store: &dyn Store,
     root: &Path,
     version: &str,
     step: &Step,
-    manifest: &mut Manifest,
-) -> CommandResult<bool> {
-    let family = family_of(step.folder)?;
-    let id = id_from_file(&step.file);
-    let name = to_kube_resource_name(family.scope, id, family.kind, &step.file)?;
-    let now = Utc::now();
-
+) -> CommandResult<Applied> {
     match &step.action {
-        Action::Retain(_) => {
-            manifest.stamp_entry(&step.entry, version, now, false);
-            Ok(false)
-        }
+        Action::Retain(_) => Ok(Applied::Stamped(false)),
         Action::Create(_) | Action::Replace(_) => {
             let content = read_content(root, version, step.folder, &step.variant)?;
-            write_configmap(context, &name, &step.file, content, family, version).await?;
-            manifest.stamp_entry(&step.entry, version, now, true);
-            Ok(true)
+            store.write(step, content).await?;
+            Ok(Applied::Stamped(true))
         }
         Action::Merge(_) => Err(UpgradeError::MergeNotImplemented {
             version: version.to_owned(),
@@ -62,33 +64,21 @@ pub async fn apply_step(
         }
         .into()),
         Action::Delete(_) => {
-            if exists_configmap(context, &name).await? {
-                delete_configmap(context, &name).await?;
-            }
-            manifest.drop_entry(&step.entry, now);
-            Ok(true)
+            store.remove(step).await?;
+            Ok(Applied::Dropped)
         }
         Action::Modify { changes } => {
-            let Some(data) = get_configmap(context, &name).await? else {
+            let Some(current) = store.read(step).await? else {
                 return Err(UpgradeError::ModifyTargetMissing {
                     version: version.to_owned(),
                     entry: step.entry.clone(),
-                    configmap: name,
+                    configmap: store.locate(step)?,
                 }
                 .into());
             };
-            let Some(current) = data.get(&step.file) else {
-                return Err(UpgradeError::ModifyTargetMissing {
-                    version: version.to_owned(),
-                    entry: step.entry.clone(),
-                    configmap: format!("{name}/{}", step.file),
-                }
-                .into());
-            };
-            let (content, touched) = modify(version, &step.entry, current, changes)?;
-            write_configmap(context, &name, &step.file, content, family, version).await?;
-            manifest.stamp_entry(&step.entry, version, now, touched);
-            Ok(touched)
+            let (content, touched) = modify(version, &step.entry, &current, changes)?;
+            store.write(step, content).await?;
+            Ok(Applied::Stamped(touched))
         }
     }
 }
@@ -151,23 +141,7 @@ async fn write_configmap(
     Ok(())
 }
 
-fn family_of(folder: &str) -> CommandResult<&'static Family> {
-    for family in [
-        &KPROFILE_ASSETS_FAMILY,
-        &KPROFILE_CONFIGS_FAMILY,
-        &KPROFILE_PODS_FAMILY,
-    ] {
-        if family.folder == folder {
-            return Ok(family);
-        }
-    }
-    Err(UpgradeError::UnknownFamily {
-        folder: folder.to_owned(),
-    }
-    .into())
-}
-
-fn modify(
+pub(super) fn modify(
     version: &str,
     entry: &str,
     current: &str,

@@ -9,6 +9,8 @@ pub mod hop;
 pub mod inventory;
 pub mod latch;
 pub mod lock;
+pub mod offline;
 pub mod plan;
 pub mod preflight;
 pub mod spec;
+pub mod store;

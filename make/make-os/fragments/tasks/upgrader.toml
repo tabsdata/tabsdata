@@ -1,0 +1,40 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[tasks.__os__upgrader]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    command = set ""
+    arguments = split ${CARGO_MAKE_TASK_ARGS} " "
+    for argument in ${arguments}
+        if not is_empty ${argument}
+            if not eq ${argument} "check"
+                if not eq ${argument} "build"
+                    error "Unknown argument '${argument}'. Expected 'check' or 'build'."
+                    exit 1
+                end
+            end
+            if not is_empty ${command}
+                error "Too many commands. Pass exactly one of 'check' or 'build'."
+                exit 1
+            end
+            command = set ${argument}
+        end
+    end
+
+    if is_empty ${command}
+        error "Missing command. Run 'cargo make upgrader check' or 'cargo make upgrader build'."
+        exit 1
+    end
+
+    debug "🚀 tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER}"
+    exec --fail-on-error tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER}
+    ''']

@@ -3,8 +3,11 @@
 //
 
 use super::*;
-use crate::base::constants::TABSDATA_REQUIREMENTS_LOCK_ASSET;
+use crate::base::constants::{
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, TABSDATA_REQUIREMENTS_LOCK_ASSET,
+};
 use crate::runtime::instance::upgrade::spec::NestChildrenIfFlat;
+use crate::runtime::instance::upgrade::store::family_of;
 
 fn operation(leaf: &str, from: serde_yaml::Value, to: serde_yaml::Value) -> Operation {
     Operation::ModifyLeafValueIf(ModifyLeafValueIf {
@@ -862,7 +865,7 @@ database_server:
 
 #[test]
 fn the_shipped_spec_carries_a_2_0_2_apiserver_config_to_the_2_1_0_shape() {
-    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database.yaml");
+    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database_docker.yaml");
     let (rendered, touched) = applied(APISERVER_DATABASE_2_0_2, &changes);
     assert!(touched);
     assert_eq!(
@@ -875,7 +878,7 @@ fn the_shipped_spec_carries_a_2_0_2_apiserver_config_to_the_2_1_0_shape() {
 
 #[test]
 fn the_shipped_spec_carries_a_2_0_2_dbmanager_config_to_the_2_1_0_shape() {
-    let changes = shipped_changes("dbmanager.database.yaml", "dbmanager.database.yaml");
+    let changes = shipped_changes("dbmanager.database.yaml", "dbmanager.database_docker.yaml");
     let (rendered, touched) = applied(DBMANAGER_DATABASE_2_0_2, &changes);
     assert!(touched);
     let document = parsed(&rendered);
@@ -896,7 +899,7 @@ fn the_shipped_spec_carries_a_2_0_2_dbmanager_config_to_the_2_1_0_shape() {
 
 #[test]
 fn the_shipped_spec_is_idempotent_over_an_upgraded_config() {
-    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database.yaml");
+    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database_docker.yaml");
     let (once, _) = applied(APISERVER_DATABASE_2_0_2, &changes);
     let (twice, touched) = applied(&once, &changes);
     assert!(!touched);

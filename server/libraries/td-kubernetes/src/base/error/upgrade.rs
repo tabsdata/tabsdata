@@ -223,4 +223,17 @@ pub enum UpgradeError {
     } = 5345,
     #[error("Could not read the foreign asset at '{path}': {cause}.")]
     ForeignAssetReadFailed { path: String, cause: String } = 5355,
+    #[error("Could not read the kprofile file at '{path}': {cause}.")]
+    OfflineSourceReadFailed { path: String, cause: String } = 5356,
+    #[error("Could not write the upgraded file at '{path}': {cause}.")]
+    OfflineTargetWriteFailed { path: String, cause: String } = 5357,
+    #[error(
+        "The upgrade to '{version}' modifies '{entry}', but the kprofile file '{path}' does \
+         not exist."
+    )]
+    OfflineTargetMissing {
+        version: String,
+        entry: String,
+        path: String,
+    } = 5358,
 }

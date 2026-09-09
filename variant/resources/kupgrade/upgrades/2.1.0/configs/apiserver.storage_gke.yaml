@@ -1,0 +1,21 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+storage:
+  mounts:
+  - id: ROOT
+    path: /
+    uri: ${{secret}}
+    options:
+      google_service_account_key: ${{secret}}
+  - id: BUNDLES
+    path: /bundles
+    uri: ${{secret}}
+    options:
+      google_service_account_key: ${{secret}}
+  - id: IMAGES
+    path: /images
+    uri: ${{secret}}
+    options:
+      google_service_account_key: ${{secret}}

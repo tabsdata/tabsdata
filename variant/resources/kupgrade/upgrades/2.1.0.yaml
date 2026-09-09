@@ -3,9 +3,24 @@
 #
 
 schema: 1
+assets:
+  venvbuilder.py:
+    venvbuilder.py:
+      action: replace
+  venvbuilder.sh:
+    venvbuilder.sh:
+      action: replace
+  venvloader.py:
+    venvloader.py:
+      action: replace
+  venvloader.sh:
+    venvloader.sh:
+      action: replace
 configs:
   apiserver.database.yaml:
-    apiserver.database.yaml:
+    apiserver.database_aks.yaml:
+      action: create
+    apiserver.database_docker.yaml:
       action: modify
       changes:
         - op: nest-children-if-flat
@@ -22,8 +37,100 @@ configs:
             max_lifetime: 3600
             idle_timeout: 60
             test_before_acquire: true
+    apiserver.database_eks.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database.apiserver.pool
+          under: regular
+        - op: insert-sibling-if-existing
+          leaf: database.apiserver.pool.regular
+          sibling: exclusive
+          placement: after
+          value:
+            min_connections: 1
+            max_connections: 10
+            acquire_timeout: 30
+            max_lifetime: 3600
+            idle_timeout: 60
+            test_before_acquire: true
+    apiserver.database_fargate.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database.apiserver.pool
+          under: regular
+        - op: insert-sibling-if-existing
+          leaf: database.apiserver.pool.regular
+          sibling: exclusive
+          placement: after
+          value:
+            min_connections: 1
+            max_connections: 10
+            acquire_timeout: 30
+            max_lifetime: 3600
+            idle_timeout: 60
+            test_before_acquire: true
+    apiserver.database_gke.yaml:
+      action: create
+    apiserver.database_kminus.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database.apiserver.pool
+          under: regular
+        - op: insert-sibling-if-existing
+          leaf: database.apiserver.pool.regular
+          sibling: exclusive
+          placement: after
+          value:
+            min_connections: 1
+            max_connections: 10
+            acquire_timeout: 30
+            max_lifetime: 3600
+            idle_timeout: 60
+            test_before_acquire: true
+  apiserver.service.yaml:
+    apiserver.service_aks.yaml:
+      action: create
+    apiserver.service_docker.yaml:
+      action: retain
+    apiserver.service_eks.yaml:
+      action: retain
+    apiserver.service_fargate.yaml:
+      action: retain
+    apiserver.service_gke.yaml:
+      action: create
+    apiserver.service_kminus.yaml:
+      action: retain
+  apiserver.storage.schema.yaml:
+    apiserver.storage.schema.yaml:
+      action: replace
+    apiserver.storage.schema_aks.yaml:
+      action: create
+    apiserver.storage.schema_eks.yaml:
+      action: replace
+    apiserver.storage.schema_fargate.yaml:
+      action: replace
+    apiserver.storage.schema_gke.yaml:
+      action: create
+  apiserver.storage.yaml:
+    apiserver.storage_aks.yaml:
+      action: create
+    apiserver.storage_docker.yaml:
+      action: retain
+    apiserver.storage_eks.yaml:
+      action: retain
+    apiserver.storage_fargate.yaml:
+      action: retain
+    apiserver.storage_gke.yaml:
+      action: create
+    apiserver.storage_kminus.yaml:
+      action: retain
   dbmanager.database.yaml:
-    dbmanager.database.yaml:
+    dbmanager.database_aks.yaml:
+      action: create
+    dbmanager.database_docker.yaml:
       action: modify
       changes:
         - op: nest-children-if-flat
@@ -33,3 +140,237 @@ configs:
           leaf: database_server.pool.admin.max_connections
           from: 2
           to: 1
+    dbmanager.database_eks.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database_server.pool
+          under: admin
+        - op: modify-leaf-value-if
+          leaf: database_server.pool.admin.max_connections
+          from: 2
+          to: 1
+    dbmanager.database_fargate.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database_server.pool
+          under: admin
+        - op: modify-leaf-value-if
+          leaf: database_server.pool.admin.max_connections
+          from: 2
+          to: 1
+    dbmanager.database_gke.yaml:
+      action: create
+    dbmanager.database_kminus.yaml:
+      action: modify
+      changes:
+        - op: nest-children-if-flat
+          leaf: database_server.pool
+          under: admin
+        - op: modify-leaf-value-if
+          leaf: database_server.pool.admin.max_connections
+          from: 2
+          to: 1
+  tabsdata.yaml:
+    tabsdata_aks.yaml:
+      action: create
+    tabsdata_docker.yaml:
+      action: retain
+    tabsdata_eks.yaml:
+      action: retain
+    tabsdata_fargate.yaml:
+      action: retain
+    tabsdata_gke.yaml:
+      action: create
+    tabsdata_kminus.yaml:
+      action: retain
+pods:
+  apiserver-endpoint.yaml:
+    apiserver-endpoint_aks.yaml:
+      action: create
+    apiserver-endpoint_docker.yaml:
+      action: retain
+    apiserver-endpoint_eks.yaml:
+      action: retain
+    apiserver-endpoint_fargate.yaml:
+      action: retain
+    apiserver-endpoint_gke.yaml:
+      action: create
+  apiserver.yaml:
+    apiserver_aks.yaml:
+      action: create
+    apiserver_docker.yaml:
+      action: replace
+    apiserver_eks.yaml:
+      action: replace
+    apiserver_fargate.yaml:
+      action: replace
+    apiserver_gke.yaml:
+      action: create
+    apiserver_kminus.yaml:
+      action: replace
+  cron-publisher.yaml:
+    cron-publisher_aks.yaml:
+      action: create
+    cron-publisher_docker.yaml:
+      action: replace
+    cron-publisher_eks.yaml:
+      action: replace
+    cron-publisher_fargate.yaml:
+      action: replace
+    cron-publisher_gke.yaml:
+      action: create
+    cron-publisher_kminus.yaml:
+      action: retain
+  database.yaml:
+    database_kminus.yaml:
+      action: replace
+  dbmanager.yaml:
+    dbmanager_aks.yaml:
+      action: create
+    dbmanager_docker.yaml:
+      action: replace
+    dbmanager_eks.yaml:
+      action: replace
+    dbmanager_fargate.yaml:
+      action: replace
+    dbmanager_gke.yaml:
+      action: create
+    dbmanager_kminus.yaml:
+      action: retain
+  disruption.yaml:
+    disruption_aks.yaml:
+      action: create
+    disruption_docker.yaml:
+      action: retain
+    disruption_eks.yaml:
+      action: retain
+    disruption_fargate.yaml:
+      action: retain
+    disruption_gke.yaml:
+      action: create
+  function-publisher.yaml:
+    function-publisher_aks.yaml:
+      action: create
+    function-publisher_docker.yaml:
+      action: replace
+    function-publisher_eks.yaml:
+      action: replace
+    function-publisher_fargate.yaml:
+      action: replace
+    function-publisher_gke.yaml:
+      action: create
+    function-publisher_kminus.yaml:
+      action: replace
+  function-subscriber.yaml:
+    function-subscriber_aks.yaml:
+      action: create
+    function-subscriber_docker.yaml:
+      action: replace
+    function-subscriber_eks.yaml:
+      action: replace
+    function-subscriber_fargate.yaml:
+      action: replace
+    function-subscriber_gke.yaml:
+      action: create
+    function-subscriber_kminus.yaml:
+      action: replace
+  function-transformer.yaml:
+    function-transformer_aks.yaml:
+      action: create
+    function-transformer_docker.yaml:
+      action: replace
+    function-transformer_eks.yaml:
+      action: replace
+    function-transformer_fargate.yaml:
+      action: replace
+    function-transformer_gke.yaml:
+      action: create
+    function-transformer_kminus.yaml:
+      action: replace
+  inspector.yaml:
+    inspector_aks.yaml:
+      action: create
+    inspector_docker.yaml:
+      action: replace
+    inspector_eks.yaml:
+      action: replace
+    inspector_fargate.yaml:
+      action: replace
+    inspector_gke.yaml:
+      action: create
+    inspector_kminus.yaml:
+      action: replace
+  pymanager.yaml:
+    pymanager_aks.yaml:
+      action: create
+    pymanager_docker.yaml:
+      action: replace
+    pymanager_eks.yaml:
+      action: replace
+    pymanager_fargate.yaml:
+      action: replace
+    pymanager_gke.yaml:
+      action: create
+    pymanager_kminus.yaml:
+      action: replace
+  role.yaml:
+    role_aks.yaml:
+      action: create
+    role_docker.yaml:
+      action: retain
+    role_eks.yaml:
+      action: retain
+    role_fargate.yaml:
+      action: retain
+    role_gke.yaml:
+      action: create
+  rolebinding.yaml:
+    rolebinding_aks.yaml:
+      action: create
+    rolebinding_docker.yaml:
+      action: retain
+    rolebinding_eks.yaml:
+      action: retain
+    rolebinding_fargate.yaml:
+      action: retain
+    rolebinding_gke.yaml:
+      action: create
+  serviceaccount.yaml:
+    serviceaccount_aks.yaml:
+      action: create
+    serviceaccount_docker.yaml:
+      action: retain
+    serviceaccount_eks.yaml:
+      action: retain
+    serviceaccount_fargate.yaml:
+      action: retain
+    serviceaccount_gke.yaml:
+      action: create
+  stream-publisher.yaml:
+    stream-publisher_aks.yaml:
+      action: create
+    stream-publisher_docker.yaml:
+      action: replace
+    stream-publisher_eks.yaml:
+      action: replace
+    stream-publisher_fargate.yaml:
+      action: replace
+    stream-publisher_gke.yaml:
+      action: create
+    stream-publisher_kminus.yaml:
+      action: replace
+  venvloader.yaml:
+    venvloader_aks.yaml:
+      action: create
+    venvloader_docker.yaml:
+      action: replace
+    venvloader_eks.yaml:
+      action: replace
+    venvloader_fargate.yaml:
+      action: replace
+    venvloader_gke.yaml:
+      action: create
+    venvloader_kminus.yaml:
+      action: replace

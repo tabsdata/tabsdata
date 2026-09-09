@@ -54,6 +54,10 @@ name = "tdk_kcheck"
 path = "src/tdkkcheck.rs"
 
 [[bin]]
+name = "tdk_kupgrader"
+path = "src/tdkupgrader.rs"
+
+[[bin]]
 name = "tdkserver"
 path = "src/tdkserver.rs"
 

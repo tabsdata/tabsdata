@@ -44,6 +44,7 @@ dependencies = [
     "cryptography==47.0.0",
     "distlib==0.4.0",
     "filelock==3.25.2",
+    "gitpython==3.1.46",
     "griffe==2.1.0",
     "mypy==2.1.0",
     "mypy-extensions==1.1.0",
@@ -82,6 +83,7 @@ tdx-apidocgen = "tabsdatax.generator.apidoc.cli:main"
 tdx-json = "tabsdatax.render.json:main"
 tdx-table = "tabsdatax.render.table:main"
 tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"
+tdx-kupgrader = "tabsdatax.cmake.kupgrader.cli:main"
 tdx-bundle = "tabsdatax.support.bundle:main"
 tdx-copyright = "tabsdatax.support.copyrights:main"
 tdx-harvester-monitor = "tabsdatax.pytesting.plugins.harvester.client:main"

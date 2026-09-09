@@ -17,12 +17,13 @@ use crate::kube::api::{configmap as configmap_api, secret as secret_api};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::{MANIFEST_FILE, Manifest, serialize_manifest};
 use crate::runtime::instance::profile::bundle::Axis;
-use crate::runtime::instance::upgrade::apply::{apply_foreign_assets, apply_step};
+use crate::runtime::instance::upgrade::apply::{Applied, apply_foreign_assets, apply_step};
 use crate::runtime::instance::upgrade::catalog::{load_spec, resolve_kupgrade_path};
 use crate::runtime::instance::upgrade::inventory::Hop;
 use crate::runtime::instance::upgrade::latch::verify;
 use crate::runtime::instance::upgrade::lock::UpgradeLock;
 use crate::runtime::instance::upgrade::plan::plan;
+use crate::runtime::instance::upgrade::store::ConfigmapStore;
 use crate::runtime::instance::version::{InstanceManifest, require_manifest};
 use crate::runtime::provider::Provider;
 
@@ -102,8 +103,20 @@ pub async fn walk(
 
     if hop.upgrader {
         let spec = load_spec(root, &hop.to)?;
+        let store = ConfigmapStore::new(context, &hop.to);
         for step in plan(&spec, axes, preferred) {
-            if apply_step(context, root, &hop.to, &step, &mut read.manifest).await? {
+            let applied = apply_step(&store, root, &hop.to, &step).await?;
+            let now = Utc::now();
+            match applied {
+                Applied::Dropped => {
+                    read.manifest.drop_entry(&step.entry, now);
+                }
+                Applied::Stamped(touched) => {
+                    read.manifest
+                        .stamp_entry(&step.entry, &hop.to, now, touched);
+                }
+            }
+            if applied.changed() {
                 walked.applied += 1;
             } else {
                 walked.retained += 1;

@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use strum::AsRefStr;
 
 use crate::base::error::upgrade::UpgradeError;
 
@@ -29,8 +30,9 @@ struct Probe {
     changes: Option<serde_yaml::Value>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, AsRefStr)]
 #[serde(tag = "action", rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum Action {
     Retain(Bare),
     Create(Bare),

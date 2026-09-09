@@ -32,6 +32,7 @@ names = [
   # "td_transporter1",
     "tdkserver",
     "tdk_kcheck",
+    "tdk_kupgrader",
   # "tdserver",
 ]
 
