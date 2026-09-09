@@ -62,7 +62,7 @@ def entries_of(text: str) -> list[Entry]:
 
 
 def indexed(entries: list[Entry]) -> dict[str, Entry]:
-    return {entry.name: entry for entry in entries if entry.parsed}
+    return {entry.name: entry for entry in entries if entry.name is not None}
 
 
 def unparsed(entries: list[Entry]) -> list[Entry]:
@@ -72,9 +72,11 @@ def unparsed(entries: list[Entry]) -> list[Entry]:
 def duplicated(entries: list[Entry]) -> list[Entry]:
     seen: dict[str, int] = {}
     for entry in entries:
-        if entry.parsed:
+        if entry.name is not None:
             seen[entry.name] = seen.get(entry.name, 0) + 1
-    return [entry for entry in entries if entry.parsed and seen[entry.name] > 1]
+    return [
+        entry for entry in entries if entry.name is not None and seen[entry.name] > 1
+    ]
 
 
 def synthesize_requirements(previous: str, current: str) -> Synthesis:

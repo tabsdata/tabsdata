@@ -41,7 +41,12 @@ class Generation:
 
     @property
     def previous(self) -> str:
-        return self.preparation.resolution.previous
+        previous = self.preparation.resolution.previous
+        if previous is None:
+            raise ValueError(
+                f"The generation of version '{self.version}' holds no previous version"
+            )
+        return previous
 
 
 def shipped_spec_file(context: Context, version: str) -> Path:

@@ -101,14 +101,14 @@ def prepare(context: Context) -> Preparation | None:
     resolution = resolve(current, entries)
     display_resolution(context, resolution)
 
-    if resolution.exhausted:
+    previous = resolution.previous
+    if previous is None:
         log.warning(
             f"Version '{resolution.current}' is the oldest entry of the inventory. "
             "There is no previous version to upgrade from."
         )
         return None
 
-    previous = resolution.previous
     commit = resolve_tag(context.root_folder, previous)
 
     reset_folder(context.work_folder)

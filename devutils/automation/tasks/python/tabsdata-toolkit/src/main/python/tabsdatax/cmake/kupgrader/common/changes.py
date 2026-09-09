@@ -46,6 +46,11 @@ def synthesize_plans(plans: list[Plan]) -> list[Change]:
             if decision.action is not Action.MODIFY:
                 continue
             variant = decision.variant
+            if variant.previous is None or variant.current is None:
+                raise ValueError(
+                    f"The variant '{variant.name}' of bundle '{plan.name}' is modified "
+                    "but holds no file on both sides"
+                )
             if not variant.parsable:
                 changes.append(
                     Change(
