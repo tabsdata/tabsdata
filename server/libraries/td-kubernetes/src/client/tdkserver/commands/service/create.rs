@@ -171,8 +171,8 @@ pub async fn create_instance(
     }
 
     if details {
-        let markers = instance_markers(&provider.summary(), instance_in_settings);
-        preview::create_service(&provider.summary(), &markers);
+        let markers = instance_markers(&provider.view(), instance_in_settings);
+        preview::create_service(&provider.view(), &markers);
         report_ports(&assigned, settings.provider);
     }
     if !confirm(yes, "Proceed with the creation?")? {
@@ -226,7 +226,7 @@ pub async fn create_instance(
     settings.state = InstanceState::Created;
     settings.save()?;
 
-    report::component::service::created_service(&provider.summary(), with_hint);
+    report::component::service::created_service(&provider.view(), with_hint);
 
     // if provider.cluster_provider().hosts_runtimes()? {
     //     report_venv_activation(&settings.name)?;

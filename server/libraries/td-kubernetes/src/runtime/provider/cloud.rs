@@ -29,6 +29,7 @@ use crate::client::registry::{ClusterViews, init_stage_folder_in, instances_root
 use crate::client::session::settings::{AksInputs, EksInputs, FargateInputs, GkeInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
+use crate::client::tdkserver::render::view::InstanceView;
 use crate::core::system::exit::{CommandResult, abort_with};
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
 use crate::kube::kubeconfig::{
@@ -41,7 +42,6 @@ use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::provider::cloud::cluster::CloudCluster;
 use crate::runtime::provider::cloud::instance::CloudInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
-use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     CloudProvider, Cluster, ClusterProvider, ContainerProvider, Instance, Provider, Transaction,
     handle_phase_secrets,
@@ -237,8 +237,10 @@ impl Provider for CloudKubernetes {
         ContainerProvider::secret_generators(self)
     }
 
-    fn summary(&self) -> Summary {
-        Summary {
+    fn view(&self) -> InstanceView {
+        InstanceView {
+            instance_version: None,
+            instance_edition: None,
             provider: self.provider,
             instance_name: Some(self.name.clone()),
             instance_path: None,
@@ -410,7 +412,7 @@ impl Provider for CloudKubernetes {
 
     async fn ensure_startable_server(&self) -> CommandResult {
         let context = self.kube_context().await?;
-        let instance = self.summary().instance_name.unwrap_or_default();
+        let instance = self.view().instance_name.unwrap_or_default();
         ensure_upgraded(&context, &instance).await?;
         Ok(())
     }

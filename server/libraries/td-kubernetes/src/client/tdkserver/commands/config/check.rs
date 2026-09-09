@@ -85,7 +85,7 @@ pub async fn command_check(arguments: CheckArguments, globals: &GlobalArguments)
     let settings = SettingsContext::settings();
     let instance = resolved_instance(instance, &settings);
     let provider = provider_for_instance_any_state(instance.value, globals.verbose).await?;
-    let name = provider.summary().instance_name.unwrap_or_default();
+    let name = provider.view().instance_name.unwrap_or_default();
 
     let profile = load_profile(provider.cluster_provider(), globals.verbose)?;
 

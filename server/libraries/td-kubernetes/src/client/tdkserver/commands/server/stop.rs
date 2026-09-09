@@ -62,7 +62,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     }
 
     if details {
-        preview::stop_server(&provider.summary());
+        preview::stop_server(&provider.view());
     }
     if !confirm(yes, "Proceed with the stop?")? {
         info!("Operation cancelled.");
@@ -76,7 +76,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     {
         cwarn!("Server is already stopped.");
     } else {
-        report::component::server::stopped_server(&provider.summary());
+        report::component::server::stopped_server(&provider.view());
     }
 
     Ok(())

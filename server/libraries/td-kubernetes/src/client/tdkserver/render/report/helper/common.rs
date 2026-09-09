@@ -6,7 +6,7 @@ use std::path::Path;
 
 use tracing::info;
 
-use crate::runtime::provider::summary::Summary;
+use crate::client::tdkserver::render::view::InstanceView;
 
 pub(crate) const STATUS_RUNNING: &str = "Running";
 pub(crate) const STATUS_STOPPED: &str = "Stopped";
@@ -29,17 +29,17 @@ pub(crate) fn kubeconfig_export_command(kubeconfig: &Path) -> String {
     }
 }
 
-pub(crate) fn render_session_lines(summary: &Summary) {
-    if let Some(kubeconfig) = &summary.kubeconfig_path {
+pub(crate) fn render_session_lines(view: &InstanceView) {
+    if let Some(kubeconfig) = &view.kubeconfig_path {
         info!("  - kubeconfig...: {}", kubeconfig.display());
     }
-    if let Some(context) = &summary.context {
+    if let Some(context) = &view.context {
         info!("  - context......: {context}");
     }
-    if let Some(cluster_name) = &summary.cluster_name {
+    if let Some(cluster_name) = &view.cluster_name {
         info!("  - cluster......: {cluster_name}");
     }
-    if let Some(namespace) = &summary.namespace {
+    if let Some(namespace) = &view.namespace {
         info!("  - namespace....: {namespace}");
     }
 }

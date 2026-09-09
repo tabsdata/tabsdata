@@ -11,10 +11,11 @@ pub enum CheckState {
     #[serde(rename = "ko")]
     Failed,
     #[serde(rename = "warn")]
-    #[allow(dead_code)]
     Warning,
     #[serde(rename = "skip")]
     Skipped,
+    #[serde(rename = "waive")]
+    Waived,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -84,5 +85,53 @@ impl AssessCheck {
             help: Vec::new(),
             url: None,
         }
+    }
+
+    pub fn waived(
+        concern: &'static str,
+        check: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            concern,
+            check: check.into(),
+            state: CheckState::Waived,
+            seconds: 0.0,
+            code: None,
+            title: Some(reason.into()),
+            facts: Vec::new(),
+            help: Vec::new(),
+            url: None,
+        }
+    }
+
+    pub fn failed(
+        concern: &'static str,
+        check: impl Into<String>,
+        seconds: f64,
+        code: &'static str,
+        title: impl Into<String>,
+    ) -> Self {
+        Self {
+            concern,
+            check: check.into(),
+            state: CheckState::Failed,
+            seconds,
+            code: Some(code),
+            title: Some(title.into()),
+            facts: Vec::new(),
+            help: Vec::new(),
+            url: None,
+        }
+    }
+
+    pub fn with_facts(mut self, facts: Vec<String>) -> Self {
+        self.facts = facts;
+        self
+    }
+
+    pub fn with_help(mut self, help: Vec<AssessHelp>) -> Self {
+        self.help = help;
+        self
     }
 }

@@ -260,30 +260,7 @@ pub fn fuse(
     stage: &Path,
 ) -> Result<FusedSecrets, ResolverError> {
     wipe_stage(stage)?;
-    compare_family(
-        init,
-        KPROFILE_PODS_FAMILY.folder,
-        &profile.pods,
-        true,
-        &[],
-        &[],
-    )?;
-    compare_family(
-        init,
-        KPROFILE_ASSETS_FAMILY.folder,
-        &profile.assets,
-        true,
-        CUSTOMIZABLE_ASSETS,
-        FOREIGN_ASSETS,
-    )?;
-    compare_family(
-        init,
-        KPROFILE_CONFIGS_FAMILY.folder,
-        &profile.configs,
-        false,
-        &[],
-        &[],
-    )?;
+    compare_families(profile, init)?;
     stage_pods_files(profile, stage)?;
     stage_assets_files(profile, init, stage)?;
     let secrets = resolve_configs_files(profile, system, auto, init, stage)?;
@@ -443,6 +420,33 @@ fn wipe_stage(stage: &Path) -> Result<(), ResolverError> {
         path: stage.display().to_string(),
         cause: cause.to_string(),
     })
+}
+
+pub fn compare_families(profile: &Profile, init: &Path) -> Result<(), ResolverError> {
+    compare_family(
+        init,
+        KPROFILE_PODS_FAMILY.folder,
+        &profile.pods,
+        true,
+        &[],
+        &[],
+    )?;
+    compare_family(
+        init,
+        KPROFILE_ASSETS_FAMILY.folder,
+        &profile.assets,
+        true,
+        CUSTOMIZABLE_ASSETS,
+        FOREIGN_ASSETS,
+    )?;
+    compare_family(
+        init,
+        KPROFILE_CONFIGS_FAMILY.folder,
+        &profile.configs,
+        false,
+        &[],
+        &[],
+    )
 }
 
 fn compare_family(

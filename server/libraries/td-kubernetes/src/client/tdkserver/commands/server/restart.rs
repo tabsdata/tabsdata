@@ -65,7 +65,7 @@ pub async fn command_restart(
     }
 
     if details {
-        preview::restart_server(&provider.summary());
+        preview::restart_server(&provider.view());
     }
     if !confirm(yes, "Proceed with the restart?")? {
         info!("Operation cancelled.");
@@ -88,14 +88,14 @@ pub async fn restart_server(
         {
             cwarn!("Server was already stopped.");
         } else {
-            report::component::server::stopped_server(&provider.summary());
+            report::component::server::stopped_server(&provider.view());
         }
     } else {
         cwarn!("Server was already stopped; starting it.");
     }
 
     provider.start_server(reporter).await?;
-    report::component::server::restarted_server(&provider.summary());
+    report::component::server::restarted_server(&provider.view());
 
     Ok(())
 }

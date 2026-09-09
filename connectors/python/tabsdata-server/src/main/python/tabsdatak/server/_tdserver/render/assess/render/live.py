@@ -26,7 +26,9 @@ from tabsdatak.server._tdserver.render.assess import (
     State,
     titled,
 )
-from tabsdatak.server._tdserver.render.assess.task import (
+from tabsdatak.server._tdserver.render.assess.core.provider import provider_of
+from tabsdatak.server._tdserver.render.assess.core.schedule import scheduled
+from tabsdatak.server._tdserver.render.assess.core.task import (
     Target,
     Task,
     TaskError,
@@ -133,6 +135,7 @@ def assess(
     tasks: Sequence[Task], target: Target, console: Console
 ) -> tuple[list[Check], float]:
     width = console.width
+    tasks = scheduled(tasks, provider_of(target.provider))
     rows = {task.key: Row(task) for task in tasks}
 
     concerns: dict[str, list[Task]] = {}
@@ -174,7 +177,7 @@ def assess(
             unmet = [
                 rows[need].task.check
                 for need in task.needs
-                if settled[need] is not State.PASSED
+                if settled[need] not in (State.PASSED, State.WAIVED)
             ]
         if unmet:
             outcome = skipped(task, unmet)

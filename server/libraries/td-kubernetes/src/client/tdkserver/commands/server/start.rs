@@ -61,7 +61,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     }
 
     if details {
-        preview::start_server(&provider.summary());
+        preview::start_server(&provider.view());
     }
     if !confirm(yes, "Proceed with the start?")? {
         return abort(Cancelled);
@@ -69,7 +69,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
 
     let reporter = InteractiveReporter::new();
     provider.start_server(&reporter).await?;
-    report::component::server::started_server(&provider.summary());
+    report::component::server::started_server(&provider.view());
 
     Ok(())
 }

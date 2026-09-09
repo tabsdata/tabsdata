@@ -124,7 +124,7 @@ pub async fn command_venv_update(
     let verbose = globals.verbose;
 
     let provider = provider_for_instance_mutating(instance.value, verbose, None).await?;
-    let instance_name = provider.summary().instance_name.unwrap_or_default();
+    let instance_name = provider.view().instance_name.unwrap_or_default();
     let asset = name.requirements_asset();
     let quiesces = provider.cluster_provider() == ClusterProvider::Kminus;
 
@@ -286,7 +286,7 @@ async fn restore(
     if standing.instance {
         provider.ensure_startable_service().await?;
         provider.start_service(reporter).await?;
-        report::component::service::started_service(&provider.summary());
+        report::component::service::started_service(&provider.view());
     } else if !standing.cluster {
         provider.stop_cluster(reporter).await?;
     }

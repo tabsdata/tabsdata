@@ -100,8 +100,8 @@ pub async fn command_delete(
     let provider = provider_for_instance_mutating_any_state(instance.value, verbose).await?;
 
     if details.value {
-        let markers = instance_markers(&provider.summary(), instance.in_settings);
-        preview::delete_service(&provider.summary(), &markers, trash);
+        let markers = instance_markers(&provider.view(), instance.in_settings);
+        preview::delete_service(&provider.view(), &markers, trash);
     }
     if !confirm(yes.value, "Proceed with the deletion?")? {
         info!("Operation cancelled.");
@@ -131,7 +131,7 @@ pub async fn command_delete(
     settings.state = InstanceState::Initialized;
     settings.save()?;
 
-    report::component::service::deleted_service(&provider.summary());
+    report::component::service::deleted_service(&provider.view());
 
     if trash {
         let folder = instance_folder(&name)?;

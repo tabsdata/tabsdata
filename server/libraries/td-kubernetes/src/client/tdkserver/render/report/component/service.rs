@@ -12,7 +12,7 @@ use crate::base::constants::{DEFAULT_LOG_LEVEL, INIT_FOLDER, INPUT_FOLDER};
 #[cfg(feature = "enterprise")]
 use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{InstanceSettings, fn_venv_activate_file, td_venv_activate_file};
-use crate::client::tdkserver::render::preview::render_summary_lines;
+use crate::client::tdkserver::render::preview::render_view_lines;
 use crate::client::tdkserver::render::report::helper::common::{
     ABSENT_CELL, STATUS_RUNNING, STATUS_STOPPED, UNGATHERED_CELL, activation_command,
     kubeconfig_export_command, render_session_lines,
@@ -20,11 +20,11 @@ use crate::client::tdkserver::render::report::helper::common::{
 use crate::client::tdkserver::render::report::helper::table::{
     ReportColumn, ReportTable, STATUS_COLOR_SCHEME, render_tables,
 };
+use crate::client::tdkserver::render::view::InstanceView;
 use crate::client::tdkserver::widgets::show_hint;
 use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::ports::{AssignedPort, apiserver_public_port, database_port};
 use crate::runtime::provider::ClusterProvider;
-use crate::runtime::provider::summary::Summary;
 
 fn list_columns() -> [ReportColumn<'static>; 9] {
     [
@@ -147,9 +147,11 @@ fn version_cell(settings: &InstanceSettings) -> String {
 
 pub fn instance_inspect(settings: &InstanceSettings, folder: &Path, alive: Option<bool>) {
     let resolved = &settings.cluster.resolved;
-    let summary = Summary {
+    let view = InstanceView {
         provider: settings.provider,
         instance_name: Some(settings.name.clone()),
+        instance_version: Some(settings.version.clone()),
+        instance_edition: Some(settings.edition.clone()),
         instance_path: Some(folder.to_path_buf()),
         kubeconfig_path: resolved.kubeconfig.clone(),
         context: resolved.context.clone(),
@@ -170,8 +172,7 @@ pub fn instance_inspect(settings: &InstanceSettings, folder: &Path, alive: Optio
     info!("  - state........: {}", settings.state.as_str());
     info!("  - status.......: {status}");
     info!("  - locality.....: {}", settings.locality.as_str());
-    info!("  - version......: {}", version_cell(settings));
-    render_summary_lines(&summary);
+    render_view_lines(&view);
     info!("Assigned ports:");
     for entry in &settings.ports {
         info!("  - {}: {}", entry.caption, entry.port);
@@ -195,27 +196,27 @@ pub fn instance_inspect(settings: &InstanceSettings, folder: &Path, alive: Optio
         }
     }
 
-    if let Some(kubeconfig) = &summary.kubeconfig_path {
+    if let Some(kubeconfig) = &view.kubeconfig_path {
         info!("Kubectl access:");
         info!("  {}", kubeconfig_export_command(kubeconfig));
     }
 }
 
-pub fn created_service(summary: &Summary, with_hint: bool) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn created_service(view: &InstanceView, with_hint: bool) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!("Created tabsdata instance '{name}' at {}.", path.display());
         } else {
             info!("Created tabsdata instance '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Created tabsdata instance in namespace '{namespace}'.");
     } else {
         info!("Created tabsdata instance.");
     }
-    render_session_lines(summary);
+    render_session_lines(view);
     if with_hint {
-        match &summary.instance_name {
+        match &view.instance_name {
             Some(name) => show_hint(
                 &format!("Run 'tdkserver start --instance {name}' to start the instance."),
                 80,
@@ -226,54 +227,54 @@ pub fn created_service(summary: &Summary, with_hint: bool) {
     }
 }
 
-pub fn started_service(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn started_service(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!("Started tabsdata instance '{name}' at {}.", path.display());
         } else {
             info!("Started tabsdata instance '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Started tabsdata instance in namespace '{namespace}'.");
     } else {
         info!("Started tabsdata instance.");
     }
-    render_session_lines(summary);
-    if let Some(kubeconfig) = &summary.kubeconfig_path {
+    render_session_lines(view);
+    if let Some(kubeconfig) = &view.kubeconfig_path {
         info!("To use kubectl against this cluster, run:");
         info!("  {}", kubeconfig_export_command(kubeconfig));
     }
 }
 
-pub fn deleted_service(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
+pub fn deleted_service(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
         info!("Deleted tabsdata instance '{name}'. Its configuration is kept for a new create.");
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Deleted tabsdata instance in namespace '{namespace}'.");
     } else {
         info!("Deleted tabsdata instance.");
     }
-    render_session_lines(summary);
+    render_session_lines(view);
 }
 
-pub fn stopped_service(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn stopped_service(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!("Stopped tabsdata instance '{name}' at {}.", path.display());
         } else {
             info!("Stopped tabsdata instance '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Stopped tabsdata instance in namespace '{namespace}'.");
     } else {
         info!("Stopped tabsdata instance.");
     }
-    render_session_lines(summary);
+    render_session_lines(view);
 }
 
-pub fn restarted_service(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn restarted_service(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!(
                 "Restarted tabsdata instance '{name}' at {}.",
                 path.display()
@@ -281,12 +282,12 @@ pub fn restarted_service(summary: &Summary) {
         } else {
             info!("Restarted tabsdata instance '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Restarted tabsdata instance in namespace '{namespace}'.");
     } else {
         info!("Restarted tabsdata instance.");
     }
-    render_session_lines(summary);
+    render_session_lines(view);
 }
 
 pub fn initialized_service(settings: &InstanceSettings, with_hint: bool) {
@@ -303,9 +304,11 @@ pub fn initialized_service(settings: &InstanceSettings, with_hint: bool) {
         }
     }
     let resolved = &settings.cluster.resolved;
-    let summary = Summary {
+    let view = InstanceView {
         provider: settings.provider,
         instance_name: Some(settings.name.clone()),
+        instance_version: Some(settings.version.clone()),
+        instance_edition: Some(settings.edition.clone()),
         instance_path: None,
         kubeconfig_path: resolved.kubeconfig.clone(),
         context: resolved.context.clone(),
@@ -314,7 +317,7 @@ pub fn initialized_service(settings: &InstanceSettings, with_hint: bool) {
         namespace: resolved.namespace.clone(),
         loglevel: None,
     };
-    render_summary_lines(&summary);
+    render_view_lines(&view);
     if with_hint {
         let input = settings.folder.join(INIT_FOLDER).join(INPUT_FOLDER);
         show_hint(

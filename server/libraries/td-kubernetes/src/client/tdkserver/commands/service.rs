@@ -26,7 +26,7 @@ use crate::base::trace;
 use crate::client::session::settings::{Resolved, Settings, resolve, resolve_flag};
 use crate::client::tdkserver::arguments::ClusterArguments;
 use crate::client::tdkserver::render::preview::SettingsMarkers;
-use crate::runtime::provider::summary::Summary;
+use crate::client::tdkserver::render::view::InstanceView;
 
 #[derive(Debug, Clone, Default)]
 pub struct ClusterSet {
@@ -68,15 +68,15 @@ pub fn resolved_save(user: Option<bool>, settings: &Settings) -> Resolved<bool> 
     resolve_flag(user, settings.save, false)
 }
 
-pub fn instance_markers(summary: &Summary, instance_in_settings: bool) -> SettingsMarkers {
+pub fn instance_markers(view: &InstanceView, instance_in_settings: bool) -> SettingsMarkers {
     SettingsMarkers {
-        instance_name: instance_in_settings && summary.instance_name.is_some(),
+        instance_name: instance_in_settings && view.instance_name.is_some(),
         ..SettingsMarkers::default()
     }
 }
 
-pub fn instance_label(summary: &Summary) -> &str {
-    summary.instance_name.as_deref().unwrap_or(DEFAULT_INSTANCE)
+pub fn instance_label(view: &InstanceView) -> &str {
+    view.instance_name.as_deref().unwrap_or(DEFAULT_INSTANCE)
 }
 
 pub fn resolved_cluster(

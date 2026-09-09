@@ -15,6 +15,7 @@ use crate::client::tdkserver::commands::service::{
     instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
 use crate::client::tdkserver::common::confirm_at_leisure;
+use crate::client::tdkserver::render::view::InstanceView;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::context::KubeContext;
@@ -22,7 +23,6 @@ use crate::runtime::instance::upgrade::hop;
 use crate::runtime::instance::upgrade::latch;
 use crate::runtime::instance::upgrade::lock::UpgradeLock;
 use crate::runtime::instance::upgrade::preflight::{Preflight, Standing, inspect};
-use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_upgrading};
 
 struct Phases {
@@ -138,8 +138,8 @@ pub async fn command_upgrade(
     let verbose = globals.verbose;
 
     let provider = provider_for_instance_upgrading(instance.value, verbose).await?;
-    let summary = provider.summary();
-    let instance_name = summary.instance_name.clone().unwrap_or_default();
+    let view = provider.view();
+    let instance_name = view.instance_name.clone().unwrap_or_default();
     let reporter = InteractiveReporter::new();
     let kminus = provider.cluster_provider() == ClusterProvider::Kminus;
     let cluster_start = kminus && !provider.cluster_alive().await;
@@ -147,7 +147,7 @@ pub async fn command_upgrade(
 
     if !instance_confirmation_phase(
         &phases,
-        &summary,
+        &view,
         instance.in_settings,
         details.value,
         yes.value,
@@ -216,15 +216,15 @@ pub async fn command_upgrade(
 
 fn instance_confirmation_phase(
     phases: &Phases,
-    summary: &Summary,
+    view: &InstanceView,
     in_settings: bool,
     details: bool,
     yes: bool,
 ) -> CommandResult<bool> {
     phases.announce("Instance confirmation");
     if details {
-        let markers = instance_markers(summary, in_settings);
-        preview::upgrade_service(summary, &markers);
+        let markers = instance_markers(view, in_settings);
+        preview::upgrade_service(view, &markers);
     }
     let accepted = confirm_at_leisure(yes, "Proceed with the upgrade of this instance?")?;
     if !accepted {
@@ -439,7 +439,7 @@ async fn instance_restart_phase(
         return Ok(false);
     }
     provider.start_service(reporter).await?;
-    report::component::service::started_service(&provider.summary());
+    report::component::service::started_service(&provider.view());
     Ok(true)
 }
 

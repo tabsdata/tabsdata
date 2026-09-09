@@ -62,7 +62,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     }
 
     if details {
-        preview::stop_instance(&provider.summary());
+        preview::stop_instance(&provider.view());
     }
     if !confirm(yes, "Proceed with the stop?")? {
         info!("Operation cancelled.");
@@ -72,7 +72,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     let reporter = InteractiveReporter::new();
     match provider.stop_instance(&reporter).await? {
         InstanceStopOutcome::Stopped => {
-            report::component::instance::stopped_instance(&provider.summary())
+            report::component::instance::stopped_instance(&provider.view())
         }
         InstanceStopOutcome::AlreadyStopped => cwarn!("Nothing to stop."),
     }

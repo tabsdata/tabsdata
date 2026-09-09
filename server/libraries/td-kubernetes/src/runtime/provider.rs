@@ -11,7 +11,6 @@ pub mod fargate;
 pub mod gke;
 pub mod kminus;
 pub mod outcome;
-pub mod summary;
 
 use std::future::Future;
 
@@ -45,6 +44,7 @@ use crate::runtime::instance::ports::{
 use std::sync::Arc;
 use td_error::TdError;
 
+use crate::client::tdkserver::render::view::InstanceView;
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::configmap::require_configmap;
@@ -67,7 +67,6 @@ use crate::runtime::provider::outcome::{
     ServerStartOutcome, ServerStopOutcome, ServiceRestartOutcome, ServiceStartOutcome,
     ServiceStopOutcome,
 };
-use crate::runtime::provider::summary::Summary;
 use crate::runtime::reporting::build_kube_client;
 use crate::runtime::secrets::settler::{
     auto_fill_generated_secrets, settle_cluster_configs_and_secrets,
@@ -402,7 +401,7 @@ pub trait Provider: Send + Sync {
     fn system_values(&self) -> CommandResult<SystemValues>;
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>>;
 
-    fn summary(&self) -> Summary;
+    fn view(&self) -> InstanceView;
 
     fn cluster_settings(&self, provided: ClusterProperties) -> CommandResult<ClusterSettings>;
     fn cluster_descriptor(&self, settings: ClusterSettings) -> CommandResult<ClusterDescriptor>;
@@ -478,7 +477,7 @@ pub trait Provider: Send + Sync {
             return Ok(InstanceStartOutcome::AlreadyRunning);
         }
         let context = self.kube_context().await?;
-        let instance = self.summary().instance_name.unwrap_or_default();
+        let instance = self.view().instance_name.unwrap_or_default();
         ensure_upgraded(&context, &instance).await?;
         auto_fill_generated_secrets(&context).await?;
         settle_cluster_configs_and_secrets(&context).await?;

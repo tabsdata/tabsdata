@@ -30,6 +30,7 @@ use crate::client::registry::{
 use crate::client::session::settings::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
+use crate::client::tdkserver::render::view::InstanceView;
 use crate::core::system::exit::{CommandResult, abort_with};
 use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
 use crate::kube::kubeconfig::{
@@ -45,7 +46,6 @@ use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::provider::docker::cluster::DockerCluster;
 use crate::runtime::provider::docker::instance::DockerInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
-use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     Cluster, ClusterProvider, ContainerProvider, HostedProvider, Instance, LocalProvider, Provider,
     Transaction, handle_phase_secrets,
@@ -225,8 +225,10 @@ impl Provider for DockerProvider {
         ContainerProvider::secret_generators(self)
     }
 
-    fn summary(&self) -> Summary {
-        Summary {
+    fn view(&self) -> InstanceView {
+        InstanceView {
+            instance_version: None,
+            instance_edition: None,
             provider: ClusterProvider::Docker,
             instance_name: Some(self.name.clone()),
             instance_path: None,
@@ -399,7 +401,7 @@ impl Provider for DockerProvider {
     async fn ensure_startable_server(&self) -> CommandResult {
         self.ensure_published_ports_available()?;
         let context = self.kube_context().await?;
-        let instance = self.summary().instance_name.unwrap_or_default();
+        let instance = self.view().instance_name.unwrap_or_default();
         ensure_upgraded(&context, &instance).await?;
         Ok(())
     }

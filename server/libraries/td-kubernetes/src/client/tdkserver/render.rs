@@ -4,3 +4,4 @@
 
 pub mod preview;
 pub mod report;
+pub mod view;

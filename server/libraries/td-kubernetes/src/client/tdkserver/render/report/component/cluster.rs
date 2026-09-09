@@ -4,23 +4,23 @@
 
 use tracing::info;
 
-use crate::runtime::provider::summary::Summary;
+use crate::client::tdkserver::render::view::InstanceView;
 
-pub fn started_cluster(summary: &Summary) {
-    cluster_line("Started", summary);
+pub fn started_cluster(view: &InstanceView) {
+    cluster_line("Started", view);
 }
 
-pub fn stopped_cluster(summary: &Summary) {
-    cluster_line("Stopped", summary);
+pub fn stopped_cluster(view: &InstanceView) {
+    cluster_line("Stopped", view);
 }
 
-pub fn restarted_cluster(summary: &Summary) {
-    cluster_line("Restarted", summary);
+pub fn restarted_cluster(view: &InstanceView) {
+    cluster_line("Restarted", view);
 }
 
-fn cluster_line(verb: &str, summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+fn cluster_line(verb: &str, view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!(
                 "{verb} kubernetes cluster for instance '{name}' at {}.",
                 path.display()

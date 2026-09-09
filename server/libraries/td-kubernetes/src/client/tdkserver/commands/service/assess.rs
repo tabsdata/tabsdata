@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+pub mod host;
 pub mod local;
 
 use std::process::Command;
@@ -47,6 +48,15 @@ pub struct AssessArguments {
                      tdkserver assess --provider kminus --loglevel info"
     )]
     pub loglevel: Option<LogLevel>,
+
+    #[arg(
+        long,
+        name = "explain",
+        required = false,
+        display_order = 30,
+        long_help = "Explain what every check asks, after the report."
+    )]
+    pub explain: bool,
 }
 
 pub async fn command_assess(
@@ -57,6 +67,7 @@ pub async fn command_assess(
         instance,
         cluster,
         loglevel: _,
+        explain,
     } = arguments;
 
     let settings = SettingsContext::settings();
@@ -84,6 +95,9 @@ pub async fn command_assess(
     }
     if cluster.current {
         command.arg("--current");
+    }
+    if explain {
+        command.arg("--explain");
     }
 
     let status = command

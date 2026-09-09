@@ -7,22 +7,22 @@ use tracing::{info, warn};
 use crate::client::tdkserver::render::report::helper::common::{
     kubeconfig_export_command, render_session_lines,
 };
+use crate::client::tdkserver::render::view::InstanceView;
 use crate::runtime::provider::ClusterProvider;
-use crate::runtime::provider::summary::Summary;
 
-pub fn created_server(summary: &Summary) {
-    if let Some(path) = &summary.instance_path {
+pub fn created_server(view: &InstanceView) {
+    if let Some(path) = &view.instance_path {
         info!("Created tabsdata instance at {}.", path.display());
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Created tabsdata instance in namespace '{namespace}'.");
     } else {
         info!("Created tabsdata instance.");
     }
-    next_steps_after_create(summary);
+    next_steps_after_create(view);
 }
 
-fn next_steps_after_create(summary: &Summary) {
-    let kminus = matches!(summary.provider, ClusterProvider::Kminus);
+fn next_steps_after_create(view: &InstanceView) {
+    let kminus = matches!(view.provider, ClusterProvider::Kminus);
     if kminus {
         warn!("The cluster is now running. Next steps before starting the instance:");
     } else {
@@ -65,51 +65,51 @@ fn next_steps_after_create(summary: &Summary) {
     );
 }
 
-pub fn started_server(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn started_server(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!("Started tabsdata server '{name}' at {}.", path.display());
         } else {
             info!("Started tabsdata server '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Started tabsdata server in namespace '{namespace}'.");
     } else {
         info!("Started tabsdata server.");
     }
-    render_session_lines(summary);
-    if let Some(kubeconfig) = &summary.kubeconfig_path {
+    render_session_lines(view);
+    if let Some(kubeconfig) = &view.kubeconfig_path {
         info!("To use kubectl against this cluster, run:");
         info!("  {}", kubeconfig_export_command(kubeconfig));
     }
 }
 
-pub fn stopped_server(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn stopped_server(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!("Stopped tabsdata server '{name}' at {}.", path.display());
         } else {
             info!("Stopped tabsdata server '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Stopped tabsdata server in namespace '{namespace}'.");
     } else {
         info!("Stopped tabsdata server.");
     }
-    render_session_lines(summary);
+    render_session_lines(view);
 }
 
-pub fn restarted_server(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn restarted_server(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!("Restarted tabsdata server '{name}' at {}.", path.display());
         } else {
             info!("Restarted tabsdata server '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Restarted tabsdata server in namespace '{namespace}'.");
     } else {
         info!("Restarted tabsdata server.");
     }
-    render_session_lines(summary);
+    render_session_lines(view);
 }

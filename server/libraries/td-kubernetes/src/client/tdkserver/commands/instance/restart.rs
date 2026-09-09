@@ -63,7 +63,7 @@ pub async fn command_restart(
     }
 
     if details {
-        preview::restart_instance(&provider.summary());
+        preview::restart_instance(&provider.view());
     }
     if !confirm(yes, "Proceed with the restart?")? {
         info!("Operation cancelled.");
@@ -72,7 +72,7 @@ pub async fn command_restart(
 
     let reporter = InteractiveReporter::new();
     provider.restart_instance(&reporter).await?;
-    report::component::instance::restarted_instance(&provider.summary());
+    report::component::instance::restarted_instance(&provider.view());
 
     Ok(())
 }

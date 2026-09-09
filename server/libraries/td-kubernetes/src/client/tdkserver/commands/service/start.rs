@@ -88,14 +88,14 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     if provider.service_alive().await {
         cwarn!(
             "Instance '{}' is already started.",
-            instance_label(&provider.summary())
+            instance_label(&provider.view())
         );
         return Ok(());
     }
 
     if details.value {
-        let markers = instance_markers(&provider.summary(), instance.in_settings);
-        preview::start_service(&provider.summary(), &markers);
+        let markers = instance_markers(&provider.view(), instance.in_settings);
+        preview::start_service(&provider.view(), &markers);
     }
     if !confirm(yes.value, "Proceed with the start?")? {
         return abort(Cancelled);
@@ -103,7 +103,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
 
     let reporter = InteractiveReporter::new();
     provider.start_service(&reporter).await?;
-    report::component::service::started_service(&provider.summary());
+    report::component::service::started_service(&provider.view());
 
     Ok(())
 }

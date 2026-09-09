@@ -5,11 +5,11 @@
 use tracing::info;
 
 use crate::client::tdkserver::render::report::helper::common::render_session_lines;
-use crate::runtime::provider::summary::Summary;
+use crate::client::tdkserver::render::view::InstanceView;
 
-pub fn set_server(summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+pub fn set_server(view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!(
                 "Tabsdata session settings of '{name}' saved at {}.",
                 path.display()
@@ -17,10 +17,10 @@ pub fn set_server(summary: &Summary) {
         } else {
             info!("Tabsdata session settings of '{name}' saved.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("Tabsdata session settings of namespace '{namespace}' saved.");
     } else {
         info!("Tabsdata session settings saved.");
     }
-    render_session_lines(summary);
+    render_session_lines(view);
 }

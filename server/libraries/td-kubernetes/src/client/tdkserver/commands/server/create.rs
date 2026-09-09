@@ -58,7 +58,7 @@ pub async fn command_create(
     provider.ensure_creatable_server().await?;
 
     if details {
-        preview::create_server(&provider.summary());
+        preview::create_server(&provider.view());
     }
     if !confirm(yes, "Proceed with the creation?")? {
         return abort(Cancelled);
@@ -70,7 +70,7 @@ pub async fn command_create(
     provider.create_runtimes(&reporter).await?;
     provider.create_database(&reporter).await?;
     tx.commit();
-    report::component::server::created_server(&provider.summary());
+    report::component::server::created_server(&provider.view());
 
     Ok(())
 }

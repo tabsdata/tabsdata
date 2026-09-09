@@ -102,7 +102,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     let verbose = globals.verbose;
 
     let provider = provider_for_instance_mutating(instance.value, verbose, None).await?;
-    let name = provider.summary().instance_name.unwrap_or_default();
+    let name = provider.view().instance_name.unwrap_or_default();
 
     let profile = load_profile(provider.cluster_provider(), verbose)?;
     let settings = InstanceSettings::load(&name)?;

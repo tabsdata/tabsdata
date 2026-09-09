@@ -4,28 +4,28 @@
 
 use tracing::info;
 
-use crate::runtime::provider::summary::Summary;
+use crate::client::tdkserver::render::view::InstanceView;
 
-pub fn started_instance(summary: &Summary) {
-    instance_line("Started", summary);
+pub fn started_instance(view: &InstanceView) {
+    instance_line("Started", view);
 }
 
-pub fn stopped_instance(summary: &Summary) {
-    instance_line("Stopped", summary);
+pub fn stopped_instance(view: &InstanceView) {
+    instance_line("Stopped", view);
 }
 
-pub fn restarted_instance(summary: &Summary) {
-    instance_line("Restarted", summary);
+pub fn restarted_instance(view: &InstanceView) {
+    instance_line("Restarted", view);
 }
 
-fn instance_line(verb: &str, summary: &Summary) {
-    if let Some(name) = &summary.instance_name {
-        if let Some(path) = &summary.instance_path {
+fn instance_line(verb: &str, view: &InstanceView) {
+    if let Some(name) = &view.instance_name {
+        if let Some(path) = &view.instance_path {
             info!("{verb} tabsdata instance '{name}' at {}.", path.display());
         } else {
             info!("{verb} tabsdata instance '{name}'.");
         }
-    } else if let Some(namespace) = &summary.namespace {
+    } else if let Some(namespace) = &view.namespace {
         info!("{verb} tabsdata instance in namespace '{namespace}'.");
     } else {
         info!("{verb} tabsdata instance.");

@@ -14,6 +14,8 @@ from tabsdatak.common._interpreter.python.venv import (
     PythonEnvironment,
 )
 from tabsdatak.server._tdserver.render.assess import Check, Help, State
+from tabsdatak.server._tdserver.render.assess.core.provider import Provider
+from tabsdatak.server._tdserver.render.assess.core.vantage import Tier
 
 KCHECK_PROGRAM = "tdk_kcheck"
 
@@ -30,6 +32,7 @@ class Target:
     kubeconfig: str | None = None
     current: bool = False
     namespace: str | None = None
+    given: frozenset[str] = field(default_factory=frozenset)
 
     def as_arguments(self) -> list[str]:
         arguments = ["--instance", self.instance]
@@ -39,7 +42,7 @@ class Target:
             ("kubeconfig", self.kubeconfig),
             ("namespace", self.namespace),
         ):
-            if value:
+            if value and name in self.given:
                 arguments += [f"--{name}", value]
         if self.current:
             arguments.append("--current")
@@ -52,10 +55,22 @@ class Task:
     check: str
     run: Callable[[Target], Check]
     needs: Sequence[str] = field(default_factory=tuple)
+    tier: Tier = Tier.LOCAL
+    providers: frozenset[Provider] = field(default_factory=lambda: frozenset(Provider))
+    gate: bool = False
+    asserts: str = ""
+    detail: Callable[[], str] | str = ""
 
     @property
     def key(self) -> str:
         return f"{self.concern}/{self.check}"
+
+    @property
+    def particulars(self) -> str:
+        return self.detail() if callable(self.detail) else self.detail
+
+    def applies_to(self, provider: Provider | None) -> bool:
+        return provider is None or provider in self.providers
 
 
 def kcheck(name: str) -> Callable[[Target], Check]:
@@ -122,4 +137,32 @@ def skipped(task: Task, blocked_by: Sequence[str]) -> Check:
         reason=f"Waiting on {unmet}",
         title=f"The check could not run because {unmet} did not pass",
         help=[Help(text="Address the check it depends on, then assess again")],
+    )
+
+
+def waived(task: Task, because: str) -> Check:
+    return Check(
+        concern=task.concern,
+        check=task.check,
+        state=State.WAIVED,
+        reason=because,
+        title=f"The check does not apply here: {because}",
+    )
+
+
+def unreachable(task: Task, target: str, reason: str) -> Check:
+    return Check(
+        concern=task.concern,
+        check=task.check,
+        state=task.tier.unreachable_state,
+        reason=f"{target} could not be reached",
+        title=f"{target} could not be reached from this workstation",
+        facts=[reason],
+        help=[
+            Help(
+                text="The pods of the instance reach this from inside the cloud, so "
+                "this may be a route your workstation does not have rather than a "
+                "problem with the instance"
+            )
+        ],
     )

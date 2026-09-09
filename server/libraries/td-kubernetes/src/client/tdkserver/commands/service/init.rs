@@ -9,6 +9,7 @@ use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::{Cancelled, GeneralError, NoAction};
 use td_error::TdError;
 use td_python::tabsdata::tabsdata_version;
+use te_system::edition::{Edition, TabsdataEdition};
 use tracing::info;
 
 use crate::base::constants::{DEFAULT_LOG_LEVEL, KUBECONFIG_FILE, LogLevel, SCHEDULER_FARGATE};
@@ -186,7 +187,7 @@ pub async fn init_instance(
                 loglevel.map(|level| (level.as_str(), loglevel_defaulted)),
             );
         } else {
-            preview::init_cluster_service(&built.summary());
+            preview::init_cluster_service(&built.view());
         }
     }
     if !confirm(yes.value, "Proceed with the initialization?")? {
@@ -264,6 +265,7 @@ pub async fn init_instance(
         },
         version: tabsdata_version()
             .map_err(|error| ManifestError::TabsdataVersionResolveFailed(error.to_string()))?,
+        edition: TabsdataEdition.label().to_owned(),
         folder: folder.clone(),
         ports: Vec::new(),
         loglevel,

@@ -95,8 +95,8 @@ pub async fn command_restart(
     }
 
     if details.value {
-        let markers = instance_markers(&provider.summary(), instance.in_settings);
-        preview::restart_service(&provider.summary(), &markers);
+        let markers = instance_markers(&provider.view(), instance.in_settings);
+        preview::restart_service(&provider.view(), &markers);
     }
     if !confirm(yes.value, "Proceed with the restart?")? {
         info!("Operation cancelled.");
@@ -119,20 +119,20 @@ pub async fn restart_service(
         {
             cwarn!(
                 "Instance '{}' was already stopped.",
-                instance_label(&provider.summary())
+                instance_label(&provider.view())
             );
         } else {
-            report::component::service::stopped_service(&provider.summary());
+            report::component::service::stopped_service(&provider.view());
         }
     } else {
         cwarn!(
             "Instance '{}' was already stopped; starting it.",
-            instance_label(&provider.summary())
+            instance_label(&provider.view())
         );
     }
 
     provider.start_service(reporter).await?;
-    report::component::service::restarted_service(&provider.summary());
+    report::component::service::restarted_service(&provider.view());
 
     Ok(())
 }

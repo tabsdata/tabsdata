@@ -27,7 +27,7 @@ pub async fn command_status(
     if !provider.cluster_alive().await {
         cwarn!(
             "Instance '{}' is not running.",
-            instance_label(&provider.summary())
+            instance_label(&provider.view())
         );
         return Ok(());
     }

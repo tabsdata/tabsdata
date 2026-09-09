@@ -42,6 +42,7 @@ use crate::client::registry::{
 use crate::client::session::settings::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
+use crate::client::tdkserver::render::view::InstanceView;
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::copy_tree;
 use crate::core::system::subprocess;
@@ -73,7 +74,6 @@ use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::runtime::provider::kminus::instance::KminusInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
-use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     Cluster, ClusterProvider, HostedProvider, Instance, LocalProvider, ProcessProvider, Provider,
     Transaction, handle_phase_secrets,
@@ -338,9 +338,11 @@ impl Provider for KminusProvider {
         }
     }
 
-    fn summary(&self) -> Summary {
+    fn view(&self) -> InstanceView {
         let kube = self.kube_summary();
-        Summary {
+        InstanceView {
+            instance_version: None,
+            instance_edition: None,
             provider: ClusterProvider::Kminus,
             instance_name: Some(self.name.clone()),
             instance_path: Some(self.folder.clone()),
@@ -616,7 +618,7 @@ impl Provider for KminusProvider {
         }
         if self.cluster_alive().await {
             let context = self.kube_context().await?;
-            let instance = self.summary().instance_name.unwrap_or_default();
+            let instance = self.view().instance_name.unwrap_or_default();
             ensure_upgraded(&context, &instance).await?;
         }
         Ok(())

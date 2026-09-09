@@ -62,7 +62,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     }
 
     if details {
-        preview::stop_cluster(&provider.summary());
+        preview::stop_cluster(&provider.view());
     }
     if !confirm(yes, "Proceed with the stop?")? {
         info!("Operation cancelled.");
@@ -72,7 +72,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     let reporter = InteractiveReporter::new();
     match provider.stop_cluster(&reporter).await? {
         ClusterStopOutcome::Stopped => {
-            report::component::cluster::stopped_cluster(&provider.summary())
+            report::component::cluster::stopped_cluster(&provider.view())
         }
         ClusterStopOutcome::AlreadyStopped => cwarn!("Nothing to stop."),
         ClusterStopOutcome::NotSupported => cwarn!(

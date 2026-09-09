@@ -62,7 +62,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     }
 
     if details {
-        preview::start_instance(&provider.summary());
+        preview::start_instance(&provider.view());
     }
     if !confirm(yes, "Proceed with the start?")? {
         return abort(Cancelled);
@@ -71,7 +71,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     let reporter = InteractiveReporter::new();
     match provider.start_instance(&reporter).await? {
         InstanceStartOutcome::Started => {
-            report::component::instance::started_instance(&provider.summary())
+            report::component::instance::started_instance(&provider.view())
         }
         InstanceStartOutcome::AlreadyRunning => cwarn!("Instance is already started."),
     }

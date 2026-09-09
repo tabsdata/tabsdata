@@ -8,9 +8,11 @@ use crate::base::constants::LogLevel;
 use crate::runtime::provider::ClusterProvider;
 
 #[derive(Debug, Clone)]
-pub struct Summary {
+pub struct InstanceView {
     pub provider: ClusterProvider,
     pub instance_name: Option<String>,
+    pub instance_version: Option<String>,
+    pub instance_edition: Option<String>,
     pub instance_path: Option<PathBuf>,
     pub kubeconfig_path: Option<PathBuf>,
     pub context: Option<String>,

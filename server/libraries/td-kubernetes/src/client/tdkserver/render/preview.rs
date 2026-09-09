@@ -4,7 +4,7 @@
 
 use tracing::info;
 
-use crate::runtime::provider::summary::Summary;
+use crate::client::tdkserver::render::view::InstanceView;
 
 #[derive(Debug, Clone, Default)]
 pub struct SettingsMarkers {
@@ -15,59 +15,59 @@ pub struct SettingsMarkers {
     pub namespace: bool,
 }
 
-pub fn set_server(summary: &Summary) {
+pub fn set_server(view: &InstanceView) {
     info!("About to change the tabsdata session settings:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn create_server(summary: &Summary) {
+pub fn create_server(view: &InstanceView) {
     info!("About to create tabsdata instance:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn start_cluster(summary: &Summary) {
+pub fn start_cluster(view: &InstanceView) {
     info!("About to start kubernetes cluster:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn stop_cluster(summary: &Summary) {
+pub fn stop_cluster(view: &InstanceView) {
     info!("About to stop kubernetes cluster:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn restart_cluster(summary: &Summary) {
+pub fn restart_cluster(view: &InstanceView) {
     info!("About to restart kubernetes cluster:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn start_instance(summary: &Summary) {
+pub fn start_instance(view: &InstanceView) {
     info!("About to start tabsdata instance:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn stop_instance(summary: &Summary) {
+pub fn stop_instance(view: &InstanceView) {
     info!("About to stop tabsdata instance:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn restart_instance(summary: &Summary) {
+pub fn restart_instance(view: &InstanceView) {
     info!("About to restart tabsdata instance:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn start_server(summary: &Summary) {
+pub fn start_server(view: &InstanceView) {
     info!("About to start tabsdata server:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn stop_server(summary: &Summary) {
+pub fn stop_server(view: &InstanceView) {
     info!("About to stop tabsdata server:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub fn restart_server(summary: &Summary) {
+pub fn restart_server(view: &InstanceView) {
     info!("About to restart tabsdata server:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
 pub fn init_service(
@@ -97,9 +97,9 @@ pub fn init_service(
     }
 }
 
-pub fn init_cluster_service(summary: &Summary) {
+pub fn init_cluster_service(view: &InstanceView) {
     info!("About to initialize tabsdata instance:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
 fn origin_marker(in_settings: bool, defaulted: bool) -> &'static str {
@@ -112,34 +112,34 @@ fn origin_marker(in_settings: bool, defaulted: bool) -> &'static str {
     }
 }
 
-pub fn create_service(summary: &Summary, markers: &SettingsMarkers) {
+pub fn create_service(view: &InstanceView, markers: &SettingsMarkers) {
     info!("About to create tabsdata instance:");
-    render_marked_summary_lines(summary, markers);
+    render_marked_view_lines(view, markers);
 }
 
-pub fn start_service(summary: &Summary, markers: &SettingsMarkers) {
+pub fn start_service(view: &InstanceView, markers: &SettingsMarkers) {
     info!("About to start tabsdata instance:");
-    render_marked_summary_lines(summary, markers);
+    render_marked_view_lines(view, markers);
 }
 
-pub fn stop_service(summary: &Summary, markers: &SettingsMarkers) {
+pub fn stop_service(view: &InstanceView, markers: &SettingsMarkers) {
     info!("About to stop tabsdata instance:");
-    render_marked_summary_lines(summary, markers);
+    render_marked_view_lines(view, markers);
 }
 
-pub fn restart_service(summary: &Summary, markers: &SettingsMarkers) {
+pub fn restart_service(view: &InstanceView, markers: &SettingsMarkers) {
     info!("About to restart tabsdata instance:");
-    render_marked_summary_lines(summary, markers);
+    render_marked_view_lines(view, markers);
 }
 
-pub fn upgrade_service(summary: &Summary, markers: &SettingsMarkers) {
+pub fn upgrade_service(view: &InstanceView, markers: &SettingsMarkers) {
     info!("About to upgrade tabsdata instance:");
-    render_marked_summary_lines(summary, markers);
+    render_marked_view_lines(view, markers);
 }
 
-pub fn delete_service(summary: &Summary, markers: &SettingsMarkers, trash: bool) {
+pub fn delete_service(view: &InstanceView, markers: &SettingsMarkers, trash: bool) {
     info!("About to delete tabsdata instance:");
-    render_marked_summary_lines(summary, markers);
+    render_marked_view_lines(view, markers);
     if trash {
         info!("  - trash........: the instance folder will be trashed once deleted");
     }
@@ -152,35 +152,41 @@ pub fn trash_service(instance: &str, source: &str, trash: &str) {
     info!("  - trash folder...: {trash}");
 }
 
-pub fn apply_config(summary: &Summary) {
+pub fn apply_config(view: &InstanceView) {
     info!("About to apply tabsdata configs and restart the instance:");
-    render_summary_lines(summary);
+    render_view_lines(view);
 }
 
-pub(crate) fn render_summary_lines(summary: &Summary) {
-    info!("  - provider.....: {}", summary.provider.as_str());
-    if let Some(name) = &summary.instance_name {
+pub(crate) fn render_view_lines(view: &InstanceView) {
+    info!("  - provider.....: {}", view.provider.as_str());
+    if let Some(name) = &view.instance_name {
         info!("  - instance name: {name}");
     }
-    if let Some(path) = &summary.instance_path {
+    if let Some(version) = &view.instance_version {
+        info!("  - version......: {version}");
+    }
+    if let Some(edition) = &view.instance_edition {
+        info!("  - edition......: {edition}");
+    }
+    if let Some(path) = &view.instance_path {
         info!("  - instance path: {}", path.display());
     }
-    if let Some(kubeconfig) = &summary.kubeconfig_path {
+    if let Some(kubeconfig) = &view.kubeconfig_path {
         info!("  - kubeconfig...: {}", kubeconfig.display());
     }
-    if let Some(context) = &summary.context {
+    if let Some(context) = &view.context {
         info!("  - context......: {context}");
     }
-    if let Some(cluster_url) = &summary.cluster_url {
+    if let Some(cluster_url) = &view.cluster_url {
         info!("  - cluster url..: {cluster_url}");
     }
-    if let Some(cluster_name) = &summary.cluster_name {
+    if let Some(cluster_name) = &view.cluster_name {
         info!("  - cluster name.: {cluster_name}");
     }
-    if let Some(namespace) = &summary.namespace {
+    if let Some(namespace) = &view.namespace {
         info!("  - namespace....: {namespace}");
     }
-    if let Some(loglevel) = summary.loglevel {
+    if let Some(loglevel) = view.loglevel {
         info!("  - log level....: {}", loglevel.as_str());
     }
 }
@@ -189,47 +195,47 @@ fn settings_suffix(in_settings: bool) -> &'static str {
     if in_settings { " (session)" } else { "" }
 }
 
-pub(crate) fn render_marked_summary_lines(summary: &Summary, markers: &SettingsMarkers) {
+pub(crate) fn render_marked_view_lines(view: &InstanceView, markers: &SettingsMarkers) {
     info!(
         "  - provider.....: {}{}",
-        summary.provider.as_str(),
+        view.provider.as_str(),
         settings_suffix(markers.provider)
     );
-    if let Some(name) = &summary.instance_name {
+    if let Some(name) = &view.instance_name {
         info!(
             "  - instance name: {name}{}",
             settings_suffix(markers.instance_name)
         );
     }
-    if let Some(path) = &summary.instance_path {
+    if let Some(path) = &view.instance_path {
         info!("  - instance path: {}", path.display());
     }
-    if let Some(kubeconfig) = &summary.kubeconfig_path {
+    if let Some(kubeconfig) = &view.kubeconfig_path {
         info!(
             "  - kubeconfig...: {}{}",
             kubeconfig.display(),
             settings_suffix(markers.kubeconfig_path)
         );
     }
-    if let Some(context) = &summary.context {
+    if let Some(context) = &view.context {
         info!(
             "  - context......: {context}{}",
             settings_suffix(markers.context)
         );
     }
-    if let Some(cluster_url) = &summary.cluster_url {
+    if let Some(cluster_url) = &view.cluster_url {
         info!("  - cluster url..: {cluster_url}");
     }
-    if let Some(cluster_name) = &summary.cluster_name {
+    if let Some(cluster_name) = &view.cluster_name {
         info!("  - cluster name.: {cluster_name}");
     }
-    if let Some(namespace) = &summary.namespace {
+    if let Some(namespace) = &view.namespace {
         info!(
             "  - namespace....: {namespace}{}",
             settings_suffix(markers.namespace)
         );
     }
-    if let Some(loglevel) = summary.loglevel {
+    if let Some(loglevel) = view.loglevel {
         info!("  - log level....: {}", loglevel.as_str());
     }
 }

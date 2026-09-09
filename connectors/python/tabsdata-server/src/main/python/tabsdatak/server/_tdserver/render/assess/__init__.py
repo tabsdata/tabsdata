@@ -10,6 +10,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from rich import box
 from rich.console import Console, Group, RenderableType
+from rich.padding import Padding
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -220,12 +221,21 @@ def snippet(source: Source, span: Span | None) -> Text:
     return body
 
 
-def diagnostic(check: Check) -> Panel:
+def diagnostic(check: Check, also: list[Check] | None = None) -> Panel:
     head = Text()
     head.append(f"{check.state.mark} ", style=f"bold {check.state.style}")
     head.append(check.headline, style="bold")
 
     parts: list[RenderableType] = [head]
+
+    if also:
+        line = Text()
+        line.append("Also: ", style=DETAIL_STYLE)
+        line.append(
+            ", ".join(entry.check for entry in also),
+            style=DETAIL_STYLE,
+        )
+        parts.extend([Text(), line])
 
     if check.source:
         parts.extend([Text(), snippet(check.source, check.span)])
@@ -244,10 +254,19 @@ def diagnostic(check: Check) -> Panel:
             line = Text()
             line.append("Help: ", style=HELP_STYLE)
             line.append(entry.text)
-            if entry.command:
-                line.append(" ")
-                line.append(entry.command, style=COMMAND_STYLE)
             parts.append(line)
+            if entry.command:
+                parts.append(
+                    Padding(
+                        Text(
+                            entry.command,
+                            style=COMMAND_STYLE,
+                            no_wrap=True,
+                            overflow="fold",
+                        ),
+                        (0, 0, 0, 6),
+                    )
+                )
 
     if check.url:
         line = Text()
@@ -255,8 +274,12 @@ def diagnostic(check: Check) -> Panel:
         line.append(check.url, style=LINK_STYLE)
         parts.append(line)
 
+    count = 1 + len(also or [])
+    heading = check.check if count == 1 else f"{check.check} and {count - 1} more"
     return Panel(
         Group(*parts),
+        title=titled(heading),
+        title_align="left",
         border_style=check.state.style,
         box=box.SQUARE,
         padding=(1, 2),
@@ -306,6 +329,29 @@ def summary(checks: list[Check], seconds: float | None = None) -> Table:
     return table
 
 
+def grouped(checks: list[Check]) -> list[tuple[Check, list[Check]]]:
+    order: list[tuple] = []
+    held: dict[tuple, list[Check]] = {}
+    for check in checks:
+        key = (
+            check.state,
+            check.headline,
+            tuple(check.facts),
+            tuple((entry.text, entry.command) for entry in check.help),
+        )
+        if key not in held:
+            held[key] = []
+            order.append(key)
+        held[key].append(check)
+    return [(held[key][0], held[key][1:]) for key in order]
+
+
+def diagnostics(report: Report, console: Console) -> None:
+    for leading, also in grouped(report.failing):
+        console.print()
+        console.print(diagnostic(leading, also))
+
+
 def render(report: Report, console: Console | None = None) -> None:
     console = console or Console()
 
@@ -315,9 +361,7 @@ def render(report: Report, console: Console | None = None) -> None:
     for concern, checks in report.concerns.items():
         console.print(concern_panel(concern, checks))
 
-    for check in report.failing:
-        console.print()
-        console.print(diagnostic(check))
+    diagnostics(report, console)
 
     console.print()
     console.print(summary(report.checks, report.seconds))
@@ -325,16 +369,14 @@ def render(report: Report, console: Console | None = None) -> None:
 
 
 def epilogue(report: Report, console: Console) -> None:
-    for check in report.failing:
-        console.print()
-        console.print(diagnostic(check))
+    diagnostics(report, console)
     console.print()
     console.print(summary(report.checks, report.seconds))
     console.print()
 
 
 def main() -> int:
-    from tabsdatak.server._tdserver.render.assess.command import command
+    from tabsdatak.server._tdserver.render.assess.render.command import command
 
     return command()
 

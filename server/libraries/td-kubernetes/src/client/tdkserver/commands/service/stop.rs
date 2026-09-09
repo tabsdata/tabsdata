@@ -84,14 +84,14 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     if provider.service_dead().await {
         cwarn!(
             "Instance '{}' is already stopped.",
-            instance_label(&provider.summary())
+            instance_label(&provider.view())
         );
         return Ok(());
     }
 
     if details.value {
-        let markers = instance_markers(&provider.summary(), instance.in_settings);
-        preview::stop_service(&provider.summary(), &markers);
+        let markers = instance_markers(&provider.view(), instance.in_settings);
+        preview::stop_service(&provider.view(), &markers);
     }
     if !confirm(yes.value, "Proceed with the stop?")? {
         info!("Operation cancelled.");
@@ -105,10 +105,10 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     {
         cwarn!(
             "Instance '{}' is already stopped.",
-            instance_label(&provider.summary())
+            instance_label(&provider.view())
         );
     } else {
-        report::component::service::stopped_service(&provider.summary());
+        report::component::service::stopped_service(&provider.view());
     }
 
     Ok(())
