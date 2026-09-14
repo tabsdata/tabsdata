@@ -52,7 +52,7 @@ async fn create_collection(
             .await?;
         let conn = conn.get(grant);
         let group: GroupDB = conn.fetch_one(&create.group).await?;
-        let collection_type = CollectionType::from_group_id(&group.base.id);
+        let collection_type = CollectionType::from_group_kind(&group.base.kind);
         // source/destination collections carry connection config: manage_project
         escalate_for_connected(&authz, conn, &ctx, &project, &collection_type).await?;
         let plan =

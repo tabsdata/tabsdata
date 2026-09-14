@@ -22,8 +22,8 @@ async fn seed_prelude(db: &TdPool) {
     execute(
         db,
         "INSERT INTO groups (id, project_id, name, description, created_on, created_by_id, \
-           modified_on, modified_by_id, system) \
-         VALUES ('g0', 'p0', 'g0', '', now(), 'u0', now(), 'u0', false)",
+           modified_on, modified_by_id, system, kind) \
+         VALUES ('g0', 'p0', 'g0', '', now(), 'u0', now(), 'u0', false, 'custom')",
     )
     .await;
     execute(

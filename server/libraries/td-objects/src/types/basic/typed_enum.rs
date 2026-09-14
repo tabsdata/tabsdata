@@ -29,6 +29,20 @@ impl Decorator {
     }
 }
 
+/// Which seeded group a row is, stored in `groups.kind`; `Custom` is any group
+/// created through the API.
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub enum GroupKind {
+    #[typed_enum(rename = "default")]
+    Default,
+    #[typed_enum(rename = "sources")]
+    Sources,
+    #[typed_enum(rename = "destinations")]
+    Destinations,
+    #[typed_enum(rename = "custom")]
+    Custom,
+}
+
 /// Flavour of a collection, inferred from its group at creation time and then
 /// immutable. `DataFactory` is the default; `Source`/`Destination` collections
 /// carry connection info.
@@ -43,18 +57,14 @@ pub enum CollectionType {
 }
 
 impl CollectionType {
-    /// Infer the flavour from the collection's group. The reserved `sources` and
-    /// `destinations` groups map to `Source`/`Destination`; every other group
-    /// (default or user-created) is a `DataFactory`. Keying on the group *id* is
-    /// sound because the seeded system groups carry the same well-known id in
-    /// every project (group ids are unique per project, not globally).
-    pub fn from_group_id(group: &super::GroupId) -> Self {
-        if *group == super::GroupId::source() {
-            CollectionType::Source
-        } else if *group == super::GroupId::destination() {
-            CollectionType::Destination
-        } else {
-            CollectionType::DataFactory
+    /// Infer the flavour from the collection's group. The reserved `sources`
+    /// and `destinations` groups map to `Source`/`Destination`; every other
+    /// group (default or user-created) is a `DataFactory`.
+    pub fn from_group_kind(kind: &GroupKind) -> Self {
+        match kind {
+            GroupKind::Sources => CollectionType::Source,
+            GroupKind::Destinations => CollectionType::Destination,
+            GroupKind::Default | GroupKind::Custom => CollectionType::DataFactory,
         }
     }
 }
@@ -673,25 +683,23 @@ impl From<WorkerTypeDto> for WorkerType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::basic::GroupId;
 
     #[test]
-    fn test_collection_type_from_group_id() {
+    fn test_collection_type_from_group_kind() {
         assert_eq!(
-            CollectionType::from_group_id(&GroupId::source()),
+            CollectionType::from_group_kind(&GroupKind::Sources),
             CollectionType::Source
         );
         assert_eq!(
-            CollectionType::from_group_id(&GroupId::destination()),
+            CollectionType::from_group_kind(&GroupKind::Destinations),
             CollectionType::Destination
         );
         assert_eq!(
-            CollectionType::from_group_id(&GroupId::default_group()),
+            CollectionType::from_group_kind(&GroupKind::Default),
             CollectionType::DataFactory
         );
-        // Any fresh (user-created) group id is a DataFactory.
         assert_eq!(
-            CollectionType::from_group_id(&GroupId::default()),
+            CollectionType::from_group_kind(&GroupKind::Custom),
             CollectionType::DataFactory
         );
     }

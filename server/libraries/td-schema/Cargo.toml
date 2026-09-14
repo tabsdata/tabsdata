@@ -54,6 +54,7 @@ strum = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
+td-common = { workspace = true }
 td-schema = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

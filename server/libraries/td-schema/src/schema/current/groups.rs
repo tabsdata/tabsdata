@@ -26,6 +26,7 @@ pub enum Groups {
     ModifiedOn,
     ModifiedById,
     System,
+    Kind,
 }
 
 pub(super) struct Defs;
@@ -35,15 +36,11 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Groups::Table)
-                // Composite PK (project_id, id): system groups share the same
-                // well-known id in every project. Joins on groups.id from
-                // project-scoped tables must also match project_id.
-                .col(id_column(Groups::Id).not_null())
+                .col(id_column(Groups::Id).not_null().primary_key())
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
                 .col(id_column(Groups::ProjectId).not_null())
-                .primary_key(Index::create().col(Groups::ProjectId).col(Groups::Id))
                 .col(ColumnDef::new(Groups::Name).text().not_null())
                 .col(ColumnDef::new(Groups::Description).text().not_null())
                 .col(ColumnDef::new(Groups::CreatedOn).timestamp_with_time_zone().not_null())
@@ -51,6 +48,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Groups::ModifiedOn).timestamp_with_time_zone().not_null())
                 .col(id_column(Groups::ModifiedById).not_null())
                 .col(ColumnDef::new(Groups::System).boolean().not_null())
+                .col(ColumnDef::new(Groups::Kind).text().not_null())
                 .to_owned(),
         ]
     }
@@ -59,12 +57,9 @@ impl Entity for Defs {
         // Leads with project_id so it serves the RLS predicate; unique makes
         // group names unique within a project, not globally.
         vec![
-            // The primary key is `(project_id, id)` and the unique index
-            // `(project_id, name)`; RLS supplies `project_id` through an OR, so
-            // neither leading column is ever an index qual. Reads by name or id
-            // need their own.
+            // RLS supplies `project_id` through an OR, so the unique index's
+            // leading column is never an index qual; a read by name needs its own.
             Index::create().name("groups___name___idx").table(Groups::Table).col(Groups::Name).to_owned(),
-            Index::create().name("groups___id___idx").table(Groups::Table).col(Groups::Id).to_owned(),
             Index::create()
                 .name("groups___project_id__name___idx")
                 .table(Groups::Table)
@@ -95,6 +90,7 @@ impl Entity for Defs {
                     Alias::new("modified_by"),
                 )
                 .expr(Expr::col((Groups::Table, Groups::System)))
+                .expr(Expr::col((Groups::Table, Groups::Kind)))
                 .from(Groups::Table)
                 .join_as(
                     JoinType::LeftJoin,

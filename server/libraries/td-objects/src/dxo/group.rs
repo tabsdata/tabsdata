@@ -9,17 +9,37 @@
 //! `created_by` / `modified_by` name resolution), and the `Create` /
 //! `Update` DTOs are the API request surface.
 //!
-//! System rows (the seeded `default`, `source`, `destination` groups)
+//! System rows (the seeded `default`, `sources`, `destinations` groups)
 //! carry `system = true` and are rejected by `update` and `delete` at
-//! the service layer.
+//! the service layer; `kind` says which one a row is.
 
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, Created, Description, GroupId, GroupIdName, GroupName, Modified, ProjectId, System,
-    UserId, UserName,
+    AtTime, Created, Description, GroupId, GroupIdName, GroupKind, GroupName, Modified, ProjectId,
+    System, UserId, UserName,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
+use td_security::{DEFAULT_GROUP, DESTINATION_GROUP, SOURCE_GROUP};
+
+/// The system groups every project is seeded with, as `(kind, name, description)`.
+pub const SYSTEM_GROUPS: [(GroupKind, &str, &str); 3] = [
+    (
+        GroupKind::Default,
+        DEFAULT_GROUP,
+        "Default group — assigned to collections that do not specify a group.",
+    ),
+    (
+        GroupKind::Sources,
+        SOURCE_GROUP,
+        "Sources group — assigned to ingestion collections.",
+    ),
+    (
+        GroupKind::Destinations,
+        DESTINATION_GROUP,
+        "Destinations group — assigned to egestion collections.",
+    ),
+];
 
 #[ta_objects::Dao]
 #[dao(table = "groups", ops(insert), project_scoped)]
@@ -33,6 +53,7 @@ pub struct GroupInsertDB {
     pub modified_on: Modified<AtTime>,
     pub modified_by_id: Modified<UserId>,
     pub system: System,
+    pub kind: GroupKind,
 }
 
 /// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
@@ -75,6 +96,7 @@ impl GroupCreate {
             modified_on: ctx.time.into(),
             modified_by_id: ctx.user_id.into(),
             system: System::FALSE,
+            kind: GroupKind::Custom,
         }
     }
 }
@@ -108,6 +130,7 @@ pub struct Group {
     pub modified_on: Modified<AtTime>,
     pub modified_by_id: Modified<UserId>,
     pub system: System,
+    pub kind: GroupKind,
     pub created_by: Created<UserName>,
     pub modified_by: Modified<UserName>,
 }
@@ -125,6 +148,7 @@ impl FromDao for Group {
             modified_on: dao.base.base.modified_on,
             modified_by_id: dao.base.base.modified_by_id,
             system: dao.base.base.system,
+            kind: dao.base.base.kind,
             created_by: dao.created_by,
             modified_by: dao.modified_by,
         })

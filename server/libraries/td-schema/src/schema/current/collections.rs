@@ -72,22 +72,19 @@ impl Entity for Defs {
                 // Collection flavour (DataFactory/Source/Destination), single-char code.
                 .col(ColumnDef::new(Collections::CollectionType).text().not_null())
                 // The collection's connection (source/destination only); set on the
-                // first connection upsert. Connection ids are only unique per
-                // project, hence the composite FK.
+                // first connection upsert.
                 .col(id_column(Collections::ConnectionId).null())
-                // Group ids are only unique per project (same pattern as the
-                // composite FKs on transactions/LTDV/LFR).
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Collections::Table, (Collections::ProjectId, Collections::GroupId))
-                        .to(Groups::Table, (Groups::ProjectId, Groups::Id))
+                        .from(Collections::Table, Collections::GroupId)
+                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Collections::Table, (Collections::ProjectId, Collections::ConnectionId))
-                        .to(Connections::Table, (Connections::ProjectId, Connections::Id))
+                        .from(Collections::Table, Collections::ConnectionId)
+                        .to(Connections::Table, Connections::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -106,13 +103,13 @@ impl Entity for Defs {
                 .col(Collections::ProjectId)
                 .col(Expr::cust("COALESCE(\"name_when_deleted\", \"name\")"))
                 .to_owned(),
-            // A group is hard-deleted; the (project_id, group_id) RESTRICT FK
-            // makes PostgreSQL probe this table per deleted group.
+            // The group-delete RESTRICT FK probe; project_id trails so the
+            // tenant-scoped group filter is served too.
             Index::create()
-                .name("collections___project_id__group_id___idx")
+                .name("collections___group_id__project_id___idx")
                 .table(Collections::Table)
-                .col(Collections::ProjectId)
                 .col(Collections::GroupId)
+                .col(Collections::ProjectId)
                 .to_owned(),
             // Leads with project_id so it serves the RLS predicate; unique makes
             // collection names unique within a project, not globally.
@@ -240,11 +237,7 @@ fn collections_with_names() -> ViewDef {
                 JoinType::LeftJoin,
                 Groups::Table,
                 groups_alias.clone(),
-                // Group ids are only unique per project; matching project_id too
-                // keeps the join exact under RLS-bypass (global) sessions.
-                Expr::col((CollectionsActive, Collections::GroupId))
-                    .equals((groups_alias.clone(), Groups::Id))
-                    .and(Expr::col((CollectionsActive, Collections::ProjectId)).equals((groups_alias, Groups::ProjectId))),
+                Expr::col((CollectionsActive, Collections::GroupId)).equals((groups_alias, Groups::Id)),
             )
             // Safe as an inner join: projects_resolved holds every project
             // (soft-deleted included), so it never drops a collection row.

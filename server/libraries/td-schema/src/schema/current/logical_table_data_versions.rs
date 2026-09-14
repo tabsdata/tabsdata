@@ -91,10 +91,9 @@ impl Entity for Defs {
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
-                    // Composite: group ids are only unique per project.
                     ForeignKey::create()
-                        .from(LogicalTableDataVersions::Table, (LogicalTableDataVersions::ProjectId, LogicalTableDataVersions::GroupId))
-                        .to(Groups::Table, (Groups::ProjectId, Groups::Id))
+                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)
+                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -131,10 +130,10 @@ impl Entity for Defs {
             // The group-delete RESTRICT FK probe (see `collections`); without
             // it the probe scans the highest-row-count table in the schema.
             Index::create()
-                .name("logical_table_data_versions___project_id__group_id___idx")
+                .name("logical_table_data_versions___group_id__project_id___idx")
                 .table(LogicalTableDataVersions::Table)
-                .col(LogicalTableDataVersions::ProjectId)
                 .col(LogicalTableDataVersions::GroupId)
+                .col(LogicalTableDataVersions::ProjectId)
                 .to_owned(),
             // LTDV: hot path — `Head(0)` resolution scans by table_id ordered
             // by `(triggered_on DESC, id DESC)`.
@@ -292,12 +291,7 @@ impl Entity for Defs {
                         JoinType::LeftJoin,
                         Groups::Table,
                         groups_alias.clone(),
-                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId))
-                            .equals((groups_alias.clone(), Groups::Id))
-                            .and(
-                                Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ProjectId))
-                                    .equals((groups_alias, Groups::ProjectId)),
-                            ),
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)).equals((groups_alias, Groups::Id)),
                     )
                     .to_owned(),
             ),

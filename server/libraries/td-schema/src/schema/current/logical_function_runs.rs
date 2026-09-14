@@ -102,10 +102,9 @@ impl Entity for Defs {
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
-                    // Composite: group ids are only unique per project.
                     ForeignKey::create()
-                        .from(LogicalFunctionRuns::Table, (LogicalFunctionRuns::ProjectId, LogicalFunctionRuns::GroupId))
-                        .to(Groups::Table, (Groups::ProjectId, Groups::Id))
+                        .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)
+                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -131,10 +130,10 @@ impl Entity for Defs {
         vec![
             // The group-delete RESTRICT FK probe (see `collections`).
             Index::create()
-                .name("logical_function_runs___project_id__group_id___idx")
+                .name("logical_function_runs___group_id__project_id___idx")
                 .table(LogicalFunctionRuns::Table)
-                .col(LogicalFunctionRuns::ProjectId)
                 .col(LogicalFunctionRuns::GroupId)
+                .col(LogicalFunctionRuns::ProjectId)
                 .to_owned(),
             // The scheduler's execute tick: `status IN (..) ORDER BY
             // triggered_on` — status alone cannot serve the ordering. Ticks are
@@ -246,10 +245,7 @@ impl Entity for Defs {
                     JoinType::LeftJoin,
                     Groups::Table,
                     groups_alias.clone(),
-                    // Group ids are only unique per project; match project_id too.
-                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)).equals((groups_alias.clone(), Groups::Id)).and(
-                        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ProjectId)).equals((groups_alias, Groups::ProjectId)),
-                    ),
+                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)).equals((groups_alias, Groups::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

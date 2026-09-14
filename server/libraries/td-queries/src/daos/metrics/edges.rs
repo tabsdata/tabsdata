@@ -45,10 +45,7 @@ fn tdv_dim(dim: Dimension) -> LogicalTableDataVersionDBIden {
     }
 }
 
-/// Id-only projection shared by every branch. `source_project` rides along
-/// because group ids are only unique per project, so the group-dim name join
-/// on the source endpoint needs it; the target resolves against the run's
-/// own project.
+/// Id-only projection shared by every branch.
 fn edge_branch_select(
     stmt: &mut SelectStatement,
     req: &MetricsRequest,
@@ -56,7 +53,6 @@ fn edge_branch_select(
     source: SimpleExpr,
     target_kind: NodeKind,
     target: SimpleExpr,
-    source_project: SimpleExpr,
 ) {
     stmt.expr_as(bucket_expr(req.unit), Col::Bucket)
         .expr_as(kind_lit(source_kind), Col::SourceKind)
@@ -81,8 +77,7 @@ fn edge_branch_select(
             tdv_col(TableDataVersionDBWithNamesIden::DataBytes),
             Col::SourceDataBytes,
         )
-        .expr_as(fr_col(LogicalFunctionRunDBIden::ProjectId), Col::ProjectId)
-        .expr_as(source_project, Col::SourceProjectId);
+        .expr_as(fr_col(LogicalFunctionRunDBIden::ProjectId), Col::ProjectId);
 }
 
 fn apply_edge_user_status_filters(stmt: &mut SelectStatement, req: &MetricsRequest) {
@@ -101,7 +96,6 @@ fn edge_real_branch(req: &MetricsRequest, bounds: &WindowBounds) -> SelectStatem
         tdv_col(tdv_dim(req.dim)),
         NodeKind::Dim,
         fr_col(run_dim(req.dim)),
-        tdv_col(LogicalTableDataVersionDBIden::ProjectId),
     );
     join_consumed_lfri(&mut stmt);
     join_source_tdv(&mut stmt);
@@ -146,7 +140,6 @@ fn edge_synth_branch(req: &MetricsRequest, bounds: &WindowBounds) -> SelectState
         null_str(),
         NodeKind::Dim,
         fr_col(run_dim(req.dim)),
-        null_str(),
     );
     stmt.join(
         JoinType::LeftJoin,
@@ -184,7 +177,6 @@ fn edge_egress_branch(req: &MetricsRequest, bounds: &WindowBounds) -> SelectStat
         fr_col(run_dim(req.dim)),
         NodeKind::ExternalDestination,
         null_str(),
-        fr_col(LogicalFunctionRunDBIden::ProjectId),
     );
     join_consumed_lfri(&mut stmt);
     join_source_tdv(&mut stmt);
@@ -225,7 +217,6 @@ fn edge_unused_branch(req: &MetricsRequest, bounds: &WindowBounds) -> SelectStat
         tdv_col(tdv_dim(req.dim)),
         NodeKind::Unused,
         null_str(),
-        tdv_col(LogicalTableDataVersionDBIden::ProjectId),
     );
     let consumed = Query::select()
         .expr(Expr::val(1))
@@ -275,15 +266,8 @@ pub(crate) fn edge_aggregates_query(
             GroupDBIden::Name.into_iden(),
         ),
     };
-    let dim_name_join = |alias: Sq, id_col: Col, project_col: Col| {
-        let on = Expr::col((alias, dim_id.clone())).equals((Sq::A, id_col));
-        match req.dim {
-            Dimension::Collection => on,
-            Dimension::Group => {
-                on.and(Expr::col((alias, GroupDBIden::ProjectId)).equals((Sq::A, project_col)))
-            }
-        }
-    };
+    let dim_name_join =
+        |alias: Sq, id_col: Col| Expr::col((alias, dim_id.clone())).equals((Sq::A, id_col));
 
     let keys = [
         Col::Bucket,
@@ -293,7 +277,6 @@ pub(crate) fn edge_aggregates_query(
         Col::Target,
         Col::Status,
         Col::ProjectId,
-        Col::SourceProjectId,
     ];
     let mut agg = Query::select();
     for c in keys {
@@ -340,13 +323,13 @@ pub(crate) fn edge_aggregates_query(
             JoinType::LeftJoin,
             dim_table.clone(),
             Sq::SrcC,
-            dim_name_join(Sq::SrcC, Col::Source, Col::SourceProjectId),
+            dim_name_join(Sq::SrcC, Col::Source),
         )
         .join_as(
             JoinType::LeftJoin,
             dim_table,
             Sq::TgtC,
-            dim_name_join(Sq::TgtC, Col::Target, Col::ProjectId),
+            dim_name_join(Sq::TgtC, Col::Target),
         )
         .join_as(
             JoinType::LeftJoin,

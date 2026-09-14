@@ -54,7 +54,7 @@ use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
-    CollectionName, DependencyPos, Description, EntityId, EntityName, GroupId, GroupName,
+    CollectionName, DependencyPos, Description, EntityId, EntityName, GroupName,
     LogicalFunctionRunStatus, PermissionType, ProjectId, ProjectName, RoleId, RoleName,
     TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus,
     WorkerType,
@@ -116,12 +116,12 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>> Se
         self,
         collection_name: &CollectionName,
         created_by: &UserId,
-        group_id: GroupId,
+        group: &GroupDB,
     ) -> Result<ActiveCollectionDB, TdError>
     where
         E: Domained<Scope = InProject>,
     {
-        seed_collection_in_group(self.executor, collection_name, created_by, group_id).await
+        seed_collection_in_group(self.executor, collection_name, created_by, group).await
     }
 
     pub async fn execution(self, function_version: &FunctionDB) -> Result<ExecutionDB, TdError>

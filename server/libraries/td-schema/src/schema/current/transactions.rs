@@ -68,11 +68,9 @@ impl Entity for Defs {
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
-                    // Composite: group ids are only unique per project, and this
-                    // also forbids cross-project group references at the DB level.
                     ForeignKey::create()
-                        .from(Transactions::Table, (Transactions::ProjectId, Transactions::GroupId))
-                        .to(Groups::Table, (Groups::ProjectId, Groups::Id))
+                        .from(Transactions::Table, Transactions::GroupId)
+                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -84,10 +82,10 @@ impl Entity for Defs {
         vec![
             // The group-delete RESTRICT FK probe (see `collections`).
             Index::create()
-                .name("transactions___project_id__group_id___idx")
+                .name("transactions___group_id__project_id___idx")
                 .table(Transactions::Table)
-                .col(Transactions::ProjectId)
                 .col(Transactions::GroupId)
+                .col(Transactions::ProjectId)
                 .to_owned(),
             Index::create().name("transactions___execution_id___idx").table(Transactions::Table).col(Transactions::ExecutionId).to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
@@ -148,11 +146,7 @@ impl Entity for Defs {
                     JoinType::LeftJoin,
                     Groups::Table,
                     groups_alias.clone(),
-                    // Group ids are only unique per project; matching project_id
-                    // too keeps the join exact under RLS-bypass (global) sessions.
-                    Expr::col((Transactions::Table, Transactions::GroupId))
-                        .equals((groups_alias.clone(), Groups::Id))
-                        .and(Expr::col((Transactions::Table, Transactions::ProjectId)).equals((groups_alias, Groups::ProjectId))),
+                    Expr::col((Transactions::Table, Transactions::GroupId)).equals((groups_alias, Groups::Id)),
                 )
                 .to_owned(),
         )]

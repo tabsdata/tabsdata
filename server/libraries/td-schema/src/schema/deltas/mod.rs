@@ -52,6 +52,7 @@ pub(crate) mod v4_to_v5;
 pub(crate) mod v5_to_v6;
 pub(crate) mod v6_to_v7;
 pub(crate) mod v7_to_v8;
+pub(crate) mod v8_to_v9;
 
 /// The rung upgrading from version `target_version - 1` to `target_version`.
 ///
@@ -73,6 +74,7 @@ pub fn get(target_version: usize) -> Delta {
         6 => rung::<v5_to_v6::Migration>(),
         7 => rung::<v6_to_v7::Migration>(),
         8 => rung::<v7_to_v8::Migration>(),
+        9 => rung::<v8_to_v9::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

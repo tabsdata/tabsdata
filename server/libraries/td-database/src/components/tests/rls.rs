@@ -37,7 +37,7 @@ async fn scope(tx: &mut sqlx::Transaction<'static, sqlx::Postgres>, tenant: &str
 async fn test_rls_project_isolation() {
     const INSERT: &str = "INSERT INTO collections \
         (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
-        VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g', '/', 'F')";
+        VALUES ($1, $2, 'd', now(), 'u', now(), 'u', $3, '/', 'F')";
     const COUNT: &str = "SELECT count(*) FROM collections";
 
     let db = crate::test_utils::postgres::pool().await;
@@ -74,14 +74,14 @@ async fn test_rls_project_isolation() {
              TO \"{tenant}\", \"{across}\", \"{app_user}\""
         ),
         format!("ALTER ROLE \"{app_user}\" SET search_path TO \"{schema}\""),
-        // Collections FK groups(project_id, id); the schema seeds no project on
-        // Postgres, so seed a group per test project. `su` bypasses RLS, so set
+        // Collections FK groups(id); the schema seeds no project on Postgres,
+        // so seed a group per test project. `su` bypasses RLS, so set
         // project_id explicitly.
         format!(
-            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'A', 'g', 'd', now(), 'u', now(), 'u', false)"
+            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system, kind) VALUES ('g_a', 'A', 'g', 'd', now(), 'u', now(), 'u', false, 'custom')"
         ),
         format!(
-            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'B', 'g', 'd', now(), 'u', now(), 'u', false)"
+            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system, kind) VALUES ('g_b', 'B', 'g', 'd', now(), 'u', now(), 'u', false, 'custom')"
         ),
     ] {
         sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
@@ -108,6 +108,7 @@ async fn test_rls_project_isolation() {
     sqlx::query(INSERT)
         .bind("c_a")
         .bind("ca")
+        .bind("g_a")
         .execute(&mut *t)
         .await
         .unwrap();
@@ -129,7 +130,7 @@ async fn test_rls_project_isolation() {
     let bad = sqlx::query(
         "INSERT INTO collections \
          (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type, project_id) \
-         VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g', '/', 'F', 'A')",
+         VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g_a', '/', 'F', 'A')",
     )
     .execute(&mut *t)
     .await;
@@ -144,6 +145,7 @@ async fn test_rls_project_isolation() {
     sqlx::query(INSERT)
         .bind("c_b")
         .bind("cb")
+        .bind("g_b")
         .execute(&mut *t)
         .await
         .unwrap();
@@ -276,11 +278,11 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
     let mut c = db.begin().await.unwrap();
     {
         c.scope_in_project("A").await.unwrap();
-        // Collections FK groups(project_id, id); project_id defaults to the scope
-        // GUC ('A'), satisfying RLS WITH CHECK and the collection's FK.
+        // Collections FK groups(id); project_id defaults to the scope GUC
+        // ('A'), satisfying RLS WITH CHECK and the collection's FK.
         sqlx::query(
-            "INSERT INTO groups (id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) \
-             VALUES ('g', 'g', 'd', now(), 'u', now(), 'u', false)",
+            "INSERT INTO groups (id, name, description, created_on, created_by_id, modified_on, modified_by_id, system, kind) \
+             VALUES ('g', 'g', 'd', now(), 'u', now(), 'u', false, 'custom')",
         )
         .execute(&mut *c)
         .await

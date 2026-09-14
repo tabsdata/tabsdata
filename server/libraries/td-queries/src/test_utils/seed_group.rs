@@ -9,7 +9,9 @@ use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupInsertDB};
-use td_objects::types::basic::{AccessTokenId, Description, GroupId, GroupName, System, UserId};
+use td_objects::types::basic::{
+    AccessTokenId, Description, GroupId, GroupKind, GroupName, System, UserId,
+};
 
 pub(crate) async fn seed_group(
     mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
@@ -29,6 +31,7 @@ pub(crate) async fn seed_group(
         modified_on: request_context.time.into(),
         modified_by_id: request_context.user_id.into(),
         system: System::FALSE,
+        kind: GroupKind::Custom,
     };
 
     // Runs on a project-scoped connection; the field-less `GroupDB` defaults

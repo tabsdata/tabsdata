@@ -15,10 +15,15 @@ use crate::pool::options::pg_connect_options;
 use crate::test_utils::server;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use td_common::id::{Id, id_time};
 use td_schema::schema::archive;
 use td_schema::{ACROSS_PROJECTS_ROLE, PROJECT_ID_GUC};
 
 use super::{at_rest, execute, logical, scalars};
+
+const DEFAULT_GROUP_ID: &str = "00000000000000000000000208";
+const SOURCE_GROUP_ID: &str = "0000000000000000000000020c";
+const DESTINATION_GROUP_ID: &str = "0000000000000000000000020g";
 
 async fn connect(identity: &PostgresConnect) -> PgPool {
     PgPoolOptions::new()
@@ -620,6 +625,306 @@ async fn v3_to_v4_backfills_attempts_postgres() {
     assert!(
         functions.is_empty(),
         "a dropped table's trigger functions must go with it: {functions:?}"
+    );
+}
+
+/// Projects at v8, each holding the three system groups under the same fixed
+/// ids, plus a user group and one referrer per group-carrying table. Logical
+/// ids are bigint at v8, so each project's are minted from its position.
+async fn seed_shared_group_ids(db: &TdPool, projects: &[&str]) {
+    for (n, project) in projects.iter().enumerate() {
+        let (fv, e, t, l, v) = (1000 + n, 2000 + n, 3000 + n, 4000 + n, 5000 + n);
+        execute(
+            db,
+            &format!(
+                "INSERT INTO projects (id, name, description, base_path, created_on, \
+                   created_by_id, modified_on, modified_by_id) \
+                 VALUES ('{project}', '{project}', '', '/p', now(), 'u0', now(), 'u0')"
+            ),
+        )
+        .await;
+        for (id, name, system) in [
+            (DEFAULT_GROUP_ID, "default", true),
+            (SOURCE_GROUP_ID, "sources", true),
+            (DESTINATION_GROUP_ID, "destinations", true),
+            (&format!("own-{project}"), "own", false),
+        ] {
+            execute(
+                db,
+                &format!(
+                    "INSERT INTO groups (id, project_id, name, description, created_on, \
+                       created_by_id, modified_on, modified_by_id, system) \
+                     VALUES ('{id}', '{project}', '{name}', '', now(), 'u0', now(), 'u0', \
+                       {system})"
+                ),
+            )
+            .await;
+        }
+        execute(
+            db,
+            &format!(
+                "INSERT INTO collections (id, project_id, name, description, created_on, \
+                   created_by_id, modified_on, modified_by_id, group_id, base_path, \
+                   collection_type) \
+                 VALUES ('c-{project}', '{project}', 'c0', '', now(), 'u0', now(), 'u0', \
+                   '{SOURCE_GROUP_ID}', NULL, 'S')"
+            ),
+        )
+        .await;
+        execute(
+            db,
+            &format!(
+                "INSERT INTO functions (id, project_id, collection_id, name, description, \
+                   decorator, runtime_values, function_id, stage_id, stage_base_path, \
+                   storage_version, bundle_id, snippet, valid_from, defined_by_id, status, \
+                   valid_to) \
+                 VALUES ({fv}, '{project}', 'c-{project}', 'f0', '', 'P', '', 'f0', \
+                   's0', '/s', 'V1', 'b0', '', now(), 'u0', 'A', 'infinity')"
+            ),
+        )
+        .await;
+        execute(
+            db,
+            &format!(
+                "INSERT INTO executions (id, project_id, collection_id, function_version_id, \
+                   triggered_on, triggered_by_id) \
+                 VALUES ({e}, '{project}', 'c-{project}', {fv}, now(), 'u0')"
+            ),
+        )
+        .await;
+        execute(
+            db,
+            &format!(
+                "INSERT INTO transactions (id, project_id, collection_id, execution_id, \
+                   transaction_by, transaction_key, triggered_on, triggered_by_id, group_id) \
+                 VALUES ({t}, '{project}', 'c-{project}', {e}, 'F', 'k', \
+                   now(), 'u0', '{DEFAULT_GROUP_ID}')"
+            ),
+        )
+        .await;
+        execute(
+            db,
+            &format!(
+                "INSERT INTO logical_function_runs (id, project_id, collection_id, \
+                   execution_id, transaction_id, function_id, function_version_id, trigger, \
+                   triggered_on, triggered_by_id, status, group_id) \
+                 VALUES ({l}, '{project}', 'c-{project}', {e}, \
+                   {t}, 'f0', {fv}, 'M', now(), 'u0', 'S', \
+                   '{DEFAULT_GROUP_ID}')"
+            ),
+        )
+        .await;
+        execute(
+            db,
+            &format!(
+                "INSERT INTO logical_table_data_versions (id, project_id, collection_id, \
+                   execution_id, transaction_id, table_id, private, triggered_on, \
+                   triggered_by_id, group_id) \
+                 VALUES ({v}, '{project}', 'c-{project}', {e}, \
+                   {t}, 'tb0', false, now(), 'u0', '{DESTINATION_GROUP_ID}')"
+            ),
+        )
+        .await;
+    }
+}
+
+/// Full v8 → v9 run over seeded projects: the oldest keeps the fixed ids,
+/// the others derive theirs (still UUIDv7 `Id`s), `kind` is stamped, every
+/// referrer follows, the name views resolve, and the new key and FKs enforce.
+#[tokio::test]
+async fn v8_to_v9_remints_system_group_ids_postgres() {
+    let db = crate::test_utils::postgres::pool().await;
+    db.admin
+        .upgrade_source(archive::source(8))
+        .await
+        .expect("installing archive v8");
+    let mut projects: Vec<String> = (0..3).map(|_| Id::default().to_string()).collect();
+    projects.sort();
+    let keeper = projects[0].as_str();
+    let minted: Vec<&str> = projects[1..].iter().map(String::as_str).collect();
+    let seeded: Vec<&str> = projects.iter().map(String::as_str).collect();
+    seed_shared_group_ids(&db.serving, &seeded).await;
+
+    db.admin
+        .upgrade(&ApiserverComponent)
+        .await
+        .expect("upgrading v8 -> current");
+
+    let groups = scalars(
+        &db.serving,
+        "SELECT project_id || '/' || name || '=' || id || '/' || kind \
+         FROM groups ORDER BY project_id, name",
+    )
+    .await;
+    let mut expected = vec![
+        format!("{keeper}/default={DEFAULT_GROUP_ID}/default"),
+        format!("{keeper}/destinations={DESTINATION_GROUP_ID}/destinations"),
+        format!("{keeper}/own=own-{keeper}/custom"),
+        format!("{keeper}/sources={SOURCE_GROUP_ID}/sources"),
+    ];
+    for p in &minted {
+        let stem = &p[..25];
+        expected.extend([
+            format!("{p}/default={stem}4/default"),
+            format!("{p}/destinations={stem}c/destinations"),
+            format!("{p}/own=own-{p}/custom"),
+            format!("{p}/sources={stem}8/sources"),
+        ]);
+    }
+    assert_eq!(
+        groups, expected,
+        "the oldest project keeps the fixed ids; the others derive theirs from \
+         their project id; user groups keep theirs and are `custom`"
+    );
+
+    for p in &minted {
+        let project = Id::try_from(*p).unwrap();
+        for row in scalars(
+            &db.serving,
+            &format!("SELECT id FROM groups WHERE project_id = '{p}' AND kind <> 'custom'"),
+        )
+        .await
+        {
+            let group =
+                Id::try_from(row.as_str()).expect("a re-minted group id must parse as an Id");
+            assert_eq!(
+                id_time(&group),
+                id_time(&project),
+                "a re-minted id keeps its project's UUIDv7 timestamp"
+            );
+        }
+    }
+
+    for (table, fixed, marker) in [
+        ("collections", SOURCE_GROUP_ID, "8"),
+        ("transactions", DEFAULT_GROUP_ID, "4"),
+        ("logical_function_runs", DEFAULT_GROUP_ID, "4"),
+        ("logical_table_data_versions", DESTINATION_GROUP_ID, "c"),
+    ] {
+        let referrers = scalars(
+            &db.serving,
+            &format!("SELECT project_id || '=' || group_id FROM {table} ORDER BY project_id"),
+        )
+        .await;
+        let mut expected = vec![format!("{keeper}={fixed}")];
+        expected.extend(minted.iter().map(|p| format!("{p}={}{marker}", &p[..25])));
+        assert_eq!(
+            referrers, expected,
+            "{table} must follow its own project's group"
+        );
+    }
+
+    let resolved = scalars(
+        &db.serving,
+        "SELECT project_id || '=' || \"group\" FROM collections__with_names \
+         UNION ALL SELECT project_id || '=' || \"group\" FROM transactions__with_names \
+         UNION ALL SELECT project_id || '=' || \"group\" FROM function_runs__with_names \
+         ORDER BY 1",
+    )
+    .await;
+    let mut expected: Vec<String> = seeded
+        .iter()
+        .flat_map(|p| {
+            [
+                format!("{p}=sources"),
+                format!("{p}=default"),
+                format!("{p}=default"),
+            ]
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(
+        resolved, expected,
+        "every name view must resolve the group through the single-column join"
+    );
+
+    let mismatched = scalars(
+        &db.serving,
+        "SELECT c.id FROM collections c JOIN groups g ON g.id = c.group_id \
+         WHERE (g.kind = 'sources') <> (c.collection_type = 'S')",
+    )
+    .await;
+    assert!(
+        mismatched.is_empty(),
+        "collection types must agree with their group's kind: {mismatched:?}"
+    );
+
+    let pool = db.serving.as_ref();
+    let orphan = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "INSERT INTO collections (id, project_id, name, description, created_on, created_by_id, \
+           modified_on, modified_by_id, group_id, base_path, collection_type) \
+         VALUES ('orphan', '{keeper}', 'orphan', '', now(), 'u0', now(), 'u0', 'no-such-group', \
+           NULL, 'F')"
+    )))
+    .execute(pool)
+    .await;
+    assert_eq!(
+        sqlstate(orphan),
+        "23503",
+        "the re-added FK must refuse an unknown group"
+    );
+    let still_referenced = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "DELETE FROM groups WHERE id = '{DEFAULT_GROUP_ID}'"
+    )))
+    .execute(pool)
+    .await;
+    assert_eq!(
+        sqlstate(still_referenced),
+        "23001",
+        "RESTRICT must keep a referenced group"
+    );
+    let duplicate = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "INSERT INTO groups (id, project_id, name, description, created_on, created_by_id, \
+           modified_on, modified_by_id, system, kind) \
+         VALUES ('{DEFAULT_GROUP_ID}', '{}', 'again', '', now(), 'u0', now(), 'u0', false, 'custom')",
+        minted[0]
+    )))
+    .execute(pool)
+    .await;
+    assert_eq!(
+        sqlstate(duplicate),
+        "23505",
+        "the primary key must hold instance-wide, not per project"
+    );
+}
+
+fn sqlstate<T>(result: Result<T, sqlx::Error>) -> String {
+    match result {
+        Err(sqlx::Error::Database(e)) => e.code().map(|c| c.to_string()).unwrap_or_default(),
+        Err(other) => panic!("expected a database error, got {other}"),
+        Ok(_) => panic!("expected the statement to be refused"),
+    }
+}
+
+/// Two re-minted projects sharing the first 25 characters of their ids land on
+/// one group id; the primary key v8 → v9 adds refuses it and the ladder rolls
+/// back.
+#[tokio::test]
+async fn v8_to_v9_refuses_projects_whose_ids_collide_postgres() {
+    let db = crate::test_utils::postgres::pool().await;
+    db.admin
+        .upgrade_source(archive::source(8))
+        .await
+        .expect("installing archive v8");
+    seed_shared_group_ids(
+        &db.serving,
+        &[
+            "0000000000000000000000aa04",
+            "0000000000000000000000ab04",
+            "0000000000000000000000ab08",
+        ],
+    )
+    .await;
+
+    let failure = db
+        .admin
+        .upgrade(&ApiserverComponent)
+        .await
+        .expect_err("colliding project ids must fail the ladder")
+        .to_string();
+    assert!(
+        failure.contains(r#"could not create unique index "groups_pkey""#),
+        "the primary key must refuse the colliding id: {failure}"
     );
 }
 

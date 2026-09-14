@@ -148,9 +148,7 @@ pub(crate) fn node_aggregates_query(
             JoinType::LeftJoin,
             GroupDBIden::Table,
             Sq::G,
-            Expr::col((Sq::G, GroupDBIden::Id))
-                .equals((Sq::A, Col::GroupId))
-                .and(Expr::col((Sq::G, GroupDBIden::ProjectId)).equals((Sq::A, Col::ProjectId))),
+            Expr::col((Sq::G, GroupDBIden::Id)).equals((Sq::A, Col::GroupId)),
         )
         .join_as(
             JoinType::LeftJoin,

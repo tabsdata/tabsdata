@@ -9,17 +9,16 @@ use td_database::domain::{Apiserver, Domained};
 use td_database::pool::scoped::{Scoped, ScopedExt};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::group::{GroupCreate, GroupInsertDB};
+use td_objects::dxo::group::{GroupInsertDB, SYSTEM_GROUPS};
 use td_objects::dxo::project::ProjectInsertDB;
 use td_objects::dxo::project::{ActiveProjectDB, ProjectCreate};
 use td_objects::types::basic::{
     AccessTokenId, BasePath, Description, GroupId, GroupName, ProjectId, ProjectName, System,
     UserId,
 };
-use td_security::SYSTEM_GROUPS;
 
-/// Seed a project together with the system groups (`default`, `source`,
-/// `destination`) — the same set the projects CRUD seeds into a freshly-created
+/// Seed a project together with the system groups (`default`, `sources`,
+/// `destinations`) — the same set the projects CRUD seeds into a freshly-created
 /// project. A collection resolves its group within its own project, so a
 /// project without these cannot host a collection.
 ///
@@ -58,20 +57,17 @@ where
     let scoped = db.in_project(project_db.id);
     scoped.insert(&project_db).await?;
 
-    for (group_id, group_name, group_description) in SYSTEM_GROUPS {
-        let group_create = GroupCreate {
+    for (kind, group_name, group_description) in SYSTEM_GROUPS {
+        let group = GroupInsertDB {
+            id: GroupId::default(),
             name: GroupName::try_from(group_name)?,
             description: Description::try_from(group_description)?,
-        };
-        let group = GroupInsertDB {
-            id: GroupId::try_from(group_id)?,
-            name: group_create.name,
-            description: group_create.description,
             created_on: request_context.time.into(),
             created_by_id: request_context.user_id.into(),
             modified_on: request_context.time.into(),
             modified_by_id: request_context.user_id.into(),
             system: System::TRUE,
+            kind,
         };
         scoped.insert(&group).await?;
     }
@@ -86,7 +82,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
     use td_objects::dxo::project::ActiveProjectDB;
-    use td_objects::types::basic::{GroupId, GroupName, ProjectName};
+    use td_objects::types::basic::{GroupKind, GroupName, ProjectName};
 
     #[td_test::test(db)]
     async fn test_seed_project(db: TdPool) {
@@ -100,15 +96,11 @@ mod tests {
         assert_eq!(found.id, project.id);
         assert_eq!(found.name, project.name);
 
-        // The three system groups land in the new project, carrying the
-        // well-known fixed ids (group ids are unique per project). `project_id`
-        // is no longer a `GroupDB` field (RLS owns it via the column default);
-        // that the rows are tagged with the new project is covered end-to-end
-        // by `test_collection_rls_scoped_by_project`.
-        for (id, name) in [
-            (GroupId::default_group(), GroupName::default_group()),
-            (GroupId::source(), GroupName::source()),
-            (GroupId::destination(), GroupName::destination()),
+        // Project tagging is covered by `test_collection_rls_scoped_by_project`.
+        for (kind, name) in [
+            (GroupKind::Default, GroupName::default_group()),
+            (GroupKind::Sources, GroupName::source()),
+            (GroupKind::Destinations, GroupName::destination()),
         ] {
             let group: GroupDB = db
                 .scoped(project.id)
@@ -116,8 +108,8 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(
-                group.base.id, id,
-                "system group '{name}' must carry the fixed id"
+                group.base.kind, kind,
+                "system group '{name}' must carry its kind"
             );
             assert!(*group.base.system);
         }

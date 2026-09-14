@@ -75,7 +75,6 @@ enum Col {
     SourceLtdvId,
     SourceRowCount,
     SourceDataBytes,
-    SourceProjectId,
     TableId,
     Tables,
     LogicalTables,

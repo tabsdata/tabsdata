@@ -85,6 +85,7 @@ pub(crate) mod tests {
     };
     use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::graph::GraphEdge;
+    use td_objects::dxo::group::GroupDB;
     use td_objects::dxo::logical::{
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunStatusUpdateDB,
         LogicalTableDataVersionDB,
@@ -96,7 +97,7 @@ pub(crate) mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AllowDisabled, BundleId, CollectionName, Decorator, Depth, Description,
         Enabled, ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
-        GroupId, GroupName, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
+        GroupName, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
         ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
         TriggeredOn, UserId, VersionPos,
     };
@@ -166,11 +167,13 @@ pub(crate) mod tests {
             .fetch_one::<ActiveCollectionDB>(&collection_name)
             .await?;
         assert_eq!(collection.project_id, project.id);
+        let default_group: GroupDB = db
+            .scoped(project.id)
+            .fetch_one::<GroupDB>(&GroupName::default_group())
+            .await?;
         assert_eq!(
-            collection.group_id,
-            GroupId::try_from(td_security::ENCODED_ID_GROUP_DEFAULT).unwrap(),
-            "system groups carry the same well-known id in every project; the \
-             project's own row is what scopes it (asserted via project_id)",
+            collection.group_id, default_group.base.id,
+            "the collection lands in its own project's default group",
         );
 
         // Every run-level row must inherit the project's group.

@@ -10,7 +10,7 @@ use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionInsertDB};
 use td_objects::dxo::group::GroupDB;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, CollectionType, Description, GroupId, GroupName, UserId,
+    AtTime, CollectionId, CollectionName, CollectionType, Description, GroupName, UserId,
 };
 
 pub(crate) async fn seed_collection(
@@ -24,7 +24,7 @@ pub(crate) async fn seed_collection(
         .reuse()
         .fetch_one::<GroupDB>(&GroupName::default_group())
         .await?;
-    seed_collection_in_group(executor, collection_name, created_by, default_group.base.id).await
+    seed_collection_in_group(executor, collection_name, created_by, &default_group).await
 }
 
 /// Seed a collection assigned to a specific group. The plain
@@ -35,11 +35,9 @@ pub(crate) async fn seed_collection_in_group(
     mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
     collection_name: &CollectionName,
     created_by: &UserId,
-    group_id: GroupId,
+    group: &GroupDB,
 ) -> Result<ActiveCollectionDB, TdError> {
-    // Infer the flavour from the group id, mirroring the create service, so
-    // seeded source/destination collections carry the right type.
-    let collection_type = CollectionType::from_group_id(&group_id);
+    let collection_type = CollectionType::from_group_kind(&group.base.kind);
 
     let created_on = AtTime::now();
     let collection = CollectionInsertDB {
@@ -51,7 +49,7 @@ pub(crate) async fn seed_collection_in_group(
         modified_on: created_on.into(),
         modified_by_id: (*created_by).into(),
         name_when_deleted: None,
-        group_id,
+        group_id: group.base.id,
         base_path: None,
         collection_type,
         connection_id: None,

@@ -48,43 +48,10 @@ pub const ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN: &str = "000000000000000000000000
 pub const ID_USER_ROLE_ADMIN_DEFAULT: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6];
 pub const ENCODED_ID_USER_ROLE_ADMIN_DEFAULT: &str = "0000000000000000000000000o";
 
-///- Groups:
-///    - default: 00000000000000000000000022 (BASE32HEX_NOPAD: 00000000000000000000000208)
-pub const ID_GROUP_DEFAULT: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2];
-pub const ENCODED_ID_GROUP_DEFAULT: &str = "00000000000000000000000208";
-///    - source: 00000000000000000000000023 (BASE32HEX_NOPAD: 0000000000000000000000020c)
-pub const ID_GROUP_SOURCE: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3];
-pub const ENCODED_ID_GROUP_SOURCE: &str = "0000000000000000000000020c";
-///    - destination: 00000000000000000000000024 (BASE32HEX_NOPAD: 0000000000000000000000020g)
-pub const ID_GROUP_DESTINATION: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4];
-pub const ENCODED_ID_GROUP_DESTINATION: &str = "0000000000000000000000020g";
-
 /// Predefined group names.
 pub const DEFAULT_GROUP: &str = "default";
 pub const SOURCE_GROUP: &str = "sources";
 pub const DESTINATION_GROUP: &str = "destinations";
-
-/// The per-project system groups as `(encoded id, name, description)` — the
-/// single source every seeder (schema bootstrap, project create, test utils)
-/// derives from. Group ids are unique per project, so these fixed ids are
-/// minted in every project.
-pub const SYSTEM_GROUPS: [(&str, &str, &str); 3] = [
-    (
-        ENCODED_ID_GROUP_DEFAULT,
-        DEFAULT_GROUP,
-        "Default group — assigned to collections that do not specify a group.",
-    ),
-    (
-        ENCODED_ID_GROUP_SOURCE,
-        SOURCE_GROUP,
-        "Sources group — assigned to ingestion collections.",
-    ),
-    (
-        ENCODED_ID_GROUP_DESTINATION,
-        DESTINATION_GROUP,
-        "Destinations group — assigned to egestion collections.",
-    ),
-];
 
 ///- Permissions (the five rows the bootstrap seeds):
 ///    - sys_admin / manage_access on system: (BASE32HEX_NOPAD: 00000000000000000000000010)
@@ -112,7 +79,7 @@ pub const ID_ALL_ENTITIES: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 pub const ENCODED_ID_ALL_ENTITIES: &str = "00000000000000000000000204";
 
 ///- project_creator role: confers exactly `create_projects` on system.
-///  Byte 0x26 (0x25 is unused; bytes 22..=24 are the seeded groups).
+///  Byte 0x26 (bytes 0x22..=0x25 are unused).
 pub const ID_ROLE_PROJECT_CREATOR: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6];
 pub const ENCODED_ID_ROLE_PROJECT_CREATOR: &str = "0000000000000000000000020o";
 ///- project_creator / create_projects on system permission row: byte 0x27 = "...20s".

@@ -59,8 +59,8 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, GroupId, GroupName, LogicalFunctionRunStatus, ProjectName,
-        TableNameDto, TransactionKey, UserId,
+        FunctionRuntimeValues, GroupName, LogicalFunctionRunStatus, ProjectName, TableNameDto,
+        TransactionKey, UserId,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -310,11 +310,10 @@ mod tests {
         // Each row is attributed to its own project.
         assert_eq!(row_a.project_id, p.id);
         assert_eq!(row_b.project_id, project_b.id);
-        // Both `default` groups share the fixed id; the project tag disambiguates.
+        // Each project's `default` group is a row of its own.
         assert_eq!(row_a.group_id, coll_a.group_id);
         assert_eq!(row_b.group_id, coll_b.group_id);
-        assert_eq!(coll_a.group_id, GroupId::default_group());
-        assert_eq!(coll_b.group_id, GroupId::default_group());
+        assert_ne!(coll_a.group_id, coll_b.group_id);
         // A groups join not matching project_id would fan out and double these.
         assert_eq!(row_a.count, 1, "fan-out: project A count inflated");
         assert_eq!(row_b.count, 1, "fan-out: project B count inflated");

@@ -16,8 +16,7 @@ use td_objects::types::visible_projects::VisibleProjects;
 
 /// The bare LFR table with name joins; the `*__with_names` view drags in
 /// joins this endpoint doesn't need. The inner joins on the `*_active` views
-/// drop runs of soft-deleted collections and projects; the group join also
-/// matches `project_id` because group ids are only unique per project.
+/// drop runs of soft-deleted collections and projects.
 pub(crate) fn inflight_query(
     req: &InflightRequest,
     visible_projects: &VisibleProjects,
@@ -52,11 +51,7 @@ pub(crate) fn inflight_query(
             JoinType::LeftJoin,
             GroupDBIden::Table,
             Expr::col(lfr(LogicalFunctionRunDBIden::GroupId))
-                .equals((GroupDBIden::Table, GroupDBIden::Id))
-                .and(
-                    Expr::col(lfr(LogicalFunctionRunDBIden::ProjectId))
-                        .equals((GroupDBIden::Table, GroupDBIden::ProjectId)),
-                ),
+                .equals((GroupDBIden::Table, GroupDBIden::Id)),
         )
         .join(
             JoinType::InnerJoin,
