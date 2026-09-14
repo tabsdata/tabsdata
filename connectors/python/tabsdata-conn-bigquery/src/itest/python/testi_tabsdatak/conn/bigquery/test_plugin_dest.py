@@ -170,6 +170,11 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 # ---------------------------------------------------------------------------
 
 
+# A MERGE takes no load-job options, so the connector evolves its target with
+# ALTER statements or not at all -- and the write has to say so.
+_ICEBERG = {"bigquery.schema_evolution_engine": "iceberg"}
+
+
 def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
     """A batch parquet. A column given as a `Series` pins its dtype."""
     pl.DataFrame(columns).write_parquet(path, use_pyarrow=True)
@@ -220,6 +225,7 @@ def _merge_out(
             if_table_exists="merge",
             merge_cfg=merge_cfg,
             schema_evolution=schema_evolution,
+            dest_cfg=_ICEBERG,
         ),
         [parquet],
     )
@@ -519,6 +525,203 @@ def test_dest_plugin_write_out_merge_resolves_table_name_spelling(
                 "status": ["new", "shipped", "new"],
             }),
         )
+    finally:
+        db.drop_table(table)
+
+
+# ---------------------------------------------------------------------------
+# schema_evolution_engine="iceberg" on a bulk load
+#
+# BigQuery's schema_update_options only add a column or relax one to nullable,
+# so a bulk load cannot widen one however the batch has grown. Diffing the
+# target against the batch reaches what those cannot -- and refuses what
+# BigQuery could not do at all.
+#
+# A target of a particular type has to be built with DDL: one the load job
+# creates is inferred from the batch itself, so both sides would agree by
+# construction and there would be nothing to widen.
+# ---------------------------------------------------------------------------
+
+
+def _load_out(conn, work: Path, table: str, parquet: Path, **dest_kwargs) -> None:
+    plugin._BigQueryDestPlugin().write_out(
+        PluginDestCtx(work),
+        conn,
+        BigQueryDest(
+            tables=[table_fqn(table)],
+            if_table_exists=dest_kwargs.pop("if_table_exists", "append"),
+            schema_evolution=dest_kwargs.pop("schema_evolution", "update"),
+            **dest_kwargs,
+        ),
+        [parquet],
+    )
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_iceberg_engine_widens_a_numeric(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # An INT64 target against a NUMERIC batch: a widening BigQuery allows and
+    # the load-job options cannot reach, so it is the plainest thing the engine
+    # buys over native evolution.
+    db = store(domain_bigquery)
+    table = "td_dest_iceberg_widen_numeric"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    db.create_typed_table(table, "order_id INT64, amount INT64")
+    batch = _batch(
+        tmp_path / "priced.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([Decimal("10.50")], dtype=pl.Decimal(20, 2)),
+        },
+    )
+    try:
+        _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+        assert db.column_types(table)["amount"][0] == "NUMERIC"
+        assert db.count(table) == 1
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_native_engine_cannot_widen(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The counterpart, and the reason the option exists: schema_update_options
+    # add columns and relax nullability, so the retype has nowhere to go and
+    # the load job refuses the batch.
+    db = store(domain_bigquery)
+    table = "td_dest_native_widen_numeric"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    db.create_typed_table(table, "order_id INT64, amount INT64")
+    batch = _batch(
+        tmp_path / "priced.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([Decimal("10.50")], dtype=pl.Decimal(20, 2)),
+        },
+    )
+    try:
+        with pytest.raises(BigQueryRuntimeException):
+            _load_out(conn, work, table, batch)
+        assert db.column_types(table)["amount"][0] == "INTEGER"
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The half both engines can do, so the Iceberg pass has to do it too --
+    # with the load-job options off, it is the only thing that would.
+    db = store(domain_bigquery)
+    table = "td_dest_iceberg_add_column"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    narrow = _batch(tmp_path / "narrow.parquet", {"order_id": [1], "status": ["new"]})
+    widened = _batch(
+        tmp_path / "widened.parquet",
+        {"order_id": [2], "status": ["new"], "priority": ["high"]},
+    )
+    try:
+        _load_out(conn, work, table, narrow, dest_cfg=_ICEBERG)
+        assert "priority" not in db.read_table(table).columns
+
+        _load_out(conn, work, table, widened, dest_cfg=_ICEBERG)
+        got = db.read_table(table)
+        assert "priority" in got.columns
+        assert got.filter(got["order_id"] == 2)["priority"].to_list() == ["high"]
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # No ALTER reconciles two kinds, so the write stops before the load rather
+    # than after it has half-applied.
+    db = store(domain_bigquery)
+    table = "td_dest_iceberg_unsafe"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    db.create_typed_table(table, "order_id INT64, amount NUMERIC")
+    before = db.column_types(table)
+    batch = _batch(
+        tmp_path / "lettered.parquet",
+        {"order_id": [1], "amount": ["not a number"]},
+    )
+    try:
+        with pytest.raises(BigQueryRuntimeException) as ei:
+            _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_23
+        assert db.column_types(table) == before
+        assert db.count(table) == 0
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_iceberg_engine_still_refuses_a_widened_batch_on_strict(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # Strict pins the target's schema, and asking for the Iceberg engine does
+    # not lift that -- the engine only says *how* a schema that is allowed to
+    # move is moved. So the new column is never added, and the load job that
+    # would have to write it fails: BigQuery does not drop a field the target
+    # has no home for, it refuses the batch. That failure is the proof the
+    # Iceberg pass held off; had it run, the column would be there and the load
+    # would have succeeded.
+    db = store(domain_bigquery)
+    table = "td_dest_iceberg_strict"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    db.create_typed_table(table, "order_id INT64, status STRING")
+    before = db.column_types(table)
+    batch = _batch(
+        tmp_path / "widened.parquet",
+        {"order_id": [1], "status": ["new"], "priority": ["high"]},
+    )
+    try:
+        with pytest.raises(BigQueryRuntimeException) as ei:
+            _load_out(
+                conn, work, table, batch, schema_evolution="strict", dest_cfg=_ICEBERG
+            )
+        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_7
+        assert db.column_types(table) == before
+        assert db.count(table) == 0
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_iceberg_engine_loads_a_same_shape_batch_on_strict(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The other half: strict with nothing to evolve is an ordinary load. The
+    # engine adds no statements of its own and the rows land.
+    db = store(domain_bigquery)
+    table = "td_dest_iceberg_strict_same_shape"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    db.create_typed_table(table, "order_id INT64, status STRING")
+    before = db.column_types(table)
+    batch = _batch(tmp_path / "same.parquet", {"order_id": [1], "status": ["new"]})
+    try:
+        _load_out(
+            conn, work, table, batch, schema_evolution="strict", dest_cfg=_ICEBERG
+        )
+        assert db.column_types(table) == before
+        assert db.count(table) == 1
     finally:
         db.drop_table(table)
 

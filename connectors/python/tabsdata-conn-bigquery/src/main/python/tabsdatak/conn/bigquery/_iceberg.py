@@ -36,8 +36,9 @@ from tabsdatak.conn.bigquery._validation import _BIGQUERY_COLUMN_FQN_DEF
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import fqn
 
+# Re-exported so callers import every iceberg piece from one module.
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._iceberg import (
+from tabsdatak.conn.common.sql._iceberg import (  # noqa: F401
     Action,
     ColumnDef,
     DialectRenderer,
@@ -51,28 +52,6 @@ from tabsdatak.conn.common.sql._iceberg import (
     compute_delta,
     validate_delta,
 )
-
-__all__ = [
-    # Re-exported so callers import every iceberg piece from one module.
-    "Action",
-    "ColumnDef",
-    "DialectRenderer",
-    "RenderOptions",
-    "ReorderPolicy",
-    "SchemaChange",
-    "SchemaDelta",
-    "TableSchema",
-    "TypeWideningMap",
-    "UnsafeSchemaChangeError",
-    "compute_delta",
-    "validate_delta",
-    # BigQuery-specific surface.
-    "BIGQUERY_TYPE_WIDENING_MAP",
-    "BigQueryRenderer",
-    "quote_column",
-    "render_bigquery_sql",
-    "table_schema_from_columns",
-]
 
 
 def quote_column(name: str) -> str:

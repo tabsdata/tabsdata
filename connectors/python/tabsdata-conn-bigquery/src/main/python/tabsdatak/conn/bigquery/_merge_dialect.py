@@ -23,10 +23,10 @@ from tabsdatak.conn.bigquery import _iceberg
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge import WatermarkCfg
+from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._evolution import evolve_with_iceberg
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import (
@@ -35,8 +35,6 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     MergeSyntax,
     Staged,
 )
-
-__all__ = ["BigQueryMergeDialect"]
 
 logger = logging.getLogger(__name__)
 
@@ -260,8 +258,8 @@ class BigQueryMergeDialect(MergeDialect):
         return evolve_with_iceberg(
             self,
             target,
-            staged,
-            marker,
+            staged.columns,
+            marker=marker,
             renderer=_iceberg.BigQueryRenderer(),
             widening_map=_iceberg.BIGQUERY_TYPE_WIDENING_MAP,
             can_safely_widen=_iceberg.can_widen,

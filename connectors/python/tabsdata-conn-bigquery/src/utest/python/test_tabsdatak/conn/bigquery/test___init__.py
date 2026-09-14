@@ -149,6 +149,11 @@ def test_bigquery_conn_rejects_missing_staging():
 # ---------------------------------------------------------------------------
 
 
+# A MERGE takes no load-job options, so the connector evolves its target with
+# ALTER statements or not at all -- and the write has to say so.
+_ICEBERG = {"bigquery.schema_evolution_engine": "iceberg"}
+
+
 def _merge_cfg(**overrides) -> MergeCfg:
     kwargs: dict = dict(on=["order_id"], op_column="op")
     kwargs.update(overrides)
@@ -240,7 +245,7 @@ def test_bigquery_dest_round_trips_a_merge():
     dest = BigQueryDest(
         tables=["`my-project.analytics.orders`"],
         if_table_exists="merge",
-        merge_cfg=_merge_cfg(),
+        merge_cfg=_merge_cfg(), dest_cfg=_ICEBERG,
     )
     loaded = BigQueryDest.from_json(dest.to_json())
     assert loaded == dest
@@ -251,7 +256,7 @@ def test_bigquery_dest_round_trips_a_merge_cfg_per_table():
     dest = BigQueryDest(
         tables=["`p.ds.orders`", "`p.ds.items`"],
         if_table_exists="merge",
-        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
+        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])], dest_cfg=_ICEBERG,
     )
     loaded = BigQueryDest.from_json(dest.to_json())
     assert [c.on for c in loaded.merge_cfg] == [["order_id"], ["item_id"]]
@@ -262,7 +267,7 @@ def test_bigquery_dest_broadcasts_a_single_cfg_to_every_table():
     dest = BigQueryDest(
         tables=["`p.ds.a`", "`p.ds.b`", "`p.ds.c`"],
         if_table_exists="merge",
-        merge_cfg=cfg,
+        merge_cfg=cfg, dest_cfg=_ICEBERG,
     )
     assert dest._merge_cfgs() == [cfg, cfg, cfg]
 
@@ -276,14 +281,14 @@ def test_bigquery_dest_keeps_a_list_of_cfgs_in_order():
     dest = BigQueryDest(
         tables=["`p.ds.a`", "`p.ds.b`"],
         if_table_exists="merge",
-        merge_cfg=[first, second],
+        merge_cfg=[first, second], dest_cfg=_ICEBERG,
     )
     assert dest._merge_cfgs() == [first, second]
 
 
 def test_bigquery_dest_rejects_merge_without_a_merge_cfg():
     with pytest.raises(BigQueryValidateException) as ei:
-        BigQueryDest(tables=["`p.ds.a`"], if_table_exists="merge")
+        BigQueryDest(tables=["`p.ds.a`"], if_table_exists="merge", dest_cfg=_ICEBERG)
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_12
     assert "requires merge_cfg" in str(ei.value)
 
@@ -305,7 +310,7 @@ def test_bigquery_dest_rejects_a_cfg_list_that_does_not_match_tables():
         BigQueryDest(
             tables=["`p.ds.a`", "`p.ds.b`"],
             if_table_exists="merge",
-            merge_cfg=[_merge_cfg()],
+            merge_cfg=[_merge_cfg()], dest_cfg=_ICEBERG,
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_14
     assert "1 entries but tables has 2" in str(ei.value)

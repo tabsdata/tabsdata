@@ -95,8 +95,18 @@ MergeColumnSpec: TypeAlias = Annotated[str, _validation.MERGE_COLUMN_VALIDATOR]
 MergeColumnsSpec: TypeAlias = list[MergeColumnSpec]
 
 
+SchemaEvolutionEngineSpec: TypeAlias = Literal["native", "iceberg"]
+"""Which machinery evolves the target's schema. `"native"` leans on
+BigQuery's own `schema_update_options` on the load job; `"iceberg"` has the
+connector diff the target against the incoming batch and emit the `ALTER`
+statements itself."""
+
+
 # --- BigQueryDest.dest_cfg keys -------------------------------------
-DestCfgKey: TypeAlias = Literal["bigquery.logging_level",]
+DestCfgKey: TypeAlias = Literal[
+    "bigquery.logging_level",
+    "bigquery.schema_evolution_engine",
+]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -294,8 +304,19 @@ class BigQueryDest(Dest):
             `if_table_exists="merge"`: how incoming rows are matched
             onto existing ones. One `MergeCfg` applies to every table;
             pass a list to configure each table in `tables` separately.
-        dest_cfg: Optional connector config; the only supported key is
-            `bigquery.logging_level`.
+        dest_cfg: Optional connector config. Supported keys:
+            `bigquery.logging_level`, and
+            `bigquery.schema_evolution_engine` -- `"native"` (the default
+            when unset) or `"iceberg"`. Native evolution is BigQuery's
+            `schema_update_options` on the load job, which only ever adds a
+            column or relaxes one to nullable. `"iceberg"` has the connector
+            diff the target against the incoming batch instead, which also
+            widens a column whose type the batch has outgrown and refuses a
+            change BigQuery could not make. It applies only where the schema
+            is allowed to move, so it does nothing under
+            `schema_evolution="strict"`; `if_table_exists="merge"` requires
+            `bigquery.schema_evolution_engine="iceberg"`, since a `MERGE` takes no
+            load-job options at all.
 
     Examples:
         Overwrite the target table each run with `if_table_exists="replace"`:
@@ -362,7 +383,8 @@ class BigQueryDest(Dest):
 
     def validate(self) -> None:
         """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
-        require each other, and a list of configs must line up with `tables`.
+        require each other, a list of configs must line up with `tables`, and
+        merging requires `schema_evolution_engine="iceberg"`.
 
         Called by the framework; raises `BigQueryValidateException`.
         """
@@ -380,3 +402,9 @@ class BigQueryDest(Dest):
             raise BigQueryErrorCode.BIGQUERY_14.exception(
                 cfgs=len(self.merge_cfg), tables=len(self.tables)
             )
+        # Last, so a merge that is malformed in a more basic way reports that
+        # instead: a missing merge_cfg is the thing to fix first.
+        engine = (self.dest_cfg or {}).get("bigquery.schema_evolution_engine")
+        if merging and engine != "iceberg":
+            # noinspection PyProtectedMember
+            raise BigQueryErrorCode.BIGQUERY_22.exception()

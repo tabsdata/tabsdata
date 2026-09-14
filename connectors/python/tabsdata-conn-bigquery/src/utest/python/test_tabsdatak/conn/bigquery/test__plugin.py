@@ -26,6 +26,7 @@ from tabsdatak.conn.bigquery import _plugin as plugin
 from tabsdatak.conn.bigquery.error import (
     BigQueryRuntimeException,
     BigQueryErrorCode,
+    BigQueryValidateException,
 )
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery import GCSLocation
@@ -85,6 +86,187 @@ def _staging() -> GCSLocation:
         credentials=GCPJson(json=Secret(_gcp_key())),
         base_path="/staging",
     )
+
+
+# ---------------------------------------------------------------------------
+# schema_evolution_engine
+#
+# BigQuery's own evolution only ever adds a column or relaxes one to nullable,
+# so a bulk load cannot widen one however the batch has grown. Diffing the
+# target against the batch reaches what the load-job options cannot -- and
+# refuses what BigQuery could not do at all.
+# ---------------------------------------------------------------------------
+
+
+def _schema_field(name, type_, mode="NULLABLE"):
+    from google.cloud import bigquery
+
+    return bigquery.SchemaField(name, type_, mode=mode)
+
+
+def _evolving_clients(
+    monkeypatch, target_columns, batch_columns, target_exists=True
+):
+    """A bq client whose target has ``target_columns`` and whose staged batch
+    loads to a table with ``batch_columns``, each a ``(name, legacy_type)``."""
+    from google.cloud.exceptions import NotFound
+
+    target = "my-project.analytics.users"
+
+    def get_table(fqn):
+        if fqn.startswith(f"{target}_"):  # the staging table the batch loads to
+            return SimpleNamespace(
+                schema=[_schema_field(n, t) for n, t in batch_columns]
+            )
+        if fqn == target and target_exists:
+            return SimpleNamespace(
+                schema=[_schema_field(n, t) for n, t in target_columns]
+            )
+        raise NotFound(f"{fqn} not found")
+
+    bq_client = MagicMock(name="bq", get_table=MagicMock(side_effect=get_table))
+    bq_client.load_table_from_uri.return_value = MagicMock(
+        result=MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client = MagicMock(name="gcs")
+    gcs_client.bucket.return_value.blob.return_value = MagicMock()
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+    return bq_client
+
+
+def _write(work_dir, dest_cfg=None, schema_evolution="update"):
+    dest = BigQueryDest(
+        tables=["`my-project.analytics.users`"],
+        if_table_exists="append",
+        schema_evolution=schema_evolution,
+        dest_cfg=dest_cfg,
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), _bare_conn(), dest, [src])
+
+
+def _alters(bq_client):
+    return [c.args[0] for c in bq_client.query_and_wait.call_args_list]
+
+
+_ICEBERG_ENGINE = {"bigquery.schema_evolution_engine": "iceberg"}
+
+
+def test_dest_plugin_iceberg_engine_widens_a_column(monkeypatch, work_dir):
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "NUMERIC")]
+    )
+    _write(work_dir, _ICEBERG_ENGINE)
+    assert _alters(bq_client) == [
+        "ALTER TABLE `my-project.analytics.users`"
+        " ALTER COLUMN IF EXISTS `id` SET DATA TYPE NUMERIC"
+    ]
+
+
+def test_dest_plugin_iceberg_engine_adds_a_column_the_target_lacks(
+    monkeypatch, work_dir
+):
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
+    )
+    _write(work_dir, _ICEBERG_ENGINE)
+    assert _alters(bq_client) == [
+        "ALTER TABLE `my-project.analytics.users`"
+        " ADD COLUMN IF NOT EXISTS `note` STRING"
+    ]
+
+
+def test_dest_plugin_iceberg_engine_refuses_a_change_bigquery_cannot_make(
+    monkeypatch, work_dir
+):
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "NUMERIC")], [("id", "STRING")]
+    )
+    with pytest.raises(BigQueryRuntimeException):
+        _write(work_dir, _ICEBERG_ENGINE)
+    assert _alters(bq_client) == []
+
+
+def test_dest_plugin_iceberg_engine_evolves_before_it_loads(monkeypatch, work_dir):
+    # The rows have to land in a target already shaped to hold them.
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
+    )
+    _write(work_dir, _ICEBERG_ENGINE)
+    # The final load is the last one; the batch-schema read comes before it.
+    loaded = [c.args[1] for c in bq_client.load_table_from_uri.call_args_list]
+    assert loaded[-1] == "my-project.analytics.users"
+    assert loaded[0].startswith("my-project.analytics.users_")
+    assert bq_client.query_and_wait.called
+
+
+def test_dest_plugin_iceberg_engine_drops_the_table_it_read_the_batch_from(
+    monkeypatch, work_dir
+):
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER")]
+    )
+    _write(work_dir, _ICEBERG_ENGINE)
+    dropped = [c.args[0] for c in bq_client.delete_table.call_args_list]
+    assert len(dropped) == 1 and dropped[0].startswith("my-project.analytics.users_")
+
+
+def test_dest_plugin_iceberg_engine_does_nothing_under_strict(monkeypatch, work_dir):
+    """Strict pins the target's schema; the engine only says *how* a schema
+    that is allowed to move is moved."""
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
+    )
+    _write(work_dir, _ICEBERG_ENGINE, schema_evolution="strict")
+    assert _alters(bq_client) == []
+    assert bq_client.delete_table.call_count == 0
+
+
+def test_dest_plugin_native_engine_emits_no_alters_of_its_own(monkeypatch, work_dir):
+    """The counterpart: native evolution is the load-job options and nothing
+    else, so a target short a column is left to the load job."""
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
+    )
+    _write(work_dir)
+    assert _alters(bq_client) == []
+    assert bq_client.load_table_from_uri.call_count == 1
+
+
+def test_dest_plugin_iceberg_engine_skips_a_target_that_does_not_exist(
+    monkeypatch, work_dir
+):
+    """The load job creates it from the batch, so there is nothing to
+    reconcile -- and nothing to read it off."""
+    bq_client = _evolving_clients(
+        monkeypatch, [], [("id", "INTEGER")], target_exists=False
+    )
+    _write(work_dir, _ICEBERG_ENGINE)
+    assert _alters(bq_client) == []
+
+
+def test_dest_plugin_defaults_to_the_native_engine():
+    assert plugin._resolve_dest_cfg(None).schema_evolution_engine == "native"
+
+
+@pytest.mark.parametrize("engine", ["native", "iceberg"])
+def test_dest_plugin_reads_the_engine_off_dest_cfg(engine):
+    cfg = plugin._resolve_dest_cfg({"bigquery.schema_evolution_engine": engine})
+    assert cfg.schema_evolution_engine == engine
+
+
+def test_dest_plugin_rejects_an_unknown_engine():
+    with pytest.raises(BigQueryValidateException) as ei:
+        plugin._resolve_dest_cfg({"bigquery.schema_evolution_engine": "icebrg"})
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_21
+    assert "'icebrg'" in str(ei.value)
+
+
+# A MERGE takes no load-job options, so the connector evolves its target with
+# ALTER statements or not at all -- and the write has to say so.
+_ICEBERG = {"bigquery.schema_evolution_engine": "iceberg"}
 
 
 def _bare_conn() -> BigQueryDestConn:
@@ -149,6 +331,24 @@ def test_load_job_config_append_update_emits_field_options():
 
     cfg = impl.build_load_job_config("append", "update")
     assert cfg.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
+    assert set(cfg.schema_update_options or []) == {
+        bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
+        bigquery.SchemaUpdateOption.ALLOW_FIELD_RELAXATION,
+    }
+
+
+def test_load_job_config_iceberg_engine_takes_the_field_options_off():
+    """The connector has already ALTERed the target into shape; leaving
+    BigQuery's own evolution on would be a second engine on one write, and one
+    that would quietly re-add a column the Iceberg pass had refused."""
+    cfg = impl.build_load_job_config("append", "update", "iceberg")
+    assert list(cfg.schema_update_options or []) == []
+
+
+def test_load_job_config_defaults_to_the_native_engine():
+    from google.cloud import bigquery
+
+    cfg = impl.build_load_job_config("append", "update")
     assert set(cfg.schema_update_options or []) == {
         bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
         bigquery.SchemaUpdateOption.ALLOW_FIELD_RELAXATION,
@@ -376,7 +576,7 @@ def test_write_cfg_broadcasts_one_merge_cfg_across_every_table():
     dest = BigQueryDest(
         tables=["`p.ds.users`", "`p.ds.orders`"],
         if_table_exists="merge",
-        merge_cfg=merge_cfg,
+        merge_cfg=merge_cfg, dest_cfg=_ICEBERG,
     )
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.merge_cfgs == [merge_cfg, merge_cfg]
@@ -388,7 +588,7 @@ def test_write_cfg_keeps_a_merge_cfg_per_table_aligned_with_target_tables():
     dest = BigQueryDest(
         tables=["`users`", "`orders`"],
         if_table_exists="merge",
-        merge_cfg=[first, second],
+        merge_cfg=[first, second], dest_cfg=_ICEBERG,
     )
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.target_tables == [
@@ -679,7 +879,7 @@ def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -721,7 +921,7 @@ def test_dest_plugin_gives_each_merge_table_its_own_staging_table(
     dest = BigQueryDest(
         tables=["`p.ds.users`", "`p.ds.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
     )
     src1 = _make_parquet(work_dir / "in1.parquet", [{"id": 1, "op": "i"}])
     src2 = _make_parquet(work_dir / "in2.parquet", [{"id": 2, "op": "i"}])
@@ -747,7 +947,7 @@ def test_dest_plugin_merges_the_staging_table_then_drops_it(monkeypatch, work_di
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -809,7 +1009,7 @@ def _merge_dest(schema_evolution):
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
         schema_evolution=schema_evolution,
-        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
     )
 
 
@@ -1095,7 +1295,7 @@ def test_dest_plugin_pairs_each_table_with_its_own_merge_cfg(monkeypatch, work_d
         merge_cfg=[
             MergeCfg(on=["id"], op_column="op"),
             MergeCfg(on=["other_id"], op_column="op"),
-        ],
+        ], dest_cfg=_ICEBERG,
     )
     rows = [{"id": 1, "other_id": 10, "op": "i"}]
     src1 = _make_parquet(work_dir / "in1.parquet", rows)
@@ -1129,7 +1329,7 @@ def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:

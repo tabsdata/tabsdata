@@ -38,15 +38,20 @@ logger = logging.getLogger(__name__)
 
 # --- dest_cfg keys --------------------------------------------------
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "bigquery.logging_level"
+_KEY_DEST_SCHEMA_EVOLUTION_ENGINE: DestCfgKey = "bigquery.schema_evolution_engine"
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
+    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "native",
 }
+
+_SCHEMA_EVOLUTION_ENGINES = ("native", "iceberg")
 
 
 @dataclass(frozen=True)
 class _WriterCfg:
     logging_level: int
+    schema_evolution_engine: str
 
 
 def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
@@ -61,8 +66,18 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     def _get(key: DestCfgKey) -> Any:
         return cfg.get(key, _DEST_CFGS_DEFAULTS[key])
 
+    engine = _get(_KEY_DEST_SCHEMA_EVOLUTION_ENGINE)
+    if engine not in _SCHEMA_EVOLUTION_ENGINES:
+        # A typo here would otherwise fall back to native evolution and lose
+        # the widening the write asked for, with nothing said about it.
+        raise BigQueryErrorCode.BIGQUERY_21.exception(
+            value=engine,
+            allowed=" or ".join(repr(e) for e in _SCHEMA_EVOLUTION_ENGINES),
+        )
+
     return _WriterCfg(
         logging_level=int(_get(_KEY_DEST_LOGGING_LEVEL)),
+        schema_evolution_engine=engine,
     )
 
 
@@ -75,6 +90,11 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         tables: list[TableFileSpec],
     ) -> None:
         # noinspection PyProtectedMember
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.bigquery._evolution import (
+            BigQuerySchemaEvolver,
+            batch_columns,
+        )
         from tabsdatak.conn.bigquery._impl import (
             BigQueryWriteCfg,
             build_bigquery_client,
@@ -187,6 +207,11 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                     logger.debug("bigquery: finished table %r", table_fqn)
                 return
 
+            evolving_with_iceberg = (
+                write_cfg.schema_evolution == "update"
+                and cfg.schema_evolution_engine == "iceberg"
+            )
+
             # Phase 1: upload each parquet to its staging GCS URI.
             logger.info("bigquery: staging %d parquet file(s) to GCS", total)
             for i, (parquet_path, uri) in enumerate(zip(tables, staging_uris), 1):
@@ -210,9 +235,24 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                     total,
                     table_fqn,
                 )
+                if evolving_with_iceberg:
+                    # Before the load, so the rows land in a target already
+                    # shaped to hold them -- and before a replace truncates the
+                    # table it is about to refill.
+                    try:
+                        BigQuerySchemaEvolver(bq_client, table_fqn).evolve(
+                            batch_columns(bq_client, uri, table_fqn)
+                        )
+                    except ConnException:
+                        raise
+                    except Exception as e:
+                        raise BigQueryErrorCode.BIGQUERY_23.exception(
+                            cause=e, table=table_fqn
+                        )
                 job_config = build_load_job_config(
                     write_cfg.if_table_exists,
                     write_cfg.schema_evolution,
+                    cfg.schema_evolution_engine,
                 )
                 try:
                     _load_table_from_uri(

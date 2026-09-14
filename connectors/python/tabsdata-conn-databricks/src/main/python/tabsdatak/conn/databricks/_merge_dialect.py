@@ -30,8 +30,6 @@ from tabsdatak.conn.common.sql._merge.dialect import (
 )
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
-__all__ = ["DatabricksMergeDialect"]
-
 logger = logging.getLogger(__name__)
 
 # A trx id is an opaque string, and STRING is what DESCRIBE TABLE reports back

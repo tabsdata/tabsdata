@@ -200,6 +200,7 @@ class BigQueryWriteCfg:
 def build_load_job_config(
     if_table_exists: IfTableExistsSpec,
     schema_evolution: SchemaEvolutionSpec,
+    schema_evolution_engine: str = "native",
 ) -> Any:
     """Translate the dest's strategy fields into a BigQuery
     ``LoadJobConfig`` for a parquet -> table load.
@@ -215,6 +216,12 @@ def build_load_job_config(
       ``WRITE_APPEND`` with ``ALLOW_FIELD_ADDITION`` and
       ``ALLOW_FIELD_RELAXATION``.
 
+    ``schema_evolution_engine='iceberg'`` takes the options off whatever
+    the other two say: the connector has already ALTERed the target into
+    shape, and leaving BigQuery's own evolution on would be a second
+    engine on one write -- one the write did not ask for, and one that
+    would quietly re-add a column the Iceberg pass had refused.
+
     ``CREATE_IF_NEEDED`` is set unconditionally so the first write to a
     new table creates it.
 
@@ -228,12 +235,13 @@ def build_load_job_config(
     """
     from google.cloud import bigquery
 
+    natively = schema_evolution_engine == "native"
     if if_table_exists == "replace":
         write_disposition = bigquery.WriteDisposition.WRITE_TRUNCATE
         schema_update_options: list[Any] = []
     else:
         write_disposition = bigquery.WriteDisposition.WRITE_APPEND
-        if schema_evolution == "strict":
+        if schema_evolution == "strict" or not natively:
             schema_update_options = []
         else:
             schema_update_options = [
