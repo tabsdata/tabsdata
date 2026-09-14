@@ -253,10 +253,10 @@ impl TypedInner for Id {
 
 impl<K: KeyId> TypedInner for IdL<K> {
     fn sea_value(&self) -> sea_query::Value {
-        sea_query::Value::String(Some(self.padded_str()))
+        sea_query::Value::BigInt(Some(self.as_i64()))
     }
     fn null_sea_value() -> sea_query::Value {
-        sea_query::Value::String(None)
+        sea_query::Value::BigInt(None)
     }
     fn parse_str(s: &str) -> Result<Self, TdError> {
         Ok(IdL::parse(s)?)

@@ -14,7 +14,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
-use crate::schema::sql::id_column;
+use crate::schema::sql::{id_column, logical_id_column};
 
 /// `executions__with_names` view name. Re-used cross-file by
 /// `with_status_views` to build `executions__with_status`.
@@ -45,11 +45,11 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Executions::Table)
-                .col(id_column(Executions::Id).not_null().primary_key())
+                .col(logical_id_column(Executions::Id).not_null().primary_key())
                 .col(id_column(Executions::ProjectId).not_null())
                 .col(ColumnDef::new(Executions::Name).text().null())
                 .col(id_column(Executions::CollectionId).not_null())
-                .col(id_column(Executions::FunctionVersionId).not_null())
+                .col(logical_id_column(Executions::FunctionVersionId).not_null())
                 .col(ColumnDef::new(Executions::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(id_column(Executions::TriggeredById).not_null())
                 // `Option<Json<RecursionOptions>>` in the DAO; sqlx encodes

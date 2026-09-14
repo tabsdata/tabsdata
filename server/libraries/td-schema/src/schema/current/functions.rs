@@ -12,9 +12,9 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "functions__with_names"]
@@ -53,7 +53,7 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Functions::Table)
-                .col(id_column(Functions::Id).not_null().primary_key())
+                .col(logical_id_column(Functions::Id).not_null().primary_key())
                 .col(id_column(Functions::ProjectId).not_null())
                 .col(id_column(Functions::CollectionId).not_null())
                 .col(ColumnDef::new(Functions::Name).text().not_null())

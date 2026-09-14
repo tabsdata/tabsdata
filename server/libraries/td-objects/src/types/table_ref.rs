@@ -229,7 +229,6 @@ where
 mod tests {
     use super::*;
     use crate::types::basic::TableName;
-    use td_common::id;
 
     #[test]
     fn test_versioned_table_ref_to_string() {
@@ -261,8 +260,9 @@ mod tests {
         let table =
             VersionedTableRef::<TableName>::parse("collection/table@HEAD^^,INITIAL").unwrap();
         assert_eq!(table.to_string(), "collection/table@HEAD~2,INITIAL");
-        let table = format!("collection/table@{}", id::id());
-        assert_eq!(table.to_string(), table);
+        let table =
+            VersionedTableRef::<TableName>::parse("collection/table@dv20240101-123").unwrap();
+        assert_eq!(table.to_string(), "collection/table@dv20240101-0000000123");
     }
 
     #[test]
@@ -299,8 +299,10 @@ mod tests {
         assert_eq!(versions.to_string(), "HEAD~2,INITIAL");
         let versions = Versions::parse("HEAD^^..INITIAL").unwrap();
         assert_eq!(versions.to_string(), "HEAD~2..INITIAL");
-        let id = id::id();
-        let versions = Versions::parse(format!("{id}")).unwrap();
-        assert_eq!(versions.to_string(), format!("{id}"));
+        // A fixed version renders padded, whichever form it was parsed from.
+        let versions = Versions::parse("dv20240101-123").unwrap();
+        assert_eq!(versions.to_string(), "dv20240101-0000000123");
+        let versions = Versions::parse("dv20240101-0000000123").unwrap();
+        assert_eq!(versions.to_string(), "dv20240101-0000000123");
     }
 }

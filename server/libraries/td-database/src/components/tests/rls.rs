@@ -293,33 +293,34 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
         .await
         .unwrap();
         for (id, on) in [
-            ("fn1", "2026-01-01T00:00:00Z"),
-            ("fn2", "2026-01-02T00:00:00Z"),
+            (202601010000000001i64, "2026-01-01T00:00:00Z"),
+            (202601010000000002i64, "2026-01-02T00:00:00Z"),
         ] {
             sqlx::query(sqlx::AssertSqlSafe(format!(
                 "INSERT INTO functions \
                  (id, collection_id, name, description, decorator, runtime_values, function_id, \
                   stage_id, stage_base_path, storage_version, bundle_id, snippet, valid_from, defined_by_id, status) \
-                 VALUES ('{id}', 'col', 'f', 'd', 'dec', '{{}}', 'fid', 'stg', '/', '1', 'bun', 'snip', '{on}', 'u', 'active')",
+                 VALUES ({id}, 'col', 'f', 'd', 'dec', '{{}}', 'fid', 'stg', '/', '1', 'bun', 'snip', '{on}', 'u', 'active')",
             )))
             .execute(&mut *c)
             .await
             .unwrap();
         }
-        let open: Vec<String> =
+        let open: Vec<i64> =
             sqlx::query_scalar("SELECT id FROM functions WHERE valid_to = 'infinity'")
                 .fetch_all(&mut *c)
                 .await
                 .unwrap();
         assert_eq!(
             open,
-            ["fn2"],
+            [202601010000000002i64],
             "the close-out trigger's UPDATE closed the predecessor under RLS"
         );
-        let pid: String = sqlx::query_scalar("SELECT project_id FROM functions WHERE id = 'fn2'")
-            .fetch_one(&mut *c)
-            .await
-            .unwrap();
+        let pid: String =
+            sqlx::query_scalar("SELECT project_id FROM functions WHERE id = 202601010000000002")
+                .fetch_one(&mut *c)
+                .await
+                .unwrap();
         assert_eq!(pid, "A", "the scope GUC stamped the source project_id");
     }
     c.commit().await.unwrap();

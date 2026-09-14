@@ -1000,7 +1000,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 where_sql(cond),
-                r#"SELECT * FROM "test_dv_table" WHERE "id" = 'dv20260101-0000000002'"#
+                r#"SELECT * FROM "test_dv_table" WHERE "id" = 202601010000000002"#
             );
         }
 

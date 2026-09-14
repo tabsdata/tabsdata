@@ -30,9 +30,9 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::{json_object_agg, name_or_id};
 use crate::schema::source::Derived;
-use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{StickyTerminalsTriggerDef, ViewDef};
+use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "function_runs__with_names"]
@@ -80,15 +80,15 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(LogicalFunctionRuns::Table)
-                .col(id_column(LogicalFunctionRuns::Id).not_null().primary_key())
+                .col(logical_id_column(LogicalFunctionRuns::Id).not_null().primary_key())
                 .col(id_column(LogicalFunctionRuns::ProjectId).not_null())
                 .col(id_column(LogicalFunctionRuns::CollectionId).not_null())
-                .col(id_column(LogicalFunctionRuns::ExecutionId).not_null())
-                .col(id_column(LogicalFunctionRuns::TransactionId).not_null())
+                .col(logical_id_column(LogicalFunctionRuns::ExecutionId).not_null())
+                .col(logical_id_column(LogicalFunctionRuns::TransactionId).not_null())
                 .col(id_column(LogicalFunctionRuns::FunctionId).not_null())
                 // Plan-time fvid the LFR was minted against; topology
                 // reference for primitives. Set once at plan-build.
-                .col(id_column(LogicalFunctionRuns::FunctionVersionId).not_null().default(""))
+                .col(logical_id_column(LogicalFunctionRuns::FunctionVersionId).not_null().default(197001010000000001i64))
                 .col(ColumnDef::new(LogicalFunctionRuns::Trigger).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRuns::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(id_column(LogicalFunctionRuns::TriggeredById).not_null())

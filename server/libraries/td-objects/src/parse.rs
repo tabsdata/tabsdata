@@ -108,13 +108,19 @@ being a [_A-Za-z0-9] word of up to 100 characters each"
     Ok(TableRef::new(collection, table))
 }
 
+/// A logical ID `<KEY><YYYYMMDD>-<COUNTER>`, counter padded or unpadded. The key is
+/// validated against the ID type by `IdL::parse`, not here.
+const LOGICAL_ID_PATTERN: &str = "[A-Za-z]{1,3}[0-9]{8}-[0-9]{1,10}";
+
 const VERSION_PATTERN: &str = concat!(
     "^(",
     "HEAD(?<head_back>\\^{0,10})",
     "|HEAD~(?<head_minus>[0-9]{1,7})",
     "|INITIAL(?<initial_forward>\\^{0,10})",
     "|INITIAL~(?<initial_plus>[0-9]{1,7})",
-    "|(?<id>([A-Za-z0-9]{26}|[0-9]{8}[A-Za-z]{1,3}[0-9]{1,10}))",
+    "|(?<id>",
+    LOGICAL_ID_PATTERN,
+    ")",
     ")$"
 );
 
@@ -152,8 +158,11 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
     }
 }
 
-const UNNAMED_VERSION_PATTERN: &str =
-    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|INITIAL(\\^{0,10})|INITIAL(\\~[0-9]{1,7})|[A-Za-z0-9]{26})";
+const UNNAMED_VERSION_PATTERN: &str = concat!(
+    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|INITIAL(\\^{0,10})|INITIAL(\\~[0-9]{1,7})|",
+    LOGICAL_ID_PATTERN,
+    ")"
+);
 const NEW_VERSION_PATTERN: &str = "NEW";
 const VERSIONS_PATTERN: &str = concat!(
     "(?<new>",
@@ -240,7 +249,13 @@ mod tests {
     use super::*;
     use crate::types::basic::TableNameDto;
     use crate::types::table_ref::Version;
-    use td_common::id;
+
+    /// A `LogicalTableDataVersionId` (key `dv`) in its unpadded REST form.
+    const DV: &str = "dv20240101-123";
+
+    fn dv() -> LogicalTableDataVersionId {
+        LogicalTableDataVersionId::try_from(DV).unwrap()
+    }
 
     #[test]
     fn test_name_pattern() {
@@ -349,13 +364,12 @@ mod tests {
         let version = parse_version("INITIAL~1").unwrap();
         assert_eq!(version, Version::Initial(1));
         assert!(parse_version("INITIAL~a").is_err());
-        let id = id::id();
-        let version = parse_version(id).unwrap();
-        assert_eq!(
-            version,
-            Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id)))
-        );
+        let version = parse_version(DV).unwrap();
+        assert_eq!(version, Version::Fixed(dv()));
+        let version = parse_version("DV20240101-0000000123").unwrap();
+        assert_eq!(version, Version::Fixed(dv()));
         assert!(parse_version("A".repeat(26)).is_err());
+        assert!(parse_version("xx20240101-1").is_err());
     }
 
     #[test]
@@ -415,45 +429,32 @@ mod tests {
             Versions::Range(Version::Head(-1), Version::Initial(0))
         );
 
-        let id = id::id();
-        let versions = parse_versions(format!("{id}")).unwrap();
+        let versions = parse_versions(DV).unwrap();
+        assert_eq!(versions, Versions::Single(Version::Fixed(dv())));
+        let versions = parse_versions(format!("{DV},HEAD~2")).unwrap();
         assert_eq!(
             versions,
-            Versions::Single(Version::Fixed(LogicalTableDataVersionId::from(
-                IdL::new_legacy(id)
-            )))
+            Versions::List(vec![Version::Fixed(dv()), Version::Head(-2)])
         );
-        let versions = parse_versions(format!("{id},HEAD~2")).unwrap();
+        let versions = parse_versions(format!("HEAD~2,{DV}")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![
-                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id))),
-                Version::Head(-2)
-            ])
+            Versions::List(vec![Version::Head(-2), Version::Fixed(dv())])
         );
-        let versions = parse_versions(format!("HEAD~2,{id}")).unwrap();
+        let versions = parse_versions(format!("{DV},INITIAL~2")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![
-                Version::Head(-2),
-                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id)))
-            ])
+            Versions::List(vec![Version::Fixed(dv()), Version::Initial(2)])
         );
-        let versions = parse_versions(format!("{id},INITIAL~2")).unwrap();
+        let versions = parse_versions(format!("INITIAL~2,{DV}")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![
-                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id))),
-                Version::Initial(2)
-            ])
+            Versions::List(vec![Version::Initial(2), Version::Fixed(dv())])
         );
-        let versions = parse_versions(format!("INITIAL~2,{id}")).unwrap();
+        let versions = parse_versions(format!("{DV}..{DV}")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![
-                Version::Initial(2),
-                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id)))
-            ])
+            Versions::Range(Version::Fixed(dv()), Version::Fixed(dv()))
         );
 
         assert!(parse_versions("HEAD~a").is_err());
@@ -462,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_versioned_table_refs() {
-        let valid_table_with_id = format!("collection/table@{}", id::id());
+        let valid_table_with_id = format!("collection/table@{DV}");
         let valid_tables = vec![
             "table",
             "collection/table",

@@ -18,7 +18,7 @@ use sqlx::postgres::PgPoolOptions;
 use td_schema::schema::archive;
 use td_schema::{ACROSS_PROJECTS_ROLE, PROJECT_ID_GUC};
 
-use super::{execute, scalars};
+use super::{at_rest, execute, logical, scalars};
 
 async fn connect(identity: &PostgresConnect) -> PgPool {
     PgPoolOptions::new()
@@ -47,11 +47,21 @@ async fn seed_run_chain(db: &TdPool) {
          VALUES ('g0', 'p0', 'g0', '', now(), 'u0', now(), 'u0', false)",
     )
     .await;
-    for (id, base_path, fn_base_path) in [
+    for (counter, (id, base_path, fn_base_path)) in [
         ("c-fn-override", "'/from-collection'", "'/from-function'"),
         ("c-own", "'/from-collection'", "NULL"),
         ("c-inherits", "NULL", "NULL"),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let counter = counter + 1;
+        let (fv, ep, tx) = (
+            logical("fv", counter),
+            logical("ep", counter),
+            logical("tx", counter),
+        );
+        let (fr, pfr) = (logical("fr", counter), logical("pfr", counter));
         execute(
             db,
             &format!(
@@ -70,7 +80,7 @@ async fn seed_run_chain(db: &TdPool) {
                    decorator, runtime_values, function_id, base_path, stage_id, \
                    stage_base_path, storage_version, bundle_id, snippet, defined_on, \
                    defined_by_id, status) \
-                 VALUES ('fv-{id}', 'p0', '{id}', 'f0', '', 'P', '', 'f-{id}', \
+                 VALUES ('{fv}', 'p0', '{id}', 'f0', '', 'P', '', 'f-{id}', \
                    {fn_base_path}, 's0', '/s', 'V1', 'b0', '', now(), 'u0', 'A')"
             ),
         )
@@ -80,7 +90,7 @@ async fn seed_run_chain(db: &TdPool) {
             &format!(
                 "INSERT INTO executions (id, project_id, collection_id, function_version_id, \
                    triggered_on, triggered_by_id) \
-                 VALUES ('e-{id}', 'p0', '{id}', 'fv-{id}', now(), 'u0')"
+                 VALUES ('{ep}', 'p0', '{id}', '{fv}', now(), 'u0')"
             ),
         )
         .await;
@@ -89,7 +99,7 @@ async fn seed_run_chain(db: &TdPool) {
             &format!(
                 "INSERT INTO transactions (id, project_id, collection_id, execution_id, \
                    transaction_by, transaction_key, triggered_on, triggered_by_id, group_id) \
-                 VALUES ('t-{id}', 'p0', '{id}', 'e-{id}', 'F', 'k0', now(), 'u0', 'g0')"
+                 VALUES ('{tx}', 'p0', '{id}', '{ep}', 'F', 'k0', now(), 'u0', 'g0')"
             ),
         )
         .await;
@@ -101,7 +111,7 @@ async fn seed_run_chain(db: &TdPool) {
                 "INSERT INTO logical_function_runs (id, project_id, collection_id, \
                    execution_id, transaction_id, function_id, function_version_id, trigger, \
                    triggered_on, triggered_by_id, status, group_id) \
-                 VALUES ('l-{id}', 'p0', '{id}', 'e-{id}', 't-{id}', 'f-{id}', 'fv-{id}', 'M', \
+                 VALUES ('{fr}', 'p0', '{id}', '{ep}', '{tx}', 'f-{id}', '{fv}', 'M', \
                    now(), 'u0', 'S', 'g0')"
             ),
         )
@@ -112,7 +122,7 @@ async fn seed_run_chain(db: &TdPool) {
                 "INSERT INTO physical_function_runs (id, project_id, collection_id, \
                    function_version_id, execution_id, transaction_id, triggered_on, \
                    triggered_by_id, trigger, function_id, status) \
-                 VALUES ('r-{id}', 'p0', '{id}', 'fv-{id}', 'e-{id}', 't-{id}', now(), 'u0', \
+                 VALUES ('{pfr}', 'p0', '{id}', '{fv}', '{ep}', '{tx}', now(), 'u0', \
                    'M', 'f-{id}', 'R')"
             ),
         )
@@ -144,9 +154,9 @@ async fn v2_to_v3_backfills_run_base_path_postgres() {
     assert_eq!(
         stamped,
         [
-            "r-c-fn-override=/from-function",
-            "r-c-inherits=/from-project",
-            "r-c-own=/from-collection"
+            format!("{}=/from-function", at_rest(1)),
+            format!("{}=/from-collection", at_rest(2)),
+            format!("{}=/from-project", at_rest(3))
         ],
         "the backfill must resolve the function override, then the collection's \
          prefix, then the project's"
@@ -171,13 +181,14 @@ fn seed_v3_function_versions_sql() -> Vec<String> {
          VALUES ('c0', 'p0', 'c0', '', now(), 'u0', now(), 'u0', 'g0', NULL, 'R')"
             .to_string(),
     ];
-    for (id, function_id, defined_on) in [
-        ("fv1", "f-a", "'2026-01-01T00:00:00Z'"),
-        ("fv2", "f-a", "'2026-01-02T00:00:00Z'"),
-        ("fv3", "f-a", "'2026-01-03T00:00:00Z'"),
-        ("fv4", "f-a", "'2026-01-03T00:00:00Z'"),
-        ("fv5", "f-b", "'2026-01-02T00:00:00Z'"),
+    for (counter, function_id, defined_on) in [
+        (1, "f-a", "'2026-01-01T00:00:00Z'"),
+        (2, "f-a", "'2026-01-02T00:00:00Z'"),
+        (3, "f-a", "'2026-01-03T00:00:00Z'"),
+        (4, "f-a", "'2026-01-03T00:00:00Z'"),
+        (5, "f-b", "'2026-01-02T00:00:00Z'"),
     ] {
+        let id = logical("fv", counter);
         out.push(format!(
             "INSERT INTO functions (id, project_id, collection_id, name, description, \
                decorator, runtime_values, function_id, stage_id, stage_base_path, \
@@ -223,11 +234,11 @@ async fn v3_to_v4_backfills_valid_to_postgres() {
     assert_eq!(
         chains,
         [
-            "fv1=2026-01-02",
-            "fv2=2026-01-03",
-            "fv3=2026-01-03",
-            "fv4=infinity",
-            "fv5=infinity"
+            format!("{}=2026-01-02", at_rest(1)),
+            format!("{}=2026-01-03", at_rest(2)),
+            format!("{}=2026-01-03", at_rest(3)),
+            format!("{}=infinity", at_rest(4)),
+            format!("{}=infinity", at_rest(5))
         ],
         "the backfill must chain intervals per partition, close the lower-id \
          row of a same-instant pair at zero length, and leave the latest open"
@@ -249,10 +260,11 @@ async fn v3_to_v4_backfills_valid_to_postgres() {
 /// table and system dependency re-registered Active under the tombstone.
 fn seed_v3_deleted_function_sql() -> Vec<String> {
     let mut out = Vec::new();
-    for (id, defined_on, status) in [
-        ("fv6", "'2026-01-01T00:00:00Z'", "A"),
-        ("fv7", "'2026-01-02T00:00:00Z'", "D"),
+    for (counter, defined_on, status) in [
+        (6, "'2026-01-01T00:00:00Z'", "A"),
+        (7, "'2026-01-02T00:00:00Z'", "D"),
     ] {
+        let id = logical("fv", counter);
         out.push(format!(
             "INSERT INTO functions (id, project_id, collection_id, name, description, \
                decorator, runtime_values, function_id, stage_id, stage_base_path, \
@@ -261,14 +273,14 @@ fn seed_v3_deleted_function_sql() -> Vec<String> {
                'V1', 'b0', '', {defined_on}, 'u0', '{status}')"
         ));
     }
-    for (id, table_id, name, fv, defined_on, status) in [
-        ("tv1", "t-u", "u", "fv6", "'2026-01-01T00:00:00Z'", "A"),
-        ("tv2", "t-u", "u", "fv7", "'2026-01-02T00:00:00Z'", "F"),
+    for (id, table_id, name, fv_counter, defined_on, status) in [
+        ("tv1", "t-u", "u", 6, "'2026-01-01T00:00:00Z'", "A"),
+        ("tv2", "t-u", "u", 7, "'2026-01-02T00:00:00Z'", "F"),
         (
             "tv3",
             "t-s",
             "td.fn_state__f-d",
-            "fv6",
+            6,
             "'2026-01-01T00:00:00Z'",
             "A",
         ),
@@ -276,11 +288,12 @@ fn seed_v3_deleted_function_sql() -> Vec<String> {
             "tv4",
             "t-s",
             "td.fn_state__f-d",
-            "fv7",
+            7,
             "'2026-01-02T00:00:00Z'",
             "A",
         ),
     ] {
+        let fv = logical("fv", fv_counter);
         out.push(format!(
             "INSERT INTO tables (id, project_id, collection_id, table_id, name, function_id, \
                function_version_id, function_param_pos, private, partitioned, defined_on, \
@@ -371,39 +384,51 @@ async fn v3_to_v4_closes_the_leftovers_of_a_deleted_function_postgres() {
 /// then voided; `ltdv-a`'s third materialization is reachable only through
 /// its producer.
 async fn seed_attempts(db: &TdPool) {
+    let (fv, ep, tx) = (logical("fv", 1), logical("ep", 1), logical("tx", 1));
+    let ltdv = logical("dv", 21);
     for stmt in [
         "INSERT INTO projects (id, name, description, base_path, created_on, created_by_id, \
            modified_on, modified_by_id) \
-         VALUES ('p0', 'p0', '', '/p', now(), 'u0', now(), 'u0')",
+         VALUES ('p0', 'p0', '', '/p', now(), 'u0', now(), 'u0')"
+            .to_string(),
         "INSERT INTO groups (id, project_id, name, description, created_on, created_by_id, \
            modified_on, modified_by_id, system) \
-         VALUES ('g0', 'p0', 'g0', '', now(), 'u0', now(), 'u0', false)",
+         VALUES ('g0', 'p0', 'g0', '', now(), 'u0', now(), 'u0', false)"
+            .to_string(),
         "INSERT INTO collections (id, project_id, name, description, created_on, \
            created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
-         VALUES ('c0', 'p0', 'c0', '', now(), 'u0', now(), 'u0', 'g0', NULL, 'R')",
-        "INSERT INTO functions (id, project_id, collection_id, name, description, decorator, \
-           runtime_values, function_id, stage_id, stage_base_path, storage_version, bundle_id, \
-           snippet, defined_on, defined_by_id, status) \
-         VALUES ('fv1', 'p0', 'c0', 'f0', '', 'P', '', 'f-a', 's0', '/s', 'V1', 'b0', '', \
-           '2026-01-01T00:00:00Z', 'u0', 'A')",
-        "INSERT INTO executions (id, project_id, name, collection_id, function_version_id, \
-           triggered_on, triggered_by_id, function_id) \
-         VALUES ('e0', 'p0', 'e0', 'c0', 'fv1', '2026-01-01T00:00:00Z', 'u0', 'f-a')",
-        "INSERT INTO transactions (id, project_id, collection_id, execution_id, transaction_by, \
-           transaction_key, triggered_on, triggered_by_id, group_id) \
-         VALUES ('t0', 'p0', 'c0', 'e0', 'F', 'k0', '2026-01-01T00:00:00Z', 'u0', 'g0')",
+         VALUES ('c0', 'p0', 'c0', '', now(), 'u0', now(), 'u0', 'g0', NULL, 'R')"
+            .to_string(),
+        format!(
+            "INSERT INTO functions (id, project_id, collection_id, name, description, decorator, \
+               runtime_values, function_id, stage_id, stage_base_path, storage_version, bundle_id, \
+               snippet, defined_on, defined_by_id, status) \
+             VALUES ('{fv}', 'p0', 'c0', 'f0', '', 'P', '', 'f-a', 's0', '/s', 'V1', 'b0', '', \
+               '2026-01-01T00:00:00Z', 'u0', 'A')"
+        ),
+        format!(
+            "INSERT INTO executions (id, project_id, name, collection_id, function_version_id, \
+               triggered_on, triggered_by_id, function_id) \
+             VALUES ('{ep}', 'p0', 'e0', 'c0', '{fv}', '2026-01-01T00:00:00Z', 'u0', 'f-a')"
+        ),
+        format!(
+            "INSERT INTO transactions (id, project_id, collection_id, execution_id, transaction_by, \
+               transaction_key, triggered_on, triggered_by_id, group_id) \
+             VALUES ('{tx}', 'p0', 'c0', '{ep}', 'F', 'k0', '2026-01-01T00:00:00Z', 'u0', 'g0')"
+        ),
     ] {
-        execute(db, stmt).await;
+        execute(db, &stmt).await;
     }
 
-    for lfr in ["lfr-a", "lfr-b", "lfr-c"] {
+    for counter in 1..=3 {
+        let lfr = logical("fr", counter);
         execute(
             db,
             &format!(
                 "INSERT INTO logical_function_runs (id, project_id, collection_id, execution_id, \
                    transaction_id, function_id, function_version_id, trigger, triggered_on, \
                    triggered_by_id, status, group_id) \
-                 VALUES ('{lfr}', 'p0', 'c0', 'e0', 't0', '{lfr}', 'fv1', 'M', \
+                 VALUES ('{lfr}', 'p0', 'c0', '{ep}', '{tx}', '{lfr}', '{fv}', 'M', \
                    '2026-01-01T00:00:00Z', 'u0', 'C', 'g0')"
             ),
         )
@@ -411,19 +436,20 @@ async fn seed_attempts(db: &TdPool) {
     }
 
     // `function_id` pairs an attempt with its logical run when the log does not.
-    for (pfr, function_id, triggered_on) in [
-        ("pfr1", "lfr-a", "2026-01-01T01:00:00Z"),
-        ("pfr2", "lfr-a", "2026-01-01T02:00:00Z"),
-        ("pfr3", "lfr-a", "2026-01-01T03:00:00Z"),
-        ("pfr4", "lfr-c", "2026-01-01T01:00:00Z"),
+    for (pfr_counter, lfr_counter, triggered_on) in [
+        (11, 1, "2026-01-01T01:00:00Z"),
+        (12, 1, "2026-01-01T02:00:00Z"),
+        (13, 1, "2026-01-01T03:00:00Z"),
+        (14, 3, "2026-01-01T01:00:00Z"),
     ] {
+        let (pfr, function_id) = (logical("pfr", pfr_counter), logical("fr", lfr_counter));
         execute(
             db,
             &format!(
                 "INSERT INTO physical_function_runs (id, project_id, collection_id, \
                    function_version_id, execution_id, transaction_id, triggered_on, \
                    triggered_by_id, trigger, function_id, status, base_path) \
-                 VALUES ('{pfr}', 'p0', 'c0', 'fv1', 'e0', 't0', '{triggered_on}', 'u0', \
+                 VALUES ('{pfr}', 'p0', 'c0', '{fv}', '{ep}', '{tx}', '{triggered_on}', 'u0', \
                    'M', '{function_id}', 'D', '/p')"
             ),
         )
@@ -432,19 +458,23 @@ async fn seed_attempts(db: &TdPool) {
 
     execute(
         db,
-        "INSERT INTO logical_table_data_versions (id, project_id, collection_id, execution_id, \
-           transaction_id, table_id, producer_logical_function_run_id, function_param_pos, \
-           private, triggered_on, triggered_by_id, group_id) \
-         VALUES ('ltdv-a', 'p0', 'c0', 'e0', 't0', 'tb-a', 'lfr-a', 0, false, \
-           '2026-01-01T00:00:00Z', 'u0', 'g0')",
+        &format!(
+            "INSERT INTO logical_table_data_versions (id, project_id, collection_id, execution_id, \
+               transaction_id, table_id, producer_logical_function_run_id, function_param_pos, \
+               private, triggered_on, triggered_by_id, group_id) \
+             VALUES ('{ltdv}', 'p0', 'c0', '{ep}', '{tx}', 'tb-a', '{}', 0, false, \
+               '2026-01-01T00:00:00Z', 'u0', 'g0')",
+            logical("fr", 1)
+        ),
     )
     .await;
 
-    for (ptdv, pfr, triggered_on) in [
-        ("ptdv1", "pfr1", "2026-01-01T01:00:00Z"),
-        ("ptdv2", "pfr2", "2026-01-01T02:00:00Z"),
-        ("ptdv3", "pfr3", "2026-01-01T03:00:00Z"),
+    for (ptdv_counter, pfr_counter, triggered_on) in [
+        (31, 11, "2026-01-01T01:00:00Z"),
+        (32, 12, "2026-01-01T02:00:00Z"),
+        (33, 13, "2026-01-01T03:00:00Z"),
     ] {
+        let (ptdv, pfr) = (logical("pdv", ptdv_counter), logical("pfr", pfr_counter));
         execute(
             db,
             &format!(
@@ -452,46 +482,53 @@ async fn seed_attempts(db: &TdPool) {
                    table_id, name, table_version_id, function_version_id, execution_id, \
                    transaction_id, physical_function_run_id, function_param_pos, triggered_on, \
                    base_path) \
-                 VALUES ('{ptdv}', 'p0', 'c0', 'tb-a', 'tb', 'tv0', 'fv1', 'e0', 't0', '{pfr}', \
+                 VALUES ('{ptdv}', 'p0', 'c0', 'tb-a', 'tb', 'tv0', '{fv}', '{ep}', '{tx}', '{pfr}', \
                    0, '{triggered_on}', '/p')"
             ),
         )
         .await;
     }
 
-    for (id, logical, status, concrete, set_on) in [
-        ("lp1", "lfr-a", "P", "NULL", "2026-01-01T00:00:00Z"),
-        ("lp2", "lfr-a", "B", "'pfr1'", "2026-01-01T01:00:00Z"),
-        ("lp3", "lfr-a", "B", "'pfr2'", "2026-01-01T02:00:00Z"),
-        ("lp4", "lfr-b", "P", "NULL", "2026-01-01T00:00:00Z"),
-        ("lp5", "lfr-c", "P", "NULL", "2026-01-01T00:00:00Z"),
-        ("lp6", "lfr-c", "B", "'pfr4'", "2026-01-01T01:00:00Z"),
-        ("lp7", "lfr-c", "V", "NULL", "2026-01-01T03:00:00Z"),
+    for (id, lfr_counter, status, pfr_counter, set_on) in [
+        ("lp1", 1, "P", None, "2026-01-01T00:00:00Z"),
+        ("lp2", 1, "B", Some(11), "2026-01-01T01:00:00Z"),
+        ("lp3", 1, "B", Some(12), "2026-01-01T02:00:00Z"),
+        ("lp4", 2, "P", None, "2026-01-01T00:00:00Z"),
+        ("lp5", 3, "P", None, "2026-01-01T00:00:00Z"),
+        ("lp6", 3, "B", Some(14), "2026-01-01T01:00:00Z"),
+        ("lp7", 3, "V", None, "2026-01-01T03:00:00Z"),
     ] {
+        let run = logical("fr", lfr_counter);
+        let concrete = pfr_counter
+            .map(|c| format!("'{}'", logical("pfr", c)))
+            .unwrap_or_else(|| "NULL".to_string());
         execute(
             db,
             &format!(
                 "INSERT INTO logical_function_run_pointers (id, project_id, \
                    logical_function_run_id, status, physical_function_run_id, set_on, set_by_id, \
                    reason) \
-                 VALUES ('{id}', 'p0', '{logical}', '{status}', {concrete}, '{set_on}', 'u0', 'ID')"
+                 VALUES ('{id}', 'p0', '{run}', '{status}', {concrete}, '{set_on}', 'u0', 'ID')"
             ),
         )
         .await;
     }
 
-    for (id, status, concrete, set_on) in [
-        ("tp1", "P", "NULL", "2026-01-01T00:00:00Z"),
-        ("tp2", "B", "'ptdv1'", "2026-01-01T01:00:00Z"),
-        ("tp3", "B", "'ptdv2'", "2026-01-01T02:00:00Z"),
+    for (id, status, ptdv_counter, set_on) in [
+        ("tp1", "P", None, "2026-01-01T00:00:00Z"),
+        ("tp2", "B", Some(31), "2026-01-01T01:00:00Z"),
+        ("tp3", "B", Some(32), "2026-01-01T02:00:00Z"),
     ] {
+        let concrete = ptdv_counter
+            .map(|c| format!("'{}'", logical("pdv", c)))
+            .unwrap_or_else(|| "NULL".to_string());
         execute(
             db,
             &format!(
                 "INSERT INTO logical_table_data_version_pointers (id, project_id, \
                    logical_table_data_version_id, status, physical_table_data_version_id, set_on, \
                    set_by_id, reason) \
-                 VALUES ('{id}', 'p0', 'ltdv-a', '{status}', {concrete}, '{set_on}', 'u0', 'ID')"
+                 VALUES ('{id}', 'p0', '{ltdv}', '{status}', {concrete}, '{set_on}', 'u0', 'ID')"
             ),
         )
         .await;
@@ -534,10 +571,10 @@ async fn v3_to_v4_backfills_attempts_postgres() {
     assert_eq!(
         runs,
         [
-            "pfr1=lfr-a/02",
-            "pfr2=lfr-a/03",
-            "pfr3=lfr-a/infinity",
-            "pfr4=lfr-c/infinity",
+            format!("{}={}/02", at_rest(11), at_rest(1)),
+            format!("{}={}/03", at_rest(12), at_rest(1)),
+            format!("{}={}/infinity", at_rest(13), at_rest(1)),
+            format!("{}={}/infinity", at_rest(14), at_rest(3)),
         ],
         "each attempt closes at its successor's triggered_on; the newest stays \
          open, whether or not the log ever bound it, and a void leaves no trace"
@@ -555,9 +592,9 @@ async fn v3_to_v4_backfills_attempts_postgres() {
     assert_eq!(
         versions,
         [
-            "ptdv1=ltdv-a/02",
-            "ptdv2=ltdv-a/03",
-            "ptdv3=ltdv-a/infinity",
+            format!("{}={}/02", at_rest(31), at_rest(21)),
+            format!("{}={}/03", at_rest(32), at_rest(21)),
+            format!("{}={}/infinity", at_rest(33), at_rest(21)),
         ],
         "the materialization the log never bound still resolves its logical \
          version, through its producer"
@@ -824,11 +861,11 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
     assert_eq!(
         chains,
         [
-            "fv1=2026-01-02",
-            "fv2=2026-01-03",
-            "fv3=2026-01-03",
-            "fv4=infinity",
-            "fv5=infinity"
+            format!("{}=2026-01-02", at_rest(1)),
+            format!("{}=2026-01-03", at_rest(2)),
+            format!("{}=2026-01-03", at_rest(3)),
+            format!("{}=infinity", at_rest(4)),
+            format!("{}=infinity", at_rest(5))
         ],
         "the ladder's backfill must reach every row of an RLS-bound owner's schema"
     );

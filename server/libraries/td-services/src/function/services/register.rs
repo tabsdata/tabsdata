@@ -1328,7 +1328,7 @@ mod tests {
             connection: None,
             base_path: None,
             dependencies: Some(vec![TableDependencyDto::try_from(
-                "table_0@00000000000000000000000004",
+                "table_0@dv20260101-9999999999",
             )?]),
             triggers: Some(vec![]),
             tables: Some(vec![TableNameDto::try_from("table_0")?]),
@@ -1369,7 +1369,7 @@ mod tests {
             connection: None,
             base_path: None,
             dependencies: Some(vec![TableDependencyDto::try_from(
-                "table_0@00000000000000000000000004..00000000000000000000000004",
+                "table_0@dv20260101-9999999999..dv20260101-9999999999",
             )?]),
             triggers: Some(vec![]),
             tables: Some(vec![TableNameDto::try_from("table_0")?]),

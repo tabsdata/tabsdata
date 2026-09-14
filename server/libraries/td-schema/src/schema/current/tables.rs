@@ -13,9 +13,9 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "tables__with_names"]
@@ -54,7 +54,7 @@ impl Entity for Defs {
                 .col(id_column(Tables::TableId).not_null())
                 .col(ColumnDef::new(Tables::Name).text().not_null())
                 .col(id_column(Tables::FunctionId).null())
-                .col(id_column(Tables::FunctionVersionId).not_null())
+                .col(logical_id_column(Tables::FunctionVersionId).not_null())
                 .col(ColumnDef::new(Tables::FunctionParamPos).integer().null())
                 .col(ColumnDef::new(Tables::Private).boolean().not_null())
                 .col(ColumnDef::new(Tables::Partitioned).boolean().null())

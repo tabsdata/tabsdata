@@ -8,7 +8,7 @@ use super::collections::Collections;
 use super::functions::Functions;
 use super::physical_table_data_versions::PhysicalTableDataVersions;
 use crate::schema::Entity;
-use crate::schema::sql::id_column;
+use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum TablePartitions {
@@ -36,8 +36,8 @@ impl Entity for Defs {
                 .col(id_column(TablePartitions::CollectionId).not_null())
                 .col(id_column(TablePartitions::TableId).not_null())
                 .col(id_column(TablePartitions::TableVersionId).not_null())
-                .col(id_column(TablePartitions::FunctionVersionId).not_null())
-                .col(id_column(TablePartitions::TableDataVersionId).not_null())
+                .col(logical_id_column(TablePartitions::FunctionVersionId).not_null())
+                .col(logical_id_column(TablePartitions::TableDataVersionId).not_null())
                 .col(ColumnDef::new(TablePartitions::PartitionKey).text().null())
                 .col(ColumnDef::new(TablePartitions::PartitionDeleted).boolean().null())
                 .foreign_key(

@@ -25,7 +25,16 @@ pub fn id_column<T: IntoIden>(name: T) -> ColumnDef {
     column
 }
 
-/// The naming rule behind [`id_column`]: `id`, or a `*_id` reference.
+/// A logical id column: the `i64` whose digits are `<YYYYMMDD><COUNTER>`, so
+/// numeric order is chronological.
+pub fn logical_id_column<T: IntoIden>(name: T) -> ColumnDef {
+    let mut column = ColumnDef::new(name);
+    column.big_integer();
+    column
+}
+
+/// The naming rule behind [`id_column`] and [`logical_id_column`]: `id`, or a
+/// `*_id` reference.
 pub(crate) fn is_id_column(name: &str) -> bool {
     name == "id" || name.ends_with("_id")
 }

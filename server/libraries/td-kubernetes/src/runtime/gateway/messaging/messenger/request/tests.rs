@@ -56,7 +56,7 @@ fn the_split_class_survives_label_sanitising() {
 fn connection_keeps_the_stored_value_and_connection_class_splits_it() {
     let request = FunctionStartRequest {
         worker: WorkerName::Function,
-        worker_id: WorkerId::try_from("00000000000000000000000000").unwrap(),
+        worker_id: WorkerId::try_from("wkr20260101-0000000001").unwrap(),
         decorator: Decorator::Publisher,
         resolver: callback(),
         responder: callback(),

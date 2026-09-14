@@ -42,10 +42,18 @@ Every column holding an id (`id`, `*_id`) is declared with `sql::id_column`,
 which renders `text COLLATE "C"` (`ID_COLLATION`). Ids are fixed-width,
 zero-padded and ASCII, so byte order is their chronological order; the database
 default collation would only add a locale comparison to every index probe and
-sort over them. `test_id_columns_are_byte_collated` checks the rule on the
-column definitions. Note for deltas: PostgreSQL refuses to alter a column an RLS
-policy reads, so a delta touching `project_id` drops and re-creates the table's
-policies around the `ALTER`.
+sort over them.
+
+A **logical** id column is the exception: it is declared with
+`sql::logical_id_column`, which renders `bigint`. A logical id's at-rest form is
+the `i64` whose digits are `<YYYYMMDD><COUNTER>`, so the number already orders
+chronologically and needs no collation at all.
+
+`test_id_columns_are_byte_collated` checks both rules on the column definitions.
+Note for deltas: PostgreSQL refuses to alter a column an RLS policy reads, so a
+delta touching `project_id` drops and re-creates the table's policies around the
+`ALTER`; and `text` and `bigint` cannot be the two sides of a foreign key, so a
+delta changing an id column's type drops and re-adds the keys that span it.
 
 ## Major versions and upgradeability
 

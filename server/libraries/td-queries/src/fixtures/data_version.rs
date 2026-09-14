@@ -5,6 +5,7 @@
 use sea_query::{ColumnDef, Iden, Query, Table};
 use td_database::components::{SchemaComponent, SchemaSource};
 use td_database::pool::PoolKind;
+use td_objects::types::basic::LogicalTableDataVersionId;
 use td_schema::schema::render::{render_query, render_schema};
 
 #[derive(Iden)]
@@ -14,6 +15,12 @@ enum TestDvTable {
     PartitionId,
     Status,
     DefinedOn,
+}
+
+/// The at-rest `i64` of a logical ID, so the seeds are keyed by the same values
+/// the tests' `LogicalTableDataVersionId` fixtures resolve to.
+fn dv_id(id: &str) -> i64 {
+    LogicalTableDataVersionId::try_from(id).unwrap().as_i64()
 }
 
 /// Test-only component: a self-contained `data_version` timeline on its own
@@ -32,7 +39,7 @@ impl SchemaSource for DataVersionSource {
                 .table(TestDvTable::Table)
                 .col(
                     ColumnDef::new(TestDvTable::Id)
-                        .text()
+                        .big_integer()
                         .not_null()
                         .primary_key(),
                 )
@@ -99,7 +106,12 @@ impl SchemaSource for DataVersionSource {
                         TestDvTable::Status,
                         TestDvTable::DefinedOn,
                     ])
-                    .values_panic([id.into(), partition.into(), status.into(), time.into()])
+                    .values_panic([
+                        dv_id(id).into(),
+                        partition.into(),
+                        status.into(),
+                        time.into(),
+                    ])
                     .to_owned(),
             ));
         }

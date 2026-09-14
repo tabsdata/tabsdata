@@ -17,7 +17,7 @@ use super::projects::{Projects, ProjectsResolved};
 use super::transactions::Transactions;
 use crate::schema::Entity;
 use crate::schema::sql::ViewDef;
-use crate::schema::sql::id_column;
+use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "workers__with_names"]
@@ -49,13 +49,13 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Workers::Table)
-                .col(id_column(Workers::Id).not_null().primary_key())
+                .col(logical_id_column(Workers::Id).not_null().primary_key())
                 .col(id_column(Workers::ProjectId).not_null())
                 .col(id_column(Workers::CollectionId).not_null())
-                .col(id_column(Workers::ExecutionId).null())
-                .col(id_column(Workers::TransactionId).null())
-                .col(id_column(Workers::FunctionVersionId).not_null())
-                .col(id_column(Workers::PhysicalFunctionRunId).null())
+                .col(logical_id_column(Workers::ExecutionId).null())
+                .col(logical_id_column(Workers::TransactionId).null())
+                .col(logical_id_column(Workers::FunctionVersionId).not_null())
+                .col(logical_id_column(Workers::PhysicalFunctionRunId).null())
                 .col(ColumnDef::new(Workers::MessageStatus).text().not_null())
                 .col(ColumnDef::new(Workers::StartedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(Workers::EndedOn).timestamp_with_time_zone().null())

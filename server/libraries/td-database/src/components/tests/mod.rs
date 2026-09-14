@@ -61,6 +61,17 @@ async fn count_rows(db: &TdPool, table: &str) -> i64 {
         .unwrap()
 }
 
+/// A logical id as the schema stores it in text form: the padded
+/// `<KEY><YYYYMMDD>-<COUNTER>` an archived version wrote.
+fn logical(key: &str, counter: usize) -> String {
+    format!("{key}20260101-{counter:010}")
+}
+
+/// The same id as the current schema holds it: the `<YYYYMMDD><COUNTER>` `i64`.
+fn at_rest(counter: usize) -> String {
+    format!("20260101{counter:010}")
+}
+
 /// Run a statement for its effect, committing it.
 async fn execute(db: &TdPool, sql: impl Into<String>) {
     let mut conn = db.begin().await.unwrap();

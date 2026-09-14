@@ -12,9 +12,8 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except, id_column, logical_id_column};
 
 /// `function_patches` — code-only overrides of a parent
 /// `FunctionVersionId`. Lives in its own table so every "find latest
@@ -49,9 +48,9 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(FunctionPatches::Table)
-                .col(id_column(FunctionPatches::Id).not_null().primary_key())
+                .col(logical_id_column(FunctionPatches::Id).not_null().primary_key())
                 .col(id_column(FunctionPatches::ProjectId).not_null())
-                .col(id_column(FunctionPatches::ParentFunctionVersionId).not_null())
+                .col(logical_id_column(FunctionPatches::ParentFunctionVersionId).not_null())
                 .col(id_column(FunctionPatches::FunctionId).not_null())
                 .col(id_column(FunctionPatches::CollectionId).not_null())
                 .col(ColumnDef::new(FunctionPatches::Snippet).text().not_null())

@@ -9,7 +9,7 @@
 use crate::components::ApiserverComponent;
 use crate::pool::TdPool;
 
-use super::{execute, scalars};
+use super::{at_rest, execute, scalars};
 
 async fn seed_prelude(db: &TdPool) {
     execute(
@@ -35,12 +35,13 @@ async fn seed_prelude(db: &TdPool) {
     .await;
 }
 
-fn insert_function_version(id: &str, function_id: &str, valid_from: &str) -> String {
+fn insert_function_version(counter: usize, function_id: &str, valid_from: &str) -> String {
+    let id = at_rest(counter);
     format!(
         "INSERT INTO functions (id, project_id, collection_id, name, description, decorator, \
            runtime_values, function_id, stage_id, stage_base_path, storage_version, bundle_id, \
            snippet, valid_from, defined_by_id, status) \
-         VALUES ('{id}', 'p0', 'c0', 'f0', '', 'P', '', '{function_id}', 's0', '/s', 'V1', \
+         VALUES ({id}, 'p0', 'c0', 'f0', '', 'P', '', '{function_id}', 's0', '/s', 'V1', \
            'b0', '', '{valid_from}', 'u0', 'A')"
     )
 }
@@ -66,33 +67,33 @@ async fn scd2_close_out_chains_and_tie_breaks_postgres() {
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_prelude(&db.serving).await;
 
-    for (id, on) in [
-        ("fv1", "2026-01-01T00:00:00Z"),
-        ("fv2", "2026-01-02T00:00:00Z"),
-        ("fv3", "2026-01-03T00:00:00Z"),
-        ("fv4", "2026-01-03T00:00:00Z"),
+    for (counter, on) in [
+        (1, "2026-01-01T00:00:00Z"),
+        (2, "2026-01-02T00:00:00Z"),
+        (3, "2026-01-03T00:00:00Z"),
+        (4, "2026-01-03T00:00:00Z"),
     ] {
-        execute(&db.serving, &insert_function_version(id, "f-a", on)).await;
+        execute(&db.serving, &insert_function_version(counter, "f-a", on)).await;
     }
     assert_eq!(
         interval_chain(&db.serving, "f-a").await,
         [
-            "fv1=2026-01-02",
-            "fv2=2026-01-03",
-            "fv3=2026-01-03",
-            "fv4=infinity"
+            format!("{}=2026-01-02", at_rest(1)),
+            format!("{}=2026-01-03", at_rest(2)),
+            format!("{}=2026-01-03", at_rest(3)),
+            format!("{}=infinity", at_rest(4))
         ]
     );
 
     let visible_at_tie = scalars(
         &db.serving,
-        "SELECT id FROM functions WHERE function_id = 'f-a' \
+        "SELECT id::text FROM functions WHERE function_id = 'f-a' \
            AND valid_from <= '2026-01-03T00:00:00Z' AND valid_to > '2026-01-03T00:00:00Z'",
     )
     .await;
     assert_eq!(
         visible_at_tie,
-        ["fv4"],
+        [at_rest(4)],
         "at the shared instant only the highest-id row is visible"
     );
 }
@@ -108,23 +109,27 @@ async fn scd2_close_out_splices_out_of_order_inserts_postgres() {
 
     execute(
         &db.serving,
-        &insert_function_version("fv1", "f-a", "2026-01-01T00:00:00Z"),
+        &insert_function_version(1, "f-a", "2026-01-01T00:00:00Z"),
     )
     .await;
     execute(
         &db.serving,
-        &insert_function_version("fv3", "f-a", "2026-01-03T00:00:00Z"),
+        &insert_function_version(3, "f-a", "2026-01-03T00:00:00Z"),
     )
     .await;
     execute(
         &db.serving,
-        &insert_function_version("fv2", "f-a", "2026-01-02T00:00:00Z"),
+        &insert_function_version(2, "f-a", "2026-01-02T00:00:00Z"),
     )
     .await;
 
     assert_eq!(
         interval_chain(&db.serving, "f-a").await,
-        ["fv1=2026-01-02", "fv2=2026-01-03", "fv3=infinity"]
+        [
+            format!("{}=2026-01-02", at_rest(1)),
+            format!("{}=2026-01-03", at_rest(2)),
+            format!("{}=infinity", at_rest(3))
+        ]
     );
 }
 
@@ -139,7 +144,7 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
 
     let mut tx1 = db.serving.as_ref().begin().await.unwrap();
     sqlx::query(sqlx::AssertSqlSafe(insert_function_version(
-        "fv1",
+        1,
         "f-a",
         "2026-01-01T00:00:00Z",
     )))
@@ -151,7 +156,7 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
     let racer = tokio::spawn(async move {
         let mut tx2 = pool.begin().await.unwrap();
         sqlx::query(sqlx::AssertSqlSafe(insert_function_version(
-            "fv2",
+            2,
             "f-a",
             "2026-01-02T00:00:00Z",
         )))
@@ -167,14 +172,17 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
 
     assert_eq!(
         interval_chain(&db.serving, "f-a").await,
-        ["fv1=2026-01-02", "fv2=infinity"]
+        [
+            format!("{}=2026-01-02", at_rest(1)),
+            format!("{}=infinity", at_rest(2))
+        ]
     );
     let open = scalars(
         &db.serving,
-        "SELECT id FROM functions WHERE function_id = 'f-a' AND valid_to = 'infinity'",
+        "SELECT id::text FROM functions WHERE function_id = 'f-a' AND valid_to = 'infinity'",
     )
     .await;
-    assert_eq!(open, ["fv2"], "exactly one open row per partition");
+    assert_eq!(open, [at_rest(2)], "exactly one open row per partition");
 }
 
 /// The insert-only guard on event logs refuses real-column UPDATEs but lets
@@ -188,20 +196,19 @@ async fn scd2_immutable_guard_carves_out_valid_to_postgres() {
     seed_prelude(&db.serving).await;
     execute(
         &db.serving,
-        &insert_function_version("fv1", "f-a", "2026-01-01T00:00:00Z"),
+        &insert_function_version(1, "f-a", "2026-01-01T00:00:00Z"),
     )
     .await;
-    for (id, on) in [
-        ("fp1", "2026-01-02T00:00:00Z"),
-        ("fp2", "2026-01-03T00:00:00Z"),
-    ] {
+    let parent = at_rest(1);
+    for (counter, on) in [(11, "2026-01-02T00:00:00Z"), (12, "2026-01-03T00:00:00Z")] {
+        let id = at_rest(counter);
         execute(
             &db.serving,
             &format!(
                 "INSERT INTO function_patches (id, project_id, parent_function_version_id, \
                    function_id, collection_id, snippet, bundle_id, runtime_values, description, \
                    valid_from, defined_by_id, status) \
-                 VALUES ('{id}', 'p0', 'fv1', 'f-a', 'c0', '', 'b0', '', '', '{on}', 'u0', 'A')"
+                 VALUES ({id}, 'p0', {parent}, 'f-a', 'c0', '', 'b0', '', '', '{on}', 'u0', 'A')"
             ),
         )
         .await;
@@ -216,22 +223,30 @@ async fn scd2_immutable_guard_carves_out_valid_to_postgres() {
     .await;
     assert_eq!(
         chains,
-        ["fp1=2026-01-03", "fp2=infinity"],
+        [
+            format!("{}=2026-01-03", at_rest(11)),
+            format!("{}=infinity", at_rest(12))
+        ],
         "the close-out UPDATE must pass the insert-only guard"
     );
 
-    let err = sqlx::query("UPDATE function_patches SET description = 'x' WHERE id = 'fp2'")
-        .execute(db.serving.as_ref())
-        .await
-        .expect_err("real-column UPDATE must be refused");
+    let patch = at_rest(12);
+    let err = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "UPDATE function_patches SET description = 'x' WHERE id = {patch}"
+    )))
+    .execute(db.serving.as_ref())
+    .await
+    .expect_err("real-column UPDATE must be refused");
     assert!(
         err.to_string().contains("function_patches is insert-only"),
         "{err}"
     );
-    let err = sqlx::query("DELETE FROM function_patches WHERE id = 'fp2'")
-        .execute(db.serving.as_ref())
-        .await
-        .expect_err("DELETE must be refused");
+    let err = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "DELETE FROM function_patches WHERE id = {patch}"
+    )))
+    .execute(db.serving.as_ref())
+    .await
+    .expect_err("DELETE must be refused");
     assert!(
         err.to_string().contains("function_patches is insert-only"),
         "{err}"
@@ -240,34 +255,45 @@ async fn scd2_immutable_guard_carves_out_valid_to_postgres() {
 
 async fn seed_run_prelude(db: &TdPool) {
     seed_prelude(db).await;
+    let (fv, ep, tx, fr) = (at_rest(1), at_rest(1), at_rest(1), at_rest(1));
     for stmt in [
-        insert_function_version("fv1", "f-a", "2026-01-01T00:00:00Z"),
-        "INSERT INTO executions (id, project_id, name, collection_id, function_version_id, \
-           triggered_on, triggered_by_id, function_id) \
-         VALUES ('e0', 'p0', 'e0', 'c0', 'fv1', '2026-01-01T00:00:00Z', 'u0', 'f-a')"
-            .to_string(),
-        "INSERT INTO transactions (id, project_id, collection_id, execution_id, transaction_by, \
-           transaction_key, triggered_on, triggered_by_id, group_id) \
-         VALUES ('t0', 'p0', 'c0', 'e0', 'F', 'k0', '2026-01-01T00:00:00Z', 'u0', 'g0')"
-            .to_string(),
-        "INSERT INTO logical_function_runs (id, project_id, collection_id, execution_id, \
-           transaction_id, function_id, function_version_id, trigger, triggered_on, \
-           triggered_by_id, status, group_id) \
-         VALUES ('lfr-a', 'p0', 'c0', 'e0', 't0', 'f-a', 'fv1', 'M', '2026-01-01T00:00:00Z', \
-           'u0', 'S', 'g0')"
-            .to_string(),
+        insert_function_version(1, "f-a", "2026-01-01T00:00:00Z"),
+        format!(
+            "INSERT INTO executions (id, project_id, name, collection_id, function_version_id, \
+               triggered_on, triggered_by_id, function_id) \
+             VALUES ({ep}, 'p0', 'e0', 'c0', {fv}, '2026-01-01T00:00:00Z', 'u0', 'f-a')"
+        ),
+        format!(
+            "INSERT INTO transactions (id, project_id, collection_id, execution_id, transaction_by, \
+               transaction_key, triggered_on, triggered_by_id, group_id) \
+             VALUES ({tx}, 'p0', 'c0', {ep}, 'F', 'k0', '2026-01-01T00:00:00Z', 'u0', 'g0')"
+        ),
+        format!(
+            "INSERT INTO logical_function_runs (id, project_id, collection_id, execution_id, \
+               transaction_id, function_id, function_version_id, trigger, triggered_on, \
+               triggered_by_id, status, group_id) \
+             VALUES ({fr}, 'p0', 'c0', {ep}, {tx}, 'f-a', {fv}, 'M', '2026-01-01T00:00:00Z', \
+               'u0', 'S', 'g0')"
+        ),
     ] {
         execute(db, &stmt).await;
     }
 }
 
-fn insert_attempt(id: &str, valid_from: &str) -> String {
+fn insert_attempt(counter: usize, valid_from: &str) -> String {
+    let (id, fv, ep, tx, fr) = (
+        at_rest(counter),
+        at_rest(1),
+        at_rest(1),
+        at_rest(1),
+        at_rest(1),
+    );
     format!(
         "INSERT INTO physical_function_runs (id, project_id, collection_id, \
            function_version_id, execution_id, transaction_id, valid_from, triggered_by_id, \
            trigger, function_id, status, base_path, logical_function_run_id) \
-         VALUES ('{id}', 'p0', 'c0', 'fv1', 'e0', 't0', '{valid_from}', 'u0', 'M', \
-           'f-a', 'D', '/p', 'lfr-a')"
+         VALUES ({id}, 'p0', 'c0', {fv}, {ep}, {tx}, '{valid_from}', 'u0', 'M', \
+           'f-a', 'D', '/p', {fr})"
     )
 }
 
@@ -287,22 +313,28 @@ async fn scd2_attempts_chain_on_valid_from_postgres() {
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_run_prelude(&db.serving).await;
 
-    execute(&db.serving, &insert_attempt("pfr1", "2026-01-01T01:00:00Z")).await;
-    assert_eq!(attempt_chain(&db.serving).await, ["pfr1=infinity"]);
-
-    execute(&db.serving, &insert_attempt("pfr2", "2026-01-01T02:00:00Z")).await;
+    execute(&db.serving, &insert_attempt(1, "2026-01-01T01:00:00Z")).await;
     assert_eq!(
         attempt_chain(&db.serving).await,
-        ["pfr1=02", "pfr2=infinity"]
+        [format!("{}=infinity", at_rest(1))]
+    );
+
+    execute(&db.serving, &insert_attempt(2, "2026-01-01T02:00:00Z")).await;
+    assert_eq!(
+        attempt_chain(&db.serving).await,
+        [
+            format!("{}=02", at_rest(1)),
+            format!("{}=infinity", at_rest(2))
+        ]
     );
 
     let at_first = scalars(
         &db.serving,
-        "SELECT id FROM physical_function_runs \
+        "SELECT id::text FROM physical_function_runs \
            WHERE valid_from <= '2026-01-01T01:30:00Z' AND valid_to > '2026-01-01T01:30:00Z'",
     )
     .await;
-    assert_eq!(at_first, ["pfr1"]);
+    assert_eq!(at_first, [at_rest(1)]);
 }
 
 /// A void closes the open interval by hand and opens nothing.
@@ -311,26 +343,30 @@ async fn scd2_attempts_void_leaves_no_current_row_postgres() {
     let db = crate::test_utils::postgres::pool().await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_run_prelude(&db.serving).await;
-    execute(&db.serving, &insert_attempt("pfr1", "2026-01-01T01:00:00Z")).await;
-    execute(&db.serving, &insert_attempt("pfr2", "2026-01-01T02:00:00Z")).await;
+    execute(&db.serving, &insert_attempt(1, "2026-01-01T01:00:00Z")).await;
+    execute(&db.serving, &insert_attempt(2, "2026-01-01T02:00:00Z")).await;
 
-    let void = |id: &str| {
+    let void = |counter: usize| {
+        let id = at_rest(counter);
         format!(
             "UPDATE physical_function_runs SET valid_to = '2026-01-01T03:00:00Z' \
-               WHERE id = '{id}' AND valid_to = 'infinity'"
+               WHERE id = {id} AND valid_to = 'infinity'"
         )
     };
-    let closed = sqlx::query(sqlx::AssertSqlSafe(void("pfr2")))
+    let closed = sqlx::query(sqlx::AssertSqlSafe(void(2)))
         .execute(db.serving.as_ref())
         .await
         .unwrap()
         .rows_affected();
     assert_eq!(closed, 1);
-    assert_eq!(attempt_chain(&db.serving).await, ["pfr1=02", "pfr2=03"]);
+    assert_eq!(
+        attempt_chain(&db.serving).await,
+        [format!("{}=02", at_rest(1)), format!("{}=03", at_rest(2))]
+    );
 
     let open = scalars(
         &db.serving,
-        "SELECT id FROM physical_function_runs WHERE valid_to = 'infinity'",
+        "SELECT id::text FROM physical_function_runs WHERE valid_to = 'infinity'",
     )
     .await;
     assert!(
@@ -338,7 +374,7 @@ async fn scd2_attempts_void_leaves_no_current_row_postgres() {
         "a voided run has no current attempt: {open:?}"
     );
 
-    let again = sqlx::query(sqlx::AssertSqlSafe(void("pfr1")))
+    let again = sqlx::query(sqlx::AssertSqlSafe(void(1)))
         .execute(db.serving.as_ref())
         .await
         .unwrap()

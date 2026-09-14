@@ -90,7 +90,7 @@ fn dv_create_table_sql() -> String {
             .table(LoadDvTable::Table)
             .col(
                 ColumnDef::new(LoadDvTable::Id)
-                    .text()
+                    .big_integer()
                     .not_null()
                     .primary_key(),
             )
@@ -103,6 +103,10 @@ fn dv_create_table_sql() -> String {
             )
             .to_owned(),
     )
+}
+
+fn dv_id(seq: usize) -> LogicalTableDataVersionId {
+    LogicalTableDataVersionId::try_from(format!("DV20260101-{seq:010}").as_str()).unwrap()
 }
 
 /// `2026-01-01T00:00:00Z + v seconds` — strictly increasing so ranking is
@@ -128,10 +132,10 @@ impl SchemaSource for LoadDvSource {
     fn seeds(&self) -> Vec<String> {
         let (partitions, versions) = dims();
         let mut stmts = Vec::with_capacity(partitions * versions);
-        let mut seq = 1u64;
+        let mut seq = 1usize;
         for p in 0..partitions {
             for v in 0..versions {
-                let id = format!("DV20260101.{seq:010}");
+                let id = dv_id(seq).as_i64();
                 let defined_on = dv_defined_on(v);
                 let partition = format!("p{p}");
                 stmts.push(render_query(
@@ -291,7 +295,7 @@ fn keyed_row() -> Result<LoadDvKeyedDao, TdError> {
             .unwrap(),
     ));
     Ok(LoadDvKeyedDao {
-        id: LogicalTableDataVersionId::try_from("DV20260101.0000000001")?,
+        id: dv_id(1),
         partition_id: p0(),
         status: DvStatus::Active,
         defined_on,
@@ -320,8 +324,7 @@ async fn load_data_version_insert_or_ignore(db: TdPool) -> Result<(), TdError> {
 pub(crate) fn dv_rows(start: usize, count: usize) -> Result<Vec<LoadDvDao>, TdError> {
     (start..start + count)
         .map(|v| {
-            let id =
-                LogicalTableDataVersionId::try_from(format!("DV20260101.{:010}", v + 1).as_str())?;
+            let id = dv_id(v + 1);
             let defined_on = Scd2ValidFrom::asserted(Timestamp::from(
                 dv_defined_on(v)
                     .parse::<chrono::DateTime<chrono::Utc>>()

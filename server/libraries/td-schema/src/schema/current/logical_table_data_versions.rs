@@ -26,8 +26,8 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
-use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "table_data_versions__with_names"]
@@ -67,16 +67,16 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(LogicalTableDataVersions::Table)
-                .col(id_column(LogicalTableDataVersions::Id).not_null().primary_key())
+                .col(logical_id_column(LogicalTableDataVersions::Id).not_null().primary_key())
                 .col(id_column(LogicalTableDataVersions::ProjectId).not_null())
                 .col(id_column(LogicalTableDataVersions::CollectionId).not_null())
-                .col(id_column(LogicalTableDataVersions::ExecutionId).not_null())
-                .col(id_column(LogicalTableDataVersions::TransactionId).not_null())
+                .col(logical_id_column(LogicalTableDataVersions::ExecutionId).not_null())
+                .col(logical_id_column(LogicalTableDataVersions::TransactionId).not_null())
                 .col(id_column(LogicalTableDataVersions::TableId).not_null())
                 // Nullable: NULL when the LTDV is a lazy-mint over a V1-born
                 // physical_table_data_versions row whose producer pre-dates the logic
                 // layer, so no LFR exists for the producer.
-                .col(id_column(LogicalTableDataVersions::ProducerLogicalFunctionRunId).null())
+                .col(logical_id_column(LogicalTableDataVersions::ProducerLogicalFunctionRunId).null())
                 // Nullable for the same reason as ProducerLogicalFunctionRunId.
                 .col(ColumnDef::new(LogicalTableDataVersions::FunctionParamPos).integer().null())
                 .col(ColumnDef::new(LogicalTableDataVersions::Private).boolean().not_null())

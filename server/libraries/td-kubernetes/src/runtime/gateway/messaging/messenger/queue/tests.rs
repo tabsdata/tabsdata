@@ -21,7 +21,7 @@ use url::Url;
 use super::*;
 
 fn worker_id() -> WorkerId {
-    WorkerId::try_from("00000000000000000000000000").unwrap()
+    WorkerId::try_from("wkr20260101-0000000001").unwrap()
 }
 
 fn resolver() -> Callback {

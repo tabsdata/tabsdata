@@ -18,9 +18,9 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
 use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "physical_function_runs__with_names"]
@@ -76,18 +76,18 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(PhysicalFunctionRuns::Table)
-                .col(id_column(PhysicalFunctionRuns::Id).not_null().primary_key())
+                .col(logical_id_column(PhysicalFunctionRuns::Id).not_null().primary_key())
                 .col(id_column(PhysicalFunctionRuns::ProjectId).not_null())
                 .col(id_column(PhysicalFunctionRuns::CollectionId).not_null())
-                .col(id_column(PhysicalFunctionRuns::FunctionVersionId).not_null())
+                .col(logical_id_column(PhysicalFunctionRuns::FunctionVersionId).not_null())
                 // Patch id used at this attempt, if any. NULL → the head
                 // fvid in `function_version_id` ran verbatim; non-NULL → the
                 // patch's bundle_id/snippet ran (head's table topology is
                 // preserved, since patches don't redefine tables). FK to
                 // `function_patches(id)`.
-                .col(id_column(PhysicalFunctionRuns::FunctionVersionPatchId).null())
-                .col(id_column(PhysicalFunctionRuns::ExecutionId).not_null())
-                .col(id_column(PhysicalFunctionRuns::TransactionId).not_null())
+                .col(logical_id_column(PhysicalFunctionRuns::FunctionVersionPatchId).null())
+                .col(logical_id_column(PhysicalFunctionRuns::ExecutionId).not_null())
+                .col(logical_id_column(PhysicalFunctionRuns::TransactionId).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(id_column(PhysicalFunctionRuns::TriggeredById).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::Trigger).text().not_null())
@@ -114,7 +114,7 @@ impl Entity for Defs {
                 // fresh install does: the with-names view expands `*`.
                 .col(ColumnDef::new(PhysicalFunctionRuns::BasePath).text().not_null())
                 // SCD2 partition: attempts version their logical run by `valid_from`.
-                .col(id_column(PhysicalFunctionRuns::LogicalFunctionRunId).not_null())
+                .col(logical_id_column(PhysicalFunctionRuns::LogicalFunctionRunId).not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()

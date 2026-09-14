@@ -12,6 +12,7 @@ use super::{CurrentSource, SchemaDelta, SchemaSource, archive, current, deltas, 
 use crate::ID_COLLATION;
 use crate::schema::render::{render_schema, update_db_version};
 use crate::schema::sql::{created_table, is_id_column};
+use sea_query::ColumnType;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -615,7 +616,8 @@ fn test_no_index_is_a_prefix_of_another() {
 }
 
 /// Every id column (`id`, `*_id`) is declared through `id_column`, so it is
-/// `text COLLATE "C"`; no other column carries that collation. Checked on the
+/// `text COLLATE "C"`, or — for a logical id — through `logical_id_column`, so
+/// it is `bigint`; no other column carries that collation. Checked on the
 /// column definitions themselves, not on rendered DDL.
 #[test]
 fn test_id_columns_are_byte_collated() {
@@ -624,12 +626,16 @@ fn test_id_columns_are_byte_collated() {
         let table = created_table(&stmt);
         for col in stmt.get_columns() {
             let name = col.get_column_name();
-            let is_id = is_id_column(&name);
             let collated = col.get_column_spec().extra.as_deref() == Some(ID_COLLATION);
-            if is_id != collated {
+            let logical = matches!(col.get_column_type(), Some(ColumnType::BigInteger));
+            let declared = if is_id_column(&name) { collated || logical } else { !collated };
+            if !declared {
                 wrong.push(format!("{table}.{name}"));
             }
         }
     }
-    assert!(wrong.is_empty(), "id columns must be declared with `id_column` and only they may carry {ID_COLLATION}: {wrong:?}");
+    assert!(
+        wrong.is_empty(),
+        "id columns must be declared with `id_column` or `logical_id_column`, and only the former may carry {ID_COLLATION}: {wrong:?}"
+    );
 }
