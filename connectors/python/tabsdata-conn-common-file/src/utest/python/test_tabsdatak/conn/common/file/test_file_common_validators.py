@@ -86,7 +86,10 @@ def test_dest_path_accepts_simple_name():
 
 
 def test_dest_path_accepts_known_token():
-    assert _validation.DEST_PATH_VALIDATION.validate("out/${EXEC_PLAN_ID}.csv") == "out/${EXEC_PLAN_ID}.csv"
+    assert (
+        _validation.DEST_PATH_VALIDATION.validate("out/${EXEC_PLAN_ID}.csv")
+        == "out/${EXEC_PLAN_ID}.csv"
+    )
 
 
 def test_dest_path_rejects_empty():
@@ -180,7 +183,8 @@ def test_format_cfg_rejects_non_dict_value():
     # into the primary message (no chained ValueError needed).
     with pytest.raises(ConnException) as ei:
         _validation.validate_format_cfg(
-            {SrcFileFormat.CSV: "not a dict"}, side="src"  # type: ignore[dict-item]
+            {SrcFileFormat.CSV: "not a dict"},
+            side="src",  # type: ignore[dict-item]
         )
     assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_12
     msg = str(ei.value)
@@ -302,6 +306,261 @@ def test_dest_path_rejects_null_byte():
 def test_format_cfg_rejects_bad_side():
     with pytest.raises(ConnInitException) as ei:
         _validation.validate_format_cfg(
-            {SrcFileFormat.CSV: {}}, side="other",
+            {SrcFileFormat.CSV: {}},
+            side="other",
         )
     assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_13
+
+
+# --- ebcdic format_cfg ---------------------------------------------------
+
+
+def _copybook(record: str) -> str:
+    """A minimal copybook source. `copybook` carries the COBOL itself, not a
+    path to it, so fixtures have to be real (if tiny) layouts."""
+    return f"      01  {record}.\n          05  FIELD PIC X(4).\n"
+
+
+def test_ebcdic_src_cfg_accepts_its_own_keys():
+    cfg = {
+        SrcFileFormat.EBCDIC: {
+            "copybook": [_copybook("CUSTOMER")],
+            "codepage": "cp500",
+        }
+    }
+    assert _validation.validate_format_cfg(cfg, side="src") == cfg
+
+
+@pytest.mark.parametrize(
+    "key", ["copybook_text", "keep_filler", "hfp", "trim", "lrecl"]
+)
+def test_ebcdic_src_cfg_takes_only_copybook_and_codepage(key):
+    # The binary has more reader knobs; none is reachable from format_cfg.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_format_cfg(
+            {SrcFileFormat.EBCDIC: {"copybook": [_copybook("REC")], key: "x"}},
+            side="src",
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_11
+
+
+def test_ebcdic_src_cfg_rejects_an_unknown_key():
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_format_cfg(
+            {SrcFileFormat.EBCDIC: {"lrecl": 80}}, side="src"
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_11
+
+
+def test_ebcdic_is_source_only_on_the_dest_side():
+    # There is no DestFileFormat.EBCDIC, so a dest cfg cannot name it at all.
+    assert not hasattr(DestFileFormat, "EBCDIC")
+
+
+# --- validate_src_format -------------------------------------------------
+
+
+def _ebcdic(**cfg) -> dict:
+    return {SrcFileFormat.EBCDIC: cfg}
+
+
+def test_validate_src_format_accepts_one_copybook_per_path():
+    _validation.validate_src_format(
+        SrcFileFormat.EBCDIC, ["cust.dat"], _ebcdic(copybook=[_copybook("CUSTOMER")])
+    )
+    _validation.validate_src_format(
+        SrcFileFormat.EBCDIC,
+        ["jan.dat", "feb.dat", "mar.dat"],
+        _ebcdic(copybook=[_copybook("JAN"), _copybook("FEB"), _copybook("MAR")]),
+    )
+
+
+def test_paths_sharing_a_layout_repeat_the_same_copybook():
+    # The pairing is positional, so a shared layout is spelled out.
+    _validation.validate_src_format(
+        SrcFileFormat.EBCDIC,
+        ["jan.dat", "feb.dat"],
+        _ebcdic(copybook=[_copybook("CUSTOMER")] * 2),
+    )
+
+
+@pytest.mark.parametrize(
+    "cfg", [None, {}, _ebcdic(), _ebcdic(codepage="cp037"), _ebcdic(copybook=[])]
+)
+def test_an_ebcdic_source_with_no_copybook_fails_at_declaration_time(cfg):
+    # The descriptor must not build, rather than the first run failing.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(SrcFileFormat.EBCDIC, ["cust.dat"], cfg)
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_31
+
+
+@pytest.mark.parametrize(
+    "paths, copybooks",
+    [
+        (["a.dat", "b.dat"], [_copybook("A")]),
+        (["a.dat"], [_copybook("A"), _copybook("B")]),
+        ([], [_copybook("A")]),
+    ],
+)
+def test_a_copybook_list_that_does_not_match_the_paths_fails(paths, copybooks):
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.EBCDIC, paths, _ebcdic(copybook=copybooks)
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_32
+    message = str(excinfo.value)
+    assert f"list of {len(paths)} entries" in message
+    assert str(len(copybooks)) in message
+
+
+def test_a_bare_copybook_string_is_not_a_list_of_one():
+    # Accepting a scalar would make the 1-1 rule look optional.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.EBCDIC,
+            ["cust.dat"],
+            _ebcdic(copybook=_copybook("CUSTOMER")),
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_32
+    assert "str" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("path", ["*.dat", "extracts/*.dat", "cust*.dat", "2026/*"])
+def test_an_ebcdic_path_may_not_use_a_wildcard(path):
+    # An unknown number of files pairs with no fixed list.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.EBCDIC, [path], _ebcdic(copybook=[_copybook("CUSTOMER")])
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_33
+    assert path in str(excinfo.value)
+
+
+def test_the_wildcard_rule_is_reported_before_the_count_rule():
+    # Reporting the count first would send the user to fix the wrong thing.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.EBCDIC, ["*.dat", "b.dat"], _ebcdic(copybook=[_copybook("A")])
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_33
+
+
+def test_a_wildcard_is_fine_for_every_other_format():
+    for fmt in (SrcFileFormat.CSV, SrcFileFormat.EXCEL, SrcFileFormat.PARQUET):
+        _validation.validate_src_format(fmt, ["*.dat"], None)
+
+
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        SrcFileFormat.AUTO,
+        SrcFileFormat.CSV,
+        SrcFileFormat.PARQUET,
+        SrcFileFormat.EXCEL,
+    ],
+)
+def test_validate_src_format_leaves_every_other_format_alone(fmt):
+    # Only EBCDIC carries a mandatory format_cfg entry.
+    _validation.validate_src_format(fmt, ["a.dat"], None)
+    _validation.validate_src_format(fmt, ["a.dat"], {})
+
+
+@pytest.mark.parametrize("codepage", ["cp037", "cp273", "cp500", "cp1140"])
+def test_every_supported_codepage_is_accepted(codepage):
+    _validation.validate_src_format(
+        SrcFileFormat.EBCDIC,
+        ["cust.dat"],
+        _ebcdic(copybook=[_copybook("CUSTOMER")], codepage=codepage),
+    )
+
+
+@pytest.mark.parametrize(
+    "codepage",
+    [
+        "cp1047",  # a real EBCDIC page, just not one we ship
+        "utf-8",
+        "037",
+        "ibm037",
+        "CP037",  # the binary deserializes by name, so case matters
+        "",
+    ],
+)
+def test_an_unsupported_codepage_fails_at_declaration_time(codepage):
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.EBCDIC,
+            ["cust.dat"],
+            _ebcdic(copybook=[_copybook("CUSTOMER")], codepage=codepage),
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_34
+    # The message has to name the alternatives; the user cannot guess them.
+    assert "cp037, cp273, cp500, cp1140" in str(excinfo.value)
+
+
+def test_an_omitted_codepage_is_fine():
+    # The reader defaults to cp037, so absent is not the same as invalid.
+    _validation.validate_src_format(
+        SrcFileFormat.EBCDIC, ["cust.dat"], _ebcdic(copybook=[_copybook("CUSTOMER")])
+    )
+
+
+def test_the_copybook_rules_are_reported_before_the_codepage():
+    # A bad codepage alongside a missing copybook: the copybook is the thing
+    # without which nothing can be read.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.EBCDIC, ["cust.dat"], _ebcdic(codepage="nope")
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_31
+
+
+# --- validate_src_format: worksheet fragments ----------------------------
+#
+# The `#<sheet>` rules are a path concern, not an EBCDIC one, so they run
+# ahead of the format gate and apply to every source format.
+
+
+@pytest.mark.parametrize("fmt", [SrcFileFormat.AUTO, SrcFileFormat.EXCEL])
+def test_validate_src_format_accepts_a_worksheet_fragment(fmt):
+    _validation.validate_src_format(fmt, ["book.xlsx#2"], None)
+
+
+def test_validate_src_format_accepts_paths_without_a_fragment():
+    _validation.validate_src_format(SrcFileFormat.CSV, ["rows.csv"], None)
+
+
+@pytest.mark.parametrize("fragment", ["", "abc", "2.0", "-1", "٢", "4294967296"])
+def test_a_malformed_worksheet_fragment_fails_at_declaration_time(fragment):
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.AUTO, [f"book.xlsx#{fragment}"], None
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_28
+
+
+def test_worksheet_zero_fails_at_declaration_time():
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(SrcFileFormat.AUTO, ["book.xlsx#0"], None)
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_29
+
+
+def test_a_fragment_on_a_non_excel_format_fails_at_declaration_time():
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(SrcFileFormat.CSV, ["rows.csv#2"], None)
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_30
+
+
+def test_every_path_is_checked_not_only_the_first():
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(
+            SrcFileFormat.EXCEL, ["ok.xlsx#1", "bad.xlsx#0"], None
+        )
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_29
+
+
+def test_a_fragment_is_checked_even_on_an_ebcdic_source():
+    # The fragment rules run before the EBCDIC gate returns, so a format that
+    # takes no worksheet still reports the fragment rather than the copybook.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_format(SrcFileFormat.EBCDIC, ["cust.dat#2"], None)
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_30

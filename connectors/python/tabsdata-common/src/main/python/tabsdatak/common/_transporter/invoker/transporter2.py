@@ -288,6 +288,16 @@ class TransporterExcelFormat(TransporterFormat):
     has_header: bool = True
 
 
+@dataclass(frozen=True, slots=True)
+class TransporterEbcdicFormat(TransporterFormat):
+    """Read-only. Fixed-length records described by a COBOL copybook, whose
+    **source text** ``copybook`` holds -- it travels inline with the request,
+    so the binary fetches nothing."""
+
+    copybook: str
+    codepage: str = "cp037"
+
+
 # --- Wire dataclasses (request side) -------------------------------
 #
 # Mirror the td_transporter2 request structs. Serialized to YAML by the
@@ -333,11 +343,25 @@ class ExcelOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class EbcdicOptions:
+    """Copybook reader options, carried in :class:`FormatSpec`'s ``options``.
+    Mirrors ``EbcdicOptions`` in the binary's ``spec.rs`` field for field -- a
+    name that drifts is a YAML parse failure there, not here.
+
+    The copybook and a code page are the whole surface; the reader's other
+    behaviours are fixed on both sides (hex float, trailing spaces trimmed,
+    ``FILLER`` dropped)."""
+
+    copybook: str
+    codepage: str = "cp037"
+
+
+@dataclass(frozen=True, slots=True)
 class FormatSpec:
     """A data format the binary can decode / encode: ``parquet``,
     ``csv`` (with :class:`CsvOptions`), ``ndjson``, ``avro``, or -- read-only,
-    so valid only as a ``source_format`` -- ``text`` and ``excel`` (with
-    :class:`ExcelOptions`).
+    so valid only as a ``source_format`` -- ``text``, ``excel`` (with
+    :class:`ExcelOptions`) and ``ebcdic`` (with :class:`EbcdicOptions`).
 
     ``options`` carries whichever block the format takes, untagged; the
     binary reads it against the sibling ``format`` field rather than
@@ -345,7 +369,7 @@ class FormatSpec:
     """
 
     format: str
-    options: CsvOptions | ExcelOptions | None = None
+    options: CsvOptions | ExcelOptions | EbcdicOptions | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -630,6 +654,14 @@ def to_format_spec(fmt: TransporterFormat) -> FormatSpec:
         return FormatSpec(
             format="excel",
             options=ExcelOptions(sheet=fmt.sheet, has_header=fmt.has_header),
+        )
+    if isinstance(fmt, TransporterEbcdicFormat):
+        return FormatSpec(
+            format="ebcdic",
+            options=EbcdicOptions(
+                copybook=fmt.copybook,
+                codepage=fmt.codepage,
+            ),
         )
     raise ValueError(f"unsupported transporter format: {type(fmt).__name__}")
 
@@ -940,11 +972,38 @@ def src_format_to_transporter(
             sheet=1 if sheet is None else sheet,
             has_header=bool((cfg or {}).get("has_header", True)),
         )
+    if fmt is SrcFileFormat.EBCDIC:
+        return _ebcdic_format(cfg or {})
     # AUTO must be resolved by ``resolve_auto_src_format`` before reaching
     # here -- the previous behaviour silently returned Parquet, which
     # masked CSV/JSON/AVRO mismatches as parquet-magic-byte failures.
     # noinspection PyProtectedMember
     raise FileFormatErrorCode.FILE_FORMAT_1.exception(format=fmt)
+
+
+def _ebcdic_format(options: dict) -> TransporterEbcdicFormat:
+    """Mandatory and undefaultable: the data carries no schema at all.
+
+    One request covers one path, so this is a single copybook --
+    ``ReaderConf.format_cfg_for`` narrowed the user's per-path list already.
+    """
+    copybook = _one_copybook(options.get("copybook"))
+    if not copybook:
+        raise FileFormatErrorCode.FILE_FORMAT_6.exception()
+    return TransporterEbcdicFormat(
+        copybook=copybook,
+        codepage=str(options.get("codepage", "cp037")),
+    )
+
+
+def _one_copybook(value: Any) -> str | None:
+    """A list here was never narrowed to its slot -- a wiring bug. Say so
+    rather than read entry 0 for every path."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        raise FileFormatErrorCode.FILE_FORMAT_7.exception(count=len(value))
+    return str(value)
 
 
 def dest_format_to_transporter(

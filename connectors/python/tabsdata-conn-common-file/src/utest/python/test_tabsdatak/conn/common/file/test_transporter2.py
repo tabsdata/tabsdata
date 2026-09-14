@@ -160,7 +160,9 @@ def test_to_format_spec_simple_formats():
 
 
 def test_to_format_spec_csv_char_separator():
-    spec = t.to_format_spec(t.TransporterCSVFormat({"separator": ";", "has_header": False}))
+    spec = t.to_format_spec(
+        t.TransporterCSVFormat({"separator": ";", "has_header": False})
+    )
     assert spec.format == "csv"
     assert spec.options == t.CsvOptions(has_header=False, delimiter=";")
 
@@ -246,7 +248,10 @@ def test_dump_find_copy_drops_none_and_empty_configs():
     assert wire == {
         "source": {"uri": "s3://b/in/*.csv", "configs": {"region": "env:R"}},
         "target_dir": {"uri": "file:///out/"},  # empty configs omitted
-        "source_format": {"format": "csv", "options": {"has_header": True, "delimiter": ","}},
+        "source_format": {
+            "format": "csv",
+            "options": {"has_header": True, "delimiter": ","},
+        },
         "target_format": {"format": "parquet"},
         "decompress": "auto",
     }
@@ -302,7 +307,9 @@ def test_dump_find_request_minimal():
 
 def test_dump_delete_request():
     wire = t._dump(
-        t.DeleteRequest(files=[t.Location("file:///a"), t.Location("s3://b/c", {"region": "env:R"})])
+        t.DeleteRequest(
+            files=[t.Location("file:///a"), t.Location("s3://b/c", {"region": "env:R"})]
+        )
     )
     assert wire == {
         "files": [
@@ -314,7 +321,9 @@ def test_dump_delete_request():
 
 def test_dump_request_is_plain_yaml_safe(tmp_path):
     # _dump output must be safe_dump-able (plain dict/list/str/bool/int).
-    req = t.CopyRequest(pairs=[t.CopyPair(from_=t.Location("file:///a"), to=t.Location("file:///b"))])
+    req = t.CopyRequest(
+        pairs=[t.CopyPair(from_=t.Location("file:///a"), to=t.Location("file:///b"))]
+    )
     text = yaml.safe_dump(t._dump(req), sort_keys=False)
     assert "!!" not in text  # no python object tags
     assert yaml.safe_load(text) == t._dump(req)
@@ -517,7 +526,9 @@ def test_run_binary_nonzero_raises_run_error(monkeypatch, tmp_path):
     req = tmp_path / "req.yaml"
     req.write_text("x: 1\n")
     with pytest.raises(t.TransporterRunError) as ei:
-        t.run_binary("copy", req, tmp_path / "resp.yaml", env=None, binary_path="/fake/bin")
+        t.run_binary(
+            "copy", req, tmp_path / "resp.yaml", env=None, binary_path="/fake/bin"
+        )
     assert ei.value.returncode == 7
     assert "boom" in str(ei.value)
 
@@ -568,7 +579,9 @@ def test_find_copy_subcommand_request_and_parse(monkeypatch, tmp_path):
 
 def test_find_copy_alpha_suborder_appends_flag(monkeypatch, tmp_path):
     capture: dict[str, Any] = {}
-    _fake_run(monkeypatch, capture=capture, response={"files": [], "lastmod_info": None})
+    _fake_run(
+        monkeypatch, capture=capture, response={"files": [], "lastmod_info": None}
+    )
     req = t.FindCopyRequest(
         source=t.Location("file:///in/*.csv"),
         target_dir=t.Location(t.path_to_file_uri(tmp_path)),
@@ -656,7 +669,10 @@ def test_delete_subcommand_and_parse(monkeypatch, tmp_path):
     _fake_run(
         monkeypatch,
         capture=capture,
-        response={"deleted": ["s3://b/a"], "failed": [{"uri": "s3://b/x", "error": "nope"}]},
+        response={
+            "deleted": ["s3://b/a"],
+            "failed": [{"uri": "s3://b/x", "error": "nope"}],
+        },
     )
     resp = t.delete(
         t.DeleteRequest(files=[t.Location("s3://b/a", {"region": "env:R"})]),
@@ -675,7 +691,11 @@ def test_driver_run_error_propagates(monkeypatch, tmp_path):
     with pytest.raises(t.TransporterRunError) as ei:
         t.copy(
             t.CopyRequest(
-                pairs=[t.CopyPair(from_=t.Location("file:///a"), to=t.Location("file:///b"))]
+                pairs=[
+                    t.CopyPair(
+                        from_=t.Location("file:///a"), to=t.Location("file:///b")
+                    )
+                ]
             ),
             tmp_path,
             binary_path="/fake/bin",
@@ -722,10 +742,14 @@ def test_file_uri_to_path_roundtrip_and_passthrough(tmp_path):
 
 
 def test_resolve_auto_src_format_uniform():
-    assert t.resolve_auto_src_format(SrcFileFormat.AUTO, ["a.csv", "b.csv"]) is SrcFileFormat.CSV
+    assert (
+        t.resolve_auto_src_format(SrcFileFormat.AUTO, ["a.csv", "b.csv"])
+        is SrcFileFormat.CSV
+    )
     # already concrete -> unchanged
     assert (
-        t.resolve_auto_src_format(SrcFileFormat.PARQUET, ["a.csv"]) is SrcFileFormat.PARQUET
+        t.resolve_auto_src_format(SrcFileFormat.PARQUET, ["a.csv"])
+        is SrcFileFormat.PARQUET
     )
 
 
@@ -755,18 +779,28 @@ def test_resolve_auto_src_format_unknown_extension_raises():
 
 def test_resolve_auto_dest_format_uniform():
     assert (
-        t.resolve_auto_dest_format(DestFileFormat.AUTO, ["a.parquet"]) is DestFileFormat.PARQUET
+        t.resolve_auto_dest_format(DestFileFormat.AUTO, ["a.parquet"])
+        is DestFileFormat.PARQUET
     )
 
 
 def test_src_format_to_transporter_maps_each():
-    assert isinstance(t.src_format_to_transporter(SrcFileFormat.CSV, None), t.TransporterCSVFormat)
-    assert isinstance(t.src_format_to_transporter(SrcFileFormat.JSON, None), t.TransporterJsonFormat)
-    assert isinstance(t.src_format_to_transporter(SrcFileFormat.AVRO, None), t.TransporterAvroFormat)
     assert isinstance(
-        t.src_format_to_transporter(SrcFileFormat.PARQUET, None), t.TransporterParquetFormat
+        t.src_format_to_transporter(SrcFileFormat.CSV, None), t.TransporterCSVFormat
     )
-    assert isinstance(t.src_format_to_transporter(SrcFileFormat.LOG, None), t.TransporterLogFormat)
+    assert isinstance(
+        t.src_format_to_transporter(SrcFileFormat.JSON, None), t.TransporterJsonFormat
+    )
+    assert isinstance(
+        t.src_format_to_transporter(SrcFileFormat.AVRO, None), t.TransporterAvroFormat
+    )
+    assert isinstance(
+        t.src_format_to_transporter(SrcFileFormat.PARQUET, None),
+        t.TransporterParquetFormat,
+    )
+    assert isinstance(
+        t.src_format_to_transporter(SrcFileFormat.LOG, None), t.TransporterLogFormat
+    )
     assert isinstance(
         t.src_format_to_transporter(SrcFileFormat.EXCEL, None), t.TransporterExcelFormat
     )
@@ -809,7 +843,108 @@ def test_a_sheet_never_reaches_another_format_as_an_option():
 
 
 def test_dest_format_to_transporter_maps_each():
-    assert isinstance(t.dest_format_to_transporter(DestFileFormat.CSV, None), t.TransporterCSVFormat)
     assert isinstance(
-        t.dest_format_to_transporter(DestFileFormat.PARQUET, None), t.TransporterParquetFormat
+        t.dest_format_to_transporter(DestFileFormat.CSV, None), t.TransporterCSVFormat
     )
+    assert isinstance(
+        t.dest_format_to_transporter(DestFileFormat.PARQUET, None),
+        t.TransporterParquetFormat,
+    )
+
+
+# --- EBCDIC / copybook sources -----------------------------------
+
+
+def test_ebcdic_is_source_only():
+    assert SrcFileFormat.EBCDIC.value == "EBCDIC"
+    assert not hasattr(DestFileFormat, "EBCDIC")
+
+
+def test_auto_never_infers_ebcdic():
+    # A mainframe extract has no conventional extension, so there is nothing
+    # to infer from and the format must always be named.
+    for path in ["rec.dat", "rec.bin", "rec.ebc", "rec"]:
+        with pytest.raises(Exception):
+            t.resolve_auto_src_format(SrcFileFormat.AUTO, [path])
+
+
+def _copybook(record: str) -> str:
+    """A minimal copybook source. `copybook` carries the COBOL itself, not a
+    path to it, so fixtures have to be real (if tiny) layouts."""
+    return f"      01  {record}.\n          05  FIELD PIC X(4).\n"
+
+
+def test_src_format_to_transporter_ebcdic_takes_the_copybook_source():
+    copybook = _copybook("CUSTOMER")
+    fmt = t.src_format_to_transporter(SrcFileFormat.EBCDIC, {"copybook": copybook})
+    assert isinstance(fmt, t.TransporterEbcdicFormat)
+    assert fmt.copybook == copybook
+
+
+def test_an_un_narrowed_copybook_list_is_a_wiring_bug_not_a_silent_first_entry():
+    # A list here means `format_cfg_for` did not narrow it; taking entry 0
+    # would read every path against the first path's copybook.
+    with pytest.raises(Exception, match="list of 2"):
+        t.src_format_to_transporter(
+            SrcFileFormat.EBCDIC,
+            {"copybook": [_copybook("JAN"), _copybook("FEB")]},
+        )
+
+
+def test_the_code_page_defaults_to_cp037():
+    copybook = _copybook("REC")
+    fmt = t.src_format_to_transporter(SrcFileFormat.EBCDIC, {"copybook": copybook})
+    assert fmt.codepage == "cp037"
+    other = t.src_format_to_transporter(
+        SrcFileFormat.EBCDIC, {"copybook": copybook, "codepage": "cp273"}
+    )
+    assert other.codepage == "cp273"
+
+
+@pytest.mark.parametrize("cfg", [None, {}, {"codepage": "cp037"}, {"copybook": ""}])
+def test_ebcdic_without_a_copybook_is_refused(cfg):
+    # The data carries no schema at all, so there is nothing to fall back to.
+    with pytest.raises(Exception, match="copybook"):
+        t.src_format_to_transporter(SrcFileFormat.EBCDIC, cfg)
+
+
+def test_dump_ebcdic_source_format_matches_the_binary_field_names():
+    # Drift is a runtime parse failure in the binary, so the keys are pinned.
+    req = t.FindCopyRequest(
+        source=t.Location(uri="s3://b/extract.dat"),
+        target_dir=t.Location(uri="file:///work/slot0"),
+        source_format=t.to_format_spec(
+            t.TransporterEbcdicFormat(copybook=_copybook("REC"), codepage="cp500")
+        ),
+        target_format=t.FormatSpec(format="parquet"),
+    )
+    dumped = t._dump(req)
+    assert dumped["source_format"] == {
+        "format": "ebcdic",
+        "options": {
+            # The copybook source itself, inline: the binary fetches nothing.
+            "copybook": _copybook("REC"),
+            "codepage": "cp500",
+        },
+    }
+    assert yaml.safe_load(yaml.safe_dump(dumped)) == dumped
+
+
+def test_the_binary_only_knobs_are_left_off_the_wire():
+    # `copybook_text`, `keep_filler`, `hfp` and `trim` are not reachable from
+    # a connector's format_cfg, so nothing is emitted for them and the binary
+    # applies its own defaults.
+    dumped = t._dump(
+        t.to_format_spec(t.TransporterEbcdicFormat(copybook=_copybook("REC")))
+    )
+    assert set(dumped["options"]) == {"copybook", "codepage"}
+
+
+def test_a_multiline_copybook_survives_the_yaml_round_trip():
+    # Newlines and leading columns are load-bearing: code starts at column 8.
+    copybook = (
+        "      01  REC.\n      05  NAME PIC X(20).\n      05  QTY  PIC S9(5) COMP-3.\n"
+    )
+    spec = t.to_format_spec(t.TransporterEbcdicFormat(copybook=copybook))
+    dumped = t._dump(spec)
+    assert yaml.safe_load(yaml.safe_dump(dumped))["options"]["copybook"] == copybook

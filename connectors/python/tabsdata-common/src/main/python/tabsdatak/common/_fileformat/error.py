@@ -35,3 +35,13 @@ class FileFormatErrorCode(ErrorCode):
         "A '#{sheet}' worksheet fragment is only valid on an EXCEL source, but the "
         "format resolved to '{format}'",
     )  # import_request -- a sheet survived onto a non-Excel source
+    FILE_FORMAT_6 = ErrorDef(
+        CommonInitException,
+        "An EBCDIC source needs a copybook: set format_cfg's 'copybook' to a "
+        "list of copybook sources, one for each entry in 'paths'",
+    )  # src_format_to_transporter -- no copybook
+    FILE_FORMAT_7 = ErrorDef(
+        CommonInitException,
+        "An EBCDIC copybook reached the reader as a list of {count} rather than "
+        "the one entry for this path; the per-path list was never narrowed",
+    )  # src_format_to_transporter -- an un-narrowed copybook list

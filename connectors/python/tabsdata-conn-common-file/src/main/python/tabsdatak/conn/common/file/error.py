@@ -145,14 +145,37 @@ class FileCommonErrorCode(ErrorCode):
         ConnInitException,
         "Source path '{path}' has a malformed worksheet fragment '#{fragment}': "
         "expected a decimal worksheet number, as in 'book.xlsx#2'",
-    )  # split_sheet_fragment
+    )  # split_sheet_fragment (validate_src_format)
     FILE_COMMON_29 = ErrorDef(
         ConnInitException,
         "Source path '{path}' names worksheet 0: worksheet numbers start at 1, "
         "counting every sheet the workbook declares",
-    )  # split_sheet_fragment
+    )  # split_sheet_fragment (validate_src_format)
     FILE_COMMON_30 = ErrorDef(
         ConnInitException,
         "Source path '{path}' has a '#<sheet>' worksheet fragment, which only an "
         "EXCEL source takes (format is {format})",
-    )  # split_sheet_fragment
+    )  # split_sheet_fragment (validate_src_format)
+    FILE_COMMON_31 = ErrorDef(
+        ConnInitException,
+        "An EBCDIC source needs a copybook: set "
+        "format_cfg[SrcFileFormat.EBCDIC]['copybook'] to a list of copybook "
+        "sources, one for each entry in 'paths'",
+    )  # validate_src_format
+    FILE_COMMON_32 = ErrorDef(
+        ConnInitException,
+        "An EBCDIC source reads one copybook per path, so "
+        "format_cfg[SrcFileFormat.EBCDIC]['copybook'] must be a list of "
+        "{paths} entries, one for each entry in 'paths' (got {given})",
+    )  # validate_src_format
+    FILE_COMMON_34 = ErrorDef(
+        ConnInitException,
+        "format_cfg[SrcFileFormat.EBCDIC]['codepage'] is '{codepage}', which is "
+        "not a supported EBCDIC code page. Use one of: {supported}",
+    )  # validate_src_format
+    FILE_COMMON_33 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' uses a wildcard, which an EBCDIC source cannot: "
+        "each path is read against its own copybook, and a wildcard stands for "
+        "an unknown number of files. Name each file on its own path",
+    )  # validate_src_format

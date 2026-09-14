@@ -149,19 +149,25 @@ class LocalFileSrc(Src):
             empty segments (`//`). A path may use a `*` glob in its
             final segment only; backslashes, NUL and `${...}` tokens
             are not allowed. An `.xlsx` path may end with `#<n>` to name
-            the worksheet to read -- `1`-based, counting every sheet the
-            workbook declares, hidden ones included. Two paths may name
-            different sheets of one workbook, giving a slot each.
+            the worksheet -- `1`-based over every sheet the workbook
+            declares, hidden ones included. Two paths may name different
+            sheets of one workbook, giving a slot each.
         format: File format -- one of `AUTO`, `CSV`, `JSON`,
-            `AVRO`, `PARQUET`, `LOG`, `EXCEL`. `AUTO` (the default)
+            `AVRO`, `PARQUET`, `LOG`, `EXCEL`, `EBCDIC`. `AUTO` (the default)
             infers it from the file extension. `EXCEL` reads one
-            worksheet of an `.xlsx` workbook, named by the path's
-            `#<n>` fragment.
+            worksheet of an `.xlsx` workbook, named by the path's `#<n>`
+            fragment. `EBCDIC` reads fixed-length records described by a
+            COBOL copybook; it must be named explicitly (a mainframe
+            extract has no extension to infer from) and its paths may not
+            use a wildcard, each being read against its own copybook.
         format_cfg: Optional per-format reader options (source-side
             keys only), keyed by the `SrcFileFormat`. `EXCEL` takes
-            `has_header` (default `True`); if `False`, the first row is
-            read as data and the column names are generated as
-            `column_1`, `column_2`, ...
+            `has_header` (default `True`); with `False` the first row is
+            data and the columns are named `column_1`, `column_2`, ...
+            `EBCDIC` requires `copybook`, a list holding the copybook
+            source text for each entry in `paths`, and takes `codepage`
+            -- one of `cp037` (the default), `cp273`, `cp500` or `cp1140`,
+            spelled exactly so.
         initial_last_modified: Optional cutoff for incremental
             ingestion. The first run imports only files modified at or
             after this timestamp; the cutoff then advances each run so
@@ -209,13 +215,17 @@ class LocalFileSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
-        """Cross-field validation of `format_cfg` (source side).
+        """Cross-field validation of `format`, `paths` and `format_cfg`
+        (source side).
 
         Called by the framework; raises `LocalFileValidateException`
         on failure.
         """
         try:
             _file_validation.validate_format_cfg(self.format_cfg, side="src")
+            _file_validation.validate_src_format(
+                self.format, self.paths, self.format_cfg
+            )
         except Exception as e:
             raise LocalFileErrorCode.LOCALFILE_3.exception(cause=e)
 

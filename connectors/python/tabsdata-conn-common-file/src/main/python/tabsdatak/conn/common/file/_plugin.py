@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, cast
 
 from tabsdatak.common._fileformat.taxonomy import (
+    EBCDIC_COPYBOOK_KEYS,
     EXCEL_SHEET_KEY,
     DestFileFormat,
     SrcFileFormat,
@@ -24,6 +25,7 @@ from tabsdatak.common._transporter.invoker.transporter1 import (
 )
 from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
 from tabsdatak.conn.common.file import _input, _output
+from tabsdatak.conn.common.file._validation import split_sheet_fragment
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
@@ -50,48 +52,6 @@ def initial_lastmod_to_iso(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
-
-
-# The wire carries the worksheet number as a u32, so a fragment above this
-# is malformed rather than merely out of range -- which sheet a workbook
-# actually has is the binary's to report, against the workbook.
-_MAX_SHEET = 0xFFFF_FFFF
-
-
-def split_sheet_fragment(
-    path: str, file_format: SrcFileFormat
-) -> tuple[str, int | None]:
-    """Split a source path's ``#<sheet>`` worksheet fragment off.
-
-    Returns the fragment-free path and the 1-based worksheet number the
-    fragment named, or ``None`` when there was none. Splitting on the
-    *first* ``#`` matches what ``Url::parse`` already does to the uri
-    inside the binary, so a literal ``#`` in an object key is no more
-    expressible than it was before this existed.
-
-    Everything downstream -- ``build_location``, AUTO inference, the
-    transporter's own output naming -- reads the path, so this runs before
-    any of them and they never see a fragment.
-
-    A fragment is only accepted under ``EXCEL`` or ``AUTO``; under AUTO a
-    path that turns out not to be a workbook is caught once the format
-    resolves, which is the first point that can know.
-    """
-    head, marker, fragment = path.partition("#")
-    if not marker:
-        return path, None
-    if file_format not in (SrcFileFormat.AUTO, SrcFileFormat.EXCEL):
-        raise FileCommonErrorCode.FILE_COMMON_30.exception(
-            path=path, format=file_format.name
-        )
-    # ``str.isdigit`` alone admits superscripts and other unicode digits
-    # that ``int`` then refuses, so ASCII is required too.
-    if not (fragment.isascii() and fragment.isdigit()) or int(fragment) > _MAX_SHEET:
-        raise FileCommonErrorCode.FILE_COMMON_28.exception(path=path, fragment=fragment)
-    sheet = int(fragment)
-    if sheet == 0:
-        raise FileCommonErrorCode.FILE_COMMON_29.exception(path=path)
-    return head, sheet
 
 
 def format_cfg_with_sheets(
@@ -170,26 +130,40 @@ class ReaderConf:
         )
 
     def format_cfg_for(self, index: int) -> dict | None:
-        """:attr:`format_cfg` with the EXCEL worksheet list narrowed to the
-        single number the path at ``index`` named.
+        """:attr:`format_cfg` with every per-path list narrowed to the value
+        belonging to the path at ``index`` -- EXCEL's worksheet number and
+        EBCDIC's copybook.
 
-        Every request covers one path, so the reader is handed one number,
-        not the list; a slot whose path named no worksheet gets the key
-        dropped entirely and reads the first sheet. Narrowing here rather
-        than in :meth:`from_src` is what lets ``format_cfg`` stay the one
-        per-source dict it has always been.
+        Every request covers one path, so the reader is handed one value.
+        Narrowing here rather than in :meth:`from_src` keeps ``format_cfg``
+        the one per-source dict it has always been.
         """
-        excel = (self.format_cfg or {}).get(SrcFileFormat.EXCEL) or {}
-        if EXCEL_SHEET_KEY not in excel:
-            return self.format_cfg
-        sheets = excel[EXCEL_SHEET_KEY]
-        sheet = sheets[index] if index < len(sheets) else None
-        narrowed = dict(excel)
-        if sheet is None:
-            del narrowed[EXCEL_SHEET_KEY]
-        else:
-            narrowed[EXCEL_SHEET_KEY] = sheet
-        return {**self.format_cfg, SrcFileFormat.EXCEL: narrowed}
+        cfg = self.format_cfg
+        if not cfg:
+            return cfg
+        cfg = self._narrowed(cfg, SrcFileFormat.EXCEL, (EXCEL_SHEET_KEY,), index)
+        return self._narrowed(cfg, SrcFileFormat.EBCDIC, EBCDIC_COPYBOOK_KEYS, index)
+
+    @staticmethod
+    def _narrowed(
+        cfg: dict, fmt: SrcFileFormat, keys: tuple[str, ...], index: int
+    ) -> dict:
+        """``cfg`` with each of ``keys`` under ``fmt`` replaced by its element
+        at ``index``. An empty slot drops the key, so the reader falls back to
+        its own default rather than seeing a ``None``."""
+        entry = cfg.get(fmt) or {}
+        present = [key for key in keys if key in entry]
+        if not present:
+            return cfg
+        narrowed = dict(entry)
+        for key in present:
+            values = narrowed[key]
+            value = values[index] if index < len(values) else None
+            if value is None:
+                del narrowed[key]
+            else:
+                narrowed[key] = value
+        return {**cfg, fmt: narrowed}
 
 
 @dataclass(frozen=True)

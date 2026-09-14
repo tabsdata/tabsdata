@@ -156,6 +156,7 @@ def _allowed_keys(fmt_name: str, *, side: str) -> frozenset[str]:
     from tabsdatak.conn.common.file.typing_ import (
         CsvDestKey,
         CsvSrcKey,
+        EbcdicSrcKey,
         ExcelSrcKey,
     )
 
@@ -164,6 +165,8 @@ def _allowed_keys(fmt_name: str, *, side: str) -> frozenset[str]:
             return frozenset(get_args(CsvSrcKey))
         if side == "dest":
             return frozenset(get_args(CsvDestKey))
+    if fmt_name == "EBCDIC" and side == "src":
+        return frozenset(get_args(EbcdicSrcKey))
     if fmt_name == "EXCEL" and side == "src":
         # Deliberately not ``sheet``: that arrives as a path fragment, not
         # as an option, and a user naming it here should be told so.
@@ -200,3 +203,101 @@ def validate_format_cfg(
                 allowed=sorted(allowed) or "(none)",
             )
     return value
+
+
+# The wire carries the worksheet number as a u32, so a fragment above this
+# is malformed rather than merely out of range -- which sheet a workbook
+# actually has is the binary's to report, against the workbook.
+_MAX_SHEET = 0xFFFF_FFFF
+
+
+def split_sheet_fragment(path: str, file_format: Any) -> tuple[str, int | None]:
+    """Split a source path's ``#<sheet>`` worksheet fragment off.
+
+    Returns the fragment-free path and the 1-based worksheet number the
+    fragment named, or ``None`` when there was none. Splitting on the
+    *first* ``#`` matches what ``Url::parse`` already does to the uri
+    inside the binary, so a literal ``#`` in an object key is no more
+    expressible than it was before this existed.
+
+    Everything downstream -- ``build_location``, AUTO inference, the
+    transporter's own output naming -- reads the path, so this runs before
+    any of them and they never see a fragment.
+
+    A fragment is only accepted under ``EXCEL`` or ``AUTO``; under AUTO a
+    path that turns out not to be a workbook is caught once the format
+    resolves, which is the first point that can know.
+
+    :func:`validate_src_format` runs this over every path, so a bad
+    fragment fails the descriptor; the reader calls it again only to read
+    the number back off an already-validated path.
+    """
+    # Local import for the same circular-import reason as above.
+    from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
+
+    head, marker, fragment = path.partition("#")
+    if not marker:
+        return path, None
+    if file_format not in (SrcFileFormat.AUTO, SrcFileFormat.EXCEL):
+        raise FileCommonErrorCode.FILE_COMMON_30.exception(
+            path=path, format=file_format.name
+        )
+    # ``str.isdigit`` alone admits superscripts and other unicode digits
+    # that ``int`` then refuses, so ASCII is required too.
+    if not (fragment.isascii() and fragment.isdigit()) or int(fragment) > _MAX_SHEET:
+        raise FileCommonErrorCode.FILE_COMMON_28.exception(path=path, fragment=fragment)
+    sheet = int(fragment)
+    if sheet == 0:
+        raise FileCommonErrorCode.FILE_COMMON_29.exception(path=path)
+    return head, sheet
+
+
+def validate_src_format(fmt: Any, paths: Any, value: dict | None) -> None:
+    """Cross-check a source's `format` against its `paths` and `format_cfg`.
+
+    For Excel format, the paths are checked for a `#<sheet>` fragment and the fragment
+    is validated. For EBCDIC format, the paths are checked for a `copybook` entry in the
+    `format_cfg`, the number of copybooks must match the number of paths, and the
+    `codepage` is validated for valid values.
+    """
+    # Local import for the same circular-import reason as above.
+    from tabsdatak.common._fileformat.taxonomy import (
+        EBCDIC_CODEPAGES,
+        SrcFileFormat,
+    )
+
+    # Excel paths are checked for a `#<sheet>` fragment and the fragment is validated.
+    for path in paths or []:
+        split_sheet_fragment(str(path), fmt)
+
+    if fmt is not SrcFileFormat.EBCDIC:
+        return
+    cfg = (value or {}).get(SrcFileFormat.EBCDIC) or {}
+    copybooks = cfg.get("copybook")
+    if not copybooks:
+        raise FileCommonErrorCode.FILE_COMMON_31.exception()
+
+    entries = list(paths or [])
+    # A wildcard is an unknown number of files, so no fixed list pairs with
+    # it. Before the count check, which would report an unactionable length.
+    for path in entries:
+        if "*" in str(path):
+            raise FileCommonErrorCode.FILE_COMMON_33.exception(path=path)
+
+    if not isinstance(copybooks, (list, tuple)) or len(copybooks) != len(entries):
+        given = (
+            f"{len(copybooks)}"
+            if isinstance(copybooks, (list, tuple))
+            else type(copybooks).__name__
+        )
+        raise FileCommonErrorCode.FILE_COMMON_32.exception(
+            paths=len(entries), given=given
+        )
+
+    codepage = cfg.get("codepage")
+    # Spelled exactly as the binary's enum spells it -- it deserializes by
+    # name, so `CP037` is as unusable as `cp1047`.
+    if codepage is not None and codepage not in EBCDIC_CODEPAGES:
+        raise FileCommonErrorCode.FILE_COMMON_34.exception(
+            codepage=codepage, supported=", ".join(EBCDIC_CODEPAGES)
+        )

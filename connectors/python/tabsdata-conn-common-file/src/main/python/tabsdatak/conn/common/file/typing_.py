@@ -116,18 +116,37 @@ non-empty row names the columns. With it off no row is spent on names,
 every row is data, and the columns are called `column_1`, `column_2`, ...
 """
 
+EbcdicSrcKey = Literal["copybook", "codepage"]
+"""Copybook reader options accepted in a source `format_cfg[EBCDIC]`
+entry.
+
+`copybook` is mandatory -- the data carries no schema at all -- and holds
+the copybook **source text**, not a path to it. It is a list, one entry
+per entry in `paths`; repeat the same text where paths share a layout.
+Hence no `*` wildcards: no fixed list pairs with an unknown file count.
+
+`codepage` (default `cp037`; also `cp273`, `cp500`, `cp1140`, spelled
+exactly so) translates the text fields. Numeric fields decode from raw
+bytes and are unaffected.
+"""
+
 CsvSrcCfg: TypeAlias = dict[CsvSrcKey, Any]
 CsvDestCfg: TypeAlias = dict[CsvDestKey, Any]
 ExcelSrcCfg: TypeAlias = dict[ExcelSrcKey, Any]
+EbcdicSrcCfg: TypeAlias = dict[EbcdicSrcKey, Any]
 
 
-SrcFormatCfgSpec: TypeAlias = dict[SrcFileFormat, CsvSrcCfg | ExcelSrcCfg | dict]
+SrcFormatCfgSpec: TypeAlias = dict[
+    SrcFileFormat, CsvSrcCfg | ExcelSrcCfg | EbcdicSrcCfg | dict
+]
 """Per-format reader options for a source, keyed by `SrcFileFormat`.
 
-Only `CSV` (keys typed by `CsvSrcKey`) and `EXCEL` (`ExcelSrcKey`)
-accept non-empty options; every other format must map to `{}` or be
-omitted. A destination-only key raises the connector's validate exception
-at descriptor construction.
+Only `CSV` (keys typed by `CsvSrcKey`), `EXCEL` (`ExcelSrcKey`) and
+`EBCDIC` (`EbcdicSrcKey`) accept non-empty options; every other format
+must map to `{}` or be omitted. `EBCDIC` is the one format whose entry is
+mandatory rather than optional -- it carries the copybook. A
+destination-only key raises the connector's validate exception at
+descriptor construction.
 """
 
 DestFormatCfgSpec: TypeAlias = dict[DestFileFormat, CsvDestCfg | dict]

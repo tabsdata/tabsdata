@@ -1399,3 +1399,72 @@ def test_sheet_in_reads_a_narrowed_cfg():
     assert _plugin.sheet_in({SrcFileFormat.CSV: {"separator": ";"}}) is None
     assert _plugin.sheet_in({SrcFileFormat.EXCEL: {}}) is None
     assert _plugin.sheet_in({SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: 7}}) == 7
+
+
+# --- EBCDIC: one copybook per path ---------------------------------
+
+
+def _copybook(record: str) -> str:
+    """A minimal copybook source. `copybook` carries the COBOL itself, not a
+    path to it, so fixtures have to be real (if tiny) layouts."""
+    return f"      01  {record}.\n          05  FIELD PIC X(4).\n"
+
+
+def _ebcdic_conf(paths: list[str], **cfg) -> _plugin.ReaderConf:
+    return _plugin.ReaderConf(
+        conn=object(),
+        paths=paths,
+        file_format=SrcFileFormat.EBCDIC,
+        format_cfg={SrcFileFormat.EBCDIC: cfg},
+    )
+
+
+def test_format_cfg_for_narrows_the_copybook_list_to_one_slot():
+    copybooks = [_copybook(m) for m in ("JAN", "FEB", "MAR")]
+    conf = _ebcdic_conf(
+        ["jan.dat", "feb.dat", "mar.dat"], copybook=copybooks, codepage="cp500"
+    )
+    for index, expected in enumerate(copybooks):
+        assert conf.format_cfg_for(index) == {
+            SrcFileFormat.EBCDIC: {"copybook": expected, "codepage": "cp500"}
+        }
+    # Narrowing does not disturb the stored list.
+    assert conf.format_cfg[SrcFileFormat.EBCDIC]["copybook"] == copybooks
+
+
+def test_paths_sharing_one_layout_repeat_the_copybook():
+    conf = _ebcdic_conf(["jan.dat", "feb.dat"], copybook=[_copybook("CUSTOMER")] * 2)
+    assert conf.format_cfg_for(0) == conf.format_cfg_for(1)
+
+
+def test_an_ebcdic_cfg_with_no_copybook_passes_straight_through():
+    # Validation refuses this at declaration time; narrowing has nothing
+    # to do rather than inventing a key.
+    conf = _ebcdic_conf(["a.dat"], codepage="cp037")
+    assert conf.format_cfg_for(0) is conf.format_cfg
+
+
+def test_narrowing_one_format_leaves_the_others_untouched():
+    conf = _plugin.ReaderConf(
+        conn=object(),
+        paths=["a.dat", "b.dat"],
+        file_format=SrcFileFormat.EBCDIC,
+        format_cfg={
+            SrcFileFormat.EBCDIC: {"copybook": [_copybook("A"), _copybook("B")]},
+            SrcFileFormat.CSV: {"separator": ";"},
+        },
+    )
+    assert conf.format_cfg_for(1) == {
+        SrcFileFormat.EBCDIC: {"copybook": _copybook("B")},
+        SrcFileFormat.CSV: {"separator": ";"},
+    }
+
+
+def test_a_narrowed_copybook_reaches_the_reader_as_one_source():
+    # The binary is handed one copybook for the one path it covers.
+    copybooks = [_copybook("JAN"), _copybook("FEB")]
+    conf = _ebcdic_conf(["jan.dat", "feb.dat"], copybook=copybooks)
+    fmt = transporter2.src_format_to_transporter(
+        SrcFileFormat.EBCDIC, conf.format_cfg_for(1)[SrcFileFormat.EBCDIC]
+    )
+    assert fmt.copybook == copybooks[1]
