@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
@@ -20,6 +21,7 @@ from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import BigQueryDest, MergeCfg, _plugin as plugin
+from tabsdatak.conn.bigquery.error import BigQueryErrorCode, BigQueryRuntimeException
 
 pytestmark = pytest.mark.bigquery
 
@@ -170,7 +172,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 
 def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
     """A batch parquet. A column given as a `Series` pins its dtype."""
-    pl.DataFrame(columns).write_parquet(path)
+    pl.DataFrame(columns).write_parquet(path, use_pyarrow=True)
     return path
 
 
@@ -576,6 +578,174 @@ def test_dest_plugin_write_out_merge_adds_a_new_column_to_an_inserted_row(
                 "carrier": [None, "ups"],
             }),
         )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_widens_a_column_type_on_update(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The batch's column is wider than the target's, and the base types alone
+    # settle it: INT64 becomes FLOAT64. The column is retyped before the MERGE
+    # runs, so the batch's own value lands rather than being refused.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_widen_type"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([10], dtype=pl.Int64),
+        },
+    )
+    widened = _batch(
+        tmp_path / "widened.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([10.5], dtype=pl.Float64),
+            "op": ["u"],
+        },
+    )
+    try:
+        _seed_target(conn, work, table, seed)
+        assert db.column_types(table)["amount"][0] == "INTEGER"
+
+        _merge_out(conn, work, table, widened, merge_cfg, "update")
+        assert db.column_types(table)["amount"][0] == "FLOAT"
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({"order_id": [1], "amount": [10.5]}),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_widens_a_numeric_by_its_parameters(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # Both sides are NUMERIC, so the base types say nothing and only the
+    # precision and scale decide: the target holds 7 integer digits and 2
+    # decimal ones, an unparameterized NUMERIC holds 29 and 9, so neither
+    # budget shrinks and the widening is taken.
+    #
+    # The target is built with DDL because a parameterized type cannot be
+    # loaded into being -- a parquet decimal lands as plain NUMERIC whatever
+    # precision and scale it was written with. That is also why the batch's
+    # side is unparameterized: a merge only ever meets parameters that were
+    # already in the target.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_widen_numeric"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    # Four decimal places, which a NUMERIC(9, 2) could not have held.
+    widened = _batch(
+        tmp_path / "widened.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "total": pl.Series([Decimal("1234.5678")], dtype=pl.Decimal(20, 4)),
+            "op": ["i"],
+        },
+    )
+    try:
+        db.create_typed_table(table, "order_id INT64, total NUMERIC(9, 2)")
+        assert db.column_types(table)["total"] == ("NUMERIC", 9, 2)
+
+        _merge_out(conn, work, table, widened, merge_cfg, "update")
+        assert db.column_types(table)["total"] == ("NUMERIC", None, None)
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({"order_id": [1], "total": [Decimal("1234.5678")]}),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_refuses_a_batch_that_would_narrow(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The mirror of the widening case, and it does not go quietly: FLOAT64 down
+    # to INT64 is no widening, so nothing is altered and the MERGE would write
+    # the batch's column into an incompatible one. The delta is refused before
+    # the statement is built, so the target is left as the seed made it.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_narrow_type"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([10.5], dtype=pl.Float64),
+        },
+    )
+    narrowed = _batch(
+        tmp_path / "narrowed.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([11], dtype=pl.Int64),
+            "op": ["u"],
+        },
+    )
+    try:
+        _seed_target(conn, work, table, seed)
+        with pytest.raises(BigQueryRuntimeException) as ei:
+            _merge_out(conn, work, table, narrowed, merge_cfg, "update")
+        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
+
+        assert db.column_types(table)["amount"][0] == "FLOAT"
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({"order_id": [1], "amount": [10.5]}),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_refuses_a_widened_batch_on_strict(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # Strict does not evolve, so a batch whose column widened is written into
+    # the target's narrower one -- which BigQuery will not do. A type change in
+    # the batch is therefore a hard failure under strict, not a no-op: the same
+    # batch merges cleanly under "update", where the column is retyped first.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_strict_type"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([10], dtype=pl.Int64),
+        },
+    )
+    widened = _batch(
+        tmp_path / "widened.parquet",
+        {
+            "order_id": pl.Series([1], dtype=pl.Int64),
+            "amount": pl.Series([10.5], dtype=pl.Float64),
+            "op": ["u"],
+        },
+    )
+    try:
+        _seed_target(conn, work, table, seed)
+        with pytest.raises(BigQueryRuntimeException) as ei:
+            _merge_out(conn, work, table, widened, merge_cfg, "strict")
+        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
+        assert db.column_types(table)["amount"][0] == "INTEGER"
     finally:
         db.drop_table(table)
 

@@ -61,8 +61,11 @@ def test_quote_column_leaves_an_already_quoted_name_alone():
 # ---------------------------------------------------------------------------
 
 
-def test_renderer_supports_add_column_alone():
-    assert _iceberg.BigQueryRenderer.SUPPORTED_ACTIONS == {_iceberg.Action.ADD_COLUMN}
+def test_renderer_supports_adding_and_widening_alone():
+    assert _iceberg.BigQueryRenderer.SUPPORTED_ACTIONS == {
+        _iceberg.Action.ADD_COLUMN,
+        _iceberg.Action.ALTER_TYPE,
+    }
     assert _iceberg.BigQueryRenderer.SUPPORTS_REORDER is False
 
 
@@ -103,7 +106,6 @@ def test_render_alter_never_emits_not_null_or_default():
     "action",
     [
         _iceberg.Action.DROP_COLUMN,
-        _iceberg.Action.ALTER_TYPE,
         _iceberg.Action.SET_NULLABLE,
         _iceberg.Action.DROP_NULLABLE,
         _iceberg.Action.SET_DEFAULT,
@@ -122,7 +124,7 @@ def test_render_sql_skips_the_actions_the_dialect_does_not_support():
     delta = _delta(
         _change(_iceberg.Action.DROP_COLUMN, "gone"),
         _change(_iceberg.Action.ADD_COLUMN, "note", type="STRING"),
-        _change(_iceberg.Action.ALTER_TYPE, "total", old_type="INT64", type="NUMERIC"),
+        _change(_iceberg.Action.SET_DEFAULT, "total", default="0"),
     )
     assert _iceberg.render_bigquery_sql(delta) == [
         "ALTER TABLE `p.ds.t` ADD COLUMN IF NOT EXISTS `note` STRING"
@@ -258,9 +260,33 @@ def test_table_schema_from_columns_makes_every_column_nullable():
     assert all(col.default is None for col in schema.columns)
 
 
-def test_widening_map_is_empty_because_no_type_action_is_supported():
-    assert _iceberg.BIGQUERY_TYPE_WIDENING_MAP == {}
-    assert _iceberg.Action.ALTER_TYPE not in _iceberg.BigQueryRenderer.SUPPORTED_ACTIONS
+def test_widening_map_is_keyed_by_the_type_being_widened_to():
+    """An entry names the types that can safely become the key, so nothing
+    widens *to* the narrowest one."""
+    widenings = _iceberg.BIGQUERY_TYPE_WIDENING_MAP
+    assert "INT64" not in widenings
+    assert widenings["NUMERIC"] == {"INT64"}
+    assert "NUMERIC" in widenings["BIGNUMERIC"]
+
+
+def test_widening_map_feeds_the_safety_flag_the_caller_gates_on():
+    """The map marks a retype safe; acting on that is the caller's call, since
+    the renderer renders whatever it is handed."""
+    assert _iceberg.Action.ALTER_TYPE in _iceberg.BigQueryRenderer.SUPPORTED_ACTIONS
+    current = _iceberg.table_schema_from_columns("`p.ds.t`", [("n", "INT64")])
+    desired = _iceberg.table_schema_from_columns("`p.ds.t`", [("n", "NUMERIC")])
+    delta = _iceberg.compute_delta(
+        current, desired, _iceberg.BIGQUERY_TYPE_WIDENING_MAP
+    )
+    (alter,) = [c for c in delta.changes if c.action is _iceberg.Action.ALTER_TYPE]
+    assert alter.safe is True
+
+
+def test_widening_map_leaves_parameterized_types_to_can_widen():
+    """``_impl.column_type`` spells a type with its parameters, which these keys
+    do not carry -- so the map alone would call a widening unsafe."""
+    assert "NUMERIC(20, 4)" not in _iceberg.BIGQUERY_TYPE_WIDENING_MAP
+    assert _iceberg.can_widen("NUMERIC(9, 2)", "NUMERIC(20, 4)") is True
 
 
 # ---------------------------------------------------------------------------

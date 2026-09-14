@@ -386,14 +386,73 @@ def test_evolve_keeps_the_staging_spelling_of_a_new_column():
     assert "`Note` STRING" in _statements(client)[0]
 
 
-def test_evolve_never_drops_or_retypes():
-    """Schema drift stays as harmless as it has always been here: a column only
-    the target has, or one whose type changed, is reported and ignored."""
+def test_evolve_never_drops_a_column_only_the_target_has():
+    """A column the batch does not carry is reported as a drop and ignored: the
+    renderer does not drop, so schema drift in that direction stays harmless."""
     client, evolved = _evolve(
         [_field("order_id", "INTEGER"), _field("legacy", "STRING")],
-        [_field("order_id", "STRING")],
+        [_field("order_id", "INTEGER")],
     )
     assert evolved == []
+    assert _statements(client) == []
+
+
+def test_evolve_widens_a_column_the_batch_has_outgrown():
+    client, evolved = _evolve(
+        [_field("total", "INTEGER")], [_field("total", "NUMERIC")]
+    )
+    assert evolved == ["total"]
+    assert _statements(client) == [
+        "ALTER TABLE `my-project.analytics.orders`"
+        " ALTER COLUMN IF EXISTS `total` SET DATA TYPE NUMERIC"
+    ]
+
+
+def test_evolve_widens_a_numeric_by_its_parameters():
+    """The map answers for the base alone, so a parameterized type is left to
+    ``can_widen`` -- which reads the precision and scale and has the final say."""
+    client, evolved = _evolve(
+        [_field("total", "NUMERIC", precision=9, scale=2)],
+        [_field("total", "NUMERIC", precision=20, scale=4)],
+    )
+    assert evolved == ["total"]
+    assert "SET DATA TYPE NUMERIC(20, 4)" in _statements(client)[0]
+
+
+@pytest.mark.parametrize(
+    "stored,staged",
+    [
+        # Two bases with no widening between them, in both directions.
+        ("INTEGER", "STRING"),
+        ("STRING", "INTEGER"),
+        # A narrowing.
+        ("NUMERIC", "INTEGER"),
+    ],
+)
+def test_evolve_refuses_a_change_bigquery_cannot_make(stored, staged):
+    """The batch's values would have nowhere to land, so the write stops here
+    rather than at the MERGE. Both sides' types are read the same way, so a
+    reported retype is a real one.
+    """
+    from tabsdatak.conn.common.sql._iceberg import UnsafeSchemaChangeError
+
+    client = _field_client({_TARGET: [_field("total", stored)]})
+    with pytest.raises(UnsafeSchemaChangeError):
+        _dialect(client).evolve(
+            _QUOTED_TARGET, _staged([_field("total", staged)]), "op"
+        )
+    assert _statements(client) == []
+
+
+def test_evolve_refuses_before_it_alters_anything():
+    """The check covers the whole delta, so a column that could have been added
+    is not added when another column's retype is refused."""
+    from tabsdatak.conn.common.sql._iceberg import UnsafeSchemaChangeError
+
+    client = _field_client({_TARGET: [_field("total", "INTEGER")]})
+    staged = _staged([_field("total", "STRING"), _field("note", "STRING")])
+    with pytest.raises(UnsafeSchemaChangeError):
+        _dialect(client).evolve(_QUOTED_TARGET, staged, "op")
     assert _statements(client) == []
 
 

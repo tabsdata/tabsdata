@@ -287,36 +287,65 @@ def quote_table(table_fqn: str) -> str:
     return fqn(table_fqn.split("."), _BIGQUERY_FQN_DEF)
 
 
-def _standard_sql_type(type_: Any) -> str:
-    """Spell a ``StandardSqlDataType`` the way DDL takes it."""
-    kind = type_.type_kind.value
-    if kind == "ARRAY":
-        return f"ARRAY<{_standard_sql_type(type_.array_element_type)}>"
-    if kind == "STRUCT":
-        fields = ", ".join(
-            f"{quote_column(field.name)} {_standard_sql_type(field.type)}"
-            for field in type_.struct_type.fields
-        )
-        return f"STRUCT<{fields}>"
-    if kind == "RANGE":
-        return f"RANGE<{_standard_sql_type(type_.range_element_type)}>"
-    return kind
+def _standard_kind(field: Any) -> str:
+    """The GoogleSQL name of what one ``SchemaField`` holds.
+
+    ``SchemaField.field_type`` reports the legacy name -- ``INTEGER`` for an
+    ``INT64`` column, ``RECORD`` for a ``STRUCT`` -- so the name is read off
+    ``to_standard_sql()``, which knows the mapping. That folds
+    ``mode="REPEATED"`` into an ``ARRAY``, so the element is unwrapped again
+    here: repetition is the field's, not the type's.
+    """
+    type_ = field.to_standard_sql().type
+    if type_.type_kind.value == "ARRAY":
+        type_ = type_.array_element_type
+    return type_.type_kind.value
+
+
+def _type_parameters(field: Any) -> str:
+    """The parameters a ``SchemaField``'s type carries, as DDL spells them.
+
+    ``STRING`` and ``BYTES`` take a length, ``NUMERIC`` and ``BIGNUMERIC`` a
+    precision and optionally a scale. A scale without a precision cannot be
+    spelled, so it is dropped rather than guessed at.
+    """
+    if field.max_length is not None:
+        return f"({field.max_length})"
+    if field.precision is None:
+        return ""
+    if field.scale is not None:
+        return f"({field.precision}, {field.scale})"
+    return f"({field.precision})"
 
 
 def column_type(field: Any) -> str:
     """The GoogleSQL type of a ``SchemaField``, as DDL spells it.
 
-    ``SchemaField.field_type`` reports the legacy name -- ``INTEGER`` for an
-    ``INT64`` column, ``RECORD`` for a ``STRUCT`` -- so the type is read off
-    ``to_standard_sql()`` instead, which also folds ``mode="REPEATED"`` into an
-    ``ARRAY<...>``.
+    Walked over the ``SchemaField`` itself rather than over what
+    ``to_standard_sql()`` returns, because that drops the type's parameters: a
+    column defined ``NUMERIC(20, 4)`` reads back there as plain ``NUMERIC``, and
+    a target created from it would take the type's whole range instead of the
+    staging table's. Only the type *name* is read from the standard-SQL view,
+    which is the part the legacy spelling gets wrong.
 
-    Parameters are dropped: a ``NUMERIC(20, 4)`` column reads back as plain
-    ``NUMERIC``, so a column added from it takes the type's whole range. That is
-    the wider of the two, and the safer default for a column that has to hold
-    whatever arrives next.
+    Parameters are kept wherever they sit: on the element of a repeated column,
+    and on each field of a struct.
     """
-    return _standard_sql_type(field.to_standard_sql().type)
+    element = _element_type(field)
+    return f"ARRAY<{element}>" if field.mode == "REPEATED" else element
+
+
+def _element_type(field: Any) -> str:
+    """``column_type`` for the field's element, with its repetition set aside."""
+    kind = _standard_kind(field)
+    if kind == "STRUCT":
+        fields = ", ".join(
+            f"{quote_column(sub.name)} {column_type(sub)}" for sub in field.fields
+        )
+        return f"STRUCT<{fields}>"
+    if kind == "RANGE":
+        return f"RANGE<{field.range_element_type.element_type}>"
+    return f"{kind}{_type_parameters(field)}"
 
 
 def table_column_types(bq_client: Any, table_fqn: str) -> list[tuple[str, str]]:

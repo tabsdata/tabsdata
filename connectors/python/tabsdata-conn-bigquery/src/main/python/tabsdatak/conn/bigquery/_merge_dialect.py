@@ -171,8 +171,8 @@ class BigQueryMergeDialect(MergeDialect):
         The marker is left out: it says what to do with a row and is never part
         of the row, so a target created here never has it.
 
-        An existing target is left exactly as it is; widening it is
-        :meth:`evolve`'s job. The rendered DDL still carries ``IF NOT EXISTS``,
+        An existing target is left exactly as it is; adding to it and widening
+        it are :meth:`evolve`'s job. The rendered DDL still carries ``IF NOT EXISTS``,
         so a second run that read the same missing target creates nothing rather
         than failing.
         """
@@ -215,16 +215,18 @@ class BigQueryMergeDialect(MergeDialect):
 
     def evolve(self, target: str, staged: Staged, marker: str) -> list[str]:
         """``ALTER TABLE`` the target to add every column the batch has and it
-        does not.
+        does not, and to widen a column whose type the batch has outgrown.
 
         A ``MERGE`` evolves nothing here -- there is no modifier that would make
-        it -- so a merge target gains a column through this pass or not at all.
+        it -- so a merge target gains a column, or a wider type, through this
+        pass or not at all.
 
-        ``strict`` is False: the renderer supports ``ADD_COLUMN`` alone, so a
-        retype the diff reports renders to nothing anyway, and the current
-        schema's types come from the table while the batch's come from the
-        staging table BigQuery built -- close enough to agree most of the time,
-        but not something to refuse a write over.
+        Both sides' types are read by the same walk over a ``SchemaField``, so a
+        column neither side touched reports as unchanged and there is no
+        vocabulary to reconcile first. That is what makes ``strict`` safe: the
+        retypes the diff reports are real, and one BigQuery cannot make refuses
+        the whole write rather than staging rows into a column that cannot hold
+        them.
         """
         return evolve_with_iceberg(
             self,
@@ -233,7 +235,8 @@ class BigQueryMergeDialect(MergeDialect):
             marker,
             renderer=_iceberg.BigQueryRenderer(),
             widening_map=_iceberg.BIGQUERY_TYPE_WIDENING_MAP,
-            strict=False,
+            can_safely_widen=_iceberg.can_widen,
+            strict=True,
         )
 
     # --- BigQuery internals -------------------------------------------

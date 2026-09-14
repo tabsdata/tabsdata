@@ -296,10 +296,44 @@ def test_column_type_renders_a_repeated_struct():
     assert impl.column_type(field) == "ARRAY<STRUCT<`q` INT64>>"
 
 
-def test_column_type_drops_type_parameters():
-    """A NUMERIC(20, 4) reads back as plain NUMERIC, so the added column takes
-    the type's whole range -- wider than the staging column, never narrower."""
-    assert impl.column_type(_field("a", "NUMERIC", precision=20, scale=4)) == "NUMERIC"
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        (_field("a", "NUMERIC", precision=20, scale=4), "NUMERIC(20, 4)"),
+        (_field("a", "BIGNUMERIC", precision=40), "BIGNUMERIC(40)"),
+        (_field("a", "STRING", max_length=50), "STRING(50)"),
+        (_field("a", "BYTES", max_length=16), "BYTES(16)"),
+    ],
+)
+def test_column_type_keeps_type_parameters(field, expected):
+    """``to_standard_sql()`` drops them, so a target built from it would take
+    the type's whole range instead of the staging table's."""
+    assert impl.column_type(field) == expected
+
+
+def test_column_type_omits_parameters_a_type_does_not_carry():
+    assert impl.column_type(_field("a", "NUMERIC")) == "NUMERIC"
+    assert impl.column_type(_field("a", "STRING")) == "STRING"
+
+
+def test_column_type_keeps_parameters_on_a_repeated_element():
+    field = _field("a", "NUMERIC", mode="REPEATED", precision=10, scale=2)
+    assert impl.column_type(field) == "ARRAY<NUMERIC(10, 2)>"
+
+
+def test_column_type_keeps_parameters_on_a_struct_field():
+    field = _field(
+        "money",
+        "RECORD",
+        fields=[
+            _field("amount", "NUMERIC", precision=9, scale=2),
+            _field("currency", "STRING", max_length=3),
+        ],
+    )
+    assert (
+        impl.column_type(field)
+        == "STRUCT<`amount` NUMERIC(9, 2), `currency` STRING(3)>"
+    )
 
 
 def test_table_column_types_pairs_names_with_googlesql_types():

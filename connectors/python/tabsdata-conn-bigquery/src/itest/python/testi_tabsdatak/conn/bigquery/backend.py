@@ -80,6 +80,29 @@ class BigQueryStore(SqlStore):
         values = ", ".join(f"({row['id']}, '{row['name']}')" for row in rows)
         self._client.query(f"INSERT INTO {fqn} (id, name) VALUES {values}").result()
 
+    def create_typed_table(self, table: str, columns: str) -> None:
+        """Create `table` from an explicit column list, e.g.
+        ``"id INT64, total NUMERIC(9, 2)"``.
+
+        A parameterized type cannot be seeded through the connector: a parquet
+        decimal loads as plain ``NUMERIC`` whatever precision and scale it was
+        written with, so a target that carries them has to be built with DDL.
+        """
+        self._client.query(
+            f"CREATE OR REPLACE TABLE {self._fqn(table)} ({columns})"
+        ).result()
+
+    def column_types(self, table: str) -> dict[str, tuple[str, int | None, int | None]]:
+        """``name -> (type, precision, scale)`` as BigQuery reports the table.
+
+        The type is BigQuery's legacy spelling -- ``INTEGER`` for an ``INT64``
+        column, ``FLOAT`` for a ``FLOAT64`` -- read straight off the API rather
+        than through the connector's own translation, so a test that asserts on
+        it is not checking the code against itself.
+        """
+        schema = self._client.get_table(self._path(table)).schema
+        return {f.name: (f.field_type, f.precision, f.scale) for f in schema}
+
     def count(self, table: str) -> int:
         rows = self._client.query(
             f"SELECT count(*) AS n FROM {self._fqn(table)}"
