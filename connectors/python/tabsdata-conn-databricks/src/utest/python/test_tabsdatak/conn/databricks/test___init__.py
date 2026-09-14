@@ -16,8 +16,6 @@ from tabsdatak.conn.common.sql.error import (
 )
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
 from tabsdatak.conn.databricks import (
     CredentialsSpec,
     DatabricksDestConn,
@@ -220,13 +218,6 @@ def _merge_cfg(**overrides) -> MergeCfg:
     return MergeCfg(**kwargs)
 
 
-def test_merge_cfg_is_the_shared_merge_cfg():
-    """The structure and its invariants come from common-sql; only the column
-    folding is Databricks'."""
-    assert issubclass(MergeCfg, SqlMergeCfg)
-    assert MergeCfg.__kind__ == "databricksMergeCfg"
-
-
 def test_merge_cfg_round_trip():
     cfg = _merge_cfg(on=["order_id", "customer_id"])
     assert MergeCfg.from_json(cfg.to_json()) == cfg
@@ -288,6 +279,17 @@ def test_merge_cfg_rejects_a_key_as_the_op_column_across_case():
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_6
 
 
+def test_a_dotted_merge_key_is_refused_at_the_field():
+    """The column spec gates the value, so a qualified reference never reaches
+    the merge. The identifier code and the offending position both survive into
+    the message."""
+    with pytest.raises(ConnInitException) as ei:
+        _merge_cfg(on=["orders.id"])
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_18
+    assert "DATABRICKS-14" in str(ei.value)
+    assert "on.0" in str(ei.value)
+
+
 def test_merge_cfg_rejects_a_quoted_key_as_the_op_column():
     """The collision check runs on folded names, so quoting cannot smuggle the
     marker past it."""
@@ -309,11 +311,11 @@ def test_databricks_dest_round_trips_a_merge():
     dest = DatabricksDest(
         tables=["main.analytics.orders"],
         if_table_exists="merge",
-        merge_cfg=_merge_cfg(),
+        merge_cfg=[_merge_cfg()],
     )
     loaded = DatabricksDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.merge_cfg.op_column == "op"
+    assert loaded.merge_cfg[0].op_column == "op"
 
 
 def test_databricks_dest_round_trips_a_merge_cfg_per_table():
@@ -326,14 +328,36 @@ def test_databricks_dest_round_trips_a_merge_cfg_per_table():
     assert [c.on for c in loaded.merge_cfg] == [["order_id"], ["item_id"]]
 
 
-def test_databricks_dest_broadcasts_a_single_cfg_to_every_table():
+def test_databricks_dest_takes_one_merge_cfg_per_table():
+    cfgs = [_merge_cfg(), _merge_cfg(on=["item_id"])]
+    dest = DatabricksDest(
+        tables=["c.s.a", "c.s.b"],
+        if_table_exists="merge",
+        merge_cfg=cfgs,
+    )
+    assert dest._merge_cfgs() == cfgs
+
+
+def test_databricks_dest_takes_a_one_entry_list_for_a_single_table():
     cfg = _merge_cfg()
     dest = DatabricksDest(
-        tables=["c.s.a", "c.s.b", "c.s.c"],
+        tables=["c.s.a"],
         if_table_exists="merge",
-        merge_cfg=cfg,
+        merge_cfg=[cfg],
     )
-    assert dest._merge_cfgs() == [cfg, cfg, cfg]
+    assert dest._merge_cfgs() == [cfg]
+
+
+def test_databricks_dest_refuses_a_bare_merge_cfg():
+    # A list even for one table, so reading a merge config off a destination
+    # never depends on how many tables it happens to write.
+    with pytest.raises(ConnInitException) as ei:
+        DatabricksDest(
+            tables=["c.s.a"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(),
+        )
+    assert "valid list" in str(ei.value)
 
 
 def test_databricks_dest_merge_cfgs_is_none_outside_merge_mode():
@@ -363,7 +387,7 @@ def test_databricks_dest_rejects_a_merge_cfg_outside_merge_mode(if_table_exists)
         DatabricksDest(
             tables=["c.s.a"],
             if_table_exists=if_table_exists,
-            merge_cfg=_merge_cfg(),
+            merge_cfg=[_merge_cfg()],
         )
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
     assert if_table_exists in str(ei.value)
@@ -414,30 +438,30 @@ def test_databricks_dest_rejects_a_watermark_on_a_replace():
     assert "nothing for a watermark to make idempotent" in str(ei.value)
 
 
-def test_databricks_dest_rejects_a_watermark_named_on_the_merge_cfg():
-    # The field is inherited from the shared MergeCfg and so is still settable
-    # there, but this connector reads it off the destination. Silently dropping
-    # it would cost a rerun its idempotency.
-    with pytest.raises(DatabricksValidateException) as ei:
-        DatabricksDest(
-            tables=["c.s.t"],
-            if_table_exists="merge",
-            merge_cfg=_merge_cfg(watermark_column=_WATERMARK),
-        )
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
-    assert "name the watermark on DatabricksDest.watermark_column" in str(ei.value)
-
-
-def test_databricks_dest_stamps_the_watermark_onto_every_merge_cfg():
+def test_databricks_dest_watermark_named_on_the_merge_cfg_does_not_arrive():
+    # MergeCfg has no such field any more, and the API dataclass drops a kwarg
+    # it does not declare -- so the name is gone before validate sees it and the
+    # destination is the only place it can be named.
     dest = DatabricksDest(
-        tables=["c.s.a", "c.s.b"],
+        tables=["c.s.t"],
         if_table_exists="merge",
-        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
+        merge_cfg=[_merge_cfg(watermark_column=_WATERMARK)],
+    )
+    assert dest._watermark_column() is None
+    assert not hasattr(dest._merge_cfgs()[0], "watermark_column")
+
+
+def test_databricks_dest_hands_its_merge_cfgs_over_untouched():
+    # The watermark travels to the driver as a value of its own now, so the
+    # configs are broadcast rather than rewritten.
+    a, b = _merge_cfg(), _merge_cfg(on=["item_id"])
+    dest = DatabricksDest(
+        tables=["c.s.t", "c.s.t"],
+        if_table_exists="merge",
+        merge_cfg=[a, b],
         watermark_column=_WATERMARK,
     )
-    assert [c.watermark_column for c in dest._merge_cfgs()] == [_WATERMARK] * 2
-    # The configs the user wrote are left alone.
-    assert [c.watermark_column for c in dest.merge_cfg] == [None, None]
+    assert dest._merge_cfgs() == [a, b]
 
 
 def test_databricks_dest_folds_the_watermark_column_to_its_stored_form():
@@ -459,8 +483,22 @@ def test_databricks_dest_rejects_a_watermark_colliding_with_a_key():
         DatabricksDest(
             tables=["c.s.t"],
             if_table_exists="merge",
-            merge_cfg=_merge_cfg(),
+            merge_cfg=[_merge_cfg()],
             watermark_column="order_id",
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
+
+
+def test_databricks_dest_rejects_a_quoted_watermark_colliding_with_a_quoted_key():
+    # Backticks quote a special-char name without making it case-sensitive,
+    # so both names fold to `mycol` and collide. Unlike Snowflake's, this
+    # folding is idempotent, so it holds however often it is applied.
+    with pytest.raises(SqlCommonValidateException) as ei:
+        DatabricksDest(
+            tables=["c.s.t"],
+            if_table_exists="merge",
+            merge_cfg=[_merge_cfg(on=['`MyCol`'])],
+            watermark_column='`MYCOL`',
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
 
@@ -470,13 +508,24 @@ def test_databricks_dest_rejects_a_watermark_colliding_with_the_op_column():
         DatabricksDest(
             tables=["c.s.t"],
             if_table_exists="merge",
-            merge_cfg=_merge_cfg(),
+            merge_cfg=[_merge_cfg()],
             watermark_column="op",
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
 
 
-def test_databricks_merge_cfg_no_longer_declares_its_own_watermark():
-    # Moved to the destination; the inherited field stays at its default.
+def test_databricks_dest_rejects_a_quoted_watermark_colliding_with_a_quoted_op_column():
+    with pytest.raises(SqlCommonValidateException) as ei:
+        DatabricksDest(
+            tables=["c.s.t"],
+            if_table_exists="merge",
+            merge_cfg=[_merge_cfg(op_column='`OpCol`')],
+            watermark_column='`OPCOL`',
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
+
+
+def test_databricks_merge_cfg_has_no_watermark_of_its_own():
+    # Named on the destination, and gone from the shared base too.
     assert "watermark_column" not in MergeCfg.__annotations__
-    assert _merge_cfg().watermark_column is None
+    assert not hasattr(_merge_cfg(), "watermark_column")

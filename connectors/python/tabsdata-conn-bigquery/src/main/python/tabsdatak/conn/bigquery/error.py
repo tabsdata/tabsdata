@@ -165,10 +165,11 @@ class BigQueryErrorCode(ErrorCode):
         " leaves the same rows behind and there is nothing for a watermark to"
         " make idempotent",
     )  # BigQueryDest.validate()
+
+    # --- merge columns (tabsdatak.conn.bigquery) --------------------
     BIGQUERY_25 = ErrorDef(
-        BigQueryValidateException,
-        "MergeCfg.watermark_column is set; name the watermark on"
-        " BigQueryDest.watermark_column instead. It belongs to the write rather"
-        " than to the way one table's rows are matched, and the destination"
-        " stamps every one of its targets with it",
-    )  # BigQueryDest.validate()
+        ConnInitException,
+        "not a valid BigQuery column name (up to 300 characters of letters, "
+        "digits and underscores, starting with a letter or underscore, or a "
+        "backtick-quoted name for a flexible column name): {value!r}",
+    )  # BigQueryColumnSpec

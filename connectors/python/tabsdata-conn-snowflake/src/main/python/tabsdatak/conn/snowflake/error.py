@@ -82,7 +82,7 @@ class SnowflakeErrorCode(ErrorCode):
         "not a valid Snowflake identifier (unquoted: a letter or underscore"
         " followed by letters, digits, underscores or dollar signs; or"
         " double-quoted for a case-sensitive / special-char name): {value!r}",
-    )  # IdentifierSpec / NameSpec
+    )  # IdentifierSpec / NameSpec / SnowflakeColumnSpec
     SNOWFLAKE_11 = ErrorDef(
         ConnInitException,
         "MergeCfg validation failed",
@@ -149,10 +149,4 @@ class SnowflakeErrorCode(ErrorCode):
         " a replace truncates the target and reloads it, so rerunning one"
         " already leaves the same rows behind and there is nothing for a"
         " watermark to make idempotent",
-    )  # SnowflakeDest.validate()
-    SNOWFLAKE_24 = ErrorDef(
-        SnowflakeValidateException,
-        "MergeCfg.watermark_column is set; name the watermark on the"
-        " destination instead, as SnowflakeDest.watermark_column. It belongs"
-        " to the write rather than to the way one table's rows are matched",
     )  # SnowflakeDest.validate()

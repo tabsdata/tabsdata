@@ -4,11 +4,8 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
-import tempfile
 import uuid
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -114,6 +111,9 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._merge._driver import merge_batch
 
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._watermark import watermarked_batch
+
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
         logger.info(
@@ -201,9 +201,10 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                             ),
                             target=quote_table(table_fqn),
                             batch=Path(parquet_path),
-                            cfg=merge_cfg,
+                            cfg=merge_cfg._sql_merge_cfg(),
                             schema_evolution=write_cfg.schema_evolution,
                             ctx=ctx,
+                            watermark_column=write_cfg.watermark_column,
                         )
                     except ConnException:
                         raise
@@ -253,7 +254,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                     continue
                 logger.debug("bigquery: staging %d/%d to %s", i, total, uri)
                 try:
-                    with _watermarked_batch(
+                    with watermarked_batch(
                         Path(parquet_path), watermark, ctx.trx_id
                     ) as batch:
                         _upload_to_gcs(gcs_client, batch, uri)
@@ -338,42 +339,6 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                         "Failed to delete auxiliary file %r from GCS",
                         uri,
                     )
-
-
-@contextlib.contextmanager
-def _watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[Path]:
-    """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
-    in place of ``batch`` -- or ``batch`` itself when the write names no
-    watermark.
-
-    Written into the file rather than added to the target afterwards: the load
-    job matches it onto the target by name like any other column, so the load
-    stamps the rows it brings in and nothing has to walk them a second time.
-    Rows already in the target are left alone, which is what "written before
-    there was a watermark" looks like.
-
-    The staged object is named for the write rather than for the file, so unlike
-    Snowflake there is nothing downstream keyed off this copy's own name. It
-    lives in a temp directory removed as soon as it has been uploaded.
-    """
-    if column is None:
-        yield batch
-        return
-
-    import polars as pl
-
-    with tempfile.TemporaryDirectory() as work:
-        stamped = Path(work) / batch.name
-        logger.info(
-            "bigquery: stamping %s with %s = %r before staging",
-            batch.name,
-            column,
-            trx_id,
-        )
-        pl.scan_parquet(batch).with_columns(
-            pl.lit(trx_id, dtype=pl.String).alias(column)
-        ).sink_parquet(stamped)
-        yield stamped
 
 
 def _upload_to_gcs(gcs_client: Any, local_path: Path, gs_uri: str) -> None:

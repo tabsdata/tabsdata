@@ -4,10 +4,6 @@
 
 from __future__ import annotations
 
-import re
-
-from pydantic import AfterValidator
-
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
@@ -55,21 +51,10 @@ MERGE_SOURCE_ALIAS = "source"
 
 # A column is a single Snowflake identifier: the ``IDENTIFIER_PATTERN`` shape
 # without the FQN separator, so a dotted value is rejected rather than silently
-# read as a qualified reference.
-_COLUMN_RE = re.compile(IDENTIFIER_PATTERN)
-
-
-def _column_validate(value: str) -> str:
-    if not _COLUMN_RE.match(value):
-        raise ValueError(
-            f"not a Snowflake column identifier (unquoted, or double-quoted"
-            f" for a case-sensitive / special-char name): {value!r}"
-        )
-    return value
-
-
-# Validator for the ``MergeColumnSpec`` field.
-MERGE_COLUMN_VALIDATOR = AfterValidator(_column_validate)
+# read as a qualified reference. Same shape and same error code as an
+# identifier, so ``SnowflakeColumnSpec`` annotates itself with that constraint
+# under its own name.
+COLUMN_VALIDATION = IDENTIFIER_VALIDATION
 
 
 def merge_column_key(name: str) -> str:

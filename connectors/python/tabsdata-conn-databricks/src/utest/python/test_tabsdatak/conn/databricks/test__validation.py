@@ -10,6 +10,8 @@ import pytest
 
 from tabsdatak.error import ConstraintError
 
+from tabsdatak.conn.databricks.error import DatabricksErrorCode
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _validation
 
@@ -182,31 +184,38 @@ def test_databricks_fqn_def_uses_backtick_and_doubled_backtick_escape():
     "value",
     ["op", "order_id", "ORDER_ID", "OrderId", "order-id", "_x", "`weird col`"],
 )
-def test_merge_column_validator_accepts_an_identifier(value):
-    assert _validation._column_validate(value) == value
+def test_merge_column_validation_accepts_an_identifier(value):
+    assert _validation.COLUMN_VALIDATION.validate(value) == value
 
 
 @pytest.mark.parametrize(
     "value",
     ["orders.id", "`a.b`", "", " ", "1abc", "a`b", "`unclosed"],
 )
-def test_merge_column_validator_rejects_a_non_identifier(value):
-    with pytest.raises(ValueError):
-        _validation._column_validate(value)
+def test_merge_column_validation_rejects_a_non_identifier(value):
+    with pytest.raises(ConstraintError) as ei:
+        _validation.COLUMN_VALIDATION.validate(value)
+    assert ei.value.code is DatabricksErrorCode.DATABRICKS_14
 
 
-def test_merge_column_validator_rejects_a_dot_even_inside_backticks():
+def test_merge_column_validation_rejects_a_dot_even_inside_backticks():
     """A dot is out whichever way it is written: Delta reads one as nested-field
     access, so a column cannot carry it without column mapping."""
-    with pytest.raises(ValueError):
-        _validation._column_validate("`a.b`")
+    with pytest.raises(ConstraintError):
+        _validation.COLUMN_VALIDATION.validate("`a.b`")
 
 
-def test_merge_column_validator_rejects_a_dotted_column():
+def test_merge_column_validation_rejects_a_dotted_column():
     """A merge column is one column, not a qualified reference -- otherwise
     ``orders.id`` would read as a table-qualified name."""
-    with pytest.raises(ValueError, match="not a Databricks column identifier"):
-        _validation._column_validate("orders.id")
+    with pytest.raises(ConstraintError, match="not a valid Databricks identifier"):
+        _validation.COLUMN_VALIDATION.validate("orders.id")
+
+
+def test_merge_column_validation_is_the_identifier_constraint():
+    """A column is one identifier, so it reuses that constraint instead of
+    restating the pattern -- the two cannot drift apart."""
+    assert _validation.COLUMN_VALIDATION is _validation.IDENTIFIER_VALIDATION
 
 
 @pytest.mark.parametrize(

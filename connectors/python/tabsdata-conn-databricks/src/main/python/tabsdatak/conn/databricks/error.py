@@ -101,7 +101,7 @@ class DatabricksErrorCode(ErrorCode):
         ConnInitException,
         "not a valid Databricks identifier (up to 255 chars, letters, digits, "
         "underscore and hyphen, or a backtick-quoted name): {value!r}",
-    )  # IdentifierSpec
+    )  # IdentifierSpec / DatabricksColumnSpec
     DATABRICKS_15 = ErrorDef(
         ConnInitException,
         "not a valid Databricks warehouse name (1-100 chars, no leading or "

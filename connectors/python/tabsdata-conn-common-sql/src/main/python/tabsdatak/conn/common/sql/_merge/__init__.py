@@ -74,15 +74,6 @@ class MergeCfg(_api.DescriptorBase):
         op_column: The column holding each row's `i` / `u` / `d` marker. Read
             to decide each row's fate and never written, so the target does not
             need the column and will not gain it.
-        watermark_column: The column each row the merge writes is stamped with
-            the current transaction's id in, making the merge idempotent: a
-            rerun that finds the target already carrying this trx's id writes
-            nothing rather than applying the same batch twice.
-
-            Not named here by a user. Every connector exposes the watermark on
-            its destination instead -- it belongs to the write rather than to
-            the way one table's rows are matched -- and stamps the choice onto
-            each config on the way past. This field is what the driver reads.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:
@@ -96,7 +87,6 @@ class MergeCfg(_api.DescriptorBase):
 
     on: MergeColumnsSpec
     op_column: MergeColumnSpec
-    watermark_column: MergeColumnSpec | None = None
 
     def _fold(self, name: str) -> str:
         """The name's stored form in the target, per the dialect's identifier
@@ -109,16 +99,17 @@ class MergeCfg(_api.DescriptorBase):
     def _op_column(self) -> str:
         return self._fold(self.op_column)
 
-    def _watermark_column(self) -> str | None:
-        return self._fold(self.watermark_column) if self.watermark_column else None
-
     def validate(self) -> None:
-        """Field validation: `on` is non-empty, and neither `op_column` nor
-        `watermark_column` collides with a key column or with each other.
+        """Field validation: `on` is non-empty and `op_column` does not collide
+        with a key column.
 
         Both names are compared in their folded form, so a subclass whose
         dialect folds case catches a marker that collides with a key under a
         different spelling.
+
+        The idempotency watermark is named on the destination, not here, so the
+        checks against it live beside it -- see
+        :func:`~tabsdatak.conn.common.sql._watermark.validate_watermark_column`.
 
         Called by the framework; raises `SqlCommonValidateException`.
         """
@@ -128,16 +119,6 @@ class MergeCfg(_api.DescriptorBase):
         if self._op_column() in set(self._keys()):
             # noinspection PyProtectedMember
             raise SqlCommonErrorCode.SQL_COMMON_6.exception(column=self.op_column)
-        if self.watermark_column and self._watermark_column() in set(self._keys()):
-            # noinspection PyProtectedMember
-            raise SqlCommonErrorCode.SQL_COMMON_7.exception(
-                column=self.watermark_column
-            )
-        if self.watermark_column and self._watermark_column() == self._op_column():
-            # noinspection PyProtectedMember
-            raise SqlCommonErrorCode.SQL_COMMON_8.exception(
-                column=self.watermark_column
-            )
 
 
 @dataclass(frozen=True)

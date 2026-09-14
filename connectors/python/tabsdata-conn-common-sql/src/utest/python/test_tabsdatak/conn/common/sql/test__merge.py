@@ -6,11 +6,13 @@
 :class:`~tabsdatak.conn.common.sql._merge.MergeCfg`.
 
 Covers the generic column validation, the structural invariants (`on`
-non-empty, and neither `op_column` nor `watermark_column` doubling as
-anything else), the envelope round-trip, and the
-`_fold` hook a connector overrides -- including that the inherited
+non-empty and `op_column` not doubling as a key), the envelope round-trip, and
+the `_fold` hook a connector overrides -- including that the inherited
 `validate()` compares *folded* names, which is what lets a case-folding
 dialect catch a marker colliding with a key under another spelling.
+
+The idempotency watermark is named on a destination rather than here, so its
+checks live in :mod:`test__watermark`.
 """
 
 from __future__ import annotations
@@ -129,27 +131,16 @@ class TestValidate:
     def test_several_keys_are_allowed(self):
         assert _cfg(on=["a", "b", "c"])._keys() == ["a", "b", "c"]
 
-    def test_watermark_column_is_optional(self):
-        assert _cfg().watermark_column is None
-        assert _cfg()._watermark_column() is None
+    def test_a_watermark_is_not_a_field_here(self):
+        """It is named on the destination, which passes it to the driver. A
+        config carrying one would be a second place to name it.
 
-    def test_watermark_column_as_a_key_is_rejected(self):
-        """A key is what a row is matched by; a watermark is written onto every
-        row the merge touches, so one column cannot be both."""
-        with pytest.raises(SqlCommonValidateException) as ei:
-            _cfg(on=["order_id", "wm"], watermark_column="wm")
-        assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
-        assert "'wm'" in str(ei.value)
-
-    def test_watermark_column_as_the_marker_is_rejected(self):
-        """The marker is read and never written, so it can carry no stamp."""
-        with pytest.raises(SqlCommonValidateException) as ei:
-            _cfg(op_column="op", watermark_column="op")
-        assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
-        assert "'op'" in str(ei.value)
-
-    def test_a_watermark_beside_the_keys_and_the_marker_is_allowed(self):
-        assert _cfg(watermark_column="wm")._watermark_column() == "wm"
+        A stray kwarg is dropped rather than refused -- the API dataclass
+        ignores what it does not declare -- so the name simply does not survive
+        onto the config.
+        """
+        assert "watermark_column" not in MergeCfg.__annotations__
+        assert not hasattr(_cfg(watermark_column="wm"), "watermark_column")
 
 
 # --- The _fold hook --------------------------------------------------
@@ -170,12 +161,6 @@ class TestFold:
         cfg = _UpperMergeCfg(on=["order_id"], op_column="op")
         assert cfg._keys() == ["ORDER_ID"]
         assert cfg._op_column() == "OP"
-
-    def test_subclass_fold_applies_to_the_watermark(self):
-        """The stored form is what the dialect probes the target for, so it has
-        to be folded like every other name."""
-        cfg = _UpperMergeCfg(on=["order_id"], op_column="op", watermark_column="wm")
-        assert cfg._watermark_column() == "WM"
 
     def test_inherited_validate_compares_folded_names(self):
         """The invariant is checked after folding, so a collision only the
@@ -205,15 +190,7 @@ class TestSerde:
         envelope = _cfg().to_dict()
         assert envelope["kind"] == "sqlMergeCfg"
         assert envelope["type"] == "tabsdatak.conn.common.sql._merge:MergeCfg"
-        assert envelope["spec"] == {
-            "on": ["order_id"],
-            "op_column": "op",
-            "watermark_column": None,
-        }
-
-    def test_a_watermark_round_trips(self):
-        cfg = _cfg(watermark_column="wm")
-        assert MergeCfg.from_json(cfg.to_json()) == cfg
+        assert envelope["spec"] == {"on": ["order_id"], "op_column": "op"}
 
     def test_subclass_round_trips_back_to_the_subclass(self):
         cfg = _UpperMergeCfg(on=["order_id"], op_column="op")

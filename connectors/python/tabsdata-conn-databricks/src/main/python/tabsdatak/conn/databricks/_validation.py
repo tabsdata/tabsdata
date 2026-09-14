@@ -4,10 +4,6 @@
 
 from __future__ import annotations
 
-import re
-
-from pydantic import AfterValidator
-
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
@@ -78,22 +74,10 @@ DATABRICKS_TABLE_FQN_VALIDATION = name_validate(
 
 # A merge column is a single Databricks identifier. ``IDENTIFIER_PATTERN``
 # already admits one part only, so a dotted value is rejected rather than
-# silently read as a qualified reference.
-_COLUMN_RE = re.compile(IDENTIFIER_PATTERN)
-
-
-def _column_validate(value: str) -> str:
-    if not _COLUMN_RE.match(value):
-        raise ValueError(
-            f"not a Databricks column identifier (letters, digits, underscore"
-            f" and hyphen, or a backtick-quoted name for a special-char name):"
-            f" {value!r}"
-        )
-    return value
-
-
-# Validator for the ``MergeColumnSpec`` field.
-MERGE_COLUMN_VALIDATOR = AfterValidator(_column_validate)
+# silently read as a qualified reference. Same shape and same error code as an
+# identifier, so ``DatabricksColumnSpec`` annotates itself with that constraint
+# under its own name.
+COLUMN_VALIDATION = IDENTIFIER_VALIDATION
 
 
 def merge_column_key(name: str) -> str:

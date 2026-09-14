@@ -10,6 +10,8 @@ import pytest
 
 from tabsdatak.error import ConstraintError
 
+from tabsdatak.conn.bigquery.error import BigQueryErrorCode
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
 
@@ -157,8 +159,8 @@ def test_bigquery_fqn_def_uses_outer_only_backtick_with_backslash_escape():
         "`" + "a" * 300 + "`",
     ],
 )
-def test_merge_column_validator_accepts_a_column_name(value):
-    assert _validation._column_validate(value) == value
+def test_merge_column_validation_accepts_a_column_name(value):
+    assert _validation.COLUMN_VALIDATION.validate(value) == value
 
 
 @pytest.mark.parametrize(
@@ -179,23 +181,34 @@ def test_merge_column_validator_accepts_a_column_name(value):
         "`col\n`",
     ],
 )
-def test_merge_column_validator_rejects_a_non_column_name(value):
-    with pytest.raises(ValueError, match="not a BigQuery column name"):
-        _validation._column_validate(value)
+def test_merge_column_validation_rejects_a_non_column_name(value):
+    with pytest.raises(ConstraintError) as ei:
+        _validation.COLUMN_VALIDATION.validate(value)
+    assert ei.value.code is BigQueryErrorCode.BIGQUERY_25
 
 
-def test_merge_column_validator_rejects_a_dot_even_inside_backticks():
+def test_merge_column_validation_rejects_a_dot_even_inside_backticks():
     """A dot separates a path, so BigQuery cannot resolve a column carrying
     one."""
-    with pytest.raises(ValueError, match="not a BigQuery column name"):
-        _validation._column_validate("`a.b`")
+    with pytest.raises(ConstraintError, match="not a valid BigQuery column name"):
+        _validation.COLUMN_VALIDATION.validate("`a.b`")
 
 
-def test_merge_column_validator_rejects_a_dotted_column():
+def test_merge_column_validation_rejects_a_dotted_column():
     """A merge column is one column, not a qualified reference -- otherwise
     ``orders.id`` would read as a path."""
-    with pytest.raises(ValueError, match="not a BigQuery column name"):
-        _validation._column_validate("orders.id")
+    with pytest.raises(ConstraintError, match="not a valid BigQuery column name"):
+        _validation.COLUMN_VALIDATION.validate("orders.id")
+
+
+def test_merge_column_validation_carries_its_own_code():
+    """A column is not a dataset or a project: the shapes differ, so the
+    rejection names the column rule rather than borrowing another field's."""
+    assert _validation.COLUMN_VALIDATION.pattern == _validation.COLUMN_PATTERN
+    with pytest.raises(ConstraintError) as ei:
+        _validation.COLUMN_VALIDATION.validate("with-hyphen")
+    assert ei.value.code is BigQueryErrorCode.BIGQUERY_25
+    assert ei.value.code is not BigQueryErrorCode.BIGQUERY_10
 
 
 @pytest.mark.parametrize(

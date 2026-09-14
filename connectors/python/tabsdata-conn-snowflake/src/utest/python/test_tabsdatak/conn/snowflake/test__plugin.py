@@ -166,8 +166,8 @@ def test_dest_plugin_write_out_calls_write_all_tables(monkeypatch, work_dir):
 
 
 def test_dest_plugin_forwards_one_merge_cfg_per_table(monkeypatch, work_dir):
-    """A single MergeCfg reaches the impl already broadcast across the tables, so
-    the write side can index it by slot without re-deriving the mapping."""
+    """The configs reach the impl one per table, in the destination's order, so
+    the write side can index them by slot without re-deriving the mapping."""
     files = [
         _make_parquet(work_dir / "a.parquet", [{"id": 1}]),
         _make_parquet(work_dir / "b.parquet", [{"id": 2}]),
@@ -177,16 +177,17 @@ def test_dest_plugin_forwards_one_merge_cfg_per_table(monkeypatch, work_dir):
         impl, "write_all_tables", lambda cfg, tables: captured.update(cfg=cfg)
     )
 
-    merge_cfg = MergeCfg(on=["id"], op_column="op")
+    first = MergeCfg(on=["id"], op_column="op")
+    second = MergeCfg(on=["other_id"], op_column="op")
     dest = SnowflakeDest(
         tables=["DB.S.A", "DB.S.B"],
         if_table_exists="merge",
-        merge_cfg=merge_cfg,
+        merge_cfg=[first, second],
         dest_cfg={"snowflake.schema_evolution_engine": "iceberg"},
     )
     plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, files)
 
-    assert captured["cfg"].merge_cfgs == [merge_cfg, merge_cfg]
+    assert captured["cfg"].merge_cfgs == [first, second]
 
 
 @pytest.mark.parametrize("schema_evolution", ["strict", "update"])

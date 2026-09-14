@@ -16,8 +16,6 @@ from tabsdatak.conn.common.sql.error import (
 )
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
 from tabsdatak.conn.snowflake import (
     AccountSpec,
     CredentialsSpec,
@@ -147,7 +145,7 @@ def test_snowflake_dest_requires_iceberg_for_a_merge():
         SnowflakeDest(
             tables=["DB.S.T"],
             if_table_exists="merge",
-            merge_cfg=_merge_cfg(),
+            merge_cfg=[_merge_cfg()],
         )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_22
 
@@ -157,7 +155,7 @@ def test_snowflake_dest_rejects_native_evolution_for_a_merge():
         SnowflakeDest(
             tables=["DB.S.T"],
             if_table_exists="merge",
-            merge_cfg=_merge_cfg(),
+            merge_cfg=[_merge_cfg()],
             dest_cfg={"snowflake.schema_evolution_engine": "native"},
         )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_22
@@ -241,12 +239,12 @@ def test_snowflake_dest_round_trips_a_merge():
     dest = SnowflakeDest(
         tables=["ANALYTICS.PUBLIC.ORDERS"],
         if_table_exists="merge",
-        merge_cfg=_merge_cfg(op_column="op"),
+        merge_cfg=[_merge_cfg(op_column="op")],
         dest_cfg=_ICEBERG,
     )
     loaded = SnowflakeDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.merge_cfg.op_column == "op"
+    assert loaded.merge_cfg[0].op_column == "op"
 
 
 def test_snowflake_dest_round_trips_a_merge_cfg_per_table():
@@ -261,15 +259,39 @@ def test_snowflake_dest_round_trips_a_merge_cfg_per_table():
     assert [c.on for c in loaded.merge_cfg] == [["order_id"], ["item_id"]]
 
 
-def test_merge_cfgs_broadcasts_a_single_cfg_to_every_table():
-    cfg = _merge_cfg()
+def test_snowflake_dest_takes_one_merge_cfg_per_table():
+    cfgs = [_merge_cfg(), _merge_cfg(on=["item_id"])]
     dest = SnowflakeDest(
-        tables=["DB.S.A", "DB.S.B", "DB.S.C"],
+        tables=["DB.S.A", "DB.S.B"],
         if_table_exists="merge",
-        merge_cfg=cfg,
+        merge_cfg=cfgs,
         dest_cfg=_ICEBERG,
     )
-    assert dest._merge_cfgs() == [cfg, cfg, cfg]
+    assert dest._merge_cfgs() == cfgs
+
+
+def test_snowflake_dest_takes_a_one_entry_list_for_a_single_table():
+    cfg = _merge_cfg()
+    dest = SnowflakeDest(
+        tables=["DB.S.T"],
+        if_table_exists="merge",
+        merge_cfg=[cfg],
+        dest_cfg=_ICEBERG,
+    )
+    assert dest._merge_cfgs() == [cfg]
+
+
+def test_snowflake_dest_refuses_a_bare_merge_cfg():
+    # A list even for one table, so reading a merge config off a destination
+    # never depends on how many tables it happens to write.
+    with pytest.raises(ConnInitException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(),
+        dest_cfg=_ICEBERG,
+        )
+    assert "valid list" in str(ei.value)
 
 
 def test_merge_cfgs_is_none_outside_merge_mode():
@@ -284,27 +306,6 @@ def test_merge_cfgs_is_none_outside_merge_mode():
 # table's rows are matched. The merge driver still reads it off the config it is
 # handed, so the destination stamps it onto every config on the way past.
 # ---------------------------------------------------------------------------
-
-
-def test_merge_cfgs_stamp_the_destinations_watermark_onto_every_cfg():
-    dest = SnowflakeDest(
-        tables=["DB.S.A", "DB.S.B"],
-        if_table_exists="merge",
-        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
-        watermark_column="wm",
-        dest_cfg=_ICEBERG,
-    )
-    assert [cfg.watermark_column for cfg in dest._merge_cfgs()] == ["wm", "wm"]
-
-
-def test_merge_cfgs_leave_the_watermark_unset_when_the_destination_names_none():
-    dest = SnowflakeDest(
-        tables=["DB.S.A"],
-        if_table_exists="merge",
-        merge_cfg=_merge_cfg(),
-        dest_cfg=_ICEBERG,
-    )
-    assert dest._merge_cfgs()[0].watermark_column is None
 
 
 def test_snowflake_dest_rejects_a_watermark_on_a_replace():
@@ -331,17 +332,18 @@ def test_snowflake_dest_accepts_a_watermark_on_an_append():
     assert dest._merge_cfgs() is None
 
 
-def test_snowflake_dest_rejects_a_watermark_named_on_the_merge_cfg():
-    # The field is inherited from the shared MergeCfg and so is still settable
-    # there. Taking it silently would cost the rerun its idempotency.
-    with pytest.raises(SnowflakeValidateException) as ei:
-        SnowflakeDest(
-            tables=["DB.S.T"],
-            if_table_exists="merge",
-            merge_cfg=_merge_cfg(watermark_column="wm"),
-            dest_cfg=_ICEBERG,
-        )
-    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_24
+def test_a_watermark_named_on_the_merge_cfg_does_not_reach_the_write():
+    # MergeCfg has no such field any more, and the API dataclass drops a kwarg
+    # it does not declare -- so the name is gone before validate sees it and the
+    # destination is the only place it can be named.
+    dest = SnowflakeDest(
+        tables=["DB.S.T"],
+        if_table_exists="merge",
+        merge_cfg=[_merge_cfg(watermark_column="wm")],
+        dest_cfg=_ICEBERG,
+    )
+    assert dest._watermark_column() is None
+    assert not hasattr(dest._merge_cfgs()[0], "watermark_column")
 
 
 def test_a_destination_watermark_still_cannot_collide_with_a_key_column():
@@ -352,8 +354,24 @@ def test_a_destination_watermark_still_cannot_collide_with_a_key_column():
         SnowflakeDest(
             tables=["DB.S.T"],
             if_table_exists="merge",
-            merge_cfg=_merge_cfg(on=["order_id"]),
+            merge_cfg=[_merge_cfg(on=["order_id"])],
             watermark_column="ORDER_ID",
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
+
+
+def test_a_quoted_destination_watermark_collides_with_a_quoted_key_column():
+    # Snowflake's folding is not idempotent: `"MyCol"` folds to `MyCol`, which
+    # folds again to `MYCOL` and then matches no key. The destination hands the
+    # validator a config that has already folded its own names, so the folded
+    # watermark is compared as it stands rather than folded a second time.
+    with pytest.raises(SqlCommonValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=[_merge_cfg(on=['"MyCol"'])],
+            watermark_column='"MyCol"',
             dest_cfg=_ICEBERG,
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
@@ -364,8 +382,20 @@ def test_a_destination_watermark_still_cannot_collide_with_the_op_column():
         SnowflakeDest(
             tables=["DB.S.T"],
             if_table_exists="merge",
-            merge_cfg=_merge_cfg(op_column="op"),
+            merge_cfg=[_merge_cfg(op_column="op")],
             watermark_column="op",
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
+
+
+def test_a_quoted_destination_watermark_collides_with_a_quoted_op_column():
+    with pytest.raises(SqlCommonValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=[_merge_cfg(op_column='"OpCol"')],
+            watermark_column='"OpCol"',
             dest_cfg=_ICEBERG,
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
@@ -375,7 +405,7 @@ def test_snowflake_dest_round_trips_a_watermark_column():
     dest = SnowflakeDest(
         tables=["DB.S.T"],
         if_table_exists="merge",
-        merge_cfg=_merge_cfg(),
+        merge_cfg=[_merge_cfg()],
         watermark_column="wm",
         dest_cfg=_ICEBERG,
     )
@@ -408,14 +438,6 @@ def test_merge_cfg_rejects_an_empty_on():
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_5
 
 
-def test_merge_cfg_is_the_shared_merge_cfg():
-    """The Snowflake spelling of the shared descriptor: the structure and its
-    invariants come from common-sql, the identifier folding from here."""
-    assert issubclass(MergeCfg, SqlMergeCfg)
-    assert MergeCfg.__kind__ == "snowflakeMergeCfg"
-
-
-
 # ---------------------------------------------------------------------------
 # SnowflakeDest -- merge_cfg and if_table_exists require each other
 # ---------------------------------------------------------------------------
@@ -433,7 +455,7 @@ def test_snowflake_dest_rejects_a_merge_cfg_it_would_ignore(if_table_exists):
         SnowflakeDest(
             tables=["DB.S.T"],
             if_table_exists=if_table_exists,
-            merge_cfg=_merge_cfg(),
+            merge_cfg=[_merge_cfg()],
         )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_13
     assert repr(if_table_exists) in str(ei.value)
@@ -488,13 +510,13 @@ def test_snowflake_dest_rejects_an_unknown_schema_evolution():
 def test_schema_evolution_is_independent_of_the_disposition(if_table_exists):
     # The two settings do not constrain each other: evolution says whether the
     # target's columns may change, the disposition says what happens to its rows.
-    merge_cfg = MergeCfg(on=["id"], op_column="op") if if_table_exists == "merge" else None
+    merging = if_table_exists == "merge"
     dest = SnowflakeDest(
         tables=["DB.S.T"],
         if_table_exists=if_table_exists,
         schema_evolution="update",
-        merge_cfg=merge_cfg,
-        dest_cfg=_ICEBERG if if_table_exists == "merge" else None,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")] if merging else None,
+        dest_cfg=_ICEBERG if merging else None,
     )
     assert dest.schema_evolution == "update"
 
@@ -535,6 +557,17 @@ def test_merge_cfg_rejects_a_key_as_the_op_column_across_case():
     with pytest.raises(SqlCommonValidateException) as ei:
         _merge_cfg(on=["order_id"], op_column="order_id")
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_6
+
+
+def test_a_dotted_merge_key_is_refused_at_the_field():
+    """The column spec gates the value, so a qualified reference never reaches
+    the merge. The identifier code and the offending position both survive into
+    the message."""
+    with pytest.raises(ConnInitException) as ei:
+        _merge_cfg(on=["orders.id"])
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_11
+    assert "SNOWFLAKE-10" in str(ei.value)
+    assert "on.0" in str(ei.value)
 
 
 def test_merge_cfg_rejects_a_quoted_key_as_the_op_column():

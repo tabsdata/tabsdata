@@ -769,7 +769,17 @@ class TestMergeBatch:
     settings part company: one lets the statement land the column, the other has
     to be given it first."""
 
-    def _merge(self, cursor, batch, schema_evolution="update", **cfg_kwargs):
+    def _merge(
+        self,
+        cursor,
+        batch,
+        schema_evolution="update",
+        watermark_column=None,
+        **cfg_kwargs,
+    ):
+        """``watermark_column`` arrives at the driver already folded -- the
+        destination that names it does the folding -- so it is spelled here the
+        way the target stores it."""
         return merge_batch(
             _dialect(cursor, schema_evolution=schema_evolution),
             target=_TARGET,
@@ -777,6 +787,7 @@ class TestMergeBatch:
             cfg=_cfg(on=["k"], **cfg_kwargs),
             schema_evolution=schema_evolution,
             ctx=_FakeCtx(),
+            watermark_column=watermark_column,
         )
 
     def test_leaves_a_target_already_stamped_alone(self, tmp_path):

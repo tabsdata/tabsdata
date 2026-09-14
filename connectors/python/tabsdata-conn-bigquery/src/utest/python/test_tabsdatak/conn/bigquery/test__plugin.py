@@ -573,15 +573,17 @@ def test_write_cfg_carries_no_merge_cfgs_outside_merge_mode():
     assert cfg.merge_cfgs is None
 
 
-def test_write_cfg_broadcasts_one_merge_cfg_across_every_table():
-    merge_cfg = MergeCfg(on=["user_id"], op_column="op")
+def test_write_cfg_carries_one_merge_cfg_per_table():
+    users = MergeCfg(on=["user_id"], op_column="op")
+    orders = MergeCfg(on=["order_id"], op_column="op")
     dest = BigQueryDest(
         tables=["`p.ds.users`", "`p.ds.orders`"],
         if_table_exists="merge",
-        merge_cfg=merge_cfg, dest_cfg=_ICEBERG,
+        merge_cfg=[users, orders],
+        dest_cfg=_ICEBERG,
     )
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
-    assert cfg.merge_cfgs == [merge_cfg, merge_cfg]
+    assert cfg.merge_cfgs == [users, orders]
 
 
 def test_write_cfg_keeps_a_merge_cfg_per_table_aligned_with_target_tables():
@@ -881,7 +883,7 @@ def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -923,7 +925,8 @@ def test_dest_plugin_gives_each_merge_table_its_own_staging_table(
     dest = BigQueryDest(
         tables=["`p.ds.users`", "`p.ds.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")] * 2,
+        dest_cfg=_ICEBERG,
     )
     src1 = _make_parquet(work_dir / "in1.parquet", [{"id": 1, "op": "i"}])
     src2 = _make_parquet(work_dir / "in2.parquet", [{"id": 2, "op": "i"}])
@@ -949,7 +952,7 @@ def test_dest_plugin_merges_the_staging_table_then_drops_it(monkeypatch, work_di
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -1011,7 +1014,7 @@ def _merge_dest(schema_evolution):
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
         schema_evolution=schema_evolution,
-        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
     )
 
 
@@ -1331,7 +1334,7 @@ def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=MergeCfg(on=["id"], op_column="op"), dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:

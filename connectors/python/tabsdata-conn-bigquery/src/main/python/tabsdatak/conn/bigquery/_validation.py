@@ -4,10 +4,6 @@
 
 from __future__ import annotations
 
-import re
-
-from pydantic import AfterValidator
-
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
@@ -69,21 +65,9 @@ _BACKTICK_COLUMN_PART = (
 
 COLUMN_PATTERN = rf"^(?:{_UNQUOTED_COLUMN_PART}|{_BACKTICK_COLUMN_PART})$"
 
-_COLUMN_RE = re.compile(COLUMN_PATTERN)
-
-
-def _column_validate(value: str) -> str:
-    if not _COLUMN_RE.match(value):
-        raise ValueError(
-            f"not a BigQuery column name (up to 300 characters of letters,"
-            f" digits and underscores, starting with a letter or underscore, or"
-            f" a backtick-quoted name for a flexible column name): {value!r}"
-        )
-    return value
-
-
-# Validator for the ``MergeColumnSpec`` field.
-MERGE_COLUMN_VALIDATOR = AfterValidator(_column_validate)
+COLUMN_VALIDATION = _api.ValueConstraints(
+    _api.Rule.matches(COLUMN_PATTERN, BigQueryErrorCode.BIGQUERY_25)
+)
 
 # A column name is a single part, so it quotes per part -- the
 # ``outer_only`` wrapping ``_BIGQUERY_FQN_DEF`` uses for a table path

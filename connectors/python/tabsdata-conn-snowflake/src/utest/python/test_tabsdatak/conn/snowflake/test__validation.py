@@ -10,6 +10,8 @@ import pytest
 
 from tabsdatak.error import ConstraintError
 
+from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import _validation
 
@@ -130,7 +132,21 @@ def test_merge_column_key_folds_unquoted_and_keeps_quoted(value, stored):
     assert _validation.merge_column_key(value) == stored
 
 
+@pytest.mark.parametrize(
+    "value", ["order_id", "ORDER_ID", "mIxEd$1", "_x", '"myCol"', '"a.b"']
+)
+def test_merge_column_validation_accepts_an_identifier(value):
+    assert _validation.COLUMN_VALIDATION.validate(value) == value
+
+
 @pytest.mark.parametrize("value", ["orders.id", "", "1st", "a-b"])
-def test_merge_column_validator_rejects_invalid(value):
-    with pytest.raises(ValueError, match="not a Snowflake column identifier"):
-        _validation.MERGE_COLUMN_VALIDATOR.func(value)
+def test_merge_column_validation_rejects_a_non_identifier(value):
+    with pytest.raises(ConstraintError) as ei:
+        _validation.COLUMN_VALIDATION.validate(value)
+    assert ei.value.code is SnowflakeErrorCode.SNOWFLAKE_10
+
+
+def test_merge_column_validation_is_the_identifier_constraint():
+    """A column is one identifier, so it reuses that constraint instead of
+    restating the pattern -- the two cannot drift apart."""
+    assert _validation.COLUMN_VALIDATION is _validation.IDENTIFIER_VALIDATION

@@ -20,11 +20,8 @@ the plugin (registry scans pay only for the DestDef metadata).
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import re
-import tempfile
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -33,6 +30,9 @@ from tabsdatak.conn.common._validation import fqn, unfqn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._watermark import watermarked_batch
 from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDestConn
 from tabsdatak.conn.snowflake._evolution import (
@@ -335,40 +335,6 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
         sf_conn.close()
 
 
-@contextlib.contextmanager
-def _watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[Path]:
-    """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
-    in place of ``batch`` -- or ``batch`` itself when the write names no
-    watermark.
-
-    Written into the file rather than added to the target afterwards: the load
-    matches it onto the target by name like any other column, so the ``COPY``
-    stamps the rows it inserts and nothing has to walk them a second time. Rows
-    already in the target are left alone, which is what "written before there
-    was a watermark" looks like.
-
-    The rewritten file keeps the original's basename, so the staged file -- and
-    everything downstream keyed off its name -- is indistinguishable from the
-    one the write was handed. It lives in a temp directory removed as soon as it
-    has been staged.
-    """
-    if column is None:
-        yield batch
-        return
-
-    import polars as pl
-
-    with tempfile.TemporaryDirectory() as work:
-        stamped = Path(work) / batch.name
-        logger.info(
-            "Stamping %s with %s = %r before staging", batch.name, column, trx_id
-        )
-        pl.scan_parquet(batch).with_columns(
-            pl.lit(trx_id, dtype=pl.String).alias(column)
-        ).sink_parquet(stamped)
-        yield stamped
-
-
 def _write_one(
     sf_conn,
     cfg: SnowflakeWriteCfg,
@@ -404,7 +370,7 @@ def _write_one(
                 cfg.ctx.trx_id,
             )
             return
-        with _watermarked_batch(file_path, watermark, cfg.ctx.trx_id) as batch:
+        with watermarked_batch(file_path, watermark, cfg.ctx.trx_id) as batch:
             file_name = put_file_to_stage(cursor, batch, stage)
         _create_table_from_inferred_schema(cursor, stage, file_name, sql_table)
         if watermark is not None:
@@ -488,7 +454,8 @@ def _merge_one(
         ),
         target=sql_table,
         batch=file_path,
-        cfg=merge_cfg,
+        cfg=merge_cfg._sql_merge_cfg(),
         schema_evolution=cfg.schema_evolution,
         ctx=cfg.ctx,
+        watermark_column=cfg.watermark_column,
     )

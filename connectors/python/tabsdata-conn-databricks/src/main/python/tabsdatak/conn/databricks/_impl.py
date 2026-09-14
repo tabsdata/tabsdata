@@ -20,14 +20,12 @@ metadata).
 
 from __future__ import annotations
 
-import contextlib
 import io
 import logging
-import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Collection, Iterator
+from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,6 +42,9 @@ from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._watermark import watermarked_batch
 from tabsdatak.conn.common.sql.cdc.constants import (
     OP_DELETE,
     OP_INSERT,
@@ -807,42 +808,6 @@ def string_literal(value: str) -> str:
     return f"'{escaped}'"
 
 
-@contextlib.contextmanager
-def watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[Path]:
-    """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
-    in place of ``batch`` -- or ``batch`` itself when the write names no
-    watermark.
-
-    Written into the file rather than added to the target afterwards: ``COPY
-    INTO`` matches it onto the target by name like any other column, so the load
-    stamps the rows it brings in and nothing has to walk them a second time.
-    Rows already in the target are left alone, which is what "written before
-    there was a watermark" looks like.
-
-    The rewritten file keeps the original's basename, which the staged name is
-    built from. It lives in a temp directory removed as soon as it has been
-    uploaded.
-    """
-    if column is None:
-        yield batch
-        return
-
-    import polars as pl
-
-    with tempfile.TemporaryDirectory() as work:
-        stamped = Path(work) / batch.name
-        logger.info(
-            "databricks: stamping %s with %s = %r before staging",
-            batch.name,
-            column,
-            trx_id,
-        )
-        pl.scan_parquet(batch).with_columns(
-            pl.lit(trx_id, dtype=pl.String).alias(column)
-        ).sink_parquet(stamped)
-        yield stamped
-
-
 def has_watermark_column(cursor, fq_table: str, column: str) -> bool:
     """Whether ``fq_table`` carries ``column``.
 
@@ -1151,9 +1116,10 @@ def _merge_one(
             ),
             target=_fq_for_sql(fq_table),
             batch=parquet_path,
-            cfg=merge_cfg,
+            cfg=merge_cfg._sql_merge_cfg(),
             schema_evolution=cfg.schema_evolution,
             ctx=cfg.ctx,
+            watermark_column=cfg.watermark_column,
         )
     finally:
         cursor.close()

@@ -1002,7 +1002,13 @@ def test_merge_batch_evolves_only_on_update(tmp_path):
         assert result.evolved == expected
 
 
-def _merge(fake, batch, schema_evolution="update", **cfg_kwargs):
+def _merge(fake, batch, schema_evolution="update", watermark_column=None, **cfg_kwargs):
+    """Drive the shared driver over ``fake``.
+
+    ``watermark_column`` arrives at the driver already folded -- the destination
+    that names it does the folding -- so it is spelled here the way the target
+    stores it.
+    """
     return merge_batch(
         _dialect(fake),
         target=_TARGET,
@@ -1010,6 +1016,7 @@ def _merge(fake, batch, schema_evolution="update", **cfg_kwargs):
         cfg=_cfg(**cfg_kwargs),
         schema_evolution=schema_evolution,
         ctx=_FakeCtx(trx_id=_TRX),
+        watermark_column=watermark_column,
     )
 
 
@@ -1023,7 +1030,7 @@ def test_merge_batch_leaves_a_target_already_stamped_alone(tmp_path):
     not to write them again."""
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
     fake = _watermark_fake(watermark_answers(has_column=True, stamped=True))
-    result = _merge(fake, batch, watermark_column="wm")
+    result = _merge(fake, batch, watermark_column="WM")
     assert result == MergeResult(evolved=[], written=[])
     assert not any(s.startswith(("PUT", "MERGE", "CREATE")) for s in fake.log)
 
@@ -1033,7 +1040,7 @@ def test_merge_batch_checks_the_watermark_before_it_stages_anything(tmp_path):
     # scratch table it would leave behind is one nobody asked for.
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
     fake = _watermark_fake(watermark_answers(has_column=False))
-    _merge(fake, batch, watermark_column="wm")
+    _merge(fake, batch, watermark_column="WM")
     probe = next(i for i, s in enumerate(fake.log) if s.startswith("SELECT COUNT("))
     put = next(i for i, s in enumerate(fake.log) if s.startswith("PUT file://"))
     assert probe < put
@@ -1044,7 +1051,7 @@ def test_merge_batch_writes_the_watermark_onto_the_target(tmp_path):
     # the column is evolved onto it and named in the write list like any other.
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
     fake = _watermark_fake(watermark_answers(has_column=False))
-    result = _merge(fake, batch, watermark_column="wm")
+    result = _merge(fake, batch, watermark_column="WM")
     assert result.evolved == ["WM"]
     assert result.written == ["C", "WM"]
     assert 'ALTER TABLE "DB"."S"."T" ADD COLUMN IF NOT EXISTS "WM" STRING' in fake.log
@@ -1065,7 +1072,7 @@ def test_merge_batch_writes_the_watermark_on_strict_too(tmp_path):
     # to find.
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
     fake = _watermark_fake(watermark_answers(has_column=False))
-    result = _merge(fake, batch, schema_evolution="strict", watermark_column="wm")
+    result = _merge(fake, batch, schema_evolution="strict", watermark_column="WM")
     assert result.evolved == ["WM"]
     assert result.written == ["C", "WM"]
     assert 'ALTER TABLE "DB"."S"."T" ADD COLUMN IF NOT EXISTS "WM" STRING' in fake.log
@@ -1077,7 +1084,7 @@ def test_merge_batch_adds_nothing_else_on_strict(tmp_path):
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"], v=[10])
     columns = [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("V", "NUMBER(38,0)")]
     fake = column_fakes(["C"], columns, watermark_answers(has_column=False))
-    result = _merge(fake, batch, schema_evolution="strict", watermark_column="wm")
+    result = _merge(fake, batch, schema_evolution="strict", watermark_column="WM")
     assert result.evolved == ["WM"]
     assert "V" not in result.written
 

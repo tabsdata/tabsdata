@@ -224,7 +224,7 @@ def _merge_out(
         BigQueryDest(
             tables=[table_fqn(table)],
             if_table_exists="merge",
-            merge_cfg=merge_cfg,
+            merge_cfg=[merge_cfg],
             schema_evolution=schema_evolution,
             watermark_column=watermark_column,
             dest_cfg=_ICEBERG,

@@ -88,6 +88,7 @@ def merge_batch(
     cfg: MergeCfg,
     schema_evolution: str,
     ctx: DestContext,
+    watermark_column: str | None = None,
 ) -> MergeResult:
     """Apply ``batch`` onto ``target`` as a CDC merge.
 
@@ -100,15 +101,16 @@ def merge_batch(
     that needs a step none of the others do belongs inside one of those hooks,
     not in a copy of this function.
 
-    A ``MergeCfg`` naming a watermark column makes the whole thing idempotent:
-    the rows written carry this transaction's id, and a rerun that finds the
-    target already stamped with it writes nothing rather than applying the same
-    batch twice. That column reaches the target under either evolution setting
-    -- through the evolution pass on ``"update"``, and through
+    ``watermark_column`` makes the whole thing idempotent: the rows written
+    carry this transaction's id, and a rerun that finds the target already
+    stamped with it writes nothing rather than applying the same batch twice.
+    It arrives already folded, named on the destination rather than on the
+    ``MergeCfg`` -- it belongs to the write, not to the way one table's rows are
+    matched. That column reaches the target under either evolution setting --
+    through the evolution pass on ``"update"``, and through
     :meth:`MergeDialect.ensure_watermark_column` on ``"strict"``, since a
     watermark nothing can be stamped in is no watermark at all.
     """
-    watermark_column = cfg._watermark_column()
     watermark_cfg = (
         WatermarkCfg(column=watermark_column, transaction_id=ctx.trx_id)
         if watermark_column is not None
