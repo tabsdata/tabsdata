@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -44,13 +45,14 @@ pytestmark = pytest.mark.bigquery
 @dataclass
 class _Ctx:
     _work: Path
+    trx_id: str = "TRX_1"
 
     def work_dir(self) -> Path:
         return self._work
 
 
-def _dest_ctx(work: Path) -> _Ctx:
-    return _Ctx(work)
+def _dest_ctx(work: Path, trx_id: str = "TRX_1") -> _Ctx:
+    return _Ctx(work, trx_id)
 
 
 def _make_parquet(path: Path, rows: list[dict]) -> Path:
@@ -1462,3 +1464,308 @@ def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         plugin._resolve_dest_cfg({"bogus.key": "value"})
     assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# watermark_column on an append
+#
+# An append is not idempotent on its own: a rerun of the same transaction
+# uploads the batch again and the load job appends it a second time. Naming a
+# watermark closes it -- the column is written into the parquet before it goes
+# to GCS so the load stamps the rows it brings in, and a rerun that finds the
+# target already carrying this trx's id does nothing at all.
+# ---------------------------------------------------------------------------
+
+_WATERMARK = "wm"
+_TARGET_FQN = "my-project.analytics.users"
+
+
+def _staging_gcs() -> tuple[MagicMock, list[tuple[Path, list[dict]]]]:
+    """A GCS client recording the path and rows of every upload.
+
+    Read inside the upload call: the rewritten batch lives in a temp directory
+    removed as soon as it has been staged, so a test that looks afterwards
+    finds nothing. The path is kept so a test can tell the copy from the
+    original and check it was cleaned up.
+    """
+    gcs_client = MagicMock(name="gcs")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value.blob.return_value = blob
+    staged: list[tuple[Path, list[dict]]] = []
+
+    def upload_from_filename(path: str) -> None:
+        staged.append((Path(path), pl.read_parquet(path).to_dicts()))
+
+    blob.upload_from_filename.side_effect = upload_from_filename
+    return gcs_client, staged
+
+
+def _watermark_clients(
+    monkeypatch,
+    target_columns=(("id", "INTEGER"), (_WATERMARK, "STRING")),
+    batch_columns=(("id", "INTEGER"),),
+    *,
+    stamped=False,
+    target_exists=True,
+):
+    """A bq client whose target really gains the columns its own DDL adds, plus
+    a GCS client that records what it was given.
+
+    The target's schema has to move: two passes read it -- the watermark's and
+    the Iceberg diff's -- and a fake that answered the first from a frozen
+    schema would report a table its own ALTER had already changed, so the
+    second would add the column a second time.
+
+    ``stamped`` answers the guard's probe. Every statement returns the one
+    boolean, which the ALTERs and the load ignore.
+    """
+    from google.cloud.exceptions import NotFound
+
+    target = list(target_columns)
+    batch = list(batch_columns)
+
+    def get_table(fqn):
+        if fqn.startswith(f"{_TARGET_FQN}_"):  # the table the batch loads to
+            return SimpleNamespace(schema=[_schema_field(n, t) for n, t in batch])
+        if fqn == _TARGET_FQN and target_exists:
+            return SimpleNamespace(schema=[_schema_field(n, t) for n, t in target])
+        raise NotFound(f"{fqn} not found")
+
+    added = re.compile(r"ADD COLUMN IF NOT EXISTS `([^`]+)` (\w+)")
+
+    def query_and_wait(statement):
+        match = added.search(statement)
+        if match is not None and statement.startswith(f"ALTER TABLE `{_TARGET_FQN}`"):
+            name, type_ = match.group(1), match.group(2)
+            if all(existing != name for existing, _ in target):
+                target.append((name, type_))
+        return [(stamped,)]
+
+    bq_client = MagicMock(
+        name="bq",
+        get_table=MagicMock(side_effect=get_table),
+        query_and_wait=MagicMock(side_effect=query_and_wait),
+    )
+    bq_client.load_table_from_uri.return_value = MagicMock(
+        result=MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client, staged = _staging_gcs()
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+    return bq_client, staged
+
+
+def _watermark_write(
+    work_dir,
+    *,
+    watermark_column=_WATERMARK,
+    if_table_exists="append",
+    schema_evolution="strict",
+    dest_cfg=None,
+    trx_id="TRX_1",
+):
+    dest = BigQueryDest(
+        tables=[f"`{_TARGET_FQN}`"],
+        if_table_exists=if_table_exists,
+        schema_evolution=schema_evolution,
+        watermark_column=watermark_column,
+        dest_cfg=dest_cfg,
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}, {"id": 2}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir, trx_id), _bare_conn(), dest, [src]
+    )
+    return src
+
+
+def _watermark_alters(bq_client):
+    # The guard's probe names the column too, so the prefix is what tells an
+    # ALTER apart from a read of it.
+    return [
+        s
+        for s in _alters(bq_client)
+        if s.startswith("ALTER TABLE") and f"`{_WATERMARK}`" in s
+    ]
+
+
+def test_dest_plugin_append_watermark_stamps_every_uploaded_row(
+    monkeypatch, work_dir
+):
+    _, staged = _watermark_clients(monkeypatch)
+    _watermark_write(work_dir)
+    _, rows = staged[0]
+    assert [row[_WATERMARK] for row in rows] == ["TRX_1", "TRX_1"]
+
+
+def test_dest_plugin_append_watermark_uploads_a_copy_not_the_original(
+    monkeypatch, work_dir
+):
+    _, staged = _watermark_clients(monkeypatch)
+    src = _watermark_write(work_dir)
+    path, _ = staged[0]
+    assert path != src
+
+
+def test_dest_plugin_append_without_a_watermark_uploads_what_it_was_handed(
+    monkeypatch, work_dir
+):
+    _, staged = _watermark_clients(monkeypatch)
+    src = _watermark_write(work_dir, watermark_column=None)
+    path, rows = staged[0]
+    assert path == src
+    assert rows == [{"id": 1}, {"id": 2}]
+
+
+def test_dest_plugin_append_watermark_removes_the_copy_once_it_is_uploaded(
+    monkeypatch, work_dir
+):
+    _, staged = _watermark_clients(monkeypatch)
+    _watermark_write(work_dir)
+    path, _ = staged[0]
+    assert not path.exists()
+
+
+def test_dest_plugin_append_watermark_adds_the_column_to_the_target(
+    monkeypatch, work_dir
+):
+    bq_client, _ = _watermark_clients(
+        monkeypatch, target_columns=(("id", "INTEGER"),)
+    )
+    _watermark_write(work_dir)
+    assert _watermark_alters(bq_client) == [
+        f"ALTER TABLE `{_TARGET_FQN}` ADD COLUMN IF NOT EXISTS `{_WATERMARK}` STRING"
+    ]
+
+
+def test_dest_plugin_append_watermark_leaves_an_existing_column_alone(
+    monkeypatch, work_dir
+):
+    bq_client, _ = _watermark_clients(monkeypatch)
+    _watermark_write(work_dir)
+    assert _watermark_alters(bq_client) == []
+
+
+def test_dest_plugin_append_watermark_adds_the_column_before_the_load(
+    monkeypatch, work_dir
+):
+    # A load job handed a batch carrying a column the target has not got fails
+    # outright rather than dropping it, so the ALTER cannot come afterwards.
+    bq_client, _ = _watermark_clients(
+        monkeypatch, target_columns=(("id", "INTEGER"),)
+    )
+    _watermark_write(work_dir)
+    assert _watermark_alters(bq_client)
+    bq_client.load_table_from_uri.assert_called_once()
+
+
+def test_dest_plugin_append_watermark_leaves_a_missing_target_to_the_load(
+    monkeypatch, work_dir
+):
+    """The load job creates the target from the batch, which already carries
+    the column, so there is nothing to ALTER onto a table that is not there."""
+    bq_client, staged = _watermark_clients(
+        monkeypatch, target_columns=(), target_exists=False
+    )
+    _watermark_write(work_dir)
+    assert _watermark_alters(bq_client) == []
+    assert [row[_WATERMARK] for row in staged[0][1]] == ["TRX_1", "TRX_1"]
+
+
+def test_dest_plugin_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
+    monkeypatch, work_dir
+):
+    """Added ahead of the diff, so the engine that may also add columns finds
+    it already there -- one statement, not two claims on the same column."""
+    bq_client, _ = _watermark_clients(
+        monkeypatch,
+        target_columns=(("id", "INTEGER"),),
+        batch_columns=(("id", "INTEGER"), (_WATERMARK, "STRING")),
+    )
+    _watermark_write(
+        work_dir, schema_evolution="update", dest_cfg=_ICEBERG_ENGINE
+    )
+    assert len(_watermark_alters(bq_client)) == 1
+
+
+def test_dest_plugin_append_skips_entirely_when_the_trx_is_already_stamped(
+    monkeypatch, work_dir
+):
+    bq_client, staged = _watermark_clients(monkeypatch, stamped=True)
+    _watermark_write(work_dir)
+    assert staged == []
+    bq_client.load_table_from_uri.assert_not_called()
+
+
+def test_dest_plugin_append_proceeds_when_the_target_carries_another_trx(
+    monkeypatch, work_dir
+):
+    bq_client, staged = _watermark_clients(monkeypatch, stamped=False)
+    _watermark_write(work_dir)
+    assert len(staged) == 1
+    bq_client.load_table_from_uri.assert_called_once()
+
+
+def test_dest_plugin_append_checks_the_watermark_before_it_uploads(
+    monkeypatch, work_dir
+):
+    # A rerun with nothing to do should not pay to rewrite and ship a file it is
+    # about to decline to load.
+    bq_client, _ = _watermark_clients(monkeypatch)
+    _watermark_write(work_dir)
+    probe = f"SELECT COUNT(*) > 0 FROM `{_TARGET_FQN}` WHERE `{_WATERMARK}` = 'TRX_1'"
+    assert _alters(bq_client)[0] == probe
+
+
+@pytest.mark.parametrize(
+    "trx_id,literal",
+    [
+        ("plain", "'plain'"),
+        ("it's", "'it\\'s'"),
+        ("back\\slash", "'back\\\\slash'"),
+    ],
+)
+def test_dest_plugin_append_escapes_the_trx_id_in_the_probe(
+    monkeypatch, work_dir, trx_id, literal
+):
+    # There is nowhere to bind a value in a statement built by hand.
+    bq_client, _ = _watermark_clients(monkeypatch)
+    _watermark_write(work_dir, trx_id=trx_id)
+    assert _alters(bq_client)[0].endswith(f"= {literal}")
+
+
+def test_dest_plugin_replace_never_stamps_even_when_handed_a_watermark(
+    monkeypatch, work_dir
+):
+    """BigQueryDest refuses the pairing, and the write path declines it again
+    rather than resting on a validation two layers away."""
+    bq_client, staged = _watermark_clients(monkeypatch)
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    write_cfg = impl.BigQueryWriteCfg(
+        conn=_bare_conn(),
+        target_tables=[_TARGET_FQN],
+        if_table_exists="replace",
+        schema_evolution="strict",
+        watermark_column=_WATERMARK,
+    )
+    monkeypatch.setattr(
+        impl.BigQueryWriteCfg, "from_dest", classmethod(lambda cls, c, d: write_cfg)
+    )
+    dest = BigQueryDest(
+        tables=[f"`{_TARGET_FQN}`"], if_table_exists="replace", schema_evolution="strict"
+    )
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+    )
+    assert staged[0][0] == src
+    assert _watermark_alters(bq_client) == []
+
+
+def test_dest_plugin_append_does_not_clean_up_a_file_it_never_uploaded(
+    monkeypatch, work_dir
+):
+    # Deleting a URI the guard declined to stage would warn about a file that is
+    # absent by design.
+    _, staged = _watermark_clients(monkeypatch, stamped=True)
+    _watermark_write(work_dir)
+    assert staged == []

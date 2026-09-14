@@ -165,6 +165,10 @@ class BigQueryWriteCfg:
     # ``BigQueryDest._merge_cfgs()`` (a single MergeCfg broadcast across every
     # table); ``None`` in every other disposition.
     merge_cfgs: list[MergeCfg] | None = None
+    # The target column each row is stamped with the trx id in, already in the
+    # form the target names it by; ``None`` when the write names no watermark.
+    # A merge reads its own off ``merge_cfgs``.
+    watermark_column: str | None = None
     dest_cfg: CfgSpec | None = None
 
     @classmethod
@@ -190,6 +194,7 @@ class BigQueryWriteCfg:
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest.schema_evolution,
             merge_cfgs=dest._merge_cfgs(),
+            watermark_column=dest._watermark_column(),
             dest_cfg=dest.dest_cfg,
         )
 

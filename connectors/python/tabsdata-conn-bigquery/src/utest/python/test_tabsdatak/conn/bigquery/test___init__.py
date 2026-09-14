@@ -314,3 +314,113 @@ def test_bigquery_dest_rejects_a_cfg_list_that_does_not_match_tables():
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_14
     assert "1 entries but tables has 2" in str(ei.value)
+
+
+# ---------------------------------------------------------------------------
+# watermark_column
+#
+# The idempotency watermark belongs to the write, not to the way one table's
+# rows are matched, so it is named on the destination and stamped onto every
+# merge config on the way past.
+# ---------------------------------------------------------------------------
+
+_WATERMARK = "wm"
+
+
+def test_bigquery_dest_wires_the_watermark_column_spec():
+    assert _hint(BigQueryDest, "watermark_column") == MergeColumnSpec | None
+
+
+def test_bigquery_dest_accepts_a_watermark_on_an_append():
+    dest = BigQueryDest(
+        tables=["`p.ds.t`"],
+        if_table_exists="append",
+        watermark_column=_WATERMARK,
+    )
+    assert dest.watermark_column == _WATERMARK
+    assert dest._merge_cfgs() is None
+
+
+def test_bigquery_dest_rejects_a_watermark_on_a_replace():
+    # A replace rewrites the target wholesale, so a rerun already leaves the
+    # same rows behind. There is nothing here to make idempotent.
+    with pytest.raises(BigQueryValidateException) as ei:
+        BigQueryDest(
+            tables=["`p.ds.t`"],
+            if_table_exists="replace",
+            watermark_column=_WATERMARK,
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_24
+
+
+def test_bigquery_dest_rejects_a_watermark_named_on_the_merge_cfg():
+    # The field is inherited from the shared MergeCfg and so is still settable
+    # there, but this connector reads it off the destination. Silently dropping
+    # it would cost a rerun its idempotency.
+    with pytest.raises(BigQueryValidateException) as ei:
+        BigQueryDest(
+            tables=["`p.ds.t`"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(watermark_column=_WATERMARK),
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_25
+
+
+def test_bigquery_dest_stamps_the_watermark_onto_every_merge_cfg():
+    dest = BigQueryDest(
+        tables=["`p.ds.a`", "`p.ds.b`"],
+        if_table_exists="merge",
+        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
+        watermark_column=_WATERMARK,
+        dest_cfg=_ICEBERG,
+    )
+    assert [c.watermark_column for c in dest._merge_cfgs()] == [_WATERMARK] * 2
+    # The configs the user wrote are left alone.
+    assert [c.watermark_column for c in dest.merge_cfg] == [None, None]
+
+
+def test_bigquery_dest_folds_the_watermark_column_to_its_stored_form():
+    dest = BigQueryDest(
+        tables=["`p.ds.t`"],
+        if_table_exists="append",
+        watermark_column="WM",
+    )
+    assert dest._watermark_column() == "wm"
+
+
+def test_bigquery_dest_reports_no_watermark_column_when_unset():
+    dest = BigQueryDest(tables=["`p.ds.t`"], if_table_exists="append")
+    assert dest._watermark_column() is None
+
+
+def test_bigquery_dest_rejects_a_watermark_colliding_with_a_key():
+    # The collision checks live on the shared MergeCfg, so they only see the
+    # watermark once the destination has stamped it on.
+    with pytest.raises(SqlCommonValidateException) as ei:
+        BigQueryDest(
+            tables=["`p.ds.t`"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(),
+            watermark_column="order_id",
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
+
+
+def test_bigquery_dest_rejects_a_watermark_colliding_with_the_op_column():
+    with pytest.raises(SqlCommonValidateException) as ei:
+        BigQueryDest(
+            tables=["`p.ds.t`"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(),
+            watermark_column="op",
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
+
+
+def test_bigquery_merge_cfg_no_longer_declares_its_own_watermark():
+    # Moved to the destination; the inherited field stays at its default.
+    assert "watermark_column" not in MergeCfg.__annotations__
+    assert _merge_cfg().watermark_column is None

@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import tempfile
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -94,6 +97,8 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         from tabsdatak.conn.bigquery._evolution import (
             BigQuerySchemaEvolver,
             batch_columns,
+            check_watermark_column,
+            ensure_watermark_column,
         )
         from tabsdatak.conn.bigquery._impl import (
             BigQueryWriteCfg,
@@ -153,6 +158,9 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         staging_bucket = conn.staging._bucket()
 
         staging_uris: list[str] = []
+        # URIs a rerun guard declined to stage, so neither the load loop nor
+        # the cleanup goes looking for them.
+        skipped: set[str] = set()
         for index in range(len(tables)):
             file_name = (f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet").replace(
                 "-", "_"
@@ -212,12 +220,43 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 and cfg.schema_evolution_engine == "iceberg"
             )
 
+            # Append is the only disposition that stamps: a merge has returned
+            # above, and a replace is refused the column by
+            # BigQueryDest.validate. Named again here rather than inferred from
+            # those two, so widening the API later cannot quietly start
+            # stamping a disposition that has no business being stamped.
+            watermark = (
+                write_cfg.watermark_column
+                if write_cfg.if_table_exists == "append"
+                else None
+            )
+
             # Phase 1: upload each parquet to its staging GCS URI.
             logger.info("bigquery: staging %d parquet file(s) to GCS", total)
-            for i, (parquet_path, uri) in enumerate(zip(tables, staging_uris), 1):
+            for i, (parquet_path, uri, table_fqn) in enumerate(
+                zip(tables, staging_uris, write_cfg.target_tables), 1
+            ):
+                if watermark is not None and check_watermark_column(
+                    bq_client, table_fqn, watermark, ctx.trx_id
+                ):
+                    # Asked before the batch is rewritten and uploaded: a rerun
+                    # that has nothing to do should not pay to build and ship a
+                    # file it will not load.
+                    logger.info(
+                        "bigquery: skipping append onto %r: watermark column %s"
+                        " already has value %s",
+                        table_fqn,
+                        watermark,
+                        ctx.trx_id,
+                    )
+                    skipped.add(uri)
+                    continue
                 logger.debug("bigquery: staging %d/%d to %s", i, total, uri)
                 try:
-                    _upload_to_gcs(gcs_client, Path(parquet_path), uri)
+                    with _watermarked_batch(
+                        Path(parquet_path), watermark, ctx.trx_id
+                    ) as batch:
+                        _upload_to_gcs(gcs_client, batch, uri)
                 except Exception as e:
                     raise BigQueryErrorCode.BIGQUERY_6.exception(
                         cause=e,
@@ -229,12 +268,25 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
             for i, (table_fqn, uri) in enumerate(
                 zip(write_cfg.target_tables, staging_uris), 1
             ):
+                if uri in skipped:
+                    continue
                 logger.info(
                     "bigquery: writing table %d/%d: %r",
                     i,
                     total,
                     table_fqn,
                 )
+                if watermark is not None:
+                    # Strict is what makes this necessary: it adds nothing, and
+                    # a load job handed a batch carrying a column the target
+                    # has not got fails outright rather than dropping it. The
+                    # same exception the merge carves out for its own watermark.
+                    #
+                    # Ahead of the evolution pass so that under "update" the
+                    # column is already there when the diff runs, leaving one
+                    # place that adds it rather than two engines each having a
+                    # claim.
+                    ensure_watermark_column(bq_client, table_fqn, watermark)
                 if evolving_with_iceberg:
                     # Before the load, so the rows land in a target already
                     # shaped to hold them -- and before a replace truncates the
@@ -274,6 +326,10 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
             # succeeded / failed; the auxiliary file's fate is
             # secondary.
             for uri in staging_uris:
+                # A URI a rerun guard skipped was never uploaded, so deleting
+                # it would warn about a file that is absent by design.
+                if uri in skipped:
+                    continue
                 logger.debug("bigquery: deleting staged file %s", uri)
                 try:
                     _delete_gcs_uri(gcs_client, uri)
@@ -282,6 +338,42 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                         "Failed to delete auxiliary file %r from GCS",
                         uri,
                     )
+
+
+@contextlib.contextmanager
+def _watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[Path]:
+    """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
+    in place of ``batch`` -- or ``batch`` itself when the write names no
+    watermark.
+
+    Written into the file rather than added to the target afterwards: the load
+    job matches it onto the target by name like any other column, so the load
+    stamps the rows it brings in and nothing has to walk them a second time.
+    Rows already in the target are left alone, which is what "written before
+    there was a watermark" looks like.
+
+    The staged object is named for the write rather than for the file, so unlike
+    Snowflake there is nothing downstream keyed off this copy's own name. It
+    lives in a temp directory removed as soon as it has been uploaded.
+    """
+    if column is None:
+        yield batch
+        return
+
+    import polars as pl
+
+    with tempfile.TemporaryDirectory() as work:
+        stamped = Path(work) / batch.name
+        logger.info(
+            "bigquery: stamping %s with %s = %r before staging",
+            batch.name,
+            column,
+            trx_id,
+        )
+        pl.scan_parquet(batch).with_columns(
+            pl.lit(trx_id, dtype=pl.String).alias(column)
+        ).sink_parquet(stamped)
+        yield stamped
 
 
 def _upload_to_gcs(gcs_client: Any, local_path: Path, gs_uri: str) -> None:

@@ -156,3 +156,19 @@ class BigQueryErrorCode(ErrorCode):
         BigQueryRuntimeException,
         "BigQuery schema evolution of table {table} failed",
     )  # _BigQueryDestPlugin.write_out: the Iceberg evolution pass
+
+    # --- watermark_column (tabsdatak.conn.bigquery) -----------------
+    BIGQUERY_24 = ErrorDef(
+        BigQueryValidateException,
+        'BigQueryDest.watermark_column is set but if_table_exists="replace";'
+        " a replace rewrites the target wholesale, so rerunning one already"
+        " leaves the same rows behind and there is nothing for a watermark to"
+        " make idempotent",
+    )  # BigQueryDest.validate()
+    BIGQUERY_25 = ErrorDef(
+        BigQueryValidateException,
+        "MergeCfg.watermark_column is set; name the watermark on"
+        " BigQueryDest.watermark_column instead. It belongs to the write rather"
+        " than to the way one table's rows are matched, and the destination"
+        " stamps every one of its targets with it",
+    )  # BigQueryDest.validate()

@@ -37,6 +37,95 @@ def fold_identifier(name: str) -> str:
     return name.lower()
 
 
+# A trx id is an opaque string, and STRING is what the SchemaField walk reports
+# back for the column, so a target that already has it does not read as a
+# retype of it.
+WATERMARK_TYPE = "STRING"
+
+
+def string_literal(value: str) -> str:
+    """``value`` as a GoogleSQL string literal.
+
+    The trx id is a system-generated token, but it is the one value here that
+    does not come from the connector itself, and a statement built by hand has
+    nowhere to bind it.
+    """
+    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{escaped}'"
+
+
+def _existing_columns(bq_client: Any, target_fqn: str) -> set[str] | None:
+    """``target_fqn``'s folded column names, or ``None`` when it is not there.
+
+    A missing target is not an error here: every watermark pass runs before
+    anything has been written to it, and "no table" and "no such column" lead to
+    the same answer.
+    """
+    from google.cloud.exceptions import NotFound
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.bigquery._impl import table_column_types
+
+    try:
+        return {
+            fold_identifier(name)
+            for name, _ in table_column_types(bq_client, target_fqn)
+        }
+    except NotFound:
+        return None
+
+
+def check_watermark_column(
+    bq_client: Any, target_fqn: str, column: str, transaction_id: str
+) -> bool:
+    """Whether ``target_fqn`` already holds a row stamped with ``transaction_id``.
+
+    The target's own schema answers the first half, so a target that does not
+    exist yet, or one that predates the watermark column, reports unstamped
+    without being queried -- selecting a column the table has not got is an
+    error rather than an answer.
+    """
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.bigquery._impl import quote_table
+
+    columns = _existing_columns(bq_client, target_fqn)
+    if columns is None or fold_identifier(column) not in columns:
+        return False
+    rows = bq_client.query_and_wait(
+        f"SELECT COUNT(*) > 0 FROM {quote_table(target_fqn)}"
+        f" WHERE {_iceberg.quote_column(column)}"
+        f" = {string_literal(transaction_id)}"
+    )
+    return any(row[0] for row in rows)
+
+
+def ensure_watermark_column(bq_client: Any, target_fqn: str, column: str) -> bool:
+    """``ALTER`` the watermark column onto ``target_fqn`` unless it is there
+    already, reporting whether anything was added.
+
+    A target that does not exist yet is left alone: whatever creates it -- the
+    load job for a bulk write, ``ensure_target`` for a merge -- builds it from a
+    batch already carrying the column.
+
+    The rows already in the target were written by earlier transactions and are
+    left alone, so they keep the NULL a new column starts with. That is what
+    "written before there was a watermark" looks like; stamping them with this
+    trx's id would claim them for it.
+    """
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.bigquery._impl import quote_table
+
+    columns = _existing_columns(bq_client, target_fqn)
+    if columns is None or fold_identifier(column) in columns:
+        return False
+    logger.debug("bigquery: adding watermark column %r to %r", column, target_fqn)
+    bq_client.query_and_wait(
+        f"ALTER TABLE {quote_table(target_fqn)} ADD COLUMN IF NOT EXISTS"
+        f" {_iceberg.quote_column(column)} {WATERMARK_TYPE}"
+    )
+    return True
+
+
 def batch_columns(bq_client: Any, uri: str, target_fqn: str) -> list[tuple[str, str]]:
     """The ``(name, type)`` pairs the batch at ``uri`` carries.
 

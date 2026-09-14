@@ -20,6 +20,14 @@ from pathlib import Path
 from typing import Any
 
 from tabsdatak.conn.bigquery import _iceberg
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.bigquery._evolution import (
+    WATERMARK_TYPE,
+    check_watermark_column as _check_watermark_column,
+    ensure_watermark_column as _ensure_watermark_column,
+    string_literal,
+)
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 
 # noinspection PyProtectedMember
@@ -51,11 +59,6 @@ _SYNTAX = MergeSyntax(
     update_qualified=False,
 )
 
-# A trx id is an opaque string, and STRING is what the SchemaField walk reports
-# back for the column, so a target that already has it does not read as a
-# retype of it.
-_WATERMARK_TYPE = "STRING"
-
 _ERRORS = MergeErrors(
     marker_absent=BigQueryErrorCode.BIGQUERY_15.exception,
     keys_absent=BigQueryErrorCode.BIGQUERY_16.exception,
@@ -63,17 +66,6 @@ _ERRORS = MergeErrors(
     ambiguous_column=BigQueryErrorCode.BIGQUERY_19.exception,
     keys_absent_from_target=BigQueryErrorCode.BIGQUERY_17.exception,
 )
-
-
-def _string_literal(value: str) -> str:
-    """``value`` as a GoogleSQL string literal.
-
-    The trx id is a system-generated token, but it is the one value here that
-    does not come from the connector itself, and a statement built by hand has
-    nowhere to bind it.
-    """
-    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
-    return f"'{escaped}'"
 
 
 class BigQueryMergeDialect(MergeDialect):
@@ -180,7 +172,7 @@ class BigQueryMergeDialect(MergeDialect):
             columns = table_column_types(self._bq_client, staging_table)
             if watermark_cfg is not None:
                 self._stamp(relation, watermark_cfg)
-                columns.append((watermark_cfg.column, _WATERMARK_TYPE))
+                columns.append((watermark_cfg.column, WATERMARK_TYPE))
             yield Staged(relation=relation, columns=columns)
         finally:
             logger.debug("bigquery: dropping staging table %r", staging_table)
@@ -268,22 +260,16 @@ class BigQueryMergeDialect(MergeDialect):
 
     def check_watermark_column(self, target: str, watermark_cfg: WatermarkCfg) -> bool:
         """Whether ``target`` already holds a row stamped with this
-        transaction's id.
-
-        The target's own schema answers the first half, so a target that does
-        not exist yet, or one that predates the watermark column, reports
-        unstamped without being queried -- selecting a column the table has not
-        got is an error rather than an answer.
+        transaction's id -- see
+        :func:`~tabsdatak.conn.bigquery._evolution.check_watermark_column`,
+        which a bulk load reaches for too.
         """
-        columns = self._existing_columns()
-        if columns is None or self.fold(watermark_cfg.column) not in columns:
-            return False
-        rows = self._bq_client.query_and_wait(
-            f"SELECT COUNT(*) > 0 FROM {target}"
-            f" WHERE {self.quote_column(watermark_cfg.column)}"
-            f" = {_string_literal(watermark_cfg.transaction_id)}"
+        return _check_watermark_column(
+            self._bq_client,
+            self._target_fqn,
+            watermark_cfg.column,
+            watermark_cfg.transaction_id,
         )
-        return any(row[0] for row in rows)
 
     def ensure_watermark_column(
         self, target: str, watermark_cfg: WatermarkCfg | None
@@ -295,44 +281,17 @@ class BigQueryMergeDialect(MergeDialect):
         gains it, the merge never writes it, and the rerun guard reads every run
         as the first one -- a watermark that silently does nothing.
 
-        The rows already in the target were written by earlier transactions and
-        are left alone, so they keep the NULL a new column starts with. That is
-        what "written before there was a watermark" looks like; stamping them
-        with this trx's id would claim them for it.
+        See :func:`~tabsdatak.conn.bigquery._evolution.ensure_watermark_column`,
+        which a bulk load reaches for too.
         """
         if watermark_cfg is None:
             return []
-        columns = self._existing_columns()
-        if columns is None or self.fold(watermark_cfg.column) in columns:
-            return []
-        logger.debug(
-            "bigquery: adding watermark column %r to %r",
-            watermark_cfg.column,
-            self._target_fqn,
+        added = _ensure_watermark_column(
+            self._bq_client, self._target_fqn, watermark_cfg.column
         )
-        self.execute(
-            f"ALTER TABLE {target} ADD COLUMN IF NOT EXISTS"
-            f" {self.quote_column(watermark_cfg.column)} {_WATERMARK_TYPE}"
-        )
-        return [watermark_cfg.column]
+        return [watermark_cfg.column] if added else []
 
     # --- BigQuery internals -------------------------------------------
-
-    def _existing_columns(self) -> set[str] | None:
-        """The target's folded column names, or ``None`` when it is not there.
-
-        A missing target is not an error here: both watermark passes run before
-        anything has been written to it, and "no table" and "no such column"
-        lead to the same answer.
-        """
-        from google.cloud.exceptions import NotFound
-
-        try:
-            return {
-                self.fold(name) for name, _ in self.target_columns(self._target_fqn)
-            }
-        except NotFound:
-            return None
 
     def _stamp(self, relation: str, watermark_cfg: WatermarkCfg) -> None:
         """Give the staging table the watermark column and fill it in.
@@ -344,12 +303,11 @@ class BigQueryMergeDialect(MergeDialect):
         """
         column = self.quote_column(watermark_cfg.column)
         self.execute(
-            f"ALTER TABLE {relation} ADD COLUMN IF NOT EXISTS"
-            f" {column} {_WATERMARK_TYPE}"
+            f"ALTER TABLE {relation} ADD COLUMN IF NOT EXISTS {column} {WATERMARK_TYPE}"
         )
         self.execute(
             f"UPDATE {relation} SET {column} ="
-            f" {_string_literal(watermark_cfg.transaction_id)} WHERE TRUE"
+            f" {string_literal(watermark_cfg.transaction_id)} WHERE TRUE"
         )
 
     def quote_table(self, table_fqn: str) -> str:
