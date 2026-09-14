@@ -162,9 +162,11 @@ def handle_value_conversion_error(
 
 class DQColumns(Enum):
     DQ_VERSION = "dq.version"
+    DQ_COLUMN = "dq.column"
     DQ_CLASSIFIER = "dq.classifier"
     DQ_TYPE = "dq.type"
     DQ_BINS = "dq.bins"
+    DQ_TOTAL = "dq.total"
     DQ_FALSE = "dq.false"
     DQ_TRUE = "dq.true"
     DQ_CATEGORY = "dq.p{:03d}"
@@ -1790,6 +1792,7 @@ class DataQualityEngine:
 
         # noinspection PyProtectedMember
         lf = self._tf._lf.select(dq_columns)
+        total_count = lf.select(pl.len()).collect().item()
         summary_data = []
 
         for column in sorted(dq_columns):
@@ -1914,6 +1917,8 @@ class DataQualityEngine:
                         f"Unsupported classifier family: {type(column_info.classifier)}"
                     )
 
+            summary_row[DQColumns.DQ_COLUMN.value] = column_info.column
+            summary_row[DQColumns.DQ_TOTAL.value] = total_count
             summary_row[DQColumns.DQ_PARAMETERS.value] = (
                 column_info.classifier.to_json()
             )
@@ -1923,9 +1928,11 @@ class DataQualityEngine:
         # We stick to 64-bit integers for now.
         schema = {
             DQColumns.DQ_VERSION.value: pl.UInt8,
+            DQColumns.DQ_COLUMN.value: pl.String,
             DQColumns.DQ_CLASSIFIER.value: pl.String,
             DQColumns.DQ_TYPE.value: pl.String,
             DQColumns.DQ_BINS.value: pl.UInt8,
+            DQColumns.DQ_TOTAL.value: pl.UInt64,
             DQColumns.DQ_FALSE.value: pl.UInt64,
             DQColumns.DQ_TRUE.value: pl.UInt64,
             DQColumns.DQ_UNDERFLOW.value: pl.UInt64,
