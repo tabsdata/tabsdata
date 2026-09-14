@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from tabsdatak.conn.common.error import ConnException
+from tabsdatak.conn.common.error import ConnException, ConnInitException
 from tabsdatak.error import ErrorCode, ErrorDef
 
 
@@ -16,6 +16,17 @@ class SqlCommonRuntimeException(ConnException):
     Raised on engine dispatch, retry exhaustion and similar failures in
     the code shared by every SQL connector. Connector plugins translate
     it to their own per-connector codes when relevant.
+    """
+
+
+class SqlCommonValidateException(ConnException):
+    """Cross-field validation failure in a shared SQL descriptor.
+
+    :categories: error
+
+    Raised by the `validate()` hook of a descriptor defined here (e.g.
+    `MergeCfg`), so the invariant is reported the same way whichever SQL
+    connector's dest carries it.
     """
 
 
@@ -40,3 +51,17 @@ class SqlCommonErrorCode(ErrorCode):
     )
     SQL_COMMON_2 = ErrorDef(SqlCommonRuntimeException, "Cannot create SQLEntity")
     SQL_COMMON_3 = ErrorDef(SqlCommonRuntimeException, "Cannot create SQLConnMetaModel")
+    SQL_COMMON_4 = ErrorDef(
+        ConnInitException,
+        "MergeCfg validation failed",
+    )  # _merge.MergeCfg
+    SQL_COMMON_5 = ErrorDef(
+        SqlCommonValidateException,
+        "MergeCfg.on must name at least one key column: it is what incoming rows"
+        " are matched by",
+    )  # _merge.MergeCfg.validate()
+    SQL_COMMON_6 = ErrorDef(
+        SqlCommonValidateException,
+        "MergeCfg.op_column={column!r} is also named in on; a key is what rows"
+        " are matched by, so it cannot double as the row's i/u/d marker",
+    )  # _merge.MergeCfg.validate()

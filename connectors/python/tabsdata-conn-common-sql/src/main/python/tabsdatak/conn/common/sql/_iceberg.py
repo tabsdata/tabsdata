@@ -23,6 +23,7 @@ type-widening map (e.g.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -102,9 +103,17 @@ def compute_delta(
     s1: TableSchema | None,
     s2: TableSchema,
     widen_map: TypeWideningMap,
+    can_safely_widen: Callable[[str, str], bool] | None = None,
 ) -> SchemaDelta:
     """Compute the schema delta between ``s1`` (current) and ``s2``
-    (desired)."""
+    (desired).
+
+    A retype is marked safe when ``widen_map`` allows it. A dialect whose
+    answer cannot be spelled as a set of type names -- one whose types carry
+    parameters, say, so that the safe conversions are not a fixed list -- passes
+    ``can_safely_widen`` as well, called ``(old_type, new_type)`` and consulted
+    only when the map has not already said yes. Either saying so is enough.
+    """
     delta = SchemaDelta(table_name=s2.table_name)
 
     # CASE 1: Table does not exist.
@@ -177,7 +186,9 @@ def compute_delta(
 
         # 2c-i: Type change.
         if old.type != new.type:
-            safe = new.type in widen_map and old.type in widen_map[new.type]
+            safe = (new.type in widen_map and old.type in widen_map[new.type]) or (
+                can_safely_widen(old.type, new.type) if can_safely_widen else False
+            )
             delta.changes.append(
                 SchemaChange(
                     action=Action.ALTER_TYPE,

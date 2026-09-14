@@ -117,6 +117,27 @@ class SqlCdcErrorCode(ErrorCode):
         SqlCdcException,
         "Failed to process staged CDC files for output slot {index}: {reason}",
     )
+    CDC_16 = ErrorDef(
+        SqlCdcException,
+        "coalesce_cdc_batch needs at least one key column: it is what change "
+        "records are grouped by, and what the merge matches rows on",
+    )  # coalesce_cdc_batch
+    CDC_17 = ErrorDef(
+        SqlCdcException,
+        "coalesce_cdc_batch op_column={column!r} is also a key column; a key "
+        "identifies the row, so it cannot double as the row's change marker",
+    )  # coalesce_cdc_batch
+    CDC_18 = ErrorDef(
+        SqlCdcException,
+        "coalesce_cdc_batch order_column={column!r} is also a key column; it "
+        "holds one value per key group, so it cannot order the records within "
+        "a group",
+    )  # coalesce_cdc_batch
+    CDC_19 = ErrorDef(
+        SqlCdcException,
+        "coalesce_cdc_batch order_column={column!r} is also the op_column; the "
+        "arrival order of a key's records cannot be read from the change marker",
+    )  # coalesce_cdc_batch
 
 
 def cdc_validate_call(

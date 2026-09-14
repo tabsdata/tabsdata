@@ -311,6 +311,121 @@ class TestComputeDeltaEvolution:
         assert reorders == []
 
 
+# --- compute_delta: can_safely_widen ---------------------------------
+#
+# The dialect's own answer to "is this retype safe", for a dialect whose safe
+# conversions are not a fixed list of type names. It supplements ``widen_map``
+# rather than replacing it: either saying yes is enough.
+
+
+def _alter(delta: SchemaDelta) -> list[SchemaChange]:
+    return [c for c in delta.changes if c.action == Action.ALTER_TYPE]
+
+
+def _retype(old: str, new: str) -> tuple[TableSchema, TableSchema]:
+    return (
+        TableSchema(table_name="t", columns=[ColumnDef(name="a", type=old)]),
+        TableSchema(table_name="t", columns=[ColumnDef(name="a", type=new)]),
+    )
+
+
+class TestComputeDeltaCanSafelyWiden:
+    def test_callback_can_make_a_retype_the_map_rejects_safe(self):
+        s1, s2 = _retype("NUMERIC(9, 2)", "NUMERIC(20, 4)")
+        # The map is keyed by bare type names, so a parameterized one misses.
+        assert _alter(compute_delta(s1, s2, WIDEN_MAP))[0].safe is False
+        delta = compute_delta(s1, s2, WIDEN_MAP, lambda old, new: True)
+        assert _alter(delta)[0].safe is True
+
+    def test_callback_saying_no_leaves_the_retype_unsafe(self):
+        s1, s2 = _retype("BIGINT", "INT")
+        delta = compute_delta(s1, s2, WIDEN_MAP, lambda old, new: False)
+        assert _alter(delta)[0].safe is False
+
+    def test_callback_receives_the_old_type_then_the_new_one(self):
+        """Backwards would invert every answer, so the order is pinned."""
+        seen: list[tuple[str, str]] = []
+        s1, s2 = _retype("INT", "DOUBLE")
+        compute_delta(s1, s2, WIDEN_MAP, lambda old, new: seen.append((old, new)))
+        assert seen == [("INT", "DOUBLE")]
+
+    def test_map_short_circuits_the_callback(self):
+        """A retype the map already allows does not need asking twice."""
+        calls: list[tuple[str, str]] = []
+
+        def widens(old: str, new: str) -> bool:
+            calls.append((old, new))
+            return False
+
+        s1, s2 = _retype("INT", "BIGINT")
+        delta = compute_delta(s1, s2, WIDEN_MAP, widens)
+        assert _alter(delta)[0].safe is True
+        assert calls == []
+
+    def test_omitting_the_callback_leaves_the_map_as_the_only_answer(self):
+        s1, s2 = _retype("INT", "BIGINT")
+        assert _alter(compute_delta(s1, s2, WIDEN_MAP))[0].safe is True
+        s1, s2 = _retype("BIGINT", "INT")
+        assert _alter(compute_delta(s1, s2, WIDEN_MAP))[0].safe is False
+
+    def test_callback_is_not_asked_about_a_column_that_did_not_change(self):
+        calls: list[tuple[str, str]] = []
+
+        def widens(old: str, new: str) -> bool:
+            calls.append((old, new))
+            return True
+
+        s1, s2 = _retype("INT", "INT")
+        delta = compute_delta(s1, s2, WIDEN_MAP, widens)
+        assert _alter(delta) == []
+        assert calls == []
+
+    def test_callback_is_not_asked_on_the_create_path(self):
+        """Every column is new, so there is no old type to widen from."""
+        calls: list[tuple[str, str]] = []
+
+        def widens(old: str, new: str) -> bool:
+            calls.append((old, new))
+            return True
+
+        s2 = TableSchema(table_name="t", columns=[ColumnDef(name="a", type="INT")])
+        delta = compute_delta(None, s2, WIDEN_MAP, widens)
+        assert delta.is_create is True
+        assert calls == []
+
+    def test_callback_is_asked_per_changed_column(self):
+        s1 = TableSchema(
+            table_name="t",
+            columns=[
+                ColumnDef(name="a", type="INT"),
+                ColumnDef(name="b", type="SMALLINT"),
+                ColumnDef(name="c", type="INT"),
+            ],
+        )
+        s2 = TableSchema(
+            table_name="t",
+            columns=[
+                ColumnDef(name="a", type="DECIMAL(10)"),
+                ColumnDef(name="b", type="SMALLINT"),
+                ColumnDef(name="c", type="DECIMAL(20)"),
+            ],
+        )
+        delta = compute_delta(
+            s1, s2, WIDEN_MAP, lambda old, new: new == "DECIMAL(20)"
+        )
+        assert {(c.column, c.safe) for c in _alter(delta)} == {("a", False), ("c", True)}
+
+    def test_safe_flag_reaches_validate_delta(self):
+        """What the callback decides is what strict validation acts on."""
+        s1, s2 = _retype("NUMERIC(9, 2)", "NUMERIC(20, 4)")
+        allowed = compute_delta(s1, s2, WIDEN_MAP, lambda old, new: True)
+        assert validate_delta(allowed, strict=True) is True
+
+        refused = compute_delta(s1, s2, WIDEN_MAP, lambda old, new: False)
+        with pytest.raises(UnsafeSchemaChangeError):
+            validate_delta(refused, strict=True)
+
+
 # --- validate_delta ----------------------------------------------------
 
 

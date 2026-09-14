@@ -22,10 +22,13 @@ Public surface (see `__all__`):
   `RelativePositionSpec` / `TimestampPosition` / `CdcFormat` /
   `CdcColumnsFormatSpec` -- the shared table / position / output-format
   specs each connector re-expresses locally.
+* `coalesce_cdc_batch` -- reduces a captured batch to one row per key so
+  it can be merged into a target table.
 """
 
 import importlib.metadata
 
+from tabsdatak.conn.common.sql.cdc._coalesce import coalesce_cdc_batch
 from tabsdatak.conn.common.sql.cdc._connection import CdcConn
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import (
@@ -43,6 +46,8 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 
 __all__ = [
+    # Batch coalescing
+    "coalesce_cdc_batch",
     # Connections
     "CdcConn",
     # Runner
