@@ -10,7 +10,14 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.error import ConnInitException
+from tabsdatak.conn.common.sql.error import (
+    SqlCommonErrorCode,
+    SqlCommonValidateException,
+)
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
 from tabsdatak.conn.databricks import (
     CredentialsSpec,
     DatabricksDestConn,
@@ -22,6 +29,10 @@ from tabsdatak.conn.databricks import (
     HostUrlSpec,
     IdentifierSpec,
     IfTableExistsSpec,
+    MergeCfg,
+    MergeCfgSpec,
+    MergeColumnSpec,
+    MergeColumnsSpec,
     QueriesSpec,
     SchemaEvolutionSpec,
     SrcCfgSpec,
@@ -139,6 +150,12 @@ def test_databricks_dest_fields_wire_expected_specs():
     assert _hint(DatabricksDest, "dest_cfg") == DestCfgSpec | None
 
 
+def test_databricks_dest_defaults_to_strict_schema_evolution():
+    """Opt-in rather than opt-out: the target's schema is pinned unless the
+    flow asks for it to move."""
+    assert DatabricksDest(tables=["c.s.t"]).schema_evolution == "strict"
+
+
 # ---------------------------------------------------------------------------
 # src_cfg / dest_cfg literal-key validation
 # ---------------------------------------------------------------------------
@@ -190,3 +207,174 @@ def test_databricks_conn_rejects_missing_required_fields(cls):
             volume="main.staging.v",
         )
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_1
+
+
+# ---------------------------------------------------------------------------
+# MergeCfg -- the Databricks spelling of the shared descriptor
+# ---------------------------------------------------------------------------
+
+
+def _merge_cfg(**overrides) -> MergeCfg:
+    kwargs: dict = dict(on=["order_id"], op_column="op")
+    kwargs.update(overrides)
+    return MergeCfg(**kwargs)
+
+
+def test_merge_cfg_is_the_shared_merge_cfg():
+    """The structure and its invariants come from common-sql; only the column
+    folding is Databricks'."""
+    assert issubclass(MergeCfg, SqlMergeCfg)
+    assert MergeCfg.__kind__ == "databricksMergeCfg"
+
+
+def test_merge_cfg_round_trip():
+    cfg = _merge_cfg(on=["order_id", "customer_id"])
+    assert MergeCfg.from_json(cfg.to_json()) == cfg
+
+
+def test_merge_cfg_fields_wire_expected_specs():
+    assert _hint(MergeCfg, "on") == MergeColumnsSpec
+    assert _hint(MergeCfg, "op_column") == MergeColumnSpec
+
+
+def test_merge_cfg_folds_columns_case_insensitively():
+    # Databricks resolves identifiers case-insensitively, so any spelling of a
+    # name has to reach the same column.
+    assert _merge_cfg(on=["ORDER_ID"])._keys() == ["order_id"]
+    assert _merge_cfg(op_column="OP")._op_column() == "op"
+
+
+def test_merge_cfg_strips_backticks_without_making_a_name_case_sensitive():
+    """Unlike Snowflake, a quoted Databricks name is not case-sensitive -- the
+    backticks are only there for special characters."""
+    assert _merge_cfg(on=["`OrderId`"])._keys() == ["orderid"]
+    assert _merge_cfg(on=["`weird col`"])._keys() == ["weird col"]
+
+
+def test_merge_cfg_rejects_a_dotted_column():
+    with pytest.raises(ConnInitException) as ei:
+        _merge_cfg(on=["orders.id"])
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_18
+
+
+def test_merge_cfg_rejects_a_dotted_op_column():
+    with pytest.raises(ConnInitException) as ei:
+        _merge_cfg(op_column="orders.op")
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_18
+
+
+def test_merge_cfg_requires_an_op_column():
+    with pytest.raises(ConnInitException) as ei:
+        MergeCfg(on=["order_id"])
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_18
+
+
+def test_merge_cfg_rejects_an_empty_on():
+    # Structural invariant, so the shared MergeCfg reports it.
+    with pytest.raises(SqlCommonValidateException) as ei:
+        _merge_cfg(on=[])
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_5
+
+
+def test_merge_cfg_rejects_a_key_as_the_op_column():
+    with pytest.raises(SqlCommonValidateException) as ei:
+        _merge_cfg(on=["order_id", "op"], op_column="op")
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_6
+
+
+def test_merge_cfg_rejects_a_key_as_the_op_column_across_case():
+    with pytest.raises(SqlCommonValidateException) as ei:
+        _merge_cfg(on=["OP"], op_column="op")
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_6
+
+
+def test_merge_cfg_rejects_a_quoted_key_as_the_op_column():
+    """The collision check runs on folded names, so quoting cannot smuggle the
+    marker past it."""
+    with pytest.raises(SqlCommonValidateException) as ei:
+        _merge_cfg(on=["`op`"], op_column="OP")
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_6
+
+
+# ---------------------------------------------------------------------------
+# DatabricksDest -- merge_cfg and if_table_exists require each other
+# ---------------------------------------------------------------------------
+
+
+def test_databricks_dest_wires_the_merge_cfg_spec():
+    assert _hint(DatabricksDest, "merge_cfg") == MergeCfgSpec | None
+
+
+def test_databricks_dest_round_trips_a_merge():
+    dest = DatabricksDest(
+        tables=["main.analytics.orders"],
+        if_table_exists="merge",
+        merge_cfg=_merge_cfg(),
+    )
+    loaded = DatabricksDest.from_json(dest.to_json())
+    assert loaded == dest
+    assert loaded.merge_cfg.op_column == "op"
+
+
+def test_databricks_dest_round_trips_a_merge_cfg_per_table():
+    dest = DatabricksDest(
+        tables=["c.s.orders", "c.s.items"],
+        if_table_exists="merge",
+        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
+    )
+    loaded = DatabricksDest.from_json(dest.to_json())
+    assert [c.on for c in loaded.merge_cfg] == [["order_id"], ["item_id"]]
+
+
+def test_databricks_dest_broadcasts_a_single_cfg_to_every_table():
+    cfg = _merge_cfg()
+    dest = DatabricksDest(
+        tables=["c.s.a", "c.s.b", "c.s.c"],
+        if_table_exists="merge",
+        merge_cfg=cfg,
+    )
+    assert dest._merge_cfgs() == [cfg, cfg, cfg]
+
+
+def test_databricks_dest_merge_cfgs_is_none_outside_merge_mode():
+    assert DatabricksDest(tables=["c.s.a"])._merge_cfgs() is None
+
+
+def test_databricks_dest_keeps_a_list_of_cfgs_in_order():
+    first, second = _merge_cfg(), _merge_cfg(on=["item_id"])
+    dest = DatabricksDest(
+        tables=["c.s.a", "c.s.b"],
+        if_table_exists="merge",
+        merge_cfg=[first, second],
+    )
+    assert dest._merge_cfgs() == [first, second]
+
+
+def test_databricks_dest_rejects_merge_without_a_merge_cfg():
+    with pytest.raises(DatabricksValidateException) as ei:
+        DatabricksDest(tables=["c.s.a"], if_table_exists="merge")
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
+    assert "requires merge_cfg" in str(ei.value)
+
+
+@pytest.mark.parametrize("if_table_exists", ["append", "replace"])
+def test_databricks_dest_rejects_a_merge_cfg_outside_merge_mode(if_table_exists):
+    with pytest.raises(DatabricksValidateException) as ei:
+        DatabricksDest(
+            tables=["c.s.a"],
+            if_table_exists=if_table_exists,
+            merge_cfg=_merge_cfg(),
+        )
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
+    assert if_table_exists in str(ei.value)
+
+
+def test_databricks_dest_rejects_a_cfg_list_that_does_not_match_tables():
+    with pytest.raises(DatabricksValidateException) as ei:
+        DatabricksDest(
+            tables=["c.s.a", "c.s.b"],
+            if_table_exists="merge",
+            merge_cfg=[_merge_cfg()],
+        )
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
+    assert "1 entries but tables has 2" in str(ei.value)

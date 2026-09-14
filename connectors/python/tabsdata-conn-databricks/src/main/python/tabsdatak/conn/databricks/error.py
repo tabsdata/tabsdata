@@ -116,3 +116,31 @@ class DatabricksErrorCode(ErrorCode):
         "not a valid Databricks qualified name (1 to 3 dot-separated identifier "
         "parts, e.g. 'catalog.schema.volume'): {value!r}",
     )  # VolumeSpec
+    DATABRICKS_18 = ErrorDef(
+        ConnInitException,
+        "MergeCfg validation failed",
+    )  # MergeCfg
+    DATABRICKS_19 = ErrorDef(
+        DatabricksRuntimeException,
+        "MergeCfg.op_column={column!r} is not a column of the data written to"
+        " table {table}, so the merge cannot read each row's i/u/d marker. Every"
+        " incoming row has to carry it",
+    )  # _coalesced_parquet: op column absent from the incoming data
+    DATABRICKS_20 = ErrorDef(
+        DatabricksRuntimeException,
+        "MergeCfg.on names {columns}, which the data written to table {table}"
+        " does not carry, so incoming rows cannot be matched against it. Every"
+        " key column has to be a column of the frame",
+    )  # _coalesced_parquet: key column absent from the incoming data
+    DATABRICKS_21 = ErrorDef(
+        DatabricksRuntimeException,
+        "MergeCfg column {column!r} matches {matches} of the data written to"
+        " table {table}. Databricks resolves column names case-insensitively, so"
+        " columns whose names differ only in case cannot be told apart",
+    )  # _coalesced_parquet: ambiguous case-insensitive match
+    DATABRICKS_22 = ErrorDef(
+        DatabricksRuntimeException,
+        "Table {table} shares no column with the incoming data, so a merge onto"
+        " it would write nothing. Check the target name and that the frame's"
+        " columns match the table's",
+    )  # the merge driver: nothing to write

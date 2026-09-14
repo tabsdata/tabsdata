@@ -166,3 +166,80 @@ def test_databricks_fqn_def_uses_backtick_and_doubled_backtick_escape():
     assert _validation._DATABRICKS_FQN_DEF.quote == "`"
     assert _validation._DATABRICKS_FQN_DEF.escape == "`"
     assert _validation._DATABRICKS_FQN_DEF.outer_only is False
+
+
+# ---------------------------------------------------------------------------
+# Merge columns
+#
+# Databricks resolves identifiers case-insensitively and a backtick only quotes
+# a special-char name, so the canonical key is unquoted and lower-cased. That is
+# a comparison key, not the stored name -- a Delta column keeps the case it was
+# defined with.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["op", "order_id", "ORDER_ID", "OrderId", "order-id", "_x", "`weird col`"],
+)
+def test_merge_column_validator_accepts_an_identifier(value):
+    assert _validation._column_validate(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["orders.id", "`a.b`", "", " ", "1abc", "a`b", "`unclosed"],
+)
+def test_merge_column_validator_rejects_a_non_identifier(value):
+    with pytest.raises(ValueError):
+        _validation._column_validate(value)
+
+
+def test_merge_column_validator_rejects_a_dot_even_inside_backticks():
+    """A dot is out whichever way it is written: Delta reads one as nested-field
+    access, so a column cannot carry it without column mapping."""
+    with pytest.raises(ValueError):
+        _validation._column_validate("`a.b`")
+
+
+def test_merge_column_validator_rejects_a_dotted_column():
+    """A merge column is one column, not a qualified reference -- otherwise
+    ``orders.id`` would read as a table-qualified name."""
+    with pytest.raises(ValueError, match="not a Databricks column identifier"):
+        _validation._column_validate("orders.id")
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("op", "op"),
+        ("OP", "op"),
+        ("order_id", "order_id"),
+        ("ORDER_ID", "order_id"),
+        ("OrderId", "orderid"),
+        ("order-id", "order-id"),
+        ("`OrderId`", "orderid"),
+        ("`weird col`", "weird col"),
+    ],
+)
+def test_merge_column_key_folds_to_lower_case(value, expected):
+    assert _validation.merge_column_key(value) == expected
+
+
+def test_merge_column_key_strips_backticks():
+    """Backticks are quoting, not part of the name."""
+    assert _validation.merge_column_key("`op`") == "op"
+
+
+def test_merge_column_key_treats_quoted_and_bare_as_one_column():
+    """Unlike Snowflake, quoting does not make a Databricks name
+    case-sensitive, so these are the same column."""
+    assert (
+        _validation.merge_column_key("`OP`")
+        == _validation.merge_column_key("op")
+        == "op"
+    )
+
+
+def test_merge_column_key_unescapes_a_doubled_backtick():
+    assert _validation.merge_column_key("`we``ird`") == "we`ird"

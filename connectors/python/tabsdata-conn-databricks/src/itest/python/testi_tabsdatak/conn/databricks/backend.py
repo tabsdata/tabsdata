@@ -79,6 +79,25 @@ class DatabricksStore(SqlStore):
         with self._connection.cursor() as cursor:
             cursor.execute(f"DROP TABLE IF EXISTS {self._fqn(table)}")
 
+    def column_types(self, table: str) -> dict[str, str]:
+        """``name -> type`` as Databricks reports the table -- ``int``,
+        ``bigint``, ``double``, ``decimal(20,4)``.
+
+        Read through ``DESCRIBE TABLE`` rather than off a read's arrow schema: a
+        widening is a property of the table, and a value that happens to survive
+        a round trip says nothing about the column that carried it. The
+        partition/metadata block ``DESCRIBE`` appends after the columns opens
+        with a blank name, which is where the walk stops.
+        """
+        with self._connection.cursor() as cursor:
+            cursor.execute(f"DESCRIBE TABLE {self._fqn(table)}")
+            types = {}
+            for name, type_, *_ in cursor.fetchall():
+                if not name or name.startswith("#"):
+                    break
+                types[name] = type_.lower()
+            return types
+
     def _fqn(self, table: str) -> str:
         return ".".join(
             self.quote(part) for part in (self._catalog, self._schema, table)

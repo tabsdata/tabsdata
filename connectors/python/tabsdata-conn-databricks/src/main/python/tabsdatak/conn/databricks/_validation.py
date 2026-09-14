@@ -4,11 +4,15 @@
 
 from __future__ import annotations
 
+import re
+
+from pydantic import AfterValidator
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import FqnDef, name_validate, unfqn
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 # --- Identifier / warehouse patterns --------------------------------
@@ -69,3 +73,42 @@ _DATABRICKS_FQN_DEF = FqnDef(separator=".", quote="`", escape="`")
 DATABRICKS_TABLE_FQN_VALIDATION = name_validate(
     _DATABRICKS_FQN_DEF, max_parts=3, syntax="Databricks"
 )
+
+# --- Merge ----------------------------------------------------------
+
+# A merge column is a single Databricks identifier. ``IDENTIFIER_PATTERN``
+# already admits one part only, so a dotted value is rejected rather than
+# silently read as a qualified reference.
+_COLUMN_RE = re.compile(IDENTIFIER_PATTERN)
+
+
+def _column_validate(value: str) -> str:
+    if not _COLUMN_RE.match(value):
+        raise ValueError(
+            f"not a Databricks column identifier (letters, digits, underscore"
+            f" and hyphen, or a backtick-quoted name for a special-char name):"
+            f" {value!r}"
+        )
+    return value
+
+
+# Validator for the ``MergeColumnSpec`` field.
+MERGE_COLUMN_VALIDATOR = AfterValidator(_column_validate)
+
+
+def merge_column_key(name: str) -> str:
+    """The canonical form of a merge column name: unquoted and lower-cased.
+
+    Databricks resolves identifiers case-insensitively, and a backtick quotes a
+    special-char name without making it case-sensitive -- so ``order_id``,
+    ``ORDER_ID`` and ```OrderId``` all name one column. Folding to a single case
+    is therefore the only way to tell the marker column apart from a key
+    whichever case either was written in.
+
+    Note this is a canonical *comparison* key, not the name Databricks stores: a
+    Delta column keeps the case it was defined with, which a config cannot know.
+    That differs from Snowflake, where an unquoted name really is upper-folded on
+    the way in and a quoted one really is case-sensitive.
+    """
+    (part,) = unfqn(name, _DATABRICKS_FQN_DEF)
+    return str(part).lower()

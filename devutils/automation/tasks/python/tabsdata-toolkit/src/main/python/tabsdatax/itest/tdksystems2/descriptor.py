@@ -120,10 +120,12 @@ def save(info: SystemInfo | DomainInfo, path: str | Path) -> None:
 
 
 def load(path: str | Path) -> SystemInfo | DomainInfo:
-    """Read a descriptor. A legacy ``TDX2`` one raises
-    :class:`.errors.LegacyDescriptorError` naming the ``upgrade`` command —
-    converting is an operator's explicit act, never a read's side effect."""
-    return loads(Path(path).read_text(encoding="utf-8"))
+    p = Path(path)
+    try:
+        text = p.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise TdxError(f"{p} is not a descriptor (not UTF-8 text)")
+    return loads(text)
 
 
 def upgrade(path: str | Path) -> bool:
@@ -148,7 +150,7 @@ def is_descriptor(path: str | Path) -> bool:
         return False
     try:
         return crypto.is_pem(p.read_text(encoding="utf-8"))
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return False
 
 

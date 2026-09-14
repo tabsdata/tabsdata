@@ -25,6 +25,7 @@ import logging
 import threading
 import time
 import uuid
+from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,8 +39,17 @@ from tenacity import (
 )
 
 from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge._driver import merge_batch
+from tabsdatak.conn.common.sql.cdc.constants import (
+    OP_DELETE,
+    OP_INSERT,
+    OP_UPDATE,
+)
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
+from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn, MergeCfg
+from tabsdatak.conn.databricks._merge_dialect import DatabricksMergeDialect
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
 
 # Conn helpers operate on both Src and Dest variants.
@@ -67,6 +77,24 @@ _PARQUET_COMPRESSION = "snappy"
 _COPY_INTO_RETRY_ATTEMPTS = 6
 _COPY_INTO_RETRY_WAIT_SECONDS = 5
 
+# The two aliases the generated MERGE binds its sides to. The source is a
+# staging table whose name the connector picks, so nothing outside the
+# statement can name either side.
+MERGE_TARGET_ALIAS = "target"
+MERGE_SOURCE_ALIAS = "source"
+
+# The markers ``MergeCfg.op_column`` carries, and what each one makes the merge
+# do with the row -- ``CdcOperation``'s, so a CDC source in this family feeds a
+# merge without a translation step. Lower case, and the column is lower-cased
+# before it is compared, so a feed emitting either case works.
+#
+# ``.value``, not the member: these are interpolated into the marker predicates,
+# and formatting a str-mixin enum yields ``"CdcOperation.INSERT"`` -- which would
+# be valid SQL that no row can ever match.
+_OP_INSERT = OP_INSERT.value
+_OP_UPDATE = OP_UPDATE.value
+_OP_DELETE = OP_DELETE.value
+
 
 # --- Read cfg / write cfg dataclasses -------------------------------
 
@@ -84,8 +112,9 @@ class DatabricksReadCfg:
 class DatabricksWriteCfg:
     conn: _AnyDatabricksConn
     target_tables: list[str]  # raw user input -- not yet fqn'd
-    if_table_exists: str  # "append" | "replace"
+    if_table_exists: str  # "append" | "replace" | "merge"
     schema_evolution: str  # "update" | "strict"
+    merge_cfgs: list[MergeCfg] | None = None
     # Support knobs (legacy parity). Forwarded directly to
     # ``cursor.execute(**kwargs)``; only set when debugging.
     support_append_create_table: dict = field(default_factory=dict)
@@ -648,16 +677,115 @@ def _execute_volume_statement(cursor, statement: str, parameters: dict) -> None:
     cursor.execute(statement, **parameters)
 
 
+def _temp_table_name(fq_table: str) -> str:
+    """A name for a temp table beside ``fq_table``, unique per call.
+
+    Keeps the target's catalog / schema parts so the table is created where the
+    write is happening, and suffixes only the last part. The suffix is what makes
+    it safe: it cannot collide with the target it is about to be merged into, nor
+    with a concurrent write to the same target, nor with a copy an earlier run
+    failed to drop.
+
+    Returned per-part backtick-quoted and ready to embed -- *not* bare like
+    :func:`_fully_qualify_table`. Quoting here, off the split parts, rather than
+    re-deriving it from a bare string is what keeps a target part holding a dot
+    or a backtick from re-splitting into a different name.
+    """
+    parts = unfqn(fq_table, _DATABRICKS_FQN_DEF)
+    parts[-1] = f"{parts[-1]}_{uuid.uuid4().hex[:8]}"
+    return fqn(parts, _DATABRICKS_FQN_DEF)
+
+
+def _create_temp_table_from_volume_schema(
+    cursor,
+    file_in_volume: str,
+    fq_table: str,
+) -> str:
+    """``CREATE TABLE`` beside ``fq_table`` carrying the volume file's own schema
+    and no rows, and return its quoted ``catalog.schema.table`` name.
+
+    ``read_files`` reads the parquet footer, so the temp table holds every column
+    the file has -- including any the target does not, which a merge predicate
+    may still need to read. ``LIMIT 0`` takes the schema without the rows; the
+    caller loads them with :func:`copy_into_table`.
+
+    A real catalog table, not a session relation: it outlives the connection, so
+    **the caller must pass it to :func:`drop_temp_table` when the merge is
+    done** -- including when the merge fails, or the copy is left behind.
+
+    Goes through :func:`_execute_volume_statement` because it reads the volume:
+    an upload is not always visible to the warehouse immediately, and the retry
+    there is what absorbs the ``PATH_NOT_FOUND`` window.
+    """
+    temp_table = _temp_table_name(fq_table)
+    logger.debug("Creating temp table %s for %s", temp_table, fq_table)
+    _execute_volume_statement(
+        cursor,
+        f"CREATE TABLE {temp_table} USING DELTA AS SELECT * FROM "
+        f"read_files('{file_in_volume}', format => 'parquet') LIMIT 0",
+        {},
+    )
+    return temp_table
+
+
+def drop_temp_table(cursor, temp_table: str) -> None:
+    """Drop a table :func:`_create_temp_table_from_volume_schema` made.
+
+    ``IF EXISTS`` so this is safe in the ``finally`` it belongs in: it has to run
+    whether the merge succeeded, failed, or never got as far as loading the copy.
+
+    Not routed through :func:`_execute_volume_statement` -- the statement touches
+    the catalog, not the volume, so the ``PATH_NOT_FOUND`` retry has nothing to
+    absorb here.
+    """
+    logger.debug("Dropping temp table %s", temp_table)
+    cursor.execute(f"DROP TABLE IF EXISTS {temp_table}")
+
+
+def _volume_schema_projection(exclude: Collection[str] = ()) -> str:
+    """The select list that copies a volume file's schema, less ``exclude``.
+
+    ``* EXCEPT`` drops by name against the file's own columns, and Databricks
+    matches identifiers case-insensitively, so a marker the publisher wrote as
+    ``OP`` is dropped by ``op`` without the caller having to know which case the
+    file used.
+
+    An excluded name the file does not have makes the statement fail rather than
+    being ignored, which is the wanted end of that trade: a merge whose marker
+    column is missing cannot read any row's fate, so it must not quietly build a
+    target as though it could.
+    """
+    if not exclude:
+        return "*"
+    return f"* EXCEPT ({_quote_columns(exclude)})"
+
+
+def _quote_column(name: str) -> str:
+    """A column reference, backtick-quoted.
+
+    Safe unconditionally: quoting is the only way to spell a name that is not a
+    legal bare identifier, and Databricks resolves a quoted name the same way it
+    resolves a bare one -- the backticks do not make it case-sensitive.
+    """
+    return fqn([name], _DATABRICKS_FQN_DEF)
+
+
+def _quote_columns(names: Collection[str]) -> str:
+    return ", ".join(_quote_column(name) for name in names)
+
+
 def copy_into_table(
     sql_conn,
     cfg: DatabricksWriteCfg,
     file_in_volume: str,
     fq_table: str,
 ) -> None:
-    """Execute the legacy CREATE-OR-REPLACE / CREATE-IF-NOT-EXISTS +
-    COPY INTO sequence against ``fq_table`` from ``file_in_volume``.
-    The exact statements mirror the legacy
-    ``_perform_upload_to_table`` codepath."""
+    """Execute the CREATE-OR-REPLACE / CREATE-IF-NOT-EXISTS + COPY INTO
+    sequence against ``fq_table`` from ``file_in_volume``.
+
+    Append and replace only -- a merge goes through the shared driver and
+    :class:`~tabsdatak.conn.databricks._merge_dialect.DatabricksMergeDialect`.
+    """
     cursor = sql_conn.cursor()
     sql_fq = _fq_for_sql(fq_table)
     if cfg.if_table_exists == "replace":
@@ -787,16 +915,28 @@ def write_all_tables(
     logger.debug("databricks: establishing SQL connection")
     sql_conn = _build_sql_connection(ws_client, cfg.conn)
     total = len(cfg.target_tables)
+    # ``strict`` also holds the merge configs to one per table: the plugin
+    # normalizes them to that shape, and a mismatch here would silently merge one
+    # table by another's keys.
+    merge_cfgs = cfg.merge_cfgs or [None] * len(cfg.target_tables)
     try:
-        for i, (raw_table, parquet_path) in enumerate(
+        for i, (raw_table, parquet_path, merge_cfg) in enumerate(
             zip(
                 cfg.target_tables,
                 parquet_files,
+                merge_cfgs,
+                strict=True,
             ),
             1,
         ):
             fq_table = _fully_qualify_table(cfg.conn, raw_table)
             logger.info("databricks: writing table %d/%d: %s", i, total, fq_table)
+            if cfg.if_table_exists == "merge":
+                _merge_one(
+                    sql_conn, ws_client, cfg, Path(parquet_path), fq_table, merge_cfg
+                )
+                logger.debug("databricks: finished table %s", fq_table)
+                continue
             logger.info("databricks: staging parquet for %s", fq_table)
             file_in_volume = upload_file_to_volume(
                 ws_client, cfg.conn, fq_table, parquet_path
@@ -810,3 +950,40 @@ def write_all_tables(
     finally:
         logger.debug("databricks: closing SQL connection")
         sql_conn.close()
+
+
+def _merge_one(
+    sql_conn,
+    ws_client,
+    cfg: DatabricksWriteCfg,
+    parquet_path: Path,
+    fq_table: str,
+    merge_cfg: MergeCfg,
+) -> None:
+    """Drive one merge through the shared driver.
+
+    Everything the merge does -- coalescing the batch, staging it, creating the
+    target, evolving it, running the statement -- belongs to the driver and to
+    :class:`~tabsdatak.conn.databricks._merge_dialect.DatabricksMergeDialect`.
+    The volume upload and the staged file's deletion move in with the staging,
+    which is why nothing is left here but the cursor.
+    """
+    cursor = sql_conn.cursor()
+    try:
+        merge_batch(
+            DatabricksMergeDialect(
+                cursor,
+                ws_client,
+                cfg.conn,
+                fq_table,
+                schema_evolution=cfg.schema_evolution,
+                copy_options=cfg.support_replace_copy_options,
+                copy_kwargs=cfg.support_replace_copy_into,
+            ),
+            target=_fq_for_sql(fq_table),
+            batch=parquet_path,
+            cfg=merge_cfg,
+            schema_evolution=cfg.schema_evolution,
+        )
+    finally:
+        cursor.close()

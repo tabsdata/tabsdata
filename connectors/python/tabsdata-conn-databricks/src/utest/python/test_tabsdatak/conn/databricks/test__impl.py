@@ -490,3 +490,171 @@ def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
     with pytest.raises(DatabricksRuntimeException) as ei:
         _impl.write_all_tables(cfg, [clean, dirty])
     assert "main.analytics.second" in str(ei.value)
+
+
+# ---------------------------------------------------------------------------
+# Staging table from the volume file's schema
+# ---------------------------------------------------------------------------
+
+
+class _RecordingCursor:
+    """Captures every statement, since the DDL is the whole behaviour here."""
+
+    def __init__(self) -> None:
+        self.log: list[tuple[str, dict]] = []
+
+    def execute(self, statement: str, **parameters) -> None:
+        self.log.append((statement, parameters))
+
+
+def _staged(target: str, path: str = "/Volumes/c/s/v/in.parquet"):
+    cursor = _RecordingCursor()
+    name = _impl._create_temp_table_from_volume_schema(cursor, path, target)
+    return name, cursor.log[0][0]
+
+
+class TestTempTableName:
+    def test_keeps_the_targets_catalog_and_schema(self):
+        """A real catalog table, so it is created where the write is happening."""
+        name = _impl._temp_table_name("main.analytics.orders")
+        assert name.startswith("`main`.`analytics`.`orders_")
+
+    def test_suffixes_only_the_last_part(self):
+        name = _impl._temp_table_name("main.analytics.orders")
+        assert len(_impl.unfqn(name, _impl._DATABRICKS_FQN_DEF)) == 3
+
+    def test_is_unique_per_call(self):
+        """Two writes to one target must not land on the same copy."""
+        target = "main.analytics.orders"
+        assert _impl._temp_table_name(target) != _impl._temp_table_name(target)
+
+    def test_never_equals_the_target(self):
+        """A copy spelled like the target would be merged into itself."""
+        name = _impl._temp_table_name("main.analytics.orders")
+        assert name != _impl._fq_for_sql("main.analytics.orders")
+
+    def test_returns_a_quoted_name(self):
+        assert _impl._temp_table_name("c.s.t").startswith("`c`.`s`.`t_")
+
+    def test_quotes_a_part_that_needs_it(self):
+        assert _impl._temp_table_name("`my-cat`.s.t").startswith("`my-cat`.`s`.`t_")
+
+    @pytest.mark.parametrize(
+        "target,prefix",
+        [
+            ("c.s.`weird tbl`", "`c`.`s`.`weird tbl_"),
+            # A dot or a backtick inside a quoted part must not re-split the
+            # name: quoting is applied to the split parts, never re-derived
+            # from a bare string.
+            ("c.s.`a.b`", "`c`.`s`.`a.b_"),
+            ("c.s.`we``ird`", "`c`.`s`.`we``ird_"),
+        ],
+    )
+    def test_stays_three_part_for_an_awkward_target(self, target, prefix):
+        name = _impl._temp_table_name(target)
+        assert name.startswith(prefix)
+        assert len(_impl.unfqn(name, _impl._DATABRICKS_FQN_DEF)) == 3
+
+
+class TestCreateTempTableFromVolumeSchema:
+    def test_creates_a_delta_table_from_the_volume_file(self):
+        name, sql = _staged("main.analytics.orders")
+        assert sql == (
+            f"CREATE TABLE {name} USING DELTA AS SELECT * FROM "
+            f"read_files('/Volumes/c/s/v/in.parquet', format => 'parquet') LIMIT 0"
+        )
+
+    def test_is_not_temporary(self):
+        """A real catalog table: it outlives the connection, which is why the
+        caller has to drop it."""
+        _, sql = _staged("c.s.t")
+        assert "TEMPORARY" not in sql
+
+    def test_takes_the_schema_without_the_rows(self):
+        """``LIMIT 0`` is what makes this a schema copy rather than a load; the
+        rows arrive via COPY INTO."""
+        _, sql = _staged("c.s.t")
+        assert sql.endswith("LIMIT 0")
+
+    def test_reads_the_file_the_caller_named(self):
+        _, sql = _staged("c.s.t", path="/Volumes/x/y/z/other.parquet")
+        assert "read_files('/Volumes/x/y/z/other.parquet', format => 'parquet')" in sql
+
+    def test_returns_the_name_it_created(self):
+        name, sql = _staged("c.s.t")
+        assert f"CREATE TABLE {name} " in sql
+
+    def test_creates_beside_the_target_not_over_it(self):
+        name, sql = _staged("main.analytics.orders")
+        assert name.startswith("`main`.`analytics`.")
+        assert "`orders`" not in sql
+
+    def test_retries_a_path_not_found(self, monkeypatch):
+        """The statement reads the volume, so it has to go through the retry that
+        absorbs an upload not yet visible to the warehouse."""
+        calls: list[str] = []
+
+        def spy(cursor, statement, parameters):
+            calls.append(statement)
+
+        monkeypatch.setattr(_impl, "_execute_volume_statement", spy)
+        _impl._create_temp_table_from_volume_schema(
+            _RecordingCursor(), "/Volumes/c/s/v/in.parquet", "c.s.t"
+        )
+        assert len(calls) == 1 and calls[0].startswith("CREATE TABLE ")
+
+    def test_passes_no_extra_execute_parameters(self):
+        cursor = _RecordingCursor()
+        _impl._create_temp_table_from_volume_schema(
+            cursor, "/Volumes/c/s/v/in.parquet", "c.s.t"
+        )
+        assert cursor.log[0][1] == {}
+
+
+class TestDropTempTable:
+    def test_drops_the_table_it_is_given(self):
+        cursor = _RecordingCursor()
+        _impl.drop_temp_table(cursor, "`main`.`analytics`.`orders_abc12345`")
+        assert cursor.log == [
+            ("DROP TABLE IF EXISTS `main`.`analytics`.`orders_abc12345`", {})
+        ]
+
+    def test_is_conditional(self):
+        """It belongs in a ``finally``, so it has to tolerate a temp table the
+        create never got to make."""
+        cursor = _RecordingCursor()
+        _impl.drop_temp_table(cursor, "`c`.`s`.`t_1`")
+        assert "IF EXISTS" in cursor.log[0][0]
+
+    def test_round_trips_the_created_name(self):
+        create = _RecordingCursor()
+        name = _impl._create_temp_table_from_volume_schema(
+            create, "/Volumes/c/s/v/in.parquet", "c.s.`weird tbl`"
+        )
+        drop = _RecordingCursor()
+        _impl.drop_temp_table(drop, name)
+        assert drop.log[0][0].endswith(name)
+
+
+# ---------------------------------------------------------------------------
+# The volume-schema projection
+#
+# The select list the merge dialect builds a target with, and the one a
+# scratch table is built with.
+# ---------------------------------------------------------------------------
+
+
+class TestVolumeSchemaProjection:
+    def test_copies_every_column_by_default(self):
+        assert _impl._volume_schema_projection() == "*"
+
+    def test_drops_one_column(self):
+        assert _impl._volume_schema_projection(["op"]) == "* EXCEPT (`op`)"
+
+    def test_drops_several_columns(self):
+        projection = _impl._volume_schema_projection(["op", "seq"])
+        assert projection == "* EXCEPT (`op`, `seq`)"
+
+    def test_quotes_a_name_that_needs_it(self):
+        projection = _impl._volume_schema_projection(["weird col"])
+        assert projection == "* EXCEPT (`weird col`)"

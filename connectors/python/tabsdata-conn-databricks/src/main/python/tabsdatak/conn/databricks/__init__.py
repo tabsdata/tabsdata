@@ -16,6 +16,8 @@ Four classes, imported from `tabsdatak.conn.databricks`:
 * `DatabricksDest` -- the `@subscriber` destination: a list of
   target `tables`, one output slot per table (staged to the Volume,
   then `COPY INTO`).
+* `MergeCfg` -- how `DatabricksDest(if_table_exists="merge")` matches
+  incoming rows onto the target table.
 
 The connection (with credentials) is registered on a collection, not
 passed to a decorator; the runtime resolves it at run time. A flow
@@ -54,6 +56,9 @@ from tabsdatak.api import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
@@ -102,8 +107,14 @@ DatabricksTableNameSpec: TypeAlias = Annotated[
     _validation.DATABRICKS_TABLE_FQN_VALIDATION,
 ]
 DatabricksTableNamesSpec: TypeAlias = list[DatabricksTableNameSpec]
-IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+IfTableExistsSpec: TypeAlias = Literal["append", "replace", "merge"]
 SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
+
+# A merge column is a single Databricks identifier -- the `IdentifierSpec`
+# shape, minus the FQN separator, so a dotted value is rejected instead of
+# being read as a qualified reference.
+MergeColumnSpec: TypeAlias = Annotated[str, _validation.MERGE_COLUMN_VALIDATOR]
+MergeColumnsSpec: TypeAlias = list[MergeColumnSpec]
 
 
 # --- DatabricksSrc.src_cfg keys -------------------------------------
@@ -123,6 +134,61 @@ DestCfgKey: TypeAlias = Literal["databricks.logging_level",]
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
+
+
+# --- Merge -----------------------------------------------------------
+
+
+@_api.dataclass(DatabricksErrorCode.DATABRICKS_18, kw_only=True)
+class MergeCfg(SqlMergeCfg):
+    """How `if_table_exists="merge"` matches incoming rows onto a target table.
+
+    :categories: destination
+
+    The Databricks spelling of the shared `MergeCfg`. Columns are named as
+    Databricks resolves them: case-insensitively, so `on=["order_id"]` hits
+    `ORDER_ID` and `OrderId` alike. A backtick-quoted name is for a
+    special-char or reserved name -- unlike Snowflake, quoting does not make it
+    case-sensitive.
+
+    Every incoming row carries a marker in `op_column` saying what to do with it,
+    and the marker is what decides which clause claims the row:
+
+    * `'i'` -- insert the row, if it matches no key.
+    * `'u'` -- update the row it matches.
+    * `'d'` -- delete the row it matches.
+
+    Args:
+        on: The key columns rows are matched by, joined with `AND`. Must be
+            present on both sides. Each is a Databricks column identifier --
+            bare, or backtick-quoted for a special-char name.
+        op_column: The column holding each row's `i` / `u` / `d` marker. Read
+            to decide each row's fate and never written, so the target does not
+            need the column and will not gain it.
+
+    Examples:
+        A CDC feed whose `op` column says what to do with each row:
+
+        .. code-block:: python
+
+            MergeCfg(on=["order_id", "customer_id"], op_column="op")
+    """
+
+    __kind__ = "databricksMergeCfg"
+
+    # Re-annotated so the shared fields carry the Databricks column shape: a
+    # value that is not a Databricks identifier is rejected here rather than
+    # surfacing as invalid SQL when the MERGE is built.
+    on: MergeColumnsSpec
+    op_column: MergeColumnSpec
+
+    def _fold(self, name: str) -> str:
+        return _validation.merge_column_key(name)
+
+
+MergeCfgSpec: TypeAlias = MergeCfg | list[MergeCfg]
+"""One `MergeCfg` applied to every target table, or one per entry in
+`DatabricksDest.tables`."""
 
 
 # --- Connection ------------------------------------------------------
@@ -310,9 +376,14 @@ class DatabricksDest(Dest):
             connection's `catalog` / `schema` defaults.
         if_table_exists: `"append"` (the default) adds rows;
             `"replace"` overwrites the table.
-        schema_evolution: `"update"` (the default) forwards
-            `mergeSchema=true` to `COPY INTO` so new columns are
-            added; `"strict"` rejects schema changes.
+            `"merge"` merges rows.
+        schema_evolution: `"strict"` (the default) rejects schema changes;
+            `"update"` adds new columns and performs type widening on existing
+            columns of the target to match the schema of the incoming data.
+        merge_cfg: Required by -- and only valid with --
+            `if_table_exists="merge"`: how incoming rows are matched
+            onto existing ones. One `MergeCfg` applies to every table;
+            pass a list to configure each table in `tables` separately.
         dest_cfg: Optional connector config; the only supported key is
             `databricks.logging_level`.
 
@@ -346,9 +417,66 @@ class DatabricksDest(Dest):
             )
             def evolve(rows: TableFrameSpec) -> TableFrameSpec:
                 return rows
+
+        Merge mode merges incoming rows onto the target by the keys in `merge_cfg`:
+
+        .. code-block:: python
+            @subscriber(
+                destination=DatabricksDest(
+                    tables=["cap_merge"],
+                    if_table_exists="merge",
+                    merge_cfg=MergeCfg(
+                        on=["cap_id"],
+                        op_column="op",
+                    ),
+                ),
+                input_tables=["caps_input/cap_merge_v2"],
+            )
+            def merge(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     tables: DatabricksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
-    schema_evolution: SchemaEvolutionSpec = "update"
+    schema_evolution: SchemaEvolutionSpec = "strict"
+    merge_cfg: MergeCfgSpec | None = None
     dest_cfg: DestCfgSpec | None = None
+
+    def _merge_cfgs(self) -> list[MergeCfg] | None:
+        """One `MergeCfg` per entry in `tables`, or `None` outside merge mode."""
+        if self.merge_cfg is None:
+            return None
+        if isinstance(self.merge_cfg, MergeCfg):
+            return [self.merge_cfg] * len(self.tables)
+        return list(self.merge_cfg)
+
+    def validate(self) -> None:
+        """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
+        require each other, and a list of configs must line up with `tables`.
+
+        Called by the framework; raises `DatabricksValidateException`.
+        """
+        merging = self.if_table_exists == "merge"
+        if merging and self.merge_cfg is None:
+            # noinspection PyProtectedMember
+            raise DatabricksErrorCode.DATABRICKS_2.exception(
+                cls="Dest",
+                rule='if_table_exists="merge" requires merge_cfg to be set',
+            )
+        if not merging and self.merge_cfg is not None:
+            # noinspection PyProtectedMember
+            raise DatabricksErrorCode.DATABRICKS_2.exception(
+                cls="Dest",
+                rule=f"merge_cfg is set but if_table_exists="
+                f"{self.if_table_exists!r}; merge_cfg only applies to"
+                f' if_table_exists="merge"',
+            )
+        if isinstance(self.merge_cfg, list) and len(self.merge_cfg) != len(self.tables):
+            # noinspection PyProtectedMember
+            raise DatabricksErrorCode.DATABRICKS_2.exception(
+                cls="Dest",
+                rule=f"merge_cfg has {len(self.merge_cfg)} entries but tables"
+                f" has {len(self.tables)}; a list of merge configs must line up"
+                f" one-to-one with tables (pass a single MergeCfg to apply one"
+                f" config to every table)",
+            )
