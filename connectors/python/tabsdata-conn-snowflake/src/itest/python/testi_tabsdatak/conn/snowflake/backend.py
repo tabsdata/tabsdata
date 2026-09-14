@@ -80,6 +80,39 @@ class SnowflakeStore(SqlStore):
             [(row["id"], row["name"]) for row in rows],
         )
 
+    def create_typed_table(self, table: str, columns: str) -> None:
+        """Create `table` from an explicit column list, e.g.
+        ``"ORDER_ID NUMBER(38,0), AMOUNT NUMBER(9,2)"``.
+
+        A target the connector builds is templated from the staged file's
+        inferred schema, so a column with a particular width or precision can
+        only be set up with DDL -- which is exactly what a widening test needs
+        on the other side of the diff.
+        """
+        fqn = self._fqn(table)
+        self._execute(f"DROP TABLE IF EXISTS {fqn}")
+        self._execute(f"CREATE TABLE {fqn} ({columns})")
+
+    def column_types(self, table: str) -> dict[str, tuple[str, int | None, int | None]]:
+        """``name -> (type, precision_or_length, scale)`` as Snowflake reports the
+        table, names lower-cased the way :meth:`read_table` reports them.
+
+        Read out of ``INFORMATION_SCHEMA.COLUMNS`` rather than the ``DESC TABLE``
+        the connector parses itself, so a test asserting on a widened column is
+        not checking the code against itself. The type is Snowflake's own
+        vocabulary -- ``TEXT`` for a VARCHAR column, ``NUMBER`` for an INT --
+        with the parameters beside it rather than inside it.
+        """
+        rows, _ = self._query(
+            "SELECT COLUMN_NAME, DATA_TYPE,"
+            " COALESCE(CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION,"
+            " DATETIME_PRECISION), NUMERIC_SCALE"
+            f" FROM {self._database}.INFORMATION_SCHEMA.COLUMNS"
+            f" WHERE TABLE_SCHEMA = UPPER('{self._schema}')"
+            f" AND TABLE_NAME = UPPER('{table}')"
+        )
+        return {name.lower(): (type_, size, scale) for name, type_, size, scale in rows}
+
     def count(self, table: str) -> int:
         rows, _ = self._query(f"SELECT count(*) FROM {self._fqn(table)}")
         return rows[0][0]

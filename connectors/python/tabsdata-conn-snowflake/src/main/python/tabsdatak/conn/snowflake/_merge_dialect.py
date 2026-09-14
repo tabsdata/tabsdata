@@ -177,18 +177,17 @@ class SnowflakeMergeDialect(MergeDialect):
         self._cursor.execute(statement)
 
     def evolve(self, target: str, staged: Staged, marker: str) -> list[str]:
-        """Add the columns the batch has and the target does not.
+        """Add the columns the batch has and the target does not, and widen a
+        column whose type the batch has outgrown.
 
         ``ENABLE_SCHEMA_EVOLUTION`` is honoured by ``COPY INTO`` and not by a
         ``MERGE``, so a merge target is evolved here or not at all.
 
-        Adding is the whole of it: :class:`SnowflakeRenderer` supports
-        ``ADD_COLUMN`` alone, so a retype the diff reports renders to nothing.
-        That is also why ``strict`` is False -- the target's types come from
-        ``DESC TABLE`` and the batch's from ``infer_schema``, which spell the
-        same type differently, so a column neither side touched reads as an
-        unsafe retype. Refusing the write for it would refuse nearly all of
-        them.
+        ``strict``: a retype Snowflake cannot make refuses the whole write
+        rather than staging rows into a column that cannot hold them. That is
+        only safe because ``align_type`` has already folded away the
+        differences that are not real ones -- without it the two vocabularies
+        would refuse nearly every write.
         """
         return evolve_with_iceberg(
             self,
@@ -197,7 +196,9 @@ class SnowflakeMergeDialect(MergeDialect):
             marker,
             renderer=_iceberg.SnowflakeRenderer(),
             widening_map=_iceberg.SNOWFLAKE_TYPE_WIDENING_MAP,
-            strict=False,
+            can_safely_widen=_iceberg.can_widen,
+            align_type=_aligned_type,
+            strict=True,
         )
 
     # --- Snowflake internals ------------------------------------------
@@ -232,3 +233,34 @@ def _scratch_table_name(target: str) -> str:
     parts = unfqn(target, _SNOWFLAKE_FQN_DEF)
     parts[-1] = f"{parts[-1]}_{uuid.uuid4().hex[:8].upper()}"
     return fqn(parts, _SNOWFLAKE_FQN_DEF)
+
+
+def _aligned_type(stored: str | None, inferred: str) -> str:
+    """``inferred`` in the target's own spelling when the difference between the
+    two is not one to act on.
+
+    The diff compares type strings, and the two sides come from different
+    vocabularies: ``DESC TABLE`` reports ``VARCHAR(16777216)`` where
+    ``infer_schema`` reports ``TEXT`` for the very same column. Left alone,
+    every such column reads as a retype -- an unsafe one, since there is nothing
+    to widen -- and the write is refused over a column nobody touched.
+
+    Two spellings are folded together on either of two grounds: they name one
+    type, or they differ only in the parameters of a base Snowflake will not
+    alter. ``TIMESTAMP_NTZ(9)`` against ``TIMESTAMP_NTZ(6)`` is the second kind:
+    a real difference, but ``ALTER COLUMN`` reaches the parameters of ``NUMBER``
+    and ``VARCHAR`` alone, so there is no statement to render and the load casts
+    into the target column as it always has. Refusing the write for it would
+    stop a load that works.
+
+    What survives the folding is a retype worth reporting: a column whose type
+    really moved within a base that can be altered, or one that changed base
+    outright.
+    """
+    if stored is None:
+        return inferred
+    if _iceberg.same_type(stored, inferred) or _iceberg.same_unalterable_base(
+        stored, inferred
+    ):
+        return stored
+    return inferred

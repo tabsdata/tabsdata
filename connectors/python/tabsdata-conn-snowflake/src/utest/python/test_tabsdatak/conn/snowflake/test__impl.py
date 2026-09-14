@@ -361,6 +361,21 @@ def test_write_all_tables_creates_stage_puts_then_copies(
     )
 
 
+def test_write_all_tables_reads_the_parquet_logical_types(
+    fake_sf_connection, tmp_path
+):
+    # Without USE_LOGICAL_TYPE the inferred schema is the file's physical types:
+    # a timestamp column comes back as the NUMBER holding its epoch, and a
+    # decimal without its precision and scale. OR REPLACE because an account
+    # holding an earlier definition of the format would otherwise keep it.
+    parquet = _parquet(tmp_path / "in.parquet")
+    impl.write_all_tables(_write_cfg(), [parquet])
+    assert (
+        "CREATE OR REPLACE FILE FORMAT tabsdata_parquet"
+        " TYPE = PARQUET USE_LOGICAL_TYPE = TRUE"
+    ) in fake_sf_connection.log
+
+
 def test_write_all_tables_uses_temporary_stage_when_conn_stage_unset(
     fake_sf_connection, tmp_path
 ):

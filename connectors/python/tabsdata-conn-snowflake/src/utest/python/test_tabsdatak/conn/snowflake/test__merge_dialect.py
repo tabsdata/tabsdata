@@ -40,6 +40,9 @@ from tabsdatak.conn.common.sql._merge.dialect import Staged
 from tabsdatak.conn.snowflake import MergeCfg
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.snowflake import _iceberg
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
 from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
@@ -164,32 +167,55 @@ def test_evolve_probes_the_table_with_desc():
     assert 'DESC TABLE "DB"."S"."T"' in fake.log
 
 
-@pytest.mark.parametrize(
-    "stored,inferred",
-    [
-        # The same type under two names: DESC TABLE reports the column
-        # VARCHAR(16777216) where infer_schema calls it TEXT.
-        ("VARCHAR(16777216)", "TEXT"),
-        # A widening, which this dialect does not do yet.
-        ("VARCHAR(10)", "VARCHAR(20)"),
-        # A precision the engine could not change either way.
-        ("TIMESTAMP_NTZ(9)", "TIMESTAMP_NTZ(6)"),
-        # Real drift, in both directions.
-        ("NUMBER(20,2)", "NUMBER(10,2)"),
-        ("NUMBER(38,0)", "TEXT"),
-    ],
-)
-def test_evolve_leaves_every_retype_alone(stored, inferred):
-    # ADD_COLUMN is the only action the renderer supports, so a column both
-    # sides have renders to nothing whatever its type does -- including the
-    # spelling difference the two vocabularies produce for a column nobody
-    # touched, which must not become DDL or refuse the write.
-    fake, changed = _evolve([("AMOUNT", stored)], [("AMOUNT", inferred)])
+def test_evolve_widens_a_column_the_batch_has_outgrown():
+    fake, changed = _evolve(
+        [("NAME", "VARCHAR(10)")], [("NAME", "VARCHAR(20)")], target='"T"'
+    )
+    assert changed == ["NAME"]
+    assert _alters(fake.log) == [
+        'ALTER TABLE "T" ALTER COLUMN "NAME" SET DATA TYPE VARCHAR(20)'
+    ]
+
+
+def test_evolve_grows_a_number_precision_at_a_fixed_scale():
+    fake, _ = _evolve(
+        [("PRICE", "NUMBER(10,2)")], [("PRICE", "NUMBER(20,2)")], target='"T"'
+    )
+    assert _alters(fake.log) == [
+        'ALTER TABLE "T" ALTER COLUMN "PRICE" SET DATA TYPE NUMBER(20,2)'
+    ]
+
+
+def test_evolve_leaves_a_synonym_of_the_same_type_alone():
+    # The load-bearing case: DESC TABLE reports the column VARCHAR(16777216) and
+    # infer_schema calls the same type TEXT. Aligned onto the target's own
+    # spelling, the two are one type and no change is reported -- without which
+    # every write on a table with an unparameterized text column would be
+    # refused as an unsafe retype.
+    fake, changed = _evolve([("NAME", "VARCHAR(16777216)")], [("NAME", "TEXT")])
     assert changed == []
     assert _alters(fake.log) == []
 
 
-def test_evolve_still_adds_beside_a_retype_it_leaves_alone():
+@pytest.mark.parametrize(
+    "stored,inferred",
+    [
+        ("TIMESTAMP_NTZ(9)", "TIMESTAMP_NTZ(6)"),
+        ("TIMESTAMP_NTZ(6)", "TIMESTAMP_NTZ(9)"),
+        ("BINARY(10)", "BINARY(20)"),
+    ],
+)
+def test_evolve_leaves_a_base_it_cannot_alter_alone(stored, inferred):
+    # ALTER COLUMN reaches the parameters of NUMBER and VARCHAR alone, so a
+    # timestamp whose precision the two sides report differently is a difference
+    # with no statement behind it. The load casts into the column as it stands --
+    # refusing the write would stop a load that works.
+    fake, changed = _evolve([("SEEN_AT", stored)], [("SEEN_AT", inferred)])
+    assert changed == []
+    assert _alters(fake.log) == []
+
+
+def test_evolve_still_adds_beside_a_base_it_cannot_alter():
     # And the rest of the batch is not held hostage to it: the new column lands.
     fake, changed = _evolve(
         [("ID", "NUMBER(38,0)"), ("SEEN_AT", "TIMESTAMP_NTZ(9)")],
@@ -204,6 +230,52 @@ def test_evolve_still_adds_beside_a_retype_it_leaves_alone():
     assert _alters(fake.log) == [
         'ALTER TABLE "T" ADD COLUMN IF NOT EXISTS "NOTE" TEXT'
     ]
+
+
+@pytest.mark.parametrize(
+    "stored,inferred",
+    [
+        ("NUMBER(38,0)", "TEXT"),
+        ("NUMBER(38,0)", "FLOAT"),
+        ("VARCHAR(20)", "VARCHAR(10)"),
+        ("NUMBER(20,2)", "NUMBER(20,4)"),
+        ("DATE", "TIMESTAMP_NTZ(9)"),
+    ],
+)
+def test_evolve_refuses_a_change_snowflake_cannot_make(stored, inferred):
+    # A narrowing, or a conversion between two bases: the batch's values have
+    # nowhere to land, so the write stops here rather than at the MERGE.
+    fake = column_fakes([("AMOUNT", stored)], [("AMOUNT", inferred)])
+    with pytest.raises(_iceberg.UnsafeSchemaChangeError):
+        _dialect(fake).evolve(_TARGET, _staged([("AMOUNT", inferred)]), "OP")
+    assert _alters(fake.log) == []
+
+
+def test_evolve_refuses_before_it_alters_anything():
+    # The check covers the whole delta, so a column that could have been added
+    # is not added when another column's retype is refused. Half a schema
+    # change is worse than none.
+    columns = [("AMOUNT", "FLOAT"), ("NOTE", "TEXT")]
+    fake = column_fakes([("AMOUNT", "NUMBER(38,0)")], columns)
+    with pytest.raises(_iceberg.UnsafeSchemaChangeError):
+        _dialect(fake).evolve(_TARGET, _staged(columns), "OP")
+    assert _alters(fake.log) == []
+
+
+def test_evolve_adds_and_widens_in_one_pass():
+    # ``compute_delta`` reports every addition before any retype, and the
+    # returned names follow the statements that were run.
+    fake, changed = _evolve(
+        [("NAME", "VARCHAR(10)")],
+        [("NAME", "VARCHAR(20)"), ("AMOUNT", "FLOAT")],
+        target='"T"',
+    )
+    assert changed == ["AMOUNT", "NAME"]
+    assert _alters(fake.log) == [
+        'ALTER TABLE "T" ADD COLUMN IF NOT EXISTS "AMOUNT" FLOAT',
+        'ALTER TABLE "T" ALTER COLUMN "NAME" SET DATA TYPE VARCHAR(20)',
+    ]
+
 
 
 def test_evolve_emits_no_ddl_beyond_the_alters():

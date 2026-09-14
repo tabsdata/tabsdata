@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
@@ -20,6 +22,7 @@ from testi_tabsdatak.conn.snowflake.backend import dest_conn, store
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDest, _plugin as plugin
+from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
 
 pytestmark = pytest.mark.snowflake
 
@@ -165,7 +168,10 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 # ---------------------------------------------------------------------------
 
 
-def _batch(path: Path, columns: dict[str, list]) -> Path:
+def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
+    """A batch parquet. A column given as a `Series` pins its dtype, which the
+    type-widening tests need -- a parquet decimal carries its precision and
+    scale, and a timestamp its unit."""
     pl.DataFrame(columns).write_parquet(path)
     return path
 
@@ -631,7 +637,7 @@ def test_dest_plugin_write_out_merge_keeps_the_target_schema_on_strict(
     domain_snowflake: SnowflakeDomain,
     tmp_path: Path,
 ):
-    # The merge path reaches ``_add_missing_columns`` only on update, so a
+    # The merge path reaches ``_evolve_target_columns`` only on update, so a
     # same-shape batch has to merge cleanly under strict without it.
     db = store(domain_snowflake)
     table = "TD_DEST_MERGE_STRICT"
@@ -837,5 +843,221 @@ def test_dest_plugin_write_out_merge_keeps_the_marker_out_of_the_target(
                 "status": ["new", "shipped", "new"],
             }),
         )
+    finally:
+        db.drop_table(table)
+
+
+# ---------------------------------------------------------------------------
+# if_table_exists="merge" + type widening
+#
+# ENABLE_SCHEMA_EVOLUTION does not reach a MERGE, so the merge path ALTERs the
+# target itself: a column both sides have whose type has moved is widened before
+# the statement runs, and one Snowflake cannot widen stops the write instead.
+#
+# What a parquet file can say about a type is the question underneath all of
+# these. It carries a decimal's precision and scale and a timestamp's unit, and
+# carries no length for a string at all -- so these tests are also what pins
+# down what ``infer_schema`` reports back for each.
+#
+# A target of a particular width has to be built with DDL: one the connector
+# creates is templated from the staged file itself, so both sides would agree by
+# construction and there would be nothing to widen.
+# ---------------------------------------------------------------------------
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_merge_repeats_without_touching_the_schema(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # The target the first merge creates is templated from the staged file, so
+    # the second merge diffs that file against a table built from it and must
+    # find nothing to do. The two sides do not spell a type the same way --
+    # DESC TABLE reports VARCHAR(16777216) where infer_schema reports TEXT -- so
+    # this is the case that breaks if the spellings are compared as strings.
+    db = store(domain_snowflake)
+    table = "TD_DEST_MERGE_SCHEMA_STABLE"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1], "status": ["new"], "amount": [10], "op": ["i"]},
+    )
+    delta = _batch(
+        tmp_path / "delta.parquet",
+        {
+            "order_id": [1, 2],
+            "status": ["shipped", "new"],
+            "amount": [11, 20],
+            "op": ["u", "i"],
+        },
+    )
+    try:
+        _merge_out(conn, work, table, seed, merge_cfg, schema_evolution="update")
+        before = db.column_types(table)
+
+        _merge_out(conn, work, table, delta, merge_cfg, schema_evolution="update")
+        assert db.column_types(table) == before
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["shipped", "new"],
+                "amount": [11, 20],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_merge_keeps_a_timestamp_precision_it_cannot_alter(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # TIMESTAMP_NTZ defaults to precision 9 and the parquet carries microseconds,
+    # so the two sides can report the column differently -- a real difference
+    # with no statement behind it, since ALTER COLUMN reaches the parameters of
+    # NUMBER and VARCHAR alone. The load casts into the column as it stands, so
+    # the write has to go through and the precision has to stay where it was.
+    db = store(domain_snowflake)
+    table = "TD_DEST_MERGE_TIMESTAMP"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), SEEN_AT TIMESTAMP_NTZ")
+    before = db.column_types(table)
+    batch = _batch(
+        tmp_path / "stamped.parquet",
+        {
+            "order_id": [1],
+            "seen_at": pl.Series(
+                [datetime(2026, 1, 2, 3, 4, 5)], dtype=pl.Datetime("us")
+            ),
+            "op": ["i"],
+        },
+    )
+    try:
+        _merge_out(conn, work, table, batch, merge_cfg, schema_evolution="update")
+        assert db.column_types(table) == before
+        assert db.count(table) == 1
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_merge_widens_a_number_precision(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # Parquet stores a decimal's precision and scale, so this is the one widening
+    # the incoming file can actually justify: same scale, more digits. If it
+    # fails as an unsafe retype instead, infer_schema is reporting the column
+    # without its parameters and no decimal widening is reachable from a file.
+    db = store(domain_snowflake)
+    table = "TD_DEST_MERGE_WIDEN_NUMBER"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), AMOUNT NUMBER(9,2)")
+    batch = _batch(
+        tmp_path / "priced.parquet",
+        {
+            "order_id": [1],
+            "amount": pl.Series([Decimal("123456.78")], dtype=pl.Decimal(20, 2)),
+            "op": ["i"],
+        },
+    )
+    try:
+        _merge_out(conn, work, table, batch, merge_cfg, schema_evolution="update")
+        assert db.column_types(table)["amount"] == ("NUMBER", 20, 2)
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({"order_id": [1], "amount": [Decimal("123456.78")]}),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_merge_widens_a_bounded_text_column_to_full_width(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # A parquet string carries no length, so infer_schema can only report the
+    # widest text type and every bounded text column in the target is widened to
+    # it -- on the first update-mode merge, whatever the values in the batch
+    # measure. Recorded rather than endorsed: it is the one widening no file can
+    # ever justify, and Snowflake cannot narrow the column back afterwards.
+    db = store(domain_snowflake)
+    table = "TD_DEST_MERGE_WIDEN_TEXT"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
+    assert db.column_types(table)["status"] == ("TEXT", 10, None)
+    batch = _batch(
+        tmp_path / "short.parquet",
+        {"order_id": [1], "status": ["new"], "op": ["i"]},
+    )
+    try:
+        _merge_out(conn, work, table, batch, merge_cfg, schema_evolution="update")
+        assert db.column_types(table)["status"] == ("TEXT", 16777216, None)
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_merge_holds_a_bounded_text_column_on_strict(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # The counterpart: strict never reaches the ALTER pass at all, so the target
+    # keeps the width it was declared with and the rows still land.
+    db = store(domain_snowflake)
+    table = "TD_DEST_MERGE_STRICT_TEXT"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
+    batch = _batch(
+        tmp_path / "short.parquet",
+        {"order_id": [1], "status": ["new"], "op": ["i"]},
+    )
+    try:
+        _merge_out(conn, work, table, batch, merge_cfg, schema_evolution="strict")
+        assert db.column_types(table)["status"] == ("TEXT", 10, None)
+        assert_frames_match(
+            db.read_table(table), pl.DataFrame({"order_id": [1], "status": ["new"]})
+        )
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_merge_refuses_a_change_snowflake_cannot_make(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # A batch whose column is text against a target column that is a number:
+    # no ALTER reconciles two bases, so the write stops before anything is
+    # staged rather than after the target has been half evolved.
+    db = store(domain_snowflake)
+    table = "TD_DEST_MERGE_UNSAFE_RETYPE"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), AMOUNT NUMBER(10,2)")
+    before = db.column_types(table)
+    batch = _batch(
+        tmp_path / "lettered.parquet",
+        {"order_id": [1], "amount": ["not a number"], "op": ["i"]},
+    )
+    try:
+        with pytest.raises(SnowflakeRuntimeException):
+            _merge_out(conn, work, table, batch, merge_cfg, schema_evolution="update")
+        assert db.column_types(table) == before
+        assert db.count(table) == 0
     finally:
         db.drop_table(table)
