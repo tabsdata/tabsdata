@@ -13,8 +13,7 @@ use std::path::PathBuf;
 use td_common::env::{DATABASE_DIR_ENV, REPOSITORY_URI_ENV};
 
 /// Boot knobs for the managed server. Not config surface: deployments derive
-/// these via [`boot_config`]; the shared test server builds them directly. No
-/// superuser name knob — `postgresql_embedded` always runs `initdb` with its
+/// these via [`boot_config`]. No superuser name knob — `postgresql_embedded` always runs `initdb` with its
 /// fixed default (`postgres`).
 #[derive(Debug, Clone, Default)]
 pub struct BootConfig {

@@ -22,13 +22,6 @@ script = [
         end
     end
 
-    # shared_pg_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/td-test-pg"
-    # shared_pg_exists = is_path_exists ${shared_pg_folder}
-    # if ${shared_pg_exists}
-    #     info "🧹 Removing the stale shared test PostgreSQL folder: ${shared_pg_folder}"
-    #     rm -r ${shared_pg_folder}
-    # end
-
     test_rs_parallel = get_env TD_TEST_RS_PARALLEL
     if eq ${test_rs_parallel} "true"
         info "⌛️ Fail-Fast enabled for parallel tests. All groups of Rust tests will execute even if some group has failures."
@@ -50,29 +43,6 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     unset_env TD_TROUBLESHOOT_RS
-
-    # shared_pg_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/td-test-pg"
-    # shared_pg_exists = is_path_exists ${shared_pg_folder}
-    # if ${shared_pg_exists}
-    #    info "🧹 Removing the shared test PostgreSQL folder: ${shared_pg_folder}"
-    #    attempts = range 0 24
-    #    for attempt in ${attempts}
-    #        still_present = is_path_exists ${shared_pg_folder}
-    #        if ${still_present}
-    #            exec python -c "import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)" ${shared_pg_folder}
-    #            still_present = is_path_exists ${shared_pg_folder}
-    #            if ${still_present}
-    #                info "🧹 Shared test PostgreSQL folder still locked; retrying in 5s"
-    #                sleep 5000
-    #            end
-    #        end
-    #    end
-    #    release ${attempts}
-    #    still_present = is_path_exists ${shared_pg_folder}
-    #    if ${still_present}
-    #        warn "🧹 Could not remove the shared test PostgreSQL folder after 2 minutes; leaving it in place (it will be recreated on the next run)"
-    #    end
-    # end
 
     exit_code = get_env TD_TESTS_CODE_RS
     if not eq ${exit_code} "0"

@@ -42,11 +42,9 @@ impl SchemaComponent for ApiserverComponent {
         &td_schema::CurrentSource
     }
 
-    /// Fail fast on server version / lock capacity / upgrader privileges
-    /// before any delta.
+    /// Fail fast on server version and upgrader privileges before any delta.
     async fn preflight(&self, admin: &AdminPool) -> Result<(), DbError> {
         admin.check_pg_min_version().await?;
-        admin.check_pg_lock_capacity().await?;
         admin.check_upgrader_permissions().await
     }
 
@@ -64,7 +62,6 @@ impl SchemaComponent for ApiserverComponent {
         serving.check_tabsdata_edition().await?;
         debug!("db.check: edition OK");
         serving.check_pg_min_version().await?;
-        serving.check_pg_lock_capacity().await?;
         serving.check_rls_posture().await?;
         Ok(())
     }

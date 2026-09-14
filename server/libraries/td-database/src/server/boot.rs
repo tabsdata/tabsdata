@@ -75,20 +75,6 @@ fn base_settings(cfg: &BootConfig) -> Settings {
     if let Some(port) = cfg.port {
         settings.port = port;
     }
-    // One server backs the whole test suite; a high-concurrency runner opens
-    // many pools at once, so raise PostgreSQL's default (100) well above it.
-    settings
-        .configuration
-        .insert("max_connections".to_string(), "500".to_string());
-    // Each test upgrades its own schema (many tables/indexes) in a single
-    // transaction, and every versioned-row insert takes an advisory lock held
-    // to commit; with hundreds running concurrently the default per-transaction
-    // lock allotment (64) exhausts the shared lock table ("out of shared
-    // memory" / 53200). Size it for a full schema upgrade — and keep it at or
-    // above the floor `check_pg_lock_capacity` enforces.
-    settings
-        .configuration
-        .insert("max_locks_per_transaction".to_string(), "1024".to_string());
     settings
 }
 
@@ -130,7 +116,7 @@ async fn boot(mut server: PostgreSQL) -> Result<(), DbError> {
 /// Boot the server detached, unconditionally — no reuse check. The caller is
 /// responsible for not booting over a server it wants to keep; a boot that
 /// loses a race to a running postmaster fails cleanly (see [`boot`]).
-pub async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
+async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
     clear_stale_postmaster(&cfg.data_dir_or_default());
     let settings = boot_settings(cfg)?;
     let (host, port) = (settings.host.clone(), settings.port);

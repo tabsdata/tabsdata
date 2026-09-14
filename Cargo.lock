@@ -9531,7 +9531,6 @@ name = "td-database"
 version = "2.1.0"
 dependencies = [
  "async-trait",
- "fslock",
  "futures-util",
  "inventory",
  "openssl",

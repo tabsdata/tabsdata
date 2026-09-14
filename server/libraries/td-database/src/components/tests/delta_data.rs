@@ -12,7 +12,7 @@ use crate::config::{DatabaseConfig, PostgresConnect, RlsRoles, Schema};
 use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
-use crate::test_utils::server;
+use crate::test_utils::domain;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use td_common::id::{Id, id_time};
@@ -959,8 +959,7 @@ async fn the_upgrade_transaction_is_not_project_scoped_postgres() {
 /// without it still sees nothing.
 #[tokio::test]
 async fn force_rls_binds_a_non_superuser_owner_postgres() {
-    server::ensure_started().await;
-    let su = connect(&server::admin_base()).await;
+    let su = connect(&domain::admin_base()).await;
     let uid = td_common::id::id();
     let (owner, schema) = (format!("own_{uid}"), format!("sch_{uid}"));
 
@@ -990,7 +989,7 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
             .unwrap();
     }
 
-    let mut identity = server::admin_base();
+    let mut identity = domain::admin_base();
     identity.username = owner.clone();
     identity.password = "own_pw".to_owned();
     let as_owner = connect(&identity).await;
@@ -1075,8 +1074,7 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
 /// NULL and its `SET NOT NULL` would fail the ladder.
 #[tokio::test]
 async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
-    server::ensure_started().await;
-    let su = connect(&server::admin_base()).await;
+    let su = connect(&domain::admin_base()).await;
     let uid = td_common::id::id();
     let (owner, schema) = (format!("own_{uid}"), format!("sch_{uid}"));
     let roles = RlsRoles {
@@ -1111,7 +1109,7 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
             .unwrap();
     }
 
-    let mut identity = server::admin_base();
+    let mut identity = domain::admin_base();
     identity.username = owner.clone();
     identity.password = "own_pw".to_owned();
     let config = DatabaseConfig {
@@ -1199,8 +1197,7 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
 /// nobody. The upgrade must refuse before the ladder opens, naming the grant.
 #[tokio::test]
 async fn upgrade_refuses_a_missing_across_projects_membership_postgres() {
-    server::ensure_started().await;
-    let su = connect(&server::admin_base()).await;
+    let su = connect(&domain::admin_base()).await;
     let uid = td_common::id::id();
     let (owner, schema) = (format!("own_{uid}"), format!("sch_{uid}"));
     let roles = RlsRoles {
@@ -1225,7 +1222,7 @@ async fn upgrade_refuses_a_missing_across_projects_membership_postgres() {
             .unwrap();
     }
 
-    let mut identity = server::admin_base();
+    let mut identity = domain::admin_base();
     identity.username = owner.clone();
     identity.password = "own_pw".to_owned();
     let admin = AdminPool::connect(&DatabaseConfig {

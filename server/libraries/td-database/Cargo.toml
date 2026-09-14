@@ -38,11 +38,9 @@ dummy = []
 mock-env = []
 test_logging = []
 # `test-utils` exposes the test pool factories in `td_database::test_utils`.
-# Pulls in embedded postgres (and `fslock` to serialize the shared server's
-# first boot across processes).
-test-utils = ["embedded-postgres", "dep:fslock"]
+test-utils = []
 # `embedded-postgres` enables the in-process Postgres server used by the
-# apiserver's default-when-no-URL path and by test_utils::postgres.
+# apiserver's default-when-no-URL path.
 embedded-postgres = ["dep:postgresql_embedded"]
 
 [package.metadata.cargo-machete]
@@ -76,7 +74,6 @@ te-system = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
-fslock = { workspace = true, optional = true }
 futures-util = { workspace = true }
 inventory = { workspace = true }
 postgresql_embedded = { workspace = true, features = ["bundled", "tokio"], optional = true }

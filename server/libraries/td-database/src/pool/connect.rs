@@ -272,7 +272,7 @@ mod tests {
     use crate::config::RlsRoles;
     use crate::config::{PoolConfig, PoolsConfig, PostgresConfig, PostgresConnect};
     use crate::connection::PgConnectionExt;
-    use crate::test_utils::server;
+    use crate::test_utils::domain;
     use std::time::Duration;
     use tracing::log::LevelFilter;
 
@@ -295,7 +295,7 @@ mod tests {
     async fn pg_begin_ro_rejects_writes() {
         let test_db = crate::test_utils::postgres::pool().await;
         let config = crate::test_utils::postgres::schema_connectable(
-            &crate::test_utils::server::admin_base(),
+            &crate::test_utils::domain::admin_base(),
             test_db.schema(),
         );
         let pool = crate::db(&config).await.unwrap();
@@ -366,9 +366,8 @@ mod tests {
     /// not as an opaque pool timeout.
     #[tokio::test]
     async fn serving_connect_surfaces_unswitchable_app_role() {
-        server::ensure_started().await;
         let config = DatabaseConfig {
-            conn: server::admin_base(),
+            conn: domain::admin_base(),
             schema: Some(Schema::new("public")),
             roles: Some(RlsRoles {
                 in_project: format!("td_no_role_{}", td_common::id::id()),

@@ -13,23 +13,22 @@ use crate::config::{DatabaseConfig, PoolConfig, PoolsConfig, PostgresConnect, Rl
 use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
-use crate::test_utils::server;
+use crate::test_utils::domain;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
 
 async fn su_pool() -> PgPool {
-    server::ensure_started().await;
     PgPoolOptions::new()
         .max_connections(1)
-        .connect_with(pg_connect_options(&server::admin_base()))
+        .connect_with(pg_connect_options(&domain::admin_base()))
         .await
         .unwrap()
 }
 
 fn login(username: &str, password: &str) -> PostgresConnect {
     PostgresConnect {
-        options: server::admin_base().options,
+        options: domain::admin_base().options,
         username: username.to_owned(),
         password: password.to_owned(),
     }
@@ -231,7 +230,7 @@ async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
     }
 
     let privileged = AdminPool::connect(&DatabaseConfig {
-        conn: server::admin_base(),
+        conn: domain::admin_base(),
         schema: None,
         roles: None,
         pool: crate::test_utils::test_pool_config(),
@@ -357,7 +356,7 @@ async fn test_superuser_provision_leaves_colliding_role_untouched() {
     .await;
     let hash = owner_password_hash(&su, &foreign).await;
 
-    let admin = AdminPool::connect(&config(server::admin_base(), &foreign, &roles))
+    let admin = AdminPool::connect(&config(domain::admin_base(), &foreign, &roles))
         .await
         .unwrap();
     let spec = ProvisionSpec {

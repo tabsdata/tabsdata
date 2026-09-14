@@ -260,5 +260,5 @@ set it to `skip`. td-database's own internals suite (`components/tests/*`,
 `pool::connect`) tests the database layer itself rather than apiserver logic, so it needs
 a superuser: it creates and drops cluster-global roles and sets `BYPASSRLS`. It takes that
 from the `apiserver_postgres_internals` domain, whose descriptor carries the owning system's
-superuser, and falls back to the embedded server in `target/td-test-pg` when that domain's
+superuser. Nothing starts a server for it, so it fails rather than skips when that domain's
 environment tier is absent.

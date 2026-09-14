@@ -285,14 +285,4 @@ pub enum DbError {
          once it has finished."
     )]
     ConcurrentUpgradeInProgress(String) = 5046,
-    #[error(
-        "PostgreSQL `max_locks_per_transaction` is too low: {0}, but Tabsdata \
-         requires {1} or more. Versioned tables close their previous version \
-         under a per-row advisory lock held to commit, and a function register \
-         or plan build writes thousands of versioned rows in one transaction; \
-         at a lower setting those transactions abort with 'out of shared \
-         memory'. Raise `max_locks_per_transaction` to {1} in postgresql.conf \
-         and restart the server."
-    )]
-    InsufficientLockCapacity(i32, i32) = 5048,
 }

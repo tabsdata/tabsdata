@@ -10,9 +10,10 @@
 //! test queries. Returned databases are freshly connected but **un-upgraded**;
 //! callers that need the schema applied call [`TestDb::upgrade`].
 //!
-//! Only this crate's own internal factories boot the shared embedded server
-//! ([`server`]); the [`postgres::pools`] path the `#[td_test::test(db)]` macro
-//! uses takes its connect from the caller, which points it at a tdx-provisioned
+//! Nothing here starts a server. This crate's own internal factories take the
+//! superuser connect from the tdx domain in [`domain`]; the
+//! [`postgres::pools`] path the `#[td_test::test(db)]` macro uses takes its
+//! connect from the caller, which points it at another tdx-provisioned
 //! domain's database.
 
 use crate::components::{AdminPool, ApiserverComponent};
@@ -24,8 +25,8 @@ use std::ops::Deref;
 use std::time::Duration;
 use tracing::warn;
 
+pub mod domain;
 pub mod postgres;
-pub mod server;
 /// Pool settings for the test pools. One server backs the whole suite, so each
 /// pool stays lean and holds **no resident connections**
 /// (`min_connections = 0` + short idle timeout: connections open on demand and

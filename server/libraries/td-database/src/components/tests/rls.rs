@@ -13,7 +13,7 @@ use crate::connection::PgConnectionExt;
 use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
-use crate::test_utils::server;
+use crate::test_utils::domain;
 use sqlx::postgres::PgPoolOptions;
 use td_schema::ACROSS_PROJECTS_ROLE;
 
@@ -47,7 +47,7 @@ async fn test_rls_project_isolation() {
     // but inherits neither, so an unswitched transaction is fail-closed.
     let su = PgPoolOptions::new()
         .max_connections(1)
-        .connect_with(pg_connect_options(&server::admin_base()))
+        .connect_with(pg_connect_options(&domain::admin_base()))
         .await
         .unwrap();
     let schema = db.schema();
@@ -91,7 +91,7 @@ async fn test_rls_project_isolation() {
     }
 
     let app_connect = PostgresConnect {
-        options: server::admin_base().options,
+        options: domain::admin_base().options,
         username: app_user.clone(),
         password: "app_pw".to_string(),
     };
@@ -228,7 +228,7 @@ async fn test_check_rejects_bypassing_serving_role() {
     // A unique name — roles are cluster-global on the shared server.
     let su = PgPoolOptions::new()
         .max_connections(1)
-        .connect_with(pg_connect_options(&server::admin_base()))
+        .connect_with(pg_connect_options(&domain::admin_base()))
         .await
         .unwrap();
     let bypassing = format!("b_{}", td_common::id::id());
@@ -242,7 +242,7 @@ async fn test_check_rejects_bypassing_serving_role() {
     // Pin the bypassing role so the pool's connections `SET ROLE` it (the
     // superuser may switch to any role).
     let cfg = DatabaseConfig {
-        conn: (server::admin_base()),
+        conn: (domain::admin_base()),
         schema: Some(db.schema().clone()),
         roles: Some(RlsRoles {
             in_project: bypassing.clone(),

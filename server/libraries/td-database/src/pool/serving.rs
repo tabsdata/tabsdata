@@ -157,11 +157,6 @@ impl TdPool {
         crate::pool::state::check_pg_min_version(&self.pool).await
     }
 
-    /// Verify the server's lock table is sized for bulk versioned writes.
-    pub async fn check_pg_lock_capacity(&self) -> Result<(), DbError> {
-        crate::pool::state::check_pg_lock_capacity(&self.pool).await
-    }
-
     pub async fn begin(&self) -> Result<Transaction<'static, Postgres>, Error> {
         self.pool.begin().await
     }

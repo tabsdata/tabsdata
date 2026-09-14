@@ -22,9 +22,8 @@ fn join_idens(idens: &[DynIden], sep: &str) -> String {
 /// In the trigger rather than the insert path so `valid_to` has one writer
 /// regardless of which crate, delta, seed or bulk statement inserts, and so
 /// the per-partition advisory lock (a row lock cannot cover the
-/// empty-partition race) is taken in the same statement that needs it. One
-/// lock entry per inserted row is held to commit; `td-database` enforces the
-/// lock-table floor that implies.
+/// empty-partition race) is taken in the same statement that needs it. It
+/// costs one lock entry per distinct partition inserted, held to commit.
 pub struct Scd2TriggerDef {
     /// Trigger name, e.g. `"functions__scd2_close"`.
     pub name: String,

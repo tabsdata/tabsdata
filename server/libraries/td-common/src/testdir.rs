@@ -37,8 +37,8 @@ macro_rules! tdtestdir {
 
 /// The workspace root, located by walking up from the running executable for a
 /// `.root` marker, else a `Cargo.toml` + `target/` dir (see [`find_root`]). Shared
-/// test infrastructure uses this to anchor stable, per-workspace paths (e.g. the
-/// shared test postgres data dir under `target/`).
+/// test infrastructure uses this to anchor stable, per-workspace paths under
+/// `target/`.
 pub fn root() -> PathBuf {
     find_root()
 }

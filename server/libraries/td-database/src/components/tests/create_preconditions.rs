@@ -12,7 +12,7 @@ use crate::config::{
     RlsRoles, Schema,
 };
 use crate::error::DbError;
-use crate::test_utils::server;
+use crate::test_utils::domain;
 use std::time::Duration;
 
 fn roles(uid: &impl std::fmt::Display) -> RlsRoles {
@@ -25,7 +25,7 @@ fn roles(uid: &impl std::fmt::Display) -> RlsRoles {
 /// The privileged pool `db create` provisions with.
 fn admin_config(roles: &RlsRoles) -> DatabaseConfig {
     DatabaseConfig {
-        conn: server::admin_base(),
+        conn: domain::admin_base(),
         schema: None,
         roles: Some(roles.clone()),
         pool: PoolsConfig {
@@ -47,7 +47,7 @@ fn components(schema: &str, roles: &RlsRoles) -> DatabaseComponents {
         ComponentConfig {
             postgres: PostgresConfig {
                 password: Some("owner_pw".to_owned()),
-                ..server::admin_base().options
+                ..domain::admin_base().options
             },
             schema: Some(Schema::new(schema)),
             in_project_role: Some(roles.in_project.clone()),
@@ -59,7 +59,6 @@ fn components(schema: &str, roles: &RlsRoles) -> DatabaseComponents {
 
 #[tokio::test]
 async fn test_provision_all_refuses_an_already_provisioned_component() {
-    server::ensure_started().await;
     let uid = td_common::id::id();
     let schema = format!("own_{uid}");
     let roles = roles(&uid);

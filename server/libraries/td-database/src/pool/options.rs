@@ -71,7 +71,7 @@ pub fn pg_connect_options(c: &PostgresConnect) -> PgConnectOptions {
 mod tests {
     use super::*;
     use crate::config::PostgresConfig;
-    use crate::test_utils::server;
+    use crate::test_utils::domain;
     use sqlx::postgres::PgPoolOptions;
     use std::collections::BTreeMap;
 
@@ -113,8 +113,7 @@ mod tests {
     /// is deliberate: sqlx sends `2` when unset, so a dropped mapping fails.
     #[tokio::test]
     async fn pg_connect_options_reach_the_server() {
-        server::ensure_started().await;
-        let base = server::admin_base();
+        let base = domain::admin_base();
         let connect = PostgresConnect {
             options: PostgresConfig {
                 application_name: Some("td-connect-options-test".to_string()),

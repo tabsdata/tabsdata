@@ -22,12 +22,10 @@ pub(crate) use entry::server_connectable;
 pub(crate) use credentials::{EmbeddedPassword, resolve_password};
 
 #[cfg(feature = "embedded-postgres")]
-pub(crate) use knobs::{BootConfig, boot_config, database_dir};
+pub(crate) use knobs::{boot_config, database_dir};
 
 #[cfg(feature = "embedded-postgres")]
 pub(crate) use boot::ServerHandle;
-#[cfg(all(feature = "embedded-postgres", any(test, feature = "test-utils")))]
-pub(crate) use boot::boot_detached;
 #[cfg(feature = "embedded-postgres")]
 pub(crate) use secrets::{load_or_create_owner_password, load_owner_password, load_password};
 

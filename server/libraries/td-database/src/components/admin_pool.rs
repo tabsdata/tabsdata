@@ -232,12 +232,6 @@ impl AdminPool {
         crate::pool::state::check_pg_min_version(&self.pool).await
     }
 
-    /// Refuse a server whose `max_locks_per_transaction` cannot hold the
-    /// per-row locks a bulk write into a versioned table takes.
-    pub(crate) async fn check_pg_lock_capacity(&self) -> Result<(), DbError> {
-        crate::pool::state::check_pg_lock_capacity(&self.pool).await
-    }
-
     /// Verify the upgrader role has CREATE on the application schema — caught
     /// up front instead of failing mid-upgrade with an opaque error.
     pub(crate) async fn check_upgrader_permissions(&self) -> Result<(), DbError> {
