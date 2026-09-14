@@ -44,7 +44,6 @@ pub mod physical_table_data_version;
 pub mod project;
 pub mod query_filters;
 pub mod role;
-pub mod run_metrics;
 pub mod runtime_info;
 pub mod scd2_interval;
 pub mod simple_permission;

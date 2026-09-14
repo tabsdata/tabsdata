@@ -53,18 +53,6 @@ pub enum PhysicalFunctionRuns {
     // Per-attempt audit status. Canonical flow-control status lives on
     // `logical_function_runs.status` — the two are independent.
     Status,
-    // UTC epoch-ms bucket floors derived from `ended_on` at terminalization.
-    // NULL until the attempt reaches a terminal status.
-    EndedOnHourMs,
-    EndedOnDayMs,
-    EndedOnWeekMs,
-    EndedOnMonthMs,
-    // Aggregated per-attempt metrics. NULL except when the attempt
-    // reached `Done` (i.e. produced output). Populated atomically with
-    // `status` and `ended_on` from the worker callback's `RunMetrics`.
-    MetricTableVersions,
-    MetricRows,
-    MetricDataBytes,
     LogicalFunctionRunId,
     ValidTo,
 }
@@ -103,13 +91,6 @@ impl Entity for Defs {
                 // atomically with status/ended_on at terminalization. The
                 // metric columns are populated only when the attempt
                 // produced output (status = Done).
-                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnHourMs).big_integer().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnDayMs).big_integer().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnWeekMs).big_integer().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnMonthMs).big_integer().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::MetricTableVersions).big_integer().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::MetricRows).big_integer().null())
-                .col(ColumnDef::new(PhysicalFunctionRuns::MetricDataBytes).big_integer().null())
                 // Declared last so the appending delta lands on the same attnum a
                 // fresh install does: the with-names view expands `*`.
                 .col(ColumnDef::new(PhysicalFunctionRuns::BasePath).text().not_null())

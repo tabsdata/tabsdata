@@ -224,16 +224,6 @@ impl Entity for Defs {
                     Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::FunctionVersionPatchId)),
                     Alias::new("function_version_patch_id"),
                 )
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnHourMs)), Alias::new("ended_on_hour_ms"))
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnDayMs)), Alias::new("ended_on_day_ms"))
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnWeekMs)), Alias::new("ended_on_week_ms"))
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnMonthMs)), Alias::new("ended_on_month_ms"))
-                .expr_as(
-                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::MetricTableVersions)),
-                    Alias::new("metric_table_versions"),
-                )
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::MetricRows)), Alias::new("metric_rows"))
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::MetricDataBytes)), Alias::new("metric_data_bytes"))
                 .from(LogicalFunctionRuns::Table)
                 .join(
                     JoinType::LeftJoin,

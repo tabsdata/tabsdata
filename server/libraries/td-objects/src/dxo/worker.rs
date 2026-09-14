@@ -2,21 +2,17 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::run_metrics::RunMetrics;
 use crate::dxo::yaml::WorkerOutput;
-use crate::dxo::yaml::function::WrittenTable;
 use crate::types::basic::{
-    AtTime, ByteCount, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask,
-    Enabled, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek, EpochMs, ExecutionId,
-    ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId, LogsCastNumber,
-    OfFunction, Patch, PhysicalFunctionRunId, ProjectId, ProjectName, RowCount, SizeThreshold,
-    Started, TableVersionCount, TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId,
+    AtTime, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, Enabled, Ended,
+    ExecutionId, ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
+    LogsCastNumber, OfFunction, Patch, PhysicalFunctionRunId, ProjectId, ProjectName,
+    SizeThreshold, Started, TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId,
     WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 use chrono::{DateTime, Utc};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, or};
-use td_common::bucket::BucketFloors;
 use td_common::datetime::Timestamp;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::logging::LOG_EXTENSION;
@@ -205,19 +201,6 @@ pub struct WorkerExecutionUpdate {
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
     pub status: WorkerCallbackStatus,
-    // Bucket floors derived from `ended_on`. NULL while still
-    // running (no `ended_on` yet); populated at terminalization
-    // via td_common::bucket::BucketFloors::from_utc.
-    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
-    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
-    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
-    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
-    // Per-attempt metrics aggregated from the worker callback's
-    // Function output. `metric_data_bytes` stays None when the
-    // worker yaml omits `data_bytes` on every written table.
-    pub metric_table_versions: Option<TableVersionCount>,
-    pub metric_rows: Option<RowCount>,
-    pub metric_data_bytes: Option<ByteCount>,
 }
 
 impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
@@ -232,46 +215,6 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
             })
             .transpose()?;
 
-        // Single derivation site: every row whose `ended_on` is set also
-        // gets its four bucket-floor columns set.
-        let floors = ended_on.map(|t| {
-            let dt: DateTime<Utc> = ***t;
-            BucketFloors::from_utc(dt)
-        });
-
-        // `None` = no output payload; `data_bytes` itself stays optional
-        // for the older-worker-yaml case.
-        let metrics: Option<RunMetrics> = match &value.context {
-            Some(WorkerOutput::Function(o)) => {
-                let mut tables: i64 = 0;
-                let mut rows: i64 = 0;
-                let mut bytes: Option<i64> = None;
-                for w in &o.output {
-                    let info = match w {
-                        WrittenTable::Data { info, .. } | WrittenTable::Partitions { info, .. } => {
-                            info
-                        }
-                        WrittenTable::NoData { .. } => continue,
-                    };
-                    tables += 1;
-                    rows += *info.row_count;
-                    if let Some(b) = &info.data_bytes {
-                        bytes = Some(bytes.unwrap_or(0) + **b);
-                    }
-                }
-                Some(RunMetrics {
-                    table_versions: TableVersionCount::try_from(tables)?,
-                    rows: RowCount::try_from(rows)?,
-                    data_bytes: bytes.map(ByteCount::try_from).transpose()?,
-                })
-            }
-            _ => None,
-        };
-
-        let metric_table_versions = metrics.as_ref().map(|m| m.table_versions);
-        let metric_rows = metrics.as_ref().map(|m| m.rows);
-        let metric_data_bytes = metrics.as_ref().and_then(|m| m.data_bytes);
-
         Ok(WorkerExecutionUpdate {
             started_on: value
                 .start
@@ -282,21 +225,6 @@ impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
                 .transpose()?,
             ended_on,
             status: value.status.clone(),
-            ended_on_hour_ms: floors
-                .map(|f| EpochMs::try_from(f.hour_ms).map(EndedHour::from))
-                .transpose()?,
-            ended_on_day_ms: floors
-                .map(|f| EpochMs::try_from(f.day_ms).map(EndedDay::from))
-                .transpose()?,
-            ended_on_week_ms: floors
-                .map(|f| EpochMs::try_from(f.week_ms).map(EndedWeek::from))
-                .transpose()?,
-            ended_on_month_ms: floors
-                .map(|f| EpochMs::try_from(f.month_ms).map(EndedMonth::from))
-                .transpose()?,
-            metric_table_versions,
-            metric_rows,
-            metric_data_bytes,
         })
     }
 }

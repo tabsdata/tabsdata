@@ -6,16 +6,13 @@ use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
-    AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
-    ConnectionKind, Decorator, Dispatched, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek,
-    EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx,
-    LogicalFunctionRunId, OfExecution, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-    ProjectId, ProjectName, RowCount, StageId, Started, StorageVersion, TableVersionCount,
+    AtTime, BasePath, BundleId, CollectionId, CollectionName, ConnectionId, ConnectionKind,
+    Decorator, Dispatched, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
+    FunctionVersionId, InputIdx, LogicalFunctionRunId, OfExecution, Patch, PhysicalFunctionRunId,
+    PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, Started, StorageVersion,
     TransactionId, Trigger, UserId, UserName,
 };
-use chrono::{DateTime, Utc};
 use ta_objects::FromDao;
-use td_common::bucket::BucketFloors;
 use td_error::TdError;
 
 /// One attempt at a logical function run. Attempts are the run's SCD2
@@ -50,21 +47,6 @@ pub struct PhysicalFunctionRunInsertDB {
     pub status: PhysicalFunctionRunStatus,
     // Patch resolved at mint, if any. NULL → head ran verbatim.
     pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
-
-    // UTC epoch-ms bucket floors derived from `ended_on` at
-    // terminalization. Written atomically with `status` + `ended_on`
-    // by the worker callback. NULL until the attempt terminates.
-    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
-    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
-    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
-    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
-
-    // Aggregated per-attempt outcome from the worker callback's
-    // `RunMetrics`. Populated only on `Done` terminalization;
-    // NULL for `Error` / `Failed` and for not-yet-terminal rows.
-    pub metric_table_versions: Option<TableVersionCount>,
-    pub metric_rows: Option<RowCount>,
-    pub metric_data_bytes: Option<ByteCount>,
 }
 
 #[ta_objects::Dao]
@@ -178,12 +160,6 @@ impl FromDao for PhysicalFunctionRun {
 // writes both via WorkerExecutionUpdate → builder. The LFR's
 // canonical status is updated separately via LogicalFunctionRunStatusUpdateDB
 // (sticky-Committed gate applies there, not here).
-//
-// At terminalization, the same UPDATE also writes the four
-// `ended_on_*_ms` bucket floors (computed in Rust from `ended_on`
-// via `td_common::bucket::BucketFloors::from_utc`) and — when the
-// attempt produced output — the three `metric_*` aggregates from
-// the callback's `RunMetrics`. Single atomic write.
 #[ta_objects::Dao]
 #[dao(
     table = "physical_function_runs",
@@ -196,15 +172,6 @@ pub struct PhysicalFunctionRunUpdateDB {
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
     pub status: PhysicalFunctionRunStatus,
-
-    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
-    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
-    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
-    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
-
-    pub metric_table_versions: Option<TableVersionCount>,
-    pub metric_rows: Option<RowCount>,
-    pub metric_data_bytes: Option<ByteCount>,
 }
 
 impl PhysicalFunctionRunUpdateDB {
@@ -218,35 +185,19 @@ impl PhysicalFunctionRunUpdateDB {
             started_on: None,
             ended_on: None,
             status: PhysicalFunctionRunStatus::Dispatched,
-            ended_on_hour_ms: None,
-            ended_on_day_ms: None,
-            ended_on_week_ms: None,
-            ended_on_month_ms: None,
-            metric_table_versions: None,
-            metric_rows: None,
-            metric_data_bytes: None,
         }
     }
 
     /// Terminalization without a worker callback: recover of a stuck
     /// `Requested` LFR abandons its in-flight attempt as `Failed` at
     /// `ended_on`, so late callbacks from it drop at the in-flight
-    /// filter. No metrics (the attempt produced no output).
+    /// filter.
     pub fn failed_at(ended_on: &AtTime) -> Result<Self, TdError> {
-        let dt: DateTime<Utc> = ***ended_on;
-        let floors = BucketFloors::from_utc(dt);
         Ok(Self {
             dispatched_on: None,
             started_on: None,
             ended_on: Some((*ended_on).into()),
             status: PhysicalFunctionRunStatus::Failed,
-            ended_on_hour_ms: Some(EpochMs::try_from(floors.hour_ms)?.into()),
-            ended_on_day_ms: Some(EpochMs::try_from(floors.day_ms)?.into()),
-            ended_on_week_ms: Some(EpochMs::try_from(floors.week_ms)?.into()),
-            ended_on_month_ms: Some(EpochMs::try_from(floors.month_ms)?.into()),
-            metric_table_versions: None,
-            metric_rows: None,
-            metric_data_bytes: None,
         })
     }
 }
@@ -259,13 +210,6 @@ impl TryFrom<&WorkerExecutionUpdate> for PhysicalFunctionRunUpdateDB {
             started_on: src.started_on,
             ended_on: src.ended_on,
             status: src.status.clone().try_into()?,
-            ended_on_hour_ms: src.ended_on_hour_ms,
-            ended_on_day_ms: src.ended_on_day_ms,
-            ended_on_week_ms: src.ended_on_week_ms,
-            ended_on_month_ms: src.ended_on_month_ms,
-            metric_table_versions: src.metric_table_versions,
-            metric_rows: src.metric_rows,
-            metric_data_bytes: src.metric_data_bytes,
         })
     }
 }

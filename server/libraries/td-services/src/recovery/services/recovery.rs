@@ -298,10 +298,6 @@ mod tests {
             .await?;
         assert_eq!(pfr_failed.base.status, PhysicalFunctionRunStatus::Failed);
         assert!(pfr_failed.base.ended_on.is_some());
-        assert!(pfr_failed.base.ended_on_hour_ms.is_some());
-        assert!(pfr_failed.base.ended_on_day_ms.is_some());
-        assert!(pfr_failed.base.ended_on_week_ms.is_some());
-        assert!(pfr_failed.base.ended_on_month_ms.is_some());
 
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
@@ -670,13 +666,6 @@ mod tests {
             started_on: None,
             ended_on: None,
             status: PhysicalFunctionRunStatus::Running,
-            ended_on_hour_ms: None,
-            ended_on_day_ms: None,
-            ended_on_week_ms: None,
-            ended_on_month_ms: None,
-            metric_table_versions: None,
-            metric_rows: None,
-            metric_data_bytes: None,
         };
         db.scd2().update(&to_running, &pfr_old.base.id).await?;
         let lfr: LogicalFunctionRunDB = db

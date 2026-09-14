@@ -9,6 +9,20 @@ WITH "attempts" AS  MATERIALIZED (SELECT "physical_function_runs"."ended_on" AS 
 
 RESET work_mem
 
+ALTER TABLE physical_function_runs DROP COLUMN ended_on_hour_ms
+
+ALTER TABLE physical_function_runs DROP COLUMN ended_on_day_ms
+
+ALTER TABLE physical_function_runs DROP COLUMN ended_on_week_ms
+
+ALTER TABLE physical_function_runs DROP COLUMN ended_on_month_ms
+
+ALTER TABLE physical_function_runs DROP COLUMN metric_table_versions
+
+ALTER TABLE physical_function_runs DROP COLUMN metric_rows
+
+ALTER TABLE physical_function_runs DROP COLUMN metric_data_bytes
+
 ALTER TABLE metrics_facts ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 
 ALTER TABLE metrics_facts ENABLE ROW LEVEL SECURITY

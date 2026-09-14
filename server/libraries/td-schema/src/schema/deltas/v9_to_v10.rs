@@ -30,6 +30,17 @@ const ATTEMPT_FAILED: &str = "F";
 /// Measured flat from 32 MB up on a million-attempt database.
 const DERIVATION_WORK_MEM: &str = "64MB";
 
+/// Only the old `/metrics` read these.
+const RETIRED_ATTEMPT_COLUMNS: [&str; 7] = [
+    "ended_on_hour_ms",
+    "ended_on_day_ms",
+    "ended_on_week_ms",
+    "ended_on_month_ms",
+    "metric_table_versions",
+    "metric_rows",
+    "metric_data_bytes",
+];
+
 const TENANT_PREDICATE: &str = "project_id = current_setting('app.project_id', true)";
 const ACROSS_PROJECTS_ROLE: &str = "td_across_projects";
 
@@ -613,6 +624,7 @@ impl SchemaDelta for Migration {
         out.push(format!("SET LOCAL work_mem = '{DERIVATION_WORK_MEM}'"));
         out.push(backfill_statement());
         out.push("RESET work_mem".to_string());
+        out.extend(RETIRED_ATTEMPT_COLUMNS.iter().map(|column| format!("ALTER TABLE physical_function_runs DROP COLUMN {column}")));
         out.extend(policies("metrics_facts"));
         out.push(update_db_version(Self::TO_VERSION));
         out

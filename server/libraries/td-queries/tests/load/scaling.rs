@@ -447,13 +447,6 @@ async fn time_chain_queries(
         started_on: None,
         ended_on: None,
         status: PhysicalFunctionRunStatus::Done,
-        ended_on_hour_ms: None,
-        ended_on_day_ms: None,
-        ended_on_week_ms: None,
-        ended_on_month_ms: None,
-        metric_table_versions: None,
-        metric_rows: None,
-        metric_data_bytes: None,
     };
     let _ = timed_once!(
         out,

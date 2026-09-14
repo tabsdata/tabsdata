@@ -89,13 +89,6 @@ pub fn build_function_run(
         ended_on: None,
         status: PhysicalFunctionRunStatus::Requested,
         function_version_patch_id: runnable.function_version_patch_id.clone(),
-        ended_on_hour_ms: None,
-        ended_on_day_ms: None,
-        ended_on_week_ms: None,
-        ended_on_month_ms: None,
-        metric_table_versions: None,
-        metric_rows: None,
-        metric_data_bytes: None,
     })
 }
 

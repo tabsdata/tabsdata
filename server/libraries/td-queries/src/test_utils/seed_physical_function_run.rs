@@ -56,13 +56,6 @@ pub(crate) async fn seed_physical_function_run(
         ended_on: None,
         status: PhysicalFunctionRunStatus::from(status),
         function_version_patch_id: None,
-        ended_on_hour_ms: None,
-        ended_on_day_ms: None,
-        ended_on_week_ms: None,
-        ended_on_month_ms: None,
-        metric_table_versions: None,
-        metric_rows: None,
-        metric_data_bytes: None,
         logical_function_run_id: logical.base.id.clone(),
     };
 

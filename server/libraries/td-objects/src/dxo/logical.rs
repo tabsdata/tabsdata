@@ -12,14 +12,13 @@
 use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
-    DataChanged, DependencyPos, Ended, EndedDay, EndedHour, EndedMonth, EndedWeek, EpochMs,
-    ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, GroupId, GroupName,
-    HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
-    LogicalTableDataVersionId, Patch, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-    PhysicalTableDataVersionId, Private, ProjectId, ProjectName, RowCount, SchemaChanged,
-    SchemaDataChanged, SchemaHash, Started, StorageVersion, TableFunctionParamPos, TableId,
-    TableName, TableVersionCount, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId,
-    UserName, VersionPos, WithData,
+    DataChanged, DependencyPos, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
+    FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
+    LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalTableDataVersionId, Patch,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
+    ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started,
+    StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
+    Trigger, TriggeredOn, UserId, UserName, VersionPos, WithData,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -107,15 +106,6 @@ pub struct FunctionRunDBWithNames {
     // sticky-Committed `status` lives on the LFR side.
     pub physical_status: Option<PhysicalFunctionRunStatus>,
     pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
-    // Bucket floors / aggregated metrics from the current PFR. NULL until the
-    // attempt terminates; metric_* additionally NULL for non-output statuses.
-    pub ended_on_hour_ms: Option<EndedHour<EpochMs>>,
-    pub ended_on_day_ms: Option<EndedDay<EpochMs>>,
-    pub ended_on_week_ms: Option<EndedWeek<EpochMs>>,
-    pub ended_on_month_ms: Option<EndedMonth<EpochMs>>,
-    pub metric_table_versions: Option<TableVersionCount>,
-    pub metric_rows: Option<RowCount>,
-    pub metric_data_bytes: Option<ByteCount>,
 }
 
 /// One row per `(execution_id, function_id)`: the LFR identity (canonical

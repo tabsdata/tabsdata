@@ -552,10 +552,6 @@ mod tests {
                     .await?;
                 assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Failed);
                 assert!(pfr.base.ended_on.is_some());
-                assert!(pfr.base.ended_on_hour_ms.is_some());
-                assert!(pfr.base.ended_on_day_ms.is_some());
-                assert!(pfr.base.ended_on_week_ms.is_some());
-                assert!(pfr.base.ended_on_month_ms.is_some());
                 Ok(())
             }
         })
