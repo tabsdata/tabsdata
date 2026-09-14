@@ -13,8 +13,14 @@ import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
-from testi_tabsdatak.conn.localfile.backend import scratch, src_conn, stage_parquet
+from testi_tabsdatak.conn.localfile.backend import (
+    scratch,
+    src_conn,
+    stage_parquet,
+    stage_xlsx,
+)
 
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.typing_ import SrcFileFormat
 
 # noinspection PyProtectedMember
@@ -638,3 +644,169 @@ def test_csv_src_eol_char_default_lf(
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
     ]
+
+
+# Worksheet selection is a source-path concern rather than a reader option, so
+# the `#<n>` fragment is exercised here as well as in the conn-common-file
+# transporter suite: it has to survive `build_location` and AUTO inference with
+# nothing downstream ever seeing it, and come back on the provenance column.
+
+_SHEETS = {
+    "First": [["tag"], ["from-sheet-1"]],
+    "Second": [["tag"], ["from-sheet-2"]],
+}
+
+
+def _read_in(base, work, src) -> list:
+    return plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+
+
+def _user_frame(imported) -> pl.DataFrame:
+    """One imported file's frame, with the binary's ``$td.opt.*`` provenance
+    columns projected away."""
+    df = pl.read_parquet(imported.file)
+    return df.select([c for c in df.columns if not c.startswith("$td.")])
+
+
+@fs_domain("fs")
+def test_src_format_excel_reads_the_first_sheet(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    _, base, work = scratch(domain_fs, request)
+    stage_xlsx(base, "book.xlsx", _SHEETS)
+
+    src = LocalFileSrc(paths=["book.xlsx"], format=SrcFileFormat.EXCEL)
+    out = _read_in(base, work, src)
+
+    # No fragment reads the first worksheet, which is what the binary defaults
+    # to as well.
+    assert _user_frame(out[0][0]).to_dicts() == [{"tag": "from-sheet-1"}]
+
+
+@fs_domain("fs")
+def test_src_format_auto_infers_excel_from_extension(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    _, base, work = scratch(domain_fs, request)
+    stage_xlsx(base, "users.xlsx", {"Data": [["id", "name"], [1, "alice"]]})
+
+    src = LocalFileSrc(paths=["users.xlsx"], format=SrcFileFormat.AUTO)
+    out = _read_in(base, work, src)
+
+    assert _user_frame(out[0][0]).to_dicts() == [{"id": 1, "name": "alice"}]
+
+
+@fs_domain("fs")
+def test_src_excel_sheet_fragment_selects_the_worksheet(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    _, base, work = scratch(domain_fs, request)
+    stage_xlsx(base, "book.xlsx", _SHEETS)
+
+    # No `format`: AUTO has to infer EXCEL from the extension once the fragment
+    # has been split off the path.
+    out = _read_in(base, work, LocalFileSrc(paths=["book.xlsx#2"]))
+
+    assert len(out) == 1
+    assert len(out[0]) == 1
+    imported = out[0][0]
+    assert _user_frame(imported).to_dicts() == [{"tag": "from-sheet-2"}]
+    # `@td.file.path` names the worksheet too, in the form that pastes straight
+    # back into `paths`.
+    assert imported.metadata[FILE_META_PATH].endswith("book.xlsx#2")
+
+
+@fs_domain("fs")
+def test_src_excel_two_paths_name_two_sheets_of_one_workbook(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    _, base, work = scratch(domain_fs, request)
+    stage_xlsx(base, "book.xlsx", _SHEETS)
+
+    src = LocalFileSrc(paths=["book.xlsx#2", "book.xlsx"], format=SrcFileFormat.EXCEL)
+    out = _read_in(base, work, src)
+
+    # One worksheet list covers both slots: slot 0 named sheet 2, slot 1 named
+    # none and reads the first sheet rather than inheriting its neighbour's.
+    assert [_user_frame(slot[0]).item(0, 0) for slot in out] == [
+        "from-sheet-2",
+        "from-sheet-1",
+    ]
+    assert out[0][0].metadata[FILE_META_PATH].endswith("#2")
+    assert "#" not in out[1][0].metadata[FILE_META_PATH]
+
+
+@fs_domain("fs")
+def test_src_excel_has_header_false_generates_column_names(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    _, base, work = scratch(domain_fs, request)
+    stage_xlsx(
+        base,
+        "flat.xlsx",
+        {"Data": [["id", "name"], ["a", "alice"], ["b", "bob"]]},
+    )
+
+    src = LocalFileSrc(
+        paths=["flat.xlsx"],
+        format=SrcFileFormat.EXCEL,
+        format_cfg={SrcFileFormat.EXCEL: {"has_header": False}},
+    )
+    out = _read_in(base, work, src)
+
+    # With no header row the columns are named positionally and row 1 is data.
+    assert _user_frame(out[0][0]).to_dicts() == [
+        {"column_1": "id", "column_2": "name"},
+        {"column_1": "a", "column_2": "alice"},
+        {"column_1": "b", "column_2": "bob"},
+    ]
+
+
+@fs_domain("fs")
+def test_src_excel_resolves_column_types(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    _, base, work = scratch(domain_fs, request)
+    stage_xlsx(
+        base,
+        "typed.xlsx",
+        {
+            "Data": [
+                ["n", "ratio", "label", "sparse"],
+                [1, 1.5, "a", 10],
+                [2, 2.0, "b", None],
+            ]
+        },
+    )
+
+    df = _user_frame(_read_in(base, work, LocalFileSrc(paths=["typed.xlsx"]))[0][0])
+
+    # Every number in a workbook is a float on the wire; a column whose cells
+    # are all whole narrows to Int64, and one fractional cell widens it.
+    assert dict(df.sort("n").schema) == {
+        "n": pl.Int64,
+        "ratio": pl.Float64,
+        "label": pl.String,
+        "sparse": pl.Int64,
+    }
+    assert df.sort("n").to_dicts() == [
+        {"n": 1, "ratio": 1.5, "label": "a", "sparse": 10},
+        # A blank cell is a null, not a zero and not an empty string.
+        {"n": 2, "ratio": 2.0, "label": "b", "sparse": None},
+    ]
+
+
+@fs_domain("fs")
+def test_src_excel_wildcard_matches_workbooks(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    _, base, work = scratch(domain_fs, request)
+    stage_xlsx(base, "a.xlsx", {"Data": [["tag"], ["a"]]})
+    stage_xlsx(base, "b.xlsx", {"Data": [["tag"], ["b"]]})
+    # A non-matching neighbour must not show up.
+    stage_parquet(base, "skip.parquet")
+
+    out = _read_in(base, work, LocalFileSrc(paths=["*.xlsx"]))
+
+    assert len(out) == 1
+    assert sorted(_user_frame(f).item(0, 0) for f in out[0]) == ["a", "b"]

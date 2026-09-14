@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import time
 import uuid
+import zipfile
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import polars as pl
 import pytest
@@ -36,6 +38,105 @@ Writer = Callable[[pl.DataFrame, Path], None]
 
 def _parquet(frame: pl.DataFrame, path: Path) -> None:
     frame.write_parquet(path, use_pyarrow=True)
+
+
+# Hand-rolled rather than produced with a spreadsheet library: nothing in the
+# dependency set writes workbooks, and only a handful of package parts are
+# needed. Cells are inline strings and numbers, so there is no shared-strings
+# table and no styles part.
+
+_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+_PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
+_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_TYPES = "http://schemas.openxmlformats.org/package/2006/content-types"
+_OFFICE = "application/vnd.openxmlformats-officedocument.spreadsheetml"
+
+
+def _xlsx_cell(ref: str, value) -> str:
+    # An omitted cell is how a workbook spells "blank".
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f'<c r="{ref}"><v>{value}</v></c>'
+    return f'<c r="{ref}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>'
+
+
+def _xlsx_sheet(rows: list[list]) -> str:
+    body = "".join(
+        '<row r="{n}">{cells}</row>'.format(
+            n=n,
+            cells="".join(
+                _xlsx_cell(f"{chr(ord('A') + i)}{n}", value)
+                for i, value in enumerate(row)
+            ),
+        )
+        for n, row in enumerate(rows, 1)
+    )
+    return f'<worksheet xmlns="{_MAIN}"><sheetData>{body}</sheetData></worksheet>'
+
+
+def _write_xlsx(path: Path, sheets: dict[str, list[list]]) -> None:
+    """Write a workbook holding ``sheets``, in declaration order."""
+    tags: list[str] = []
+    rels: list[str] = []
+    overrides = [
+        f'<Override PartName="/xl/workbook.xml"'
+        f' ContentType="{_OFFICE}.sheet.main+xml"/>'
+    ]
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for n, (name, rows) in enumerate(sheets.items(), 1):
+            tags.append(f'<sheet name="{escape(name)}" sheetId="{n}" r:id="rId{n}"/>')
+            rels.append(
+                f'<Relationship Id="rId{n}" Type="{_REL}/worksheet"'
+                f' Target="worksheets/sheet{n}.xml"/>'
+            )
+            overrides.append(
+                f'<Override PartName="/xl/worksheets/sheet{n}.xml"'
+                f' ContentType="{_OFFICE}.worksheet+xml"/>'
+            )
+            zf.writestr(f"xl/worksheets/sheet{n}.xml", _xlsx_sheet(rows))
+        zf.writestr(
+            "[Content_Types].xml",
+            f'<Types xmlns="{_TYPES}">'
+            '<Default Extension="rels" ContentType="application/vnd.'
+            'openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f"{''.join(overrides)}</Types>",
+        )
+        zf.writestr(
+            "_rels/.rels",
+            f'<Relationships xmlns="{_PKG_REL}">'
+            f'<Relationship Id="rId1" Type="{_REL}/officeDocument"'
+            ' Target="xl/workbook.xml"/></Relationships>',
+        )
+        zf.writestr(
+            "xl/workbook.xml",
+            f'<workbook xmlns="{_MAIN}" xmlns:r="{_REL}">'
+            f"<sheets>{''.join(tags)}</sheets></workbook>",
+        )
+        zf.writestr(
+            "xl/_rels/workbook.xml.rels",
+            f'<Relationships xmlns="{_PKG_REL}">{"".join(rels)}</Relationships>',
+        )
+
+
+def _xlsx(frame: pl.DataFrame, path: Path) -> None:
+    """One-sheet workbook of ``frame`` -- the ``Writer`` shape ``_stage`` wants."""
+    _write_xlsx(path, {"Data": [list(frame.columns), *(list(r) for r in frame.rows())]})
+
+
+def _stage_workbook(
+    objects: ObjectStore,
+    prefix: str,
+    name: str,
+    tmp_path: Path,
+    sheets: dict[str, list[list]],
+) -> None:
+    """The sibling of :func:`_stage` for the cases needing more than the one
+    sheet a ``Writer`` can produce."""
+    local = tmp_path / f"stage-{uuid.uuid4().hex}-{name.replace('/', '_')}"
+    _write_xlsx(local, sheets)
+    objects.upload(local, f"{prefix}/{name}")
 
 
 def _stage(
@@ -124,6 +225,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
         ("users.json", lambda df, p: df.write_ndjson(p), SrcFileFormat.JSON),
         ("users.avro", lambda df, p: df.write_avro(p), SrcFileFormat.AVRO),
         ("users.parquet", _parquet, SrcFileFormat.PARQUET),
+        ("users.xlsx", _xlsx, SrcFileFormat.EXCEL),
     ],
 )
 def test_src_reads_each_format(
@@ -282,4 +384,78 @@ def test_src_reordering_paths_reimports_because_slots_are_positional(
     assert [_names(slot) for slot in _read_with(moved, system_s3, prefix, swapped)] == [
         ["b"],
         ["a"],
+    ]
+
+
+# Worksheet selection is a source-path concern, so it is covered here rather
+# than left to the LocalFile suite: the `#<n>` fragment has to survive the
+# object-store path handling (`build_location`, AUTO inference, the object key
+# the transporter reports back) with nothing downstream ever seeing it.
+
+_SHEETS = {
+    "First": [["tag"], ["from-sheet-1"]],
+    "Second": [["tag"], ["from-sheet-2"]],
+}
+
+
+@s3_system("s3")
+def test_src_excel_sheet_fragment_selects_the_worksheet(
+    system_s3: S3System, tmp_path: Path
+):
+    prefix = run_prefix(system_s3.sys_path, "td-integ")
+    _stage_workbook(store(system_s3), prefix, "book.xlsx", tmp_path, _SHEETS)
+
+    # No `format`: AUTO has to infer EXCEL from the extension once the
+    # fragment has been split off the path.
+    out = _read_back(system_s3, prefix, S3Src(paths=["book.xlsx#2"]), tmp_path)
+
+    assert len(out) == 1
+    assert len(out[0]) == 1
+    assert pl.read_parquet(out[0][0].file).select("tag").item(0, 0) == "from-sheet-2"
+
+
+@s3_system("s3")
+def test_src_excel_two_paths_name_two_sheets_of_one_workbook(
+    system_s3: S3System, tmp_path: Path
+):
+    prefix = run_prefix(system_s3.sys_path, "td-integ")
+    _stage_workbook(store(system_s3), prefix, "book.xlsx", tmp_path, _SHEETS)
+
+    src = S3Src(paths=["book.xlsx#2", "book.xlsx"], format=SrcFileFormat.EXCEL)
+    out = _read_back(system_s3, prefix, src, tmp_path)
+
+    # One worksheet list covers both slots: slot 0 named sheet 2, slot 1 named
+    # none and reads the first sheet rather than inheriting its neighbour's.
+    assert [pl.read_parquet(slot[0].file).select("tag").item(0, 0) for slot in out] == [
+        "from-sheet-2",
+        "from-sheet-1",
+    ]
+
+
+@s3_system("s3")
+def test_src_excel_has_header_false_generates_column_names(
+    system_s3: S3System, tmp_path: Path
+):
+    prefix = run_prefix(system_s3.sys_path, "td-integ")
+    _stage_workbook(
+        store(system_s3),
+        prefix,
+        "flat.xlsx",
+        tmp_path,
+        {"Data": [["id", "name"], ["a", "alice"], ["b", "bob"]]},
+    )
+
+    src = S3Src(
+        paths=["flat.xlsx"],
+        format=SrcFileFormat.EXCEL,
+        format_cfg={SrcFileFormat.EXCEL: {"has_header": False}},
+    )
+    out = _read_back(system_s3, prefix, src, tmp_path)
+
+    # With no header row the columns are named positionally and row 1 is data.
+    df = pl.read_parquet(out[0][0].file).select("column_1", "column_2")
+    assert df.to_dicts() == [
+        {"column_1": "id", "column_2": "name"},
+        {"column_1": "a", "column_2": "alice"},
+        {"column_1": "b", "column_2": "bob"},
     ]
