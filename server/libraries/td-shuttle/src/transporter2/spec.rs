@@ -9,6 +9,7 @@
 //! during `resolve` (sizes from `head`, codec from the extension table, schema
 //! decision) so the planner never touches IO — see the module invariants.
 
+use crate::transporter2::ebcdic::codepage::Codepage;
 use chrono::{DateTime, Utc};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -20,7 +21,8 @@ use std::collections::HashMap;
 
 /// A data format the pipeline can decode and/or encode. Parquet is the internal
 /// pivot (ingress writes it, egress reads it); `Text` is read-only (line → row,
-/// like the legacy transporter's `Log`), as is `Excel` (one worksheet → rows).
+/// like the legacy transporter's `Log`), as are `Excel` (one worksheet → rows)
+/// and `Ebcdic` (fixed-length records described by a COBOL copybook).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Format {
@@ -30,6 +32,7 @@ pub enum Format {
     Avro,
     Text,
     Excel,
+    Ebcdic,
 }
 
 impl Format {
@@ -42,7 +45,10 @@ impl Format {
             Format::Parquet | Format::Avro | Format::Ndjson | Format::Text => true,
             // A worksheet is a single deflate stream inside a zip container, and
             // its cells are only addressable by walking that stream from the top.
-            Format::Csv | Format::Excel => false,
+            //
+            // Ebcdic splits perfectly on lrecl boundaries, but the lrecl is the
+            // copybook's and this method sees only the format. Not yet wired.
+            Format::Csv | Format::Excel | Format::Ebcdic => false,
         }
     }
 }
@@ -56,6 +62,7 @@ impl Format {
 pub enum FormatOptions {
     Csv(CsvOptions),
     Excel(ExcelOptions),
+    Ebcdic(Box<EbcdicOptions>),
 }
 
 /// The request-level spelling of a [`Format`] plus its options. A plain,
@@ -102,6 +109,9 @@ impl<'de> Deserialize<'de> for FormatSpec {
             (Format::Excel, Some(block)) => Some(FormatOptions::Excel(
                 ExcelOptions::deserialize(block).map_err(D::Error::custom)?,
             )),
+            (Format::Ebcdic, Some(block)) => Some(FormatOptions::Ebcdic(Box::new(
+                EbcdicOptions::deserialize(block).map_err(D::Error::custom)?,
+            ))),
             _ => None,
         };
         Ok(FormatSpec {
@@ -136,6 +146,14 @@ impl FormatSpec {
         }
     }
 
+    /// An ebcdic format with explicit options.
+    pub fn ebcdic_with(options: EbcdicOptions) -> Self {
+        Self {
+            format: Format::Ebcdic,
+            options: Some(FormatOptions::Ebcdic(Box::new(options))),
+        }
+    }
+
     /// The resolved [`Format`].
     pub fn format(&self) -> Format {
         self.format
@@ -163,6 +181,16 @@ impl FormatSpec {
             Some(FormatOptions::Excel(options)) => *options,
             _ => ExcelOptions::default(),
         })
+    }
+
+    /// `None` both for another format and for an ebcdic format with no
+    /// options block: unlike csv and excel there is nothing to default to, so
+    /// the caller must treat the second case as the error it is.
+    pub fn ebcdic(&self) -> Option<EbcdicOptions> {
+        match (self.format, &self.options) {
+            (Format::Ebcdic, Some(FormatOptions::Ebcdic(options))) => Some((**options).clone()),
+            _ => None,
+        }
     }
 }
 
@@ -252,6 +280,18 @@ impl Default for ExcelOptions {
             has_header: excel_has_header_default(),
         }
     }
+}
+
+/// Copybook reader options carried on the wire.
+///
+/// `copybook` is the COBOL copybook **itself**, inline: the layout travels
+/// with the request, so there is no second location to credential and nothing
+/// that can be unreachable at run time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EbcdicOptions {
+    pub copybook: String,
+    #[serde(default)]
+    pub codepage: Codepage,
 }
 
 // --------------------------------------------------------------------------

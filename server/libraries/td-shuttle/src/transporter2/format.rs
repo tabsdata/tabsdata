@@ -13,9 +13,10 @@
 //! `codec`. Phase 1 is sequential — no range splits (`format::Split` is Phase 2).
 
 use crate::transporter2::csvprep::ResolvedCsv;
+use crate::transporter2::ebcdic;
 use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::excel;
-use crate::transporter2::spec::{CsvOptions, ExcelOptions, Format};
+use crate::transporter2::spec::{CsvOptions, EbcdicOptions, ExcelOptions, Format};
 use arrow::array::{ArrayRef, RecordBatch, StringArray};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use bytes::Bytes;
@@ -39,6 +40,9 @@ pub struct DecodeOptions {
     pub sample_rows: usize,
     pub csv: CsvOptions,
     pub excel: ExcelOptions,
+    /// `None` for every other format, and -- unlike csv and excel -- for an
+    /// ebcdic source that named none: there is nothing to default to.
+    pub ebcdic: Option<EbcdicOptions>,
 }
 
 impl Default for DecodeOptions {
@@ -48,6 +52,7 @@ impl Default for DecodeOptions {
             sample_rows: 1024,
             csv: CsvOptions::default(),
             excel: ExcelOptions::default(),
+            ebcdic: None,
         }
     }
 }
@@ -145,6 +150,7 @@ pub fn decode_with_schema(
             Ok((schema, Box::new(iter)))
         }
         Format::Excel => excel::decode_bytes(data, opts.excel, opts.batch_size),
+        Format::Ebcdic => ebcdic::decode_bytes(data, ebcdic_options(opts)?, opts.batch_size),
         Format::Text => decode_text(name, data, opts.batch_size),
     }
 }
@@ -176,11 +182,20 @@ pub fn infer_schema(format: Format, data: &Bytes, opts: &DecodeOptions) -> Resul
             Ok(reader.schema())
         }
         Format::Excel => excel::schema_from_bytes(data.clone(), opts.excel),
+        // The copybook is the schema, so this reads none of `data`.
+        Format::Ebcdic => ebcdic::schema(ebcdic_options(opts)?),
         Format::Text => Ok(Arc::new(Schema::new(vec![
             Field::new("file", DataType::Utf8, false),
             Field::new("message", DataType::Utf8, false),
         ]))),
     }
+}
+
+/// The copybook options, or the error saying none were supplied.
+fn ebcdic_options(opts: &DecodeOptions) -> Result<&EbcdicOptions> {
+    opts.ebcdic
+        .as_ref()
+        .ok_or(TransporterError::CopybookSourceMissing)
 }
 
 /// `Text`: one row per line, columns `file` (the source name) + `message`.
@@ -312,7 +327,9 @@ pub fn encode(
             w.finish()
                 .map_err(|e| TransporterError::other(format!("avro: {e}")))?;
         }
-        Format::Text | Format::Excel => return Err(TransporterError::UnsupportedTarget(format)),
+        Format::Text | Format::Excel | Format::Ebcdic => {
+            return Err(TransporterError::UnsupportedTarget(format));
+        }
     }
     Ok(buf)
 }
@@ -385,6 +402,7 @@ pub fn decode_file(
             ))
         }
         Format::Excel => excel::decode_path(path, opts.excel, opts.batch_size),
+        Format::Ebcdic => ebcdic::decode_path(path, ebcdic_options(opts)?, opts.batch_size),
         // Text is line-oriented and modest; reuse the in-memory shaping.
         Format::Text => {
             let data = Bytes::from(std::fs::read(path)?);
@@ -437,7 +455,9 @@ pub fn encode_file(
             w.finish()
                 .map_err(|e| TransporterError::other(format!("avro: {e}")))?;
         }
-        Format::Text | Format::Excel => return Err(TransporterError::UnsupportedTarget(format)),
+        Format::Text | Format::Excel | Format::Ebcdic => {
+            return Err(TransporterError::UnsupportedTarget(format));
+        }
     }
     Ok(())
 }

@@ -104,9 +104,6 @@ pub enum TransporterError {
         remainder: u64,
     },
 
-    #[error("unsupported ebcdic code page '{0}' (cp037, cp273, cp500, cp1140)")]
-    EbcdicUnsupportedCodepage(String),
-
     #[error("field '{name}' declares {digits} digits, beyond the 38 a decimal can hold")]
     EbcdicFieldTooWide { name: String, digits: u32 },
 

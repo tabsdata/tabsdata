@@ -522,6 +522,7 @@ pub fn samples() -> String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::transporter2::ebcdic::codepage::Codepage;
     use crate::transporter2::spec::{CsvOptions, ExcelOptions, Format, FormatSpec};
 
     #[test]
@@ -702,6 +703,37 @@ target_format: { format: parquet }
         let excel: FormatSpec = serde_yaml::from_str("{ format: excel, options: {} }").unwrap();
         assert_eq!(excel.excel().unwrap(), ExcelOptions::default());
         assert!(excel.excel().unwrap().has_header);
+    }
+
+    #[test]
+    fn an_ebcdic_block_carries_the_copybook_inline() {
+        // The shape the Python client emits; drift is a runtime parse failure.
+        let spec: FormatSpec = serde_yaml::from_str(
+            "{ format: ebcdic, options: { copybook: \"      01 REC.\", codepage: cp500 } }",
+        )
+        .unwrap();
+        let options = spec.ebcdic().unwrap();
+        assert_eq!(options.copybook, "      01 REC.");
+        assert_eq!(options.codepage, Codepage::Cp500);
+    }
+
+    #[test]
+    fn an_ebcdic_code_page_defaults_when_the_block_omits_it() {
+        let spec: FormatSpec =
+            serde_yaml::from_str("{ format: ebcdic, options: { copybook: '      01 REC.' } }")
+                .unwrap();
+        assert_eq!(spec.ebcdic().unwrap().codepage, Codepage::Cp037);
+    }
+
+    #[test]
+    fn an_ebcdic_block_with_no_copybook_fails_the_run() {
+        // Nothing to default to, so a block without one is refused.
+        assert!(serde_yaml::from_str::<FormatSpec>("{ format: ebcdic, options: {} }").is_err());
+        assert!(spec_without_options().ebcdic().is_none());
+    }
+
+    fn spec_without_options() -> FormatSpec {
+        serde_yaml::from_str("{ format: ebcdic }").unwrap()
     }
 
     #[test]

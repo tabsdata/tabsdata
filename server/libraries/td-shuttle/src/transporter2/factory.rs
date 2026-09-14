@@ -15,13 +15,14 @@ use crate::transporter::api::CompressionAlgorithmSpec;
 use crate::transporter2::byte_copy::{ByteCopyJob, byte_copy_one};
 use crate::transporter2::codec;
 use crate::transporter2::convert::{ConvertJob, convert_one};
+use crate::transporter2::ebcdic;
 use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::format::{DecodeOptions, EncodeOptions};
 use crate::transporter2::io;
 use crate::transporter2::plan::{Strategy, plan};
 use crate::transporter2::schedule::Scheduler;
 use crate::transporter2::spec::{
-    CopyOptions, CopySpec, Endpoint, FormatSpec, Location, SchemaSource,
+    CopyOptions, CopySpec, Endpoint, Format, FormatSpec, Location, SchemaSource,
 };
 use crate::transporter2::staged::StagedConvert;
 use crate::transporter2::task::{RetryConfig, retry};
@@ -37,6 +38,7 @@ fn decode_opts_for(sf: &FormatSpec, opts: &CopyOptions) -> DecodeOptions {
         sample_rows: opts.infer_sample_rows,
         csv: sf.csv().unwrap_or_default(),
         excel: sf.excel().unwrap_or_default(),
+        ebcdic: sf.ebcdic(),
     }
 }
 
@@ -105,6 +107,13 @@ pub async fn execute_pair(
     match (source_format, target_format) {
         (Some(sf), Some(tf)) => {
             codec::check_source(sf.format(), decompress_codec)?;
+            if sf.format() == Format::Ebcdic {
+                // Parse before anything expensive: a staged convert would
+                // otherwise download the whole file before finding a typo.
+                // Memoised, so the decode reuses this parse.
+                let options = sf.ebcdic().ok_or(TransporterError::CopybookSourceMissing)?;
+                ebcdic::layout_of(&options.copybook)?;
+            }
             // Size drives the staging decision; `head` itself is retried.
             let (size, _) = retry(&retry_cfg, "head", || {
                 let store = from_store.clone();

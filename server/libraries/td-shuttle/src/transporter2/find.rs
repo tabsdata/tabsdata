@@ -129,6 +129,10 @@ fn canonical_data_ext(format: Format) -> &'static str {
         Format::Avro => "avro",
         Format::Text => "txt",
         Format::Excel => "xlsx",
+        // Claimed by no entry in `DATA_EXTS`: a mainframe extract has no
+        // conventional extension. Ebcdic is read-only, so this is only ever
+        // reached for exhaustiveness.
+        Format::Ebcdic => "dat",
     }
 }
 

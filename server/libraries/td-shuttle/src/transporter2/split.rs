@@ -55,7 +55,7 @@ pub fn split(
         return Ok(None);
     }
     match format {
-        Format::Csv | Format::Excel => Ok(None),
+        Format::Csv | Format::Excel | Format::Ebcdic => Ok(None),
         Format::Parquet => split_parquet(data, target),
         Format::Ndjson => Ok(split_lines(format, name, data, target, true, opts)?),
         Format::Text => Ok(split_lines(format, name, data, target, false, opts)?),

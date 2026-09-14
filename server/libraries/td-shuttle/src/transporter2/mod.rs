@@ -7,7 +7,8 @@
 //! A `td_files`-style file mover (clean request/response YAML interface, same
 //! `Location { uri, configs }` model) that ALSO transcodes between data formats
 //! the way the legacy polars [`crate::transporter`] did — parquet / csv / ndjson
-//! / avro / text, plus excel on the read side, with per-codec (de)compression —
+//! / avro / text, plus excel and copybook-described EBCDIC on the read side, with
+//! per-codec (de)compression —
 //! but built as an arrow-rs streaming pipeline instead of polars `LazyFrame`s.
 //!
 //! The architecture is split into a **pure** planner ([`plan`]) that decides the
@@ -22,6 +23,7 @@ pub mod codec;
 pub mod commands;
 pub mod convert;
 pub mod csvprep;
+pub mod ebcdic;
 pub mod error;
 pub mod excel;
 pub mod factory;
