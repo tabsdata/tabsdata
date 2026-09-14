@@ -65,3 +65,14 @@ class SqlCommonErrorCode(ErrorCode):
         "MergeCfg.op_column={column!r} is also named in on; a key is what rows"
         " are matched by, so it cannot double as the row's i/u/d marker",
     )  # _merge.MergeCfg.validate()
+    SQL_COMMON_7 = ErrorDef(
+        SqlCommonValidateException,
+        "MergeCfg.watermark_column={column!r} is also named in on; a key is what"
+        " rows are matched by, so it cannot double as the row's watermark",
+    )  # _merge.MergeCfg.validate()
+    SQL_COMMON_8 = ErrorDef(
+        SqlCommonValidateException,
+        "MergeCfg.watermark_column={column!r} is also the op_column; the marker"
+        " says what to do with a row and is never written, so it cannot double"
+        " as the watermark the target is stamped with",
+    )  # _merge.MergeCfg.validate()

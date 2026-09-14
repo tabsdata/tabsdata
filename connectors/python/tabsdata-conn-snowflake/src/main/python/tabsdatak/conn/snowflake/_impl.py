@@ -41,6 +41,7 @@ from tabsdatak.conn.snowflake._staging import (
 )
 from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
+from tabsdatak.spi import DestContext
 
 if TYPE_CHECKING:
     import snowflake.connector as sfc
@@ -71,6 +72,7 @@ class SnowflakeWriteCfg:
     target_tables: list[str]  # raw user input -- already FQN-shaped
     schema_evolution: str  # "strict" | "update"
     if_table_exists: str  # "append" | "replace" | "merge"
+    ctx: DestContext  # the trx the write belongs to; a merge stamps its id
     # One entry per target table when merging, already normalized by
     # ``SnowflakeDest._merge_cfgs()`` (a single MergeCfg broadcast across every
     # table); ``None`` in every other disposition.
@@ -395,4 +397,5 @@ def _merge_one(
         batch=file_path,
         cfg=merge_cfg,
         schema_evolution=cfg.schema_evolution,
+        ctx=cfg.ctx,
     )

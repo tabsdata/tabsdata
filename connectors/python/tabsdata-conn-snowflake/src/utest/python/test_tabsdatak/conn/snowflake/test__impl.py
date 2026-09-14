@@ -16,6 +16,7 @@ from tabsdatak.conn.snowflake import SnowflakeDestConn
 
 from test_tabsdatak.conn.snowflake.support import (
     _FakeConnection,
+    _FakeCtx,
     _FakeCursor,
     column_fakes as _column_fakes,
     insert_lists as _insert_lists,
@@ -96,6 +97,7 @@ def _write_cfg(**overrides) -> impl.SnowflakeWriteCfg:
         target_tables=["ANALYTICS.PUBLIC.T"],
         if_table_exists="append",
         schema_evolution="update",
+        ctx=_FakeCtx(),
     )
     kwargs.update(overrides)
     return impl.SnowflakeWriteCfg(**kwargs)

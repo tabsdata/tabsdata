@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge import MergeCfg
+from tabsdatak.conn.common.sql._merge import MergeCfg, WatermarkCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._batch import coalesced_batch
@@ -21,6 +21,7 @@ from tabsdatak.conn.common.sql._merge._statement import render_merge
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect, Staged
+from tabsdatak.spi import DestContext
 
 __all__ = ["MergeResult", "merge_batch", "write_columns"]
 
@@ -76,6 +77,7 @@ def merge_batch(
     batch: Path,
     cfg: MergeCfg,
     schema_evolution: str,
+    ctx: DestContext,
 ) -> MergeResult:
     """Apply ``batch`` onto ``target`` as a CDC merge.
 
@@ -87,15 +89,41 @@ def merge_batch(
     Every engine-specific step is a :class:`MergeDialect` call. A destination
     that needs a step none of the others do belongs inside one of those hooks,
     not in a copy of this function.
+
+    A ``MergeCfg`` naming a watermark column makes the whole thing idempotent:
+    the rows written carry this transaction's id, and a rerun that finds the
+    target already stamped with it writes nothing rather than applying the same
+    batch twice. That column reaches the target under either evolution setting
+    -- through the evolution pass on ``"update"``, and through
+    :meth:`MergeDialect.ensure_watermark_column` on ``"strict"``, since a
+    watermark nothing can be stamped in is no watermark at all.
     """
+    watermark_column = cfg._watermark_column()
+    watermark_cfg = (
+        WatermarkCfg(column=watermark_column, transaction_id=ctx.trx_id)
+        if watermark_column is not None
+        else None
+    )
     with coalesced_batch(dialect, target, batch, cfg) as reduced:
-        with dialect.staging(target, reduced) as staged:
+        if watermark_cfg is not None:
+            logger.debug(
+                "Checking watermark column %s on %s", watermark_cfg.column, target
+            )
+            if dialect.check_watermark_column(target, watermark_cfg):
+                logger.info(
+                    "Skipping merge onto %s: watermark column %s already has value %s",
+                    target,
+                    watermark_cfg.column,
+                    watermark_cfg.transaction_id,
+                )
+                return MergeResult(evolved=[], written=[])
+        with dialect.staging(target, reduced, watermark_cfg) as staged:
             marker = cfg._op_column()
             dialect.ensure_target(target, staged, marker)
             evolved = (
                 dialect.evolve(target, staged, marker)
                 if schema_evolution == "update"
-                else []
+                else dialect.ensure_watermark_column(target, watermark_cfg)
             )
             # Read after the ALTERs above, so a column just added counts as
             # written rather than being left out of the merge.

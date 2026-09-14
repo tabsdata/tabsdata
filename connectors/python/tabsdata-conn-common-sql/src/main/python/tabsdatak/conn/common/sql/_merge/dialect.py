@@ -19,6 +19,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
+
 __all__ = [
     "MergeDialect",
     "MergeErrors",
@@ -137,14 +139,32 @@ class MergeDialect(ABC):
         having it.
         """
 
+    def check_watermark_column(self, target: str, watermark_cfg: WatermarkCfg) -> bool:
+        """Whether ``target`` already carries rows stamped with
+        ``watermark_cfg.transaction_id``, meaning this batch has been merged
+        before and merging it again would double-apply it.
+
+        Answering ``False`` is always safe -- it merges -- so the default is to
+        say so, and a dialect whose engine can be asked overrides it. A target
+        that does not exist, or that has no watermark column yet, has never been
+        stamped and so answers ``False`` too.
+        """
+        return False
+
     @abstractmethod
-    def staging(self, target: str, batch: Path) -> contextlib.AbstractContextManager:
+    def staging(
+        self, target: str, batch: Path, watermark_cfg: WatermarkCfg | None = None
+    ) -> contextlib.AbstractContextManager:
         """Land ``batch`` where the statement can read it, yielding a
         :class:`Staged`.
 
         Whatever the engine needs -- an upload, a load job, a scratch table --
         and its teardown. The context manager is exited however the merge ends,
         so a dialect that leaves an object behind drops it here.
+
+        When ``watermark_cfg`` is given, the staged relation gains that column
+        stamped with the transaction's id, so the rows the merge writes carry
+        the stamp :meth:`check_watermark_column` later reads.
         """
 
     @abstractmethod
@@ -174,5 +194,24 @@ class MergeDialect(ABC):
         modifier in :attr:`MergeSyntax.evolution_modifier` instead. A dialect
         that evolves with ``ALTER`` statements overrides this, and owns the
         policy for a change the engine cannot make safely.
+        """
+        return []
+
+    def ensure_watermark_column(
+        self, target: str, watermark_cfg: WatermarkCfg | None
+    ) -> list[str]:
+        """Give ``target`` the watermark column if it has not got one, returning
+        the columns added.
+
+        Called in :meth:`evolve`'s place under ``schema_evolution="strict"``,
+        where the flow has asked for the target's schema to be held still. The
+        watermark is the one exception the flow did ask for: without the column
+        nothing is ever stamped, so the rerun guard could never fire and naming
+        a watermark would quietly do nothing. Under ``"update"`` there is
+        nothing to do here -- :meth:`evolve` already sees the column among the
+        staged ones.
+
+        The default does nothing, which is right for an engine whose ``MERGE``
+        brings the column with it.
         """
         return []

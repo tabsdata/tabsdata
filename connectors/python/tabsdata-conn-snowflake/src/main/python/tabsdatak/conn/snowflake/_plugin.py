@@ -115,6 +115,7 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
             target_tables=list(dest.tables),
             schema_evolution=dest.schema_evolution,
             if_table_exists=dest.if_table_exists,
+            ctx=ctx,
             merge_cfgs=dest._merge_cfgs(),
         )
         try:

@@ -13,6 +13,7 @@ them the same way.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated, TypeAlias
 
 from pydantic import AfterValidator
@@ -26,6 +27,7 @@ __all__ = [
     "MergeCfg",
     "MergeColumnSpec",
     "MergeColumnsSpec",
+    "WatermarkCfg",
 ]
 
 
@@ -80,6 +82,12 @@ class MergeCfg(_api.DescriptorBase):
         op_column: The column holding each row's `i` / `u` / `d` marker. Read
             to decide each row's fate and never written, so the target does not
             need the column and will not gain it.
+        watermark_column: An optional column holding a watermark for the current
+            transaction that the merge is part of. If provided, the given column is
+            populated with the transaction id the merge is part of; the merge will then
+            not be performed again if the transaction is re-run. This is useful for
+            idempotent merges, where the same transaction may be run multiple times and
+            we want to avoid duplicate writes.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:
@@ -93,6 +101,7 @@ class MergeCfg(_api.DescriptorBase):
 
     on: MergeColumnsSpec
     op_column: MergeColumnSpec
+    watermark_column: MergeColumnSpec | None = None
 
     def _fold(self, name: str) -> str:
         """The name's stored form in the target, per the dialect's identifier
@@ -105,9 +114,12 @@ class MergeCfg(_api.DescriptorBase):
     def _op_column(self) -> str:
         return self._fold(self.op_column)
 
+    def _watermark_column(self) -> str | None:
+        return self._fold(self.watermark_column) if self.watermark_column else None
+
     def validate(self) -> None:
-        """Field validation: `on` is non-empty and `op_column` is not one of its
-        key columns.
+        """Field validation: `on` is non-empty, and neither `op_column` nor
+        `watermark_column` collides with a key column or with each other.
 
         Both names are compared in their folded form, so a subclass whose
         dialect folds case catches a marker that collides with a key under a
@@ -121,3 +133,26 @@ class MergeCfg(_api.DescriptorBase):
         if self._op_column() in set(self._keys()):
             # noinspection PyProtectedMember
             raise SqlCommonErrorCode.SQL_COMMON_6.exception(column=self.op_column)
+        if self.watermark_column and self._watermark_column() in set(self._keys()):
+            # noinspection PyProtectedMember
+            raise SqlCommonErrorCode.SQL_COMMON_7.exception(
+                column=self.watermark_column
+            )
+        if self.watermark_column and self._watermark_column() == self._op_column():
+            # noinspection PyProtectedMember
+            raise SqlCommonErrorCode.SQL_COMMON_8.exception(
+                column=self.watermark_column
+            )
+
+
+@dataclass(frozen=True)
+class WatermarkCfg:
+    """The watermark column and the current transaction's id.
+
+    Args:
+        column: The column holding the watermark.
+        transaction_id: The current transaction's id.
+    """
+
+    column: str
+    transaction_id: str

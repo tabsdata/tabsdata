@@ -18,10 +18,12 @@ from pathlib import Path
 import pytest
 from test_tabsdatak.conn.snowflake.support import (
     _FakeConnection,
+    _FakeCtx,
     _INFER_PREFIX,
     assignments as _assignments,
     column_fakes,
     insert_lists as _insert_lists,
+    watermark_answers,
 )
 
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
@@ -30,10 +32,17 @@ from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.sql._merge._batch import coalesced_batch, incoming_column
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._driver import merge_batch, write_columns
+from tabsdatak.conn.common.sql._merge._driver import (
+    MergeResult,
+    merge_batch,
+    write_columns,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._statement import render_merge
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import Staged
@@ -68,8 +77,10 @@ def _staged(columns: list[tuple[str, str]], relation: str = _SCRATCH) -> Staged:
     return Staged(relation=relation, columns=list(columns))
 
 
-def _cfg(on=("c",), op_column="op") -> MergeCfg:
-    return MergeCfg(on=list(on), op_column=op_column)
+def _cfg(on=("c",), op_column="op", watermark_column=None) -> MergeCfg:
+    return MergeCfg(
+        on=list(on), op_column=op_column, watermark_column=watermark_column
+    )
 
 
 def _alters(log: list[str]) -> list[str]:
@@ -615,6 +626,204 @@ def test_staging_leaves_the_scratch_table_to_the_session(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# The watermark
+#
+# A merge is not naturally idempotent: rerunning one applies the same batch
+# twice. Naming a watermark column makes it so -- every row written carries the
+# trx's id, and a rerun that finds the target already stamped with it does
+# nothing.
+# ---------------------------------------------------------------------------
+
+_TRX = "TRX_1"
+
+
+def _watermark(column: str = "WM", transaction_id: str = _TRX) -> WatermarkCfg:
+    return WatermarkCfg(column=column, transaction_id=transaction_id)
+
+
+def _check(fake: _FakeConnection, target: str = _TARGET, **kwargs) -> bool:
+    return _dialect(fake).check_watermark_column(target, _watermark(**kwargs))
+
+
+def _selects(log: list[str]) -> list[str]:
+    return [s for s in log if s.startswith("SELECT COUNT(")]
+
+
+def test_watermark_reads_unstamped_when_the_target_has_no_such_column():
+    """Which is also the answer for a target that does not exist yet: a table
+    that is not there contributes no rows to INFORMATION_SCHEMA.COLUMNS, so one
+    probe covers both."""
+    fake = column_fakes([], [], watermark_answers(has_column=False))
+    assert _check(fake) is False
+
+
+def test_watermark_does_not_probe_a_target_that_lacks_the_column():
+    """Selecting a column the table has not got is an error, not an answer, so
+    the second probe has to be gated on the first."""
+    fake = column_fakes([], [], watermark_answers(has_column=False))
+    _check(fake)
+    assert len(_selects(fake.log)) == 1
+    assert not any(_TARGET in s for s in _selects(fake.log))
+
+
+def test_watermark_reads_stamped_when_the_target_carries_the_id():
+    fake = column_fakes([], [], watermark_answers(has_column=True, stamped=True))
+    assert _check(fake) is True
+
+
+def test_watermark_reads_unstamped_when_the_target_carries_another_id():
+    fake = column_fakes([], [], watermark_answers(has_column=True, stamped=False))
+    assert _check(fake) is False
+
+
+def test_watermark_probe_is_qualified_with_the_targets_own_database():
+    # INFORMATION_SCHEMA is per-database, so the session's would answer about
+    # the wrong one for a target that names its own.
+    fake = column_fakes([], [], watermark_answers(has_column=False))
+    _check(fake)
+    assert '"DB".INFORMATION_SCHEMA.COLUMNS' in _selects(fake.log)[0]
+
+
+def test_watermark_probe_falls_back_to_the_session_for_a_bare_target():
+    # An unqualified target resolves in the session's own database and schema,
+    # which is where the probe has to look for it too.
+    fake = column_fakes([], [], watermark_answers(has_column=False))
+    _check(fake, target='"T"')
+    probe = _selects(fake.log)[0]
+    assert "INFORMATION_SCHEMA.COLUMNS" in probe and '"DB".' not in probe
+    assert "COALESCE(%s, CURRENT_SCHEMA())" in probe
+
+
+def test_watermark_probe_binds_the_names_it_matches_on():
+    # The parts go in as values rather than as SQL, and unquoted: the connector
+    # creates its targets per-part quoted, so what unfqn gives back is already
+    # the spelling Snowflake stored.
+    fake = column_fakes([], [], watermark_answers(has_column=False))
+    _check(fake)
+    _, params = fake.binds[0]
+    assert params == ("S", "T", "WM")
+
+
+def test_watermark_probe_binds_the_transaction_id():
+    fake = column_fakes([], [], watermark_answers(has_column=True, stamped=True))
+    _check(fake)
+    statement, params = fake.binds[1]
+    assert f'FROM {_TARGET} WHERE "WM" = %s' in statement
+    assert params == (_TRX,)
+
+
+def test_watermark_probe_quotes_a_special_char_column():
+    fake = column_fakes([], [], watermark_answers(has_column=True, stamped=True))
+    _check(fake, column="weird name")
+    assert '"weird name" = %s' in fake.binds[1][0]
+
+
+# --- Stamping the staged rows -----------------------------------------
+
+
+def _stage_with(fake, tmp_path, watermark_cfg):
+    batch = tmp_path / "in.parquet"
+    batch.write_bytes(b"")
+    with _dialect(fake).staging(_TARGET, batch, watermark_cfg) as staged:
+        return staged
+
+
+def test_staging_stamps_the_scratch_table_with_the_transaction_id(tmp_path):
+    fake = _staging_fake()
+    staged = _stage_with(fake, tmp_path, _watermark())
+    (alter,) = _alters(fake.log)
+    assert alter == (
+        f"ALTER TABLE {staged.relation} ADD COLUMN IF NOT EXISTS"
+        f" \"WM\" STRING DEFAULT '{_TRX}'"
+    )
+
+
+def test_staging_stamps_after_the_rows_are_in(tmp_path):
+    # The batch does not carry the column, so a scratch table templated with it
+    # would leave the COPY nothing to match it against. Adding it afterwards
+    # with a constant default backfills the rows that were just loaded.
+    fake = _staging_fake()
+    _stage_with(fake, tmp_path, _watermark())
+    copy = next(i for i, s in enumerate(fake.log) if s.startswith("COPY INTO"))
+    alter = next(i for i, s in enumerate(fake.log) if s.startswith("ALTER TABLE"))
+    assert copy < alter
+
+
+def test_staging_reports_the_watermark_among_the_staged_columns(tmp_path):
+    # Which is what carries it onward: ensure_target, evolve and the write list
+    # all read the target's shape off the staged columns.
+    staged = _stage_with(_staging_fake(), tmp_path, _watermark())
+    assert staged.columns == [
+        ("C", "NUMBER(38,0)"),
+        ("OP", "TEXT"),
+        ("WM", "STRING"),
+    ]
+
+
+def test_staging_stamps_nothing_without_a_watermark(tmp_path):
+    fake = _staging_fake()
+    staged = _stage_with(fake, tmp_path, None)
+    assert _alters(fake.log) == []
+    assert staged.columns == [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
+
+
+# --- Getting the column onto the target under strict ------------------
+
+
+def _ensure(fake, watermark_cfg, target=_TARGET):
+    return _dialect(fake).ensure_watermark_column(target, watermark_cfg)
+
+
+def test_ensure_watermark_adds_the_column_a_strict_target_lacks():
+    # Strict holds the schema still, and this is the one column it cannot hold
+    # back: nothing else adds it, so the guard would read every run as the
+    # first one.
+    fake = column_fakes(["C"], [])
+    assert _ensure(fake, _watermark()) == ["WM"]
+    assert _alters(fake.log) == [
+        f'ALTER TABLE {_TARGET} ADD COLUMN IF NOT EXISTS "WM" STRING'
+    ]
+
+
+def test_ensure_watermark_adds_it_without_a_default():
+    """The rows already in the target belong to earlier transactions;
+    backfilling this one's id would claim them for it and make the next rerun
+    of it skip a batch it never applied."""
+    fake = column_fakes(["C"], [])
+    _ensure(fake, _watermark())
+    assert "DEFAULT" not in _alters(fake.log)[0]
+
+
+def test_ensure_watermark_leaves_a_target_that_already_has_it_alone():
+    fake = column_fakes(["C", "WM"], [])
+    assert _ensure(fake, _watermark()) == []
+    assert _alters(fake.log) == []
+
+
+def test_ensure_watermark_matches_the_existing_column_case_insensitively():
+    fake = column_fakes(["C", "wm"], [])
+    assert _ensure(fake, _watermark()) == []
+    assert _alters(fake.log) == []
+
+
+def test_ensure_watermark_does_nothing_without_a_watermark():
+    fake = column_fakes(["C"], [])
+    assert _ensure(fake, None) == []
+    assert fake.log == []
+
+
+def test_evolve_leaves_a_watermark_the_target_already_has_alone(tmp_path):
+    """STRING and the VARCHAR(16777216) that DESC TABLE reports for it are one
+    type, so a second run does not read the column as a retype of itself."""
+    fake, changed = _evolve(
+        [("C", "NUMBER(38,0)"), ("WM", "VARCHAR(16777216)")],
+        [("C", "NUMBER(38,0)"), ("WM", "STRING")],
+    )
+    assert changed == []
+    assert _alters(fake.log) == []
+
+
+# ---------------------------------------------------------------------------
 # Coalescing the batch before it is staged
 #
 # MERGE matches each incoming row against the target at most once, so a batch
@@ -770,6 +979,7 @@ def test_merge_batch_refuses_a_target_sharing_no_column(tmp_path):
             batch=batch,
             cfg=_cfg(),
             schema_evolution="strict",
+            ctx=_FakeCtx(),
         )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_16
     assert _TARGET in str(ei.value)
@@ -787,5 +997,94 @@ def test_merge_batch_evolves_only_on_update(tmp_path):
             batch=batch,
             cfg=_cfg(),
             schema_evolution=evolution,
+            ctx=_FakeCtx(),
         )
         assert result.evolved == expected
+
+
+def _merge(fake, batch, schema_evolution="update", **cfg_kwargs):
+    return merge_batch(
+        _dialect(fake),
+        target=_TARGET,
+        batch=batch,
+        cfg=_cfg(**cfg_kwargs),
+        schema_evolution=schema_evolution,
+        ctx=_FakeCtx(trx_id=_TRX),
+    )
+
+
+def _watermark_fake(answers, table_columns=("C",)):
+    columns = [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
+    return column_fakes(list(table_columns), columns, answers)
+
+
+def test_merge_batch_leaves_a_target_already_stamped_alone(tmp_path):
+    """The whole point of the watermark: a trx that already wrote these rows is
+    not to write them again."""
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    fake = _watermark_fake(watermark_answers(has_column=True, stamped=True))
+    result = _merge(fake, batch, watermark_column="wm")
+    assert result == MergeResult(evolved=[], written=[])
+    assert not any(s.startswith(("PUT", "MERGE", "CREATE")) for s in fake.log)
+
+
+def test_merge_batch_checks_the_watermark_before_it_stages_anything(tmp_path):
+    # Staging is the expensive half, so the answer has to come first -- and the
+    # scratch table it would leave behind is one nobody asked for.
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    fake = _watermark_fake(watermark_answers(has_column=False))
+    _merge(fake, batch, watermark_column="wm")
+    probe = next(i for i, s in enumerate(fake.log) if s.startswith("SELECT COUNT("))
+    put = next(i for i, s in enumerate(fake.log) if s.startswith("PUT file://"))
+    assert probe < put
+
+
+def test_merge_batch_writes_the_watermark_onto_the_target(tmp_path):
+    # The stamp only makes the next run idempotent if it reaches the target, so
+    # the column is evolved onto it and named in the write list like any other.
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    fake = _watermark_fake(watermark_answers(has_column=False))
+    result = _merge(fake, batch, watermark_column="wm")
+    assert result.evolved == ["WM"]
+    assert result.written == ["C", "WM"]
+    assert 'ALTER TABLE "DB"."S"."T" ADD COLUMN IF NOT EXISTS "WM" STRING' in fake.log
+    assert 'source."WM"' in next(s for s in fake.log if s.startswith("MERGE"))
+
+
+def test_merge_batch_probes_no_watermark_when_the_cfg_names_none(tmp_path):
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    fake = _watermark_fake(watermark_answers(has_column=True, stamped=True))
+    result = _merge(fake, batch)
+    assert not any(s.startswith("SELECT COUNT(") for s in fake.log)
+    assert result.written == ["C"]
+
+
+def test_merge_batch_writes_the_watermark_on_strict_too(tmp_path):
+    # Strict adds nothing else, but a watermark the target cannot hold is no
+    # watermark: the column is put there so the next run of this trx has a stamp
+    # to find.
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    fake = _watermark_fake(watermark_answers(has_column=False))
+    result = _merge(fake, batch, schema_evolution="strict", watermark_column="wm")
+    assert result.evolved == ["WM"]
+    assert result.written == ["C", "WM"]
+    assert 'ALTER TABLE "DB"."S"."T" ADD COLUMN IF NOT EXISTS "WM" STRING' in fake.log
+
+
+def test_merge_batch_adds_nothing_else_on_strict(tmp_path):
+    # The rest of the widened batch is still held back -- the exception is the
+    # watermark alone, not evolution creeping into strict.
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"], v=[10])
+    columns = [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("V", "NUMBER(38,0)")]
+    fake = column_fakes(["C"], columns, watermark_answers(has_column=False))
+    result = _merge(fake, batch, schema_evolution="strict", watermark_column="wm")
+    assert result.evolved == ["WM"]
+    assert "V" not in result.written
+
+
+def test_merge_batch_adds_no_watermark_on_strict_without_one(tmp_path):
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    fake = _watermark_fake(watermark_answers(has_column=False))
+    result = _merge(fake, batch, schema_evolution="strict")
+    assert result.evolved == []
+    assert _alters(fake.log) == []

@@ -23,6 +23,9 @@ from pathlib import Path
 from tabsdatak.conn.common._validation import fqn, unfqn
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._evolution import evolve_with_iceberg
 
 # noinspection PyProtectedMember
@@ -62,6 +65,11 @@ _SYNTAX = MergeSyntax(
     not_matched="WHEN NOT MATCHED",
     wildcard_writes=None,
 )
+
+# A trx id is an opaque string, and STRING parses to the same type DESC TABLE
+# reports for it (VARCHAR(16777216)), so a target that already has the column
+# does not read as a retype of it.
+_WATERMARK_TYPE = "STRING"
 
 _ERRORS = MergeErrors(
     marker_absent=SnowflakeErrorCode.SNOWFLAKE_18.exception,
@@ -110,7 +118,9 @@ class SnowflakeMergeDialect(MergeDialect):
         return name.upper()
 
     @contextlib.contextmanager
-    def staging(self, target: str, batch: Path) -> Iterator[Staged]:
+    def staging(
+        self, target: str, batch: Path, watermark_cfg: WatermarkCfg | None = None
+    ) -> Iterator[Staged]:
         """``PUT`` the batch, template a temporary table from it and ``COPY``
         the rows in.
 
@@ -123,6 +133,14 @@ class SnowflakeMergeDialect(MergeDialect):
         The columns are read from the file before the ``COPY``, which purges it:
         after that the staged file is gone and ``infer_schema`` has nothing to
         report.
+
+        A watermark column is added to the scratch table once the rows are in,
+        not to its template: the batch does not carry the column, so the
+        ``COPY`` would have nothing to match it against. Adding it afterwards
+        with the transaction's id as its default stamps every row that was just
+        loaded, and reporting it among the staged columns is what carries it
+        through ``ensure_target``, ``evolve`` and the write list onto the
+        target.
         """
         file_name = put_file_to_stage(self._cursor, batch, self._stage)
         columns = self._staged_columns(file_name)
@@ -135,7 +153,49 @@ class SnowflakeMergeDialect(MergeDialect):
             match_by_column_name=self._match_by_column_name,
             purge=self._purge,
         )
+        if watermark_cfg is not None:
+            self._add_watermark_column(scratch, watermark_cfg)
+            columns.append((watermark_cfg.column, _WATERMARK_TYPE))
         yield Staged(relation=scratch, columns=columns)
+
+    def check_watermark_column(self, target: str, watermark_cfg: WatermarkCfg) -> bool:
+        """Whether ``target`` already holds a row stamped with this
+        transaction's id.
+
+        Asked of ``INFORMATION_SCHEMA.COLUMNS`` first, and only then of the
+        table: a target that does not exist yet, or one that predates the
+        watermark column, has no such row and must not be probed for one --
+        selecting the column would be an error rather than an answer. The
+        column view covers both, since a missing table contributes no rows to
+        it.
+
+        The names are matched as Snowflake stores them. The connector creates
+        its targets through :func:`_fq_for_sql`, whose parts are quoted
+        verbatim, so the parts ``unfqn`` gives back are the stored spellings
+        rather than something to fold. ``watermark_cfg.column`` has already been
+        through ``MergeCfg._fold``, which is that same stored form.
+        """
+        database, schema, table = unfqn(target, _SNOWFLAKE_FQN_DEF, total_parts=3)
+        # INFORMATION_SCHEMA is per-database; unqualified, it is the session's
+        # own, which is where an unqualified target lives too.
+        catalog = f"{fqn([database], _SNOWFLAKE_FQN_DEF)}." if database else ""
+        self._cursor.execute(
+            f"SELECT COUNT(*) FROM {catalog}INFORMATION_SCHEMA.COLUMNS"
+            f" WHERE TABLE_SCHEMA = COALESCE(%s, CURRENT_SCHEMA())"
+            f" AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, table, watermark_cfg.column),
+        )
+        row = self._cursor.fetchone()
+        if not (row and row[0]):
+            return False
+
+        self._cursor.execute(
+            f"SELECT COUNT(*) > 0 FROM {target}"
+            f" WHERE {self.quote_column(watermark_cfg.column)} = %s",
+            (watermark_cfg.transaction_id,),
+        )
+        row = self._cursor.fetchone()
+        return bool(row and row[0])
 
     def ensure_target(self, target: str, staged: Staged, marker: str) -> None:
         """``CREATE TABLE IF NOT EXISTS`` from the scratch table's schema, less
@@ -201,6 +261,33 @@ class SnowflakeMergeDialect(MergeDialect):
             strict=True,
         )
 
+    def ensure_watermark_column(
+        self, target: str, watermark_cfg: WatermarkCfg | None
+    ) -> list[str]:
+        """``ALTER TABLE`` the watermark column onto the target under strict.
+
+        Strict holds the target's schema still, and this is the one column it
+        cannot hold back: nothing else adds it, so without this the target never
+        gains it, the merge never writes it, and the rerun guard reads every run
+        as the first one -- a watermark that silently does nothing.
+
+        Unlike the scratch table's copy it is added without a ``DEFAULT``. The
+        rows already in the target were written by earlier transactions, and
+        backfilling this one's id would claim them for it. They take a NULL,
+        which is what "written before there was a watermark" looks like.
+        """
+        if watermark_cfg is None:
+            return []
+        existing = {self.fold(name) for name, _ in self.target_columns(target)}
+        if self.fold(watermark_cfg.column) in existing:
+            return []
+        logger.debug("Adding watermark column %s to %s", watermark_cfg.column, target)
+        self._cursor.execute(
+            f"ALTER TABLE {target} ADD COLUMN IF NOT EXISTS"
+            f" {self.quote_column(watermark_cfg.column)} {_WATERMARK_TYPE}"
+        )
+        return [watermark_cfg.column]
+
     # --- Snowflake internals ------------------------------------------
 
     def _staged_columns(self, file_name: str) -> list[tuple[str, str]]:
@@ -219,6 +306,20 @@ class SnowflakeMergeDialect(MergeDialect):
             f")"
         )
         return scratch
+
+    def _add_watermark_column(self, table: str, cfg: WatermarkCfg) -> None:
+        """Stamp every row of ``table`` with the transaction's id.
+
+        The default is what does the stamping: Snowflake backfills a constant
+        default into the rows already there, so the ``COPY``'s rows carry it
+        without a second pass over them.
+        """
+        logger.debug("Adding watermark column %s to %s", cfg.column, table)
+        self._cursor.execute(
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS"
+            f" {self.quote_column(cfg.column)} {_WATERMARK_TYPE}"
+            f" DEFAULT '{cfg.transaction_id}'"
+        )
 
 
 def _scratch_table_name(target: str) -> str:

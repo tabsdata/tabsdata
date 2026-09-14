@@ -4,11 +4,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
 import pytest
+from test_tabsdatak.conn.snowflake.support import _FakeCtx
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
@@ -33,16 +33,8 @@ pytestmark = pytest.mark.snowflake
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _Ctx:
-    _work: Path
-
-    def work_dir(self) -> Path:
-        return self._work
-
-
-def _dest_ctx(work: Path) -> _Ctx:
-    return _Ctx(work)
+def _dest_ctx(work: Path) -> _FakeCtx:
+    return _FakeCtx(work=work)
 
 
 def _credentials() -> UserPassword:
