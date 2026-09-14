@@ -336,6 +336,9 @@ version = "0.22.1"
 [workspace.dependencies.bytes]
 version = "1.11.1"
 
+[workspace.dependencies.calamine]
+version = "0.36.1"
+
 [workspace.dependencies.chrono]
 version = "0.4.44"
 

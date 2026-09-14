@@ -18,7 +18,7 @@
 use crate::transporter::api::CompressionAlgorithmSpec;
 use crate::transporter::compression::{CompressionAlgorithm, async_reader, async_writer};
 use crate::transporter2::error::{Result, TransporterError};
-use crate::transporter2::spec::Codec;
+use crate::transporter2::spec::{Codec, Format};
 use bytes::Bytes;
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
@@ -83,6 +83,20 @@ pub fn from_extension(filename: &str) -> Codec {
         Some("zstd") => Codec::Zstd,
         _ => Codec::None,
     }
+}
+
+/// Reject a declared source codec the format's reader cannot see through.
+///
+/// An `.xlsx` workbook is already a zip container that the reader opens itself,
+/// and `decompress` is a *stream* codec — `CompressionAlgorithmSpec::Zip` maps to
+/// [`Codec::Zlib`], a raw zlib stream rather than container extraction — so
+/// declaring one would hand the reader corrupted bytes. `auto` never trips this:
+/// `.xlsx` is not a compression extension, so it resolves to [`Codec::None`].
+pub fn check_source(format: Format, codec: Codec) -> Result<()> {
+    if format == Format::Excel && codec != Codec::None {
+        return Err(TransporterError::UnsupportedSourceCodec { format, codec });
+    }
+    Ok(())
 }
 
 /// Bridge to the generic compression wrappers' algorithm enum. `io` / `convert`
@@ -234,6 +248,40 @@ mod test {
             resolve(Some(CompressionAlgorithmSpec::Auto), "a.BZ2"),
             Codec::Bzip
         );
+    }
+
+    #[test]
+    fn an_excel_source_rejects_every_declared_decompress_codec() {
+        // `zip` is the trap: it resolves to a raw zlib stream, not container
+        // extraction, so it would hand the reader corrupted bytes.
+        for spec in [
+            CompressionAlgorithmSpec::Zip,
+            CompressionAlgorithmSpec::Gzip,
+            CompressionAlgorithmSpec::Zstd,
+        ] {
+            let codec = resolve(Some(spec), "q2.xlsx");
+            let err = check_source(Format::Excel, codec).unwrap_err();
+            assert!(
+                matches!(err, TransporterError::UnsupportedSourceCodec { .. }),
+                "{spec:?} -> {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_excel_source_is_fine_without_one() {
+        // `auto` never trips it: .xlsx is not a compression extension.
+        for spec in [None, Some(CompressionAlgorithmSpec::Auto)] {
+            let codec = resolve(spec, "q2.xlsx");
+            assert_eq!(codec, Codec::None);
+            assert!(check_source(Format::Excel, codec).is_ok());
+        }
+    }
+
+    #[test]
+    fn other_formats_still_decompress() {
+        assert!(check_source(Format::Csv, Codec::Gzip).is_ok());
+        assert!(check_source(Format::Ndjson, Codec::Zstd).is_ok());
     }
 
     #[test]

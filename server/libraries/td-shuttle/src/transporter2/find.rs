@@ -118,7 +118,7 @@ pub async fn find(
 
 const COMPRESSION_EXTS: &[&str] = &["br", "bz2", "gz", "z", "lz4", "xz", "zlib", "zstd"];
 const DATA_EXTS: &[&str] = &[
-    "parquet", "pq", "csv", "json", "jsonl", "ndjson", "avro", "log", "txt",
+    "parquet", "pq", "csv", "json", "jsonl", "ndjson", "avro", "log", "txt", "xlsx",
 ];
 
 fn canonical_data_ext(format: Format) -> &'static str {
@@ -128,6 +128,7 @@ fn canonical_data_ext(format: Format) -> &'static str {
         Format::Ndjson => "ndjson",
         Format::Avro => "avro",
         Format::Text => "txt",
+        Format::Excel => "xlsx",
     }
 }
 
@@ -192,6 +193,21 @@ mod test {
         assert_eq!(
             output_name("weird", Some(Format::Ndjson), None),
             "weird.ndjson"
+        );
+    }
+
+    #[test]
+    fn output_name_turns_a_workbook_into_a_parquet() {
+        assert_eq!(
+            output_name("sales.xlsx", Some(Format::Parquet), None),
+            "sales.parquet"
+        );
+        // The sheet number never reaches here -- the connector strips the uri
+        // fragment before the request is written -- so a name carrying one is
+        // not a case to accommodate, only evidence the strip was skipped.
+        assert_eq!(
+            output_name("sales.xlsx", Some(Format::Csv), Some("gz")),
+            "sales.csv.gz"
         );
     }
 

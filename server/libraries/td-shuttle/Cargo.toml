@@ -79,6 +79,7 @@ liblzma-sys = { workspace = true }
 backon = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
+calamine = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }

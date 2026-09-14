@@ -10,7 +10,8 @@
 //! decision) so the planner never touches IO — see the module invariants.
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 // --------------------------------------------------------------------------
@@ -19,7 +20,7 @@ use std::collections::HashMap;
 
 /// A data format the pipeline can decode and/or encode. Parquet is the internal
 /// pivot (ingress writes it, egress reads it); `Text` is read-only (line → row,
-/// like the legacy transporter's `Log`).
+/// like the legacy transporter's `Log`), as is `Excel` (one worksheet → rows).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Format {
@@ -28,6 +29,7 @@ pub enum Format {
     Ndjson,
     Avro,
     Text,
+    Excel,
 }
 
 impl Format {
@@ -38,22 +40,75 @@ impl Format {
     pub fn is_splittable(self) -> bool {
         match self {
             Format::Parquet | Format::Avro | Format::Ndjson | Format::Text => true,
-            Format::Csv => false,
+            // A worksheet is a single deflate stream inside a zip container, and
+            // its cells are only addressable by walking that stream from the top.
+            Format::Csv | Format::Excel => false,
         }
     }
 }
 
-/// The request-level spelling of a [`Format`] plus its (only CSV has any)
-/// options. A plain, tag-free, forgiving struct (the Python clients use
-/// `safe_load`): `{ format: parquet }` for the option-free formats, and
-/// `{ format: csv }` (default options) or `{ format: csv, options: { delimiter:
-/// ";" } }` (partial — missing keys default) for csv. `options` is ignored for
-/// non-csv formats.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Options for the formats that have any. The wire block carries no tag of its
+/// own — which variant it is, is decided by the sibling `format` field, so
+/// `{ sheet: 2 }` under `format: excel` and `{ delimiter: ";" }` under
+/// `format: csv` both arrive as a plain `options` mapping.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum FormatOptions {
+    Csv(CsvOptions),
+    Excel(ExcelOptions),
+}
+
+/// The request-level spelling of a [`Format`] plus its options. A plain,
+/// tag-free, forgiving struct (the Python clients use `safe_load`):
+/// `{ format: parquet }` for the option-free formats, `{ format: csv }`
+/// (default options) or `{ format: csv, options: { delimiter: ";" } }`
+/// (partial — missing keys default) for csv, and
+/// `{ format: excel, options: { sheet: 2 } }` for excel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FormatSpec {
     pub format: Format,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub options: Option<CsvOptions>,
+    pub options: Option<FormatOptions>,
+}
+
+impl<'de> Deserialize<'de> for FormatSpec {
+    /// `options` is read as whatever `format` says it is.
+    ///
+    /// Hand-written because serde cannot tag a field by a *sibling* field: an
+    /// untagged enum would have to guess the variant from the block's own keys,
+    /// and `{}` is a valid csv block and a valid excel block both. Buffering the
+    /// raw block and reading it once the format is known removes the guess.
+    ///
+    /// A block under a format that has no options is dropped rather than
+    /// rejected — as it was when `options` was csv-shaped for every format —
+    /// but a block that *is* read has to parse, so a malformed one still fails
+    /// the run instead of silently reverting to defaults.
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Raw {
+            format: Format,
+            #[serde(default)]
+            options: Option<serde_yaml::Value>,
+        }
+
+        let raw = Raw::deserialize(deserializer)?;
+        let options = match (raw.format, raw.options) {
+            (Format::Csv, Some(block)) => Some(FormatOptions::Csv(
+                CsvOptions::deserialize(block).map_err(D::Error::custom)?,
+            )),
+            (Format::Excel, Some(block)) => Some(FormatOptions::Excel(
+                ExcelOptions::deserialize(block).map_err(D::Error::custom)?,
+            )),
+            _ => None,
+        };
+        Ok(FormatSpec {
+            format: raw.format,
+            options,
+        })
+    }
 }
 
 impl FormatSpec {
@@ -69,7 +124,15 @@ impl FormatSpec {
     pub fn csv_with(options: CsvOptions) -> Self {
         Self {
             format: Format::Csv,
-            options: Some(options),
+            options: Some(FormatOptions::Csv(options)),
+        }
+    }
+
+    /// An excel format with explicit options.
+    pub fn excel_with(options: ExcelOptions) -> Self {
+        Self {
+            format: Format::Excel,
+            options: Some(FormatOptions::Excel(options)),
         }
     }
 
@@ -81,11 +144,25 @@ impl FormatSpec {
     /// CSV reader/writer options (defaulted) when this is a csv format, else
     /// `None`.
     pub fn csv(&self) -> Option<CsvOptions> {
-        if self.format == Format::Csv {
-            Some(self.options.clone().unwrap_or_default())
-        } else {
-            None
+        if self.format != Format::Csv {
+            return None;
         }
+        Some(match &self.options {
+            Some(FormatOptions::Csv(options)) => options.clone(),
+            _ => CsvOptions::default(),
+        })
+    }
+
+    /// Excel reader options (defaulted) when this is an excel format, else
+    /// `None`.
+    pub fn excel(&self) -> Option<ExcelOptions> {
+        if self.format != Format::Excel {
+            return None;
+        }
+        Some(match &self.options {
+            Some(FormatOptions::Excel(options)) => *options,
+            _ => ExcelOptions::default(),
+        })
     }
 }
 
@@ -137,6 +214,42 @@ impl Default for CsvOptions {
             truncate_ragged_lines: false,
             skip_rows: 0,
             skip_rows_after_header: 0,
+        }
+    }
+}
+
+/// Excel reader options carried on the wire.
+///
+/// `sheet` is the **1-based** position of the worksheet in the workbook, over
+/// every sheet the workbook declares — hidden and chart sheets included — in tab
+/// order. Numbering every sheet is what makes the number stable: it always means
+/// "the Nth sheet", so it does not shift when a workbook hides one.
+///
+/// `has_header` decides whether the sheet's first non-empty row names the
+/// columns. With it off no row is spent on names, every row is data, and the
+/// columns are called `column_1`, `column_2`, ... as they are for a blank
+/// header cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExcelOptions {
+    #[serde(default = "excel_sheet_default")]
+    pub sheet: u32,
+    #[serde(default = "excel_has_header_default")]
+    pub has_header: bool,
+}
+
+fn excel_sheet_default() -> u32 {
+    1
+}
+
+fn excel_has_header_default() -> bool {
+    true
+}
+
+impl Default for ExcelOptions {
+    fn default() -> Self {
+        Self {
+            sheet: excel_sheet_default(),
+            has_header: excel_has_header_default(),
         }
     }
 }

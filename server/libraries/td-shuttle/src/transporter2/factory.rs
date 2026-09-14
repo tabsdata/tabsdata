@@ -36,6 +36,7 @@ fn decode_opts_for(sf: &FormatSpec, opts: &CopyOptions) -> DecodeOptions {
         batch_size: opts.rows_per_batch,
         sample_rows: opts.infer_sample_rows,
         csv: sf.csv().unwrap_or_default(),
+        excel: sf.excel().unwrap_or_default(),
     }
 }
 
@@ -103,6 +104,7 @@ pub async fn execute_pair(
 
     match (source_format, target_format) {
         (Some(sf), Some(tf)) => {
+            codec::check_source(sf.format(), decompress_codec)?;
             // Size drives the staging decision; `head` itself is retried.
             let (size, _) = retry(&retry_cfg, "head", || {
                 let store = from_store.clone();
@@ -270,6 +272,33 @@ mod test {
             let _ = leftovers;
         }
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[tokio::test]
+    async fn an_excel_source_with_a_declared_decompress_codec_is_refused() {
+        // The policy lives in `codec::check_source`; this is the call site,
+        // which is what a request actually reaches. It fails before any IO --
+        // neither path below exists.
+        let err = execute_pair(
+            &local(std::path::Path::new("/nonexistent/q2.xlsx")),
+            &local(std::path::Path::new("/nonexistent/q2.parquet")),
+            Some(&FormatSpec::of(Format::Excel)),
+            Some(&FormatSpec::of(Format::Parquet)),
+            Some(CompressionAlgorithmSpec::Zip),
+            None,
+            &CopyOptions::default(),
+            &sched(),
+        )
+        .await;
+        // `PairOutcome` is not `Debug`, so match rather than `unwrap_err`.
+        let err = match err {
+            Ok(_) => panic!("expected the declared codec to be refused"),
+            Err(e) => e,
+        };
+        assert!(
+            matches!(err, TransporterError::UnsupportedSourceCodec { .. }),
+            "{err}"
+        );
     }
 
     #[tokio::test]

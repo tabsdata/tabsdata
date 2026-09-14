@@ -14,7 +14,8 @@
 
 use crate::transporter2::csvprep::ResolvedCsv;
 use crate::transporter2::error::{Result, TransporterError};
-use crate::transporter2::spec::{CsvOptions, Format};
+use crate::transporter2::excel;
+use crate::transporter2::spec::{CsvOptions, ExcelOptions, Format};
 use arrow::array::{ArrayRef, RecordBatch, StringArray};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use bytes::Bytes;
@@ -33,8 +34,11 @@ pub type BatchIter = Box<dyn Iterator<Item = Result<RecordBatch>> + Send>;
 pub struct DecodeOptions {
     pub batch_size: usize,
     /// Rows sampled to infer a schema for schemaless formats (csv / ndjson).
+    /// Excel does not sample — it reads every cell's declared type in a first
+    /// pass — so this does not reach it.
     pub sample_rows: usize,
     pub csv: CsvOptions,
+    pub excel: ExcelOptions,
 }
 
 impl Default for DecodeOptions {
@@ -43,6 +47,7 @@ impl Default for DecodeOptions {
             batch_size: 8192,
             sample_rows: 1024,
             csv: CsvOptions::default(),
+            excel: ExcelOptions::default(),
         }
     }
 }
@@ -139,6 +144,7 @@ pub fn decode_with_schema(
             let iter = reader.map(|r| r.map_err(|e| TransporterError::other(format!("avro: {e}"))));
             Ok((schema, Box::new(iter)))
         }
+        Format::Excel => excel::decode_bytes(data, opts.excel, opts.batch_size),
         Format::Text => decode_text(name, data, opts.batch_size),
     }
 }
@@ -169,6 +175,7 @@ pub fn infer_schema(format: Format, data: &Bytes, opts: &DecodeOptions) -> Resul
                 .build(BufReader::new(Cursor::new(data.clone())))?;
             Ok(reader.schema())
         }
+        Format::Excel => excel::schema_from_bytes(data.clone(), opts.excel),
         Format::Text => Ok(Arc::new(Schema::new(vec![
             Field::new("file", DataType::Utf8, false),
             Field::new("message", DataType::Utf8, false),
@@ -305,7 +312,7 @@ pub fn encode(
             w.finish()
                 .map_err(|e| TransporterError::other(format!("avro: {e}")))?;
         }
-        Format::Text => return Err(TransporterError::UnsupportedTarget(Format::Text)),
+        Format::Text | Format::Excel => return Err(TransporterError::UnsupportedTarget(format)),
     }
     Ok(buf)
 }
@@ -377,6 +384,7 @@ pub fn decode_file(
                 ),
             ))
         }
+        Format::Excel => excel::decode_path(path, opts.excel, opts.batch_size),
         // Text is line-oriented and modest; reuse the in-memory shaping.
         Format::Text => {
             let data = Bytes::from(std::fs::read(path)?);
@@ -429,7 +437,7 @@ pub fn encode_file(
             w.finish()
                 .map_err(|e| TransporterError::other(format!("avro: {e}")))?;
         }
-        Format::Text => return Err(TransporterError::UnsupportedTarget(Format::Text)),
+        Format::Text | Format::Excel => return Err(TransporterError::UnsupportedTarget(format)),
     }
     Ok(())
 }

@@ -16,8 +16,10 @@
 //!   bytes on read, `compress` to the output bytes on write — orthogonal to the
 //!   data format, exactly as today.
 //!
-//! Formats: `parquet`, `csv` (with options), `ndjson`, `avro`, and `text`
-//! (read-only — valid only as a `source_format`).
+//! Formats: `parquet`, `csv` (with options), `ndjson`, `avro`, and — read-only,
+//! so valid only as a `source_format` — `text` and `excel` (with
+//! `options: { sheet: <1-based> }`). One `options` key serves every format;
+//! which block it is, is read from the sibling `format`.
 
 use crate::transporter::api::CompressionAlgorithmSpec;
 use crate::transporter2::error::Result;
@@ -520,7 +522,7 @@ pub fn samples() -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::transporter2::spec::{CsvOptions, Format, FormatSpec};
+    use crate::transporter2::spec::{CsvOptions, ExcelOptions, Format, FormatSpec};
 
     #[test]
     fn format_spec_yaml_is_plain_and_tag_free() {
@@ -595,6 +597,131 @@ max_files: 100
         let out = serde_yaml::to_string(&req).unwrap();
         let req2: FindCopyRequest = serde_yaml::from_str(&out).unwrap();
         assert_eq!(req2.target_format, Some(FormatSpec::of(Format::Parquet)));
+    }
+
+    #[test]
+    fn find_copy_request_carries_an_excel_sheet() {
+        let yaml = r#"
+source: { uri: "s3://b/2026/q2.xlsx" }
+target_dir: { uri: "file:///data/in" }
+source_format:
+  format: excel
+  options:
+    sheet: 2
+target_format:
+  format: parquet
+"#;
+        let req: FindCopyRequest = serde_yaml::from_str(yaml).unwrap();
+        let source = req.source_format.as_ref().unwrap();
+        assert_eq!(source.format(), Format::Excel);
+        assert_eq!(source.excel().unwrap().sheet, 2);
+
+        // re-serialize and re-parse: stable contract. A field name that drifts
+        // from the Python side is a runtime parse failure here, not there.
+        let out = serde_yaml::to_string(&req).unwrap();
+        assert!(out.contains("sheet: 2"), "{out}");
+        assert!(!out.contains("excel_options"), "{out}");
+        let back: FindCopyRequest = serde_yaml::from_str(&out).unwrap();
+        assert_eq!(back.source_format, req.source_format);
+    }
+
+    #[test]
+    fn the_python_side_emits_exactly_this() {
+        // Pasted verbatim from what `transporter2.to_format_spec` dumps for
+        // `TransporterExcelFormat(sheet=2)`. If either side's field names drift
+        // this stops compiling into the same values.
+        let emitted = "format: excel\noptions:\n  sheet: 2\n  has_header: true\n";
+        let spec: FormatSpec = serde_yaml::from_str(emitted).unwrap();
+        assert_eq!(spec.format(), Format::Excel);
+        assert_eq!(
+            spec.excel().unwrap(),
+            ExcelOptions {
+                sheet: 2,
+                has_header: true
+            }
+        );
+    }
+
+    #[test]
+    fn an_excel_source_can_turn_the_header_row_off() {
+        let yaml = r#"
+source: { uri: "s3://b/2026/q2.xlsx" }
+target_dir: { uri: "file:///data/in" }
+source_format: { format: excel, options: { sheet: 2, has_header: false } }
+target_format: { format: parquet }
+"#;
+        let req: FindCopyRequest = serde_yaml::from_str(yaml).unwrap();
+        let excel = req.source_format.unwrap().excel().unwrap();
+        assert_eq!(excel.sheet, 2);
+        assert!(!excel.has_header);
+    }
+
+    #[test]
+    fn the_two_excel_options_default_independently() {
+        // Naming one must not reset the other.
+        let only_sheet: FormatSpec =
+            serde_yaml::from_str("{ format: excel, options: { sheet: 3 } }").unwrap();
+        assert_eq!(only_sheet.excel().unwrap().sheet, 3);
+        assert!(only_sheet.excel().unwrap().has_header);
+
+        let only_header: FormatSpec =
+            serde_yaml::from_str("{ format: excel, options: { has_header: false } }").unwrap();
+        assert_eq!(only_header.excel().unwrap().sheet, 1);
+        assert!(!only_header.excel().unwrap().has_header);
+    }
+
+    #[test]
+    fn an_excel_source_without_options_reads_the_first_sheet() {
+        let yaml = r#"
+source: { uri: "s3://b/2026/q2.xlsx" }
+target_dir: { uri: "file:///data/in" }
+source_format: { format: excel }
+target_format: { format: parquet }
+"#;
+        let req: FindCopyRequest = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(req.source_format.unwrap().excel().unwrap().sheet, 1);
+    }
+
+    #[test]
+    fn an_options_block_is_read_against_the_format_not_its_own_keys() {
+        // One `options` key, and the sibling `format` decides what it means. A
+        // key the format does not know is ignored rather than fatal.
+        for (yaml, sheet) in [
+            ("{ format: excel, options: { delimiter: \";\" } }", 1),
+            ("{ format: excel, options: { sheet: 7 } }", 7),
+        ] {
+            let spec: FormatSpec = serde_yaml::from_str(yaml).unwrap();
+            assert!(spec.csv().is_none(), "{yaml}");
+            assert_eq!(spec.excel().unwrap().sheet, sheet, "{yaml}");
+        }
+        // `{}` is a valid block for either format -- which is exactly why the
+        // sibling field decides, and not the block's own shape.
+        let csv: FormatSpec = serde_yaml::from_str("{ format: csv, options: {} }").unwrap();
+        assert!(csv.excel().is_none());
+        assert_eq!(csv.csv().unwrap(), CsvOptions::default());
+        let excel: FormatSpec = serde_yaml::from_str("{ format: excel, options: {} }").unwrap();
+        assert_eq!(excel.excel().unwrap(), ExcelOptions::default());
+        assert!(excel.excel().unwrap().has_header);
+    }
+
+    #[test]
+    fn an_options_block_on_a_format_with_none_is_dropped() {
+        let spec: FormatSpec =
+            serde_yaml::from_str("{ format: parquet, options: { sheet: 2 } }").unwrap();
+        assert_eq!(spec, FormatSpec::of(Format::Parquet));
+    }
+
+    #[test]
+    fn a_malformed_block_still_fails_the_run() {
+        // Forgiving about a *misplaced* option, not about a broken one.
+        assert!(
+            serde_yaml::from_str::<FormatSpec>("{ format: excel, options: { sheet: nope } }")
+                .is_err()
+        );
+        assert!(
+            serde_yaml::from_str::<FormatSpec>("{ format: csv, options: { delimiter: 5 } }")
+                .is_err()
+        );
     }
 
     #[test]

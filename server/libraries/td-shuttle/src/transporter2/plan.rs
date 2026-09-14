@@ -45,24 +45,29 @@ fn is_passthrough(spec: &CopySpec) -> bool {
 ///
 /// 1. **passthrough** (parquet→parquet, codec in == codec out, no schema change)
 ///    → [`Strategy::ByteCopy`];
-/// 2. otherwise, **size ≥ staging threshold** (and staging allowed)
-///    → [`Strategy::Staged`] wrapping a [`Strategy::Convert`] — the inner convert
-///    runs on the large local staged file, so it uses
-///    [`ReadMode::ConcurrentRanged`] for the splittable formats (CSV stays
-///    [`ReadMode::Sequential`] — it is never split);
+/// 2. otherwise, **size ≥ staging threshold, or an excel source** (and staging
+///    allowed) → [`Strategy::Staged`] wrapping a [`Strategy::Convert`] — the
+///    inner convert runs on the local staged file, so it uses
+///    [`ReadMode::ConcurrentRanged`] for the splittable formats (CSV and excel
+///    stay [`ReadMode::Sequential`] — neither is ever split);
 /// 3. otherwise → a [`Strategy::Convert`] whose mode is `ConcurrentRanged` when
 ///    the source is splittable AND (cloud-sourced OR already large), else
 ///    `Sequential`.
+///
+/// Excel stages at any size because the reader needs a seekable file it can read
+/// twice: the workbook is a zip container, and resolving the sheet's schema is a
+/// first pass over the same worksheet the second pass then encodes.
 pub fn plan(spec: &CopySpec) -> Strategy {
     if is_passthrough(spec) {
         return Strategy::ByteCopy;
     }
     let splittable = spec.source.format.is_splittable();
     let large = spec.size >= spec.staging_threshold;
+    let needs_file = spec.source.format == Format::Excel;
 
-    if spec.allow_staging && large {
-        // The inner convert reads the large *local* staged file: range-split the
-        // splittable formats, sequential for CSV.
+    if spec.allow_staging && (large || needs_file) {
+        // The inner convert reads the *local* staged file: range-split the
+        // splittable formats, sequential for csv and excel.
         let mode = if splittable {
             ReadMode::ConcurrentRanged
         } else {
@@ -339,6 +344,69 @@ mod test {
         assert_eq!(plan(&s), convert_seq());
     }
 
+    // --- Excel --------------------------------------------------------------
+
+    #[test]
+    fn excel_stages_even_when_tiny() {
+        // The reader needs a seekable file it can read twice, so size does not
+        // enter into it.
+        let s = spec(
+            Format::Excel,
+            Codec::None,
+            Locality::Cloud,
+            Format::Parquet,
+            Codec::None,
+            Locality::Local,
+            1,
+            SchemaSource::Infer { sample_rows: 1024 },
+            true,
+        );
+        assert_eq!(plan(&s), staged_seq());
+    }
+
+    #[test]
+    fn excel_stages_from_a_local_source_too() {
+        let s = spec(
+            Format::Excel,
+            Codec::None,
+            Locality::Local,
+            Format::Parquet,
+            Codec::None,
+            Locality::Local,
+            1,
+            SchemaSource::Infer { sample_rows: 1024 },
+            true,
+        );
+        assert_eq!(plan(&s), staged_seq());
+    }
+
+    #[test]
+    fn excel_is_never_ranged() {
+        for &loc in &[Locality::Local, Locality::Cloud] {
+            for size in [0u64, THRESHOLD, THRESHOLD * 9] {
+                for allow_staging in [true, false] {
+                    let s = spec(
+                        Format::Excel,
+                        Codec::None,
+                        loc,
+                        Format::Parquet,
+                        Codec::None,
+                        Locality::Local,
+                        size,
+                        SchemaSource::Infer { sample_rows: 1024 },
+                        allow_staging,
+                    );
+                    let expected = if allow_staging {
+                        staged_seq()
+                    } else {
+                        convert_seq()
+                    };
+                    assert_eq!(plan(&s), expected, "{loc:?}, {size}, {allow_staging}");
+                }
+            }
+        }
+    }
+
     // --- Exhaustive matrix --------------------------------------------------
 
     #[test]
@@ -349,6 +417,7 @@ mod test {
             Format::Ndjson,
             Format::Avro,
             Format::Text,
+            Format::Excel,
         ];
         let codecs = [Codec::None, Codec::Gzip, Codec::Zstd];
         let localities = [Locality::Local, Locality::Cloud];
@@ -356,9 +425,9 @@ mod test {
 
         for &src_fmt in &formats {
             for &tgt_fmt in &formats {
-                // Text is read-only; never a target. Skip those rows (resolve
-                // rejects them before planning).
-                if tgt_fmt == Format::Text {
+                // Text and excel are read-only; never a target. Skip those
+                // rows (resolve rejects them before planning).
+                if matches!(tgt_fmt, Format::Text | Format::Excel) {
                     continue;
                 }
                 for &src_codec in &codecs {
@@ -386,7 +455,7 @@ mod test {
                                     let large = size >= THRESHOLD;
                                     let expected = if passthrough {
                                         Strategy::ByteCopy
-                                    } else if large {
+                                    } else if large || src_fmt == Format::Excel {
                                         // allow_staging = true in this matrix
                                         staged(if splittable {
                                             ReadMode::ConcurrentRanged

@@ -6,7 +6,7 @@
 //! treated as **terminal**, not transient (module invariant 8) — that policy
 //! lives in the task layer; this enum just carries the cause.
 
-use crate::transporter2::spec::Format;
+use crate::transporter2::spec::{Codec, Format};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransporterError {
@@ -67,6 +67,32 @@ pub enum TransporterError {
 
     #[error("invalid csv options: {0}")]
     InvalidCsvOptions(String),
+
+    #[error("excel: {0}")]
+    Excel(#[from] calamine::XlsxError),
+
+    #[error("excel sheet numbers start at 1 (got {0})")]
+    ExcelSheetNumber(u32),
+
+    #[error(
+        "excel sheet {requested} is out of range: the workbook has {available} sheet(s), \
+         counting hidden and chart sheets"
+    )]
+    ExcelSheetOutOfRange { requested: u32, available: usize },
+
+    #[error("excel sheet {number} ('{name}') is a {kind} and holds no cells; name a worksheet")]
+    ExcelNotAWorksheet {
+        number: u32,
+        name: String,
+        kind: String,
+    },
+
+    /// A declared source codec the format's reader cannot see through.
+    #[error(
+        "a {format:?} source cannot be decompressed (declared {codec:?}): it is already a \
+         container format — drop the decompress option"
+    )]
+    UnsupportedSourceCodec { format: Format, codec: Codec },
 
     /// A declared codec does not match the bytes (magic-byte sanity guard).
     #[error("codec mismatch: declared {declared}, but the data is not {declared} ({detail})")]

@@ -12,7 +12,9 @@
 //!   slice of whole lines); ndjson spans share one pre-inferred schema;
 //! * **avro (OCF)** — split by data-block boundaries; each span is a synthetic
 //!   OCF = the original header + a contiguous run of blocks;
-//! * **csv** — never split (a quoted field may contain a newline) ⇒ `None`.
+//! * **csv** — never split (a quoted field may contain a newline) ⇒ `None`;
+//! * **excel** — never split (the worksheet is one deflate stream inside a zip,
+//!   walked from the top) ⇒ `None`.
 //!
 //! `split` returns `None` when the format is unsplittable or the input is too
 //! small to split (< 2 spans) — the caller then decodes sequentially.
@@ -53,7 +55,7 @@ pub fn split(
         return Ok(None);
     }
     match format {
-        Format::Csv => Ok(None),
+        Format::Csv | Format::Excel => Ok(None),
         Format::Parquet => split_parquet(data, target),
         Format::Ndjson => Ok(split_lines(format, name, data, target, true, opts)?),
         Format::Text => Ok(split_lines(format, name, data, target, false, opts)?),
